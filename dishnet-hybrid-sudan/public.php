@@ -793,6 +793,20 @@ if ($page === 'distributor_apply') {
     exit;
 }
 
+// ── Distributor partner portal API (WS-A P4d, docs/50) ─────────────────
+// URL: public.php?page=partner_api&action=…
+//
+// The distributor-facing portal's data surface, served under the uCRM address
+// (D-9a). partner_api.php self-gates on Uganda + distributors_enabled (off/other
+// tenant ⇒ its own 404), authenticates its OWN distributor session (never a
+// staff token), and is deny-by-default: an undeclared action is 404 and it never
+// falls through to the staff api_handlers.php. Inert until the pilot flag is on.
+if ($page === 'partner_api') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/partner_api.php';
+    exit;
+}
+
 // ── Public accessories shop (5.18.11) ──────────────────────────────────
 // URL: public.php?page=shop            the page (add &format=json for the website)
 //      public.php?page=shop_img&s=…    a product photo, sized (&w=240|480)
@@ -2303,6 +2317,9 @@ else:
         // (tabs/admin/retailers.php iterates every module) and the whole admin UI stay byte-for-byte as before — the
         // South Sudan golden test's own axis. The capture endpoint and table are harmless there (unused, empty).
         ...($_staffJobsUganda ? [['id'=>'partner_applications','label'=>'Distributor Applications','icon'=>'[Orders]', 'group'=>'Admin', 'roles'=>['admin']]] : []),
+        // Uganda-only AND behind the distributors_enabled flag (default off): the distributor registry (WS-A P1a, docs/49).
+        // Off by default, so the admin UI is unchanged on every install until an admin turns the flag on; South Sudan never sees it.
+        ...(($_staffJobsUganda && is_array($config ?? null) && !empty($config['distributors_enabled'])) ? [['id'=>'distributors','label'=>'Distributors','icon'=>'[Orders]', 'group'=>'Admin', 'roles'=>['admin']]] : []),
         ['id'=>'overdue_email_tpl','label'=>'Overdue Templates',        'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
         ['id'=>'overdue_workbench','label'=>'Overdue Workbench',        'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin','accountant','field_accountant']],
         ['id'=>'maintenance',    'label'=>'System Maintenance',       'icon'=>'[Pipeline]', 'group'=>'Admin',      'roles'=>['admin']],
@@ -2751,6 +2768,7 @@ $_tabFiles = [
     'duplicate_log'    => 'tabs/admin/duplicate_log.php',
     'overdue_email_log'=> 'tabs/admin/overdue_email_log.php',
     'partner_applications'=> 'tabs/admin/partner_applications.php',
+    'distributors'       => 'tabs/admin/distributors.php',
     'overdue_email_tpl'=> 'tabs/admin/overdue_email_tpl.php',
     'overdue_workbench'=> 'tabs/admin/overdue_workbench.php',
     'ucrm_data'        => 'tabs/admin/ucrm_data.php',
@@ -2836,6 +2854,7 @@ $_tabPerms = [
     'ops_settlement'       => '*admin',
     'ops_sync_health'      => '*admin',
     'partner_applications' => '*admin',
+    'distributors' => '*admin',
     // HRM (v4.11.0)
     'hrm_dashboard'        => ['accounts_dash', '*admin'],
     'hrm_employees'        => ['accounts_dash', '*admin'],

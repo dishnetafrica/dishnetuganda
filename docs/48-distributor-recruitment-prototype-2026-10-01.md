@@ -11,9 +11,10 @@ distribution module (root `docs/47`) must hold — **before** any of it is built
 
 > **Update — 1 October, integration built (5.18.59).** On your approval ("integrate into live website",
 > submissions **captured in the plugin**, search **indexed**) the page is now a live site citizen and the
-> submission is wired to a new plugin endpoint that stores applications for staff review. **It is built,
-> tested and held — nothing has been deployed by this session.** The two deploys (website → `main`;
-> plugin → operator-run `deploy-5.18.59.sh`) wait for your explicit go-ahead. See **§12** for exactly
+> submission is wired to a new plugin endpoint that stores applications for staff review. **Both halves
+> are now DEPLOYED** — plugin 5.18.59 on 2026-10-01 06:22 UTC, and the website live 2026-10-01 (the page
+> answers `HTTP/2 200` and serves the production-honest version; this session deployed nothing itself —
+> the operator ran the plugin deploy and published the website). See **§12.3** for the result and **§12** for exactly
 > what changed and what is still NOT done. Every compliance guardrail in §7 still holds: an application
 > is **not** an approval, and **no uCRM client, partner, service or account is created.**
 
@@ -291,11 +292,11 @@ that approval.
 
 ---
 
-## 12. Integration as built (5.18.59) — built and tested, NOT deployed
+## 12. Integration as built (5.18.59) — DEPLOYED (plugin 06:22 UTC + website live, 2026-10-01)
 
 On your approval — *"integrate into live website"*, submissions **"Capture in the plugin"**, search
 **"Yes, index it"** — the prototype became a live site citizen and the submission was wired to a new plugin
-endpoint. Everything below is in the branch and **held**; this session deployed nothing.
+endpoint. **Both halves are now deployed** (§12.3); this session deployed nothing itself — the operator ran the plugin deploy and published the website.
 
 ### 12.1 The website half (`dishnet-web-uganda/`)
 
@@ -345,10 +346,17 @@ endpoint. Everything below is in the branch and **held**; this session deployed 
    created no application row (R4); no uCRM reference in the installed code (R5); all 144 prior-release files
    intact (R7); no fatal. The capture endpoint is now live and ready. The separate `--rollback` was printed on
    its own at the end of the log.
-2. **Website — still held for your go-ahead.** Merge the branch to **`main`**, rebuild `web-uganda` on
-   EasyPanel, then run `verify-site.sh` / `verify-address.py` (`dishnet-web-uganda/README-DEPLOY.md`). Until
-   this runs, the live site does not yet point real submissions at the (now-ready) endpoint; the WhatsApp
-   fallback covers that window regardless.
+2. **Website — LIVE 2026-10-01.** `https://dishnetuganda.com/become-a-distributor.html` answers `HTTP/2 200`
+   and serves the production-honest page: the pre-publish fixes in `a7e4b62` removed the "Prototype · Demo"
+   badge, the "Demo mode: not saved" line and the "not a live application form" footer, and taught
+   `verify-site.sh` the intended intake URL (`verify-site.sh` + `verify-address.py` PASS). Confirmed on the
+   server — the live page carries `page=distributor_apply` and none of the demo strings. **`web-uganda`
+   builds the live site from the branch (`claude/study-this-jhe2eg`), not from `main`**, so `main` was not
+   the deploy path; the PR opened for a `main` merge (#18) was **closed as not required** — reopen/merge
+   only to keep `main` in sync. The live site now points real submissions at the capture endpoint; the
+   WhatsApp fallback remains for any unreachable-endpoint window. Remaining proof: a real wizard submit
+   returning a `DNP-NNNNN` reference into the Distributor Applications tab (add `dishnetuganda.com` to the
+   plugin's `site_origins` if the submit shows the WhatsApp fallback instead of a reference).
 
 ### 12.4 Still NOT done (unchanged from §11, restated)
 

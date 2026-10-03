@@ -122,6 +122,12 @@ $ledger = [
     'StarlinkMailWorker.php'   => 'fixed',   // three literal templates, no model text
     'EvolutionApiService.php'  => 'transport',
     'EvolutionApiClient.php'   => 'transport',
+    // WS-A P3 (docs/49): the distributor-alert channel adapter. The text it forwards is a FIXED template
+    // built by DistributorNotifier from the owning customer's OWN fields and already passed through
+    // ReplyPrivacyGuard — no model-generated output — and it goes to the DISTRIBUTOR's verified number,
+    // never to a customer. So the plan fence (which guards model text in front of a customer) does not
+    // apply. It is also NOT bound in the pilot: the live binding is NullWhatsAppChannel, which sends nothing.
+    'WhatsAppChannel.php'      => 'distributor',
 ];
 // WaAutoReplyService is deliberately absent: it calls sendText nowhere. It
 // produces the reply and fences it in guard(), and something else posts it.

@@ -1106,9 +1106,13 @@ if ($page === 'stock_api') {
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
     // Auth: try Bearer token first (PWA), then session (webview)
+    $authedViaCookie = false;              // PD-8: set from the AUTH OUTCOME, never a header
     $retailer = $auth->tokenAuth();
     if (!$retailer) {
+        // requireLogin() returns a retailer only for a live cookie session;
+        // otherwise it redirects to the login page and exits.
         $retailer = $auth->requireLogin();
+        $authedViaCookie = true;           // reached only when a browser cookie authenticated
     }
     if (!$retailer) { http_response_code(401); echo json_encode(['status'=>'error','message'=>'Unauthorized']); exit; }
 
@@ -1119,6 +1123,11 @@ if ($page === 'stock_api') {
     $isAdmin = !empty($retailer['is_admin']);
     $ok2  = function($d,$m='OK',$c=200){ http_response_code($c); echo json_encode(['status'=>'success','message'=>$m,'data'=>$d]); exit; };
     $er2  = function($m,$c=400){ http_response_code($c); echo json_encode(['status'=>'error','message'=>$m]); exit; };
+
+    // PD-8 (docs/54): a cookie-authenticated, state-changing request must come from
+    // our own page. Bearer integrations and GET/HEAD reads are unaffected.
+    require_once dirname(__DIR__) . '/lib/StaffApiCsrf.php';
+    if (StaffApiCsrf::mustBlock($authedViaCookie, $met)) $er2(StaffApiCsrf::BLOCKED, 403);
 
     require_once dirname(__DIR__) . '/lib/StockService.php';
     try {

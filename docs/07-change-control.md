@@ -2933,3 +2933,372 @@ intact; V4 no fatal since the deploy.** Container PHP 8.1.34.
   **OTP / login-code e-mail is still never copied.**
 
 **The feature is live and active.** Do not roll back — customers are not affected.
+
+## 01 Oct — "Become a DishNet Distributor" page LIVE on the website (docs/48 §12.3)
+
+The held website half of the 5.18.59 distributor-recruitment integration is now **live**:
+`https://dishnetuganda.com/become-a-distributor.html` answers **`HTTP/2 200`**. The recruitment funnel is
+connected end to end — live site → the plugin's `distributor_apply` capture endpoint → the **Distributor
+Applications** staff-review tab. **An application is still an expression of interest, not an approval:** no
+uCRM client, partner, service or account is created; appointing a partner stays a separate staff act
+(`docs/47`, unbuilt).
+
+- **Pre-publish honesty fixes (commit `a7e4b62`, on `claude/study-this-jhe2eg`).** The 5.18.59 integration
+  (`babce15`) wired the submit to the live endpoint but left the page's prototype clothing, and it had never
+  been run through `verify-site.sh` (the website half was held). Caught and fixed before publishing: removed
+  the "Prototype · Demo" badge, the *"Demo mode: your answers are not sent or saved"* line above Submit, and
+  the footer *"not a live application form"* — all false now the submit is real; the honest *"expression of
+  interest only"* notice stays. The WhatsApp fallback button is built via `JSON.stringify` so the site
+  link-checker no longer reads it as broken, and `verify-site.sh` now allows the intended `distributor_apply`
+  intake URL. `verify-site.sh` PASS (58 pages, 67 refs 0 broken, one portal URL, no price leaks),
+  `verify-address.py` PASS, inline JS `node --check` OK.
+- **Confirmed live on the server:** the page carries `page=distributor_apply` and **none** of the demo
+  strings, so it is the fixed version, not a stale cache.
+- **Publish path:** `web-uganda` (EasyPanel) builds the live site from the **branch**
+  (`claude/study-this-jhe2eg`), not from `main` — so `main` was not the deploy path. PR #18 (branch → `main`),
+  opened as the publish route, was **closed as not required**; reopen/merge only to keep `main` in sync.
+- **Still to confirm:** a real wizard submit returning a `DNP-NNNNN` reference into the Distributor
+  Applications tab. If the submit shows the WhatsApp fallback instead of a reference, add `dishnetuganda.com`
+  to the plugin's `site_origins` (the application is still stored either way).
+- **Rollback:** revert the page on the branch and rebuild `web-uganda`. The plugin's capture table/data are
+  untouched by the website.
+
+## 01 Oct — 5.18.61: distributor registry (WS-A P1a of the docs/49 plan) — BUILT, off by default, NOT deployed
+
+The first appointed-distributor **entity**, the smallest independently-releasable batch of the distributor
+plan the operator approved (docs/49, §15; operator "go P1a"). It is a **local record only** — it creates no
+uCRM client, grants no account/login/wallet/portal, and makes no uCRM call anywhere. Build only; **no deploy,
+no production change, no real records.** The riskiest piece (linking a uCRM company client — the coherence
+operation) is deliberately split out as its own later batch (P1b).
+
+**1. What changed (plugin 5.18.61).** All additive, and the whole feature is gated **twice**: the
+`distributors_enabled` config flag (**default off**) *and* the existing Uganda tenant gate. South Sudan and a
+flag-off Uganda install are unchanged.
+- `migrations/078_distributor_core.sql` — `dist_partners` (docs/47 §9.2 shape; `status` starts `prospect`,
+  `ucrm_client_id` nullable until active) + `dist_appointment` (application→partner provenance, one per
+  application). Additive, idempotent; nothing in 001–077 touched. **No phone column — dedupe is structurally
+  never by phone** (docs/47 §9.1; the wrong-customer-disclosure rule).
+- `lib/DistributorRegistry.php` — create / get / list / setStatus / `appointFromApplication`. Dedupe by
+  normalised TIN (unique where present) and uCRM id (unique where linked); a duplicate TIN is a **refusal**,
+  never an upsert. Actor passed from the identity boundary, never a request field. No uCRM, ever.
+- `tabs/admin/distributors.php` — admin-only (defence-in-depth `$isAdmin` check **and** the flag), lists
+  partners, and appoints a `DNP-…` application as a local prospect. `includes/post/post_distributors.php` —
+  the `dist_appoint` POST, `requireAdmin()` + the global CSRF gate + the flag + Uganda gate.
+- `public.php` — three additive lines (tab file, `*admin` perm, Uganda+flag-gated nav module);
+  `includes/post_handlers.php` — one additive `require`. Manifest → **5.18.61**.
+
+**2. Tests.** New `tests/test_distributor_registry.php` — **59 assertions, 0 failed** (migration facts;
+create/dedupe/enum guards each with a positive control; appointment + provenance + one-per-application;
+**the headline: two applications sharing a phone appoint to two distinct partners**; the no-uCRM boundary by
+source grep; the wiring + double gate; off-by-default). Regression subset green: `test_distributor_apply`
+61/0 (version pin bumped 5.18.60→5.18.61), `test_migration_integrity` 28/0 (078 applies + is recorded),
+`test_schema_doctor` 19/0, `test_whatsapp_admin_only` 104/0 (tab perms intact), **South Sudan golden 51/0/0
+(admin UI renders byte-for-byte identically — the Uganda-gated nav never touches SS)**. Full plugin suite run
+as the after-gate. All changed PHP `php -l` clean.
+
+**3. Not done, deliberately (await their own approval).** P1b (link a uCRM company client — the one uCRM
+write), territory + attribution (P2), the distributor-notification pilot (P3), the partner portal (P4,
+operator deferred per B-7), and WS-B (per-distributor own-number WhatsApp + AI — committed, Evolution + 21
+DishNet-owned SIMs). No operability toggle for the flag ships in P1a; enabling it is a controlled config set
+at the (separately-approved) deploy step.
+
+**4. Deployment.** **None in this batch.** When approved it will follow the pinned `deploy-5.18.NN.sh` +
+rehearsal pattern, baseline-gated on 5.18.60, flag staying off on deploy. Rollback is trivial: the flag off
+restores prior behaviour exactly, and migration 078 only *adds* two unused tables.
+
+## 01 Oct — 5.18.62: distributor → uCRM company-client LINK (WS-A P1b) — BUILT, off by default, NOT deployed
+
+On the operator's "proceed p1b" (after the P1a verification gate reported green). Links an appointed
+distributor partner to an **existing** uCRM company client. **No migration** — migration 078 already carries
+`ucrm_client_id` / `ucrm_linked_by` / `ucrm_linked_at`. **Reads uCRM to verify and cache; never creates or
+modifies a uCRM record.** Build only; **no deploy, no production change, no real uCRM record touched.** Still
+behind the `distributors_enabled` flag (default off) and Uganda-gated.
+
+**1. What changed (plugin 5.18.62).**
+- `lib/DistributorRegistry.php` — new `linkUcrmClient(partnerId, ucrmClientId, $crm, actor)`: reads the client
+  (`$crm->get("clients/{id}")`), requires a **company** (`clientType=2` / `companyName` present) with a legal
+  name, **dedupes by uCRM id and normalised TIN — never phone**, refuses a client already linked to another
+  partner and a TIN another partner holds (**conflicts flagged for review, never merged or re-pointed**),
+  caches uCRM's company fields (uCRM is master), and stamps who/when. A same-id re-link is an idempotent no-op;
+  a different id is refused (relink is a separate, audited action). The partial unique indexes on
+  `ucrm_client_id` and `tin_norm` are the **floor** beneath the app checks (a race fails there and reports a
+  conflict).
+- `includes/post/post_distributors.php` — new `dist_link_ucrm` POST: `requireAdmin()` + the global CSRF gate +
+  the flag + Uganda gate; builds `CrmApiClient::fromUcrm()` and calls `linkUcrmClient`. **Issues no uCRM write
+  of its own** (no POST/PATCH/DELETE, no `createClient`).
+- `tabs/admin/distributors.php` — the uCRM column renders an inline **Link** form (admin, CSRF) for unlinked
+  partners, with a confirm that states it reads an existing client and creates nothing; linked partners show
+  the id. Manifest → **5.18.62**.
+
+**2. Tests.** New `tests/test_distributor_link_ucrm.php` — **33 assertions, 0 failed** — drives the link
+through a `FakeCrm extends CrmApiClient` (overrides `get()`, records every call): success + field caching;
+idempotent same-link; already-linked-other; duplicate uCRM id (conflict); individual-not-company; missing
+company name; **normalised-TIN collision (conflict)**; uCRM error/timeout; not-found; not-configured; the
+unique index as the floor; **never by phone** (the method body reads no phone field); and the admin+flag+Uganda
+gating. **Read-only proven**: across the whole run the fake recorded only `GET` calls — **no POST/PATCH/DELETE,
+so no uCRM client was created or modified.** `test_distributor_registry.php` updated (**57/0**) — its P1a-era
+"post_distributors.php does not use CrmApiClient" assertion was deliberately re-scoped to the P1b boundary (the
+handler may READ uCRM; it creates nothing), with the reason recorded in the test. `test_distributor_apply.php`
+pin → 5.18.62 (61/0). South Sudan golden **51/0** (admin UI byte-for-byte unchanged). Full suite as after-gate.
+All changed PHP `php -l` clean.
+
+**3. Not done, deliberately.** No unlink/relink operation (a separate audited action if ever wanted); no
+status automation on link; no territory/attribution (P2); no notifications (P3); no portal (P4); no WS-B.
+
+**4. Deployment.** **None.** P1a (5.18.61) and P1b (5.18.62) deploy together when approved, as one pinned,
+rehearsed `deploy-5.18.NN.sh`, flag staying off. The one production behaviour P1b adds — a uCRM **read** when
+an admin links a client with the flag on — only ever runs post-deploy, admin-triggered. Rollback: flag off
+restores prior behaviour; no schema change to revert.
+
+## 01 Oct — 5.18.63: distributor territory + customer attribution (WS-A P2) — BUILT, off by default, NOT deployed
+
+On the operator's "P2 (territory + attribution) go ahead". Adds the attribution spine: a distributor's
+**territory** (areas/districts) and the **structured customer/lead → distributor owner** link. **Local only;
+no uCRM, no messages, no production change.** Behind `distributors_enabled` (default off) and Uganda-gated.
+
+**1. Files & migration.**
+- `migrations/079_distributor_territory.sql` — `dist_regions` (docs/47 §9.3), `dist_territory_map`
+  (area_key → region → distributor), `dist_customer_links` (scope ∈ {ucrm_client, lead}, entity_id, partner,
+  assigned_via, active, history). Additive/idempotent; 001-078 untouched. **No phone column anywhere.**
+- `lib/DistributorAttribution.php` — `addRegion`/`addArea` (territory), `candidateFor` (resolver), `link`
+  (attribution), `activeLink`/`history`/`territory`/`linksForPartner`.
+- `tabs/admin/distributors.php` — a Territory & attribution section (add region, add area, the territory map
+  table, and a confirm-owner form). `includes/post/post_distributors.php` — `dist_region_add`/`dist_area_add`/
+  `dist_attribute` POSTs, admin + CSRF + flag + Uganda. Manifest → 5.18.63; three version pins updated.
+
+**2. Rules baked in (docs/49 §6), each proven.**
+- **Never by phone** — no phone column; `link()` takes/reads no phone (asserted on the method body); keyed by
+  the uCRM client id or lead id.
+- **One owner at a time** — one *active* link per (scope, entity_id), enforced by a partial unique index;
+  re-attributing **supersedes** the old row (kept as history with `superseded_at`), never a silent overwrite.
+- **One distributor per area** — `area_key` is globally unique; an area already another distributor's is
+  refused and flagged, never merged; so a territory resolve returns at most one candidate (ambiguity → null).
+- **Human-confirmed (pilot, B-6)** — `candidateFor()` only *proposes*; the admin confirms the owner via the
+  form. Nothing auto-attributes a real customer.
+
+**3. Tests.** `tests/test_distributor_territory.php` — **47/0**: migration + no-phone invariant; region dup
+refused (+control); area normalisation + one-area-one-distributor conflict (+control) + idempotent; resolver
+proposes one / fails safe to null / case-insensitive; attribution active link, **relink supersedes with
+history kept and exactly one active** (+the partial-unique-index floor proven by a direct 2nd-active INSERT
+being refused, with the inactive-row control); scope/via/entity/partner guards; scope separates a lead from a
+client with the same id; handlers admin+flag+Uganda; tab forms; no uCRM. Regression: registry 57/0, apply
+61/0, link 33/0, **South Sudan golden 51/0 (admin UI byte-for-byte unchanged)**. Full suite as after-gate.
+`php -l` clean.
+
+**4. Deployment.** **None.** P1a+P1b+P2 (5.18.61→.63) deploy together when approved, flag off. Rollback:
+flag off restores prior behaviour; migration 079 only *adds* three unused tables. Preserves Uganda/South
+Sudan; Domain B untouched. **Not built, deliberately:** `dist_outlets` (stock-side, a later phase);
+auto-attribution of real customers on the customer/lead screens (the resolver is the spine; that wiring is a
+separate step); P3 notifications; the partner portal (P4).
+
+## 01 Oct — 5.18.64: distributor notifications, pilot core (WS-A P3) — BUILT, off by default, NOTHING SENT, NOT deployed
+
+On the operator's "p3 go ahead". When something happens to a distributor's own customer or lead — a lead
+attributed, a payment received, a new customer activated (B-5's three events) — an alert is **drafted** for a
+DishNet admin to approve. **Draft → approve, never auto-send (B-4). NOTHING is sent to a real number in this
+pilot:** the bound transport is a Null channel, so approving *queues* an alert; connecting a live WhatsApp
+number is a separate, explicitly-approved step. **Local only — no uCRM write, no message, no production
+change.** Behind `distributors_enabled` (default off) and Uganda-gated.
+
+**1. Files.**
+- `migrations/080_distributor_notifications.sql` — `dist_contacts` (a distributor's **verified** number;
+  `verified` defaults 0, never trusted from a form), `dist_notify_consent` (the distributor's own `muted`
+  flag — the only suppressor), `dist_notify_log` (the draft→approve outbox; `status`
+  draft|approved|sent|rejected|suppressed; `dedup_key` **UNIQUE** = the once-per-(distributor,event,entity)
+  claim floor). Additive, idempotent; nothing in 001–079 touched.
+- `lib/WhatsAppChannel.php` — the provider **port** (docs/49 §3.3). `NullWhatsAppChannel` is bound in the
+  pilot (sends nothing); `EvolutionWhatsAppChannel` (a thin wrapper over the existing `EvolutionApiService`)
+  exists so the port has its one real adapter but is **constructed nowhere** — the "one adapter live at a
+  time, never a second integration" rule.
+- `lib/DistributorNotifier.php` — builds a privacy-guarded draft, checks the distributor's own consent, claims
+  the dedup key, resolves the verified recipient; `approve()` hands an approved draft to the channel (Null →
+  queued, never sent); `reject()`; contacts + consent management.
+- `lib/DistributorEvents.php` — the one flag-gated, **try/catch-isolated** entry point every event source
+  calls. A strict no-op unless Uganda **and** the flag; resolves the owning distributor from
+  `dist_customer_links` (079); builds a draft only. Any throw is swallowed — safe to drop into a live path.
+- `includes/post/post_distributors.php` — attributing a **lead** now fires `lead_attributed` from our own
+  handler; new admin actions `dist_contact_add` / `dist_contact_verify` / `dist_consent_mute` /
+  `dist_notify_approve` / `dist_notify_reject`, all admin + CSRF + flag + Uganda.
+- `tabs/admin/distributors.php` — a **Notifications** section: verified numbers & consent per distributor, the
+  draft→approve queue, recent activity. Copy says plainly nothing is sent in the pilot.
+- **`webhook.php` — two thin, flag-gated, try/catch-isolated hooks** (the one live-file change this phase):
+  the `payment.add` handler (after the response is flushed, off the uCRM-**re-verified** payment) and
+  `service.add` on first activation (`status === 1`). Each calls `DistributorEvents::maybeNotify()` and is a
+  **strict no-op** when the pilot is off — every South Sudan install, and Uganda by default. Proven below.
+- Manifest → 5.18.64; the four distributor-test version pins updated.
+
+**2. The rules, each proven.**
+- **Draft → approve, no live send.** The bound channel is Null; `approve()` queues (`approved`), it does not
+  send. A fake *live* channel in the test proves the approve→send path exists and works, but no live adapter
+  is bound in the pilot.
+- **Privacy (docs/49 §11).** Every draft body passes `ReplyPrivacyGuard::check()` with an allow-list of **only
+  the owning customer's own** amount/ids, so a foreign customer's value is blocked (`foreign:amount`) and
+  never queued. An edited body is re-checked on approve.
+- **Consent (CLASS_DISTRIBUTOR).** A customer's opt-out never suppresses a distributor alert (the recipient is
+  the distributor, and the design routes nothing through a customer opt-out); only the distributor's own
+  `muted` does.
+- **Exactly once.** The UNIQUE `dedup_key` is the floor — a webhook replay or double-submit creates no second
+  draft.
+- **Verified recipient only.** A number is a destination only when `verified = 1`; 0 or >1 verified resolves
+  to none (ambiguous, fail safe).
+- **Never by phone for ownership.** The owner comes from `dist_customer_links` (079), keyed by the uCRM client
+  id or the lead id; a phone here is only a verified destination.
+
+**3. Tests.** `tests/test_distributor_notify.php` — **66/0**: migration + dedup floor; contacts (0/1/>1
+recipient resolution); consent; the three events → draft, dedup once, suppressed-when-muted; **privacy — a
+foreign amount blocked, a paired allow-list control, and a weakened copy of the notifier (guard removed) that
+lets the value through, proving the guard has teeth**; draft→approve with Null (queued) and a fake live channel
+(sent); reject; the Uganda+flag gate (on/off, owned/unowned); the DB unique floor (+control); wiring/gating;
+the port (Null bound, Evolution adapter present but unbound); no uCRM. Existing distributor suites green with
+pins bumped: registry **57/0**, apply **61/0**, link **33/0**, territory **47/0**. **South Sudan golden 51/0 —
+admin UI and the whole job-day (every uCRM call, WhatsApp text, webhook log, e-mail) byte-for-byte unchanged,
+all 11 mutants still caught** — proving the `webhook.php` hooks are strict no-ops off. Full suite as after-gate.
+
+**4. Deployment.** **Built and rehearsed, NOT run.** On the operator's go-ahead, `scripts/deploy-5.18.64.sh`
+(pinned to `03df9a5`, installs P1a+P1b+P2+P3 over live 5.18.60) with `distributors_enabled` left OFF — backup +
+GO/NO-GO, byte-for-byte verify, the three additive migrations (078/079/080) apply on the next request, R4 proves
+the Null channel is bound so nothing can be sent, and the rollback to 5.18.60 is a separate command (never pasted
+with the deploy). `tools/set_distributors.php --on|--off|--show` is the operator toggle (Uganda only; still sends
+nothing). The rehearsal `scripts/harness/deploy-5.18.64/rehearse.sh` drives it end to end against a fake 5.18.60
+server with teeth + a mutant control: **88/0**. This session cannot reach the server; the operator runs the
+one-line command and sends back the log. Rollback: flag off, or the script's `--rollback`; the additive tables
+stay empty and ignored by 5.18.60. Preserves Uganda/South Sudan; Domain B untouched. **Not built, deliberately:**
+the live WhatsApp transport (a separate, approved step — the pilot queues, never sends); the partner portal (P4);
+WS-B (per-distributor own-number WhatsApp + AI).
+
+## 01 Oct — 5.18.65: Distributors link in the left sidebar (Admin section) — DEPLOYED to production 21:25 UTC (PASSED 18/0/0)
+
+On the operator's "yes go ahead" to putting the Distributors screen in the side menu. 5.18.64 deployed the pilot and
+the operator turned it on, but the registry was reachable only by typing the `?page=dashboard&tab=distributors` URL —
+the left sidebar (`includes/navigation.php`) is hand-curated and had no link. **One UI change over 5.18.64:** a
+"Distributors" link in the left sidebar's **Admin** section. **No migration, no new behaviour, the pilot switch
+untouched.**
+
+**1. Files.**
+- `includes/navigation.php` — a self-contained, self-gated block in the Admin section (after Overdue Workbench): the
+  link renders only when `$isAdmin` **and** Uganda (`StaffJobsGate::applies`, fail-closed) **and**
+  `!empty($config['distributors_enabled'])` — the exact triple gate the tab (`tabs/admin/distributors.php`) and the
+  `$ALL_MODULES` menu entry (`public.php`) already use. On South Sudan, and on Uganda while the flag is off, the block
+  is pure PHP that emits **zero bytes**. It re-`require`s `StaffJobsGate` and re-checks `$isAdmin` itself, so it cannot
+  leak if moved.
+- `manifest.json` → 5.18.65. Five distributor test files: version pins 5.18.64 → 5.18.65.
+
+**2. Tests.** `tests/test_distributor_registry.php` (**59/0**) gains two assertions: the sidebar carries
+`tab=distributors`, and the admin+Uganda+flag gate sits within the 8 lines before it (a copy that drops the gate
+fails). **South Sudan golden 51/0** — the Staff page, dashboard and the whole job-day render **byte-for-byte**
+identical to 5.18.49, all 11 mutants still caught — proving the sidebar block emits nothing on South Sudan. Existing
+distributor suites green with pins bumped (apply 61/0, territory 47/0, notify 66/0, link 33/0). Full plugin suite
+**green, run twice** (`run.sh` exit 0 both runs, 0 failures).
+
+**3. Deployment. DEPLOYED to production 2026-10-01 21:25 UTC — PASSED (18 ok, 0 failed, 0 notes).** The operator ran
+the pinned command; the log shows: plugin commit `ce3fa91` over live `03df9a5` (5.18.64), 7 files byte-for-byte (R1),
+the pilot switch read **on** before and after and unchanged by the deploy (V3/R2), no migration (R3), the Null channel
+still bound — nothing can be sent (R4), Release A→5.18.64 preserved (173 files, R5), and the **Distributors sidebar
+link installed and gated (R6)**. The **Distributors** link is now live under **Admin** in the left sidebar on the
+Uganda install. `scripts/deploy-5.18.65.sh` (pinned to `ce3fa91`, installs
+5.18.65 over live **5.18.64**) — backup + GO/NO-GO, byte-for-byte verify (R1), the pilot switch **unchanged** by the
+deploy (V3/R2 read the live state before and after and require them equal — whatever the operator set it to, it
+stays; even on, nothing is sent), **no migration** (R3 is a regression check that 5.18.64's three are still present
+and the six tables intact), the Null channel still bound so nothing can be sent (R4), Release A→5.18.64 preserved
+(R5), and the **Distributors sidebar link installed and gated (R6)**. The rollback to 5.18.64 is a **separate**
+`--rollback` command (never pasted with the deploy, root docs/44 §16.9); it restores code only, so the pilot, its
+config and its tables are untouched and the screen stays reachable at the URL. The rehearsal
+`scripts/harness/deploy-5.18.65/rehearse.sh` drives the deploy + checks + rollback end to end against a fake 5.18.64
+server (pilot **ON**, as the live one is) with R1/R6/R5 teeth and an R4 control-on-control mutant: **87/0**. This
+session cannot reach the server; the operator runs the one-line command and sends back the log. Preserves
+Uganda/South Sudan (South Sudan sees nothing); Domain B untouched. **Not changed:** the pilot itself, the Null
+transport (still queues, never sends), P4, WS-B.
+
+## 02 Oct — WS-A P4: distributor-portal OTP over the existing Evolution WhatsApp + admin TOTP reset — BUILT in development, NOT deployed, NOTHING SENT
+
+On the operator's implementation approval of `docs/53` (decision **D2 — reuse the existing support instance
+`evo_instance_support`; fake-Evolution tests only; real sending a separate future gate**). This fills the delivery
+seam the P4 sign-in (P4c/P4d) left null. **Development and test schema only. No real WhatsApp send, no live-provider
+test, no deployment, no flag change, the portal stays OFF.** South Sudan and Uganda (flag off) are unchanged; Domain B
+is untouched.
+
+**1. Files.**
+- `migrations/083_distributor_portal_otp_delivery.sql` — **new** `dist_partner_auth_log`, the non-secret
+  authentication-plane record (OTP-send outcome + TOTP-reset audit). Additive, idempotent, inert until the flag is on;
+  nothing in 001–082 touched. A CHECK constrains `otp_send` outcomes to `accepted / failed / unknown / no_recipient` —
+  **there is deliberately no `delivered` value, so Evolution's acceptance can never be written as delivery.** No
+  `code` / `secret` / `token` column.
+- `lib/PartnerOtpSender.php` — **new**. `fromConfig()` binds `EvolutionWhatsAppChannel` on `CHANNEL_SUPPORT` (D2) over
+  the EXISTING `EvolutionApiService` — the same `WhatsAppChannel` port the distributor notifications use, **not**
+  `NotificationService`, message class `CLASS_STAFF`. `resolveRecipient($userId)` derives the destination **server-side
+  from the account alone** → the account's OWN verified `dist_contacts` number → else `null` (no send). `send()` calls
+  the channel **exactly once** (never a self-retry), maps the result to `accepted / failed / unknown`, records a
+  non-secret row; the login request's number is ignored.
+- `lib/PartnerAccounts.php` — **+`resetTotp($userId,$actor)`**: clears the authenticator, revokes every live session,
+  and audits, **in one transaction** (fail-closed). Actor from the identity boundary. Mirrors `disable()`/`setRole()`.
+- `includes/post/post_distributors.php` — **+`dist_totp_reset`** staff handler: `requireAdmin()` + Uganda + flag gate,
+  actor = the authenticated admin, calls `resetTotp()`. No self-service.
+- `partner_api.php` — **behaviour unchanged: `$deliver = null`** (the live entry binds NO sender); comment refined to
+  show the separately-approved wiring.
+- `tests/fixtures/fake_evo_server.php` — strictly-additive `code` param on `/__test/fail_next` (default 500) so a test
+  can force a gateway 50x; existing callers unaffected.
+
+**2. Tests.** `tests/test_partner_otp_delivery.php` — **68/0**, all synthetic, against the fake Evolution server:
+migration 083 (incl. the DB-level `delivered` refusal + control); the server-side verified-only recipient resolver
+(unverified / absent / foreign-number / disabled all → no send; resolver takes a user id only, by reflection); a real
+`accepted` send on the **support** instance to the **verified** number carrying the code, with the request's bogus
+number ignored; `failed` on a provider 500; `unknown` on a gateway 504 **and** on a real Uganda timeout, each reaching
+Evolution exactly once and never resent; `no_recipient` with the uniform `{status:"sent"}` response; the per-account
+send cap gating sending (four requests, cap two → two sends); the secrets scan (code / TOTP secret / apikey / token in
+no log row or response); the admin TOTP reset revoking a live session, clearing the authenticator, and auditing with
+the acting admin; the outcome-mapping table with the no-self-retry guarantee (channel called exactly once); the
+separation + support-binding checks; the no-accidental-send checks; and **three weakened copies each caught** (a copy
+that reads the destination from the request, one that records an uncertain send as `accepted`, one that logs the code).
+Full plugin suite **green, run twice** (`run.sh` exit 0, 0 failures). The fake-server change is additive; the
+Evolution-dependent suites stay green.
+
+**3. No accidental real send (operator-requested review).** There is no path, under any test or configuration, that
+makes the live entry send in this phase: (a) `partner_api.php` keeps `$deliver = null` (asserted as code, comments
+stripped), so the live portal produces the code and sends nothing whatever the flag/config; (b) `PartnerApi` hard-codes
+no sender — delivery is injected; (c) the portal 404s unless Uganda **and** `distributors_enabled`, and the pilot flag
+is off; (d) the sender is constructed only in tests, pointed at the `127.0.0.1` fake, which never contacts WhatsApp —
+no test uses a real `evo_api_url`; (e) wiring it live is a visible one-line change, deliberately absent and documented
+as the separate gate.
+
+**4. Deployment. NONE — and none is in scope.** Real OTP delivery, wiring the sender into `partner_api.php`, enabling
+the portal/flag, P4e (portal pages), P4f (deploy artifacts), staging rehearsal and deployment all remain **separate,
+explicitly-approved** steps. `docs/53 §8` is the as-built record. PD-2 / PD-5 / PD-8 remediation (docs/52) is untouched.
+
+## 02 Oct — PD-8: same-site CSRF guard on the staff JSON API (both surfaces) — BUILT in development, NOT deployed
+
+On the operator's approval of the `docs/54` PD-8 design, limited to **cookie-authenticated CSRF protection only**. The
+two staff JSON surfaces — `public.php?page=api` and `public.php?page=stock_api` — accept either a Bearer `api_token`
+(every integration) or the browser session cookie (`kyc_retailer`, deliberately `SameSite=None` for the uCRM iframe).
+Because that cookie rides cross-site requests too, and the JSON path never ran a CSRF check while CORS is `*`, a page a
+signed-in staff member visits could drive a "simple" (preflight-free) cross-site write on their behalf. This closes
+that. **Development and test only; not deployed; no flag change; CORS unchanged; Uganda and South Sudan preserved;
+Domain B untouched.**
+
+**1. Files.**
+- `lib/StaffApiCsrf.php` — **new**. One pure method, `mustBlock($authedViaCookie, $method)`. It exempts GET/HEAD/OPTIONS
+  (safe methods / preflight), exempts anything **not** cookie-authenticated (Bearer integrations) — keyed off the
+  **server-side auth outcome, never a header's presence** — and, for a cookie-authenticated mutation, delegates
+  "our own page?" to `CustomerSession::crossSite()`, reused verbatim.
+- `includes/api_handlers.php` (`?page=api`) — captures `$authedViaCookie` (false before `tokenAuth()`, true only in the
+  session-fallback branch) and refuses `403 cross_site` after the staff auth check; the pre-auth customer-app actions
+  exit earlier and are untouched.
+- `includes/routes.php` (`?page=stock_api`) — the same, before the stock handler runs.
+
+**2. No static allow-list (a safer deviation from the `docs/54` §6 plan).** `crossSite()` compares the request's
+`Origin` to its **own `Host`**, so the Traefik hostname and the UISP `:8443` origin each validate against themselves and
+are **not** treated as interchangeable — no list to misconfigure, and the operator's point-5 hard-stop did not arise.
+Only `crossSite()` is reused, **not** `cookieUseAllowed()`, which also demands `X-Requested-With: DishNet` — a header the
+staff UI does not send.
+
+**3. Tests.** `tests/test_api_csrf_guard.php` — **51/0**: a unit matrix over `mustBlock()` (safe methods, Bearer
+exemption, same-origin pass, cross-site block by `Sec-Fetch-Site` and by `Origin`≠`Host`, missing/`null`/malformed
+`Origin`, the four Traefik-vs-`:8443` permutations, three weakened copies each caught, and source-wiring assertions
+incl. the unchanged CORS `*`); and, over real HTTP on **both** surfaces, Bearer cross-site → allowed, cookie cross-site
+→ 403 (incl. the form / FormData / text-plain "simple request" cases), cookie same-origin → allowed, GET → allowed,
+invalid-Bearer-then-cookie → blocked, valid-Bearer-plus-cookie → allowed, anonymous cross-site → 401. Full plugin suite
+**green, run twice** — `tests/run.sh` exit 0 both times, **263 files / 10,521 assertions / 0 failed** (identical both
+passes); `test_api_csrf_guard.php` **51/0**.
+
+**4. Scope / deployment. NONE in scope.** CORS narrowing (step 4), PD-5, PD-2, P4e, portal/flag changes, OTP
+wiring/sending, staging and deployment all remain separate, explicitly-approved steps. The manifest version is
+unchanged (release/versioning is the operator's step). `docs/54 §10` is the as-built record.

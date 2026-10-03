@@ -1558,6 +1558,23 @@ switch ($changeType) {
             }
         }
 
+        // WS-A P3 (docs/49): draft a distributor alert if this customer belongs to a
+        // distributor. DRAFT ONLY — nothing is sent (pilot). Flag-gated + try/catch
+        // isolated, a strict no-op when the distributor pilot is off (every South Sudan
+        // install, and Uganda by default). It runs AFTER the response is flushed and
+        // after the customer's own receipt, so it cannot affect customer-facing behaviour.
+        // The amount is the uCRM-re-verified payment ($payment via whVerified), never the
+        // posted body (docs/49 §7).
+        try {
+            require_once __DIR__ . '/lib/DistributorEvents.php';
+            $dpAmt = (int)round((float)$amount);
+            DistributorEvents::maybeNotify($store, is_array($config ?? null) ? $config : [], $dataDir ?? null,
+                'payment_received',
+                ['client_id' => (string)$clientId, 'payment_id' => (string)$paymentId],
+                ['customer_name' => (string)$name, 'amount_display' => 'UGX ' . number_format($dpAmt), 'amount_raw' => (string)$dpAmt],
+                'system (payment webhook)');
+        } catch (\Throwable $e) { whLog($changeType, 'distributor notify (payment) skipped: ' . $e->getMessage()); }
+
         // 5.18.54 (D-1): the answer went before the delivery note; a second one would only raise header warnings.
         if (!empty($payResponded)) exit;
         whResp(200, 'payment.add processed.');
@@ -1732,6 +1749,22 @@ switch ($changeType) {
             } catch (\Throwable $fiberErr) {
                 whLog($changeType, "Fiber service.add exception: " . $fiberErr->getMessage());
             }
+        }
+
+        // WS-A P3 (docs/49): on FIRST activation (status active) draft a "new customer
+        // activated" alert for the owning distributor. DRAFT ONLY — nothing is sent (pilot).
+        // Flag-gated + try/catch isolated, a strict no-op when the distributor pilot is off
+        // (every South Sudan install, Uganda by default). Wrapped so a throw can never stop
+        // the 200 below — this runs before the response is sent.
+        if ($status === 1) {
+            try {
+                require_once __DIR__ . '/lib/DistributorEvents.php';
+                DistributorEvents::maybeNotify($store, is_array($config ?? null) ? $config : [], $dataDir ?? null,
+                    'customer_activated',
+                    ['client_id' => (string)$clientId],
+                    ['customer_name' => (string)$name],
+                    'system (service webhook)');
+            } catch (\Throwable $e) { whLog($changeType, 'distributor notify (activation) skipped: ' . $e->getMessage()); }
         }
 
         whResp(200, 'service.add processed.');

@@ -71,6 +71,7 @@
     // ═══════════════════════════════════════════════════════════════
     // AUTH GUARD — Bearer token or browser session required below
     // ═══════════════════════════════════════════════════════════════
+    $authedViaCookie = false;              // PD-8: set from the AUTH OUTCOME, never a header
     $me2 = $auth->tokenAuth();
 
     // Session fallback: if no Bearer token, check if logged in via browser session
@@ -81,10 +82,18 @@
         if ($sessData && !empty($sessData['id'])) {
             // Use the full cached record if available, otherwise the session summary
             $me2 = $sessData['cached_record'] ?? $sessData;
+            $authedViaCookie = true;       // this request was authenticated by the browser cookie
         }
     }
 
     if (!$me2) $er2('Unauthorized.', 401);
+
+    // PD-8 (docs/54): a cookie-authenticated, state-changing request must come from
+    // our own page. Bearer integrations and GET/HEAD reads are unaffected. $met is
+    // set at the top of this file; $er2 at line 10.
+    require_once dirname(__DIR__) . '/lib/StaffApiCsrf.php';
+    if (StaffApiCsrf::mustBlock($authedViaCookie, $met)) $er2(StaffApiCsrf::BLOCKED, 403);
+
     $rid        = (int)$me2['id'];
 
     // ── Global auth helpers — available to ALL handlers below ────────────────
