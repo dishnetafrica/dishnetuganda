@@ -1,254 +1,195 @@
 # 05 — Official API V2: live-access test record
 
 **Task:** a READ-ONLY validation of the **official** Starlink Public API V2 against DishNet's real
-service-account credentials, to prove scope/coverage **before** any change to the working
-data-report integration. **No migration is started here.** No code, schema, flag, plugin, or
-deployment is changed; no write/mutation is made against any system.
+service-account credential, to prove scope/coverage **before** any change to the working
+data-report integration. **No migration started.** No code/schema/flag/plugin/deploy changed; no
+write/mutation made against any system.
 
-**Evidence labels (as the operator required):**
-- **[LIVE]** VERIFIED FROM LIVE API — an actual response from the probe.
-- **[DOC]** VERIFIED FROM OFFICIAL DOCUMENTATION — the V2 OpenAPI 3.0.4 spec (see `01`).
-- **[SHOT]** VERIFIED FROM OPERATOR SCREENSHOT — the service-account permissions dialog (partial;
-  dialog overlays some rows).
-- **[INF]** INFERRED — reasoning from the above.
-- **[NV]** NOT VERIFIED — pending the live probe run.
+**Status: EXECUTED 2026-10-03** on the DishNet server (which has egress to `starlink.com`), using
+`probe/starlink_api_probe.py`. The Claude Code session itself cannot reach `starlink.com`
+(egress `403`), so the operator ran the probe and pasted back the redacted summary.
+
+**Evidence labels:** **[LIVE]** verified from the live API · **[DOC]** from the V2 OpenAPI spec
+(`01`) · **[SHOT]** from the service-account screenshot · **[INF]** inference · **[NV]** not verified.
 
 ---
 
 ## 1. Executive result
 
-**The live API test could not be executed from the Claude Code session, and no live results are
-fabricated.** Two blockers, both evidenced:
+**Authentication succeeded and the credential is SINGLE-ACCOUNT.** [LIVE]
+- Auth **PASS** (OIDC client-credentials, body auth; 13 GET calls; token never printed).
+- It sees **1 Starlink account · 4 service-lines · 1 user-terminal (kit) · 8 addresses · 5 invoices**.
+- The **managed-accounts** hierarchy is reachable (`/managed/accounts/tree` → `rootAccountNumber`,
+  `tree`) but has **0 child accounts**, and the managed queries return the **same** 4 service-lines as
+  the direct ones — so nothing beyond this one account is visible.
+- The existing Data Report tracks ~**4 accounts / 16 service-lines / 2 kits** (prior audit `docs/39`),
+  so **this credential covers only part of the estate.** *Single-account access observed;
+  organization-wide access not proven.*
+- **Permissions are broader than the screenshot implied:** `/account` and `/billing/*` returned **OK**
+  despite "Account information"/"Financial" appearing unticked (`§2`). Live evidence overrides the
+  screenshot.
+- The official API remains a **read/billing/service/device-reboot** surface — **no** WiFi config,
+  per-client pause, auto-block actuation, live telemetry, or orders (`01`§D, `20`). A migration is
+  **hybrid at best**; the mapping of the rest of the estate is pursued in `06`.
 
-- **This session cannot reach `starlink.com`.** A credential-free GET to the public OIDC discovery
-  URL returns `CONNECT tunnel failed, response 403` from the egress proxy. The same host serves the
-  OIDC token endpoint and every V2 path, so **all live calls are blocked here.** [LIVE — negative]
-- **No Starlink credentials are present in this environment.** (They were later shared in chat, but
-  that does not change egress, and that secret must be **rotated** — §12.)
+## 2. Credential scope — LIVE permission results (corrects the screenshot)
 
-**What was produced instead** (the build-here / run-on-your-infrastructure split this project uses
-throughout): a safe, read-only probe — `probe/starlink_api_probe.py` (+ `probe/README.md`) — for the
-operator to run where egress and credentials exist (the Mac/server). Its **SCOPE VERDICT** block
-directly answers "one credential → all accounts?". Until it is run, §§4–10 are **[NV]**; §§2–3, 11
-carry provisional answers from the spec and the screenshot, clearly labelled.
+| Feature | Live result | Endpoint evidence |
+|---|---|---|
+| **Account information** | **ALLOWED** | `GET /account` → OK (accountName, accountNumber, activeSuspensions, regionCode) |
+| **Financial** | **ALLOWED** | `GET /billing/invoices` → OK (5); `GET /billing/balance` → OK |
+| **Service** | **ALLOWED** | `GET /service-lines` → OK (4); `/products` → 422 (validation, not permission) |
+| **Device (read)** | **ALLOWED** | `GET /user-terminals` → OK (1; routers nested) |
+| **Device command** | **NOT TESTED** | never invoked (read-only probe) |
 
-**Provisional headline [INF from DOC+SHOT]:** the credential as currently granted can likely read
-*service-lines, user-terminals, products* but **not** *account* or *billing* (those View permissions
-are unticked — §2); and whether it is **org-wide vs single-account** is **[NV]** until the probe's
-`/managed/accounts/tree` call is seen. The official API remains a **read/billing/service/device-reboot**
-surface with **no** WiFi/pause/auto-block/live-telemetry/orders (`01`§D, `20`) — so any outcome is at
-most a **partial, hybrid** migration, never a full replacement.
+[LIVE] — so the earlier [SHOT] reading ("Account info / Financial ungranted") is **superseded by live
+evidence**: this credential can read account, service-lines, user-terminals, addresses, invoices, and
+balance for the account it belongs to.
 
-## 2. Credential scope
+## 3. Account-access model [LIVE + DOC]
+- **Observed: one credential → one account.** `/account` = 1; `/managed/accounts` = **0 children**;
+  managed service-lines (4) == direct service-lines (4). The credential's reach **is** this one
+  account.
+- **The managed-accounts *mechanism* exists** (`/managed/accounts/tree` works, returns a
+  `rootAccountNumber` + `tree`) [LIVE] — so an **org-wide** model is *possible in principle* if the
+  other accounts were linked as children, but **none are today** [LIVE]. Whether DishNet's other
+  accounts *can* be placed under a managed hierarchy is a Starlink account-structure question
+  (`06`§5, operator/Starlink). **Do not change account structure for testing.**
+- **Verdict:** *Single-account access observed; organization-wide access not proven.*
 
-- **Type:** an **account "service account credential"** used to *"obtain an authorization token"* —
-  i.e. **OIDC client-credentials**, exactly the V2 auth model. [SHOT][DOC]
-- **Permission grants, as currently saved** (from the permissions matrix; two columns = View / Manage;
-  dialog overlaid the middle rows): [SHOT, partial]
-
-  | Feature group | Granted now? | Maps to V2 `FeatureAccess` | Affects |
-  |---|---|---|---|
-  | Account information | **✗ (both columns)** | AccountInformation | `GET /account`, `/addresses` → **would be DENIED** |
-  | Device command and configuration management | **✓ (both)** | DeviceCommand / DeviceConfigurationAssignment | reboot, config, L2VPN, public-IP (**write/command** — a read probe must not need this) |
-  | Device … (reboot/telemetry rows) | **✓ (visible)** | DeviceManagement / DeviceTelemetry | `/user-terminals`, routers |
-  | Financial | **✗ (visible)** | Financial | `GET /billing/*` → **would be DENIED** |
-  | Service … (two rows) | **✓** | ServicePlan / ServiceAccountManagement | `/service-lines`, `/products`, usage |
-  | User management | **✗ (both)** | UserManagement | `/contacts` |
-
-- **[INF]** With these grants, the probe will likely return **DENIED** on `/account` and `/billing/*`
-  (`403 UserLacksRequiredPermission`, naming `AccountInformation`/`Financial`), and **OK** on
-  `/service-lines`, `/user-terminals`, `/products`. The operator can tick **Financial** and
-  **Account information** (View) and Save to extend coverage — a deliberate choice, since withholding
-  Financial keeps billing *off* the API path (which aligns with "uCRM/accounting stays authoritative").
-- **[INF]** The credential currently holds **device command/config (write)** — more than a read
-  validation needs. Recommendation: mint a **separate, view-only** credential for the probe (§12).
-
-## 3. Account-access model (the pivotal question)
-
-**"With ONE credential, can DishNet read ALL its Starlink accounts/service-lines/terminals, or only
-one account?"**
-
-- **[DOC]** The V2 API offers two surfaces: the **direct** endpoints (`/account`, `/service-lines`,
-  `/user-terminals`, `/billing/*`) operate on **the single authenticated account**; the **Managed
-  Accounts** endpoints (`/managed/accounts/tree`, `/managed/accounts`,
-  `/managed/accounts/service-lines`, `/managed/accounts/user-terminals`) expose a **parent→child
-  hierarchy** — *if* the account is a managed/parent account *and* the credential holds the
-  `ManagedAccount*` permissions.
-- **[INF]** The URL seen (`/account/service-account-v2`) is an **account-scoped** credential; a
-  managed hierarchy is possible but **not evidenced**. The "Service" grants *may* include
-  `ServiceAccountManagement`, which is adjacent to managed-account capability — but that is not proof.
-- **[NV] Definitive answer is the probe's `/managed/accounts/tree` result:**
-  - `tree` returns a hierarchy with **N>1** accounts → **ORG-WIDE** (one key reads all N).
-  - `tree` **DENIED**/empty while `/service-lines` returns data → **SINGLE-ACCOUNT** (one key reads
-    one account's lines only; DishNet would need one credential per Starlink account).
-
-  The probe prints exactly this as its `SCOPE VERDICT`. **Do not assume either outcome.**
-
-## 4. Accessible population  — **[NV] PENDING PROBE**
-Fill from the probe `SCOPE VERDICT`:
+## 4. Accessible population [LIVE]
 ```
-accessible_account_count   = ____   (managed_accounts_count, or 1 if single-account)
-accessible_service_count   = ____   (service_lines totalCount / managed_service_lines)
-accessible_kit_count       = ____   (user_terminals totalCount / managed_user_terminals)
+accessible_account_count   = 1
+accessible_service_count   = 4   (service-lines; managed == direct)
+accessible_kit_count       = 1   (user-terminal; routers nested inside)
+addresses                  = 8
+invoices                   = 5
 ```
-Compare against data-report's current population (prior audit: **~4 accounts / 16 service-lines /
-2 kits**, `docs/39`) in §6.
 
-## 5. Endpoint test results — **[NV] PENDING PROBE** (scaffold)
-One row per endpoint the probe reports (`result`, `totalCount`/`count`, needed-permission on 403,
-field names). Expected per the spec + grants:
+## 5. Endpoint test results [LIVE]
 
-| Endpoint | Method | Expect (provisional) | Permission |
-|---|---|---|---|
-| `/account` | GET | DENIED (AccountInformation unticked) | AccountInformation/View |
-| `/managed/accounts/tree` | GET | **the scope test** | ManagedAccountInformation |
-| `/managed/accounts` | GET (cursor) | hierarchy count or DENIED | ManagedAccountInformation |
-| `/service-lines` | GET (page) | OK + totalCount | ServicePlan/View |
-| `/user-terminals` | GET (page) | OK + totalCount | DeviceManagement/View |
-| `/products` | GET (page) | OK (plan catalog + price) | ServicePlan/View |
-| `/addresses` | GET (page) | DENIED or OK | AccountInformation/View |
-| `/billing/invoices` | GET (page) | DENIED (Financial unticked) | Financial/View |
-| `/billing/balance` | GET | DENIED (Financial unticked) | Financial/View |
-| `/data-usage/query` | POST-read | opt-in follow-up only | ServicePlan/View |
+| Endpoint | Method | Result | Count | Key fields returned |
+|---|---|---|---|---|
+| `/account` | GET | **OK** | 1 | accountName, accountNumber, activeSuspensions, regionCode |
+| `/managed/accounts/tree` | GET | **OK** | 1 | rootAccountNumber, tree |
+| `/managed/accounts` | GET | **OK** | **0** | (no children) |
+| `/managed/accounts/service-lines` | GET | **OK** | 4 | accountNumber, serviceLineNumber, productReferenceId, active, endDate, addressReferenceId, nickname, … |
+| `/managed/accounts/user-terminals` | GET | **OK** | 1 | accountNumber, serviceLineNumber, kitSerialNumber, dishSerialNumber, userTerminalId, routers, nickname |
+| `/service-lines` | GET | **OK** | totalCount=4 | (same SL shape) |
+| `/user-terminals` | GET | **OK** | totalCount=1 | kitSerialNumber, dishSerialNumber, userTerminalId, serviceLineNumber, routers |
+| `/products` | GET | **ERROR 422** | — | business-validation error (not 403/permission) — needs a param or no catalog at this level |
+| `/addresses` | GET | **OK** | totalCount=8 | addressReferenceId, formattedAddress, latitude, longitude, region, regionCode, … |
+| `/billing/invoices` | GET | **OK** | totalCount=5 | invoiceId, amount, currency, dueAmount, dueDate, invoiceDate, status, description |
+| `/billing/balance` | GET | **OK** | 1 | balances |
+| `/data-usage/query` | POST-read | **NOT TESTED** | — | deliberately skipped (POST-style read; follow-up) |
 
-## 6. Multi-account findings — **[NV] PENDING PROBE**
-Report: hierarchy present? child-account count; do those accounts match the Starlink accounts
-data-report currently syncs? any API-only or current-only accounts?
+## 6. Multi-account findings [LIVE]
+**NOT PROVEN.** `/managed/accounts` returned **0** children and managed==direct scope. This single
+credential exposes exactly one account's resources. To cover the other ~3 accounts, DishNet needs
+either a credential per account (`06`§5 Option D) or the accounts linked under a managed hierarchy
+(Option B — not configured today).
 
-## 7. Multi-kit findings — **[NV] PENDING PROBE**
-Report accessible kit/terminal count vs data-report's `wifi_router_map.json`/registry population;
-list matched / API-only / current-only (pseudonymised `KIT-001…`).
+## 7. Multi-kit findings [LIVE]
+This credential exposes **1 user-terminal (kit)** with its nested routers. Data Report tracks ~2 kits
+across the estate, so the other kit(s) live in other accounts this credential cannot see. The
+`06` mapping shows the plugins already store `kitSerialNumber`↔`accountNumber` for all of them.
 
-## 8. Data Report comparison — **[NV] PENDING PROBE** (method fixed now)
-For the same population, compare each field data-report consumes against the API, classifying
-**EXACT MATCH / PARTIAL / NOT AVAILABLE / AVAILABLE BUT DIFFERENT SEMANTICS / UNKNOWN**. The
-field-by-field expectation is already derived from the spec in **`20-mapping-data-report.md`** (kit/SL
-identity, plan, active/endDate = match; pause/standby/`canPause`/`lastConnected` = not available;
-usage GB = match-ish, allowance unknown; invoices = partial + Financial-gated; orders, WiFi, live
-telemetry = not available). The probe confirms it against live data.
+## 8. Data Report comparison [LIVE + CURRENT]
+| | This API credential | Data Report (prior audit) |
+|---|---|---|
+| accounts | **1** | ~4 |
+| service-lines | **4** | ~16 |
+| kits | **1** | ~2 |
+→ **Partial coverage.** The field *shapes* match exactly (accountNumber / serviceLineNumber /
+kitSerialNumber / dishSerialNumber / addressReferenceId are the same identifiers Data Report stores —
+`06`§2), so for the account it can see, the mapping is **deterministic**. The gap is **access**, not
+identity. A per-field value-level reconciliation (does the API's 4 SL numbers equal Data Report's 4
+for this account?) is the recommended next read-only check (`06`, kit-lookup tool).
 
-## 9. Coverage matrix — provisional [INF from DOC]; confirm with probe
+## 9. Coverage matrix — provisional, now with live permissions
+Unchanged from `20` on *capability* (reads = Partial+; device plane + orders = No), **plus** the live
+fact that this credential **can** read account + billing (so those reads are available per-account,
+subject to a credential existing for each account).
 
-| Data Report capability | Current source | Official API source | Match | Gap | Keep current? | Improvement |
-|---|---|---|---|---|---|---|
-| Auth/session | pasted cookie + refresh | **OIDC client-credentials** | — | none | **No — replace** | kills cookie fragility |
-| Account/contact + billing dates | `accounts/v3/contact` | `/account` (+`/billing` dates) | Partial | billing-day, business flag | partial | needs AccountInformation grant |
-| Service-line + router map | `webagg/service-lines` | `/service-lines`+`/user-terminals` | Partial | pause/standby, lastConnected, hw ver | **keep for device bits** | cleaner identity |
-| Usage GB | `telemetryagg/annotated` | `/data-usage/query` | Partial(+) | allowance source, day-lag | partial | cleaner priority/standard split |
-| Invoices (cost) | `webagg invoice-balances/invoice` | `/billing/*` | Partial | paymentMethod, msrp, adjustment; **Financial-gated** | partial | per-line `serviceLineNumbers[]` |
-| Plans/subscription | webagg + diag | `/products` + SL product id | Yes-ish | pendingActivation flag | replace | official plan price |
-| Orders / shipment | `webagg orders` | **none** | No | whole feature | **keep current** | — |
-| Dish-online / client counts | gRPC `get_status` | **none** | No | all | **keep current** | — |
-| WiFi SSID/password change | gRPC `wifi_*config` | **none** | No | all | **keep current** | — |
-| Per-client pause / auto-block | gRPC + self-HTTP | **none** (reboot/deactivate only) | No | all | **keep current** | — |
-
-**The objective is the best architecture, not forcing everything onto the official API.**
-
-## 10. Discrepancies — **[NV] PENDING PROBE**
-Quantify from the probe vs current records:
+## 10. Discrepancies [LIVE]
 ```
-total current records (DR) = ____     total official API records = ____
-matched = ____   API-only = ____   current-only = ____   ambiguous = ____
-same kit / service / customer / status / dates / usage / billing?  (per-field)
+current records (DR, prior audit): ~4 accounts / ~16 SLs / ~2 kits
+official API (this credential):      1 account  /   4 SLs  /  1 kit
+matched (this account):              pending value-level check (06 / kit-lookup)
+API-only:                            none observed
+current-only:                        ~3 accounts / ~12 SLs / ~1 kit (in other accounts, unreachable
+                                     by this credential)
 ```
-Do not modify any record. A mismatch is a finding to investigate, **never** an auto-correction, and
-**historical finance records are never recalculated from current API state** (refunds/cancellations/
-re-dates would corrupt closed periods — `21`§H, §12).
+No record modified. A mismatch is a finding to investigate, never an auto-correction; **historical
+finance is never recomputed from current API state** (`21`§H).
 
-## 11. Rate limits / reliability — [DOC]
-- **250 requests/min per account**; **1,000 token requests / 15 min per IP** → cache the token,
-  never mint per request. [DOC]
-- **Pagination:** page-index (`pageIndex/limit/isLastPage/totalCount/results`) and cursor
-  (`nextKey/results`) — probe handles both. [DOC]
-- **Errors:** business failures = **HTTP 422** inside the `ServiceResponse` envelope (`isValid:false`,
-  `errors[]`) → do not retry; a `2xx` with `isValid:false` is also a failure. `403
-  UserLacksRequiredPermission` = permission gap → surface, don't retry. `401` → refresh once.
-  `429/5xx` → backoff + retry. [DOC]
-- **No webhooks** → scheduled polling only. [DOC] Reliability for scheduled jobs: adequate for the
-  current cadence given the small fleet; confirm token-expiry/refresh behaviour with the probe. [NV]
+## 11. Rate limits / reliability [DOC + LIVE]
+- [DOC] 250 req/min per account; 1,000 token/15min per IP; no webhooks (poll only); 422 = business
+  error in the `ServiceResponse` envelope; 403 = `UserLacksRequiredPermission`.
+- [LIVE] 13 calls completed without a rate-limit block; no rate-limit headers were surfaced in this
+  run. Token mint via **body auth** worked (no Basic needed).
 
 ## 12. Security observations
-1. **A live client secret was shared in chat + a screenshot. ROTATE it.** Mint a fresh secret (the
-   screen allows up to 20), use it, delete the exposed one. Secrets belong in environment variables
-   on the run host, never in chat/screenshots/Git. This session has **not** stored or committed it.
-2. **Use a dedicated view-only credential for the probe** — grant *View* on Account information,
-   Financial, Service, Device; do **not** grant *Device command and configuration management*
-   (write/reboot). The current credential carries device-command/config power a read validation
-   should not.
-3. The probe redacts all secrets/tokens, stores no raw payloads, and pseudonymises identifiers.
-4. Pre-existing (from `11`§H, out of scope but recorded): `data/crm_invoice_export.json` ships with
-   real customer PII; finance's WiFi queue stores plaintext passwords; its WiFi API is CORS-open.
+1. **ROTATE the client secret** — it was shown in chat + a screenshot (operator will rotate after
+   review). This session never stored/committed it.
+2. The credential also holds **device command/configuration (write)** — more than reads need; a
+   dedicated **view-only** credential is recommended for ongoing read use.
+3. The probe redacted all secrets/tokens, saved no raw payloads, pseudonymised ids.
 
-## 13. Recommended architecture — provisional, pending probe
-**Option C → trending B: existing integration stays primary; official API adopted selectively, in a
-proven hybrid.** [INF]
-- **Adopt first, independently valuable:** replace the cookie/session machinery with **OIDC** for the
-  read endpoints the credential is granted (service-lines, user-terminals, products; usage; and
-  invoices/account *iff* the operator grants Financial/AccountInformation).
-- **Keep current, no official equivalent:** the **device plane** (WiFi config, per-client pause,
-  auto-block actuation, dish-online/client telemetry) and **orders/shipment**.
-- **Finance stays downstream and untouched** until the data-report source-of-truth transition is
-  proven: it consumes `sl_invoice_lines.json` / `dr_kit_registry.json` and calls Starlink never
-  (`11`, `30`). uCRM/accounting remains authoritative for customer price, payment, balance, revenue.
-- **Final A/B/C choice is contingent on the probe** (scope + which reads are permitted + field parity).
+## 13. Recommended architecture [INF, from live + `20`/`30`]
+**Hybrid, per-account.** The official API can source **account, service-lines, user-terminals,
+addresses, invoices, balance** for *each account that has a credential*; the **device plane**
+(WiFi/pause/auto-block/telemetry) and **orders** stay on the current mechanism (no V2 equivalent).
+Multi-account requires **either** one credential per Starlink account **or** a managed hierarchy
+(`06`). Finance stays downstream and untouched; uCRM/accounting authoritative for money.
 
-## 14. Proposed migration strategy — **not started; approval-gated** (also see `60`)
-1. Run the probe; record §§2–10 live. 2. If reads are permitted and parity holds, implement a V2
-   client in data-report **behind a flag, read-only**, writing to **shadow** files. 3. **Side-by-side**
-   for a full billing cycle: compare V2-derived vs scraped for the same population (kit/SL/customer/
-   status/usage/invoice), diff reported, **nothing switched**. 4. Only after parity is demonstrated,
-   flip the read source **per domain**, preserving every output-file contract. 5. Device plane +
-   orders stay as-is. 6. Finance untouched throughout; it keeps reading the same files.
+## 14. Proposed migration strategy — not started; approval-gated (also `60`)
+Build the per-account registry (`06`) → mint/collect a credential per account → V2 read client in
+data-report **behind a flag, shadow files** → side-by-side for a full cycle → flip per domain,
+preserving file contracts → device plane + orders unchanged → finance untouched.
 
-## 15. Rollback strategy (also see `60`)
-Flag-controlled: the V2 reader is additive and off by default; disabling it reverts to the scraped
-path instantly. No schema/file-contract change during side-by-side (shadow files only). Last-good
-files are retained so a V2 outage degrades to stale-but-correct data. **No finance record is ever
-rewritten**, so there is nothing to roll back downstream. Secret rotation + credential revocation are
-independent of code.
+## 15. Rollback strategy (also `60`)
+Flag-off reverts to the scraped path instantly; shadow files during side-by-side; last-good files on
+outage; no finance record ever rewritten; secret rotation/revocation independent of code.
 
-## 16. Exact unanswered questions (the probe answers 1–6)
-1. Is the credential **org-wide (managed hierarchy)** or **single-account**? (`/managed/accounts/tree`)
-2. `accessible_account_count` / `service_count` / `kit_count`?
-3. Do those match data-report's current population (matched / API-only / current-only)?
-4. With current grants, which endpoints return **OK vs DENIED** (confirm Account/Financial gating)?
-5. **Field parity** per `20`: does `/data-usage` carry an **allowance**? do `/service-lines` really
-   omit pause/standby/lastConnected? does `/billing` omit paymentMethod/msrp/adjustment?
-6. Token-expiry/refresh behaviour and any rate-limit headers in practice?
-7. **Operator decisions (not probe):** grant Financial/AccountInformation View? mint a view-only
-   credential? one credential per Starlink account if single-account scope?
+## 16. Exact unanswered questions
+1. [answered — LIVE] org-wide vs single-account → **single-account** (0 managed children).
+2. Value-level match: do the API's 4 SL numbers / 1 kit for this account equal Data Report's stored
+   values for it? (next read-only check — `06` kit-lookup)
+3. Can DishNet's other accounts be **linked under a managed hierarchy** (one parent credential), or is
+   **per-account credentials** the only path? (Starlink account-structure question)
+4. `/products` 422 cause (param needed? empty catalog?).
+5. Usage (`/data-usage/query`, POST-read) field parity incl. allowance.
+6. Per-account credential + secret-storage design (`06`§6/§10).
 
 ---
 
 ## FINAL REPORT
 
-1. **WHAT WORKS TODAY** — data-report scrapes Starlink's internal endpoints (cookie auth) for account,
-   service-lines/routers, usage, invoices, orders, and drives the gRPC device plane (WiFi change,
-   pause, auto-block, dish status). Finance consumes data-report's files + uCRM; it calls Starlink
-   never and recognizes revenue nowhere. All of this is working and must be preserved.
-2. **WHAT OFFICIAL API CAN REPLACE** — the fragile **auth/session** layer (OIDC), and the **reads** the
-   credential is granted: service-lines, user-terminals, products, usage, and — if Financial/
-   AccountInformation are granted — account + invoices. [INF; confirm with probe]
-3. **WHAT OFFICIAL API CANNOT REPLACE** — WiFi SSID/password, per-client pause, **auto-block
-   actuation**, live dish/client telemetry, and **orders/shipment**: no V2 equivalent exists (`01`§D).
-4. **DOES ONE API KEY HANDLE ALL ACCOUNTS?** — **NOT VERIFIED YET.** Determined by the probe's
-   `/managed/accounts/tree`: hierarchy with N>1 → org-wide; else single-account. The current
-   credential also lacks Account/Financial View as issued (§2).
-5. **DATA REPORT COVERAGE** — read/billing half = Partial-or-better (field losses listed in `20`/§9);
-   device plane + orders = No. Hybrid is the ceiling.
-6. **FINANCE IMPACT** — none until the data-report source transition is proven. Finance stays a
-   downstream file consumer; uCRM/accounting stays authoritative for money; no historical recompute.
-7. **RECOMMENDED NEXT STEP** — (a) rotate the exposed secret; (b) optionally mint a view-only
-   credential and tick Financial/AccountInformation View; (c) **run `probe/starlink_api_probe.py`** and
-   paste the redacted SUMMARY; (d) complete §§4–10; then decide A/B/C. **Do not start migration.**
-8. **RISKS** — assuming org-wide scope without proof; assuming field parity (allowance, pause flags);
-   the exposed secret; granting a write-capable credential to a read path; conflating Starlink cost
-   with customer payment/revenue; breaking the `sl_invoice_lines.json`/registry file contracts.
-9. **TEST EVIDENCE** — egress blocked (`CONNECT tunnel failed, 403`, credential-free); no creds in
-   session env; probe compiles (`python3 -m py_compile` OK) and contains no secret; **no live API call
-   was made from this session.**
-10. **FILES/COMMIT** — `docs/starlink-api-integration/05-official-api-live-access-test.md` (this),
-    `probe/starlink_api_probe.py`, `probe/README.md`. Documentation + safe local tooling only; no
-    secret committed; no production file/config changed.
+1. **WHAT WORKS TODAY** — data-report scrapes Starlink (cookie auth) for account/SL/usage/invoices/
+   orders + drives the gRPC device plane; finance consumes data-report files + uCRM, calls Starlink
+   never, recognizes revenue nowhere. All preserved.
+2. **WHAT OFFICIAL API CAN REPLACE** — [LIVE] per-account: auth (OIDC), account, service-lines,
+   user-terminals, addresses, invoices, balance. (Usage likely, pending the POST-read check.)
+3. **WHAT OFFICIAL API CANNOT REPLACE** — WiFi config, per-client pause, **auto-block actuation**,
+   live dish/client telemetry, **orders/shipment**. No V2 equivalent.
+4. **DOES ONE API KEY HANDLE ALL ACCOUNTS?** — **NO (not with this credential).** [LIVE] It is
+   single-account (1 acct / 4 SLs / 1 kit; 0 managed children). The estate needs per-account
+   credentials or a managed hierarchy (`06`).
+5. **DATA REPORT COVERAGE** — read/billing half = Partial-or-better *per account*; device plane +
+   orders = No. This credential covers ~1 of ~4 accounts.
+6. **FINANCE IMPACT** — none until the data-report source transition is proven; finance stays a file
+   consumer; uCRM/accounting authoritative; no historical recompute.
+7. **RECOMMENDED NEXT STEP** — run `probe/starlink_kit_lookup.py` for the known kits to confirm the
+   deterministic per-account match, and build the account registry (`06`). Then decide per-account
+   credentials vs managed hierarchy. **Do not start migration.**
+8. **RISKS** — assuming other credentials behave like this one; the exposed secret; a write-capable
+   credential on a read path; conflating Starlink cost with customer payment/revenue; breaking the
+   `sl_invoice_lines.json`/registry file contracts.
+9. **TEST EVIDENCE** — [LIVE] run from the DishNet server: auth PASS, 13 calls, the §5 matrix; probe
+   redacted, no secret printed/stored; no write/mutation; device command never invoked.
+10. **FILES/COMMIT** — this doc; `probe/starlink_api_probe.py`, `probe/starlink_kit_lookup.py`,
+    `probe/README.md`. Documentation + safe local tooling only; no secret committed; no production
+    change.
 
-*Live sections complete once the probe is run. Migration remains unstarted and approval-gated.*
+*Account-to-credential mapping for the rest of the estate is investigated in `06`.*

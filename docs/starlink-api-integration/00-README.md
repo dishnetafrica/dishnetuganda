@@ -44,8 +44,9 @@ official equivalent** (see `01` §D and `40`).
 |---|---|---|
 | `00-README.md` | this index | ✅ |
 | `01-official-api-v2-catalogue.md` | **#4** verified official-API V2 endpoint/field catalogue | ✅ written (from the supplied spec) |
-| `05-official-api-live-access-test.md` | **live-access validation record** (credential scope, org-wide-vs-single-account, side-by-side) | ✅ scaffold written; **live sections PENDING operator probe run** |
-| `probe/starlink_api_probe.py` + `probe/README.md` | **safe read-only probe** the operator runs where egress+credentials exist | ✅ written (compiles; no secret) |
+| `05-official-api-live-access-test.md` | **live-access validation record** (credential scope, org-wide-vs-single-account, side-by-side) | ✅ **EXECUTED live** 2026-10-03: single-account (1 acct/4 SLs/1 kit); broader perms than the screenshot |
+| `06-starlink-account-mapping.md` | existing (cookie-era) ↔ official-API **account mapping** + registry/credential design | ✅ written; **deterministic mapping** (account/SL/kit keys already stored); per-account credentials or managed hierarchy needed |
+| `probe/starlink_api_probe.py` + `probe/starlink_kit_lookup.py` + `probe/README.md` | **safe read-only probe** + per-kit lookup the operator runs where egress+credentials exist | ✅ written (compile clean; no secret) |
 | `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ✅ written (from real source) |
 | `11-baseline-finance.md` | **#1b** baseline inventory — finance | ✅ written (from real source v7.3.9) |
 | `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ✅ written |
