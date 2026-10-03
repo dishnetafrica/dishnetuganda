@@ -3369,6 +3369,33 @@ including the byte-for-byte 5.18.51 baseline comparison on Uganda and South Suda
 `test_job_notifier` 130/0, `test_migration_integrity` 28/0, `test_preauth_allowlist` 105/0, `test_api_csrf_guard` 51/0,
 `test_staff_jobs_gate` 41/0. The job page's `<script>` block parses under Node. PHP 7.4 syntax throughout.
 
-**5. Deployment. NONE.** The manifest reads 5.18.66; building and installing the ZIP (`build-zip.sh`) is the operator's
-step. First use on the server: migration 084 applies at boot; the data directory gains `uploads/job_photos/`, which the
-Google Drive backup already covers (`data/uploads`).
+**5. Deployment — prepared the project's way, NOT run.** Asked "what command do I have to run", the answer followed the
+pattern every release since 5.18.39 has used: a deploy script pinned to the reviewed commit, rehearsed against a fake
+install, a backup before copying, read-only checks afterwards, a log file sent back.
+
+- **A scope finding first.** `deploy-hybrid.sh` copies the whole plugin tree, and the branch tip (`924cb6f`) carries,
+  beyond 5.18.66, the distributor partner-portal stack (WS-A P4a–P4d, `93da47e`…`8227fc8`: migrations 081–083,
+  `partner_api.php`, `lib/Partner*.php`, `lib/Totp.php`, `lib/DistributorPortalData.php`) and the PD-8 CSRF guard
+  (`675f128`) — each recorded above as "NOT deployed", each with its own approval still to come, the portal with a
+  security review in progress (docs/51). Deploying the tip would ship all of it. So the release is cut on the live
+  version instead: **`release/5.18.66` = commit `8137912`, parent `ce3fa91` (5.18.65, production since 1 Oct)** — the
+  5.18.66 plugin changes applied to it and nothing else (18 files; the four pin bumps for test files that do not exist
+  at 5.18.65 left out; code hunks unchanged). On that tree: `test_job_photos` 72/0, `test_job_access` 83/0,
+  `test_job_notifications_day` 50/0 with the 5.18.51 baseline, `test_staff_jobs_south_sudan` 51/0,
+  `test_migration_integrity` 28/0, `test_staff_jobs_gate` 41/0, `test_distributor_registry` 59/0,
+  `test_distributor_apply` 61/0.
+- **`scripts/deploy-5.18.66.sh`** (pinned `8137912` over `ce3fa91`), the 5.18.65 script's shape with: **A0** — the
+  delta must contain no partner-portal / CSRF file, and the pin's parent must be 5.18.65 (a copy pinned to the branch
+  tip is refused before the container is even looked at); the release branch is fetched when the checkout lacks the
+  commit; **V5** — the photo viewer sends an anonymous visitor to sign in and `job_photo_upload` answers 401 to nobody;
+  **R3** — migration 084 installed, its two tables present-or-lazy with their row counts; **R4** — the pilot regression
+  plus "no `partner_api.php` / `StaffApiCsrf.php` installed"; **R6** — the photo surface present and wired to the Uganda
+  gate; the rollback (typed `ROLLBACK`) restores 5.18.65's code and leaves the two tables and any photos on disk, unread.
+- **Rehearsal `scripts/harness/deploy-5.18.66/rehearse.sh`: 127/0 over 17 runs of the script** — the three NO-GO gates,
+  the deploy as the operator runs it, the plugin's first boot (084 additive, `0:0`, no existing row changed), R1/R6, R5,
+  V3/R2 and R4 each proved to have teeth (a reverted job page, a changed Release-A file, the switch flipped, a live
+  channel and a planted `partner_api.php` are each caught by name), the rollback, and an R1-blinded copy caught.
+- **The operator's command** is in the script's header (deploy only — the rollback is printed at the end of the deploy's
+  own log, as its own command, never pasted together; root docs/44 §16.9). First use on the server: 084 applies on the
+  next plugin request; the data directory gains `uploads/job_photos/`, already inside the Google Drive backup.
+- **Result: PENDING** the operator's run and log file.
