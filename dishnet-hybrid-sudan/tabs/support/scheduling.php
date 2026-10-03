@@ -411,9 +411,13 @@ function schRenderPhotos(){
         if(_jobClosed&&!mine.length) return;
         var req=_photoRules.enforced&&_photoRules.required.indexOf(lb)!==-1;
         h+='<div style="background:#0f1724;border-radius:10px;padding:10px 12px;margin-bottom:6px;">';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">';
-        h+='<span style="font-size:13px;font-weight:700;color:#e2e8f0;">'+escHtml(PHOTO_LABELS[lb]||lb)+(req?(mine.length?' <span style="color:#4ade80;">✓</span>':' <span style="color:#fbbf24;font-size:11px;">required</span>'):'')+'</span>';
-        if(canAdd) h+='<button onclick="schPhotoPick(\''+lb+'\')" class="sch-act-btn" style="background:#1e3a5f;color:#93c5fd;margin:0;width:auto;min-height:40px;padding:8px 14px;font-size:13px;">📷 '+(mine.length?'Add another':'Take photo')+'</button>';
+        // 5.18.67: the label and its status stack on the left, so the button on the right keeps one line at any width.
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">';
+        h+='<div style="min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;">'+escHtml(PHOTO_LABELS[lb]||lb)+'</div>';
+        if(req) h+=mine.length?'<div style="font-size:11px;color:#4ade80;margin-top:2px;">✓ added</div>':'<div style="font-size:11px;color:#fbbf24;margin-top:2px;">required</div>';
+        else if(mine.length) h+='<div style="font-size:11px;color:#64748b;margin-top:2px;">'+mine.length+' photo'+(mine.length>1?'s':'')+'</div>';
+        h+='</div>';
+        if(canAdd) h+='<button onclick="schPhotoPick(\''+lb+'\')" class="sch-act-btn" style="background:#1e3a5f;color:#93c5fd;margin:0;width:auto;min-height:40px;padding:8px 14px;font-size:13px;white-space:nowrap;flex-shrink:0;">📷 '+(mine.length?'Add another':'Take photo')+'</button>';
         h+='</div>';
         if(mine.length){
             h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">';
