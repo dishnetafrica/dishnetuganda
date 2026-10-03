@@ -78,24 +78,54 @@ function http_request(string $method, string $url, array $headers, ?string $body
         throw new RuntimeException('SAFETY: method ' . $method . ' not allowed (read-only adapter)');
     }
     $CALLS++;
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_CUSTOMREQUEST  => $method,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_TIMEOUT        => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_FOLLOWLOCATION => false,
-    ]);
-    if ($body !== null) {
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    // Prefer ext-curl (what the deployed plugin uses); fall back to PHP streams so
+    // the CLI also runs on a host whose php lacks ext-curl.
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+        $resp = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        if ($resp === false) {
+            return [0, json_encode(['_transport_error' => substr($err, 0, 160)])];
+        }
+        return [$code, $resp];
     }
-    $resp = curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
+    // Fallback: PHP stream wrapper (needs allow_url_fopen + openssl).
+    if (!ini_get('allow_url_fopen')) {
+        throw new RuntimeException('no ext-curl and allow_url_fopen is off — run inside the UCRM container (its php has curl), e.g. docker exec -e DR_OFFICIAL_API_SYNC -e DR_SL_CLIENT_ID -e DR_SL_CLIENT_SECRET <ucrm> php <in-container-path>/official_api/official_api_sync.php');
+    }
+    $ctx = stream_context_create([
+        'http' => [
+            'method'          => $method,
+            'header'          => implode("\r\n", $headers),
+            'content'         => $body ?? '',
+            'timeout'         => $timeout,
+            'ignore_errors'   => true,   // capture 4xx/5xx bodies (e.g. 422 validation)
+            'follow_location' => 0,
+        ],
+        'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
+    ]);
+    $resp = @file_get_contents($url, false, $ctx);
+    $code = 0;
+    if (isset($http_response_header) && is_array($http_response_header)) {
+        foreach ($http_response_header as $h) {
+            if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m)) { $code = (int)$m[1]; }
+        }
+    }
     if ($resp === false) {
-        return [0, json_encode(['_transport_error' => substr($err, 0, 160)])];
+        return [0, json_encode(['_transport_error' => 'stream request failed'])];
     }
     return [$code, $resp];
 }
