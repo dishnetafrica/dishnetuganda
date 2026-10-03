@@ -49,7 +49,7 @@ official equivalent** (see `01` §D and `40`).
 | `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ✅ written (from real source) |
 | `11-baseline-finance.md` | **#1b** baseline inventory — finance | ✅ written (from real source v7.3.9) |
 | `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ✅ written |
-| `21-mapping-finance.md` | **#3** exhaustive function→API mapping — finance | ⏳ follows `11` |
+| `21-mapping-finance.md` | **#3** exhaustive function→API mapping — finance | ✅ written (finance = almost all "preserve") |
 | `30-shared-architecture.md` | **#5** cross-plugin shared-architecture recommendation | ✅ written |
 | `40-gaps-and-questions.md` | **#6** missing-capabilities + unresolved-questions list | ⏳ accumulates across the set |
 | `50-regression-matrix.md` | **#7** regression test matrix | ⏳ follows the mappings |
