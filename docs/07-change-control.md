@@ -3398,4 +3398,28 @@ install, a backup before copying, read-only checks afterwards, a log file sent b
 - **The operator's command** is in the script's header (deploy only — the rollback is printed at the end of the deploy's
   own log, as its own command, never pasted together; root docs/44 §16.9). First use on the server: 084 applies on the
   next plugin request; the data directory gains `uploads/job_photos/`, already inside the Google Drive backup.
-- **Result: PENDING** the operator's run and log file.
+- **RESULT — DEPLOYED to production 2026-10-03, 19:39 UTC: PASSED, 21 ok / 0 failed / 0 notes.** The run began at
+  19:39:22 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 8137912"* at 19:39:47 UTC.
+  Recorded from the terminal the operator pasted (the script prints no secret); the log file stays on the server as
+  `/root/dnb-5.18.66/deploy-20261003T193922Z.log`.
+  - **A.** Checkout `fc81066`; branch tip `924cb6f` (not installed); release commit `8137912` cut on `ce3fa91`; 18 files
+    (14 changed, 4 added, 0 removed), 1 migration; **A0** — no partner-portal or CSRF file in the delta. Live `ce3fa91`
+    / 5.18.65. The container's PHP **8.1.34** accepted all 7 changed server files and the 9 test files; **GD present**,
+    so photos are re-encoded server-side. Pilot `on`; photo tables `lazy`; `uploads/job_photos` absent.
+  - **Backup** `/root/dnb-5.18.66/backup-20261003T193922Z`: `plugin.sqlite3` 26 MB, one consistent copy, integrity ok,
+    239 tables; the data directory 124 MB; the installed 5.18.65 11 MB; the vault. No `dishnet.sqlite` in the data
+    directory (nothing to copy). `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal without a session 302; no South Sudan contact; **V5** the photo
+    viewer without a session 302, `job_photo_upload` without a login 401; **V3** the pilot unchanged (`on` → `on`);
+    **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 18 files as `8137912` has them, manifest 5.18.66; R2 `pilot=on`; **R3 migration 084 installed and
+    both tables present with `0:0` rows** — the plugin's first request within the guard window created them, additively;
+    R4 the pilot libs, the two flag-gated hooks and the Null channel as before, the pilot tables present, **no
+    `partner_api.php` / `StaffApiCsrf.php` installed**; R5 all 173 files from Release A through 5.18.65 intact; R6 the
+    photo surface installed and Uganda-gated.
+  - **A standing hazard this release makes real.** The server checkout (`/opt/dishnet`) sits on the branch tip, which
+    now carries undeployed work (the portal stack, PD-8). A bare `bash scripts/deploy-hybrid.sh` there would ship all
+    of it. **Deploy only through a pinned `scripts/deploy-5.18.NN.sh` from now on**, and read its `--check` line
+    ("NOT up to date") as the documented consequence of installing a release commit, not as a fault.
+  - **Not yet seen:** a technician's photo and location on a real job. Next: a phone, signed in as a technician — My Jobs
+    → a job → *Take photo* → *Mark as Completed* → *Allow location*; then `bash scripts/deploy-5.18.66.sh --after-only`.
