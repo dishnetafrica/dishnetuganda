@@ -205,6 +205,14 @@ def main():
     for r in crecs:
         sl = str(r.get("service_line") or "")
         if sl: by_sl.setdefault(sl, []).append(r)
+    # raw-text presence check: distinguishes "cookie doesn't retain" from a join/format bug
+    raw_txt = ""
+    try:
+        with open(os.path.join(DR_DATA, "sl_usage.json"), "r") as fh:
+            raw_txt = fh.read()
+    except Exception:
+        pass
+    print("  cookie sl_usage unique service_lines: %d" % len(by_sl))
 
     # Compare latest cycle per SL
     print("\n=== USAGE PARITY (latest cycle per service-line; GB) ===")
@@ -237,7 +245,8 @@ def main():
         if lrec: matched += 1
         for k, a, l in (("total", a_tot, l_tot), ("priority", a_pri, l_pri), ("standard", a_std, l_std)):
             c = cls(a, l); tally[k][c] = tally[k].get(c, 0) + 1
-        print("SL %s" % pz("SL", sl))
+        raw_present = "FOUND" if (sl and raw_txt and sl in raw_txt) else "ABSENT"
+        print("SL %s   (SL string present in sl_usage.json raw text: %s)" % (pz("SL", sl), raw_present))
         print("   period      API %-24s cookie %s" % (a_period, l_period))
         print("   total_gb    API %-8s cookie %-8s -> %s" % (a_tot, l_tot, cls(a_tot, l_tot)))
         print("   priority_gb API %-8s cookie %-8s -> %s" % (a_pri, l_pri, cls(a_pri, l_pri)))
