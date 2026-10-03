@@ -3480,3 +3480,12 @@ applies on first request here.
 `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.67 && mkdir -p /root/dnb-5.18.67 && bash scripts/deploy-5.18.67.sh 2>&1 | tee /root/dnb-5.18.67/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 — it refuses unless the container serves `8137912`; `--check` will read "NOT up to date" before and after (the branch tip
 is not what is installed — the documented consequence, not a fault). **RESULT: pending the operator's run.**
+
+**6. The full plugin suite, on the tree that carries 5.18.66 and 5.18.67** (`4c72a4a`; its plugin tree is `9343f60`'s):
+`tests/run.sh` — **264 files, 12,055 passed / 0 failed, exit 0, twice.** Run 2 began while the 5.18.67 files were still
+being edited and is not the record (its totals happen to be identical); **run 3, on the final tree, is.** One verdict
+line per file, no fatal, no file skipped. Among them: `test_job_photos` 72/0, `test_job_access` 83/0,
+`test_job_notifications_day` 50/0 (the byte-for-byte 5.18.51 baseline on Uganda and South Sudan),
+`test_staff_jobs_south_sudan` 51/0, `test_api_csrf_guard` 51/0, `test_partner_api` 32/0, `test_dist_isolation` 39/0. Run 1,
+during the 5.18.66 build, had been green except for the six version pins that still read 5.18.65 — bumped before the
+commit, each re-run green. This is the whole-suite confirmation the 5.18.66 entry above lists only per test.
