@@ -201,7 +201,7 @@ function mint_token(): string {
 }
 
 /** POST /data-usage/query — a documented READ/QUERY (filter+pagination body only). */
-function usage_query(string $token, array $bodyObj, int $page): array {
+function usage_query(string $token, $bodyObj, int $page): array {  // $bodyObj: array or stdClass
     global $BASE, $TIMEOUT;
     $url = $BASE . '/data-usage/query?' . http_build_query(['page' => $page, 'limit' => 50]);
     $headers = bearer_headers($token);
