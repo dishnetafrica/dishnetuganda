@@ -46,8 +46,9 @@ official equivalent** (see `01` §D and `40`).
 | `01-official-api-v2-catalogue.md` | **#4** verified official-API V2 endpoint/field catalogue | ✅ written (from the supplied spec) |
 | `05-official-api-live-access-test.md` | **live-access validation record** (credential scope, org-wide-vs-single-account, side-by-side) | ✅ **EXECUTED live** 2026-10-03: single-account (1 acct/4 SLs/1 kit); broader perms than the screenshot |
 | `06-starlink-account-mapping.md` | existing (cookie-era) ↔ official-API **account mapping** + registry/credential design + Starlink email | ✅ written; **deterministic mapping** (account/SL/kit keys already stored; 9/9 kits uCRM-linked); per-account credentials or managed hierarchy needed |
-| `07-starlink-api-vs-cookie-parity.md` | **parallel parity** plan: API-vs-cookie field comparison + account registry w/ migration states | ✅ written; **live parity results PENDING the tool run**; cookies stay primary |
-| `probe/starlink_api_probe.py` · `starlink_kit_lookup.py` · `starlink_api_vs_cookie.py` · `README.md` | **safe read-only** probe · per-kit lookup · **API-vs-cookie parity** tool | ✅ written (compile clean; no secret; read-only on API + local files) |
+| `07-starlink-api-vs-cookie-parity.md` | **parallel parity** plan: API-vs-cookie field comparison + account registry w/ migration states | ✅ **PROVEN live** for the tested account (zero DIFFs; API adds dish serial + start date); cookies stay primary |
+| `08-starlink-usage-parity.md` | **usage parity** (`/data-usage/query` vs cookie `sl_usage.json`): GB/period/units comparison | ✅ written; **live results PENDING the tool run** |
+| `probe/starlink_api_probe.py` · `starlink_kit_lookup.py` · `starlink_api_vs_cookie.py` · `starlink_usage_parity.py` · `README.md` | **safe read-only** probe · per-kit lookup · field parity · **usage parity** tools | ✅ written (compile clean; no secret; read-only on API + local files) |
 | `10-baseline-data-report.md` | **#1a** baseline inventory — data-report | ✅ written (from real source) |
 | `11-baseline-finance.md` | **#1b** baseline inventory — finance | ✅ written (from real source v7.3.9) |
 | `20-mapping-data-report.md` | **#2** exhaustive function→API mapping — data-report (10-column table) | ✅ written |
