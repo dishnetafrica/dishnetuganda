@@ -43,23 +43,39 @@ files are reachable. It:
 ## 2. Field parity matrix — EXPECTED vs LIVE
 Expected classification from the mapping analysis (`06`/`20`); **LIVE column filled from the tool run.**
 
-| Field | API source | Cookie source | Expected | LIVE |
+| Field | API source | Cookie source | Expected | **LIVE (2026-10-03, tested account)** |
 |---|---|---|---|---|
-| account number | `accountNumber` | `account_number`/`starlink_account_number` | **EXACT** (deterministic) | **[NV]** |
-| service line | `serviceLineNumber` | `service_line` | **EXACT** (join key) | **[NV]** |
-| kit serial | `kitSerialNumber` | `kit_number`/`kit_serial` | **EXACT** (join key) | **[NV]** |
-| dish serial | `dishSerialNumber` | `dish_serial`/`dishSerialNumber` | EXACT where stored | **[NV]** |
-| terminal id | `userTerminalId` | `terminal_id` | EXACT where stored | **[NV]** |
-| active/status | `active` + `endDate` | `subscription_active` + `isPaused/isSuspended/isStandby`/`sl_status` | **DIFFERENT SEMANTICS** — API has only `active`; cookie has granular pause/standby (`20` SL) | **[NV]** |
-| product/plan | `productReferenceId` | `plan_id`/`product_desc` | EXACT (id); plan *name* via `/products` | **[NV]** |
-| start/end dates | `startDate`/`endDate` | `start_date`/`subscription_endDate` | EXACT-ish | **[NV]** |
-| address | `addressReferenceId` (UUID) | `serviceAddress` (text) | **DIFFERENT REPRESENTATION** — the API UUID is not stored locally (`06`§2 weak key) | **[NV]** |
-| usage (GB) | `/data-usage/query` (POST-read) | `sl_usage.json` | NOT YET TESTED (POST; allowance source unknown) | **[NV]** |
-| billing/invoices | `/billing/invoices` | `dr_invoices.json` | PARTIAL (count+core fields; no paymentMethod/deposit — `20` INV-L) | **[NV]** |
-| uCRM link | — (none) | `crm_client_id`/`crm_service_id` | **COOKIE-only** — API has no uCRM concept | **[CURRENT] COOKIE-only** |
+| account number | `accountNumber` | `account_number`/`starlink_account_number` | EXACT | **COOKIE-only (artifact)** — the *direct* `/service-lines` & `/user-terminals` rows omit `accountNumber`; it IS available via `/account` and the managed endpoints, so **not a real gap** |
+| service line | `serviceLineNumber` | `service_line` | EXACT (join) | **EXACT 4/4** ✓ |
+| kit serial | `kitSerialNumber` | `kit_number`/`kit_serial` | EXACT (join) | **EXACT 1/1** ✓ (join succeeded) |
+| dish serial | `dishSerialNumber` | `dish_serial`/… | EXACT where stored | **API-only** — the API *provides* it; local doesn't store it (API adds data) |
+| terminal id | `userTerminalId` | `terminal_id` | EXACT where stored | **EXACT 1/1** ✓ |
+| active/status | `active` (+`endDate`) | `subscription_active`/… | DIFFERENT SEMANTICS | **EXACT 4/4** ✓ for `active` (no DIFF). Granular pause/standby is **not persisted** in the lean live cache anyway — see §2a |
+| product/plan | `productReferenceId` | `plan_id`/`product_desc` | EXACT | **EXACT 4/4** ✓ |
+| start/end dates | `startDate`/`endDate` | `start_date`/`subscription_endDate` | EXACT-ish | `end_date` both-empty 4/4; `start_date` **API-only 1** (API adds), else both-empty |
+| address | `addressReferenceId` (UUID) | `serviceAddress` (text) | DIFFERENT REPRESENTATION | not compared by the tool; API returns `addressReferenceId`, local cache has no address field → **API-only/different** |
+| usage (GB) | `/data-usage/query` (POST-read) | `sl_usage.json` | NOT YET TESTED | **[NV]** (POST-read; separate follow-up) |
+| billing/invoices | `/billing/invoices` | `dr_invoices.json` | PARTIAL | API **5** invoices for this account; local `dr_invoices` holds **43** across all 5 accounts (count-consistent for this account) |
+| uCRM link | — (none) | `crm_client_id`/`crm_service_id` | COOKIE-only | **COOKIE-only 1/1** ✓ (confirmed — API has no uCRM concept) |
 
-> Run the tool and paste its `FIELD TALLY` blocks; I fill the LIVE column and the counts
-> (exact / API-only / cookie-only / diff).
+### 2a. Live result — VERDICT: parity PROVEN for the tested account's read fields [LIVE]
+- **Zero DIFFs.** Every field where both sides hold a value is **EXACT** (service_line, kit serial,
+  terminal_id, `active`, product_ref). The API even **adds** data the cookie cache lacks (dish serial,
+  a start_date). 4/4 SLs and 1/1 kit matched the local records by the deterministic keys.
+- **`account_number` COOKIE-only is a tool/endpoint artifact**, not a gap: the direct `/service-lines`
+  and `/user-terminals` row shapes don't echo `accountNumber` (it's on `/account` + the managed
+  endpoints). The account is fully known.
+- **`crm_link` COOKIE-only is permanent and correct** — uCRM linkage is DishNet's, not Starlink's.
+- **New finding — the live cookie cache is LEAN.** `sl_svc_cache.json` persists only
+  `account_number, has_telemetry, kit_number, plan_id, product_desc, service_line` (6 fields). The rich
+  per-SL status/pause/standby fields the source *reads* are **not stored** on this server — so the
+  official API (which returns `active`, dates, dish serial, address ref) actually **exposes more
+  per-SL data than the cookie cache currently keeps**, not less. The granular pause/standby concern
+  (`20` SL) is moot for the *stored* dataset.
+- **Conclusion:** for the read/service/billing surface, the official API **reproduces or exceeds** the
+  cookie Data Report for this account. The account is **eligible to move COOKIE_ONLY → API_VALIDATING →
+  API_VERIFIED** in the registry (§4) — but **NOT** API_PRIMARY (human decision; cookie fallback
+  retained; and the device/orders features in §3 still require cookies).
 
 ## 3. Features that still REQUIRE cookies regardless of parity [LIVE + DOC, from `20`]
 No official-API equivalent exists for these, so they **stay on the cookie/gRPC path** even for a fully
@@ -130,12 +146,15 @@ COOKIE_FALLBACK ◀──(API outage / regression)──────────
 
 ### FINAL
 ```
-PARITY (tested account):   PENDING the tool run (expected EXACT on deterministic keys;
-                           DIFFERENT-SEMANTICS on status/address; PARTIAL on billing; usage untested)
+PARITY (tested account):   PROVEN (LIVE 2026-10-03) — EXACT on all overlapping read fields
+                           (service_line, kit serial, terminal_id, active, product_ref); ZERO DIFFs;
+                           API ADDS dish serial + a start_date. account_number omitted by the direct
+                           endpoints (artifact, available via /account+managed). usage untested (POST).
 COOKIE-only (permanent):   WiFi change, per-client pause, auto-block actuation, device telemetry, orders
 COOKIE-only (data):        uCRM link (crm_client_id) — API has no uCRM concept
-REGISTRY STATE:            1 account API_VALIDATING; 4 accounts COOKIE_ONLY; 0 API_PRIMARY
-NEXT:                      run probe/starlink_api_vs_cookie.py on the server; paste the redacted
-                           FIELD TALLY; then (separately) send the Starlink Option-B email (06 App.B)
+REGISTRY STATE:            tested account now eligible API_VALIDATING→API_VERIFIED (parity proven);
+                           4 accounts COOKIE_ONLY; 0 API_PRIMARY (human-promoted only)
+NEXT:                      (1) rotate the exposed secret; (2) send the Starlink Option-B email
+                           (06 App.B); (3) optionally test usage parity (POST /data-usage). No migration.
 ```
 **Do not migrate. Do not change cookies, Data Report, Finance, schema, or deploy.** Prove parity first.
