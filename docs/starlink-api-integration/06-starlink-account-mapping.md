@@ -37,8 +37,18 @@ Field-frequency evidence (grep of plugin source): data-report — `kit_number`×
 `kitSerialNumber`/`dishSerialNumber`/`userTerminalId`; finance `sl_kits.json` — `kit_number`×367,
 `account_number`×219, `starlink_account_number`×109, `crm_client_id`×118, `crm_service_id`×34. [CURRENT]
 
-> **The actual per-account VALUES live only on the server** (runtime JSON), not in the repo. §Appendix
+> **The actual per-account VALUES live only on the server** (runtime JSON), not in the repo. §Appendix A
 > gives a read-only command to emit a **redacted** account inventory (ACCOUNT-001 …) from the server.
+
+**Filled inventory — live extraction 2026-10-03 (redacted) [CURRENT]:** finance `sl_kits.json`
+(`/home/unms/data/ucrm/ucrm/data/plugins/dishnet-starlink-finance/data/`) holds **9 kits** across
+**3 Starlink account-groups** (1 + 2 + 6 kits), and **all 9 kits carry a uCRM link** (`crm_client_id`
+= 9/9). `service_line` is **not** stored in `sl_kits.json` — the kit↔service-line link lives in
+data-report's files (`sl_svc_cache.json`, `wifi_router_map.json`). **3-vs-5 nuance:** the live cookie
+sync discovered **5** Starlink accounts / 27 service-lines / 9 kits, but finance's kit map groups into
+**3** `starlink_account_number` values — so ~2 accounts have service-lines but **no kits recorded in
+finance yet** (or an incomplete `starlink_account_number`). A **data-completeness** item to resolve
+during any migration, **not** a mapping blocker (the strong keys still exist per record).
 
 ## 2. Existing identifiers available for mapping [CURRENT]
 
@@ -83,8 +93,11 @@ is a local join, confirmed per-account as each account's credential comes online
 | B — PROBABLY MAPPABLE | only partial/medium keys | any record missing `starlink_account_number` but having kit/SL |
 | C — NOT MAPPABLE YET | no strong key, or needs Starlink info | none expected; confirm via the §Appendix inventory |
 
-**Expected outcome [INFERRED]:** essentially all accounts are **Class A** — the plugins were built to
-store these exact keys. The §Appendix extraction confirms it with real counts.
+**Confirmed [CURRENT, live extraction 2026-10-03]:** the 3 finance account-groups holding kits are all
+**Class A** — **9/9 kits carry a uCRM link** and each record has `account_number`/`starlink_account_number`
++ `kit_number`. The ~2 cookie-sync accounts with no kits in finance are still **Class A by account
+number** (their service-line/kit data is in data-report's files); their kit records simply have not been
+written into finance's `sl_kits.json` yet (the data-completeness item). **No Class C observed.**
 
 ## 7. Official multi-account authentication model [LIVE + DOC]
 | Option | Supported? | Evidence |
@@ -225,8 +238,9 @@ credential stays fully on cookies. **Nothing is removed until its replacement is
 ```
 CURRENT STARLINK ACCOUNTS:     5    (LIVE cookie sync 2026-10-03: 5 accounts / 27 SLs / 9 kits)
 OFFICIAL API ACCOUNTS:         1    (this credential; LIVE — 1 acct / 4 SLs / 1 kit)
-DIRECTLY MAPPABLE:             all 5 — account_number+service_line+kit_number are stored locally for
-                               every account (the STRONG keys); per-account kit/SL counts via Appendix
+DIRECTLY MAPPABLE:             yes — strong keys stored locally. Confirmed: 9/9 kits carry a uCRM link
+                               across 3 finance account-groups (1+2+6); ~2 cookie-sync accounts have
+                               no kits in finance yet (data-completeness item, not a blocker)
 CONFIRMED LIVE (kit lookup):   of 8 known SLs, 1 FOUND in the API account, 7 DENIED (403 = other accts)
 PROBABLY MAPPABLE:             only records missing starlink_account_number (expected: few/none)
 NOT MAPPABLE:                  expected 0 (confirm via Appendix)
@@ -271,3 +285,38 @@ PY
 ```
 Paste the redacted output back to fill §1/§6 and the FINAL ANSWER counts. (It prints only shortened
 account numbers + counts — no secrets, no customer PII.)
+
+## Appendix B — Starlink support email draft (Option B question)
+Fill the `<…>` placeholders (keep real account numbers out of any public place). Send to Starlink
+support / your account rep.
+
+> **Subject:** Service-account (API) access across our multiple Starlink accounts
+>
+> Hi,
+>
+> We manage **5 Starlink accounts** under one login (we currently switch between them in the portal).
+> We've created an API **service-account credential** and confirmed it authenticates and reads one
+> account's data via the Public API v2 (`/account`, `/service-lines`, `/user-terminals`, `/billing`,
+> `/addresses`). However `/managed/accounts` returns **0 children**, so that one credential sees only
+> the account it was created under.
+>
+> We'd like **one credential to read all our accounts** via `/managed/accounts/*`. Please advise:
+>
+> 1. Our portal login already accesses all 5 accounts; can a **single service-account credential be
+>    issued at the organization/parent level** to read all of them via `/managed/accounts/*`?
+> 2. The API's only managed write is "create a new child account" — can our **existing** accounts be
+>    **linked / migrated** under one parent, or does the managed model only cover newly-created
+>    children?
+> 3. If linkable: is it self-service, or does it require your team? What are the steps/prerequisites?
+> 4. What are the **billing / ownership / invoicing implications** of placing existing accounts under a
+>    parent? (We must not disrupt current invoicing.)
+> 5. Which permissions must the parent credential hold to read child accounts' **service-lines,
+>    terminals, usage, and billing** (e.g. `ManagedAccountInformation`, `ManagedAccountBillingInformation`)?
+>
+> Our accounts (for your reference): `<ACC-DF-… ×5>`.
+>
+> Thank you,
+> `<name / DishNet>`
+
+If the answer to (1)/(2) is "no / not for existing accounts," we fall back to **one read-only
+service-account credential per account** (Option D), which already works today.
