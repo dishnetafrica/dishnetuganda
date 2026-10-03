@@ -281,8 +281,10 @@ try {
     // --- usage (POST read/query) ---
     $usageOut = [];
     $usageNote = '';
-    $bodyObj = json_decode($USAGE_BODY, true);
-    if ($bodyObj === null) { $bodyObj = []; }
+    // Decode in OBJECT mode so an empty '{}' round-trips to '{}' (assoc-mode '{}' becomes
+    // an empty PHP array, which json_encode would emit as '[]' and the API rejects with 400).
+    $bodyObj = json_decode($USAGE_BODY);
+    if ($bodyObj === null) { $bodyObj = new stdClass(); }
     $page = 0; $usageRows = [];
     while ($page < $MAX_PAGES) {
         [$uc, $uok, $ucontent] = usage_query($token, $bodyObj, $page);
