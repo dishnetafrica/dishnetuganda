@@ -96,7 +96,8 @@ is_(strpos($ma, 'if ($maSSP): ?>') !== false, 'my_account: the field-accountant 
 is_(substr_count($ma, 'if (dn_ssp_selectable($config ?? null)): ?>') >= 2, 'my_account: the expense and advance SSP radios are gated');
 $wa = nc($Sl.'wallet.php');
 is_(strpos($wa, 'dn_ssp_selectable($config ?? null) && in_array($userRole') !== false, 'wallet: $fr_is_support_role requires dn_ssp_selectable');
-is_(strpos($wa, "dn_ssp_selectable(\$config ?? null) ? ['USD','SSP'] : ['USD']") !== false, 'wallet: the currency filter rejects SSP on Uganda');
+is_(strpos($wa, "dn_ssp_selectable(\$config ?? null) ? [\$_frBase, 'SSP'] : [\$_frBase], true)") !== false, 'wallet: the currency filter admits SSP only where SSP is selectable (5.18.70: the base by its own code, no longer the literal USD)');
+is_(strpos($wa, "['USD','SSP'] : ['USD']") === false, 'wallet: the old literal whitelist is gone');
 is_(substr_count($wa, 'if (dn_ssp_selectable($config ?? null)): ?>') >= 3, 'wallet: the SSP filter button, summary and currency pill are gated');
 is_(strpos($wa, "'' : '<?= rtrim(dn_cur(\$config)) ?>'") !== false, 'wallet: the entry-modal amount prefix follows the tenant');
 $feNC = nc($Sp.'field_expenses.php');
