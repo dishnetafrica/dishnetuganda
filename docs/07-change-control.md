@@ -3812,3 +3812,72 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
 - **The full plugin suite on the final 5.18.69 tree (`c1c2f62`, the plugin files of `1e718c3`): `tests/run.sh` 266 files,
   12,165 passed / 0 failed, exit 0**, one verdict per file — 12,129 before this release + the 36 of the manual-entry test,
   exactly. 26 minutes, run alongside the second rehearsal without a flake.
+
+## 04 Oct — 5.18.70: the Field Register speaks the book's base; the records tool covers cash-ins — BUILT, rehearsed, NOT deployed
+
+**Why.** The 5.18.69 deploy's R7 census (06:26 UTC) placed the technician's three "USD" rows in **`cash_ins`**, not in the
+Manual Entry collections 5.18.69's tool repairs, and the operator's `--void` run found *nothing in scope* (and said "already
+voided" — wrong wording, fixed here). Traced from the export's own column (it prints a cash-in's category; theirs is
+`Collection`) to the one writer that stamps that category: **the Field Register page** (`tabs/sales/wallet.php`,
+`action=log_cash_in` → `includes/post/post_field.php`). Its base pill is labelled with the book's base, but its JavaScript's
+token for that pill is the literal `'USD'`, and every form on the page copied the token into its hidden `currency` field —
+cash-ins (`fr3fInCurrency`, twice), expenses (`fr3fCurrency`, five times), the handover and the advance (`_fr3Curr`).
+`dn_entry_currency()` then passed `USD` through, because the Uganda book lists `UGX,USD` and USD is a legitimate second bag.
+**So the page still stamped USD on 5.18.69**, and would have gone on doing so. The same literal drove that page's filter
+whitelist, its two sums, its pending-row label, its filter button, and the Field Register CSV export in `routes.php`.
+
+**What changed** (`c…` on the branch, release `RELEASE_HASH_5_18_70` on `fec15bc`):
+- `tabs/sales/wallet.php` — `var _fr3Base = <?= json_encode(dn_book_base($config)) ?>` next to the pill token, and every
+  submission for the base pill sends it (`_fr3Base`, or `isSsp ? 'SSP' : _fr3Base`, or `_fr3Curr === 'SSP' ? 'SSP' :
+  _fr3Base`); server-side `$_frBase` for the filter whitelist, the collection rows' currency (their own stamp, the base when
+  they carry none), the exchange-row filter, the expense/handover/advance fallbacks, the two sums, the pending label and the
+  filter button. The pill token `'USD'` itself stays — it is a UI name, not data — and the exchange leg's dollar side stays
+  literal (South Sudan only).
+- `includes/routes.php` — the Field Register CSV export: collections and handovers carry their own stamp (the base when
+  none), the filter compares to it; the staff export of 5.18.69 is untouched.
+- `tools/staff_records_currency.php` (5.18.70) — candidates are the Manual Entry collections **and every cash-in** stamped
+  in a non-base, non-SSP currency, listed with source (`collection #n` / `cash-in #n`), date, staff member, category, stamp,
+  amount, status, description. **VOID** of a cash-in is the Staff Cashbooks page's own `void_cash_in`, field for field
+  (`prev_status`, `status = voided`, `voided_by`, `voided_at`, `void_reason`), the page's activity line (`void_cash_in`), then
+  `StaffLedgerWriter::onCashInVoided` (and the `CINO-` key for an OUT row). **RELABEL** sets the record's currency to the
+  base with an `audit_log` entry and, where a live `staff_ledger` row exists for it, that row's currency — the tool's one
+  direct ledger write, reported by key. Zero candidates now read *"no Manual Entry collection and no cash-in is stamped in a
+  currency other than UGX"*; a table that exists but is empty prints `0`. Still Uganda-only (exit 2 elsewhere), still
+  read-only without a flag, still typed `VOID` / `RELABEL`.
+- `manifest.json` 5.18.70; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
+
+**Tests.**
+- `tests/test_field_cash_in_currency.php` — **48/0.** A: the page tells its JavaScript `_fr3Base = "UGX"`; both cash-in
+  submissions, the five expense submissions and the two handover/advance submissions send the base; no literal submission
+  left; the filter button links `fr_curr=UGX`. B: the technician's cash-in, posted with what the page now submits, is stamped
+  UGX, Collection, approved; the wallet's Collections line and the Staff Cashbooks UGX tile both read 20,000. C: production's
+  shape planted — three USD-stamped Collection cash-ins and one `USD Received` with a live ledger row: the wallet's
+  Collections line counts the three (320,000: *the label lied and the figure followed*) while the UGX tile does not (the two
+  screens disagreed by 300,000); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
+  lists each cash-in with category, stamp, amount, status and description, writes nothing. D: VOID names each row, voids
+  them the page's way (stamp untouched, nothing deleted), voids the ledger row `CIN-n`, writes four `void_cash_in` activity
+  lines and its summary; the wallet is back to 20,000 and agrees with the tile; LIST reads *4 (0 not yet voided)*; a second
+  VOID says "already voided". E: with nothing in scope VOID says so and exits 0; RELABEL relabels the record and the live
+  ledger row, and both then count in the UGX tile (100,000). F: South Sudan — `_fr3Base = "USD"`, the pill submits USD and
+  an SSP Received submits SSP exactly as before, the tool refuses. G: three weakened copies caught — the Collection
+  submission sent as the literal again; the tool blind to cash-ins; VOID leaving the ledger row live.
+- `tests/test_staff_manual_entry_currency.php` 36/0 (two assertions follow the tool's new listing and version),
+  `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.70` = `RELEASE_HASH_5_18_70`, parent `fec15bc` (5.18.69, production since 06:26 UTC):** the
+  branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.69 left out:
+  RELEASE_DELTA_5_18_70.
+- **`scripts/deploy-5.18.70.sh`** (pinned `RELEASE_HASH_5_18_70` over `fec15bc`), the 5.18.69 script's shape: A0 refuses a
+  pin whose parent is not 5.18.69 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the base
+  token, the two base submissions, no literal submission, the export's base and the 5.18.70 tool, beside the 5.18.69 fixes,
+  the 5.18.68 chain and the photo surface; **R7** runs the tool in LIST mode inside the container — read-only — **which on
+  production will name the three cash-ins**, each with its category, stamp, amount and description, for the operator to read
+  before typing VOID; RB after a rollback checks the token and the 5.18.70 tool are gone and the 5.18.69 fixes still there;
+  F prints the rollback alone, then the tool's `--void` command as a third block, naming `--relabel` as the alternative.
+- **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`:** REHEARSAL_RESULT_PENDING_5_18_70
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.70 && mkdir -p /root/dnb-5.18.70 && bash scripts/deploy-5.18.70.sh 2>&1 | tee /root/dnb-5.18.70/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `fec15bc`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  tool's `--void` (or `--relabel`), printed after it, **this time with the three cash-ins in scope**: it asks for `VOID`,
+  voids only the rows the LIST named, sends no message.
+- **Still open:** the 5.18.68 backfill's `APPLY` log (the ledger count says it ran — confirm on the page); the operator's
+  void/keep answer (void recommended: CB-66 + CB-72 are the same money). SUITE_PENDING_5_18_70 **RESULT:** not deployed.
