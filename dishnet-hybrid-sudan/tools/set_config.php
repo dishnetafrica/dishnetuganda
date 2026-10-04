@@ -77,6 +77,11 @@ $FLAGS = [
         'Let uCRM leads sign in to the customer portal (default: no)'],
     'portal_login_require_service' => ['bool',
         'Refuse portal sign-in to clients with no uCRM service (default: no)'],
+    // 5.18.73 — where the customer portal hands usage over to the dishnet-data-report plugin. Blank follows the
+    // country profile (South Sudan yes, Uganda no); yes needs webhook_secret and crm_auth_token set, or the other
+    // plugin answers 404 to every hand-off.
+    'portal_data_report_handoff' => ['text',
+        'Customer portal: open usage in the Data Report plugin — yes or no (blank = the country profile)'],
     'app_jwt_ttl_days' => ['number',
         'Days a customer stays signed in after a code (default 30)'],
     // A migration instrument with an end date, not a business setting. It
@@ -343,6 +348,14 @@ if (!$clear && $key === 'tenant_profile') {
     if (!in_array(strtolower(trim($new)), TenantProfile::IDS, true)) {
         echo "\n  \"" . $new . "\" is not a shipped profile, so nothing was saved.\n";
         echo "  Use one of: " . implode(', ', TenantProfile::IDS) . " — or --clear to derive it from the currency.\n\n";
+        exit(1);
+    }
+    $new = strtolower(trim($new));
+}
+// 5.18.73: yes or no, nothing else — a value like "true" would read as no at the portal and nothing would say so.
+if (!$clear && $key === 'portal_data_report_handoff') {
+    if (!in_array(strtolower(trim($new)), ['yes', 'no'], true)) {
+        echo "\n  \"" . $new . "\" is not yes or no, so nothing was saved. Use --clear to follow the country profile.\n\n";
         exit(1);
     }
     $new = strtolower(trim($new));

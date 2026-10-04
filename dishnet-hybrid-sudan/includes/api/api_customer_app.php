@@ -947,6 +947,16 @@ if ($act === 'app_data_report_token') {
     ca_init_tables($store->getPdo());
     $pdo = $store->getPdo();
     $claims  = ca_require_auth($config, $pdo, $er2);
+    // 5.18.73 — the hand-off exists only where the tenant says so (TenantProfile::dataReportHandoff: the explicit key
+    // portal_data_report_handoff, else the profile), and only where the other plugin can verify it: it rebuilds the
+    // secret from THIS plugin's webhook_secret and crm_app_key/crm_auth_token and refuses when either is empty. A token
+    // minted under empty inputs is signed with a constant anyone can compute and was refused at the other end with a 404
+    // (Uganda, 4 Oct 2026). Refuse here instead, with a reason the portal shows; the audit names the gap for staff.
+    if (!ca_tenant(is_array($config ?? null) ? $config : [])->dataReportHandoff()) $er2('Usage details are not available here.', 409);
+    if (trim((string)($config['webhook_secret'] ?? '')) === '' || trim((string)($config['crm_app_key'] ?? $config['crm_auth_token'] ?? '')) === '') {
+        ca_audit($pdo, (int)($claims['sub'] ?? 0), 'data_report_handoff_unconfigured', (string)($claims['phone'] ?? ''), ['missing' => trim((string)($config['webhook_secret'] ?? '')) === '' ? 'webhook_secret' : 'crm_auth_token']);
+        $er2('Usage details are not available here.', 409);
+    }
     $handoff = new JwtAuth(JwtAuth::legacySecret($config), 600);
     $tok = $handoff->issue([
         'sub' => (int)($claims['sub'] ?? 0), 'kind' => 'app', 'phone' => (string)($claims['phone'] ?? ''),

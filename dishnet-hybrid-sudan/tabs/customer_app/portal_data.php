@@ -21,6 +21,7 @@ require_once dirname(__DIR__, 2) . '/lib/InvoiceTotals.php';   // 5.18.42 (docs/
 //   $portalTenant, $portalSupportWa, $portalSupportWaPlus, $portalSupportPhone, $portalSupportPhoneDial,
 //   $portalSupportEmail, $portalCity, $portalLocality, $portalAreaFibre, $portalAreaLte,
 //   $portalBankAccount, $portalBankName, $portalSells (5.18.41)
+//   $portalDataReportHandoff, $portalAppVersion (5.18.73)
 //
 // Sets on failure:
 //   $portalAuthError (string)  — templates should check this first
@@ -78,6 +79,12 @@ $portalAreaLte          = $portalTenant->text('service_areas.lte', 'Juba, Yei, W
 $portalBankAccount      = $portalTenant->text('payment_instructions.account_name', '');
 $portalBankName         = $portalTenant->text('payment_instructions.bank', '');
 $portalSells            = function (string $product) use ($portalTenant): bool { return $portalTenant->sells($product); };
+// 5.18.73: hand the customer to dishnet-data-report's client view, or keep them in this app (TenantProfile::dataReportHandoff).
+$portalDataReportHandoff = $portalTenant->dataReportHandoff();
+// 5.18.73: the Account screen's footer reads the installed version from manifest.json, as the sign-in page does.
+$portalAppVersion = '?';
+$_pdManifest = json_decode((string)@file_get_contents(dirname(__DIR__, 2) . '/manifest.json'), true);
+if (is_array($_pdManifest) && !empty($_pdManifest['information']['version'])) $portalAppVersion = (string)$_pdManifest['information']['version'];
 //   Native exposes window.DishNet.* for: biometric, logout, openWhatsApp,
 //   openWifi, share, shake (haptic).
 //

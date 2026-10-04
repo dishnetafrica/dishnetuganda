@@ -89,6 +89,10 @@
     "sign_in": "We sign you into the DishNet app by sending a six-digit code to your WhatsApp number or your e-mail address. When the code goes to WhatsApp, your phone number travels through Meta's WhatsApp Business infrastructure, subject to Meta's own privacy terms. We never ask for your WhatsApp password — only your phone number or e-mail address, so we can route the code to you.",
     "data_protection_law": null
   },
+  "integrations": {
+    "_readme": "5.18.73: the customer portal hands a customer over to the dishnet-data-report plugin's client view with a token signed from this plugin's webhook_secret and crm_auth_token, which that plugin rebuilds and refuses when either is empty. This install has neither (recorded 4 Oct 2026), so every hand-off ended in that plugin's 404; the portal keeps its customers in the app instead. The explicit key portal_data_report_handoff=yes overrides this once both values are set.",
+    "data_report_handoff": false
+  },
   "products": [
     "starlink"
   ],
