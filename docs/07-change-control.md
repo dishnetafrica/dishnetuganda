@@ -3669,3 +3669,103 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
   - **The full plugin suite on the final 5.18.68 tree (`6c7a4df` + `e66faf8`): `tests/run.sh` 265 files, 12,129 passed /
     0 failed, exit 0**, one verdict per file (12,055 before this release + the 73 of the chain test + the currency test's
     one new assertion).
+
+## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — BUILT, rehearsed, NOT deployed
+
+**Reported by the operator (a screenshot and an export of the technician's staff cashbook, after 5.18.68 and before the
+backfill's `APPLY`):** the page read **UGX 0.00** with UGX 310,328 out and a row *"USD Received … +UGX 0.00"*; the export
+came down as `staff-cashbook-<staff>-USD-2026-09-04-to-2026-10-04.csv` with the columns `Received (USD)` / `Payment (USD)`
+and three rows of 25 Sep (Collection, 200,000 / 50,000 / 50,000, approved); *"I have never given USD to this technician,
+always UGX — something wrong"*. The `+UGX 0.00` row is the pre-backfill state the 5.18.68 deploy's R7 showed (the five
+cash-ins carry amount 0 until `--apply` is typed through; whether `APPLY` was typed is not yet confirmed). The rest is
+three more literal `'USD'` sources — measured on the code and on the export, not inferred from the words:
+
+1. **The Manual Entry stamped `'USD'` whatever currency was chosen.** `tabs/accounts/staff_cashbooks.php` read
+   `man_currency` and then wrote `'currency' => 'USD'` on every non-SSP entry, so a hand-typed UGX entry left the UGX
+   register (5.18.68 reads the base bag) and surfaced as dollars in the export. The three 25 Sep rows are exactly that
+   shape: `source = manual_adjustment`, stamped USD, UGX amounts. Read against the main cashbook's export they are the same
+   money as the advances **CB-66 (50,000) and CB-72 (250,000)** of those days — 300,000 both ways — typed again by hand on
+   the staff page while the advance link wrote 0. The 5.18.68 backfill links those advances to the technician's ledger, so
+   **counting both would double the money**: the tool's default repair is VOID, and RELABEL is offered only for a hand entry
+   that is the only record of its money. **Void or keep is the operator's call; the deploy repairs nothing by itself.**
+2. **The stored category `'USD Received'`.** The base-bag cash-in category is stored under South Sudan's name, and the
+   Staff Cashbooks page, My Cash and the export printed it as stored. Each now prints it as **`<base> Received`** — "UGX
+   Received" on Uganda; the stored value is unchanged (the ledger writer, the position service and the backfill key on it).
+3. **The export's tab→currency rule.** `includes/routes.php` (`sc_export=csv`) turned the page's `usd` tab into literal
+   USD through `dn_entry_currency`, so the base tab exported the USD bag — empty on Uganda but for the mis-stamped rows —
+   under USD headers and a `-USD-` file name. Now an explicit `ssp` tab exports SSP and everything else the **book's**
+   base; the file name and the two column headers follow (`Received (UGX)` / `Payment (UGX)`).
+
+**Files** (`c1c2f62`): `tabs/accounts/staff_cashbooks.php` (the stamp through `dn_entry_currency`, the confirmation names
+the currency, the label); `includes/routes.php` (the rule, the label, expense and handover rows fall back to the base
+instead of literal USD); `tabs/sales/my_account.php` (two labels); `manifest.json` 5.18.69; the nine pins. New:
+`tools/staff_records_currency.php`, `tests/test_staff_manual_entry_currency.php`. **No migration, no new table, no uCRM
+write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yields USD for the USD choice, the label is
+"USD Received", the rule gives USD — identities, proved on a South Sudan sandbox (section E of the test).
+
+- **`tools/staff_records_currency.php`.** **LIST** (default, read-only): every staff cash record by table and currency
+  across `payment_collections`, `cash_ins`, `cash_expenses`, `cash_handovers`, `staff_expenses`, `cash_advances`,
+  `staff_transfers`, `staff_ledger` (voided rows included; a non-base, non-SSP stamp is flagged `◄ not the base`), and
+  every Manual Entry collection stamped in a non-base currency, listed by id, date, staff member, stamp, amount, status and
+  description. **`--void`** (typed `VOID`): the Staff Cashbooks page's own void, record for record — `prev_status`,
+  `status = voided`, `voided_by`, `voided_at`, `void_reason`, an `audit_log` entry, the matching `cb_ledger` row by its
+  `COL-`/`PAY-` reference where one exists, one `activity_log` entry; nothing deleted, no message. **`--relabel`** (typed
+  `RELABEL`): `currency → base` with an `audit_log` entry, the row stays approved. `--yes` for a non-interactive run; both
+  flags together, an unknown option, or any book but a Uganda one (tenant `uganda`, base ≠ USD) → exit 2, nothing written.
+  It reads a table only where it exists — a LIST creates nothing (the 5.18.68 dry-run lesson, applied before the rehearsal
+  this time).
+- **`tests/test_staff_manual_entry_currency.php` — 36/0.** A: the accountant's manual UGX 20,000 entry is stamped UGX,
+  `source manual_adjustment`, and counts under the UGX tile. B: a UGX 150,000 Staff Advance through the wizard reads **"UGX
+  Received"** (never "USD Received"), hero 170,000. C: the `usd` tab's CSV carries `Received (UGX)` / `Payment (UGX)`, the
+  manual entry and the advance as "UGX Received". D: a planted USD-stamped manual collection (as the old form wrote it)
+  does not count; LIST exits 0, names `payment_collections: USD 1 ◄ not the base` and the candidate, writes nothing; VOID
+  voids it the page's way with its stamp untouched and an activity-log line; a second planted row is RELABELLED to UGX and
+  then counts (240,000) while the voided one does not; both flags → exit 2. E: South Sudan — a manual USD entry stamped
+  USD, the confirmation "Manual USD entry added", the USD and SSP exports unchanged, the tool refuses (exit 2). F: two
+  weakened copies caught — the stamp put back to literal `'USD'` (the UGX entry is stamped USD again) and the export's rule
+  put back to `dn_entry_currency` (the base tab exports `(USD)` again). Also green on the tree: `test_cashbook_currency`
+  86/0, `test_cashbook_tenant` 26/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.69` = `fec15bc`, parent `d8d2068` (5.18.68, production since 04:35 UTC):** `c1c2f62`'s
+  plugin changes applied on the live version, the four pins for test files that do not exist at 5.18.68 left out
+  (`test_dist_isolation`, `test_partner_api/_auth/_session`): **11 files, 2 added, 0 migrations, hunks byte for byte the
+  branch's** (diffed), 0 partner-portal/CSRF hits. Of the eleven, only `includes/routes.php` differs between d8d2068 and
+  the branch tip (the tip carries nine undeployed lines elsewhere in the file); the hunks applied cleanly. On the release
+  tree: `test_staff_manual_entry_currency` 36/0, `test_cashbook_currency` 86/0, `test_staff_cash_chain` 73/0,
+  `test_distributor_registry` 59/0, `test_cashbook_tenant` 26/0, `test_staff_cashbook_scope` 9/0.
+- **`scripts/deploy-5.18.69.sh`** (pinned `fec15bc` over `d8d2068`), the 5.18.68 script's shape: **A0** refuses a pin
+  whose parent is not 5.18.68, or whose delta carries a migration or any partner-portal / CSRF file; **R6** checks the
+  three fixes beside the photo surface and the 5.18.68 chain (the Manual Entry stamp `=> $manCur`, the page's
+  `$scBaseCode.' Received'`, the export's `=== 'ssp' ? 'SSP' : dn_book_base(…)`, My Cash's `$_mcBase.' Received'`, both
+  tools installed); **R7** runs the records tool in **LIST** mode inside the container — read-only on the live data, its
+  census and its candidates printed for the operator to read (staff names as the panel shows them; no phone number) and
+  the photo tables/files re-read to prove nothing moved; **RB** after a rollback checks the literal stamp and the literal
+  tab are back and the 5.18.68 chain and card still there; **F** prints the rollback alone after the verdict, and the
+  tool's `--void` command after that as a **third separate block**, naming `--relabel` as the alternative. Code only; no
+  migration.
+- **Rehearsal `scripts/harness/deploy-5.18.69/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.68 base
+  holding a UGX book with the pilot *on* and **one Manual Entry collection stamped USD by the old form seeded** (a hand copy
+  of an advance, approved — the shape production holds since 25 Sep): the three NO-GO gates (a 5.18.67 server, a placeholder
+  pin, a copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST names
+  `payment_collections  USD 1 ◄ not the base` and the candidate — USD 50,000.00, approved, as typed — and **the data digest
+  of every table is unchanged across the deploy: the LIST wrote nothing, the seeded entry still approved and still stamped
+  USD**); R1/R6 teeth (the Staff Cashbooks page reverted → R1 names it and R6 names `manual-entry:stamps-literal-usd` and
+  `staff-cashbooks:usd-received-label`; the export reverted → R1 names it and R6 `export:literal-usd-tab`; My Cash reverted →
+  `my-cash:usd-received-label`); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php` caught by name;
+  the rollback restores 5.18.68's stamp and export with the 5.18.68 chain, card and photo surface intact and no data change;
+  the R1-blinded copy caught; the rollback printed once after the verdict and the `--void` command once after the rollback,
+  with `--relabel` named once as the alternative. No defect on the first run this time (the 5.18.68 dry-run lesson was
+  applied before it). Run 1 on the working copy of the script; run 2 on the committed script: REHEARSAL_RUN2_PENDING_5_18_69.
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.69 && mkdir -p /root/dnb-5.18.69 && bash scripts/deploy-5.18.69.sh 2>&1 | tee /root/dnb-5.18.69/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `d8d2068`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  tool's `--void` (or `--relabel`), printed after it, to run **only after the operator has read R7's list and decided**;
+  it asks for `VOID` / `RELABEL`, touches only the rows the LIST named, sends no message, and on a second run reports
+  *nothing to void*. The 5.18.68 `--after-only` is superseded: this deploy's R5 re-reads every file from Release A through
+  5.18.68.
+- **Still open from 5.18.68:** the backfill's `--apply` log (not received; the screenshot shows the pre-backfill 0.00).
+  After it, the technician's page should read about UGX 339,672 (650,000 in, 310,328 out) — plus 300,000 if the three
+  hand-typed rows are relabelled rather than voided. **Open here:** the operator's answer — void the three 25 Sep
+  hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
+- **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
+  own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
+  `tools/bank_statement.php` is not for the Uganda book. **RESULT:** not deployed.
