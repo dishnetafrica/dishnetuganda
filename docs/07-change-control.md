@@ -3670,7 +3670,7 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
     0 failed, exit 0**, one verdict per file (12,055 before this release + the 73 of the chain test + the currency test's
     one new assertion).
 
-## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — BUILT, rehearsed, NOT deployed
+## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — DEPLOYED 06:26 UTC (PASSED 23/0/0)
 
 **Reported by the operator (a screenshot and an export of the technician's staff cashbook, after 5.18.68 and before the
 backfill's `APPLY`):** the page read **UGX 0.00** with UGX 310,328 out and a row *"USD Received … +UGX 0.00"*; the export
@@ -3774,7 +3774,41 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
 - **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
   own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
-  `tools/bank_statement.php` is not for the Uganda book. **RESULT:** not deployed.
+  `tools/bank_statement.php` is not for the Uganda book.
+- **RESULT — DEPLOYED to production 2026-10-04, 06:26 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  06:26:17 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves fec15bc"*; the 11 files were
+  stamped at 06:26:46 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.69/deploy-20261004T062617Z.log`.
+  - **A.** Checkout `f2af7fb`; branch tip `c1c2f62` (not installed); release commit `fec15bc` cut on `d8d2068`; 11 files
+    (9 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `d8d2068` / 5.18.68. The container's PHP **8.1.34**
+    accepted the 4 changed server files and the 6 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.69/backup-20261004T062617Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.68 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 11 files as `fec15bc` has them, manifest 5.18.69; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 190 files from Release A through 5.18.68 intact; **R6
+    the three fixes are in place** beside the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the
+    live data, read-only — corrects §1's diagnosis of WHICH form wrote the three rows:** `payment_collections UGX 1 ·
+    cash_ins UGX 5 · USD 3 ◄ not the base · staff_expenses UGX 8 · staff_ledger UGX 13`, and **Manual Entry collections
+    stamped in a currency other than UGX: 0.** The three "USD" rows the operator exported are **`cash_ins` records**, not
+    Manual Entry collections — the export prints a cash-in's own category, and theirs is `Collection`. The tool counts and
+    flags them, but its repair covers only `payment_collections` rows with `source = manual_adjustment`, so **it cannot void
+    them.** What they ARE (hand copies of CB-66 + CB-72, 300,000, UGX wearing a USD label) stands as verified above; what
+    wrote them was a cash-in form, not the Manual Entry. The photo tables and files read exactly as before (`present:3:1`,
+    `files:3`) — the LIST touched no data.
+  - **The operator then ran the tool's `--void` command** (its own command, after the deploy, ~06:30 UTC): the same census,
+    *0 (0 not yet voided)*, then **"Nothing to VOID: every candidate is already voided."** Nothing was written — correct —
+    but that sentence is **wrong for zero candidates**: nothing was voided because nothing was in scope. Two tool defects for
+    5.18.70: that message, and that a table which exists but is empty (`cash_expenses`, `cash_handovers`, `cash_advances`,
+    `staff_transfers` on production) prints nothing instead of `0`.
+  - **Read off the census, to be confirmed on the page:** `staff_ledger UGX 13` = the technician's 8 approved field expenses
+    + 5 cash-in rows — rows that exist only if the 5.18.68 backfill's `APPLY` ran, since 5.18.67's `onCashIn` wrote no row
+    for an amount of 0. **The APPLY log was never sent; the ledger count says it was applied.** `cash_ins UGX 5` are those
+    five, `USD 3` the hand-typed rows.
+  - **Not yet done:** 5.18.70 — the tool extended to `cash_ins` (LIST them by category; VOID the page's `void_cash_in` way;
+    RELABEL), the two wording defects, and a check that no form on the Uganda book can still stamp a cash-in `USD`; then the
+    operator's VOID through it; `bash scripts/deploy-5.18.69.sh --after-only`.
 - **The full plugin suite on the final 5.18.69 tree (`c1c2f62`, the plugin files of `1e718c3`): `tests/run.sh` 266 files,
   12,165 passed / 0 failed, exit 0**, one verdict per file — 12,129 before this release + the 36 of the manual-entry test,
   exactly. 26 minutes, run alongside the second rehearsal without a flake.
