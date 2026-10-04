@@ -4057,3 +4057,93 @@ SSP, South Sudan's branch untouched:
     prompt; if VOID was not typed, the three 25 Sep hand copies of CB-66/CB-72 still stand as `USD` cash-ins #3, #4, #5
     and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
     (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
+
+## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — READY TO DEPLOY (rehearsed 121/0 twice)
+
+**Reported by the operator (14:1x Kampala, after the 5.18.71 screenshots):** *"fix the collected and handover wording for
+uganda"*. On the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out) the tiles read
+**"UGX COLLECTED 650,000.00"** and **"CASH WITH STAFF 339,672.00 — Needs handover"**, beside *"Handed over 0.00 — Given to
+accounts"*. That is South Sudan's collections wording, written when every staff member with a bag was a field collector who
+collects payments and hands them over to accounts. On Uganda this staff member's inflow is **advances** (and any
+collections) to be spent on approved expenses and accounted for; the hero's own pills already said *"received"* / *"out"*,
+and the row category reads *"UGX Received"* since 5.18.69. Read from the code (`tabs/accounts/staff_cashbooks.php`, the
+selected-staff view): the first tile is `scM($uIn)` — every base-bag IN row (collections, cash-ins, advances, transfers in)
+— labelled `<base> collected` on every book; the third tile's line is `'Needs handover'` whenever the position is above
+zero. Neither label is gated on the book.
+
+**What changed** (`008e74d` on the branch, release `88d8442` on `b350192`), on a book without SSP only — wording, no figure:
+- **The first tile reads "UGX received"** with a new sub-line **"Advances & collections"** (the figure is unchanged: every
+  base-bag IN row, as before).
+- **The "Cash with staff" line reads "Still to account for"** while a balance is held; *"All settled ✓"* when it is not,
+  as before.
+- **Unchanged:** *"Handed over · Given to accounts"* (a handover is still cash given back to accounts — the staff member's
+  own button says *"Submit cash to office"*), the hero (*"⚠ Cash still with staff"* / *"Cash settled"*), its pills, the
+  Wallet tile, every figure, the list page, the CSV export.
+- **South Sudan is the same bytes.** The two PHP tags that gate the tile sit at column 0, so the `collected` branch emits
+  exactly what it did; the third tile's line is a one-line ternary on `$scSSP`. **Proved**, not assumed: on a South Sudan
+  sandbox the selected-staff page from the hero to the currency tabs, rendered by the committed 5.18.71 file and by the
+  5.18.72 file on the same data, is **byte-identical — 1,256 bytes on the USD tab, 1,242 on the SSP tab** (control: the old
+  block carries the `collected` tile).
+- `manifest.json` 5.18.72; the nine pins. **No migration, no new table, no uCRM write, no message, no setting, nothing
+  written to any record.**
+- Noted, not changed: the My Cash page a Uganda technician sees (*"Advances · Collected · Expenses · Handovers"* over the
+  collection exposure, *"You owe company"* when exposure is above zero) uses *"Collected"* for actual collections, which is
+  right; its exposure-based hero is a different question (5.18.68's note that `cash_exposure` reads 0 for an advance
+  holder).
+
+**Proofs.**
+- `tests/test_staff_cashbook_wording.php` (new): **23/0**. A: Uganda — a Staff Advance through the real wizard; the first
+  tile asserted **byte for byte** (`UGX received` / `UGX 150,000.00` / `Advances &amp; collections`, four-space indent,
+  the tile's own closing tag); no tile says *collected*; *"Still to account for"* exactly once and *"Needs handover"*
+  nowhere; the red Cash-with-staff tile; *"Handed over · Given to accounts"*, the hero line, the pills and the Wallet tile
+  unchanged; a staff member holding nothing reads *"All settled ✓"* / *"Cash settled"*. B: South Sudan — the old markup
+  byte for byte on the USD tab (`USD collected`, the figure, no sub-line), *"Needs handover"*, none of the Uganda words,
+  `SSP collected` on the SSP tab. C: **three weakened copies, each caught** — the tile reverted to *collected*, the line
+  reverted to *Needs handover*, and the South Sudan branch disabled (caught by the South Sudan control).
+- The two tests that pinned the old tile — `test_staff_manual_entry_currency` (3 places) and `test_field_cash_in_currency`
+  (5) — now anchor on the tile markup and the new label: **36/0** and **48/0**. **A regex that had matched the label by
+  word alone would have matched the hero's "received" pill**; the anchor is the tile's own class.
+- Neighbours, unchanged: `test_accounts_dashboard_cash` 30/0 · `test_staff_cash_chain` 73/0 · `test_staff_cashbook_scope`
+  9/0 · `test_sales_support_tenant` 37/0 · `test_cashbook_currency` 86/0 · `test_cashbook_tenant` 26/0.
+- **The full plugin suite on the final tree** (`tests/run.sh`, 269 files): **running at the time of this entry**; its
+  result is recorded in this entry when it ends.
+
+**Release commit `release/5.18.72` = `88d8442`, parent `b350192` (5.18.71, production since 10:59 UTC):** 10 files — the
+page, the new test, the two re-anchored tests, `manifest.json` and the five distributor pins that exist on the release
+line (`test_dist_isolation` and the three `test_partner_*` pins live only on the branch, with the undeployed portal work).
+Hunks identical to the branch commit (`git diff 88d8442 008e74d -- <the ten>` is empty); `git diff --stat b350192 88d8442`
+is exactly those ten. Pushed.
+
+**`scripts/deploy-5.18.72.sh`** (pinned `88d8442` over `b350192`), the 5.18.71 script's shape: A0 refuses a pin whose
+parent is not the live 5.18.71 or whose delta carries a migration or any partner-portal/CSRF file; R1 byte-for-byte; R5
+Release A→5.18.71 intact; **R6** adds the four 5.18.72 markers — the `received` tile, the per-book Cash-with-staff line,
+the *Advances & collections* sub-line, and **South Sudan's `collected` tile still in the file** — beside every earlier
+marker; **R7** still runs 5.18.71's read-only cash-in-hand tool on the live book; **RB** checks the old wording is back on
+every book and that the 5.18.71 hero and tool survived the rollback. No repair command; the rollback is printed alone at
+the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.72/rehearse.sh`:** against a 5.18.71 base with the pilot ON and a UGX book
+holding a receipt and a Staff Advance (cash in hand 850,000). It proves the deploy PASSES and installs exactly the ten
+files (one new, no migration, no portal file); the pin's page carries the Uganda tile, the per-book line and South Sudan's
+tile while the base's carries only the old wording; a branch-tip pin and a placeholder pin are refused before any read;
+V3/R2 read the live switch; every table is byte-identical across the deploy (R7 wrote nothing); R7 reads UGX 850,000.00 /
+USD 0.00 and the base per project; **teeth**: the page reverted on the server → R1 names it and R6 names the missing tile,
+line and sub-line; 5.18.71's tool removed → **R5** (it is not in this delta), R6 and R7 each name it; a Release-A file
+changed → R5; a live channel or a portal file planted → R4; the rollback returns 5.18.71 exactly (old wording on every
+book, the 5.18.71 hero and tool, 5.18.66–5.18.70 code intact, no data changed); an R1-blinded copy of the script is caught;
+the clone is left as found.
+- **Run 1 (the committed script, `c9377b4`):** **121/0, 17 runs of the script**, no FAIL line; R7 read `UGX CASH IN HAND
+  850,000.00 · USD CASH IN HAND 0.00`; the clone left as found.
+- **Run 2 (the committed script, unchanged — same sha256 `7075b8e9…`):** **121/0, 17 runs**, no FAIL line; the clone left as
+  found. The rehearsed deploy itself reads **24 ok / 0 failed / 0 notes**, as 5.18.71's rehearsal did (its production run
+  then read 23: the sandbox and the server differ by one check, as before).
+
+**Handover.** One command, as root on the server; it asks for `DEPLOY`; send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.72 && mkdir -p /root/dnb-5.18.72 && bash scripts/deploy-5.18.72.sh 2>&1 | tee /root/dnb-5.18.72/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9).
+
+- **Not yet done:** the deploy itself (RESULT to be recorded from the log file); the 5.18.70 VOID's records log (still not
+  received); Money Locations seen in a browser; `bash scripts/deploy-5.18.72.sh --after-only`.
