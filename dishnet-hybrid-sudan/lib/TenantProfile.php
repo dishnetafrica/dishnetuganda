@@ -211,6 +211,21 @@ final class TenantProfile
     }
 
     /**
+     * 5.18.73 — may the customer portal hand a customer over to the dishnet-data-report plugin's client view?
+     * The explicit key portal_data_report_handoff (yes/no) wins; else the profile's integrations.data_report_handoff;
+     * else true — the hand-off was unconditional before this existed, so an install that configures nothing keeps it.
+     * The hand-off token is signed with this plugin's webhook_secret and crm_auth_token, which the other plugin rebuilds
+     * and refuses when either is empty; an install without them (Uganda, recorded 4 Oct 2026) says no in its profile.
+     */
+    public function dataReportHandoff(): bool
+    {
+        $v = $this->cfg('portal_data_report_handoff');
+        if ($v !== null) return in_array(strtolower($v), ['1', 'yes', 'true', 'on'], true);
+        $p = $this->get('integrations.data_report_handoff');
+        return $p === null ? true : (bool)$p;
+    }
+
+    /**
      * A WhatsApp number as a customer reads it: the dial code and three groups
      * ("+256 705 993 348", "+211 921 443 002"). Twelve digits is the shape both
      * tenants' numbers have; anything else is shown as "+" and the digits.

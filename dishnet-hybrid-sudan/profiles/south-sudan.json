@@ -96,6 +96,9 @@
     "sign_in": "We sign you into the DishNet app by sending a six-digit code to your WhatsApp number. That means your phone number travels through Meta's WhatsApp Business infrastructure, subject to Meta's own privacy terms. We never ask for your WhatsApp password — only your phone number so we can route the code to you.",
     "data_protection_law": null
   },
+  "integrations": {
+    "data_report_handoff": true
+  },
   "products": [
     "starlink",
     "fibre",

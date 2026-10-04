@@ -48,6 +48,8 @@ exec('rm -rf ' . escapeshellarg($data)); @mkdir($data, 0700, true);
 file_put_contents($tmp . '/ucrm.json', json_encode(['pluginDataDir' => $data]));
 $store = SqliteStore::create($data);
 $store->save('kyc_config.json', ['dry_run_mode' => true, 'data_dir' => $data, 'tenant_profile' => 'uganda',
+    // 5.18.73: the hand-off is off by profile on uganda and refused under empty signing inputs; this suite tests the token's SHAPE, so it switches it on with both inputs set
+    'portal_data_report_handoff' => 'yes', 'webhook_secret' => str_repeat('a', 32), 'crm_auth_token' => str_repeat('b', 64),
     'wa_plugin_url' => 'http://127.0.0.1:1/', 'wa_app_key' => 'k', 'wa_auth_key' => 'a', 'app_jwt_ttl_days' => 2]);
 $store->getPdo()->prepare("REPLACE INTO client_search_index (id, name, phone, phone_norm, service, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
     ->execute([7, 'Test Customer', $PHONE, substr(preg_replace('/[^0-9]/', '', $PHONE), -9), 'Starlink Standard']);
