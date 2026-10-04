@@ -3955,7 +3955,7 @@ bag; and Money Locations lists staff by *collection exposure* (the `staff_cash_p
 technician who only holds an advance — so the page said *"All cash is in office — no field holdings"* while the technician
 held about UGX 339,672.
 
-**What changed** (`MAIN_HASH_5_18_71` on the branch, release `RELEASE_HASH_5_18_71` on `cba7faf`), all on a book without
+**What changed** (`72de8be` on the branch, release `b350192` on `cba7faf`), all on a book without
 SSP, South Sudan's branch untouched:
 - **The hero reads "Cash in hand — per currency"**: `CashbookService::cashInHand()` per book currency — the Cashbook card's
   own figure (UGX 723,072.00 / USD 10,871.37 today) — and the base per project in the three chips (Fiber & Starlink /
@@ -3985,16 +3985,27 @@ SSP, South Sudan's branch untouched:
   empty line, unchanged. E: three weakened copies caught — the hero drawing the account position again; the office figure
   reading the literal USD stream again (UGX 0.00 against a 1,000,000 receipt); the held-by-staff list emptied.
 - `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_sales_support_tenant` 37/0, `test_staff_cash_chain` 73/0.
-- **Release commit `release/5.18.71` = `RELEASE_HASH_5_18_71`, parent `cba7faf` (5.18.70, production since 07:12 UTC):**
+- **Release commit `release/5.18.71` = `b350192`, parent `cba7faf` (5.18.70, production since 07:12 UTC):**
   the branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.70 left out:
-  RELEASE_DELTA_5_18_71.
-- **`scripts/deploy-5.18.71.sh`** (pinned `RELEASE_HASH_5_18_71` over `cba7faf`), the 5.18.70 script's shape: A0 refuses a
+  9 files, 2 added, 0 migrations, hunks byte for byte the branch's (diffed), 0 partner-portal/CSRF hits.
+- **`scripts/deploy-5.18.71.sh`** (pinned `b350192` over `cba7faf`), the 5.18.70 script's shape: A0 refuses a
   pin whose parent is not 5.18.70 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the hero
   label, no `currencyPositions()` call, the held-by-staff list and the tool, beside the 5.18.69/5.18.70 fixes, the 5.18.68
   chain and the photo surface; **R7** runs the read-only cash-in-hand tool inside the container and prints the live book's
   figures — what the hero will show; RB after a rollback checks the hero is gone and the 5.18.69/5.18.70 fixes still there;
   F prints the rollback alone after the verdict and **no repair command — this release has none**.
-- **Rehearsal `scripts/harness/deploy-5.18.71/rehearse.sh`:** REHEARSAL_RESULT_PENDING_5_18_71
+- **Rehearsal `scripts/harness/deploy-5.18.71/rehearse.sh`: 119/0 over 17 runs of the script**, against a 5.18.70 base
+  holding a UGX book with the pilot *on*, a UGX 1,000,000 receipt and a UGX 150,000 Staff Advance seeded (cash in hand
+  850,000): the three NO-GO gates (a 5.18.69 server, a placeholder pin, a copy pinned to the branch tip refused before any
+  live read); the deploy as the operator runs it (**R7 reads `UGX CASH IN HAND 850,000.00 · USD CASH IN HAND 0.00` and
+  the base per project — Fiber & Starlink 850,000.00, the others 0.00 — and the data digest of every table is unchanged
+  across the deploy: the tool wrote nothing**); R1/R6 teeth (the dashboard reverted → R1 names it and R6 names
+  `dashboard:no-cash-in-hand-hero`, `dashboard:account-position-still-drawn`, `dashboard:no-held-by-staff`; the tool
+  removed → R1, R6 and R7 each name it); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php`
+  caught by name; the rollback restores 5.18.70's dashboard with the 5.18.70, 5.18.69 and 5.18.68 fixes and the photo
+  surface intact and no data change; the R1-blinded copy caught; the rollback printed once after the verdict and **no
+  repair command anywhere in the log**. No defect on the first run. Run 1 on the working copy of the script; run 2 on the
+  committed script: REHEARSAL_RUN2_PENDING_5_18_71.
 - **The operator's commands — two, never pasted together.** (1) The deploy, in the script's header:
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.71 && mkdir -p /root/dnb-5.18.71 && bash scripts/deploy-5.18.71.sh 2>&1 | tee /root/dnb-5.18.71/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `cba7faf`. (2) The rollback, printed by the deploy's log on its own.
