@@ -76,7 +76,10 @@ $st->execute(array_merge($STAFF_CATS, [$base]));
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
 $retailers = array_values(array_filter($store->load('retailers.json') ?: [], fn($r) => !empty($r['is_active'])));
-$cashIns   = $store->load('cash_ins.json') ?: [];
+// A dry run must leave the database byte for byte as it found it — and the store creates a JSON-list table the first
+// time a name is loaded. So the cash-ins are read only where the table exists; where it does not, there are none.
+$hasTable  = (bool)$pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cash_ins'")->fetchColumn();
+$cashIns   = $hasTable ? ($store->load('cash_ins.json') ?: []) : [];
 $byRef     = [];
 foreach ($cashIns as $idx => $ci) { $ref = (string)($ci['cb_ref'] ?? ''); if ($ref !== '') $byRef[$ref][] = $idx; }
 

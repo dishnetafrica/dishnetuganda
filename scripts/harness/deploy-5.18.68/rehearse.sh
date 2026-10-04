@@ -248,7 +248,7 @@ check "$(fails "$OUT")" "0" "no FAIL line"
 check "$(has "$OUT" '5.18.68 (deploy): PASSED')" "yes" "PASSED"
 for l in "ok    A0 the release delta carries no partner-portal or CSRF file and no migration — $N_CH files, this release's own" \
          "ok    A2 PHP" \
-         "— one consistent copy, integrity ok" "ok    backed up the installed plugin (5.18.66, $BASE)" "ok    backed up the configuration vault" \
+         "— one consistent copy, integrity ok" "ok    backed up the installed plugin (5.18.67, $BASE)" "ok    backed up the configuration vault" \
          "GO — evidence recorded" \
          "checking out $PIN (5.18.68, the release commit) for the documented deploy" \
          "ok    container serves $PIN" \
