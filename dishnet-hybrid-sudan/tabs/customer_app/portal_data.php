@@ -21,7 +21,7 @@ require_once dirname(__DIR__, 2) . '/lib/InvoiceTotals.php';   // 5.18.42 (docs/
 //   $portalTenant, $portalSupportWa, $portalSupportWaPlus, $portalSupportPhone, $portalSupportPhoneDial,
 //   $portalSupportEmail, $portalCity, $portalLocality, $portalAreaFibre, $portalAreaLte,
 //   $portalBankAccount, $portalBankName, $portalSells (5.18.41)
-//   $portalDataReportHandoff, $portalAppVersion (5.18.73)
+//   $portalDataReportHandoff, $portalAppVersion (5.18.73), $portalPayText (5.18.74)
 //
 // Sets on failure:
 //   $portalAuthError (string)  — templates should check this first
@@ -83,6 +83,10 @@ $portalSells            = function (string $product) use ($portalTenant): bool {
 $portalDataReportHandoff = $portalTenant->dataReportHandoff();
 // 5.18.73: the Account screen's footer reads the installed version from manifest.json, as the sign-in page does.
 $portalAppVersion = '?';
+// 5.18.74: how customers pay, as the operator wrote it for the assistant and the quotations (ai_fact_payment). "omit" or
+// unset shows nothing, so an install without it (South Sudan) keeps its invoice screen exactly as it was.
+$portalPayText = trim((string)((is_array($config ?? null) ? $config : [])['ai_fact_payment'] ?? ''));
+if (strtolower($portalPayText) === 'omit') $portalPayText = '';
 $_pdManifest = json_decode((string)@file_get_contents(dirname(__DIR__, 2) . '/manifest.json'), true);
 if (is_array($_pdManifest) && !empty($_pdManifest['information']['version'])) $portalAppVersion = (string)$_pdManifest['information']['version'];
 //   Native exposes window.DishNet.* for: biometric, logout, openWhatsApp,

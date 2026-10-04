@@ -90,8 +90,8 @@
     "data_protection_law": null
   },
   "integrations": {
-    "_readme": "5.18.73: the customer portal hands a customer over to the dishnet-data-report plugin's client view with a token signed from this plugin's webhook_secret and crm_auth_token, which that plugin rebuilds and refuses when either is empty. This install has neither (recorded 4 Oct 2026), so every hand-off ended in that plugin's 404; the portal keeps its customers in the app instead. The explicit key portal_data_report_handoff=yes overrides this once both values are set.",
-    "data_report_handoff": false
+    "_readme": "5.18.74: the customer portal hands a customer over to the dishnet-data-report plugin's client view (the Usage links) with a token signed from this plugin's webhook_secret and crm_auth_token, which that plugin rebuilds and verifies. ON at the operator's decision (4 Oct 2026: 'usage link i want to keep'; 5.18.73 had switched it off because this install held neither value and every link ended in that plugin's 404). While either value is empty the portal does not mint a token and tells the customer the details are not available yet. Set them: php tools/set_config.php --key webhook_secret --generate (never shown) and Settings → UCRM Connection → Admin Auth Token. The explicit key portal_data_report_handoff=no hides the links.",
+    "data_report_handoff": true
   },
   "products": [
     "starlink"

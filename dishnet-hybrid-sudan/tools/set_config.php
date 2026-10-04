@@ -78,10 +78,19 @@ $FLAGS = [
     'portal_login_require_service' => ['bool',
         'Refuse portal sign-in to clients with no uCRM service (default: no)'],
     // 5.18.73 — where the customer portal hands usage over to the dishnet-data-report plugin. Blank follows the
-    // country profile (South Sudan yes, Uganda no); yes needs webhook_secret and crm_auth_token set, or the other
-    // plugin answers 404 to every hand-off.
+    // country profile (yes in both since 5.18.74, at the operator's decision); the portal mints the hand-off token
+    // only once webhook_secret and crm_auth_token are both set, because the other plugin rebuilds the same secret
+    // and answers 404 to a token signed from an empty one.
     'portal_data_report_handoff' => ['text',
         'Customer portal: open usage in the Data Report plugin — yes or no (blank = the country profile)'],
+    // 5.18.74 — the one signing input of that hand-off this plugin can supply itself. A 'secret' key: GENERATED here
+    // (--generate), never typed (a value in a shell command lands in root's history) and never shown (the listing says
+    // how many characters are set). Settings → Webhook Secret has a Copy button for the one case that needs the value:
+    // a uCRM webhook configured to send a key — unset there, uCRM sends none and nothing is refused. The other input is
+    // Settings → UCRM Connection → Admin Auth Token.
+    'webhook_secret' => ['secret',
+        'Signs the customer portal\'s Data Report hand-off (with the Admin Auth Token); a uCRM webhook carrying a '
+      . 'DIFFERENT key is refused once this is set — --generate or --clear, never --value'],
     'app_jwt_ttl_days' => ['number',
         'Days a customer stays signed in after a code (default 30)'],
     // A migration instrument with an end date, not a business setting. It
@@ -267,6 +276,9 @@ $show = function () use ($root, $dataDir, $FLAGS) {
                     $note  = implode(', ', array_slice($cats, 0, 6)) . (count($cats) > 6 ? ', …' : '');
                 }
             }
+        } elseif ($type === 'secret') {
+            // Never the value, not even a prefix: how many characters are set is all a listing needs to say.
+            $shown = 'set (' . strlen((string)$raw) . ' characters) — not shown';
         } elseif ($type === 'number') {
             // A count, an hour figure, a limit. No unit appended and no
             // default invented — the description carries both.
@@ -291,7 +303,7 @@ if ($key === '') {
     if ($args) {
         echo "\n  Nothing was changed — this tool did not understand:\n\n";
         echo "      " . implode(' ', $args) . "\n\n";
-        echo "  It takes --key and --value (or --clear):\n\n";
+        echo "  It takes --key and --value (or --clear; a secret takes --generate):\n\n";
         echo "      php tools/set_config.php --key ai_qualification --value 1\n";
         echo "      php tools/set_config.php --key ai_qualification --clear\n\n";
         echo "  Run it with no arguments to see the settings it manages. Anything\n";
@@ -314,12 +326,46 @@ if (!array_key_exists($key, $FLAGS)) {
     exit(1);
 }
 
-$clear = in_array('--clear', $args, true);
-if (!$clear && !in_array('--value', $args, true)) {
-    echo "\n  Give --value <v>, or --clear to return it to the default.\n\n";
+$clear    = in_array('--clear', $args, true);
+$generate = in_array('--generate', $args, true);
+$isSecret = ($FLAGS[$key][0] ?? '') === 'secret';
+if ($isSecret && in_array('--value', $args, true)) {
+    // 5.18.74: a secret is never typed into a shell — the command line lands in root's history and in this terminal's
+    // scrollback. Nothing was saved.
+    echo "\n  " . $key . " is a secret and is never typed: use --generate (a random value, stored, never shown)\n";
+    echo "  or --clear. Nothing was saved.\n\n";
     exit(1);
 }
-$new = $clear ? '' : $value('--value');
+if ($generate && !$isSecret) {
+    echo "\n  --generate is only for a secret (" . implode(', ', array_keys(array_filter($FLAGS, function ($f) { return $f[0] === 'secret'; }))) . "). Nothing was saved.\n\n";
+    exit(1);
+}
+if (!$clear && !$generate && !in_array('--value', $args, true)) {
+    if ($isSecret) echo "\n  Give --generate to create and store a random value (never shown), or --clear to remove it.\n\n";
+    else           echo "\n  Give --value <v>, or --clear to return it to the default.\n\n";
+    exit(1);
+}
+if ($generate && !$clear) {
+    // Refuse to overwrite one that is set: rotating it silently would break a uCRM webhook configured with the old
+    // value, and the hand-off works with whatever both plugins read. Clearing first is the explicit two-step rotation.
+    $cur    = PluginConfig::read($root, $dataDir);   // the read-only path: this check must change nothing on disk
+    $curVal = trim((string)($cur[$key] ?? ''));
+    if ($curVal === '' && is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) {
+        // The web requests read the STORE row (public.php: $config = $store->load('kyc_config.json')), so a value that
+        // lives only there counts as set too. Never create a store here (see PluginConfig::mirrorToStore).
+        try {
+            require_once $root . '/lib/StoreInterface.php'; require_once $root . '/lib/JsonStore.php'; require_once $root . '/lib/SqliteStore.php';
+            $row = SqliteStore::create($dataDir)->load('kyc_config.json');
+            $curVal = trim((string)((is_array($row) ? $row : [])[$key] ?? ''));
+        } catch (\Throwable $e) { /* unreadable store: the file answer stands */ }
+    }
+    if ($curVal !== '') {
+        echo "\n  " . $key . " is already set (" . strlen($curVal) . " characters) — nothing was changed.\n";
+        echo "  To rotate it: --clear first, then --generate. Settings → Webhook Secret shows the current value.\n\n";
+        exit(1);
+    }
+}
+$new = $clear ? '' : ($generate ? bin2hex(random_bytes(16)) : $value('--value'));
 
 // Some of these are not flags — they are text a customer reads, verbatim.
 // Saying so at the moment of setting is the only time anyone is looking.
@@ -445,6 +491,8 @@ if (!$ok) { echo "\n  Could not save: " . (string)$err . "\n\n"; exit(1); }
 
 foreach ($warn as $w) echo "\n  Note: " . $w . "\n";
 
-echo "\n  " . $key . ($clear ? ' cleared — back to the default.' : ' = ' . $new) . "\n";
+if ($clear)          echo "\n  " . $key . " cleared — back to the default.\n";
+elseif ($isSecret)   echo "\n  " . $key . " generated and stored (" . strlen($new) . " characters). It is not shown here; Settings → Webhook Secret has a Copy button if uCRM's webhook needs it.\n";
+else                 echo "\n  " . $key . " = " . $new . "\n";
 $show();
 exit(0);

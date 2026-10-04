@@ -1508,6 +1508,10 @@ elseif ($view === 'invoice_detail'):
   <div class="sec-lbl" style="margin-top:18px">Payment</div>
   <div class="list-card">
     <div style="padding:16px">
+      <?php if ($portalPayText !== ''): /* 5.18.74: the operator's own payment instructions (ai_fact_payment), verbatim, where set */ ?>
+      <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">How to pay</div>
+      <div style="font-size:12px;color:var(--gray);line-height:1.6;margin-bottom:12px"><?= nl2br(pe($portalPayText)) ?></div>
+      <?php endif; ?>
       <?php if ($portalBankAccount !== '' && $portalBankName !== ''): // 5.18.41: only the tenant's own bank details, never the other tenant's ?>
       <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Bank transfer</div>
       <div style="font-size:12px;color:var(--gray);line-height:1.6">
