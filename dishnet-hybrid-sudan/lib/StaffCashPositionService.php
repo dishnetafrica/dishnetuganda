@@ -63,11 +63,15 @@ class StaffCashPositionService
     private \StoreInterface $store;
     private \PDO            $pdo;
     private bool            $viewAvailable;
+    private string          $base = 'USD';
 
     public function __construct(\StoreInterface $store, \PDO $pdo)
     {
         $this->store         = $store;
         $this->pdo           = $pdo;
+        // 5.18.68: the "USD" bag is the BOOK's base bag — UGX on a Uganda install, USD on
+        // South Sudan, where every comparison below therefore still reads 'USD'.
+        $this->base          = function_exists('dn_book_base') ? dn_book_base(null) : 'USD';
         // v4.11.3: Always use PHP path — the SQLite VIEW is stale and misses:
         // 1. Voided collections (VIEW counts them, PHP excludes them)
         // 2. staff_expenses SQLite (VIEW only reads cash_expenses JSON)
@@ -237,7 +241,7 @@ class StaffCashPositionService
     private function sumCollections(int $agentId): float
     {
         $rows = $this->store->findAll('payment_collections.json', 'retailer_id', $agentId);
-        $valid = array_filter($rows, fn($c) => ($c['status'] ?? '') !== 'voided' && ($c['currency'] ?? 'USD') === 'USD');
+        $valid = array_filter($rows, fn($c) => ($c['status'] ?? '') !== 'voided' && strtoupper($c['currency'] ?? $this->base) === $this->base);
         return round((float)array_sum(array_column(array_values($valid), 'amount')), 2);
     }
 
@@ -270,7 +274,7 @@ class StaffCashPositionService
         $excluded = ['voided', 'cancelled', 'rejected'];
         $counted  = array_filter($rows, fn($e) =>
             !in_array($e['status'] ?? '', $excluded, true) &&
-            strtoupper($e['currency'] ?? 'USD') === 'USD'
+            strtoupper($e['currency'] ?? $this->base) === $this->base
         );
         $jsonTotal = round((float)array_sum(array_column(array_values($counted), 'amount')), 2);
 
@@ -281,7 +285,7 @@ class StaffCashPositionService
             $stmt = $this->pdo->prepare(
                 "SELECT COALESCE(SUM(amount), 0) FROM staff_expenses
                  WHERE staff_id = ? AND status = 'approved'
-                 AND (currency = 'USD' OR currency IS NULL OR currency = '')
+                 AND (currency = '{$this->base}' OR currency IS NULL OR currency = '')
                  AND (source IS NULL OR source != 'field')"
             );
             $stmt->execute([$agentId]);
@@ -302,7 +306,7 @@ class StaffCashPositionService
         $excluded  = ['voided', 'cancelled', 'rejected', 'reverted'];
         $counted   = array_filter($rows, fn($h) =>
             !in_array($h['status'] ?? '', $excluded, true) &&
-            ($h['currency'] ?? 'USD') === 'USD'  // USD only — exclude SSP handovers
+            strtoupper($h['currency'] ?? $this->base) === $this->base  // the base bag only — exclude SSP handovers
         );
         return round((float)array_sum(array_column(array_values($counted), 'amount')), 2);
     }
@@ -333,10 +337,10 @@ class StaffCashPositionService
         try {
             $stmt = $this->pdo->prepare(
                 "SELECT
-                    ROUND(SUM(CASE WHEN from_id=? AND status='approved' AND (currency IS NULL OR currency='USD') THEN amount ELSE 0 END), 2) AS sent,
-                    ROUND(SUM(CASE WHEN to_id=?   AND status='approved' AND (currency IS NULL OR currency='USD') THEN amount ELSE 0 END), 2) AS recv
+                    ROUND(SUM(CASE WHEN from_id=? AND status='approved' AND (currency IS NULL OR currency='{$this->base}') THEN amount ELSE 0 END), 2) AS sent,
+                    ROUND(SUM(CASE WHEN to_id=?   AND status='approved' AND (currency IS NULL OR currency='{$this->base}') THEN amount ELSE 0 END), 2) AS recv
                  FROM staff_transfers
-                 WHERE (from_id=? OR to_id=?) AND status='approved' AND (currency IS NULL OR currency='USD')"
+                 WHERE (from_id=? OR to_id=?) AND status='approved' AND (currency IS NULL OR currency='{$this->base}')"
             );
             $stmt->execute([$agentId, $agentId, $agentId, $agentId]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -471,6 +475,7 @@ class StaffCashPositionService
         $usdIn  = 0.0;
         foreach ($cins as $i) {
             if (($i['category'] ?? '') !== 'USD Received') continue;
+            if (strtoupper($i['currency'] ?? $this->base) !== $this->base) continue; // 5.18.68: a cash-in in another currency is another bag
             if (in_array($i['status'] ?? 'approved', $excluded, true)) continue;
             if (self::isPersonalPay($i)) continue;
             $usdIn += (float)($i['amount'] ?? 0);
@@ -480,7 +485,7 @@ class StaffCashPositionService
         $cols = $this->store->findAll('payment_collections.json', 'retailer_id', $agentId);
         foreach ($cols as $c) {
             if (in_array($c['status'] ?? '', $excluded, true)) continue;
-            if (strtoupper($c['currency'] ?? 'USD') !== 'USD') continue;
+            if (strtoupper($c['currency'] ?? $this->base) !== $this->base) continue;
             $usdIn += (float)($c['amount'] ?? 0);
         }
 
@@ -493,7 +498,7 @@ class StaffCashPositionService
                  FROM cash_advances
                  WHERE recipient_id = ?
                    AND status IN ('active','partial')
-                   AND (currency = 'USD' OR currency IS NULL OR currency = '')
+                   AND (currency = '{$this->base}' OR currency IS NULL OR currency = '')
                    AND (parent_advance_id IS NULL OR parent_advance_id = 0)"
             );
             $stmt->execute([$agentId]);
@@ -504,7 +509,7 @@ class StaffCashPositionService
         $exps   = $this->store->findAll('cash_expenses.json', 'collector_id', $agentId);
         $usdOut = 0.0;
         foreach ($exps as $e) {
-            if (strtoupper($e['currency'] ?? 'USD') !== 'USD') continue;
+            if (strtoupper($e['currency'] ?? $this->base) !== $this->base) continue;
             if (in_array($e['status'] ?? '', $excluded, true)) continue;
             $usdOut += (float)($e['amount'] ?? 0);
         }
@@ -515,7 +520,7 @@ class StaffCashPositionService
             $stmt = $this->pdo->prepare(
                 "SELECT COALESCE(SUM(amount),0) FROM staff_expenses
                  WHERE staff_id=? AND status='approved'
-                   AND (currency='USD' OR currency IS NULL OR currency='')
+                   AND (currency='{$this->base}' OR currency IS NULL OR currency='')
                    AND (source IS NULL OR source != 'field')"
             );
             $stmt->execute([$agentId]);
@@ -526,7 +531,7 @@ class StaffCashPositionService
         $hovs = $this->store->findAll('cash_handovers.json', 'from_id', $agentId);
         foreach ($hovs as $h) {
             if (in_array($h['status'] ?? '', $excluded, true)) continue;
-            if (strtoupper($h['currency'] ?? 'USD') !== 'USD') continue;
+            if (strtoupper($h['currency'] ?? $this->base) !== $this->base) continue;
             $usdOut += (float)($h['amount'] ?? 0);
         }
 

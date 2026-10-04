@@ -243,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='log_expense
                     'id'            => count($cashIns) + 1,
                     'collector_id'  => $matchedId,
                     'collector_name'=> $matchedName,
-                    'amount'        => $currency === 'USD' ? $rawAmount : 0,
+                    'amount'        => $currency !== 'SSP' ? $rawAmount : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                     'currency'      => $currency,
                     'ssp_amount'    => $currency === 'SSP' ? $rawAmount : 0,
                     'usd_given'     => 0,
@@ -475,7 +475,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_ad
                     'id'            => count($cashIns) + 1,
                     'collector_id'  => $matchedId,
                     'collector_name'=> $matchedName,
-                    'amount'        => $cbCurrency === 'USD' ? $cbAmount : 0,
+                    'amount'        => $cbCurrency !== 'SSP' ? $cbAmount : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                     'currency'      => $cbCurrency,
                     'ssp_amount'    => $cbCurrency === 'SSP' ? $cbSspAmt : 0,
                     'usd_given'     => 0,
@@ -1026,7 +1026,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['cb_action']??'')==='add_entr
                         'id'            => count($cashIns) + 1,
                         'collector_id'  => $matchedId,
                         'collector_name'=> $matchedName,
-                        'amount'        => $cbCurrency === 'USD' ? $cbAmount : 0,
+                        'amount'        => $cbCurrency !== 'SSP' ? $cbAmount : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                         'currency'      => $cbCurrency,
                         'ssp_amount'    => $cbCurrency === 'SSP' ? $cbSspAmt : 0,
                         'usd_given'     => 0,

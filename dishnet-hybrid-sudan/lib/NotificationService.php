@@ -78,6 +78,7 @@ class NotificationService
     private string $dataDir = '';
     /** Money prefix for message texts (config currency_symbol + space). */
     private string $curSym = 'UGX ';
+    private string $bookBase = 'USD';   // 5.18.68: the book's base currency, for a cash message in another one
     /** Shape dn_money() expects, built from the symbol this install uses. */
     private array  $cfgForMoney = [];
     /** The install config, kept for the shared contact lookups. */
@@ -94,6 +95,7 @@ class NotificationService
     {
         $this->store      = $store;
         $this->curSym     = dn_cur($config);
+        $this->bookBase   = function_exists('dn_book_base') ? dn_book_base($config) : 'USD';
         $this->cfgForMoney = ['currency_symbol' => rtrim($this->curSym)];
         $this->cfgForContacts = $config;
         // Contacts and links were welded into ~30 message strings. The
@@ -863,6 +865,10 @@ class NotificationService
     {
         if ($currency === 'SSP') {
             $amtDisp = number_format($sspAmount, 0) . ' SSP';
+        } elseif ($currency !== '' && $currency !== $this->bookBase) {
+            // 5.18.68: money in a currency other than the book's base (USD handed out on a UGX book)
+            // is named by its code — the display symbol belongs to the base alone.
+            $amtDisp = $currency . ' ' . number_format($amount, 2);
         } else {
             $amtDisp = $this->curSym . number_format($amount, 2);
         }

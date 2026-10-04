@@ -88,6 +88,13 @@ cb_ledger.amount = USD. SSP amounts converted at entry time.
 Original SSP stored in ssp_amount + ssp_rate columns.
 NEVER store SSP in the amount column.
 
+5.18.68 clarification (Uganda books): `amount` is in the BOOK's base currency —
+`dn_book_base()` — which is USD on South Sudan and UGX on Uganda (Phase A, 5.18.4x).
+The substance of the rule is unchanged: SSP never goes in `amount`, and a USD row on a
+UGX book keeps `currency = 'USD'` with its own stream. The same holds for every staff
+cash record (cash_ins.json, staff_ledger): the "USD" bag is the base bag, so a reader
+compares against `dn_book_base()`, never the literal 'USD'.
+
 ## ⛔ RULE 9: HANDOVER DOES NOT TOUCH CASHBOOK
 
 Since v4.9.8, confirm_handover and admin_record_handover must NEVER

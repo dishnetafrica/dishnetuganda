@@ -22,6 +22,9 @@ $expAdv = new ExpenseAdvanceService($store, $dataDir);
 
 $agentId   = (int)$retailer['id'];
 $agentName = $retailer['name'] ?? 'Agent';
+// 5.18.68: the "USD" bag of this screen is the BOOK's base bag — UGX on a Uganda install, USD on
+// South Sudan, where every comparison that reads $_mcBase below therefore still reads 'USD'.
+$_mcBase   = dn_book_base($config ?? null);
 $_mcAllExps = $store->load('cash_expenses.json') ?: [];
 $_mcMyExps  = array_filter($_mcAllExps, fn($e) => (int)($e['collector_id'] ?? 0) === $agentId && ($e['status'] ?? '') !== 'voided');
 
@@ -71,12 +74,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
             // Negative exposure = company owes you (you have no USD). Zero or positive = you may have cash.
             $_bgAvail = $_bgUsd < 0 ? abs($_bgUsd) : 0;
             // Also check: advances - expenses - handovers for USD
-            $_bgUsdIn  = round(array_sum(array_column(array_values(array_filter($_bgCashIn, fn($i) => ($i['currency'] ?? 'USD') === 'USD' && !in_array($i['status'] ?? 'approved', ['rejected','voided']))), 'amount')), 2);
-            $_bgUsdExp = round(array_sum(array_column(array_values(array_filter($_bgExpenses, fn($e) => ($e['currency'] ?? 'USD') === 'USD' && in_array($e['status'] ?? '', ['approved','pending']))), 'amount')), 2);
-            $_bgUsdHov = round(array_sum(array_column(array_values(array_filter($_bgHandovers, fn($h) => ($h['status'] ?? '') === 'confirmed' && ($h['currency'] ?? 'USD') === 'USD')), 'amount')), 2);
+            $_bgUsdIn  = round(array_sum(array_column(array_values(array_filter($_bgCashIn, fn($i) => strtoupper($i['currency'] ?? $_mcBase) === $_mcBase && !in_array($i['status'] ?? 'approved', ['rejected','voided']))), 'amount')), 2);
+            $_bgUsdExp = round(array_sum(array_column(array_values(array_filter($_bgExpenses, fn($e) => strtoupper($e['currency'] ?? $_mcBase) === $_mcBase && in_array($e['status'] ?? '', ['approved','pending']))), 'amount')), 2);
+            $_bgUsdHov = round(array_sum(array_column(array_values(array_filter($_bgHandovers, fn($h) => ($h['status'] ?? '') === 'confirmed' && strtoupper($h['currency'] ?? $_mcBase) === $_mcBase)), 'amount')), 2);
             $_bgUsdBal = max(0, (float)($_bgPos['advance_balance'] ?? 0) + (float)($_bgPos['collections'] ?? 0) + $_bgUsdIn - $_bgUsdExp - $_bgUsdHov);
             if ($_exAmt > 0 && $_bgUsdBal <= 0 && (float)($_bgPos['advance_balance'] ?? 0) <= 0 && (float)($_bgPos['collections'] ?? 0) <= 0 && $_bgUsdIn <= 0) {
-                flash("Cannot submit " . dn_cur($config) . number_format($_exAmt, 2) . " USD — you have no USD cash. Switch to SSP if you have SSP.", 'danger');
+                flash("Cannot submit " . dn_cur($config) . number_format($_exAmt, 2) . " {$_mcBase} — you have no {$_mcBase} cash." . (dn_ssp_selectable($config ?? null) ? " Switch to SSP if you have SSP." : ''), 'danger');
                 redirect('?page=dashboard&tab=my_account&v=expense');
             }
         }
@@ -112,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['mc_action'])) {
                     $_ciRef = 'MC-STAFF-'.$agentId.'-'.time();
                     $cashIns[] = [
                         'id'=>count($cashIns)+1,'collector_id'=>$_mId,'collector_name'=>$_mName,
-                        'amount'=>$_expCurrency==='USD'?$_expAmount:0,'currency'=>$_expCurrency,
+                        'amount'=>$_expCurrency!=='SSP'?$_expAmount:0,'currency'=>$_expCurrency, // 5.18.68: non-SSP carries its amount
                         'ssp_amount'=>$_expCurrency==='SSP'?$_expSspAmt:0,
                         'usd_given'=>0,'rate'=>0,'category'=>$_ciCat,'description'=>$_ciDesc,
                         'status'=>'approved','approved_by'=>'auto (field accountant)',
@@ -583,7 +586,7 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
     // Total lifetime collected (for display)
     $_mcTotalCollected = round(array_sum(array_column(array_values($_mcCollections), 'amount')), 2);
     $_mcTotalHanded = round(array_sum(array_column(array_values(
-        array_filter($_mcHandovers, fn($h) => ($h['status'] ?? '') === 'confirmed' && ($h['currency'] ?? 'USD') === 'USD')
+        array_filter($_mcHandovers, fn($h) => ($h['status'] ?? '') === 'confirmed' && strtoupper($h['currency'] ?? $_mcBase) === $_mcBase)
     ), 'amount')), 2);
 
     // This month's collections
@@ -714,8 +717,9 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
         // USD Received from cash_ins — exclude personal pay (salary, allowance, bonus)
         // v4.21.109: keyword list now lives in StaffCashPositionService::PERSONAL_PAY_KEYWORDS
         // — single source shared with admin Staff Cashbooks and StaffLedgerWriter.
-        $_mcUsdIn2 = round(array_sum(array_column(array_values(array_filter($_mcCashIn, function($i) {
+        $_mcUsdIn2 = round(array_sum(array_column(array_values(array_filter($_mcCashIn, function($i) use ($_mcBase) {
             if (($i['category'] ?? '') !== 'USD Received') return false;
+            if (strtoupper($i['currency'] ?? $_mcBase) !== $_mcBase) return false; // 5.18.68: another currency is another bag
             if (in_array($i['status'] ?? 'approved', ['rejected','voided'])) return false;
             if (StaffCashPositionService::isPersonalPay($i)) return false;
             return true;
@@ -724,7 +728,7 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
         try {
             $_mcColStmt = $store->getPdo()->prepare(
                 "SELECT COALESCE(SUM(amount),0) FROM staff_ledger
-                 WHERE staff_id=? AND direction='in' AND currency='USD'
+                 WHERE staff_id=? AND direction='in' AND currency='{$_mcBase}'
                    AND category='collection' AND idempotency_key LIKE 'COL-%'
                    AND status NOT IN ('voided','cancelled')"
             );
@@ -732,17 +736,17 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
             $_mcUsdIn2 += round((float)$_mcColStmt->fetchColumn(), 2);
         } catch (\Throwable $e) {}
         $_mcUsdExp2 = round(array_sum(array_column(array_values(array_filter($_mcExpenses2, fn($e) =>
-            ($e['currency'] ?? 'USD') === 'USD'
+            strtoupper($e['currency'] ?? $_mcBase) === $_mcBase
             && in_array($e['status'] ?? '', ['approved','pending'])
         )), 'amount')), 2);
         // Include staff_expenses SQLite for USD
         try {
-            $_mcSqlUsdExp = $store->getPdo()->prepare("SELECT COALESCE(SUM(amount),0) FROM staff_expenses WHERE staff_id=? AND currency='USD' AND status IN ('approved','pending')");
+            $_mcSqlUsdExp = $store->getPdo()->prepare("SELECT COALESCE(SUM(amount),0) FROM staff_expenses WHERE staff_id=? AND currency='{$_mcBase}' AND status IN ('approved','pending')");
             $_mcSqlUsdExp->execute([$agentId]); $_mcUsdExp2 += round((float)$_mcSqlUsdExp->fetchColumn(), 2);
         } catch (\Throwable $e) {}
         $_mcUsdHov2 = round(array_sum(array_map(fn($h) => (float)($h['amount'] ?? 0), array_values(array_filter($_mcHandovers2, fn($h) =>
             ($h['status'] ?? '') === 'confirmed'
-            && strtoupper($h['currency'] ?? 'USD') === 'USD'
+            && strtoupper($h['currency'] ?? $_mcBase) === $_mcBase
         )))), 2);
         // v4.21.109: use service method for the displayed hero balance so admin
         // staff_cashbooks and this staff portal can never disagree. The
@@ -765,9 +769,9 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
             <?php if ($_mcSspBal2 > 0): ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">≈ <?= dn_cur($config) ?><?= number_format($_mcSspUsd2, 2) ?> @ <?= number_format($_mcRate2, 0) ?></div><?php else: ?><div style="font-size:10px;color:#94a3b8;margin-top:2px;">no SSP received</div><?php endif; ?>
         </div>
         <div style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:14px;padding:14px 12px;">
-            <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 USD Cash</div>
+            <div style="font-size:9px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.8px;">💵 <?= h($_mcBase) ?> Cash</div>
             <div style="font-size:28px;font-weight:900;color:<?= $_mcUsdBal2 > 0 ? '#4ade80' : '#475569' ?>;letter-spacing:-1px;margin-top:2px;"><?= dn_cur($config) ?><?= number_format($_mcUsdBal2, 2) ?></div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?= $_mcUsdBal2 > 0 ? 'in hand' : ($_mcUsdIn2 > 0 ? 'settled' : 'no USD received') ?></div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;"><?= $_mcUsdBal2 > 0 ? 'in hand' : ($_mcUsdIn2 > 0 ? 'settled' : 'no ' . h($_mcBase) . ' received') ?></div>
         </div>
     </div>
 
@@ -854,7 +858,7 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
     <a href="?page=dashboard&tab=my_account&v=usd_book"
        style="background:<?= $v==='usd_book'?'#059669':'#fff' ?>;border:2px solid <?= $v==='usd_book'?'#059669':'#e2e8f0' ?>;border-radius:12px;padding:10px 8px;text-align:center;text-decoration:none;">
         <div style="font-size:14px;">💵</div>
-        <div style="font-size:11px;font-weight:700;color:<?= $v==='usd_book'?'#fff':'#059669' ?>;">USD Cashbook</div>
+        <div style="font-size:11px;font-weight:700;color:<?= $v==='usd_book'?'#fff':'#059669' ?>;"><?= h($_mcBase) ?> Cashbook</div>
     </a>
 </div>
 <?php endif; ?>
@@ -875,9 +879,9 @@ $_mcIsSupport = dn_ssp_selectable($config ?? null) && in_array($retailer['role']
     <?php if ($_mcUsdIn2 > 0 || $_mcUsdExp2 > 0 || $_mcUsdHov2 > 0): ?>
     <div style="border-top:1px solid #e2e8f0;margin-top:8px;padding-top:8px;">
         <div class="mc-row"><span class="k"><span style="font-size:15px;">💵</span> USD received</span><span class="v mc-in">+<?= dn_cur($config) ?><?= number_format($_mcUsdIn2, 2) ?></span></div>
-        <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> USD expenses</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdExp2, 2) ?></span></div>
-        <?php if ($_mcUsdHov2 > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> USD returned to office</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdHov2, 2) ?></span></div><?php endif; ?>
-        <div class="mc-row total"><span class="k">💵 USD balance</span><span class="v" style="color:<?= $_mcUsdBal2 > 0 ? '#059669' : '#475569' ?>;font-weight:900;"><?= dn_cur($config) ?><?= number_format($_mcUsdBal2, 2) ?></span></div>
+        <div class="mc-row"><span class="k"><span style="font-size:15px;">🧾</span> <?= h($_mcBase) ?> expenses</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdExp2, 2) ?></span></div>
+        <?php if ($_mcUsdHov2 > 0): ?><div class="mc-row"><span class="k"><span style="font-size:15px;">🏦</span> <?= h($_mcBase) ?> returned to office</span><span class="v mc-out">-<?= dn_cur($config) ?><?= number_format($_mcUsdHov2, 2) ?></span></div><?php endif; ?>
+        <div class="mc-row total"><span class="k">💵 <?= h($_mcBase) ?> balance</span><span class="v" style="color:<?= $_mcUsdBal2 > 0 ? '#059669' : '#475569' ?>;font-weight:900;"><?= dn_cur($config) ?><?= number_format($_mcUsdBal2, 2) ?></span></div>
     </div>
     <?php endif; ?>
     <?php else: ?>
@@ -924,19 +928,19 @@ usort($_ledgerSSP, fn($a,$b)=>strcmp($b['date'],$a['date']));
 $_ledgerUSD = [];
 foreach ($_mcCashIn as $ci) {
     if (in_array($ci['status'] ?? 'approved', ['rejected','voided'])) continue;
-    if (($ci['category']??'') === 'USD Received' && (float)($ci['amount']??0) > 0) {
+    if (($ci['category']??'') === 'USD Received' && strtoupper($ci['currency'] ?? $_mcBase) === $_mcBase && (float)($ci['amount']??0) > 0) {
         $_ledgerUSD[] = ['date'=>$ci['created_at']??'','dir'=>'in','amount'=>(float)$ci['amount'],'desc'=>($ci['description']??'USD Received'),'from'=>'Office'];
     }
 }
 foreach ($_mcExpenses2 as $e) {
-    if (($e['currency']??'USD')!=='USD') continue;
+    if (strtoupper($e['currency']??$_mcBase)!==$_mcBase) continue;
     if (!in_array($e['status']??'',['approved','pending'])) continue;
     $_ledgerUSD[] = ['date'=>$e['submitted_at']??$e['created_at']??'','dir'=>'out','amount'=>(float)($e['amount']??0),
         'desc'=>($e['category']??'Expense').($e['description']?' — '.$e['description']:''),
         'status'=>$e['status']??''];
 }
 foreach ($_mcHandovers2 as $h) {
-    if (($h['status']??'')!=='confirmed' || strtoupper($h['currency']??'USD')!=='USD') continue;
+    if (($h['status']??'')!=='confirmed' || strtoupper($h['currency']??$_mcBase)!==$_mcBase) continue;
     $_ledgerUSD[] = ['date'=>$h['created_at']??'','dir'=>'out','amount'=>(float)($h['amount']??0),'desc'=>'Returned to '.($h['to_name']??'Office')];
 }
 usort($_ledgerUSD, fn($a,$b)=>strcmp($b['date'],$a['date']));
@@ -1243,7 +1247,7 @@ try {
          FROM staff_ledger
          WHERE staff_id = ?
            AND direction = 'in'
-           AND currency = 'USD'
+           AND currency = '{$_mcBase}'
            AND category = 'collection'
            AND idempotency_key LIKE 'COL-%'
            AND status NOT IN ('voided','cancelled')
@@ -1260,6 +1264,7 @@ $_ubPersonalKw = ['salary','transport allowance','food allowance','bonus','emplo
 foreach ($_ubCashIn as $ci) {
     if (in_array($ci['status'] ?? 'approved', ['rejected','voided'])) continue;
     if (($ci['category']??'') !== 'USD Received') continue;
+    if (strtoupper($ci['currency'] ?? $_mcBase) !== $_mcBase) continue; // 5.18.68: another currency is another bag
     $amt = (float)($ci['amount']??0);
     if ($amt <= 0) continue;
     $_ubDesc2 = strtolower($ci['description'] ?? '');
@@ -1286,7 +1291,7 @@ foreach ($_ubColRows as $_uc) {
     ];
 }
 foreach ($_ubMyExps as $e) {
-    if (($e['currency']??'USD')!=='USD') continue;
+    if (strtoupper($e['currency']??$_mcBase)!==$_mcBase) continue;
     if (in_array($e['status']??'',['voided','cancelled','rejected'])) continue;
     $_ubRows[] = ['date'=>$e['submitted_at']??$e['created_at']??'','dir'=>'OUT','amt'=>(float)($e['amount']??0),
         'desc'=>($e['category']??'Expense').($e['description']?' — '.substr($e['description'],0,30):''),
@@ -1294,7 +1299,7 @@ foreach ($_ubMyExps as $e) {
 }
 foreach ($_ubHandovers as $h) {
     if (($h['status']??'')!=='confirmed') continue;
-    if (strtoupper($h['currency']??'USD')!=='USD') continue;
+    if (strtoupper($h['currency']??$_mcBase)!==$_mcBase) continue;
     $_ubRows[] = ['date'=>$h['created_at']??'','dir'=>'OUT','amt'=>(float)($h['amount']??0),
         'desc'=>'Returned to '.($h['to_name']??'Office'),'cat'=>'Handover','status'=>'confirmed'];
 }
@@ -1305,7 +1310,7 @@ try {
         "SELECT * FROM staff_ledger
          WHERE staff_id = ?
            AND idempotency_key LIKE 'HOV-IN-%'
-           AND currency = 'USD'
+           AND currency = '{$_mcBase}'
            AND status NOT IN ('voided','cancelled')
          ORDER BY event_date ASC"
     );
@@ -1332,7 +1337,7 @@ $_ubRows = array_reverse($_ubRows);
 ?>
 
 <div style="background:linear-gradient(135deg,#059669,#047857);border-radius:16px;padding:16px;color:#fff;margin-bottom:12px;">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:.7;">💵 USD Cashbook — <?= h($agentName) ?></div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:.7;">💵 <?= h($_mcBase) ?> Cashbook — <?= h($agentName) ?></div>
     <div style="font-size:32px;font-weight:900;margin-top:4px;"><?= dn_cur($config) ?><?= number_format(max(0,$_ubBal),2) ?></div>
     <div style="font-size:11px;opacity:.7;margin-top:2px;"><?= count($_ubRows) ?> transactions</div>
 </div>
@@ -1390,7 +1395,7 @@ $_ubRows = array_reverse($_ubRows);
         <?php $_mcDefaultSSP = $_mcIsSupport && $_mcSspBal2 > 0; ?>
         <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:<?= $_mcDefaultSSP ? '#f8fafc' : '#f0fdf4' ?>;color:<?= $_mcDefaultSSP ? '#9ca3af' : '#15803d' ?>;" id="mc_cur_usd">
-                <input type="radio" name="currency" value="USD" <?= $_mcDefaultSSP ? '' : 'checked' ?> style="display:none;" onchange="mcCur('USD')"> 💵 <?= dn_book_base($config) ?></label>
+                <input type="radio" name="currency" value="<?= h($_mcBase) ?>" <?= $_mcDefaultSSP ? '' : 'checked' ?> style="display:none;" onchange="mcCur('<?= h($_mcBase) ?>')"> 💵 <?= dn_book_base($config) ?></label>
             <?php if (dn_ssp_selectable($config ?? null)): ?>
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:<?= $_mcDefaultSSP ? '#fff7ed' : '#f8fafc' ?>;color:<?= $_mcDefaultSSP ? '#c2410c' : '#9ca3af' ?>;" id="mc_cur_ssp">
                 <input type="radio" name="currency" value="SSP" <?= $_mcDefaultSSP ? 'checked' : '' ?> style="display:none;" onchange="mcCur('SSP')"> 🇸🇸 SSP</label>
@@ -1616,7 +1621,7 @@ $confTotal = round(array_sum(array_map(function($h) { return (float)($h['amount'
 
         <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:2px solid #e2e8f0;">
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f0fdf4;color:#15803d;" id="mc_adv_usd">
-                <input type="radio" name="currency" value="USD" checked style="display:none;" onchange="mcAdvCur('USD')"> 💵 <?= dn_book_base($config) ?></label>
+                <input type="radio" name="currency" value="<?= h($_mcBase) ?>" checked style="display:none;" onchange="mcAdvCur('<?= h($_mcBase) ?>')"> 💵 <?= dn_book_base($config) ?></label>
             <?php if (dn_ssp_selectable($config ?? null)): ?>
             <label style="flex:1;text-align:center;padding:10px;font-size:14px;font-weight:800;cursor:pointer;background:#f8fafc;color:#9ca3af;" id="mc_adv_ssp">
                 <input type="radio" name="currency" value="SSP" style="display:none;" onchange="mcAdvCur('SSP')"> 🇸🇸 SSP</label>
@@ -2018,12 +2023,14 @@ function exCalc() {
 function mcCur(c){
   var u=document.getElementById('mc_cur_usd'),s=document.getElementById('mc_cur_ssp');
   var h=document.getElementById('mc_ssp_hint');
-  if(c==='USD'){u.style.background='#f0fdf4';u.style.color='#15803d';s.style.background='#f8fafc';s.style.color='#9ca3af';if(h)h.style.display='none'}
+  if(!u||!s)return;
+  if(c===<?= json_encode($_mcBase) ?>){u.style.background='#f0fdf4';u.style.color='#15803d';s.style.background='#f8fafc';s.style.color='#9ca3af';if(h)h.style.display='none'}
   else{s.style.background='#fff7ed';s.style.color='#c2410c';u.style.background='#f8fafc';u.style.color='#9ca3af';if(h)h.style.display='block'}
 }
 function mcAdvCur(c){
   var u=document.getElementById('mc_adv_usd'),s=document.getElementById('mc_adv_ssp');
-  if(c==='USD'){u.style.background='#f0fdf4';u.style.color='#15803d';s.style.background='#f8fafc';s.style.color='#9ca3af'}
+  if(!u||!s)return;
+  if(c===<?= json_encode($_mcBase) ?>){u.style.background='#f0fdf4';u.style.color='#15803d';s.style.background='#f8fafc';s.style.color='#9ca3af'}
   else{s.style.background='#eff6ff';s.style.color='#1d4ed8';u.style.background='#f8fafc';u.style.color='#9ca3af'}
 }
 </script>

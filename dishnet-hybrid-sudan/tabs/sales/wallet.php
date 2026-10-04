@@ -70,17 +70,17 @@ $fr_cashin = array_filter($store->load('cash_ins.json') ?: [],
 // ── USD calculations ──────────────────────────────────────────────────────
 // Includes both payment_collections.json and cash_ins.json category=Collection entries
 $fr_usd_collected   = round(array_sum(array_column(array_values(
-    array_filter($fr_collections, fn($c) => ($c['currency'] ?? 'USD') === 'USD')), 'amount')), 2)
+    array_filter($fr_collections, fn($c) => strtoupper($c['currency'] ?? dn_book_base($config ?? null)) === dn_book_base($config ?? null))), 'amount')), 2) // 5.18.68: the base bag
     + round(array_sum(array_column(array_values(array_filter($fr_cashin,
         fn($i) => ($i['category'] ?? '') === 'Collection'
             && !in_array($i['status'] ?? 'approved', ['rejected','voided']))), 'amount')), 2);
 
 $fr_usd_hov_conf    = round(array_sum(array_column(array_values(
     array_filter($fr_handovers, fn($h) => ($h['status'] ?? '') === 'confirmed'
-        && ($h['currency'] ?? 'USD') === 'USD')), 'amount')), 2);
+        && strtoupper($h['currency'] ?? dn_book_base($config ?? null)) === dn_book_base($config ?? null))), 'amount')), 2);
 
 $fr_usd_exp_approv  = round(array_sum(array_column(array_values(
-    array_filter($fr_expenses, fn($e) => ($e['currency'] ?? 'USD') === 'USD'
+    array_filter($fr_expenses, fn($e) => strtoupper($e['currency'] ?? dn_book_base($config ?? null)) === dn_book_base($config ?? null)
         && in_array($e['status'] ?? '', ['approved']))), 'amount')), 2);
 
 // Exchange: USD given out (reduces USD holding)

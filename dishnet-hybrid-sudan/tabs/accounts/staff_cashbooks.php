@@ -718,10 +718,10 @@ if ($selStaff) {
     }
     $sspOut  = max(0, (int)round($sspIn - $_sc_ssp_raw, 0)); // total out = total in − balance
     $_sspHov = 0; // included in sspOut via ledger
-    $sc_usd_col=round(array_sum(array_column(array_values(array_filter($cols,fn($c)=>($c['currency']??'USD')==='USD')),'amount')),2);
+    $sc_usd_col=round(array_sum(array_column(array_values(array_filter($cols,fn($c)=>strtoupper($c['currency']??$scBaseCode)===$scBaseCode)),'amount')),2); // 5.18.68: the base bag
     $sc_wallet=round($walSvc->getBalance($aid),2);
     $fFrom=$_GET['sc_from']??date('Y-m-d',strtotime('-30 days')); $fTo=$_GET['sc_to']??date('Y-m-d');
-    foreach($cols as $c){$sc_ledger[]=['date'=>substr($c['collected_at']??$c['created_at']??date('Y-m-d'),0,10),'datetime'=>($c['collected_at']??$c['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>'USD','amt'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved','src'=>'collection','rid'=>(int)($c['id']??0),'auto'=>false,'photo'=>'','person'=>$c['customer_name']??''];}
+    foreach($cols as $c){$sc_ledger[]=['date'=>substr($c['collected_at']??$c['created_at']??date('Y-m-d'),0,10),'datetime'=>($c['collected_at']??$c['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>strtoupper($c['currency']??$scBaseCode),'amt'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved','src'=>'collection','rid'=>(int)($c['id']??0),'auto'=>false,'photo'=>'','person'=>$c['customer_name']??''];}
     foreach($cins as $i){$cur=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP');$sc_ledger[]=['date'=>substr($i['created_at']??date('Y-m-d'),0,10),'datetime'=>($i['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>$cur,'amt'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>$i['category']??'SSP Received','desc'=>$i['description']??'','status'=>$i['status']??'approved','src'=>'cash_in','rid'=>(int)($i['id']??0),'auto'=>false,'photo'=>'','person'=>''];}
     foreach($exps as $e){$cur=$e['currency']??'USD';$isSt=!empty($e['is_staff_payment'])||!empty($e['staff_name']);$p=[];if($isSt&&!empty($e['staff_name']))$p[]=$e['staff_name'];if(!$isSt)$p[]=$e['category']??'';if(!empty($e['description']))$p[]=$e['description'];$sc_ledger[]=['entry_date'=>substr($e['submitted_at']??$e['created_at']??date('Y-m-d'),0,10),'datetime'=>(function($e){$t=$e['submitted_at']??$e['created_at']??'';return(strlen($t)>10?$t:($e['approved_at']??$t?:date('Y-m-d H:i:s')));})($e),'date'=>substr((function($e){$t=$e['submitted_at']??$e['created_at']??'';return strlen($t)>10?$t:($e['approved_at']??$t?:date('Y-m-d H:i:s'));})($e),0,10),'dir'=>'out','cur'=>$cur,'amt'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$isSt?'Staff Payment':($e['expense_type']??$e['category']??'Expense'),'desc'=>implode(' — ',array_filter($p)),'status'=>$e['status']??'pending','src'=>'expense','rid'=>(int)($e['id']??0),'auto'=>!empty($e['auto_approved']),'photo'=>$e['photo']??'','person'=>$e['staff_name']??''];}
     foreach($hovs as $h){$hc=strtoupper($h['currency']??'USD');$sc_ledger[]=['date'=>substr($h['created_at']??date('Y-m-d'),0,10),'datetime'=>(function($h){$t=$h['confirmed_at']??$h['submitted_at']??$h['created_at']??'';return(strlen($t)>10?$t:date('Y-m-d H:i:s'));})($h),'dir'=>'out','cur'=>$hc,'amt'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending','src'=>'handover','rid'=>(int)($h['id']??0),'auto'=>false,'photo'=>'','person'=>$h['to_name']??''];}
@@ -741,7 +741,7 @@ if ($selStaff) {
             $_advCur = strtoupper($_adv['currency'] ?? 'USD');
             $_advAmt = (float)($_adv['amount'] ?? 0);
             $_advDesc = ($_adv['advance_no'] ?? '') . ' — ' . ($_adv['purpose'] ?? '') . ($_adv['description'] ? ': ' . $_adv['description'] : '');
-            $sc_ledger[] = ['date'=>substr($_adv['issued_at'] ?? date('Y-m-d'), 0, 10),'dir'=>'in','cur'=>$_advCur,'amt'=>$_advCur==='USD'?$_advAmt:0,'ssp'=>$_advCur==='SSP'?$_advAmt:0,'cat'=>'Advance Received','desc'=>$_advDesc,'status'=>$_adv['status']??'active','src'=>'advance','rid'=>(int)($_adv['id']??0),'auto'=>false,'photo'=>'','person'=>''];
+            $sc_ledger[] = ['date'=>substr($_adv['issued_at'] ?? date('Y-m-d'), 0, 10),'dir'=>'in','cur'=>$_advCur,'amt'=>$_advCur!=='SSP'?$_advAmt:0,'ssp'=>$_advCur==='SSP'?$_advAmt:0,'cat'=>'Advance Received','desc'=>$_advDesc,'status'=>$_adv['status']??'active','src'=>'advance','rid'=>(int)($_adv['id']??0),'auto'=>false,'photo'=>'','person'=>''];
         }
     } catch (Throwable $_ae) {}
 
@@ -758,7 +758,7 @@ if ($selStaff) {
             $_seCur = strtoupper($_se['currency'] ?? 'USD');
             $_seAmt = (float)($_se['amount'] ?? 0);
             $_seDesc = ($_se['expense_no'] ?? '') . ' — ' . ($_se['category'] ?? '') . ($_se['description'] ? ': ' . $_se['description'] : '');
-            $sc_ledger[] = ['date'=>$_se['expense_date'] ?? date('Y-m-d'),'dir'=>'out','cur'=>$_seCur,'amt'=>$_seCur==='USD'?$_seAmt:0,'ssp'=>$_seCur==='SSP'?$_seAmt:0,'cat'=>'Advance Expense','desc'=>$_seDesc,'status'=>'approved','src'=>'staff_expense','rid'=>(int)($_se['id']??0),'auto'=>false,'photo'=>'','person'=>''];
+            $sc_ledger[] = ['date'=>$_se['expense_date'] ?? date('Y-m-d'),'dir'=>'out','cur'=>$_seCur,'amt'=>$_seCur!=='SSP'?$_seAmt:0,'ssp'=>$_seCur==='SSP'?$_seAmt:0,'cat'=>'Advance Expense','desc'=>$_seDesc,'status'=>'approved','src'=>'staff_expense','rid'=>(int)($_se['id']??0),'auto'=>false,'photo'=>'','person'=>''];
         }
     } catch (Throwable $_ae) {}
 
@@ -778,7 +778,7 @@ if ($selStaff) {
             $_isSender = (int)$_tr['from_id'] === $aid;
             $_trDesc = ($_tr['transfer_no'] ?? '') . ' — ' . ($_isSender ? 'To ' . ($_tr['to_name']??'') : 'From ' . ($_tr['from_name']??''));
             if (!empty($_tr['description'])) $_trDesc .= ' (' . $_tr['description'] . ')';
-            $sc_ledger[] = ['date'=>substr($_tr['submitted_at'] ?? date('Y-m-d'), 0, 10),'dir'=>$_isSender?'out':'in','cur'=>$_trCur,'amt'=>$_trCur==='USD'?$_trAmt:0,'ssp'=>$_trCur==='SSP'?$_trAmt:0,'cat'=>$_isSender?'Transfer Out':'Transfer In','desc'=>$_trDesc,'status'=>'approved','src'=>'transfer','rid'=>(int)($_tr['id']??0),'auto'=>false,'photo'=>'','person'=>$_isSender?($_tr['to_name']??''):($_tr['from_name']??'')];
+            $sc_ledger[] = ['date'=>substr($_tr['submitted_at'] ?? date('Y-m-d'), 0, 10),'dir'=>$_isSender?'out':'in','cur'=>$_trCur,'amt'=>$_trCur!=='SSP'?$_trAmt:0,'ssp'=>$_trCur==='SSP'?$_trAmt:0,'cat'=>$_isSender?'Transfer Out':'Transfer In','desc'=>$_trDesc,'status'=>'approved','src'=>'transfer','rid'=>(int)($_tr['id']??0),'auto'=>false,'photo'=>'','person'=>$_isSender?($_tr['to_name']??''):($_tr['from_name']??'')];
         }
     } catch (Throwable $_ae) {}
 
@@ -793,7 +793,7 @@ if ($selStaff) {
     $sc_ssp = max(0, (int)$_jsonCpSvc->getSSPBalance($aid));
 
     // Keep sc_ledger derivations for CSV export and cross-check reference only
-    $_allUsd = array_values(array_filter($sc_ledger, fn($r) => $r['cur'] === 'USD'));
+    $_allUsd = array_values(array_filter($sc_ledger, fn($r) => $r['cur'] === $scBaseCode)); // 5.18.68: the base bag (UGX on Uganda)
     $_allUsdIn  = array_sum(array_column(array_values(array_filter($_allUsd, fn($r) => $r['dir'] === 'in'  && !in_array($r['status'], ['voided','cancelled','rejected','reverted']))), 'amt'));
     $_allUsdOut = array_sum(array_column(array_values(array_filter($_allUsd, fn($r) => $r['dir'] === 'out' && !in_array($r['status'], ['voided','cancelled','rejected','reverted']))), 'amt'));
     $_allSsp    = array_values(array_filter($sc_ledger, fn($r) => $r['cur'] === 'SSP'));
@@ -806,7 +806,7 @@ if ($selStaff) {
 }
 
 // Split by currency
-$uL=array_values(array_filter($sc_ledger,fn($r)=>$r['cur']==='USD'));
+$uL=array_values(array_filter($sc_ledger,fn($r)=>$r['cur']===$scBaseCode)); // 5.18.68: the base bag (UGX on Uganda)
 $sL=array_values(array_filter($sc_ledger,fn($r)=>$r['cur']==='SSP'));
 $uIn=array_sum(array_column(array_values(array_filter($uL,fn($r)=>$r['dir']==='in'&&!in_array($r['status'],['voided','cancelled','rejected','reverted']))),'amt'));
 $uOut=array_sum(array_column(array_values(array_filter($uL,fn($r)=>$r['dir']==='out'&&!in_array($r['status'],['voided','cancelled','rejected','reverted']))),'amt'));
