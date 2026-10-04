@@ -4320,3 +4320,16 @@ plugin's routing — a configuration the Uganda install never had.** Confirmatio
   **C** — a tenant setting: the hand-off is drawn only where it is configured (South Sudan); on Uganda the Usage links go to
   the portal's own Usage screen, which exists and reads the plugin's own hourly collector. Can ship now, touches only this
   plugin, and South Sudan is unchanged. **Recommended first; B later if the data-report usage view is wanted on Uganda.**
+
+**Addendum 4 — CONFIRMED (operator, `config_trace.php webhook_secret crm_auth_token` in the container, ~12:4x UTC):** both
+keys are **NOT SET in every layer** — the plugin's `data/config.json`, uCRM's `config.json`, `kyc_config.json`, the vault,
+`PluginConfig::load()` and `effectiveConfig()` all read *absent*. The root cause stands as stated. The tool's first line,
+*"[ConfigVault] restored after re-install: dpo_enabled, dpo_environment, dpo_company_token, dpo_payment_method_uuid,
+dpo_ptl, dpo_test_clients, dpo_test_link_key, dpo_currencies, pdf_link_secret"*, is about that one process, not a change:
+`PluginConfig::load()` is the boot path and runs `ConfigVault::apply()`, which **supplies in memory** every vault key the
+store copy lacks and names them; on this install those nine live only in the vault (the DPO and PDF-link code fill them
+from there on each request by design). `refresh()` then compares the snapshot with the vault file and **returns without
+writing when the content is identical** — it was — and had it written, `SecureFile::write` adopts the directory's owner
+at 0640, which is why the tool could print *nginx:nginx · 0640* after the load. **Nothing on the server changed.** Lesson
+recorded: a tool that goes through the boot path is not read-only by construction; `PluginConfig::read()` is the path
+that *"changes nothing on disk"*, and the next diagnostic handed over must use it. **Decision pending: A, B or C above.**
