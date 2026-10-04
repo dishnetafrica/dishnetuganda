@@ -3892,7 +3892,19 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   tool's `--void` (or `--relabel`), printed after it, **this time with the three cash-ins in scope**: it asks for `VOID`,
   voids only the rows the LIST named, sends no message.
 - **Still open:** the 5.18.68 backfill's `APPLY` log (the ledger count says it ran — confirm on the page); the operator's
-  void/keep answer (void recommended: CB-66 + CB-72 are the same money). SUITE_PENDING_5_18_70
+  void/keep answer (void recommended: CB-66 + CB-72 are the same money).
+- **Two suite files corrected on the branch after the deploy (`8cde7ca`, tests only, no release):** the first full-suite run
+  on the 5.18.70 tree (06:59–07:2x UTC, a Sunday) reported `test_notify_evo_retry.php` 20/3 and `test_sales_support_tenant.php`
+  35/1. The first is **the clock, not the release**: its `er_window_zone()` hunted a zone that is now a non-Sunday 09:00–18:00
+  within UTC−11…+12, although `FollowUpPolicy` opens 08:00–20:00 and real offsets run UTC−12…+14; on a Sunday between ~07:00
+  and ~19:00 UTC it found none, fell back to UTC, the follow-up sender held the draft for the window, and three assertions
+  read a broken sender (the 5.18.69 run at 05:22 UTC still had Saturday 18:22 at UTC−11). It now reads the policy's own hours
+  and the real offsets, and when no zone on Earth is inside the window it **skips** the three checks with that reason, counted
+  apart — never a failure; 23/0 at 07:23 UTC (window zone UTC−12, Saturday 19:23). The second is **a pin on text 5.18.70
+  rewrote**: the wallet's filter gate `? ['USD','SSP'] : ['USD']` is now `? [$_frBase, 'SSP'] : [$_frBase], true` — the same
+  gate, the base by its own code; the pin follows and a second one asserts the literal is gone; 37/0. **Rule, binding:** a
+  test must not depend on the hour it runs at; where the product has a window, the test controls the clock or skips with
+  the reason. SUITE_PENDING_5_18_70
 - **RESULT — DEPLOYED to production 2026-10-04, 07:12 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
   07:12:45 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves cba7faf"*; the 11 files were
   stamped at 07:13:19 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
