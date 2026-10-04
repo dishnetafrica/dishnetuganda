@@ -4288,3 +4288,35 @@ plugin**: `ucrm.json` (1 Oct 06:31), `manifest.json` **v2.8.80** (2 Jul), `main.
   configured to accept it, as in South Sudan; off on Uganda until it is), with the in-app Usage view as the default — not a
   presence probe, which this case defeats, and not a "page answers" probe, which this case also defeats (200 on the page,
   404 on the view).
+
+**Addendum 3 — ROOT CAUSE (operator's four reads, ~12:3x UTC, read-only).** Without a token the client view answers **200**
+(*"DishNet — Client Fleet"*); with a bad token it answers **404 "Report Not Found"** — the plugin's own page. Its code
+(`drVerifyHybridJwt`, its lines 839–908) verifies our hand-off by rebuilding the secret *"exactly like Hybrid's
+lib/JwtAuth.php::fromConfig()"*: `sha256(webhook_secret | crm_app_key|crm_auth_token | constant)` read from the Hybrid
+plugin's own stored configuration, and **returns null — hence 404 — when either input is empty** (its line 902: *"never
+an attacker-predictable constant secret"*). **On the Uganda install both inputs are empty**, and have been since the plugin
+was installed: the 5.18.37 record says *"On an install whose `webhook_secret` is empty — Uganda's was recorded empty"*, and
+the 5.18.38 record says *"the customer token signed with `sha256(webhook_secret | crm_auth_token | constant)` where both
+inputs are empty — a key anyone can read in the source"* — which is why 5.18.38 moved customer sessions to the dedicated,
+generated, vaulted `CustomerJwtKeys`… **and kept the legacy derivation for the data-report hand-off only** (*"signed the
+way that plugin has always been given"*). Neither value is a settings-form field in `manifest.json`; both are written only
+by the old admin form (`post_admin.php`), and `crm_auth_token` doubles as the manual uCRM API credential
+(`CrmApiClient`). South Sudan's row holds a 32-character `webhook_secret` and a 64-character `crm_auth_token` (the other
+plugin's own comment), so the hand-off verifies there. **Conclusion: on Uganda the portal mints a hand-off token under a
+constant, empty-input secret; the other plugin refuses it; every Usage link ends in that plugin's 404. Not a bug in either
+plugin's routing — a configuration the Uganda install never had.** Confirmation, read-only, in the container:
+`php tools/config_trace.php webhook_secret crm_auth_token` (prints set/empty and lengths, never values).
+
+- **Also found:** the Hybrid mints that token without checking its inputs. A hand-off signed under an all-empty secret is
+  forgeable by anyone who reads the source; the other plugin's refusal is the only thing that makes this harmless. The
+  mint (`app_data_report_token`) should **refuse** (409 *hand-off not configured*) when either input is empty.
+- **Three ways to make the Usage links work on Uganda, for the operator to choose:**
+  **A** — set `webhook_secret` and `crm_auth_token` on the Uganda Hybrid install so both plugins derive the same secret.
+  Not recommended as a quick fix: `crm_auth_token` would also become the plugin's uCRM API credential (it must then be a
+  valid uCRM app key), and `webhook_secret` is read by other boundaries (the partner-portal work on the branch).
+  **B** — a dedicated hand-off key both plugins read (generated and vaulted on our side, configured on theirs). Clean, but
+  it needs a change in the data-report plugin too — not in this repository, and its `public.php` on this server was
+  hand-edited on 3 Oct by someone who may own that side.
+  **C** — a tenant setting: the hand-off is drawn only where it is configured (South Sudan); on Uganda the Usage links go to
+  the portal's own Usage screen, which exists and reads the plugin's own hourly collector. Can ship now, touches only this
+  plugin, and South Sudan is unchanged. **Recommended first; B later if the data-report usage view is wanted on Uganda.**
