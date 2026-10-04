@@ -4513,3 +4513,110 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
   - **Branch and release state unchanged:** `release/5.18.73` = `9fd9f88` stays valid against the live `88d8442`;
     `deploy-5.18.73.sh` installs it again whenever wanted (its summary printed the command). The six fixes are only
     available by installing 5.18.73 or a later release.
+
+## 04 Oct — 5.18.74: the Usage links stay; the hand-off token is refused until the signing values exist; `webhook_secret` can be generated, never shown; "How to pay" on the invoice screen — BUILT, rehearsed, NOT deployed
+
+**Decided by the operator** (*"Yes."* to the proposal that followed the 5.18.73 rollback). 5.18.73 had switched the Data
+Report hand-off off in the Uganda profile; the operator wants the *Usage details* link kept. 5.18.74 keeps everything else
+5.18.73 built and sets that value **on**, so the link, the *See details* hand-off and the site page's *Usage Details* tile are
+drawn as on 5.18.72. What changes for the customer, until the two signing values exist: a tap no longer leads to the Data
+Report plugin's 404 page with a token in the address — the mint answers **409, audited `data_report_handoff_unconfigured`**,
+and the page says *"Usage details are not available here yet."* The release also gives the operator the missing way to set
+the one value no screen could set, and shows the configured payment instructions on an unpaid invoice.
+
+**What changed** (`b4b4c80` on the branch, release `db18ad9` on `88d8442`, the 5.18.72 release commit live again since
+16:59 UTC):
+- **`profiles/uganda.json`:** `integrations.data_report_handoff: true`, with a `_readme` recording the decision, the gap
+  (this install holds neither signing value) and how to close it. `portal_data_report_handoff=no` still hides the links;
+  the manifest and the tool say *blank = the country profile (yes in both since 5.18.74)*.
+- **`tools/set_config.php` — `webhook_secret` as a `secret` key.** `--generate` stores `bin2hex(random_bytes(16))`
+  through `PluginConfig::saveOverrides`, which writes the override file **and** mirrors the store row the web requests
+  read (`public.php` builds `$config` from `$store->load('kyc_config.json')`). `--value` is **refused**: a secret is never
+  typed into a shell. A second `--generate` is refused while a value is set (the store row counts too); rotation is
+  `--clear`, then `--generate`, explicitly. The listing and the success line read *"set (32 characters) — not shown"* and
+  never the value. `webhook_secret` was never in `SECRET_KEYS` (the refused list), so no writer changed. With the Admin
+  Auth Token set in Settings → UCRM Connection, `app_data_report_token` then mints a token that verifies under
+  `sha256(webhook_secret | crm_auth_token | constant)` — what the Data Report plugin rebuilds. The Settings tab's
+  read-only *Webhook Secret* field keeps its Copy button for the one case that needs the value: a uCRM webhook configured
+  to send a key (unset there, uCRM sends none and nothing is refused).
+- **The invoice screen — "How to pay".** An unpaid invoice shows the operator's own `ai_fact_payment` text verbatim
+  (line breaks kept) above the Payment reference block, where that setting exists and is not `omit`
+  (`portal_data.php` `$portalPayText`). Uganda has it (Airtel Money merchant, Ecobank account, how to reference a
+  payment — written for the assistant and the quotations); South Sudan has it unset and keeps its Bank transfer block
+  from the profile. Walkthrough finding 3 (*a Uganda customer is not told how to pay*) is closed from configuration the
+  operator had already approved; the text ends *"send … the transfer confirmation here"*, which on this screen is the
+  *I've paid this invoice* button below it — the operator can reword the setting if wanted.
+- **Kept from 5.18.73:** the tenant setting and `TenantProfile::dataReportHandoff()`; the mint's two refusals;
+  `DishNet.openDataReport()` never navigating without a token; the Account footer reading the installed version; the
+  biometric row hidden outside the native app; the sign-in page allowing pinch-zoom; Service status without invented
+  uptime; the Connected-devices message.
+- `manifest.json` 5.18.74; the nine pins. **No migration, no new table, no uCRM write, no message; the deploy changes no
+  configuration value — the secret is the operator's own command afterwards.** South Sudan: the profile says yes and both
+  inputs are set there, so the mint answers exactly as before; `ai_fact_payment` is unset there.
+
+**Proofs.**
+- `tests/test_portal_handoff.php` (rewritten): **62/0**. **A** Uganda default — the link and the tile drawn, the mint 409
+  with **one** `data_report_handoff_unconfigured` row, the page's own message, the six 5.18.73 fixes. **A2** the key says
+  `no` — 5.18.73's behaviour (no link, one-column grid, 409 with no "unconfigured" audit). **B/C** the key with and without
+  the inputs. **C2 the whole chain on a bare Uganda install with only the Admin Auth Token:** `--value` refused and nothing
+  saved; the key alone asks for `--generate`; `--generate` on a non-secret refused; `--generate` → exit 0, a 32-hex secret
+  in the file **and** the store row, the output carrying **no 32-hex string** and reading *not shown*; the bare listing
+  shows *set (32 characters) — not shown*; a second `--generate` refused with the value unchanged; **the token endpoint
+  answers 200 and the token verifies under the legacy derivation**; `--clear` removes both copies and the mint refuses
+  again. **D** South Sudan unchanged. **G** "How to pay": set / `omit` / unset / the South Sudan control (its Bank transfer
+  block). **F six weakened copies, each caught:** the home gate forced true under `no`, the mint ignoring the tenant, the
+  mint ignoring empty inputs, the Uganda profile back to `false`, the invoice screen ignoring `ai_fact_payment`, **the tool
+  printing the generated secret**.
+- Neighbours, unchanged: `test_set_config_tool` 40 · `test_config_one_truth` 16 · `test_tenant_profile` 108 ·
+  `test_customer_session` 80 · `test_portal_tenant` 112 · `test_customer_pwa` 31 · `test_preauth_allowlist` 105 ·
+  `test_invoice_template_links` 21 · `test_notify_customer_fixes` 32 · `test_customer_login_security` 68 ·
+  `test_consent_identity` 34 · `test_canonical_host` 49 — all 0 failed.
+- **The full plugin suite on the final 5.18.74 tree:** **`tests/run.sh` 270 files, 12,329 passed, 0 failed, 0 skipped** — the three clock-bound checks of `test_notify_evo_retry` ran this time (the run fell inside the follow-up sending window) and passed. Was 270 / 12,298 at 5.18.73: 28 assertions more, the hand-off test grown from 34 to 62, plus those three. Run on the committed `b4b4c80` plugin tree — the same files the release commit `db18ad9` carries — while the rehearsals ran.
+
+**Release commit `release/5.18.74` = `db18ad9`, parent `88d8442`:** the same sixteen files as 5.18.73's release — the two
+profiles, `TenantProfile`, the portal page, its data loader and the sign-in page, the customer API, the configuration
+tool, `manifest.json`, the hand-off test, the session test and the five distributor pins on the release line. Hunks
+identical to the branch commit (`git diff db18ad9 b4b4c80 -- <the sixteen>` is empty). Pushed.
+
+**`scripts/deploy-5.18.74.sh`** (pinned `db18ad9` over `88d8442`), 5.18.73's shape: A0 refuses a pin whose parent is not
+the live 5.18.72 or whose delta carries a migration or any partner-portal/CSRF file — **and it refuses a live 5.18.73**,
+so 5.18.73 must not be deployed again first; R1 byte-for-byte; R5 Release A→5.18.72 intact; V6 the sign-in page allows
+zoom (skipped on a rollback); **R6** expects the Uganda profile **on** and the 5.18.73 `false` absent, the secret generator
+and its never-shown message in the tool, `$portalPayText` and *How to pay* in the portal, beside every earlier marker; R7
+runs 5.18.71's read-only cash-in-hand tool; RB checks 5.18.72 is back. The deploy sets no secret: that is the operator's
+own command afterwards. No repair command; the rollback is printed alone at the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.74/rehearse.sh`:** 5.18.73's, against the same 5.18.72 base; the pin carries
+the generator and *How to pay* and the base neither; the stand-in viewport control; every teeth check (TenantProfile
+reverted → R1 and R6; the sign-in page reverted → V6 and R1; the tool removed → R5/R6/R7; a Release-A file → R5; a live
+channel or portal file → R4); the rollback to 5.18.72; the R1-blinded copy; the clone left as found.
+- **Run 1 (the committed script, `919deb8`, sha256 `3aa6ba54…`):** **134/0, 18 runs of the script**, no FAIL line; the
+  stand-in viewport control held both ways; R7 passed on the seeded book; the clone left as found.
+- **Run 2 (the committed script, unchanged — same sha256):** **134/0, 18 runs**, no FAIL line; the clone left as found.
+  The rehearsed deploy itself reads **25 ok / 0 failed / 0 notes**, as 5.18.73's did; its production run read 24 where
+  the sandbox read 25, so expect **24 ok** on the server.
+
+**Handover.** Three steps, each its own command, in this order. **Step 1**, as root on the server; it asks for `DEPLOY`;
+send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.74 && mkdir -p /root/dnb-5.18.74 && bash scripts/deploy-5.18.74.sh 2>&1 | tee /root/dnb-5.18.74/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9). **Step 2**, after the deploy passed — the secret, generated and stored, never shown:
+
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key webhook_secret --generate`
+
+**Step 3**, in the plugin's Settings tab → *UCRM Connection* → *Admin Auth Token*: paste a uCRM API token (uCRM → My
+Profile → API tokens → Create; the field says Quotes need it too), leave *CRM Base URL* blank, save. Then open a Usage
+link as a customer: it should open the Data Report. If it still answers 404, the other plugin reads the two values from a
+different file than the store row and the override file this plugin writes; one read of its code
+(`grep -n "kyc_config\|config.json\|sqlite" …/dishnet-data-report/public.php | head`) will say which, and nothing on
+our side changes until then.
+
+**After the deploy, what a Uganda customer sees** (before steps 2–3): *Usage details* is there; a tap says the details are
+not available yet, no 404; an unpaid invoice shows *How to pay*; the Account footer reads v5.18.74; Service status reads
+*No outage reported*; the sign-in page zooms. After steps 2–3: the Usage links open the Data Report.
+
+**Still open from the walkthrough:** the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles
+against a Uganda router; the resend lockout countdown; and, for whoever owns the data-report plugin, that its client view
+answered **200 with no token at all**.
