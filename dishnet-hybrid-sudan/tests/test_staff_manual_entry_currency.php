@@ -73,7 +73,7 @@ $c = $cols($s); $m0 = $c[0] ?? [];
 is_(count($c) === 1 && ($m0['currency'] ?? '') === 'UGX' && (float)($m0['amount'] ?? 0) === 20000.0 && ($m0['source'] ?? '') === 'manual_adjustment',
     "the collection row is stamped UGX (it used to be 'USD'), 20,000, source manual_adjustment", json_encode($m0));
 $pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 20,000\.00/si', $pg) === 1, 'the page counts it: UGX COLLECTED UGX 20,000.00', 'len ' . strlen($pg));
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pg) === 1, 'the page counts it: the UGX RECEIVED tile reads UGX 20,000.00', 'len ' . strlen($pg));
 is_(strpos($pg, 'Manual UGX entry added') !== false || strpos($pg, 'opening float') !== false, 'the page shows the entry (or its confirmation)');
 
 echo "\nB. The base-bag category reads as the book's base\n";
@@ -96,7 +96,7 @@ $plant($s);
 is_($rc === 0 && strpos($out, 'planted #') === 0, 'planted: a USD-stamped manual collection of 50,000 (as the old form wrote it)', $out);
 $ghostId = (int)substr($out, 9);
 $pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 170,000\.00/si', $pg) === 1, 'control: the USD-stamped row does not count — the UGX collected tile (every base-bag IN: 20,000 + the 150,000 advance) still reads 170,000.00');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 170,000\.00/si', $pg) === 1, 'control: the USD-stamped row does not count — the UGX received tile (every base-bag IN: 20,000 + the 150,000 advance) still reads 170,000.00');
 $before = json_encode($cols($s));
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php');
 is_($rc === 0 && strpos($out, 'LIST — nothing was changed') !== false, 'LIST exits 0 and says nothing was changed', $rc . ' ' . substr($out, 0, 400));
@@ -123,7 +123,7 @@ $k = null; foreach ($cols($s) as $x) if ($x['_id'] === $keepId) $k = $x;
 is_($k !== null && ($k['currency'] ?? '') === 'UGX' && ($k['status'] ?? '') === 'approved' && end($k['audit_log'])['action'] === 'relabel' && end($k['audit_log'])['from'] === 'USD',
     'the row now reads UGX, still approved, with a relabel entry in its audit log', json_encode($k));
 $pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 240,000\.00/si', $pg) === 1, 'the relabelled row counts: the tile reads 240,000.00 (170,000 + 70,000); the voided one does not');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 240,000\.00/si', $pg) === 1, 'the relabelled row counts: the tile reads 240,000.00 (170,000 + 70,000); the voided one does not');
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php', ['--void', '--relabel']);
 is_($rc === 2, '--void and --relabel together are refused (exit 2)');
 $textsNow = count($s->texts());
