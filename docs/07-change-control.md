@@ -4333,3 +4333,125 @@ writing when the content is identical** — it was — and had it written, `Secu
 at 0640, which is why the tool could print *nginx:nginx · 0640* after the load. **Nothing on the server changed.** Lesson
 recorded: a tool that goes through the boot path is not read-only by construction; `PluginConfig::read()` is the path
 that *"changes nothing on disk"*, and the next diagnostic handed over must use it. **Decision pending: A, B or C above.**
+
+## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — BUILT, rehearsed, NOT deployed
+
+**Decided by the operator** (*"c build it"*) after Addendum 4 above confirmed the root cause: on the Uganda install the
+portal minted a ten-minute hand-off token signed with `sha256(webhook_secret | crm_auth_token | constant)`, **both
+empty in every configuration layer**, and sent the customer to `dishnet-data-report`'s client view, which rebuilds that
+secret, refuses an empty input and answered its own 404 to every Usage link. Option **C**: the hand-off becomes a
+per-country setting — South Sudan on (its install holds both values, so the hand-off verifies there; nothing changes),
+Uganda off (the customer stays in this app, on its own Usage screen) — and the mint refuses to sign anything under empty
+inputs, whatever the tenant says. Options A (set the two values on Uganda) and B (a dedicated hand-off key read by both
+plugins) stay open for later; **Uganda payment instructions (finding 3) are NOT in this release** — the operator has not
+supplied the bank or mobile-money details the profile needs.
+
+**What changed** (`44c7dcf` on the branch, release `9fd9f88` on `88d8442`):
+- **`profiles/south-sudan.json`** gains `integrations.data_report_handoff: true` — the behaviour before this release,
+  written down. **`profiles/uganda.json`** gains `integrations.data_report_handoff: false` with a `_readme` recording why
+  (4 Oct 2026: this install has neither signing value) and how to switch it on.
+- **`TenantProfile::dataReportHandoff()`**: the explicit configuration key **`portal_data_report_handoff`** (`yes`/`no`,
+  declared in `manifest.json` and accepted by `tools/set_config.php`, which refuses any other value) wins; else the
+  profile value; else *on* (a profile without the key behaves as before).
+- **The portal** (`portal_data.php` sets `$portalDataReportHandoff`): the home card's fleet link *"Usage details →"* and
+  the site page's *"Usage Details"* tile are drawn **only where the tenant has the hand-off** (the site tiles collapse to
+  one column; the card above already says what the site used); the single-service *"See details →"* opens the in-app
+  **Usage** view where it is off. **`DishNet.openDataReport()` never navigates without a token**: a refused mint tells
+  the customer *"Usage details are not available here yet. Your usage is shown in this app; ask support if you need
+  more."* — the old `.catch(function () { location.href = url; })`, which navigated tokenless, is gone.
+- **The API** (`app_data_report_token`): **409** *Usage details are not available here* where the tenant has no hand-off;
+  **409, audited `data_report_handoff_unconfigured`** (naming the missing input, never a value) where `webhook_secret` or
+  `crm_auth_token`/`crm_app_key` is empty — so a token can no longer be minted under a constant, all-empty secret even
+  where the setting says yes. `JwtAuth::legacySecret()` is still called exactly once, the way the other plugin has always
+  been given it.
+- **The six small fixes from the walkthrough:** the Account footer reads the installed version from `manifest.json` (was
+  a hard-coded *v4.12.20*); the *Require biometric at app open — Loading…* row is hidden unless the Android bridge is
+  present; the sign-in page's viewport allows pinch-zoom (`maximum-scale=1,user-scalable=no` removed, as the portal
+  already allowed); Service status says **"No outage reported"** / *"Offline? Report it below"* instead of the invented
+  *"All services operational · 24h uptime 100% / 99.8% / 99.5%"* strips (a paused service still reads paused); Connected
+  devices says *"This feature is not available right now. Contact support if it continues."* instead of the JSON parser's
+  *"Unexpected token '<'"*. Not changed: the WiFi / Connected-devices / Hotspot tiles themselves — the data-report
+  plugin's action routes answer 200 on Uganda (Addendum 2), so whether they work for a Uganda router is that plugin's
+  question, not a hand-off one; the Usage copy's *"once data syncs"* wording (finding 4; the collector's state on Uganda
+  is still unknown here); the resend lockout countdown.
+- `manifest.json` 5.18.73; the nine pins. **No migration, no new table, no uCRM write, no message, no configuration value
+  changed, nothing written to any record.**
+- **South Sudan keeps every Usage link and the hand-off — measured, not assumed.** The same South Sudan customer (both
+  signing inputs set, as that install has them) was signed in on a sandbox built from the live 5.18.72 release commit and
+  on one built from the 5.18.73 release commit, and eleven pages plus the token endpoint were saved from each: the
+  hand-off token answers **200, issued, 600 s, three segments** on both; the home card carries the same two
+  `openDataReport()` handlers and the site page the same two and its *Usage Details* tile on both. The pages differ only
+  where this release means them to — the shared `openDataReport()` body and the biometric-row toggle in the page script
+  (identical on every page), whitespace around the two gated links (the PHP gate tags eat a line break; the links are
+  byte-identical), the service-status strips, the devices message, the Account footer and biometric wrapper, and the
+  sign-in page's viewport and version line. Nothing else moved. (Probe and saved pages in the session scratchpad.)
+
+**Proofs.**
+- `tests/test_portal_handoff.php` (new): **34/0**. **A** Uganda default — no `openDataReport(` click handler on the home
+  card, the one-column site grid, the token endpoint 409, the footer `v5.18.73`, the biometric row hidden, no *24h
+  uptime*, the sign-in page (fetched with an empty cookie jar) carries no zoom block. **B** Uganda with
+  `portal_data_report_handoff=yes` and **empty inputs** — the links draw, the mint still answers 409 and writes exactly one
+  `data_report_handoff_unconfigured` audit row. **C** Uganda, yes, both inputs set — links drawn, token 200 in the legacy
+  shape. **D** South Sudan — 200 with the inputs, 409 without. **E** `set_config.php --value maybe` exits 1; `YES` is
+  saved as `yes`. **F** four weakened copies, each caught: the home gate forced true, the API tenant check disabled, the
+  API empty-input check disabled, the Uganda profile set to true.
+- `test_customer_session` now runs with the hand-off on and both inputs set (it tests the token's shape): **80/0**.
+- Neighbours, unchanged: `test_tenant_profile` 108 · `test_set_config_tool` 40 · `test_config_one_truth` 16 ·
+  `test_preauth_allowlist` 105 · `test_customer_pwa` 31 · `test_portal_tenant` 112 · `test_customer_login_security` 68 ·
+  `test_consent_identity` 34 · `test_otp_log_privacy` 16 · `test_canonical_host` 49 · `test_notify_tenant_text` 30 ·
+  `test_invoice_template_links` 21 · `test_ucrm_link` 78 · `test_sales_support_tenant` 37 · `test_staff_cashbook_wording`
+  23 · `test_notify_customer_fixes` 32 — all 0 failed.
+- **The full plugin suite on the final 5.18.73 tree:** **`tests/run.sh` 270 files, 12,298 passed, 0 failed, 3 skipped** (the three clock-bound checks of `test_notify_evo_retry`, skipped by design at Sun 13:12 UTC, as at 5.18.71 and 5.18.72; the fourth skip line is that test's own note). Was 269 / 12,264 at 5.18.72: one file and 34 assertions more, the new hand-off test (34; the session test is unchanged at 80). Run on the committed `44c7dcf` plugin tree — the same files the release commit `9fd9f88` carries — while the rehearsal ran.
+
+**Release commit `release/5.18.73` = `9fd9f88`, parent `88d8442` (5.18.72, production since 11:56 UTC):** 16 files — the
+two profiles, `TenantProfile`, the portal page, its data loader and the sign-in page, the customer API, the configuration
+tool, `manifest.json`, the new test, the session test and the five distributor pins that exist on the release line.
+Hunks identical to the branch commit (`git diff 9fd9f88 44c7dcf -- <the sixteen>` is empty). Pushed.
+
+**`scripts/deploy-5.18.73.sh`** (pinned `9fd9f88` over `88d8442`), the 5.18.72 script's shape: A0 refuses a pin whose
+parent is not the live 5.18.72 or whose delta carries a migration or any partner-portal/CSRF file; R1 byte-for-byte; R5
+Release A→5.18.72 intact; **V6** reads the sign-in page on the public address and fails if it still carries
+`user-scalable=no` or `maximum-scale=` (skipped on a rollback — 5.18.72's page blocks zoom by that release's design);
+**R6** adds the 5.18.73 markers — both profile values, the `TenantProfile` method, the portal-data flag, the portal's two
+gates (counted: exactly 2), **no tokenless fallback**, the mint's refusal, zoom allowed, no *24h uptime*, no hard-coded
+version — beside every earlier release's marker; **R7** still runs 5.18.71's read-only cash-in-hand tool on the live
+book; **RB** checks the hand-off is unconditional again and that 5.18.72's wording survived. No repair command; the
+rollback is printed alone at the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.73/rehearse.sh`:** against a 5.18.72 base with the pilot ON and a UGX book
+holding a receipt and a Staff Advance (cash in hand 850,000). The stand-in sign-in page now carries the **installed**
+plugin's own viewport line — a control proves 5.18.72's blocks zoom and the pin's allows it — so V6 reads real code. It
+proves the deploy PASSES and installs exactly the sixteen files (one new, no migration, no portal file); the pin carries
+the setting, the two gates, the mint's refusal and both profile values while the base has none; a branch-tip pin and a
+placeholder pin are refused before any read; V3/R2 read the live switch; every table is byte-identical across the deploy
+(R7 wrote nothing); R7 reads UGX 850,000.00 / USD 0.00 and the base per project; **teeth**: `TenantProfile` reverted on
+the server → R1 names it and R6 names the missing setting; the sign-in page reverted → **V6 fails, counting the zoom
+block (×1 · ×1)**, and R1 names the file; 5.18.71's tool removed → R5, R6 and R7 each name it; a Release-A file changed →
+R5; a live channel or a portal file planted → R4; the rollback returns 5.18.72 exactly (the hand-off unconditional, the
+5.18.72 wording, the 5.18.71 hero and tool, 5.18.66–5.18.70 code intact, no data changed); an R1-blinded copy of the
+script is caught; the clone is left as found.
+- **Run 1 (the committed script, `8b5ce61`, sha256 `e85b4066…`):** **134/0, 18 runs of the script**, no FAIL line; the
+  stand-in's viewport control held both ways; R7 read `UGX CASH IN HAND 850,000.00 · USD CASH IN HAND 0.00`; the clone
+  left as found.
+- **Run 2 (the committed script, unchanged — same sha256):** **134/0, 18 runs**, no FAIL line; the clone left as found.
+  The rehearsed deploy itself reads **25 ok / 0 failed / 0 notes** (5.18.72's rehearsal read 24: V6 is the one check
+  more; its production run read 23 where its sandbox read 24, so expect 24 on the server this time).
+
+**Handover.** One command, as root on the server; it asks for `DEPLOY`; send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.73 && mkdir -p /root/dnb-5.18.73 && bash scripts/deploy-5.18.73.sh 2>&1 | tee /root/dnb-5.18.73/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9).
+
+**After the deploy, what a Uganda customer sees:** the home card says *"View all sites"* with no *"Usage details"* link
+(or *"See details →"* opens the Usage screen, with one site); a site page has no *"Usage Details"* tile; the Account
+footer reads *v5.18.73*; Service status reads *"No outage reported"*; the sign-in page zooms. Nothing leaves the app for
+the Data Report plugin. **To switch the hand-off on for Uganda later** (option A or B): set both signing values, then
+`php tools/set_config.php --key portal_data_report_handoff --value yes` in the container — the mint refuses until both
+values are set, however the key reads.
+
+**Still open from the walkthrough:** Uganda payment instructions for the profile (the operator's bank and MTN/Airtel
+details); the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles against a Uganda router; the
+resend lockout countdown; and, for whoever owns the data-report plugin, that its client view answered **200 with no token
+at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be checked there.
