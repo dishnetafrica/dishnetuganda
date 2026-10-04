@@ -3770,7 +3770,8 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   5.18.68.
 - **Still open from 5.18.68:** the backfill's `--apply` log (not received; the screenshot shows the pre-backfill 0.00).
   After it, the technician's page should read about UGX 339,672 (650,000 in, 310,328 out) — plus 300,000 if the three
-  hand-typed rows are relabelled rather than voided. **Open here:** the operator's answer — void the three 25 Sep
+  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: UGX 339,672.00
+  (650,000 received, 310,328 out) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
   hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
 - **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
   own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
@@ -4034,7 +4035,25 @@ SSP, South Sudan's branch untouched:
     IN HAND 10,871.37`; Fiber & Starlink UGX 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — exactly the Cashbook card's
     figures of the morning's screenshot, now also the landing hero's. The photo tables and files read exactly as before
     (`present:3:1`, `files:3`) — the tool touched no data.
-  - **Not yet done:** a look at the landing page and its Money Locations block (the technician's held figure beside his
-    name); the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the prompt); the
-    Staff Cashbooks UGX balance confirming the 5.18.68 backfill (about UGX 339,672); `bash scripts/deploy-5.18.71.sh
-    --after-only`.
+  - **Seen by the operator — 2026-10-04, 14:11 on the operator's screen (about 11:11 UTC; two screenshots of v5.18.71,
+    no words):**
+    - **The technician's Staff Cashbooks page reads UGX 339,672.00** — *"Cash still with staff"*, **▲ UGX 650,000.00
+      received · ▼ UGX 310,328.00 out**; the tiles *UGX collected 650,000.00*, *Handed over 0.00*, *Cash with staff
+      339,672.00*, *Wallet balance 0.00*; the first row is the 03 Oct Staff Advance of UGX 150,000.00, IN, *UGX Received*,
+      approved. **That is the figure predicted since 5.18.68 (650,000 − 310,328), so the 5.18.68 backfill's `APPLY` ran**:
+      the `+UGX 0.00` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
+      had said as much; the page now says it. The backfill's own log was never received; the page is the outcome.
+    - **The landing page hero reads *Cash in hand — per currency*: UGX 723,072.00 · USD 10,871.37; Fiber & Starlink
+      UGX 723,072.00 · DishNet 4G UGX 0.00 · BlueCARD UGX 0.00** — R7's figures, and the Cashbook card's. No account
+      tiles, no negative position. *Today · 04 Oct UGX 0.00 · 0 payments · 0 new KYC*; the KPI row *Agent float UGX 0
+      (9 agents) · Field cash UGX 0 (0 collectors) · MTH recharge UGX 0 · KYC month 0* as before. The screenshot ends
+      above **Money Locations**, so the held-by-staff list itself has not been seen in a browser; the figure it lists for
+      the technician comes from the same balance call the Staff Cashbooks hero shows, 339,672.00.
+    - **Two wording items noticed on the Staff Cashbooks page, not changed:** the tile says *UGX collected* and the
+      balance says *Needs handover* — South Sudan's collections wording, while on Uganda this staff member's inflow is
+      advances to be spent and accounted for, not collections to hand over. The figures are right; the words are a later
+      instruction.
+  - **Not yet done:** the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the
+    prompt; if VOID was not typed, the three 25 Sep hand copies of CB-66/CB-72 still stand as `USD` cash-ins #3, #4, #5
+    and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
+    (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
