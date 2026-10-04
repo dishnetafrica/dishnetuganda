@@ -3479,7 +3479,33 @@ applies on first request here.
 **5. The operator's command** (deploy only; send back the log file):
 `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.67 && mkdir -p /root/dnb-5.18.67 && bash scripts/deploy-5.18.67.sh 2>&1 | tee /root/dnb-5.18.67/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 — it refuses unless the container serves `8137912`; `--check` will read "NOT up to date" before and after (the branch tip
-is not what is installed — the documented consequence, not a fault). **RESULT: pending the operator's run.**
+is not what is installed — the documented consequence, not a fault).
+- **RESULT — DEPLOYED to production 2026-10-03, 20:07 UTC: PASSED, 21 ok / 0 failed / 0 notes.** The run began at
+  20:06:43 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 96857d8"*; the seven files
+  were stamped at 20:07:10 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log
+  file stays on the server as `/root/dnb-5.18.67/deploy-20261003T200643Z.log`.
+  - **A.** Checkout `4c72a4a`; branch tip `9343f60` (not installed); release commit `96857d8` cut on `8137912`; 7 files
+    (7 changed, 0 added, 0 removed), **0 migrations**; **A0** — no partner-portal or CSRF file and no migration in the
+    delta. Live `8137912` / 5.18.66. The container's PHP **8.1.34** accepted the one changed server file and the five
+    test files. Pilot `on`. **Photo tables `present:3:1`, `uploads/job_photos` holding 3 files** — see below.
+  - **Backup** `/root/dnb-5.18.67/backup-20261003T200643Z`: `plugin.sqlite3` 26 MB, one consistent copy, integrity ok,
+    **241 tables** (239 at 19:39 — the two 084 tables have been created since); the data directory 126 MB; the installed
+    5.18.66 11 MB; the vault. No `dishnet.sqlite` (nothing to copy). `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal without a session 302; no South Sudan contact; **V5** the photo
+    viewer without a session 302, `job_photo_upload` without a login 401; **V3** the pilot unchanged (`on` → `on`);
+    **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 7 files as `96857d8` has them, manifest 5.18.67; R2 `pilot=on`; **R3 084 still installed, its two
+    tables present with `3:1` rows, untouched** (3 photo files on disk, never read by the script); R4 the pilot libs, the
+    two flag-gated hooks and the Null channel as before, the pilot tables present, no `partner_api.php` /
+    `StaffApiCsrf.php` installed; R5 all 179 files from Release A through 5.18.66 intact; **R6 the job page carries the
+    new card layout** with the 5.18.66 photo surface intact.
+  - **First use of 5.18.66 in production, seen in passing.** Between the 5.18.66 deploy (19:39 UTC) and this run
+    (20:06 UTC) production gained **3 photo rows (3 files on disk) and 1 completion with a location** — the row counts
+    the before-evidence and R3 read, not something the deploy did. Whose job, and whether it was a trial, the log does
+    not say; the 5.18.66 entry's "not yet seen" is therefore *seen in the database*, not yet reviewed on a screen.
+  - **Next:** the card on a phone (the width that wrapped before); later `bash scripts/deploy-5.18.67.sh --after-only`.
+    The server checkout moved to `4c72a4a` by the pull; `56f8b00` (docs only) arrives with the next one. The standing
+    hazard stands: deploy only through a pinned `scripts/deploy-5.18.NN.sh`, never a bare `deploy-hybrid.sh`.
 
 **6. The full plugin suite, on the tree that carries 5.18.66 and 5.18.67** (`4c72a4a`; its plugin tree is `9343f60`'s):
 `tests/run.sh` — **264 files, 12,055 passed / 0 failed, exit 0, twice.** Run 2 began while the 5.18.67 files were still
