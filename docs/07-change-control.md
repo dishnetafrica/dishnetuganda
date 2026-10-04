@@ -4654,3 +4654,22 @@ answered **200 with no token at all**.
 - **Pending from the operator on the AI brief (`docs/55`):** whether to fix the live lead-path defects (a) and (b) behind
   the existing `ai_lead_capture` / `ai_crm_lead_sync` flags — an external write (uCRM lead clients) that is configured
   but has never happened. The dark media batch does not depend on that answer.
+- **Step 3 cannot work yet — the Data Report plugin reads the wrong install (operator's read, ~20:1x UTC).** Its
+  `public.php` (lines 841–880, its own comment *"v2.8.31 CRITICAL FIX: previous versions read kyc_config.json from disk…
+  table [kyc_config] row id=0"*) opens **`<plugins>/dishnet-hybrid-telecom/data/plugin.sqlite3`** and runs
+  `SELECT data FROM kyc_config WHERE id = 0`. That is the **South Sudan** install's plugin name and data location. On
+  Uganda the plugin is `dishnet-hybrid-sudan` and its data directory is `<plugins>/.dishnet-hybrid-sudan-data/` (uCRM's
+  `pluginDataDir`; `docs/27`, the 4 Oct listing). The path does not exist here, so the other plugin has always read an
+  empty configuration — **neither value it needs can ever reach it from this server, whatever we store.** This refines
+  Addendum 3: the empty inputs were real, and even filled they are read from a file that is not there.
+  - **Our side is complete and correct:** `saveOverrides` wrote the generated secret into the override file **and** the
+    store row `kyc_config` id 0 of `.dishnet-hybrid-sudan-data/plugin.sqlite3` — the table and row that plugin queries
+    (`PluginConfig::mirrorToStore`, proved by `test_portal_handoff` C2). The Settings form writes the Admin Auth Token
+    into the same row (`post_admin.php:749`).
+  - **The fix is one path in the other plugin**, on this server only, handed over as the operator's command: back up
+    `public.php`, replace `'/dishnet-hybrid-telecom/data/plugin.sqlite3'` with
+    `'/.dishnet-hybrid-sudan-data/plugin.sqlite3'`, syntax-check it in the container. That file is already hand-edited
+    (3 Oct 08:25, a root-owned `.bak` beside it) and **a future update of the Data Report plugin will overwrite it**, so
+    whoever maintains that plugin should carry the change. A symlink named `dishnet-hybrid-telecom` in uCRM's plugins
+    directory was considered and rejected: uCRM would see a plugin directory with no manifest.
+  - Then step 3 (the Admin Auth Token) and the test: a Usage link opened as a customer.
