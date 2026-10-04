@@ -3939,7 +3939,7 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
     the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
 
-## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — BUILT, rehearsed, NOT deployed
+## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 
 **Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
 accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: UGX −24,119,205.00 / USD
@@ -4015,4 +4015,26 @@ SSP, South Sudan's branch untouched:
   12,241 passed / 0 failed, exit 0**, one verdict per file — the 5.18.70 total of 12,214 + the 30 of the dashboard test −
   the 3 checks `test_notify_evo_retry.php` **skipped as designed** at 09:17 UTC on a Sunday (no zone on Earth inside the
   follow-up sending window; each skip printed with that reason, counted apart, never a failure). 27 minutes, 09:04–09:31
-  UTC, alongside the second rehearsal without a flake. **RESULT:** not deployed.
+  UTC, alongside the second rehearsal without a flake.
+- **RESULT — DEPLOYED to production 2026-10-04, 10:59 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  10:59:05 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves b350192"*; the 9 files were
+  stamped at 10:59:34 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.71/deploy-20261004T105905Z.log`.
+  - **A.** Checkout `7fc1075`; branch tip `72de8be` (not installed); release commit `b350192` cut on `cba7faf`; 9 files
+    (7 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `cba7faf` / 5.18.70. PHP **8.1.34** accepted the
+    2 changed server files and the 6 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.71/backup-20261004T105905Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 133 MB; the installed 5.18.70 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 9 files as `b350192` has them, manifest 5.18.71; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 193 files from Release A through 5.18.70 intact; **R6
+    the cash-in-hand hero, no account position, the held-by-staff list and the tool are in place** beside the earlier
+    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND 723,072.00 · USD CASH
+    IN HAND 10,871.37`; Fiber & Starlink UGX 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — exactly the Cashbook card's
+    figures of the morning's screenshot, now also the landing hero's. The photo tables and files read exactly as before
+    (`present:3:1`, `files:3`) — the tool touched no data.
+  - **Not yet done:** a look at the landing page and its Money Locations block (the technician's held figure beside his
+    name); the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the prompt); the
+    Staff Cashbooks UGX balance confirming the 5.18.68 backfill (about UGX 339,672); `bash scripts/deploy-5.18.71.sh
+    --after-only`.
