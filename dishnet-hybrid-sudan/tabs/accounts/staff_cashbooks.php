@@ -344,7 +344,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
         $manAmt   = round((float)($_POST['man_amount'] ?? 0), 2);
         $manCat   = trim($_POST['man_category'] ?? 'Adjustment');
         $manDesc  = trim($_POST['man_description'] ?? '');
-        $manCur   = strtoupper(trim($_POST['man_currency'] ?? 'USD'));
+        // 5.18.69: the currency the accountant chose, from the book's own list (UGX on Uganda). It used to be
+        // read and then ignored — every non-SSP manual entry was stamped 'USD', so a UGX entry vanished from the
+        // UGX register and surfaced as dollars in the export.
+        $manCur   = dn_entry_currency($_POST['man_currency'] ?? '', $config ?? null);
         $manStaff = (int)($_POST['man_staff_id'] ?? $selId);
         if ($manAmt <= 0 || !$manDesc) { $scMsg = 'Amount and description required.'; $scOk = false; }
         else {
@@ -370,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                     'retailer_name'   => $selStaff['name'] ?? '',
                     'customer_name'   => $manDesc,
                     'amount'          => $manAmt,
-                    'currency'        => 'USD',
+                    'currency'        => $manCur,
                     'method'          => 'Cash',
                     'service_type'    => 'manual',
                     'note'            => 'Manual entry by ' . $retailer['name'] . ': ' . $manCat,
@@ -382,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_POST['sc_action']) && csrfCh
                     'created_at'      => date('Y-m-d H:i:s'),
                 ]);
             }
-            $scMsg = '✅ Manual ' . ($manCur === 'SSP' ? 'SSP' : 'USD') . ' entry added: ' . dn_cur($config) . number_format($manAmt, 2) . ' — ' . $manDesc;
+            $scMsg = '✅ Manual ' . $manCur . ' entry added: ' . ($manCur === 'SSP' || $manCur === $scBaseCode ? dn_cur($config) : $manCur . ' ') . number_format($manAmt, 2) . ' — ' . $manDesc;
             $scOk  = true;
         }
     }
@@ -722,7 +725,7 @@ if ($selStaff) {
     $sc_wallet=round($walSvc->getBalance($aid),2);
     $fFrom=$_GET['sc_from']??date('Y-m-d',strtotime('-30 days')); $fTo=$_GET['sc_to']??date('Y-m-d');
     foreach($cols as $c){$sc_ledger[]=['date'=>substr($c['collected_at']??$c['created_at']??date('Y-m-d'),0,10),'datetime'=>($c['collected_at']??$c['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>strtoupper($c['currency']??$scBaseCode),'amt'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved','src'=>'collection','rid'=>(int)($c['id']??0),'auto'=>false,'photo'=>'','person'=>$c['customer_name']??''];}
-    foreach($cins as $i){$cur=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP');$sc_ledger[]=['date'=>substr($i['created_at']??date('Y-m-d'),0,10),'datetime'=>($i['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>$cur,'amt'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>$i['category']??'SSP Received','desc'=>$i['description']??'','status'=>$i['status']??'approved','src'=>'cash_in','rid'=>(int)($i['id']??0),'auto'=>false,'photo'=>'','person'=>''];}
+    foreach($cins as $i){$cur=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP');$sc_ledger[]=['date'=>substr($i['created_at']??date('Y-m-d'),0,10),'datetime'=>($i['created_at']??date('Y-m-d H:i:s')),'dir'=>'in','cur'=>$cur,'amt'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>((($i['category']??'')==='USD Received')?$scBaseCode.' Received':($i['category']??'SSP Received')),'desc'=>$i['description']??'','status'=>$i['status']??'approved','src'=>'cash_in','rid'=>(int)($i['id']??0),'auto'=>false,'photo'=>'','person'=>''];}
     foreach($exps as $e){$cur=$e['currency']??'USD';$isSt=!empty($e['is_staff_payment'])||!empty($e['staff_name']);$p=[];if($isSt&&!empty($e['staff_name']))$p[]=$e['staff_name'];if(!$isSt)$p[]=$e['category']??'';if(!empty($e['description']))$p[]=$e['description'];$sc_ledger[]=['entry_date'=>substr($e['submitted_at']??$e['created_at']??date('Y-m-d'),0,10),'datetime'=>(function($e){$t=$e['submitted_at']??$e['created_at']??'';return(strlen($t)>10?$t:($e['approved_at']??$t?:date('Y-m-d H:i:s')));})($e),'date'=>substr((function($e){$t=$e['submitted_at']??$e['created_at']??'';return strlen($t)>10?$t:($e['approved_at']??$t?:date('Y-m-d H:i:s'));})($e),0,10),'dir'=>'out','cur'=>$cur,'amt'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$isSt?'Staff Payment':($e['expense_type']??$e['category']??'Expense'),'desc'=>implode(' — ',array_filter($p)),'status'=>$e['status']??'pending','src'=>'expense','rid'=>(int)($e['id']??0),'auto'=>!empty($e['auto_approved']),'photo'=>$e['photo']??'','person'=>$e['staff_name']??''];}
     foreach($hovs as $h){$hc=strtoupper($h['currency']??'USD');$sc_ledger[]=['date'=>substr($h['created_at']??date('Y-m-d'),0,10),'datetime'=>(function($h){$t=$h['confirmed_at']??$h['submitted_at']??$h['created_at']??'';return(strlen($t)>10?$t:date('Y-m-d H:i:s'));})($h),'dir'=>'out','cur'=>$hc,'amt'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending','src'=>'handover','rid'=>(int)($h['id']??0),'auto'=>false,'photo'=>'','person'=>$h['to_name']??''];}
 
