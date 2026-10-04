@@ -937,47 +937,29 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
   </div>
 
   <?php if (!$_cbSSP): ?>
-  <!-- Phase C: per-currency POSITION cards. Each total lives in its OWN
-       currency; the label comes from the position data, never the display
-       symbol — a USD stream can no longer wear a UGX costume. No combined
-       figure exists on this screen. -->
+  <!-- 5.18.68: on a book without SSP (Uganda) the hero is what the LEDGER says is in
+       hand, per currency — the running balance the Balance column reaches on its latest
+       row, within this project. Accounts, bank balances, working capital and the
+       account/no-account split are not shown here (the operator's decision, docs/07);
+       each currency keeps its own figure and no combined total exists. -->
   <?php
-    $_cbPositions = $cb->currencyPositions();
-    if (!$_cbPositions) {
-        $_cbPositions = [$_cbBase => ['currency' => $_cbBase, 'accounts' => [],
-            'accounts_total' => 0.0, 'unassigned' => 0.0, 'total' => 0.0]];
-    }
     $_cbLiveCount = $cb->countEntries($proj);
     $_cbPosBgs = ['#1a6b3a', '#1a3a7a', '#5b3a7a'];
     $_cbPosI = 0;
-    foreach ($_cbPositions as $_pos):
-      if ($filterCurr !== '' && $_pos['currency'] !== $filterCurr) { $_cbPosI++; continue; }
-      $_posBg = $_cbPosBgs[min($_cbPosI, 2)];
+    foreach ($_cbCurrs as $_cihCur):
+      if ($filterCurr !== '' && $_cihCur !== $filterCurr) { $_cbPosI++; continue; }
+      $_posBg  = $_cbPosBgs[min($_cbPosI, 2)];
+      $_cihBal = $cb->cashInHand($_cihCur, $proj);
+      $_cihIco = $_cihCur === 'USD' ? "\u{1F4B5}" : ($_cihCur === $_cbBase ? "\u{1F1FA}\u{1F1EC}" : "\u{1F4B0}");
   ?>
   <div style="background:<?= $_posBg ?>;border-radius:16px;padding:18px 20px;margin-bottom:10px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:rgba(255,255,255,.06);border-radius:50%;"></div>
-    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;">💼 <?= htmlspecialchars($_pos['currency']) ?> POSITION</div>
-    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= htmlspecialchars($_pos['currency']) ?> <?php echo number_format($_pos['total'], 2); ?></div>
+    <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-bottom:6px;"><?= $_cihIco ?> <?= htmlspecialchars($_cihCur) ?> CASH IN HAND</div>
+    <div style="font-size:42px;font-weight:900;color:#fff;letter-spacing:-2px;line-height:1;"><?= htmlspecialchars($_cihCur) ?> <?php echo number_format($_cihBal, 2); ?></div>
     <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;">
-      <?php if (!empty($_pos['accounts'])): ?>
-        <?= count($_pos['accounts']) ?> account<?= count($_pos['accounts']) === 1 ? '' : 's' ?>:
-        <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['accounts_total'], 2) ?>
-        <?php if (abs($_pos['unassigned']) > 0.004): ?>
-          &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?>
-        <?php endif; ?>
-      <?php else: ?>
-        no <?= htmlspecialchars($_pos['currency']) ?> accounts yet<?php if (abs($_pos['unassigned']) > 0.004): ?> &nbsp;·&nbsp; unassigned rows: <?= htmlspecialchars($_pos['currency']) ?> <?= number_format($_pos['unassigned'], 2) ?><?php endif; ?>
-      <?php endif; ?>
-      <?php if ($_cbPosI === 0): ?>&nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entr<?= $_cbLiveCount === 1 ? 'y' : 'ies' ?><?php endif; ?>
+      the ledger's running balance<?php if ($_cbPosI === 0): ?> &nbsp;·&nbsp; <?= number_format($_cbLiveCount) ?> entr<?= $_cbLiveCount === 1 ? 'y' : 'ies' ?><?php endif; ?>
       &nbsp;·&nbsp; <?php echo date('d M Y'); ?>
     </div>
-    <?php if (!empty($_pos['counterparts'])): ?>
-    <div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;">
-      <?php foreach ($_pos['counterparts'] as $_cpt): if (!(float)$_cpt['balance'] && empty($_cpt['active'])) continue; ?>
-        <?= htmlspecialchars($_cpt['name']) ?> (<?= $_cpt['kind'] === 'equity' ? 'capital' : htmlspecialchars($_cpt['kind']) ?>): <?= htmlspecialchars($_pos['currency']) ?> <?= number_format((float)$_cpt['balance'], 2) ?>&nbsp;&nbsp;
-      <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
     <?php if ($_cbPosI === 0 && $pendingCount > 0): ?>
     <div style="margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.25);border-radius:20px;padding:4px 10px;cursor:pointer;" onclick="location.href='?<?php echo htmlspecialchars(http_build_query(array_merge($_GET,['cb_view'=>'pending']))); ?>'">
       <span style="font-size:9px;font-weight:800;color:#fcd34d;">⚠ <?php echo $pendingCount; ?> pending settlement<?= $pendingCount === 1 ? '' : 's' ?></span>

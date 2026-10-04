@@ -5,7 +5,7 @@
     "displayName": "DishNet Hybrid — Sudan Edition",
     "description": "The full DishNet Hybrid platform for a fresh Sudan deployment, with the AI WhatsApp brain built in. Carries the complete mature feature set — CRM, customer portal and PWA, sales and KYC, support and field operations, accounting and cashbook, HRM and payroll, retailers, stock, LTE, Starlink, reporting and the existing APIs, webhooks and automation — and adds Sales, Support and Accounts on WhatsApp through Evolution API, answered by one AI brain grounded in live UISP/uCRM data. Ships with no data: no customers, no employees, no accounting records, and no default passwords. The first administrator is created through a setup step on first run.",
     "url": "https://dishnetafrica.com",
-    "version": "5.18.65",
+    "version": "5.18.74",
     "ucrmVersionCompliability": {
       "min": "2.14.0",
       "max": null
@@ -290,6 +290,13 @@
       "key": "app_jwt_ttl_days",
       "label": "Customer portal: session length in days",
       "description": "How long a customer stays signed in after entering a code. Default 30. A signed-out session ends at once whatever this says.",
+      "required": 0,
+      "type": "text"
+    },
+    {
+      "key": "portal_data_report_handoff",
+      "label": "Customer portal: open usage in the Data Report plugin",
+      "description": "yes or no. Blank = follow the country profile (yes in both since 5.18.74). The hand-off needs this plugin's webhook_secret and crm_auth_token set, because the Data Report plugin rebuilds the signing key from them and answers 404 without both. Where it is off, Usage stays inside this app.",
       "required": 0,
       "type": "text"
     }

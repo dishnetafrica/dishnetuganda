@@ -661,6 +661,31 @@ class CashbookService
     }
 
     /**
+     * 5.18.68 — what the ledger itself says is in hand, per currency: the running
+     * balance the Balance column reaches on the latest row of that currency's
+     * stream, within the given project (the Cashbook page's own scope). The same
+     * rows and the same arithmetic as getEntries()' streams — accounts, counterparts
+     * and the unassigned split play no part. A book without SSP shows this figure
+     * in place of the Phase-C position cards.
+     */
+    public function cashInHand(string $currency, string $project = ''): float
+    {
+        $cur  = strtoupper(trim($currency));
+        $base = $this->bookBase();
+        if (!preg_match('/^[A-Z]{3}$/', $cur)) $cur = $base;
+        $amt  = $cur === 'SSP' ? 'COALESCE(ssp_amount,0)' : 'amount';
+        $sql  = "SELECT ROUND(COALESCE(SUM(CASE WHEN direction='in' THEN {$amt} ELSE -{$amt} END), 0), 2) AS bal
+                 FROM cb_ledger WHERE status NOT IN ('voided','voided_reconcile')"
+              . ($cur === $base
+                  ? " AND (currency=" . $this->pdo()->quote($base) . " OR currency IS NULL OR currency='')"
+                  : " AND currency=" . $this->pdo()->quote($cur));
+        $params = [];
+        if ($project !== '') { $sql .= ' AND project=?'; $params[] = $project; }
+        $row = $this->dbq($sql, $params);
+        return round((float)($row[0]['bal'] ?? 0), 2);
+    }
+
+    /**
      * One account's ledger with a running balance in the ACCOUNT's currency.
      * Voided rows stay listed (audit trail) but never move the balance.
      */

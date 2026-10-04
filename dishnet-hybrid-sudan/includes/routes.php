@@ -59,7 +59,7 @@ if ($page === 'kyc_photo') {
     $isPrivileged = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', $allowedRoles, true);
     $f = trim($_GET['f'] ?? '');
     $f = str_replace(['..', chr(92), chr(0)], '', $f);
-    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
+    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
         http_response_code(400); exit('Invalid path');
     }
     // KYC photos: privileged only. Expense photos: privileged or own upload (exp-{rid}-*.ext)
@@ -82,6 +82,36 @@ if ($page === 'kyc_photo') {
     header('Content-Length: ' . filesize($full));
     header('Cache-Control: private, max-age=3600');
     readfile($full);
+    exit;
+}
+// ── Job photo (5.18.66, Uganda): one stored site photo, by its row id ────────
+// URL: public.php?page=job_photo&id=<job_photos.id>. Who may see it: the person who took it, the job's assignee at
+// the time (their verified uCRM link), a support leader, an admin, an accountant. The path comes from the ROW, never
+// from the URL, and must lie under uploads/job_photos in the data directory (JobPhotos::path). Rows: lib/JobPhotos.php.
+if ($page === 'job_photo') {
+    $retailer = $auth->requireLogin();
+    $jpId = (string)($_GET['id'] ?? '');
+    if (!preg_match('/^\d{1,10}$/', $jpId)) { http_response_code(400); exit('Invalid id'); }
+    require_once dirname(__DIR__) . '/lib/JobPhotos.php';
+    require_once dirname(__DIR__) . '/lib/StaffDirectory.php';
+    $jpRow = JobPhotos::find($store->getPdo(), (int)$jpId);
+    if (!$jpRow) { http_response_code(404); exit('Not found'); }
+    // The account as stored now, for its verified link (the session copy may predate the link).
+    $jpMe   = $store->findOne('retailers.json', 'id', (int)($retailer['id'] ?? 0));
+    $jpMe   = is_array($jpMe) ? $jpMe : (array)$retailer;
+    $jpPriv = !empty($jpMe['is_admin']) || in_array($jpMe['role'] ?? '', ['admin', 'accountant', 'support_leader', 'field_accountant'], true);
+    $jpMine = (int)($jpMe['id'] ?? 0) > 0 && (int)($jpMe['id'] ?? 0) === (int)$jpRow['retailer_id'];
+    $jpLink = StaffDirectory::linkedUcrmUser($jpMe);
+    $jpAssg = $jpLink > 0 && (int)($jpRow['assignee_id'] ?? 0) === $jpLink;
+    if (!$jpPriv && !$jpMine && !$jpAssg) { http_response_code(403); exit('Access denied'); }
+    $jpFull = JobPhotos::path($dataDir, $jpRow);
+    if ($jpFull === null) { http_response_code(404); exit('Not found'); }
+    header('Content-Type: ' . ((string)$jpRow['mime'] !== '' ? (string)$jpRow['mime'] : 'image/jpeg'));
+    header('Content-Disposition: inline; filename="' . basename($jpFull) . '"');
+    header('Content-Length: ' . filesize($jpFull));
+    header('Cache-Control: private, max-age=3600');
+    header('X-Content-Type-Options: nosniff');
+    readfile($jpFull);
     exit;
 }
 // ── Photo Manager API ─────────────────────────────────────────────────────────
@@ -151,6 +181,18 @@ if ($page === 'photo_manager') {
                 $tid = basename($tdir);
                 foreach (glob($tdir . '/*.{jpg,png,jpeg}', GLOB_BRACE) ?: [] as $file) {
                     $addPhoto('uploads/install_photos/' . $tid . '/' . basename($file), 'install', 'Ticket #' . $tid . ' · ' . basename($file));
+                }
+            }
+        }
+    }
+    if ($type === 'all' || $type === 'job') {
+        // 5.18.66: site photos on uCRM jobs (lib/JobPhotos.php), one folder per job id
+        $jobDir = $dataDir . '/uploads/job_photos';
+        if (is_dir($jobDir)) {
+            foreach (glob($jobDir . '/*', GLOB_ONLYDIR) ?: [] as $jdir) {
+                $jid = basename($jdir);
+                foreach (glob($jdir . '/*.{jpg,png,webp,jpeg}', GLOB_BRACE) ?: [] as $file) {
+                    $addPhoto('uploads/job_photos/' . $jid . '/' . basename($file), 'job', 'Job #' . $jid . ' · ' . basename($file));
                 }
             }
         }
@@ -331,9 +373,9 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 
     $led3 = [];
     foreach ($cols3 as $c) { $led3[] = ['date'=>substr($c['collected_at']??$c['created_at']??'',0,10),'dir'=>'IN','cur'=>($c['currency'] ?? dn_book_base($config ?? null)),'usd'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved']; }
-    foreach ($cins3 as $i) { $xc=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP'); $led3[]=['date'=>substr($i['created_at']??'',0,10),'dir'=>'IN','cur'=>$xc,'usd'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>$i['category']??'SSP Received','desc'=>$i['description']??'','status'=>$i['status']??'approved']; }
-    foreach ($exps3 as $e) { $xc=$e['currency']??'USD'; $led3[]=['date'=>substr($e['submitted_at']??$e['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$e['category']??'Expense','desc'=>$e['description']??'','status'=>$e['status']??'pending']; }
-    foreach ($hovs3 as $h) { $xc=strtoupper($h['currency']??'USD'); $led3[]=['date'=>substr($h['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending']; }
+    foreach ($cins3 as $i) { $xc=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP'); $led3[]=['date'=>substr($i['created_at']??'',0,10),'dir'=>'IN','cur'=>$xc,'usd'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>((($i['category']??'')==='USD Received')?dn_book_base($config ?? null).' Received':($i['category']??'SSP Received')),'desc'=>$i['description']??'','status'=>$i['status']??'approved']; }
+    foreach ($exps3 as $e) { $xc=strtoupper($e['currency']??dn_book_base($config ?? null)); $led3[]=['date'=>substr($e['submitted_at']??$e['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$e['category']??'Expense','desc'=>$e['description']??'','status'=>$e['status']??'pending']; }
+    foreach ($hovs3 as $h) { $xc=strtoupper($h['currency']??dn_book_base($config ?? null)); $led3[]=['date'=>substr($h['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending']; }
 
     // ── Advances received (root only) ───────────────────────────────────
     try {
@@ -386,7 +428,9 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 
     $xFrom3 = $_GET['sc_from'] ?? date('Y-m-d', strtotime('-30 days'));
     $xTo3   = $_GET['sc_to'] ?? date('Y-m-d');
-    $xCur3  = dn_entry_currency($_GET['sc_cur'] ?? '', $config ?? null);
+    // 5.18.69: the page's base tab is named 'usd' (South Sudan's vocabulary); it means the BOOK's base bag — UGX on
+    // Uganda. Only an explicit SSP tab exports SSP; everything else exports the base, and the labels follow.
+    $xCur3  = strtolower(trim((string)($_GET['sc_cur'] ?? ''))) === 'ssp' ? 'SSP' : dn_book_base($config ?? null);
     $led3 = array_filter($led3, fn($r) => $r['date'] >= $xFrom3 && $r['date'] <= $xTo3 && $r['cur'] === $xCur3);
     usort($led3, fn($a,$b) => strcmp($a['date'], $b['date']));
 
@@ -422,7 +466,8 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     $r = $auth->requireLogin();
     $agId = (int)($r['id'] ?? 0);
-    $fr_curr = $_GET['fr_curr'] ?? '';
+    $fr_curr = strtoupper((string)($_GET['fr_curr'] ?? ''));
+    $frBase3 = dn_book_base($config ?? null); // 5.18.70: the base bag by its own code, not the literal 'USD'
     $fr_from = $_GET['fr_from'] ?? '';
     $fr_to   = $_GET['fr_to']   ?? '';
     $rows = [];
@@ -431,8 +476,9 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
         $dt = substr($c['collected_at']??$c['created_at']??'',0,10);
         if ($fr_from && $dt < $fr_from) continue;
         if ($fr_to   && $dt > $fr_to)   continue;
-        if ($fr_curr && $fr_curr !== 'USD') continue;
-        $rows[] = [$dt,'IN','USD',$c['amount']??0,0,'Collection',$c['customer_name']??$c['client_name']??'',empty($c['crm_synced'])?'pending':'approved'];
+        $cCur3 = strtoupper($c['currency'] ?? $frBase3);
+        if ($fr_curr && $fr_curr !== $cCur3) continue;
+        $rows[] = [$dt,'IN',$cCur3,$c['amount']??0,0,'Collection',$c['customer_name']??$c['client_name']??'',empty($c['crm_synced'])?'pending':'approved'];
     }
     foreach ($store->load('cash_expenses.json') ?: [] as $e) {
         if ((int)($e['collector_id']??0) !== $agId) continue;
@@ -448,8 +494,9 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
         $dt = substr($h['created_at']??'',0,10);
         if ($fr_from && $dt < $fr_from) continue;
         if ($fr_to   && $dt > $fr_to)   continue;
-        if ($fr_curr && $fr_curr !== 'USD') continue;
-        $rows[] = [$dt,'OUT','USD',$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
+        $hCur3 = strtoupper($h['currency'] ?? $frBase3);
+        if ($fr_curr && $fr_curr !== $hCur3) continue;
+        $rows[] = [$dt,'OUT',$hCur3,$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
     }
     foreach ($store->load('cash_ins.json') ?: [] as $i) {
         if ((int)($i['collector_id']??0) !== $agId) continue;

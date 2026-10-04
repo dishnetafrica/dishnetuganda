@@ -67,7 +67,7 @@ if (isset($_COOKIE[CustomerSession::COOKIE]) || isset($_COOKIE[CustomerSession::
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><!-- 5.18.73: zoom allowed, as on the portal -->
 <title><?= htmlspecialchars($lwProfile->login('title', 'DishNet Africa')) ?></title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

@@ -3302,3 +3302,1321 @@ passes); `test_api_csrf_guard.php` **51/0**.
 **4. Scope / deployment. NONE in scope.** CORS narrowing (step 4), PD-5, PD-2, P4e, portal/flag changes, OTP
 wiring/sending, staging and deployment all remain separate, explicitly-approved steps. The manifest version is
 unchanged (release/versioning is the operator's step). `docs/54 §10` is the as-built record.
+
+## 03 Oct — 5.18.66: site photos on a job and the technician's location at completion (Uganda only) — BUILT, NOT deployed
+
+On the operator's "ok go ahead", after the question *can a technician attach kit / cable / router photos, stored
+compressed at good quality, and can we get the location where the task was finished?* The investigation found the
+pieces half-present and none of them live for a Uganda technician: the job page's Complete form sent notes only; the
+server kept the first 200 characters of each photo; GPS was accepted but never sent, validated or shown; the live map's
+tables lose their keys on read. Built inside **My Jobs** (the installable staff app), gated by `StaffJobsGate` like every
+5.18.5x change: **South Sudan keeps 5.18.65 byte for byte** (proved below). **Development and test only; not deployed;
+nothing new is written to uCRM; Domain B untouched.**
+
+**1. Files.**
+- `migrations/084_job_photos.sql` — **new**: `job_photos` (job id, fixed label, uploader, their verified uCRM link and the
+  job's assignee at the time, server-chosen path, mime, bytes, size, sha256) and `job_completion_gps` (one row per job:
+  lat/lon/accuracy from the browser, or `source = 'missing'` with the technician's reason). Real tables, deliberately —
+  not id-keyed JSON lists (`SqliteStore` `$FLAT_TABLES`).
+- `lib/JobPhotos.php` — **new**. Four labels (`kit · cable · model · other`), never free text, so a label can never
+  become a path (the `install_photos` flaw); `getimagesize()` decides what a file is; GD re-encodes upright to ≤ 1600 px
+  on the long edge, JPEG 82 (a 3000×2000 shot stores at 1600×1067); files under `$dataDir/uploads/job_photos/<job>/`
+  (RULE 15), served only from the row and only from under that folder (`realpath` containment). `validateGps()` takes a
+  fix (range-checked, `0,0` refused, seven decimals) or a 3–200-character reason — one or the other is required.
+- `includes/api/api_job_photos.php` — **new**, loaded after `api_scheduling.php` and reusing its gate, caller and
+  `$sjMayAct` (J6): `job_photo_upload` (multipart), `job_photos`, `job_photo_delete` (taker, leader or admin; never while
+  the job is closed; ≤ 12 per job, ≤ 8 MB each). Off Uganda the three actions do not exist (404 "Unknown API action").
+- `includes/api/api_scheduling.php` — `scheduling_job_detail` carries `photos`, `completion` and `photo_rules` on Uganda;
+  `scheduling_complete` on Uganda refuses, **before anything is stored or sent**, an installation (title words:
+  install / fiber / fibre / starlink / ftth / lte activation — the invoice-queue rule) missing kit, cable or router
+  (config `job_photos_required`, default on), and any completion without a location or a reason; stores the location.
+  **The legacy base64 `photos[]` path is untouched** (still truncated, still South Sudan's).
+- `tabs/support/scheduling.php` (job page) — a **Photos** card (camera capture, resized on the phone to ≤ 1600 px / 0.82
+  before upload, thumbnails, remove) between Tasks and Actions; `window.schOpenCompleteFormImpl` — the hook the
+  notes-only form already checked — swaps in the completion form: required-photo status, live GPS with Retry, a reason
+  box when there is no fix, notes; a **Completed from** card with a Maps link on closed jobs. All behind `UG_PHOTOS`.
+- `includes/routes.php` — `?page=job_photo&id=N`: taker, assignee-at-the-time (verified link), leader, admin, accountant;
+  400 for a non-numeric id; the `kyc_photo` path rule and the Photo Manager API gain `uploads/job_photos`.
+- `tabs/admin/photo_manager.php` — a *Job Photos* tile and *📷 Jobs* filter. `includes/api_handlers.php` — one `require`.
+- Tests: `tests/test_job_photos.php` (**new**); `tests/test_job_access.php` §7 and `tests/fixtures/staff_jobs_scenario.php`
+  now complete the Uganda job the way a technician must (photos + a location — a *reason*, so every message stays
+  5.18.51's); `tests/fixtures/staff_jobs_sandbox.php` gains `upload()` (multipart); the nine manifest-version pins
+  (`test_dist_isolation`, the five `test_distributor_*`, the three `test_partner_*`) read 5.18.66, as every release
+  moves them. Nothing else in `tests/` changed.
+
+**2. What was deliberately NOT built.** No uCRM write of the location (a job comment was tried and removed: the day test
+guarantees a completion sends uCRM exactly 5.18.51's writes — a toggle later if wanted); no push of photos to uCRM
+documents (J11 stays open); no change to the South Sudan `install_photos` flow (its free-text `photo_type` path risk is
+recorded for its own fix); no live-map work (its `$FLAT_TABLES` loss is recorded, not built on); the `job_completions`
+200-character truncation left as is on the legacy path.
+
+**3. A contract change, on Uganda only.** `scheduling_complete` now answers **422** to a caller that sends neither a fix
+nor a reason, or completes an installation without its three photos. The job page always sends one or the other. Any
+native caller outside this repository (the Android wrapper's own endpoints are unmeasured) would get the 422 with the
+reason in words — nothing half-done.
+
+**4. Tests.** `test_job_photos.php` **72/0**: migration; the re-encode (1600×1067, sha256 of what is on disk, no path in
+any answer); nine refusals that change no row, file or uCRM request (unknown label, path-shaped label, a text file
+called photo.jpg, no file, another engineer, an unverified link, a sales account, no job, a job uCRM lacks); leader and
+admin uploads, a PNG stored as JPEG; completion refused for a missing router photo with uCRM untouched, refused for a
+fix out of range / non-numeric / 0,0 / no reason / a two-letter reason, then accepted — stored to seven decimals, uCRM
+receiving exactly the status and the note; the detail; a non-installation completed with a reason; the viewer route
+(taker / leader / admin 200, another engineer 403, `abc` 400, missing 404, trailing path 400); delete by taker not by
+another engineer; a closed job refuses both; **South Sudan control** (actions 404, detail without photos, completion
+asks nothing new, no file written); **three weakened copies each caught** (no access check on upload, no required-photo
+check, no reason required). Also green after the change: `test_job_access` 83/0, `test_job_notifications_day` **50/0
+including the byte-for-byte 5.18.51 baseline comparison on Uganda and South Sudan**, `test_staff_jobs_south_sudan` 51/0,
+`test_job_notifier` 130/0, `test_migration_integrity` 28/0, `test_preauth_allowlist` 105/0, `test_api_csrf_guard` 51/0,
+`test_staff_jobs_gate` 41/0. The job page's `<script>` block parses under Node. PHP 7.4 syntax throughout.
+
+**5. Deployment — prepared the project's way, NOT run.** Asked "what command do I have to run", the answer followed the
+pattern every release since 5.18.39 has used: a deploy script pinned to the reviewed commit, rehearsed against a fake
+install, a backup before copying, read-only checks afterwards, a log file sent back.
+
+- **A scope finding first.** `deploy-hybrid.sh` copies the whole plugin tree, and the branch tip (`924cb6f`) carries,
+  beyond 5.18.66, the distributor partner-portal stack (WS-A P4a–P4d, `93da47e`…`8227fc8`: migrations 081–083,
+  `partner_api.php`, `lib/Partner*.php`, `lib/Totp.php`, `lib/DistributorPortalData.php`) and the PD-8 CSRF guard
+  (`675f128`) — each recorded above as "NOT deployed", each with its own approval still to come, the portal with a
+  security review in progress (docs/51). Deploying the tip would ship all of it. So the release is cut on the live
+  version instead: **`release/5.18.66` = commit `8137912`, parent `ce3fa91` (5.18.65, production since 1 Oct)** — the
+  5.18.66 plugin changes applied to it and nothing else (18 files; the four pin bumps for test files that do not exist
+  at 5.18.65 left out; code hunks unchanged). On that tree: `test_job_photos` 72/0, `test_job_access` 83/0,
+  `test_job_notifications_day` 50/0 with the 5.18.51 baseline, `test_staff_jobs_south_sudan` 51/0,
+  `test_migration_integrity` 28/0, `test_staff_jobs_gate` 41/0, `test_distributor_registry` 59/0,
+  `test_distributor_apply` 61/0.
+- **`scripts/deploy-5.18.66.sh`** (pinned `8137912` over `ce3fa91`), the 5.18.65 script's shape with: **A0** — the
+  delta must contain no partner-portal / CSRF file, and the pin's parent must be 5.18.65 (a copy pinned to the branch
+  tip is refused before the container is even looked at); the release branch is fetched when the checkout lacks the
+  commit; **V5** — the photo viewer sends an anonymous visitor to sign in and `job_photo_upload` answers 401 to nobody;
+  **R3** — migration 084 installed, its two tables present-or-lazy with their row counts; **R4** — the pilot regression
+  plus "no `partner_api.php` / `StaffApiCsrf.php` installed"; **R6** — the photo surface present and wired to the Uganda
+  gate; the rollback (typed `ROLLBACK`) restores 5.18.65's code and leaves the two tables and any photos on disk, unread.
+- **Rehearsal `scripts/harness/deploy-5.18.66/rehearse.sh`: 127/0 over 17 runs of the script** — the three NO-GO gates,
+  the deploy as the operator runs it, the plugin's first boot (084 additive, `0:0`, no existing row changed), R1/R6, R5,
+  V3/R2 and R4 each proved to have teeth (a reverted job page, a changed Release-A file, the switch flipped, a live
+  channel and a planted `partner_api.php` are each caught by name), the rollback, and an R1-blinded copy caught.
+- **The operator's command** is in the script's header (deploy only — the rollback is printed at the end of the deploy's
+  own log, as its own command, never pasted together; root docs/44 §16.9). First use on the server: 084 applies on the
+  next plugin request; the data directory gains `uploads/job_photos/`, already inside the Google Drive backup.
+- **RESULT — DEPLOYED to production 2026-10-03, 19:39 UTC: PASSED, 21 ok / 0 failed / 0 notes.** The run began at
+  19:39:22 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 8137912"* at 19:39:47 UTC.
+  Recorded from the terminal the operator pasted (the script prints no secret); the log file stays on the server as
+  `/root/dnb-5.18.66/deploy-20261003T193922Z.log`.
+  - **A.** Checkout `fc81066`; branch tip `924cb6f` (not installed); release commit `8137912` cut on `ce3fa91`; 18 files
+    (14 changed, 4 added, 0 removed), 1 migration; **A0** — no partner-portal or CSRF file in the delta. Live `ce3fa91`
+    / 5.18.65. The container's PHP **8.1.34** accepted all 7 changed server files and the 9 test files; **GD present**,
+    so photos are re-encoded server-side. Pilot `on`; photo tables `lazy`; `uploads/job_photos` absent.
+  - **Backup** `/root/dnb-5.18.66/backup-20261003T193922Z`: `plugin.sqlite3` 26 MB, one consistent copy, integrity ok,
+    239 tables; the data directory 124 MB; the installed 5.18.65 11 MB; the vault. No `dishnet.sqlite` in the data
+    directory (nothing to copy). `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal without a session 302; no South Sudan contact; **V5** the photo
+    viewer without a session 302, `job_photo_upload` without a login 401; **V3** the pilot unchanged (`on` → `on`);
+    **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 18 files as `8137912` has them, manifest 5.18.66; R2 `pilot=on`; **R3 migration 084 installed and
+    both tables present with `0:0` rows** — the plugin's first request within the guard window created them, additively;
+    R4 the pilot libs, the two flag-gated hooks and the Null channel as before, the pilot tables present, **no
+    `partner_api.php` / `StaffApiCsrf.php` installed**; R5 all 173 files from Release A through 5.18.65 intact; R6 the
+    photo surface installed and Uganda-gated.
+  - **A standing hazard this release makes real.** The server checkout (`/opt/dishnet`) sits on the branch tip, which
+    now carries undeployed work (the portal stack, PD-8). A bare `bash scripts/deploy-hybrid.sh` there would ship all
+    of it. **Deploy only through a pinned `scripts/deploy-5.18.NN.sh` from now on**, and read its `--check` line
+    ("NOT up to date") as the documented consequence of installing a release commit, not as a fault.
+  - **Not yet seen:** a technician's photo and location on a real job. Next: a phone, signed in as a technician — My Jobs
+    → a job → *Take photo* → *Mark as Completed* → *Allow location*; then `bash scripts/deploy-5.18.66.sh --after-only`.
+
+## 03 Oct — 5.18.67: the Site photos card lays out cleanly on a phone (Uganda, My Jobs) — BUILT, rehearsed, NOT deployed
+
+**Seen in production first.** Minutes after the 5.18.66 deploy the operator opened a live job on a phone and sent two
+screenshots of the new *Site photos* card (0/12; Kit / dish, Cable used, Router / model, Other) — the first sighting of
+5.18.66 running. They also showed the defect: the word *required* sat on the same line as the label, so *Cable used* and
+*Router / model* wrapped, the *Take photo* button beside them shrank, and its own text wrapped. "yes fix it."
+
+**1. The change — one hunk, `tabs/support/scheduling.php`, `schRenderPhotos()`.** Each label row is still one flex row,
+but the left side is now a column: the label, and under it the status in 11 px — *required* (amber), *✓ added* (green;
+was a bare ✓), or *N photo(s)* for an optional label that has some. The button keeps `white-space:nowrap;flex-shrink:0`,
+so it holds one line at any width; `min-width:0` on the column lets a long label wrap on its own side instead. Nothing
+else: no API, no server code, no migration, no setting, no uCRM write; the card still renders only behind `UG_PHOTOS`, so
+**South Sudan is unaffected** (the card does not exist there). `manifest.json` 5.18.67; the nine manifest-version pins
+moved. Main commit **`9343f60`** (11 files). Green on it: `test_job_photos` 72/0 and the nine pins; PHP 7.4 syntax; the
+job page's `<script>` block parses under Node.
+
+**2. The release commit, as 5.18.66 taught.** The branch tip still carries the undeployed partner-portal stack and PD-8,
+so the release is cut on the live version: **`release/5.18.67` = `96857d8`, parent `8137912` (5.18.66, production since
+19:39 UTC)** — `9343f60` cherry-picked, the four pins for test files that do not exist at 5.18.66 left out. The code hunks
+of `scheduling.php` and `manifest.json` are **identical** between the two commits (diffed). Seven files differ from
+`8137912`: the two above and five `test_distributor_*` pins; **no migration, no new file.** On that tree:
+`test_job_photos` 72/0, `test_distributor_registry` 59/0, `test_distributor_apply` 61/0, `test_migration_integrity` 28/0.
+
+**3. `scripts/deploy-5.18.67.sh`** — pinned `96857d8` over `8137912`, the 5.18.66 script's shape, with the differences a
+code-only release needs: **A0** also refuses a pin whose delta carries *any* migration (5.18.67 adds none — a pin with
+one is another build); the parent check still refuses a copy pinned to the branch tip before the container is looked at;
+**R3** is now a regression — migration 084 still installed and its two tables present with their row counts (a count is
+never a failure; the deploy touches neither table nor the photo folder, both read before and after); **R6** adds the one
+marker the new layout introduces (`flex-shrink:0;">📷 `, once in the file) beside the 5.18.66 photo-surface markers;
+**RB** (after a rollback) proves the old layout is back *and* the 5.18.66 photo surface is intact — the rollback restores
+code only, no data was involved. V5, V3/R2, R4 ("no `partner_api.php` / `StaffApiCsrf.php` installed") and R5 (Release A
+→ 5.18.66, 179 files) are as before. 22 checks on a clean deploy. The operator's command is in the header, deploy only;
+the rollback is printed at the end of the deploy's own log, as its own command (root docs/44 §16.9).
+
+**4. Rehearsal `scripts/harness/deploy-5.18.67/rehearse.sh`: 103/0 over 16 runs of the script, twice.** Against a clone
+of this repo, the real `deploy-hybrid.sh`, a fake container holding 5.18.66 exactly (`git archive 8137912`) with the pilot
+*on* and the photo tables created by 5.18.66's own migration run (`present:0:0`), and a stand-in web server for stage V:
+**0** controls — 7 files, none new, no migration, no portal/CSRF file; the marker present at the pin and absent at the
+base; the header command stands alone (no `--rollback`, no checkout of another commit); **1** NO-GO — a server still on
+5.18.65 ("deploy 5.18.66 first", nothing deployed, no backup), a placeholder pin, and **a copy pinned to the branch tip
+`9343f60` (parent `7cefd79`) refused before any live read**; **2** the deploy as the operator runs it — PASSED, 22 ok,
+every expected line, five backups, every changed file byte-for-byte, **the data digest unchanged** (no table, no setting),
+photo tables 2 and pilot tables 8 as before, `partner_api.php`/`StaffApiCsrf.php` absent, the rollback command once and
+after the verdict, and the code backup's job page carries the *old* layout (a rollback restores 5.18.66's card exactly);
+**3** teeth — the job page reverted to 5.18.66 on the install fails **R1 by name and R6 on `old-photo-layout`**; a changed
+Release-A file fails R5 by name; each removed, `--after-only` passes; **4** V3/R2 read the live switch off and on again;
+**4e** a live channel planted in `webhook.php` and a planted `partner_api.php` each fail R4 by name; **5** the rollback
+(typed `ROLLBACK`) — PASSED, 5.18.66's manifest and card back, the photo surface intact, no data changed; **6** an
+R1-blinded copy calls the reverted page installed while the real script fails it (control on the control); **7** the
+checkout as found, no weakened copy left. The 5.18.66 rehearsal's 2b (084's first boot) has no counterpart: nothing
+applies on first request here.
+
+**5. The operator's command** (deploy only; send back the log file):
+`cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.67 && mkdir -p /root/dnb-5.18.67 && bash scripts/deploy-5.18.67.sh 2>&1 | tee /root/dnb-5.18.67/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+— it refuses unless the container serves `8137912`; `--check` will read "NOT up to date" before and after (the branch tip
+is not what is installed — the documented consequence, not a fault).
+- **RESULT — DEPLOYED to production 2026-10-03, 20:07 UTC: PASSED, 21 ok / 0 failed / 0 notes.** The run began at
+  20:06:43 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 96857d8"*; the seven files
+  were stamped at 20:07:10 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log
+  file stays on the server as `/root/dnb-5.18.67/deploy-20261003T200643Z.log`.
+  - **A.** Checkout `4c72a4a`; branch tip `9343f60` (not installed); release commit `96857d8` cut on `8137912`; 7 files
+    (7 changed, 0 added, 0 removed), **0 migrations**; **A0** — no partner-portal or CSRF file and no migration in the
+    delta. Live `8137912` / 5.18.66. The container's PHP **8.1.34** accepted the one changed server file and the five
+    test files. Pilot `on`. **Photo tables `present:3:1`, `uploads/job_photos` holding 3 files** — see below.
+  - **Backup** `/root/dnb-5.18.67/backup-20261003T200643Z`: `plugin.sqlite3` 26 MB, one consistent copy, integrity ok,
+    **241 tables** (239 at 19:39 — the two 084 tables have been created since); the data directory 126 MB; the installed
+    5.18.66 11 MB; the vault. No `dishnet.sqlite` (nothing to copy). `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal without a session 302; no South Sudan contact; **V5** the photo
+    viewer without a session 302, `job_photo_upload` without a login 401; **V3** the pilot unchanged (`on` → `on`);
+    **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 7 files as `96857d8` has them, manifest 5.18.67; R2 `pilot=on`; **R3 084 still installed, its two
+    tables present with `3:1` rows, untouched** (3 photo files on disk, never read by the script); R4 the pilot libs, the
+    two flag-gated hooks and the Null channel as before, the pilot tables present, no `partner_api.php` /
+    `StaffApiCsrf.php` installed; R5 all 179 files from Release A through 5.18.66 intact; **R6 the job page carries the
+    new card layout** with the 5.18.66 photo surface intact.
+  - **First use of 5.18.66 in production, seen in passing.** Between the 5.18.66 deploy (19:39 UTC) and this run
+    (20:06 UTC) production gained **3 photo rows (3 files on disk) and 1 completion with a location** — the row counts
+    the before-evidence and R3 read, not something the deploy did. Whose job, and whether it was a trial, the log does
+    not say; the 5.18.66 entry's "not yet seen" is therefore *seen in the database*, not yet reviewed on a screen.
+  - **Next:** the card on a phone (the width that wrapped before); later `bash scripts/deploy-5.18.67.sh --after-only`.
+    The server checkout moved to `4c72a4a` by the pull; `56f8b00` (docs only) arrives with the next one. The standing
+    hazard stands: deploy only through a pinned `scripts/deploy-5.18.NN.sh`, never a bare `deploy-hybrid.sh`.
+
+**6. The full plugin suite, on the tree that carries 5.18.66 and 5.18.67** (`4c72a4a`; its plugin tree is `9343f60`'s):
+`tests/run.sh` — **264 files, 12,055 passed / 0 failed, exit 0, twice.** Run 2 began while the 5.18.67 files were still
+being edited and is not the record (its totals happen to be identical); **run 3, on the final tree, is.** One verdict
+line per file, no fatal, no file skipped. Among them: `test_job_photos` 72/0, `test_job_access` 83/0,
+`test_job_notifications_day` 50/0 (the byte-for-byte 5.18.51 baseline on Uganda and South Sudan),
+`test_staff_jobs_south_sudan` 51/0, `test_api_csrf_guard` 51/0, `test_partner_api` 32/0, `test_dist_isolation` 39/0. Run 1,
+during the 5.18.66 build, had been green except for the six version pins that still read 5.18.65 — bumped before the
+commit, each re-run green. This is the whole-suite confirmation the 5.18.66 entry above lists only per test.
+
+## 04 Oct — 5.18.68: staff money in the book's own currency (Uganda); the Cashbook shows cash in hand — BUILT, NOT deployed
+
+**Reported by the operator (two screenshots and two exports, 06:36 UTC):** South Sudan's cashbook "is a proper system";
+on Uganda "if we give any staff any money then it is not reflecting in that staff", and "I don't want working capital
+and bank amount to be shown in the plugin in Uganda — the UGX cash book is correct". Diagnosed from the code and the
+exports, then three decisions put to the operator and taken (AskUserQuestion): **cash in hand only** on the Cashbook
+page (display only, no data change); **backfill** the five earlier advances to Elisha; and **USD is sometimes handed to
+Uganda staff too** — so the UGX fix keeps a USD bag in view and the USD staff bag is scoped as a follow-up.
+
+**1. What was actually wrong — measured.** The chain *Add Entry → auto-link → cash_ins.json → StaffLedgerWriter::onCashIn →
+staff_ledger → Staff Cashbooks* existed and worked for South Sudan's literal `'USD'` bag only:
+- the auto-link wrote the staff cash-in with `amount = currency === 'USD' ? amount : 0` — **a UGX advance arrived as 0**
+  (`includes/post/post_cashbook.php`, two blocks; the same line in `post_field.php` ×3 and `my_account.php`);
+- `onCashIn` then returned on `amount <= 0`, and would have labelled the row `USD` anyway (`lib/StaffLedgerWriter.php`);
+- `StaffCashPositionService::getUSDBalance()` (14 literal `'USD'` tests), `DualReadCashPosition` (`position($id,'USD')`),
+  `staff_cashbooks.php` (`$uL = cur === 'USD'`), `my_account.php` and `wallet.php` **dropped every UGX row**. Elisha's
+  eight approved field expenses had reached the staff ledger in UGX and were invisible too. From the export: five
+  advances (UGX 650,000, 23 Sep–3 Oct) against UGX 310,328 of expenses — a page that should read about UGX 339,672
+  read nothing.
+- The Cashbook page's POSITION card (UGX −24,119,205) was the Phase-C account model: money accounts (Cash–Uganda
+  +29,137,000, Ecobank −24,922,777 — the statement import brought only card purchases) plus "unassigned rows"
+  −28,333,428, which includes the operator's **UGX 29,056,500 "ADJUSTMENT ENTRY" of 12 Sep** that zeroed the running
+  balance. The ledger's running balance (UGX 723,072) is right *because* the adjustment cancels the account rows; cash
+  rows alone, adjustment excluded, give exactly 723,072 as well. Two arithmetics on one table.
+
+**2. The principle (5.18.57's, applied to the money logic):** the code's "USD" bag is the BOOK's BASE bag. Every "is this
+the USD bag?" question became "is this the book's base bag?" — `dn_book_base()` — and every writer that said "amount only
+when USD" now says "amount for every non-SSP currency" (SSP alone lives in `ssp_amount`). On South Sudan the base is USD
+and the only other currency is SSP, so each change is an identity there.
+
+**3. Files.**
+- `includes/post/post_cashbook.php` (the wizard `cb_action=add_entry` and the `action=cashbook_add_entry` auto-links, and
+  the staff-payment auto-link), `includes/post/post_field.php` (three field-register writers), `tabs/sales/my_account.php`
+  (the staff-pay writer): `!== 'SSP' ? $amount : 0`.
+- `lib/StaffLedgerWriter.php::onCashIn` — a `'USD Received'` row is labelled with the cash-in's own currency; missing or
+  SSP-marked stays `USD` exactly as before.
+- `lib/StaffCashPositionService.php` (`$this->base = dn_book_base(null)`, every comparison and SQL literal),
+  `lib/DualReadCashPosition.php` (`position()/allPositions()` asked for the base bag).
+- `tabs/accounts/staff_cashbooks.php` — collections carry their currency; `$uL`/`$_allUsd` filter on `$scBaseCode`;
+  advances/expenses/transfers carry every non-SSP amount. `tabs/sales/my_account.php` — one `$_mcBase`; the guard, the hero
+  figures, the two ledgers, the book view and the labels read the base; **the two currency radios' `value` is the base code**
+  (they were literal `USD` under a UGX label — a Uganda staff's own expense form recorded dollars). `tabs/sales/wallet.php`
+  — the three USD filters. `lib/NotificationService.php::staffCashReceived` — money in a currency other than the base is
+  named by its code ("USD 100.00"), the display symbol belongs to the base.
+- `tabs/accounts/cashbook.php` — on a book without SSP the hero is one **CASH IN HAND** card per currency =
+  `CashbookService::cashInHand($currency, $project)` (**new**: the same rows and arithmetic as `getEntries()`' running-balance
+  streams; accounts, counterparts and the unassigned split play no part). `cron/cashbook_summary.php` — the evening
+  WhatsApp summary on such a book says the same figure per currency, then today's P&L, instead of POSITION/accounts/
+  unassigned/counterparts. `includes/navigation.php` — the *Opening Balances* strip link is not drawn on the Uganda tenant
+  (the screen stays reachable by address; South Sudan's strip unchanged).
+- `tools/backfill_staff_cash_ins.php` (**new**) — every cb_ledger OUT in the base currency with a staff-advance category
+  (Staff Advance, Commission, SSP Advance; never Salary or an allowance) naming a person: no cash-in with that SR → CREATE;
+  a cash-in with amount 0 → FIX; an amount → SKIP already linked; a name fitting no or two staff members → SKIP, never
+  guessed. Dry run by default; `--apply` asks for a typed `APPLY` (`--yes` for tests); writes through the live chain's own
+  record shape and `onCashIn` (idempotent `CIN-<id>`); dates the created cash-in on the day the money went out; no
+  WhatsApp; refuses any book that is not the Uganda tenant with a non-USD base; logs to `activity_log.json`.
+- `SAFETY.md` RULE 8 — a clarification: `amount` is in the BOOK's base currency (USD on South Sudan, UGX on Uganda since
+  Phase A); the substance — never SSP in `amount` — unchanged. `manifest.json` 5.18.68; the nine version pins.
+- Tests: `tests/test_staff_cash_chain.php` (**new**); `tests/test_cashbook_currency.php` — the two assertions that pinned the
+  old POSITION hero rewritten to the new truth plus one asserting no account/bank/unassigned figure on the non-SSP hero.
+
+**4. What was deliberately NOT done.** No data change by the deploy (the backfill is its own command, typed); the 12 Sep
+adjustment and the 34 bank-import rows stay as they are (the operator chose "cash in hand only"); the account tables and the
+Opening Balances screen stay (hidden from the strip, not removed); `tools/bank_statement.php` is left in place but should not
+be run again on Uganda; the USD staff bag on Uganda (a second tab like South Sudan's SSP bag) is a follow-up — today a USD
+advance reaches the ledger labelled USD and is kept out of the UGX figure; the passbook's `fr_curr=USD` filter and the
+`collection`-named ledger category of a cash-in are pre-existing and untouched.
+
+**5. Tests.** `test_staff_cash_chain.php` **73/0**, driven through the REAL web wizard and the real field-expense forms on
+sandboxed plugins (fake uCRM, fake Evolution): **A** a UGX 150,000 Staff Advance → cb_ledger OUT, a cash-in carrying UGX
+150,000 (not 0), a UGX staff-ledger IN row keyed `CIN-<id>`, the technician's WhatsApp text "UGX 150,000.00"; **B** Staff
+Cashbooks for the technician reads UGX 150,000.00 and lists the advance, the landing tiles too, the technician's own My
+Cash hero reads UGX 150,000.00 and never says USD, the expense form offers UGX as the base; **C** a UGX 40,000 field
+expense submitted and approved → cashbook OUT, ledger OUT, both pages read 110,000.00; **D** a USD 100 advance is its own
+bag (cash-in USD, ledger USD, UGX still 110,000, text "USD 100.00"); **E** a Transport Allowance creates no cash-in (the
+personal-pay rule, unchanged); **F** the Cashbook page reads "UGX CASH IN HAND · UGX 290,000.00" and "USD CASH IN HAND ·
+USD -100.00", no POSITION, no "unassigned rows", no account count, no Opening Balances tab, the other tabs present;
+**G South Sudan** — a USD 50 and an SSP 100,000 Staff Advance through the same forms produce cash_ins, staff_ledger,
+cb_ledger rows and WhatsApp texts **byte for byte equal to a golden captured from the 5.18.67 tree** (scratchpad
+`ss_capture.php`, run on both trees: IDENTICAL), the page keeps its USD BALANCE / SSP BALANCE cards and the Opening
+Balances tab, the backfill tool refuses the book (exit 2); **H the backfill** — a planted 5.18.67-style ghost (amount 0,
+no ledger row), an advance to a person hired later, and an ambiguous name with no cash-in: the dry run plans FIX / CREATE /
+SKIP ambiguous, omits the USD advance, and writes nothing (cash-ins and ledger identical); `--apply --yes` restores UGX
+150,000 and its CIN row, creates the late hire's cash-in dated the day the money went out with its ledger row, guesses
+nobody for the ambiguous row, states each staff member's UGX in hand, is in the activity log, sent no message; a second
+run reads SKIP throughout; **I four weakened copies each caught** (the wizard's amount rule, `onCashIn`'s label, the
+Staff Cashbooks filter, the position service's base). Also green: `test_cashbook_currency` 86/0, `test_cashbook_tenant`
+26/0, `test_cashbook_accounts` 118/0, `test_cashbook_seeds` 37/0, `test_staff_cashbook_scope` 9/0. PHP 7.4 syntax throughout.
+Wider regression, all green: `test_notify_staff_side` 53, `test_notify_staff_controls` 45, `test_job_notifier` 130,
+`test_staff_jobs_south_sudan` 51, `test_job_access` 83, `test_job_notifications_day` 50 (the byte-for-byte 5.18.51 baseline
+on both countries), `test_currency_sweep` 9, `test_sales_support_tenant` 36, `test_starlink_accounts` 52, `test_dpo_screens` 51.
+
+**6. Deployment — prepared the project's way, NOT run.** Main commits `6c7a4df` (the build), `e66faf8` (a fix the rehearsal
+found, below), `eaec5ca`/`6ba8593` (the deploy script and its pin). **Release commit `release/5.18.68` = `d8d2068`, parent
+`96857d8` (5.18.67, production since 3 Oct 20:07 UTC)** — the two main commits' plugin changes cherry-picked onto the live
+version, the four pins for test files that do not exist at 5.18.67 left out: **23 files, 2 added, 0 migrations, and the hunks
+on those 23 files are byte for byte the branch's** (diffed), with none of the undeployed portal/CSRF files (A0's pattern: 0
+hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0,
+`test_distributor_registry` 59/0, `test_staff_cashbook_scope` 9/0.
+- **`scripts/deploy-5.18.68.sh`** (pinned `d8d2068` over `96857d8`), the 5.18.67 script's shape: **A0** refuses a pin whose
+  parent is not 5.18.67, or whose delta carries a migration or any partner-portal / CSRF file; **R6** checks the chain's
+  markers beside the photo surface (the auto-link's amount rule twice, the ledger writer's label, the position service's
+  base, `cashInHand()`, the CASH IN HAND card, no `currencyPositions()` on the page, the strip gate, the evening summary, the
+  tool installed); **R7** runs the backfill tool **without `--apply`** inside the container — a dry run on the live data, its
+  plan printed (SR, date, category, the name as typed, the staff member matched, amount, action) for the operator to read,
+  and the photo tables/files re-read to prove nothing moved; **F** prints the rollback alone after the verdict, and the
+  backfill's `--apply` command after that as a **third separate block** (`docker exec -it ucrm php …/tools/
+  backfill_staff_cash_ins.php --apply`, typed `APPLY`). Code only; no migration; 22 checks on a clean deploy before R7's two.
+- **Rehearsal `scripts/harness/deploy-5.18.68/rehearse.sh`: 134/0 over 17 runs of the script, twice** on the final script,
+  against a 5.18.67 base holding a UGX book (`cashbook_base_currency=UGX`) with the pilot *on* and **one unlinked Staff Advance
+  seeded** (a staff member the live link never saw): the three NO-GO gates (a 5.18.66 server, a placeholder pin, a copy pinned
+  to the branch tip refused before any live read); the deploy as the operator runs it (24 ok; R7 plans *1 to create* for the
+  seeded advance and **the data digest of every table is unchanged across the deploy — the dry run wrote nothing**); R1/R6
+  teeth (the position service reverted → R1 names it and R6 says `position-service:literal-usd`; the Cashbook page reverted →
+  R6 names the missing card and the position cards); R5 teeth; the switch flipped; a live channel and a planted
+  `partner_api.php` caught by name; the rollback restores 5.18.67's page and service with the photo surface intact and no
+  data change; the R1-blinded copy caught; the rollback printed once after the verdict and the `--apply` command once after
+  the rollback.
+- **The first rehearsal run found a real defect (132/2):** the dry run had left an **empty `cash_ins` table** behind — the
+  store creates a JSON-list table the first time a name is loaded — so the digest moved. The tool now reads the cash-ins only
+  where the table exists (`e66faf8`); proved on the rehearsal's seed: no table change after a dry run, `--apply` still writes.
+  The other miss was the harness's own stale expectation (the backup is of 5.18.67, not 5.18.66). The release was re-cut
+  (`358117d` → `d8d2068`) and the script re-pinned.
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.68 && mkdir -p /root/dnb-5.18.68 && bash scripts/deploy-5.18.68.sh 2>&1 | tee /root/dnb-5.18.68/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `96857d8`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  backfill's `--apply`, printed after it, to run only after reading R7's plan in the same log; it asks for `APPLY`, writes only
+  the CREATE/FIX rows listed, sends no message, and reads SKIP throughout on a second run.
+- **RESULT — DEPLOYED to production 2026-10-04, 04:35 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  04:34:40 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves d8d2068"*; the 23 files were
+  stamped at 04:35:10 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file
+  stays on the server as `/root/dnb-5.18.68/deploy-20261004T043440Z.log`.
+  - **A.** Checkout `b8a0483`; branch tip `e66faf8` (not installed); release commit `d8d2068` cut on `96857d8`; 23 files
+    (21 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `96857d8` / 5.18.67. The container's PHP
+    **8.1.34** accepted all 14 changed server files and the 7 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.68/backup-20261004T043440Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.67 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 23 files as `d8d2068` has them, manifest 5.18.68; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 179 files from Release A through 5.18.67 intact; **R6
+    the staff-cash chain is in place** beside the photo surface; **R7 the backfill's dry run on the live data: 5
+    staff-advance OUT rows in UGX name a person, 8 cash-in records exist — plan: 0 to create, 5 to FIX, 0 skipped**, each
+    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX 50,000 + 250,000 + 100,000 + 100,000 + 150,000) matched to the
+    one staff member (#4) and each already carrying a cash-in with **amount 0** (cash-ins #1, #2, #6, #7, #8). **That is the
+    diagnosis confirmed on production**: the 5.18.67 auto-link did fire for every advance and wrote 0. The photo tables and
+    files read exactly as before (`present:3:1`, `files:3`) — the dry run touched no data.
+  - **Not yet done:** the backfill's `--apply` (the operator's separate command, after reading R7's plan; result to be
+    recorded here), a look at the UGX CASH IN HAND card against the ledger's latest Balance, and
+    `bash scripts/deploy-5.18.68.sh --after-only`.
+  - **The full plugin suite on the final 5.18.68 tree (`6c7a4df` + `e66faf8`): `tests/run.sh` 265 files, 12,129 passed /
+    0 failed, exit 0**, one verdict per file (12,055 before this release + the 73 of the chain test + the currency test's
+    one new assertion).
+
+## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — DEPLOYED 06:26 UTC (PASSED 23/0/0)
+
+**Reported by the operator (a screenshot and an export of the technician's staff cashbook, after 5.18.68 and before the
+backfill's `APPLY`):** the page read **UGX 0.00** with UGX 310,328 out and a row *"USD Received … +UGX 0.00"*; the export
+came down as `staff-cashbook-<staff>-USD-2026-09-04-to-2026-10-04.csv` with the columns `Received (USD)` / `Payment (USD)`
+and three rows of 25 Sep (Collection, 200,000 / 50,000 / 50,000, approved); *"I have never given USD to this technician,
+always UGX — something wrong"*. The `+UGX 0.00` row is the pre-backfill state the 5.18.68 deploy's R7 showed (the five
+cash-ins carry amount 0 until `--apply` is typed through; whether `APPLY` was typed is not yet confirmed). The rest is
+three more literal `'USD'` sources — measured on the code and on the export, not inferred from the words:
+
+1. **The Manual Entry stamped `'USD'` whatever currency was chosen.** `tabs/accounts/staff_cashbooks.php` read
+   `man_currency` and then wrote `'currency' => 'USD'` on every non-SSP entry, so a hand-typed UGX entry left the UGX
+   register (5.18.68 reads the base bag) and surfaced as dollars in the export. The three 25 Sep rows are exactly that
+   shape: `source = manual_adjustment`, stamped USD, UGX amounts. Read against the main cashbook's export they are the same
+   money as the advances **CB-66 (50,000) and CB-72 (250,000)** of those days — 300,000 both ways — typed again by hand on
+   the staff page while the advance link wrote 0. The 5.18.68 backfill links those advances to the technician's ledger, so
+   **counting both would double the money**: the tool's default repair is VOID, and RELABEL is offered only for a hand entry
+   that is the only record of its money. **Void or keep is the operator's call; the deploy repairs nothing by itself.**
+   **Verified line by line at 06:25 UTC**, when the operator re-sent the export (byte-identical to the 04:42 copy, so the
+   server was still on 5.18.68): CB-72 (24 Sep, 250,000) reads *"Paid for Buying Material and 50K UGx as Advance"* and the
+   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* 200,000 + *"Advance for other expenses"*
+   50,000; CB-66 (23 Sep, 50,000) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
+   (advance)"* 50,000. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
+   190,000, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
+2. **The stored category `'USD Received'`.** The base-bag cash-in category is stored under South Sudan's name, and the
+   Staff Cashbooks page, My Cash and the export printed it as stored. Each now prints it as **`<base> Received`** — "UGX
+   Received" on Uganda; the stored value is unchanged (the ledger writer, the position service and the backfill key on it).
+3. **The export's tab→currency rule.** `includes/routes.php` (`sc_export=csv`) turned the page's `usd` tab into literal
+   USD through `dn_entry_currency`, so the base tab exported the USD bag — empty on Uganda but for the mis-stamped rows —
+   under USD headers and a `-USD-` file name. Now an explicit `ssp` tab exports SSP and everything else the **book's**
+   base; the file name and the two column headers follow (`Received (UGX)` / `Payment (UGX)`).
+
+**Files** (`c1c2f62`): `tabs/accounts/staff_cashbooks.php` (the stamp through `dn_entry_currency`, the confirmation names
+the currency, the label); `includes/routes.php` (the rule, the label, expense and handover rows fall back to the base
+instead of literal USD); `tabs/sales/my_account.php` (two labels); `manifest.json` 5.18.69; the nine pins. New:
+`tools/staff_records_currency.php`, `tests/test_staff_manual_entry_currency.php`. **No migration, no new table, no uCRM
+write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yields USD for the USD choice, the label is
+"USD Received", the rule gives USD — identities, proved on a South Sudan sandbox (section E of the test).
+
+- **`tools/staff_records_currency.php`.** **LIST** (default, read-only): every staff cash record by table and currency
+  across `payment_collections`, `cash_ins`, `cash_expenses`, `cash_handovers`, `staff_expenses`, `cash_advances`,
+  `staff_transfers`, `staff_ledger` (voided rows included; a non-base, non-SSP stamp is flagged `◄ not the base`), and
+  every Manual Entry collection stamped in a non-base currency, listed by id, date, staff member, stamp, amount, status and
+  description. **`--void`** (typed `VOID`): the Staff Cashbooks page's own void, record for record — `prev_status`,
+  `status = voided`, `voided_by`, `voided_at`, `void_reason`, an `audit_log` entry, the matching `cb_ledger` row by its
+  `COL-`/`PAY-` reference where one exists, one `activity_log` entry; nothing deleted, no message. **`--relabel`** (typed
+  `RELABEL`): `currency → base` with an `audit_log` entry, the row stays approved. `--yes` for a non-interactive run; both
+  flags together, an unknown option, or any book but a Uganda one (tenant `uganda`, base ≠ USD) → exit 2, nothing written.
+  It reads a table only where it exists — a LIST creates nothing (the 5.18.68 dry-run lesson, applied before the rehearsal
+  this time).
+- **`tests/test_staff_manual_entry_currency.php` — 36/0.** A: the accountant's manual UGX 20,000 entry is stamped UGX,
+  `source manual_adjustment`, and counts under the UGX tile. B: a UGX 150,000 Staff Advance through the wizard reads **"UGX
+  Received"** (never "USD Received"), hero 170,000. C: the `usd` tab's CSV carries `Received (UGX)` / `Payment (UGX)`, the
+  manual entry and the advance as "UGX Received". D: a planted USD-stamped manual collection (as the old form wrote it)
+  does not count; LIST exits 0, names `payment_collections: USD 1 ◄ not the base` and the candidate, writes nothing; VOID
+  voids it the page's way with its stamp untouched and an activity-log line; a second planted row is RELABELLED to UGX and
+  then counts (240,000) while the voided one does not; both flags → exit 2. E: South Sudan — a manual USD entry stamped
+  USD, the confirmation "Manual USD entry added", the USD and SSP exports unchanged, the tool refuses (exit 2). F: two
+  weakened copies caught — the stamp put back to literal `'USD'` (the UGX entry is stamped USD again) and the export's rule
+  put back to `dn_entry_currency` (the base tab exports `(USD)` again). Also green on the tree: `test_cashbook_currency`
+  86/0, `test_cashbook_tenant` 26/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.69` = `fec15bc`, parent `d8d2068` (5.18.68, production since 04:35 UTC):** `c1c2f62`'s
+  plugin changes applied on the live version, the four pins for test files that do not exist at 5.18.68 left out
+  (`test_dist_isolation`, `test_partner_api/_auth/_session`): **11 files, 2 added, 0 migrations, hunks byte for byte the
+  branch's** (diffed), 0 partner-portal/CSRF hits. Of the eleven, only `includes/routes.php` differs between d8d2068 and
+  the branch tip (the tip carries nine undeployed lines elsewhere in the file); the hunks applied cleanly. On the release
+  tree: `test_staff_manual_entry_currency` 36/0, `test_cashbook_currency` 86/0, `test_staff_cash_chain` 73/0,
+  `test_distributor_registry` 59/0, `test_cashbook_tenant` 26/0, `test_staff_cashbook_scope` 9/0.
+- **`scripts/deploy-5.18.69.sh`** (pinned `fec15bc` over `d8d2068`), the 5.18.68 script's shape: **A0** refuses a pin
+  whose parent is not 5.18.68, or whose delta carries a migration or any partner-portal / CSRF file; **R6** checks the
+  three fixes beside the photo surface and the 5.18.68 chain (the Manual Entry stamp `=> $manCur`, the page's
+  `$scBaseCode.' Received'`, the export's `=== 'ssp' ? 'SSP' : dn_book_base(…)`, My Cash's `$_mcBase.' Received'`, both
+  tools installed); **R7** runs the records tool in **LIST** mode inside the container — read-only on the live data, its
+  census and its candidates printed for the operator to read (staff names as the panel shows them; no phone number) and
+  the photo tables/files re-read to prove nothing moved; **RB** after a rollback checks the literal stamp and the literal
+  tab are back and the 5.18.68 chain and card still there; **F** prints the rollback alone after the verdict, and the
+  tool's `--void` command after that as a **third separate block**, naming `--relabel` as the alternative. Code only; no
+  migration.
+- **Rehearsal `scripts/harness/deploy-5.18.69/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.68 base
+  holding a UGX book with the pilot *on* and **one Manual Entry collection stamped USD by the old form seeded** (a hand copy
+  of an advance, approved — the shape production holds since 25 Sep): the three NO-GO gates (a 5.18.67 server, a placeholder
+  pin, a copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST names
+  `payment_collections  USD 1 ◄ not the base` and the candidate — USD 50,000.00, approved, as typed — and **the data digest
+  of every table is unchanged across the deploy: the LIST wrote nothing, the seeded entry still approved and still stamped
+  USD**); R1/R6 teeth (the Staff Cashbooks page reverted → R1 names it and R6 names `manual-entry:stamps-literal-usd` and
+  `staff-cashbooks:usd-received-label`; the export reverted → R1 names it and R6 `export:literal-usd-tab`; My Cash reverted →
+  `my-cash:usd-received-label`); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php` caught by name;
+  the rollback restores 5.18.68's stamp and export with the 5.18.68 chain, card and photo surface intact and no data change;
+  the R1-blinded copy caught; the rollback printed once after the verdict and the `--void` command once after the rollback,
+  with `--relabel` named once as the alternative. No defect on the first run this time (the 5.18.68 dry-run lesson was
+  applied before it). Run 1 on the working copy of the script, run 2 on the committed script (`1e718c3`): **129/0 both times, the same 18 runs**.
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.69 && mkdir -p /root/dnb-5.18.69 && bash scripts/deploy-5.18.69.sh 2>&1 | tee /root/dnb-5.18.69/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `d8d2068`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  tool's `--void` (or `--relabel`), printed after it, to run **only after the operator has read R7's list and decided**;
+  it asks for `VOID` / `RELABEL`, touches only the rows the LIST named, sends no message, and on a second run reports
+  *nothing to void*. The 5.18.68 `--after-only` is superseded: this deploy's R5 re-reads every file from Release A through
+  5.18.68.
+- **Still open from 5.18.68:** the backfill's `--apply` log (not received; the screenshot shows the pre-backfill 0.00).
+  After it, the technician's page should read about UGX 339,672 (650,000 in, 310,328 out) — plus 300,000 if the three
+  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: UGX 339,672.00
+  (650,000 received, 310,328 out) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
+  hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
+- **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
+  own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
+  `tools/bank_statement.php` is not for the Uganda book.
+- **RESULT — DEPLOYED to production 2026-10-04, 06:26 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  06:26:17 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves fec15bc"*; the 11 files were
+  stamped at 06:26:46 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.69/deploy-20261004T062617Z.log`.
+  - **A.** Checkout `f2af7fb`; branch tip `c1c2f62` (not installed); release commit `fec15bc` cut on `d8d2068`; 11 files
+    (9 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `d8d2068` / 5.18.68. The container's PHP **8.1.34**
+    accepted the 4 changed server files and the 6 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.69/backup-20261004T062617Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.68 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 11 files as `fec15bc` has them, manifest 5.18.69; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 190 files from Release A through 5.18.68 intact; **R6
+    the three fixes are in place** beside the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the
+    live data, read-only — corrects §1's diagnosis of WHICH form wrote the three rows:** `payment_collections UGX 1 ·
+    cash_ins UGX 5 · USD 3 ◄ not the base · staff_expenses UGX 8 · staff_ledger UGX 13`, and **Manual Entry collections
+    stamped in a currency other than UGX: 0.** The three "USD" rows the operator exported are **`cash_ins` records**, not
+    Manual Entry collections — the export prints a cash-in's own category, and theirs is `Collection`. The tool counts and
+    flags them, but its repair covers only `payment_collections` rows with `source = manual_adjustment`, so **it cannot void
+    them.** What they ARE (hand copies of CB-66 + CB-72, 300,000, UGX wearing a USD label) stands as verified above; what
+    wrote them was a cash-in form, not the Manual Entry. The photo tables and files read exactly as before (`present:3:1`,
+    `files:3`) — the LIST touched no data.
+  - **The operator then ran the tool's `--void` command** (its own command, after the deploy, ~06:30 UTC): the same census,
+    *0 (0 not yet voided)*, then **"Nothing to VOID: every candidate is already voided."** Nothing was written — correct —
+    but that sentence is **wrong for zero candidates**: nothing was voided because nothing was in scope. Two tool defects for
+    5.18.70: that message, and that a table which exists but is empty (`cash_expenses`, `cash_handovers`, `cash_advances`,
+    `staff_transfers` on production) prints nothing instead of `0`.
+  - **Read off the census, to be confirmed on the page:** `staff_ledger UGX 13` = the technician's 8 approved field expenses
+    + 5 cash-in rows — rows that exist only if the 5.18.68 backfill's `APPLY` ran, since 5.18.67's `onCashIn` wrote no row
+    for an amount of 0. **The APPLY log was never sent; the ledger count says it was applied.** `cash_ins UGX 5` are those
+    five, `USD 3` the hand-typed rows.
+  - **Not yet done:** 5.18.70 — the tool extended to `cash_ins` (LIST them by category; VOID the page's `void_cash_in` way;
+    RELABEL), the two wording defects, and a check that no form on the Uganda book can still stamp a cash-in `USD`; then the
+    operator's VOID through it; `bash scripts/deploy-5.18.69.sh --after-only`.
+- **The full plugin suite on the final 5.18.69 tree (`c1c2f62`, the plugin files of `1e718c3`): `tests/run.sh` 266 files,
+  12,165 passed / 0 failed, exit 0**, one verdict per file — 12,129 before this release + the 36 of the manual-entry test,
+  exactly. 26 minutes, run alongside the second rehearsal without a flake.
+
+## 04 Oct — 5.18.70: the Field Register speaks the book's base; the records tool covers cash-ins — DEPLOYED 07:12 UTC (PASSED 23/0/0)
+
+**Why.** The 5.18.69 deploy's R7 census (06:26 UTC) placed the technician's three "USD" rows in **`cash_ins`**, not in the
+Manual Entry collections 5.18.69's tool repairs, and the operator's `--void` run found *nothing in scope* (and said "already
+voided" — wrong wording, fixed here). Traced from the export's own column (it prints a cash-in's category; theirs is
+`Collection`) to the one writer that stamps that category: **the Field Register page** (`tabs/sales/wallet.php`,
+`action=log_cash_in` → `includes/post/post_field.php`). Its base pill is labelled with the book's base, but its JavaScript's
+token for that pill is the literal `'USD'`, and every form on the page copied the token into its hidden `currency` field —
+cash-ins (`fr3fInCurrency`, twice), expenses (`fr3fCurrency`, five times), the handover and the advance (`_fr3Curr`).
+`dn_entry_currency()` then passed `USD` through, because the Uganda book lists `UGX,USD` and USD is a legitimate second bag.
+**So the page still stamped USD on 5.18.69**, and would have gone on doing so. The same literal drove that page's filter
+whitelist, its two sums, its pending-row label, its filter button, and the Field Register CSV export in `routes.php`.
+
+**What changed** (`c3f9bac` on the branch, release `cba7faf` on `fec15bc`):
+- `tabs/sales/wallet.php` — `var _fr3Base = <?= json_encode(dn_book_base($config)) ?>` next to the pill token, and every
+  submission for the base pill sends it (`_fr3Base`, or `isSsp ? 'SSP' : _fr3Base`, or `_fr3Curr === 'SSP' ? 'SSP' :
+  _fr3Base`); server-side `$_frBase` for the filter whitelist, the collection rows' currency (their own stamp, the base when
+  they carry none), the exchange-row filter, the expense/handover/advance fallbacks, the two sums, the pending label and the
+  filter button. The pill token `'USD'` itself stays — it is a UI name, not data — and the exchange leg's dollar side stays
+  literal (South Sudan only).
+- `includes/routes.php` — the Field Register CSV export: collections and handovers carry their own stamp (the base when
+  none), the filter compares to it; the staff export of 5.18.69 is untouched.
+- `tools/staff_records_currency.php` (5.18.70) — candidates are the Manual Entry collections **and every cash-in** stamped
+  in a non-base, non-SSP currency, listed with source (`collection #n` / `cash-in #n`), date, staff member, category, stamp,
+  amount, status, description. **VOID** of a cash-in is the Staff Cashbooks page's own `void_cash_in`, field for field
+  (`prev_status`, `status = voided`, `voided_by`, `voided_at`, `void_reason`), the page's activity line (`void_cash_in`), then
+  `StaffLedgerWriter::onCashInVoided` (and the `CINO-` key for an OUT row). **RELABEL** sets the record's currency to the
+  base with an `audit_log` entry and, where a live `staff_ledger` row exists for it, that row's currency — the tool's one
+  direct ledger write, reported by key. Zero candidates now read *"no Manual Entry collection and no cash-in is stamped in a
+  currency other than UGX"*; a table that exists but is empty prints `0`. Still Uganda-only (exit 2 elsewhere), still
+  read-only without a flag, still typed `VOID` / `RELABEL`.
+- `manifest.json` 5.18.70; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
+
+**Tests.**
+- `tests/test_field_cash_in_currency.php` — **48/0.** A: the page tells its JavaScript `_fr3Base = "UGX"`; both cash-in
+  submissions, the five expense submissions and the two handover/advance submissions send the base; no literal submission
+  left; the filter button links `fr_curr=UGX`. B: the technician's cash-in, posted with what the page now submits, is stamped
+  UGX, Collection, approved; the wallet's Collections line and the Staff Cashbooks UGX tile both read 20,000. C: production's
+  shape planted — three USD-stamped Collection cash-ins and one `USD Received` with a live ledger row: the wallet's
+  Collections line counts the three (320,000: *the label lied and the figure followed*) while the UGX tile does not (the two
+  screens disagreed by 300,000); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
+  lists each cash-in with category, stamp, amount, status and description, writes nothing. D: VOID names each row, voids
+  them the page's way (stamp untouched, nothing deleted), voids the ledger row `CIN-n`, writes four `void_cash_in` activity
+  lines and its summary; the wallet is back to 20,000 and agrees with the tile; LIST reads *4 (0 not yet voided)*; a second
+  VOID says "already voided". E: with nothing in scope VOID says so and exits 0; RELABEL relabels the record and the live
+  ledger row, and both then count in the UGX tile (100,000). F: South Sudan — `_fr3Base = "USD"`, the pill submits USD and
+  an SSP Received submits SSP exactly as before, the tool refuses. G: three weakened copies caught — the Collection
+  submission sent as the literal again; the tool blind to cash-ins; VOID leaving the ledger row live.
+- `tests/test_staff_manual_entry_currency.php` 36/0 (two assertions follow the tool's new listing and version),
+  `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.70` = `cba7faf`, parent `fec15bc` (5.18.69, production since 06:26 UTC):** the
+  branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.69 left out:
+  11 files, 1 added, 0 migrations, hunks byte for byte the branch's (diffed), 0 partner-portal/CSRF hits.
+- **`scripts/deploy-5.18.70.sh`** (pinned `cba7faf` over `fec15bc`), the 5.18.69 script's shape: A0 refuses a
+  pin whose parent is not 5.18.69 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the base
+  token, the two base submissions, no literal submission, the export's base and the 5.18.70 tool, beside the 5.18.69 fixes,
+  the 5.18.68 chain and the photo surface; **R7** runs the tool in LIST mode inside the container — read-only — **which on
+  production will name the three cash-ins**, each with its category, stamp, amount and description, for the operator to read
+  before typing VOID; RB after a rollback checks the token and the 5.18.70 tool are gone and the 5.18.69 fixes still there;
+  F prints the rollback alone, then the tool's `--void` command as a third block, naming `--relabel` as the alternative.
+- **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.69 base
+  holding a UGX book with the pilot *on* and **the three cash-ins the old pill stamped USD seeded — production's shape**
+  (Collection, 200,000 / 50,000 / 50,000, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
+  copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST reads
+  `cash_ins USD 3 ◄ not the base` and names each cash-in with its category, stamp, amount, status and description, and
+  **the data digest of every table is unchanged across the deploy: the LIST wrote nothing, the three still approved and
+  still stamped USD**); R1/R6 teeth (the Field Register reverted → R1 names it and R6 names `field-register:no-base-token`
+  and `field-register:literal-usd-submit`; the tool reverted → R1 and R6 `records-tool:not-5.18.70`; the export reverted →
+  `export:literal-usd-collection`); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php` caught by
+  name; the rollback restores 5.18.69's pill and tool with the 5.18.69 and 5.18.68 fixes and the photo surface intact and
+  no data change; the R1-blinded copy caught; the rollback printed once after the verdict and the `--void` command once
+  after the rollback, with `--relabel` named once. No defect on the first run. Run 1 on the working copy of the script;
+  run 2 on the committed script (`8992574`): **129/0 both times, the same 18 runs**.
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.70 && mkdir -p /root/dnb-5.18.70 && bash scripts/deploy-5.18.70.sh 2>&1 | tee /root/dnb-5.18.70/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `fec15bc`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  tool's `--void` (or `--relabel`), printed after it, **this time with the three cash-ins in scope**: it asks for `VOID`,
+  voids only the rows the LIST named, sends no message.
+- **Still open:** the 5.18.68 backfill's `APPLY` log (the ledger count says it ran — confirm on the page); the operator's
+  void/keep answer (void recommended: CB-66 + CB-72 are the same money).
+- **Two suite files corrected on the branch after the deploy (`8cde7ca`, tests only, no release):** the first full-suite run
+  on the 5.18.70 tree (06:59–07:2x UTC, a Sunday) reported `test_notify_evo_retry.php` 20/3 and `test_sales_support_tenant.php`
+  35/1. The first is **the clock, not the release**: its `er_window_zone()` hunted a zone that is now a non-Sunday 09:00–18:00
+  within UTC−11…+12, although `FollowUpPolicy` opens 08:00–20:00 and real offsets run UTC−12…+14; on a Sunday between ~07:00
+  and ~19:00 UTC it found none, fell back to UTC, the follow-up sender held the draft for the window, and three assertions
+  read a broken sender (the 5.18.69 run at 05:22 UTC still had Saturday 18:22 at UTC−11). It now reads the policy's own hours
+  and the real offsets, and when no zone on Earth is inside the window it **skips** the three checks with that reason, counted
+  apart — never a failure; 23/0 at 07:23 UTC (window zone UTC−12, Saturday 19:23). The second is **a pin on text 5.18.70
+  rewrote**: the wallet's filter gate `? ['USD','SSP'] : ['USD']` is now `? [$_frBase, 'SSP'] : [$_frBase], true` — the same
+  gate, the base by its own code; the pin follows and a second one asserts the literal is gone; 37/0. **Rule, binding:** a
+  test must not depend on the hour it runs at; where the product has a window, the test controls the clock or skips with
+  the reason.
+- **The full plugin suite on the final 5.18.70 tree (`5518eb3`; plugin files of `c3f9bac` + the two test corrections of
+  `8cde7ca`): `tests/run.sh` 267 files, 12,214 passed / 0 failed, nothing skipped, exit 0**, one verdict per file — the
+  5.18.69 total of 12,165 + the 48 of the Field Register test + the one assertion the tenant test gained, exactly. 27
+  minutes, 07:26–07:53 UTC; the retry test ran its window checks in full (zone UTC−12, Saturday evening there). The first
+  run on the same plugin code (06:59–07:2x UTC) had read 2 files red for the two reasons above, both in the tests.
+- **RESULT — DEPLOYED to production 2026-10-04, 07:12 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  07:12:45 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves cba7faf"*; the 11 files were
+  stamped at 07:13:19 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.70/deploy-20261004T071245Z.log`.
+  - **A.** Checkout `4d19f49`; branch tip `c3f9bac` (not installed); release commit `cba7faf` cut on `fec15bc`; 11 files
+    (10 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `fec15bc` / 5.18.69. PHP **8.1.34** accepted the
+    3 changed server files and the 7 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.70/backup-20261004T071245Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.69 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 11 files as `cba7faf` has them, manifest 5.18.70; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 192 files from Release A through 5.18.69 intact; **R6
+    the Field Register's base token, both base submissions, no literal submission, the export's base and the 5.18.70 tool**
+    beside the 5.18.69 fixes, the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the live data,
+    read-only:** `payment_collections UGX 1 · cash_ins UGX 5 · USD 3 ◄ not the base · cash_expenses 0 · cash_handovers 0 ·
+    staff_expenses UGX 8 · cash_advances 0 · staff_transfers 0 · staff_ledger UGX 13` (the four empty tables now read `0`),
+    and **the three candidates, named: cash-in #3 (Collection, USD, 200,000.00, 25 Sep, "Outdoor ethernet cable roll
+    305 m"), #4 (50,000.00, "Advance for other expenses"), #5 (50,000.00, "6th street installation allowance
+    (advance )")**, all approved, all the technician's (#4). The photo tables and files read exactly as before
+    (`present:3:1`, `files:3`) — the LIST touched no data.
+  - **The operator then ran the tool's `--void` command** (its own command, after the deploy): the same census, the three
+    rows listed, then the prompt *"Type VOID to void the 3 row(s) above, anything else to stop:"* — **the paste ends at
+    the prompt; whether VOID was typed is not yet known.** Nothing is written until it is.
+  - **Not yet done:** the typed `VOID` and its records log (expected: three `cash-in #n voided (USD …, Collection, …)`
+    lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
+    *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
+    the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+
+## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
+
+**Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
+accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: UGX −24,119,205.00 / USD
+−139.37"** and the account tiles (Ecobank Uganda UGX −24,922,777, Cash Uganda 29,137,000, Airtel 0, MTN 0, Ecobank USD
+−1,039.37, Cash USD 0), beside the Cashbook page's card **UGX CASH IN HAND 723,072.00 / USD 10,871.37**. The 5.18.68
+decision ("I don't want working capital and bank amount to be shown in the plugin in Uganda — cash in hand only") had been
+applied to the Cashbook page; the landing hero still drew `currencyPositions()`, the Phase-C account model, on a book
+without SSP (`tabs/accounts/accounts_dashboard.php`: `$_dashSSP ? [] : $cbDash->currencyPositions()`), while South Sudan's
+branch of the same hero draws the ledger's running balance per project ("Total Cash Position" with Fiber & Starlink /
+DishNet 4G / BlueCARD chips). Two more things on that page, read from the code: `getBothBalances()` is hard-coded to the
+**USD** stream (`getBalanceByCurrency($project, 'USD')`), so the Money Locations office figure on a UGX book was the dollar
+bag; and Money Locations lists staff by *collection exposure* (the `staff_cash_position` view), which reads 0 for a
+technician who only holds an advance — so the page said *"All cash is in office — no field holdings"* while the technician
+held about UGX 339,672.
+
+**What changed** (`72de8be` on the branch, release `b350192` on `cba7faf`), all on a book without
+SSP, South Sudan's branch untouched:
+- **The hero reads "Cash in hand — per currency"**: `CashbookService::cashInHand()` per book currency — the Cashbook card's
+  own figure (UGX 723,072.00 / USD 10,871.37 today) — and the base per project in the three chips (Fiber & Starlink /
+  DishNet 4G / BlueCARD), the shape South Sudan's hero has. `currencyPositions()` is not called on the page any more; no
+  bank balance, no unassigned stream, no "position".
+- **Money Locations**: the office figure is the base cash in hand (not the literal-USD project balances); the block lists
+  **money held by staff** — `StaffCashPositionService::getUSDBalance()` per active non-admin staff, exactly the base
+  balance Staff Cashbooks shows (advances and collections received, net of expenses and handovers), each row linking to
+  that person's Staff Cashbook; a "With staff" total and a header badge; the empty line reads *"nothing held by staff"*.
+  The **Field Cash KPI and its "collectors" count are unchanged** — collection exposure is a different question.
+- **`tools/cash_in_hand.php`** (new, READ-ONLY): prints the ledger's running balance per currency and the base per project —
+  what the hero shows — for the operator to read beside the screen and for the deploy's R7.
+- `manifest.json` 5.18.71; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
+- Not changed, recorded: `getBothBalances()`'s literal USD (used by the South Sudan hero, the API balances and the evening
+  summary's SSP branch) — identity on South Sudan, a latent base-currency item elsewhere; the Cashbook card's USD figure
+  (10,871.37) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
+
+**Tests.**
+- `tests/test_accounts_dashboard_cash.php` — **30/0.** A: an empty Uganda book — the hero "Cash in hand — per currency",
+  UGX 0.00, USD 0.00 beneath, three project chips UGX 0.00, no account position and no South Sudan total, Money Locations
+  "nothing held by staff", office UGX 0.00. B: a UGX 1,000,000 receipt and a UGX 150,000 Staff Advance to the technician
+  through the real Add Entry wizard — the hero reads UGX 850,000.00, the Fiber & Starlink chip 850,000.00 and the others
+  0.00, the USD line untouched, the office UGX 850,000.00, the technician listed holding UGX 150,000.00 with the "With
+  staff" total and badge, the Field Cash KPI still UGX 0 / 0 collectors, and **the Cashbook page's card reads the same
+  850,000.00**. C: the technician logs a UGX 40,000 expense on the Field Register — the held figure follows Staff
+  Cashbooks, the hero does not move. D: South Sudan — "Total Cash Position", the three chips and the exposure list's own
+  empty line, unchanged. E: three weakened copies caught — the hero drawing the account position again; the office figure
+  reading the literal USD stream again (UGX 0.00 against a 1,000,000 receipt); the held-by-staff list emptied.
+- `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_sales_support_tenant` 37/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.71` = `b350192`, parent `cba7faf` (5.18.70, production since 07:12 UTC):**
+  the branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.70 left out:
+  9 files, 2 added, 0 migrations, hunks byte for byte the branch's (diffed), 0 partner-portal/CSRF hits.
+- **`scripts/deploy-5.18.71.sh`** (pinned `b350192` over `cba7faf`), the 5.18.70 script's shape: A0 refuses a
+  pin whose parent is not 5.18.70 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the hero
+  label, no `currencyPositions()` call, the held-by-staff list and the tool, beside the 5.18.69/5.18.70 fixes, the 5.18.68
+  chain and the photo surface; **R7** runs the read-only cash-in-hand tool inside the container and prints the live book's
+  figures — what the hero will show; RB after a rollback checks the hero is gone and the 5.18.69/5.18.70 fixes still there;
+  F prints the rollback alone after the verdict and **no repair command — this release has none**.
+- **Rehearsal `scripts/harness/deploy-5.18.71/rehearse.sh`: 119/0 over 17 runs of the script**, against a 5.18.70 base
+  holding a UGX book with the pilot *on*, a UGX 1,000,000 receipt and a UGX 150,000 Staff Advance seeded (cash in hand
+  850,000): the three NO-GO gates (a 5.18.69 server, a placeholder pin, a copy pinned to the branch tip refused before any
+  live read); the deploy as the operator runs it (**R7 reads `UGX CASH IN HAND 850,000.00 · USD CASH IN HAND 0.00` and
+  the base per project — Fiber & Starlink 850,000.00, the others 0.00 — and the data digest of every table is unchanged
+  across the deploy: the tool wrote nothing**); R1/R6 teeth (the dashboard reverted → R1 names it and R6 names
+  `dashboard:no-cash-in-hand-hero`, `dashboard:account-position-still-drawn`, `dashboard:no-held-by-staff`; the tool
+  removed → R1, R6 and R7 each name it); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php`
+  caught by name; the rollback restores 5.18.70's dashboard with the 5.18.70, 5.18.69 and 5.18.68 fixes and the photo
+  surface intact and no data change; the R1-blinded copy caught; the rollback printed once after the verdict and **no
+  repair command anywhere in the log**. No defect on the first run. Run 1 on the working copy of the script; run 2 on the
+  committed script (`91edb18`): **119/0 both times, the same 17 runs**.
+- **The operator's commands — two, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.71 && mkdir -p /root/dnb-5.18.71 && bash scripts/deploy-5.18.71.sh 2>&1 | tee /root/dnb-5.18.71/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `cba7faf`. (2) The rollback, printed by the deploy's log on its own.
+- **Still open:** the 5.18.70 VOID (the operator's terminal stopped at the prompt; the records log was not received); the
+  Staff Cashbooks UGX balance confirming the 5.18.68 backfill.
+- **The full plugin suite on the final 5.18.71 tree (`72de8be`'s plugin files, at `437a93d`): `tests/run.sh` 268 files,
+  12,241 passed / 0 failed, exit 0**, one verdict per file — the 5.18.70 total of 12,214 + the 30 of the dashboard test −
+  the 3 checks `test_notify_evo_retry.php` **skipped as designed** at 09:17 UTC on a Sunday (no zone on Earth inside the
+  follow-up sending window; each skip printed with that reason, counted apart, never a failure). 27 minutes, 09:04–09:31
+  UTC, alongside the second rehearsal without a flake.
+- **RESULT — DEPLOYED to production 2026-10-04, 10:59 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  10:59:05 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves b350192"*; the 9 files were
+  stamped at 10:59:34 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.71/deploy-20261004T105905Z.log`.
+  - **A.** Checkout `7fc1075`; branch tip `72de8be` (not installed); release commit `b350192` cut on `cba7faf`; 9 files
+    (7 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `cba7faf` / 5.18.70. PHP **8.1.34** accepted the
+    2 changed server files and the 6 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.71/backup-20261004T105905Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 133 MB; the installed 5.18.70 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 9 files as `b350192` has them, manifest 5.18.71; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 193 files from Release A through 5.18.70 intact; **R6
+    the cash-in-hand hero, no account position, the held-by-staff list and the tool are in place** beside the earlier
+    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND 723,072.00 · USD CASH
+    IN HAND 10,871.37`; Fiber & Starlink UGX 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — exactly the Cashbook card's
+    figures of the morning's screenshot, now also the landing hero's. The photo tables and files read exactly as before
+    (`present:3:1`, `files:3`) — the tool touched no data.
+  - **Seen by the operator — 2026-10-04, 14:11 on the operator's screen (about 11:11 UTC; two screenshots of v5.18.71,
+    no words):**
+    - **The technician's Staff Cashbooks page reads UGX 339,672.00** — *"Cash still with staff"*, **▲ UGX 650,000.00
+      received · ▼ UGX 310,328.00 out**; the tiles *UGX collected 650,000.00*, *Handed over 0.00*, *Cash with staff
+      339,672.00*, *Wallet balance 0.00*; the first row is the 03 Oct Staff Advance of UGX 150,000.00, IN, *UGX Received*,
+      approved. **That is the figure predicted since 5.18.68 (650,000 − 310,328), so the 5.18.68 backfill's `APPLY` ran**:
+      the `+UGX 0.00` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
+      had said as much; the page now says it. The backfill's own log was never received; the page is the outcome.
+    - **The landing page hero reads *Cash in hand — per currency*: UGX 723,072.00 · USD 10,871.37; Fiber & Starlink
+      UGX 723,072.00 · DishNet 4G UGX 0.00 · BlueCARD UGX 0.00** — R7's figures, and the Cashbook card's. No account
+      tiles, no negative position. *Today · 04 Oct UGX 0.00 · 0 payments · 0 new KYC*; the KPI row *Agent float UGX 0
+      (9 agents) · Field cash UGX 0 (0 collectors) · MTH recharge UGX 0 · KYC month 0* as before. The screenshot ends
+      above **Money Locations**, so the held-by-staff list itself has not been seen in a browser; the figure it lists for
+      the technician comes from the same balance call the Staff Cashbooks hero shows, 339,672.00.
+    - **Two wording items noticed on the Staff Cashbooks page, not changed:** the tile says *UGX collected* and the
+      balance says *Needs handover* — South Sudan's collections wording, while on Uganda this staff member's inflow is
+      advances to be spent and accounted for, not collections to hand over. The figures are right; the words are a later
+      instruction.
+  - **Not yet done:** the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the
+    prompt; if VOID was not typed, the three 25 Sep hand copies of CB-66/CB-72 still stand as `USD` cash-ins #3, #4, #5
+    and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
+    (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
+
+## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — DEPLOYED 11:56 UTC (PASSED 23/0/0)
+
+**Reported by the operator (14:1x Kampala, after the 5.18.71 screenshots):** *"fix the collected and handover wording for
+uganda"*. On the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out) the tiles read
+**"UGX COLLECTED 650,000.00"** and **"CASH WITH STAFF 339,672.00 — Needs handover"**, beside *"Handed over 0.00 — Given to
+accounts"*. That is South Sudan's collections wording, written when every staff member with a bag was a field collector who
+collects payments and hands them over to accounts. On Uganda this staff member's inflow is **advances** (and any
+collections) to be spent on approved expenses and accounted for; the hero's own pills already said *"received"* / *"out"*,
+and the row category reads *"UGX Received"* since 5.18.69. Read from the code (`tabs/accounts/staff_cashbooks.php`, the
+selected-staff view): the first tile is `scM($uIn)` — every base-bag IN row (collections, cash-ins, advances, transfers in)
+— labelled `<base> collected` on every book; the third tile's line is `'Needs handover'` whenever the position is above
+zero. Neither label is gated on the book.
+
+**What changed** (`008e74d` on the branch, release `88d8442` on `b350192`), on a book without SSP only — wording, no figure:
+- **The first tile reads "UGX received"** with a new sub-line **"Advances & collections"** (the figure is unchanged: every
+  base-bag IN row, as before).
+- **The "Cash with staff" line reads "Still to account for"** while a balance is held; *"All settled ✓"* when it is not,
+  as before.
+- **Unchanged:** *"Handed over · Given to accounts"* (a handover is still cash given back to accounts — the staff member's
+  own button says *"Submit cash to office"*), the hero (*"⚠ Cash still with staff"* / *"Cash settled"*), its pills, the
+  Wallet tile, every figure, the list page, the CSV export.
+- **South Sudan is the same bytes.** The two PHP tags that gate the tile sit at column 0, so the `collected` branch emits
+  exactly what it did; the third tile's line is a one-line ternary on `$scSSP`. **Proved**, not assumed: on a South Sudan
+  sandbox the selected-staff page from the hero to the currency tabs, rendered by the committed 5.18.71 file and by the
+  5.18.72 file on the same data, is **byte-identical — 1,256 bytes on the USD tab, 1,242 on the SSP tab** (control: the old
+  block carries the `collected` tile).
+- `manifest.json` 5.18.72; the nine pins. **No migration, no new table, no uCRM write, no message, no setting, nothing
+  written to any record.**
+- Noted, not changed: the My Cash page a Uganda technician sees (*"Advances · Collected · Expenses · Handovers"* over the
+  collection exposure, *"You owe company"* when exposure is above zero) uses *"Collected"* for actual collections, which is
+  right; its exposure-based hero is a different question (5.18.68's note that `cash_exposure` reads 0 for an advance
+  holder).
+
+**Proofs.**
+- `tests/test_staff_cashbook_wording.php` (new): **23/0**. A: Uganda — a Staff Advance through the real wizard; the first
+  tile asserted **byte for byte** (`UGX received` / `UGX 150,000.00` / `Advances &amp; collections`, four-space indent,
+  the tile's own closing tag); no tile says *collected*; *"Still to account for"* exactly once and *"Needs handover"*
+  nowhere; the red Cash-with-staff tile; *"Handed over · Given to accounts"*, the hero line, the pills and the Wallet tile
+  unchanged; a staff member holding nothing reads *"All settled ✓"* / *"Cash settled"*. B: South Sudan — the old markup
+  byte for byte on the USD tab (`USD collected`, the figure, no sub-line), *"Needs handover"*, none of the Uganda words,
+  `SSP collected` on the SSP tab. C: **three weakened copies, each caught** — the tile reverted to *collected*, the line
+  reverted to *Needs handover*, and the South Sudan branch disabled (caught by the South Sudan control).
+- The two tests that pinned the old tile — `test_staff_manual_entry_currency` (3 places) and `test_field_cash_in_currency`
+  (5) — now anchor on the tile markup and the new label: **36/0** and **48/0**. **A regex that had matched the label by
+  word alone would have matched the hero's "received" pill**; the anchor is the tile's own class.
+- Neighbours, unchanged: `test_accounts_dashboard_cash` 30/0 · `test_staff_cash_chain` 73/0 · `test_staff_cashbook_scope`
+  9/0 · `test_sales_support_tenant` 37/0 · `test_cashbook_currency` 86/0 · `test_cashbook_tenant` 26/0.
+- **The full plugin suite on the final 5.18.72 tree** (`008e74d`'s plugin files, run from `c9377b4` while the deploy
+  went out): **`tests/run.sh` 269 files, 12,264 passed, 0 failed, 3 skipped** (the three clock-bound checks of
+  `test_notify_evo_retry`, skipped by design on a Sunday afternoon UTC, as at 5.18.71). Was 268 / 12,241 at 5.18.71: one
+  file and 23 assertions more, the new wording test.
+
+**Release commit `release/5.18.72` = `88d8442`, parent `b350192` (5.18.71, production since 10:59 UTC):** 10 files — the
+page, the new test, the two re-anchored tests, `manifest.json` and the five distributor pins that exist on the release
+line (`test_dist_isolation` and the three `test_partner_*` pins live only on the branch, with the undeployed portal work).
+Hunks identical to the branch commit (`git diff 88d8442 008e74d -- <the ten>` is empty); `git diff --stat b350192 88d8442`
+is exactly those ten. Pushed.
+
+**`scripts/deploy-5.18.72.sh`** (pinned `88d8442` over `b350192`), the 5.18.71 script's shape: A0 refuses a pin whose
+parent is not the live 5.18.71 or whose delta carries a migration or any partner-portal/CSRF file; R1 byte-for-byte; R5
+Release A→5.18.71 intact; **R6** adds the four 5.18.72 markers — the `received` tile, the per-book Cash-with-staff line,
+the *Advances & collections* sub-line, and **South Sudan's `collected` tile still in the file** — beside every earlier
+marker; **R7** still runs 5.18.71's read-only cash-in-hand tool on the live book; **RB** checks the old wording is back on
+every book and that the 5.18.71 hero and tool survived the rollback. No repair command; the rollback is printed alone at
+the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.72/rehearse.sh`:** against a 5.18.71 base with the pilot ON and a UGX book
+holding a receipt and a Staff Advance (cash in hand 850,000). It proves the deploy PASSES and installs exactly the ten
+files (one new, no migration, no portal file); the pin's page carries the Uganda tile, the per-book line and South Sudan's
+tile while the base's carries only the old wording; a branch-tip pin and a placeholder pin are refused before any read;
+V3/R2 read the live switch; every table is byte-identical across the deploy (R7 wrote nothing); R7 reads UGX 850,000.00 /
+USD 0.00 and the base per project; **teeth**: the page reverted on the server → R1 names it and R6 names the missing tile,
+line and sub-line; 5.18.71's tool removed → **R5** (it is not in this delta), R6 and R7 each name it; a Release-A file
+changed → R5; a live channel or a portal file planted → R4; the rollback returns 5.18.71 exactly (old wording on every
+book, the 5.18.71 hero and tool, 5.18.66–5.18.70 code intact, no data changed); an R1-blinded copy of the script is caught;
+the clone is left as found.
+- **Run 1 (the committed script, `c9377b4`):** **121/0, 17 runs of the script**, no FAIL line; R7 read `UGX CASH IN HAND
+  850,000.00 · USD CASH IN HAND 0.00`; the clone left as found.
+- **Run 2 (the committed script, unchanged — same sha256 `7075b8e9…`):** **121/0, 17 runs**, no FAIL line; the clone left as
+  found. The rehearsed deploy itself reads **24 ok / 0 failed / 0 notes**, as 5.18.71's rehearsal did (its production run
+  then read 23: the sandbox and the server differ by one check, as before).
+
+**Handover.** One command, as root on the server; it asks for `DEPLOY`; send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.72 && mkdir -p /root/dnb-5.18.72 && bash scripts/deploy-5.18.72.sh 2>&1 | tee /root/dnb-5.18.72/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9).
+
+- **RESULT — DEPLOYED to production 2026-10-04, 11:56 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  11:56:06 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 88d8442"*; the 10 files were
+  stamped at 11:56:34 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.72/deploy-20261004T115606Z.log`. The server reads 23 where the sandbox read 24, exactly
+  as 5.18.71 did.
+  - **A.** Checkout `331a5a0`; branch tip `008e74d` (not installed); release commit `88d8442` cut on `b350192`; 10 files
+    (9 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `b350192` / 5.18.71. PHP **8.1.34** accepted the
+    1 changed server file and the 8 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.72/backup-20261004T115606Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    **242 tables** (241 at the 10:59 backup — one store table more, created lazily by a page opened since: the store makes
+    a JSON-list table on its first load); the data directory 133 MB; the installed 5.18.71 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 10 files as `88d8442` has them, manifest 5.18.72; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 196 files from Release A through 5.18.71 intact; **R6
+    the 5.18.72 wording is in place and South Sudan's `collected` / `Needs handover` branch is still in the file**, beside
+    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber &
+    Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as at 10:59, no cash movement since; the
+    photo tables and files read exactly as before.
+- **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
+  before); the 5.18.70 VOID's records log (still not
+  received); Money Locations seen in a browser; `bash scripts/deploy-5.18.72.sh --after-only`.
+
+## 04 Oct — Customer sign-in walkthrough on Uganda — FINDINGS, no change made
+
+**Asked by the operator** after a link out of the portal answered 404 (the browser console line they pasted:
+`…/_plugins/dishnet-data-report/public.php?clientId=…&kit=…&token=…` → *404 Not Found*): *"now think like end user and do
+test for customer login does our app is user friendly to customer or not"*. The link's token is a ten-minute hand-off minted
+by `app_data_report_token` at 12:00:27 UTC; it is not copied here and must never be. What the 404 means is read from the
+code: `DishNet.openDataReport()` sends the customer to **another plugin, `dishnet-data-report`**, which is **not installed
+on the Uganda host** — the portal's Starlink-fleet screens were written for the South Sudan plugin set.
+
+**Method.** A sandbox copy of the plugin (v5.18.72) served under `/plugins/dishnet-hybrid-sudan/` the way uCRM serves it,
+the **uganda** profile, UGX, one Starlink customer with one kit in a sibling kit register (`.dishnet-starlink-finance-data/
+sl_kits.json`, as production evidently has one — the operator's link carried a kit number) and one unpaid invoice,
+WhatsApp in dry-run. Driven over real HTTP with a cookie jar as a customer would: the sign-in page, six spellings of the
+number, the mistakes, the code, the consent step, **fourteen portal screens**, the hand-off token, logout, the back button.
+Script and output in the session scratchpad; nothing touched the real plugin or any server.
+
+**What works well (keep):**
+- **The number is accepted however people type it** — `0772 XXX XXX`, `0772XXXXXX`, `+256 772 XXX XXX`, `256772XXXXXX`,
+  `772XXXXXX`, `+256772XXXXXX` all reach the same customer and the same WhatsApp destination; the hint reads *"Include
+  country code. Uganda: +256"*.
+- **The code message** is short and clear (*"Your code: ****** — Valid for 15 minutes. If you did not request this,
+  ignore."*); the screen shows a live countdown from the server clock, auto-submits at six digits, offers *Resend* and the
+  e-mail route; *"Wrong code."* on a wrong code; five wrong attempts need a new code; a malformed code is refused.
+- **Privacy by design:** an unknown number or e-mail gets the same *"Code sent"* answer (nobody can probe which numbers are
+  customers), and the help copy covers the case (*"No code after a couple of minutes? …"*). Ten codes per number per hour,
+  then *"Too many requests. Try again in 1 hour."*
+- **The session** is an HttpOnly cookie (no token in the page or URL); the portal before consent bounces to the consent
+  step; logout revokes the session on the server — the back button then shows *"Session ended. Please sign in again"* and
+  returns to sign-in in 3 s.
+- **The Support screen** leads with WhatsApp, then the Uganda call and e-mail from the profile; the Terms/Privacy step is
+  one tap; the portal is installable to the home screen; ~100 KB per screen, five tabs, one consistent design.
+
+**Findings, ranked (as a Uganda customer sees them):**
+1. **Usage links lead to a 404 — three places.** Home card *"Usage details →"* / *"See details →"* and the site page's
+   *"Usage Details"* tile all call `openDataReport()`, which mints the hand-off token and navigates, in the same tab, to
+   `dishnet-data-report/public.php` — absent here. Reproduced: the token endpoint answers 200 with a 600 s token, the link
+   answers **404**. The token (customer name, phone, account list) lands in the URL of a 404 page — in browser history and
+   the web server's log. **Fix:** draw those links only when `SiblingPlugin::installed('dishnet-data-report')`; otherwise
+   send the customer to the in-app *Usage* view (`view=usage`, which exists) and have `app_data_report_token` refuse when
+   the plugin is absent.
+2. **The WiFi, Connected-devices and Hotspot features on the site page assume the same absent plugin.** *"Change WiFi"*
+   (site version, `wifi_site`) shows a full form — *"Changes are sent via Starlink cloud… Update WiFi"* — whose submit
+   fetches `dr_wifi_change_password` from the absent plugin; *"Connected devices"* shows *"Router offline — The router must
+   be online…"* plus a developer message (*"Network error: Unexpected token '<'"*, the 404 page parsed as JSON); the
+   *"Hotspot"* tile's picker says *"Checking…"* and fails the same way. The top-level *Wi-Fi Settings* (Support → *Change
+   Wi-Fi password*) is honest: *"No routers found… Contact support to set up remote WiFi management."* **Fix:** one gate on
+   the plugin's presence; where absent, the honest text everywhere, or hide the tiles.
+3. **A Uganda customer is not told how to pay.** The invoice screen reads *"Payment reference — Reference: INV-… Amount:
+   UGX 350,000 — I've paid this invoice (notifies accounts via WhatsApp)"*: no bank account, no mobile-money number, no
+   *Pay Now* (DPO is not enabled for Uganda; `profiles/uganda.json` has `payment_instructions: null`). The home card says
+   *"Pay to keep service active"* and the path ends there. **Fix:** the operator supplies the Uganda payment instructions
+   (bank, MTN/Airtel merchant codes) for the profile — a configuration decision, then one profile edit — and/or enables DPO
+   for Uganda.
+4. **Usage copy promises a sync that may never come.** *"No usage data — Usage will appear once the billing cycle syncs"*
+   (site page) and *"Usage tracking is not yet available for your service. This will update automatically once data
+   syncs"* (Usage screen). On Uganda the only source is the plugin's own hourly collector (`cron/starlink_usage.php`),
+   which needs a Starlink session on the server; *Dish status — Refresh* (`app_site_refresh`) needs the same. Whether that
+   session exists on the Uganda host is **not known here**.
+5. **Service status overstates:** *"All services operational · 24h uptime 100%"* is fixed text in the template, not a
+   measurement. **Fix:** drop the uptime figures (keep *Report an outage* and the speed test) or measure them.
+6. **Small copy and polish:** the Account screen footer says *"DishNet Africa · v4.12.20"* while the sign-in page says
+   v5.18.72 (`portal.php:1293`, hard-coded); *"Require biometric at app open — Loading…"* never resolves in a browser
+   (native-only row; hide it outside the app); the sign-in page blocks pinch-zoom (`maximum-scale=1,user-scalable=no`)
+   while the portal allows it — remove it for customers with poor eyesight; a customer who taps *Resend* repeatedly can
+   lock the number for an hour with no countdown shown.
+
+**Verdict.** Sign-in: friendly and robust. Portal: the money and support paths are clear, but on Uganda **five tiles and
+links end in a 404 or a technical error** because they belong to the South Sudan plugin set, and **the one thing a customer
+most needs — how to pay — is missing**.
+
+**One production fact only the operator can read (read-only):** `ls -la /home/unms/data/ucrm/ucrm/data/plugins/` —
+which sibling plugins and `.<plugin>-data` directories exist. The site page rendered a kit, so a kit register was found;
+the data-report plugin's page was not. That listing decides whether finding 1–2 is "gate on presence" alone or also
+"stale data directory".
+
+**Proposed 5.18.73 (not built):** (a) gate every data-report feature on the plugin's presence — honest *not available*
+text, usage links to the in-app Usage view, the token endpoint refusing when absent; (b) Uganda payment instructions in
+the profile once the operator supplies them; (c) the six small fixes above. South Sudan unchanged (the plugin is present
+there, so every gate is true).
+
+**Addendum — the production listing (operator, 12:1x UTC, read-only `ls -la …/plugins/`):** `dishnet-hybrid-sudan`,
+`dishnet-data-report` (modified 3 Oct 08:25) and `dishnet-starlink-finance` (3 Oct 09:02) are all **on disk**; the only
+`.<plugin>-data` directory is ours (`.dishnet-hybrid-sudan-data`), beside the vault. Two consequences:
+- **The 404 is not "plugin missing".** uCRM also runs that plugin's `main.php` on its tick — the container log has carried
+  its `main.php:105` flock TypeError since 25 Sep (recorded above) — so uCRM knows the plugin. The 404 is therefore either
+  uCRM not serving its *public page* (disabled, or its `public.php` not in the installed copy), or that plugin's own answer
+  to the client view the portal links to (`?clientId=…&kit=…&token=…`), which the Uganda copy may not have. Which one
+  needs three read-only reads on the server, handed over: the plugin directory's listing (`public.php`, `manifest.json`,
+  `ucrm.json` present?), its manifest version, and the HTTP status of `GET …/_plugins/dishnet-data-report/public.php` and
+  `…?action=dr_wifi_get_status&router_id=x` from the server (uCRM's 404 for both = not served; JSON or a non-404 for the
+  second = served, and the client-view route is the problem).
+- **"Gate on presence" would change nothing here.** `SiblingPlugin::installed()` is `is_dir()`, true on Uganda. The 5.18.73
+  gate must be *"the page answers"*: a server-side probe of the plugin's public page with a cached verdict (an hour), or an
+  explicit setting — never a directory test.
+- **A fragility recorded, not new:** with no `.dishnet-starlink-finance-data` or `.dishnet-data-report-data` directory, the
+  kit register and the usage files live under `<plugin>/data`, the directory uCRM deletes when that plugin is upgraded
+  (`cron/dr_snapshot.php` exists for exactly this). The site page's kit comes from there today.
+
+**Addendum 2 — the three reads (operator, read-only, ~12:2x UTC):** `dishnet-data-report` is a **complete, uCRM-installed
+plugin**: `ucrm.json` (1 Oct 06:31), `manifest.json` **v2.8.80** (2 Jul), `main.php`, `cron.php`, `client.php`,
+`dr_wifi_change.php`, `public.php` **hand-edited on the server on 3 Oct 08:25** (412 KB, with a root-owned
+`public.php.bak.<epoch>` beside it) and a root-owned `official_api/` directory (3 Oct 07:57); its `data/` was written at
+11:45 today, so its cron runs. **The plain public page answers 200 and `?action=dr_wifi_get_status&router_id=x` answers
+200**: uCRM serves it. **So the 404 is that plugin's own answer to the portal's client-view link**
+(`?clientId=…&kit=…&token=…`). Two candidate causes, both on the other plugin's side:
+- **the token does not verify there.** Our hand-off is signed with `JwtAuth::legacySecret()` =
+  `sha256(webhook_secret | crm_app_key (or crm_auth_token) | 'DishNet-Hybrid-JWT-v2-2026')` — the Hybrid plugin's own two
+  configuration values. The data-report plugin can only accept it if it derives the same secret from the **same two
+  values**; on an install made on 1 Oct from the South Sudan build, they very likely differ. A plugin that answers 404 to
+  an unverifiable token is answering as designed.
+- **the client or kit is not in that plugin's own data** (its caches are rebuilt by its cron from the Starlink account it
+  is configured for), and the client view says *not found*.
+  Handed over, read-only: the body of the 404 with and without a token; `grep -n clientId public.php | head`;
+  `grep -n -i "secret\|verify" public.php | head`; `ls -la data/`. **Nothing on our side can be concluded until then**;
+  the 5.18.73 proposal is amended: the hand-off to the other plugin should be a **tenant setting** (on where that plugin is
+  configured to accept it, as in South Sudan; off on Uganda until it is), with the in-app Usage view as the default — not a
+  presence probe, which this case defeats, and not a "page answers" probe, which this case also defeats (200 on the page,
+  404 on the view).
+
+**Addendum 3 — ROOT CAUSE (operator's four reads, ~12:3x UTC, read-only).** Without a token the client view answers **200**
+(*"DishNet — Client Fleet"*); with a bad token it answers **404 "Report Not Found"** — the plugin's own page. Its code
+(`drVerifyHybridJwt`, its lines 839–908) verifies our hand-off by rebuilding the secret *"exactly like Hybrid's
+lib/JwtAuth.php::fromConfig()"*: `sha256(webhook_secret | crm_app_key|crm_auth_token | constant)` read from the Hybrid
+plugin's own stored configuration, and **returns null — hence 404 — when either input is empty** (its line 902: *"never
+an attacker-predictable constant secret"*). **On the Uganda install both inputs are empty**, and have been since the plugin
+was installed: the 5.18.37 record says *"On an install whose `webhook_secret` is empty — Uganda's was recorded empty"*, and
+the 5.18.38 record says *"the customer token signed with `sha256(webhook_secret | crm_auth_token | constant)` where both
+inputs are empty — a key anyone can read in the source"* — which is why 5.18.38 moved customer sessions to the dedicated,
+generated, vaulted `CustomerJwtKeys`… **and kept the legacy derivation for the data-report hand-off only** (*"signed the
+way that plugin has always been given"*). Neither value is a settings-form field in `manifest.json`; both are written only
+by the old admin form (`post_admin.php`), and `crm_auth_token` doubles as the manual uCRM API credential
+(`CrmApiClient`). South Sudan's row holds a 32-character `webhook_secret` and a 64-character `crm_auth_token` (the other
+plugin's own comment), so the hand-off verifies there. **Conclusion: on Uganda the portal mints a hand-off token under a
+constant, empty-input secret; the other plugin refuses it; every Usage link ends in that plugin's 404. Not a bug in either
+plugin's routing — a configuration the Uganda install never had.** Confirmation, read-only, in the container:
+`php tools/config_trace.php webhook_secret crm_auth_token` (prints set/empty and lengths, never values).
+
+- **Also found:** the Hybrid mints that token without checking its inputs. A hand-off signed under an all-empty secret is
+  forgeable by anyone who reads the source; the other plugin's refusal is the only thing that makes this harmless. The
+  mint (`app_data_report_token`) should **refuse** (409 *hand-off not configured*) when either input is empty.
+- **Three ways to make the Usage links work on Uganda, for the operator to choose:**
+  **A** — set `webhook_secret` and `crm_auth_token` on the Uganda Hybrid install so both plugins derive the same secret.
+  Not recommended as a quick fix: `crm_auth_token` would also become the plugin's uCRM API credential (it must then be a
+  valid uCRM app key), and `webhook_secret` is read by other boundaries (the partner-portal work on the branch).
+  **B** — a dedicated hand-off key both plugins read (generated and vaulted on our side, configured on theirs). Clean, but
+  it needs a change in the data-report plugin too — not in this repository, and its `public.php` on this server was
+  hand-edited on 3 Oct by someone who may own that side.
+  **C** — a tenant setting: the hand-off is drawn only where it is configured (South Sudan); on Uganda the Usage links go to
+  the portal's own Usage screen, which exists and reads the plugin's own hourly collector. Can ship now, touches only this
+  plugin, and South Sudan is unchanged. **Recommended first; B later if the data-report usage view is wanted on Uganda.**
+
+**Addendum 4 — CONFIRMED (operator, `config_trace.php webhook_secret crm_auth_token` in the container, ~12:4x UTC):** both
+keys are **NOT SET in every layer** — the plugin's `data/config.json`, uCRM's `config.json`, `kyc_config.json`, the vault,
+`PluginConfig::load()` and `effectiveConfig()` all read *absent*. The root cause stands as stated. The tool's first line,
+*"[ConfigVault] restored after re-install: dpo_enabled, dpo_environment, dpo_company_token, dpo_payment_method_uuid,
+dpo_ptl, dpo_test_clients, dpo_test_link_key, dpo_currencies, pdf_link_secret"*, is about that one process, not a change:
+`PluginConfig::load()` is the boot path and runs `ConfigVault::apply()`, which **supplies in memory** every vault key the
+store copy lacks and names them; on this install those nine live only in the vault (the DPO and PDF-link code fill them
+from there on each request by design). `refresh()` then compares the snapshot with the vault file and **returns without
+writing when the content is identical** — it was — and had it written, `SecureFile::write` adopts the directory's owner
+at 0640, which is why the tool could print *nginx:nginx · 0640* after the load. **Nothing on the server changed.** Lesson
+recorded: a tool that goes through the boot path is not read-only by construction; `PluginConfig::read()` is the path
+that *"changes nothing on disk"*, and the next diagnostic handed over must use it. **Decision pending: A, B or C above.**
+
+## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — DEPLOYED 16:24 UTC (PASSED 24/0/0), ROLLED BACK 16:59 UTC on the operator's decision (PASSED 18/0/1); production is 5.18.72 again
+
+**Decided by the operator** (*"c build it"*) after Addendum 4 above confirmed the root cause: on the Uganda install the
+portal minted a ten-minute hand-off token signed with `sha256(webhook_secret | crm_auth_token | constant)`, **both
+empty in every configuration layer**, and sent the customer to `dishnet-data-report`'s client view, which rebuilds that
+secret, refuses an empty input and answered its own 404 to every Usage link. Option **C**: the hand-off becomes a
+per-country setting — South Sudan on (its install holds both values, so the hand-off verifies there; nothing changes),
+Uganda off (the customer stays in this app, on its own Usage screen) — and the mint refuses to sign anything under empty
+inputs, whatever the tenant says. Options A (set the two values on Uganda) and B (a dedicated hand-off key read by both
+plugins) stay open for later; **Uganda payment instructions (finding 3) are NOT in this release** — the operator has not
+supplied the bank or mobile-money details the profile needs.
+
+**What changed** (`44c7dcf` on the branch, release `9fd9f88` on `88d8442`):
+- **`profiles/south-sudan.json`** gains `integrations.data_report_handoff: true` — the behaviour before this release,
+  written down. **`profiles/uganda.json`** gains `integrations.data_report_handoff: false` with a `_readme` recording why
+  (4 Oct 2026: this install has neither signing value) and how to switch it on.
+- **`TenantProfile::dataReportHandoff()`**: the explicit configuration key **`portal_data_report_handoff`** (`yes`/`no`,
+  declared in `manifest.json` and accepted by `tools/set_config.php`, which refuses any other value) wins; else the
+  profile value; else *on* (a profile without the key behaves as before).
+- **The portal** (`portal_data.php` sets `$portalDataReportHandoff`): the home card's fleet link *"Usage details →"* and
+  the site page's *"Usage Details"* tile are drawn **only where the tenant has the hand-off** (the site tiles collapse to
+  one column; the card above already says what the site used); the single-service *"See details →"* opens the in-app
+  **Usage** view where it is off. **`DishNet.openDataReport()` never navigates without a token**: a refused mint tells
+  the customer *"Usage details are not available here yet. Your usage is shown in this app; ask support if you need
+  more."* — the old `.catch(function () { location.href = url; })`, which navigated tokenless, is gone.
+- **The API** (`app_data_report_token`): **409** *Usage details are not available here* where the tenant has no hand-off;
+  **409, audited `data_report_handoff_unconfigured`** (naming the missing input, never a value) where `webhook_secret` or
+  `crm_auth_token`/`crm_app_key` is empty — so a token can no longer be minted under a constant, all-empty secret even
+  where the setting says yes. `JwtAuth::legacySecret()` is still called exactly once, the way the other plugin has always
+  been given it.
+- **The six small fixes from the walkthrough:** the Account footer reads the installed version from `manifest.json` (was
+  a hard-coded *v4.12.20*); the *Require biometric at app open — Loading…* row is hidden unless the Android bridge is
+  present; the sign-in page's viewport allows pinch-zoom (`maximum-scale=1,user-scalable=no` removed, as the portal
+  already allowed); Service status says **"No outage reported"** / *"Offline? Report it below"* instead of the invented
+  *"All services operational · 24h uptime 100% / 99.8% / 99.5%"* strips (a paused service still reads paused); Connected
+  devices says *"This feature is not available right now. Contact support if it continues."* instead of the JSON parser's
+  *"Unexpected token '<'"*. Not changed: the WiFi / Connected-devices / Hotspot tiles themselves — the data-report
+  plugin's action routes answer 200 on Uganda (Addendum 2), so whether they work for a Uganda router is that plugin's
+  question, not a hand-off one; the Usage copy's *"once data syncs"* wording (finding 4; the collector's state on Uganda
+  is still unknown here); the resend lockout countdown.
+- `manifest.json` 5.18.73; the nine pins. **No migration, no new table, no uCRM write, no message, no configuration value
+  changed, nothing written to any record.**
+- **South Sudan keeps every Usage link and the hand-off — measured, not assumed.** The same South Sudan customer (both
+  signing inputs set, as that install has them) was signed in on a sandbox built from the live 5.18.72 release commit and
+  on one built from the 5.18.73 release commit, and eleven pages plus the token endpoint were saved from each: the
+  hand-off token answers **200, issued, 600 s, three segments** on both; the home card carries the same two
+  `openDataReport()` handlers and the site page the same two and its *Usage Details* tile on both. The pages differ only
+  where this release means them to — the shared `openDataReport()` body and the biometric-row toggle in the page script
+  (identical on every page), whitespace around the two gated links (the PHP gate tags eat a line break; the links are
+  byte-identical), the service-status strips, the devices message, the Account footer and biometric wrapper, and the
+  sign-in page's viewport and version line. Nothing else moved. (Probe and saved pages in the session scratchpad.)
+
+**Proofs.**
+- `tests/test_portal_handoff.php` (new): **34/0**. **A** Uganda default — no `openDataReport(` click handler on the home
+  card, the one-column site grid, the token endpoint 409, the footer `v5.18.73`, the biometric row hidden, no *24h
+  uptime*, the sign-in page (fetched with an empty cookie jar) carries no zoom block. **B** Uganda with
+  `portal_data_report_handoff=yes` and **empty inputs** — the links draw, the mint still answers 409 and writes exactly one
+  `data_report_handoff_unconfigured` audit row. **C** Uganda, yes, both inputs set — links drawn, token 200 in the legacy
+  shape. **D** South Sudan — 200 with the inputs, 409 without. **E** `set_config.php --value maybe` exits 1; `YES` is
+  saved as `yes`. **F** four weakened copies, each caught: the home gate forced true, the API tenant check disabled, the
+  API empty-input check disabled, the Uganda profile set to true.
+- `test_customer_session` now runs with the hand-off on and both inputs set (it tests the token's shape): **80/0**.
+- Neighbours, unchanged: `test_tenant_profile` 108 · `test_set_config_tool` 40 · `test_config_one_truth` 16 ·
+  `test_preauth_allowlist` 105 · `test_customer_pwa` 31 · `test_portal_tenant` 112 · `test_customer_login_security` 68 ·
+  `test_consent_identity` 34 · `test_otp_log_privacy` 16 · `test_canonical_host` 49 · `test_notify_tenant_text` 30 ·
+  `test_invoice_template_links` 21 · `test_ucrm_link` 78 · `test_sales_support_tenant` 37 · `test_staff_cashbook_wording`
+  23 · `test_notify_customer_fixes` 32 — all 0 failed.
+- **The full plugin suite on the final 5.18.73 tree:** **`tests/run.sh` 270 files, 12,298 passed, 0 failed, 3 skipped** (the three clock-bound checks of `test_notify_evo_retry`, skipped by design at Sun 13:12 UTC, as at 5.18.71 and 5.18.72; the fourth skip line is that test's own note). Was 269 / 12,264 at 5.18.72: one file and 34 assertions more, the new hand-off test (34; the session test is unchanged at 80). Run on the committed `44c7dcf` plugin tree — the same files the release commit `9fd9f88` carries — while the rehearsal ran.
+
+**Release commit `release/5.18.73` = `9fd9f88`, parent `88d8442` (5.18.72, production since 11:56 UTC):** 16 files — the
+two profiles, `TenantProfile`, the portal page, its data loader and the sign-in page, the customer API, the configuration
+tool, `manifest.json`, the new test, the session test and the five distributor pins that exist on the release line.
+Hunks identical to the branch commit (`git diff 9fd9f88 44c7dcf -- <the sixteen>` is empty). Pushed.
+
+**`scripts/deploy-5.18.73.sh`** (pinned `9fd9f88` over `88d8442`), the 5.18.72 script's shape: A0 refuses a pin whose
+parent is not the live 5.18.72 or whose delta carries a migration or any partner-portal/CSRF file; R1 byte-for-byte; R5
+Release A→5.18.72 intact; **V6** reads the sign-in page on the public address and fails if it still carries
+`user-scalable=no` or `maximum-scale=` (skipped on a rollback — 5.18.72's page blocks zoom by that release's design);
+**R6** adds the 5.18.73 markers — both profile values, the `TenantProfile` method, the portal-data flag, the portal's two
+gates (counted: exactly 2), **no tokenless fallback**, the mint's refusal, zoom allowed, no *24h uptime*, no hard-coded
+version — beside every earlier release's marker; **R7** still runs 5.18.71's read-only cash-in-hand tool on the live
+book; **RB** checks the hand-off is unconditional again and that 5.18.72's wording survived. No repair command; the
+rollback is printed alone at the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.73/rehearse.sh`:** against a 5.18.72 base with the pilot ON and a UGX book
+holding a receipt and a Staff Advance (cash in hand 850,000). The stand-in sign-in page now carries the **installed**
+plugin's own viewport line — a control proves 5.18.72's blocks zoom and the pin's allows it — so V6 reads real code. It
+proves the deploy PASSES and installs exactly the sixteen files (one new, no migration, no portal file); the pin carries
+the setting, the two gates, the mint's refusal and both profile values while the base has none; a branch-tip pin and a
+placeholder pin are refused before any read; V3/R2 read the live switch; every table is byte-identical across the deploy
+(R7 wrote nothing); R7 reads UGX 850,000.00 / USD 0.00 and the base per project; **teeth**: `TenantProfile` reverted on
+the server → R1 names it and R6 names the missing setting; the sign-in page reverted → **V6 fails, counting the zoom
+block (×1 · ×1)**, and R1 names the file; 5.18.71's tool removed → R5, R6 and R7 each name it; a Release-A file changed →
+R5; a live channel or a portal file planted → R4; the rollback returns 5.18.72 exactly (the hand-off unconditional, the
+5.18.72 wording, the 5.18.71 hero and tool, 5.18.66–5.18.70 code intact, no data changed); an R1-blinded copy of the
+script is caught; the clone is left as found.
+- **Run 1 (the committed script, `8b5ce61`, sha256 `e85b4066…`):** **134/0, 18 runs of the script**, no FAIL line; the
+  stand-in's viewport control held both ways; R7 read `UGX CASH IN HAND 850,000.00 · USD CASH IN HAND 0.00`; the clone
+  left as found.
+- **Run 2 (the committed script, unchanged — same sha256):** **134/0, 18 runs**, no FAIL line; the clone left as found.
+  The rehearsed deploy itself reads **25 ok / 0 failed / 0 notes** (5.18.72's rehearsal read 24: V6 is the one check
+  more; its production run read 23 where its sandbox read 24, so expect 24 on the server this time).
+
+**Handover.** One command, as root on the server; it asks for `DEPLOY`; send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.73 && mkdir -p /root/dnb-5.18.73 && bash scripts/deploy-5.18.73.sh 2>&1 | tee /root/dnb-5.18.73/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9).
+
+**After the deploy, what a Uganda customer sees:** the home card says *"View all sites"* with no *"Usage details"* link
+(or *"See details →"* opens the Usage screen, with one site); a site page has no *"Usage Details"* tile; the Account
+footer reads *v5.18.73*; Service status reads *"No outage reported"*; the sign-in page zooms. Nothing leaves the app for
+the Data Report plugin. **To switch the hand-off on for Uganda later** (option A or B): set both signing values, then
+`php tools/set_config.php --key portal_data_report_handoff --value yes` in the container — the mint refuses until both
+values are set, however the key reads.
+
+**Still open from the walkthrough:** Uganda payment instructions for the profile (the operator's bank and MTN/Airtel
+details); the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles against a Uganda router; the
+resend lockout countdown; and, for whoever owns the data-report plugin, that its client view answered **200 with no token
+at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be checked there.
+
+- **RESULT — DEPLOYED to production 2026-10-04, 16:24 UTC: PASSED, 24 ok / 0 failed / 0 notes** — the 24 the rehearsal
+  predicted (5.18.72 read 23; V6 is the one check more). The run began at 16:24:00 UTC; `DEPLOY` was typed and
+  `deploy-hybrid.sh` answered *"✓ container now serves 9fd9f88"*; the 16 files were stamped at 16:24:27 UTC. Recorded from
+  the terminal the operator pasted (the script prints no secret); the log file stays on the server as
+  `/root/dnb-5.18.73/deploy-20261004T162400Z.log`.
+  - **A.** Checkout `8891c38`; branch tip `44c7dcf` (not installed); release commit `9fd9f88` cut on `88d8442`; 16 files
+    (15 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `88d8442` / 5.18.72. PHP **8.1.34** accepted the
+    6 changed server files and the 7 test files. Pilot `on`; photo tables `present:6:2`, 6 files (3:1 and 3 at 11:56 —
+    technicians have taken photos since; the deploy touched neither).
+  - **Backup** `/root/dnb-5.18.73/backup-20261004T162400Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    242 tables; the data directory 135 MB; the installed 5.18.72 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6 the sign-in page allows
+    pinch-zoom on the public address**; **V5** 302 / 401; **V3** the pilot unchanged (`on` → `on`); **V4** no fatal or
+    parse error in the 60 s after the copy.
+  - **R.** R1 all 16 files as `9fd9f88` has them, manifest 5.18.73; R2 `pilot=on`; R3 084 still installed, `6:2` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
+    the hand-off is a tenant setting, the portal gates on it, the token is refused under empty inputs, zoom allowed, no
+    invented uptime, no hard-coded version**, beside every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN
+    HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as
+    at 10:59 and 11:56, no cash movement since; the photo tables and files read exactly as before.
+- **Not yet done:** a Uganda customer's look at the portal on 5.18.73 (home card without the *Usage details* link, a site
+  page without the *Usage Details* tile, the Account footer at v5.18.73, *No outage reported*, the sign-in page zooming);
+  `bash scripts/deploy-5.18.73.sh --after-only`; the Uganda payment details for the profile; the 5.18.70 VOID's records
+  log and the Money Locations look (still open from the earlier entries).
+- **ROLLED BACK 2026-10-04, 16:59 UTC, on the operator's decision — PASSED, 18 ok / 0 failed / 1 note.** The operator
+  wrote *"how to cancel last update usage link i want to keep"*: they want the portal's *Usage details* link kept. Given
+  three routes (the setting, making the hand-off verify, the rollback) they ran **two**: first the setting
+  `portal_data_report_handoff = yes` (stored at about 16:5x UTC through `tools/set_config.php`; on 5.18.72 no code reads
+  it, so it is inert until 5.18.73 or later is installed again, when it will draw the links and let the mint decide),
+  then `deploy-5.18.73.sh --rollback`, typed `ROLLBACK`. The documented deploy put `88d8442` back; the 16 files were
+  stamped at 16:59:13 UTC; V1–V4 green (sign-in 200 with no redirect, the portal 302, no South Sudan contact, the pilot
+  `on` → `on`, no fatal in 60 s); **RB** all seven: manifest 5.18.72, the hand-off unconditional again, and the 5.18.72,
+  5.18.71, 5.18.70/69, 5.18.68 and 5.18.66/67 code intact. Backup `/root/dnb-5.18.73/backup-20261004T165847Z` holds the
+  5.18.73 install. Recorded from the pasted terminal; the log file is on the server.
+  - **State of production now:** 5.18.72. The *Usage details* link, the *See details* hand-off and the *Usage Details*
+    tile are drawn again for Uganda customers **and still open the Data Report plugin's 404 page**, because the two
+    signing values are still empty — the rollback changed code only. The hand-off token is again minted under the
+    all-empty secret. The six small fixes (installed version in the footer, biometric row, sign-in zoom, no invented
+    uptime, devices message, no tokenless navigation) are off production again.
+  - **What would make the link work on 5.18.72 — and why it cannot be done from the screens today.** The hand-off verifies
+    once `webhook_secret` and `crm_auth_token` are both set in the Hybrid's stored configuration. `crm_auth_token` **is**
+    settable: Settings → *UCRM Connection* → *Admin Auth Token* (a real uCRM API token; the field says Quotes need it
+    anyway). **`webhook_secret` is not:** the Settings tab shows it **read-only with a Copy button** (*"Setup Webhook never
+    generates it as a side effect"*), the field has no form name so the admin form never posts it, and `set_config.php`
+    does not accept the key. **Corrected from the first draft of this bullet**, which said both were Settings fields.
+    So making the link work needs either a small release that gives the operator a way to set the secret, or the Data
+    Report side accepting a different key (option B). Cautions, from the code: the uCRM webhook refuses a request only
+    when it carries a **different** `X-Crm-Key`, so an empty uCRM webhook secret stays harmless; `crm_auth_token`
+    overrides the automatic uCRM API credential **only when `crm_base_url` is also set**, so the base URL stays empty.
+  - **Also visible in the pasted settings:** Uganda's payment instructions already exist in configuration —
+    `ai_fact_payment` (Airtel Money merchant, Ecobank account, how to reference a payment) and `pay_airtel_merchant` —
+    written for the AI assistant and the quotations. Finding 3 of the walkthrough (*a Uganda customer is not told how to
+    pay*) can therefore be closed from configuration the operator has already approved: a later release can show the
+    same instructions on the portal's invoice screen. Not built; noted for the operator's decision.
+  - **Branch and release state unchanged:** `release/5.18.73` = `9fd9f88` stays valid against the live `88d8442`;
+    `deploy-5.18.73.sh` installs it again whenever wanted (its summary printed the command). The six fixes are only
+    available by installing 5.18.73 or a later release.
+
+## 04 Oct — 5.18.74: the Usage links stay; the hand-off token is refused until the signing values exist; `webhook_secret` can be generated, never shown; "How to pay" on the invoice screen — BUILT, rehearsed, NOT deployed
+
+**Decided by the operator** (*"Yes."* to the proposal that followed the 5.18.73 rollback). 5.18.73 had switched the Data
+Report hand-off off in the Uganda profile; the operator wants the *Usage details* link kept. 5.18.74 keeps everything else
+5.18.73 built and sets that value **on**, so the link, the *See details* hand-off and the site page's *Usage Details* tile are
+drawn as on 5.18.72. What changes for the customer, until the two signing values exist: a tap no longer leads to the Data
+Report plugin's 404 page with a token in the address — the mint answers **409, audited `data_report_handoff_unconfigured`**,
+and the page says *"Usage details are not available here yet."* The release also gives the operator the missing way to set
+the one value no screen could set, and shows the configured payment instructions on an unpaid invoice.
+
+**What changed** (`b4b4c80` on the branch, release `db18ad9` on `88d8442`, the 5.18.72 release commit live again since
+16:59 UTC):
+- **`profiles/uganda.json`:** `integrations.data_report_handoff: true`, with a `_readme` recording the decision, the gap
+  (this install holds neither signing value) and how to close it. `portal_data_report_handoff=no` still hides the links;
+  the manifest and the tool say *blank = the country profile (yes in both since 5.18.74)*.
+- **`tools/set_config.php` — `webhook_secret` as a `secret` key.** `--generate` stores `bin2hex(random_bytes(16))`
+  through `PluginConfig::saveOverrides`, which writes the override file **and** mirrors the store row the web requests
+  read (`public.php` builds `$config` from `$store->load('kyc_config.json')`). `--value` is **refused**: a secret is never
+  typed into a shell. A second `--generate` is refused while a value is set (the store row counts too); rotation is
+  `--clear`, then `--generate`, explicitly. The listing and the success line read *"set (32 characters) — not shown"* and
+  never the value. `webhook_secret` was never in `SECRET_KEYS` (the refused list), so no writer changed. With the Admin
+  Auth Token set in Settings → UCRM Connection, `app_data_report_token` then mints a token that verifies under
+  `sha256(webhook_secret | crm_auth_token | constant)` — what the Data Report plugin rebuilds. The Settings tab's
+  read-only *Webhook Secret* field keeps its Copy button for the one case that needs the value: a uCRM webhook configured
+  to send a key (unset there, uCRM sends none and nothing is refused).
+- **The invoice screen — "How to pay".** An unpaid invoice shows the operator's own `ai_fact_payment` text verbatim
+  (line breaks kept) above the Payment reference block, where that setting exists and is not `omit`
+  (`portal_data.php` `$portalPayText`). Uganda has it (Airtel Money merchant, Ecobank account, how to reference a
+  payment — written for the assistant and the quotations); South Sudan has it unset and keeps its Bank transfer block
+  from the profile. Walkthrough finding 3 (*a Uganda customer is not told how to pay*) is closed from configuration the
+  operator had already approved; the text ends *"send … the transfer confirmation here"*, which on this screen is the
+  *I've paid this invoice* button below it — the operator can reword the setting if wanted.
+- **Kept from 5.18.73:** the tenant setting and `TenantProfile::dataReportHandoff()`; the mint's two refusals;
+  `DishNet.openDataReport()` never navigating without a token; the Account footer reading the installed version; the
+  biometric row hidden outside the native app; the sign-in page allowing pinch-zoom; Service status without invented
+  uptime; the Connected-devices message.
+- `manifest.json` 5.18.74; the nine pins. **No migration, no new table, no uCRM write, no message; the deploy changes no
+  configuration value — the secret is the operator's own command afterwards.** South Sudan: the profile says yes and both
+  inputs are set there, so the mint answers exactly as before; `ai_fact_payment` is unset there.
+
+**Proofs.**
+- `tests/test_portal_handoff.php` (rewritten): **62/0**. **A** Uganda default — the link and the tile drawn, the mint 409
+  with **one** `data_report_handoff_unconfigured` row, the page's own message, the six 5.18.73 fixes. **A2** the key says
+  `no` — 5.18.73's behaviour (no link, one-column grid, 409 with no "unconfigured" audit). **B/C** the key with and without
+  the inputs. **C2 the whole chain on a bare Uganda install with only the Admin Auth Token:** `--value` refused and nothing
+  saved; the key alone asks for `--generate`; `--generate` on a non-secret refused; `--generate` → exit 0, a 32-hex secret
+  in the file **and** the store row, the output carrying **no 32-hex string** and reading *not shown*; the bare listing
+  shows *set (32 characters) — not shown*; a second `--generate` refused with the value unchanged; **the token endpoint
+  answers 200 and the token verifies under the legacy derivation**; `--clear` removes both copies and the mint refuses
+  again. **D** South Sudan unchanged. **G** "How to pay": set / `omit` / unset / the South Sudan control (its Bank transfer
+  block). **F six weakened copies, each caught:** the home gate forced true under `no`, the mint ignoring the tenant, the
+  mint ignoring empty inputs, the Uganda profile back to `false`, the invoice screen ignoring `ai_fact_payment`, **the tool
+  printing the generated secret**.
+- Neighbours, unchanged: `test_set_config_tool` 40 · `test_config_one_truth` 16 · `test_tenant_profile` 108 ·
+  `test_customer_session` 80 · `test_portal_tenant` 112 · `test_customer_pwa` 31 · `test_preauth_allowlist` 105 ·
+  `test_invoice_template_links` 21 · `test_notify_customer_fixes` 32 · `test_customer_login_security` 68 ·
+  `test_consent_identity` 34 · `test_canonical_host` 49 — all 0 failed.
+- **The full plugin suite on the final 5.18.74 tree:** **`tests/run.sh` 270 files, 12,329 passed, 0 failed, 0 skipped** — the three clock-bound checks of `test_notify_evo_retry` ran this time (the run fell inside the follow-up sending window) and passed. Was 270 / 12,298 at 5.18.73: 28 assertions more, the hand-off test grown from 34 to 62, plus those three. Run on the committed `b4b4c80` plugin tree — the same files the release commit `db18ad9` carries — while the rehearsals ran.
+
+**Release commit `release/5.18.74` = `db18ad9`, parent `88d8442`:** the same sixteen files as 5.18.73's release — the two
+profiles, `TenantProfile`, the portal page, its data loader and the sign-in page, the customer API, the configuration
+tool, `manifest.json`, the hand-off test, the session test and the five distributor pins on the release line. Hunks
+identical to the branch commit (`git diff db18ad9 b4b4c80 -- <the sixteen>` is empty). Pushed.
+
+**`scripts/deploy-5.18.74.sh`** (pinned `db18ad9` over `88d8442`), 5.18.73's shape: A0 refuses a pin whose parent is not
+the live 5.18.72 or whose delta carries a migration or any partner-portal/CSRF file — **and it refuses a live 5.18.73**,
+so 5.18.73 must not be deployed again first; R1 byte-for-byte; R5 Release A→5.18.72 intact; V6 the sign-in page allows
+zoom (skipped on a rollback); **R6** expects the Uganda profile **on** and the 5.18.73 `false` absent, the secret generator
+and its never-shown message in the tool, `$portalPayText` and *How to pay* in the portal, beside every earlier marker; R7
+runs 5.18.71's read-only cash-in-hand tool; RB checks 5.18.72 is back. The deploy sets no secret: that is the operator's
+own command afterwards. No repair command; the rollback is printed alone at the end of the log.
+
+**Rehearsal `scripts/harness/deploy-5.18.74/rehearse.sh`:** 5.18.73's, against the same 5.18.72 base; the pin carries
+the generator and *How to pay* and the base neither; the stand-in viewport control; every teeth check (TenantProfile
+reverted → R1 and R6; the sign-in page reverted → V6 and R1; the tool removed → R5/R6/R7; a Release-A file → R5; a live
+channel or portal file → R4); the rollback to 5.18.72; the R1-blinded copy; the clone left as found.
+- **Run 1 (the committed script, `919deb8`, sha256 `3aa6ba54…`):** **134/0, 18 runs of the script**, no FAIL line; the
+  stand-in viewport control held both ways; R7 passed on the seeded book; the clone left as found.
+- **Run 2 (the committed script, unchanged — same sha256):** **134/0, 18 runs**, no FAIL line; the clone left as found.
+  The rehearsed deploy itself reads **25 ok / 0 failed / 0 notes**, as 5.18.73's did; its production run read 24 where
+  the sandbox read 25, so expect **24 ok** on the server.
+
+**Handover.** Three steps, each its own command, in this order. **Step 1**, as root on the server; it asks for `DEPLOY`;
+send back the **log file**:
+
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.74 && mkdir -p /root/dnb-5.18.74 && bash scripts/deploy-5.18.74.sh 2>&1 | tee /root/dnb-5.18.74/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
+§16.9). **Step 2**, after the deploy passed — the secret, generated and stored, never shown:
+
+  `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key webhook_secret --generate`
+
+**Step 3**, in the plugin's Settings tab → *UCRM Connection* → *Admin Auth Token*: paste a uCRM API token (uCRM → My
+Profile → API tokens → Create; the field says Quotes need it too), leave *CRM Base URL* blank, save. Then open a Usage
+link as a customer: it should open the Data Report. If it still answers 404, the other plugin reads the two values from a
+different file than the store row and the override file this plugin writes; one read of its code
+(`grep -n "kyc_config\|config.json\|sqlite" …/dishnet-data-report/public.php | head`) will say which, and nothing on
+our side changes until then.
+
+**After the deploy, what a Uganda customer sees** (before steps 2–3): *Usage details* is there; a tap says the details are
+not available yet, no 404; an unpaid invoice shows *How to pay*; the Account footer reads v5.18.74; Service status reads
+*No outage reported*; the sign-in page zooms. After steps 2–3: the Usage links open the Data Report.
+
+**Still open from the walkthrough:** the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles
+against a Uganda router; the resend lockout countdown; and, for whoever owns the data-report plugin, that its client view
+answered **200 with no token at all**.

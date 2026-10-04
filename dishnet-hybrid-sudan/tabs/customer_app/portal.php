@@ -720,7 +720,7 @@ if ($view === 'home'):
     <?php endif; ?>
     <div class="home-bal-foot" style="margin-top:10px">
       <span style="color:var(--red);font-weight:700;cursor:pointer" onclick="DishNet.goInternal('sites')">View all sites →</span>
-      <span style="color:var(--red);font-weight:700;cursor:pointer" onclick="DishNet.openDataReport()">Usage details →</span>
+      <?php if ($portalDataReportHandoff): /* 5.18.73: the Data Report hand-off only where the tenant has it; the site list already carries each site's GB */ ?><span style="color:var(--red);font-weight:700;cursor:pointer" onclick="DishNet.openDataReport()">Usage details →</span><?php endif; ?>
     </div>
     <?php elseif ($portalUsage): ?>
     <!-- Single-service usage (non-fleet customer) -->
@@ -733,7 +733,7 @@ if ($view === 'home'):
       <span class="home-bal-of"><?php if ($portalUsage['unlimited']): ?>GB used<?php else: ?>/ <?= $portalUsage['limit_gb'] ?> GB<?php endif; ?></span>
     </div>
     <div class="home-bal-foot" style="margin-top:10px">
-      <span style="color:var(--red);font-weight:700;cursor:pointer" onclick="DishNet.openDataReport()">See details →</span>
+      <span style="color:var(--red);font-weight:700;cursor:pointer" onclick="<?= $portalDataReportHandoff ? 'DishNet.openDataReport()' : "DishNet.goInternal('usage')" ?>">See details →</span>
     </div>
     <?php elseif ($portalService): ?>
     <div class="home-bal-top">
@@ -1241,6 +1241,7 @@ elseif ($view === 'account'):
     <?php endif; ?>
   </div>
 
+  <div id="bio-section" hidden><!-- 5.18.73: a native-app setting; shown only when the Android bridge is present -->
   <div class="sec-lbl" style="margin-top:18px">Security</div>
   <div class="list-card">
     <div class="list-row" id="bio-toggle-row">
@@ -1251,6 +1252,7 @@ elseif ($view === 'account'):
       </div>
       <div class="tog off" id="bio-toggle"></div>
     </div>
+  </div>
   </div>
 
   <div class="sec-lbl" style="margin-top:18px" id="pwa-install-lbl" hidden>App</div>
@@ -1290,7 +1292,7 @@ elseif ($view === 'account'):
   </div>
 
   <div style="text-align:center;color:var(--gray-2);font-size:11px;margin-top:30px">
-    DishNet Africa · v4.12.20<br>
+    <?= pe($portalTenant->tradingName() ?: 'DishNet Africa') ?> · v<?= pe($portalAppVersion) ?><br>
     <?= pe($portalClaims['phone'] ?? '') ?><br>
     <span style="cursor:pointer;color:var(--gray-3)" onclick="DishNet.goInternal('debug_panel')">Diagnostics</span>
   </div>
@@ -1506,6 +1508,10 @@ elseif ($view === 'invoice_detail'):
   <div class="sec-lbl" style="margin-top:18px">Payment</div>
   <div class="list-card">
     <div style="padding:16px">
+      <?php if ($portalPayText !== ''): /* 5.18.74: the operator's own payment instructions (ai_fact_payment), verbatim, where set */ ?>
+      <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">How to pay</div>
+      <div style="font-size:12px;color:var(--gray);line-height:1.6;margin-bottom:12px"><?= nl2br(pe($portalPayText)) ?></div>
+      <?php endif; ?>
       <?php if ($portalBankAccount !== '' && $portalBankName !== ''): // 5.18.41: only the tenant's own bank details, never the other tenant's ?>
       <div style="font-size:13px;color:var(--dark);font-weight:600;margin-bottom:6px">Bank transfer</div>
       <div style="font-size:12px;color:var(--gray);line-height:1.6">
@@ -2692,11 +2698,13 @@ elseif ($view === 'site_detail'):
   </div>
 
   <!-- Quick actions for this site -->
-  <div class="home-acts" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
+  <div class="home-acts" style="grid-template-columns:repeat(<?= $portalDataReportHandoff ? 2 : 1 ?>,1fr);margin-top:14px">
+    <?php if ($portalDataReportHandoff): /* 5.18.73: the Data Report hand-off only where the tenant has it; the card above already says what this site used */ ?>
     <div class="home-act" onclick="DishNet.openDataReport('<?= pe($site['kit_number']) ?>')">
       <div class="home-act-ic"><svg class="ic"><use href="#i-speed"/></svg></div>
       <div class="home-act-l">Usage Details</div>
     </div>
+    <?php endif; ?>
     <div class="home-act" onclick="DishNet.goInternal('wifi_site',{kit:'<?= pe($site['kit_number']) ?>',router:'<?= pe($site['router_id'] ?: ($portalRouter['router_id_full'] ?? '')) ?>'})">
       <div class="home-act-ic"><svg class="ic"><use href="#i-wifi"/></svg></div>
       <div class="home-act-l">Change WiFi</div>
@@ -4932,7 +4940,7 @@ elseif ($view === 'service_status'):
       <div style="width:32px;height:32px;border-radius:8px;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
         <svg class="ic" style="width:16px;height:16px"><use href="#i-check"/></svg>
       </div>
-      <div style="flex:1;font-size:13px;color:var(--green-mid);font-weight:600">All services operational</div>
+      <div style="flex:1;font-size:13px;color:var(--green-mid);font-weight:600">No outage reported</div>
     </div>
   <?php endif; ?>
 
@@ -4960,20 +4968,15 @@ elseif ($view === 'service_status'):
           <span class="pill green">Operational</span>
         <?php endif; ?>
       </div>
-      <!-- 24h uptime bars — show red ticks for the paused tail when paused -->
-      <div style="display:flex;gap:2px;margin-bottom:8px">
-        <?php for ($i = 0; $i < 24; $i++): ?>
-        <?php $isLastFew = !empty($portalIsPaused) && $i >= 20; ?>
-        <div style="flex:1;height:16px;background:<?= $isLastFew ? '#D41C1C' : 'var(--green)' ?>;border-radius:2px;opacity:.7"></div>
-        <?php endfor; ?>
-      </div>
+      <?php /* 5.18.73: the 24-hour bar and its "uptime 100%" were fixed figures, not measurements — removed. What IS
+               measured is the pause state (the Data Report block state), so the paused line stays. */ ?>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-2)">
         <?php if (!empty($portalIsPaused)): ?>
           <span>Currently paused — pay to restore</span>
           <span>Updated just now</span>
         <?php else: ?>
-          <span>24h uptime <b style="color:var(--green-mid)">100%</b></span>
-          <span>24 hours ago → now</span>
+          <span>No outage reported for your service</span>
+          <span>Offline? Report it below</span>
         <?php endif; ?>
       </div>
     </div>
@@ -4993,14 +4996,9 @@ elseif ($view === 'service_status'):
         </div>
         <span class="pill green">Operational</span>
       </div>
-      <div style="display:flex;gap:2px;margin-bottom:8px">
-        <?php for ($i = 0; $i < 24; $i++): ?>
-        <div style="flex:1;height:16px;background:var(--green);border-radius:2px;opacity:.7"></div>
-        <?php endfor; ?>
-      </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-2)">
-        <span>24h uptime <b style="color:var(--green-mid)">99.8%</b></span>
-        <span>24 hours ago → now</span>
+        <span>No outage reported</span>
+        <span>Offline? Report it below</span>
       </div>
     </div>
   </div>
@@ -5020,14 +5018,9 @@ elseif ($view === 'service_status'):
         </div>
         <span class="pill green">Operational</span>
       </div>
-      <div style="display:flex;gap:2px;margin-bottom:8px">
-        <?php for ($i = 0; $i < 24; $i++): ?>
-        <div style="flex:1;height:16px;background:var(--green);border-radius:2px;opacity:.7"></div>
-        <?php endfor; ?>
-      </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-2)">
-        <span>24h uptime <b style="color:var(--green-mid)">99.5%</b></span>
-        <span>24 hours ago → now</span>
+        <span>No outage reported</span>
+        <span>Offline? Report it below</span>
       </div>
     </div>
   </div>
@@ -5057,7 +5050,7 @@ elseif ($view === 'service_status'):
   <!-- Info -->
   <div style="margin-top:16px;padding:14px 16px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.04)">
     <div style="font-size:11px;color:var(--gray);line-height:1.6">
-      Status data is refreshed automatically. If you're experiencing issues but the status shows operational, it may be specific to your location. Contact support for help.
+      This page shows what we know: a paused service is shown as paused. If you are offline and nothing is shown here, report it below and we will check your line.
     </div>
   </div>
 </div>
@@ -6602,7 +6595,11 @@ window._fetchDevices = function(manual) {
       if (isFirst) {
         loading.style.display = 'none';
         error.style.display = 'block';
-        document.getElementById('dev-error-msg').textContent = 'Network error: ' + err.message;
+        // 5.18.73: an answer that is not JSON is the service not being available (a 404 page, a proxy error) — say so,
+        // instead of showing the parser's own words to a customer.
+        document.getElementById('dev-error-msg').textContent = (err instanceof SyntaxError)
+          ? 'This feature is not available right now. Contact support if it continues.'
+          : 'Network error: ' + err.message;
       }
     });
 };
@@ -7459,24 +7456,24 @@ window.DishNet = {
   openDataReport(kitNumber) {
     // Open the Data Report plugin's client view with this customer's CRM ID.
     // v4.12.29: also pass the JWT token so Data Report can (a) authenticate
-    // the customer and (b) construct a working "Back to Portal" return URL
-    // that carries the token back. Without this, clicking Back to Portal in
-    // Data Report landed the user on the Hybrid login page because no auth
-    // context was available in the return URL. The token is sensitive but
-    // it's already in the URL for WebView scenarios (see this.go() below),
-    // so the exposure profile is unchanged.
+    // the customer and (b) construct a working "Back to Portal" return URL.
+    // Phase 2: the session token never leaves its cookie. The other plugin is
+    // handed a purpose-bound ten-minute token minted on click (app_data_report_token).
+    // 5.18.73: NEVER without that token. The mint refuses (409) where the tenant
+    // has no hand-off, or where the signing inputs the other plugin rebuilds are
+    // empty — a token minted anyway was refused at the other end with a 404
+    // (Uganda, 4 Oct 2026). The customer is told, and stays in this app.
     var clientId = <?= $portalCustomerId ?>;
     var url = location.href.split('/_plugins/')[0] + '/_plugins/dishnet-data-report/public.php?clientId=' + clientId;
     if (kitNumber) url += '&kit=' + encodeURIComponent(kitNumber);
-    // Phase 2: the session token never leaves its cookie. The other plugin is
-    // handed a purpose-bound ten-minute token minted on click (app_data_report_token).
+    var notHere = function () { alert('Usage details are not available here yet. Your usage is shown in this app; ask support if you need more.'); };
     DishNet.apiFetch(location.pathname + '?page=api&action=app_data_report_token')
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var t = (d && d.data && d.data.token) ? d.data.token : '';
-        location.href = t ? url + '&token=' + encodeURIComponent(t) : url;
+        if (t) location.href = url + '&token=' + encodeURIComponent(t); else notHere();
       })
-      .catch(function () { location.href = url; });
+      .catch(notHere);
   },
   // v4.12.21: toggle the editable SSID field. Called when user taps the
   // "Advanced (change network name)" link. Accepts optional forceShow to
@@ -7745,6 +7742,8 @@ document.addEventListener('click', function(e) {
 
 // Ask native for current biometric state on load (Account only)
 if (window.Android && window.Android.getBiometricState) {
+  var _bioSec = document.getElementById('bio-section');   // 5.18.73: the Security row is a native-app setting; a browser has nothing to toggle
+  if (_bioSec) _bioSec.hidden = false;
   try {
     const s = window.Android.getBiometricState();
     if (typeof s === 'string') {

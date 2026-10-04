@@ -31,7 +31,10 @@ $root = dirname(__DIR__);
 $withMutants = !in_array('--no-mutants', $argv, true);
 require_once __DIR__ . '/fixtures/staff_jobs_sandbox.php';   // sj_weakened_copy()
 
-$pass = 0; $fail = 0;
+$pass = 0; $fail = 0; $skip = 0;
+require_once dirname(__DIR__) . '/lib/FollowUpPolicy.php';   // its HOUR_OPEN / HOUR_CLOSE, for er_window_zone()
+/** A check that cannot run at this hour (see er_window_zone): counted apart, printed with its reason, never a failure. */
+function skip_(string $m, string $why): void { global $skip; $skip++; echo "  skip $m — $why\n"; }
 function is_(bool $c, string $m, string $d = ''): void {
     global $pass, $fail;
     if ($c) { $pass++; echo "  ok   {$m}\n"; }
@@ -97,17 +100,21 @@ function er_tree_copy(string $root): string
 }
 /** The data directory the plugin at $tree uses: the one beside it. */
 function er_data_dir(string $tree): string { return dirname($tree) . '/.' . basename($tree) . '-data'; }
-/** A zone in which it is now a weekday, 09:00-18:00: inside the follow-up sending window whenever the test runs. */
+/** A zone in which it is now a sending day inside FollowUpPolicy's own hours — so the follow-up window is open whenever
+ *  one exists anywhere. Searches the real offsets (UTC-12 … UTC+14) against HOUR_OPEN / HOUR_CLOSE; the policy refuses
+ *  Sundays only. On a Sunday between roughly 08:00 and 18:00 UTC no zone on Earth is inside the window (Saturday has
+ *  closed everywhere, Monday has opened nowhere): then it returns '' and the callers SKIP with that reason rather than
+ *  fail — the first run on such a Sunday (4 Oct 2026, 07:12 UTC) read three false failures with the old 09-18 / ±11 hunt. */
 function er_window_zone(): string
 {
     $now = time();
-    for ($off = -11; $off <= 12; $off++) {
+    for ($off = -12; $off <= 14; $off++) {
         $t = $now + $off * 3600;
-        if ((int)gmdate('w', $t) !== 0 && (int)gmdate('G', $t) >= 9 && (int)gmdate('G', $t) <= 18) {
+        if ((int)gmdate('w', $t) !== 0 && (int)gmdate('G', $t) >= FollowUpPolicy::HOUR_OPEN && (int)gmdate('G', $t) < FollowUpPolicy::HOUR_CLOSE) {
             return $off === 0 ? 'UTC' : 'Etc/GMT' . ($off > 0 ? '-' : '+') . abs($off);
         }
     }
-    return 'UTC';
+    return '';
 }
 /**
  * One caller case: the fake Evolution closing every connection unanswered (the request arrived, no answer came back),
@@ -221,14 +228,22 @@ is_($c['sends'] === 6 && (int)($p['brain_calls'] ?? -1) === 2 && ($p['event']['s
     'South Sudan, as in 5.18.53: the AI asked twice, the reply sent six times (three per run)', er_cshow($c));
 
 echo "\n8. The follow-up sender, when its message may have gone (two runs)\n";
-$c = er_caller($copy, 'uganda', 'followup', 2);
-$p = $c['probe'];
-is_($c['sends'] === 1 && ($p['draft'] ?? '') === 'uncertain' && in_array('uncertain', (array)($p['events'] ?? []), true),
-    'Uganda: one send, and the draft set aside as uncertain, with the reason logged — the second run sends nothing', er_cshow($c));
-$c = er_caller($copy, 'south-sudan', 'followup', 2);
-$p = $c['probe'];
-is_($c['sends'] === 6 && ($p['draft'] ?? '') === 'approved',
-    'South Sudan, as in 5.18.53: the draft stays approved and goes again at the next run', er_cshow($c));
+$winZone = er_window_zone();
+$winWhy  = 'no zone on Earth is inside the follow-up sending window at ' . gmdate('D H:i') . ' UTC (a Sunday between ~08:00 and ~18:00 UTC); the check runs at any other hour';
+if ($winZone === '') {
+    skip_('Uganda: one send, and the draft set aside as uncertain, with the reason logged — the second run sends nothing', $winWhy);
+    skip_('South Sudan, as in 5.18.53: the draft stays approved and goes again at the next run', $winWhy);
+} else {
+    echo "  (window zone {$winZone})\n";
+    $c = er_caller($copy, 'uganda', 'followup', 2);
+    $p = $c['probe'];
+    is_($c['sends'] === 1 && ($p['draft'] ?? '') === 'uncertain' && in_array('uncertain', (array)($p['events'] ?? []), true),
+        'Uganda: one send, and the draft set aside as uncertain, with the reason logged — the second run sends nothing', er_cshow($c));
+    $c = er_caller($copy, 'south-sudan', 'followup', 2);
+    $p = $c['probe'];
+    is_($c['sends'] === 6 && ($p['draft'] ?? '') === 'approved',
+        'South Sudan, as in 5.18.53: the draft stays approved and goes again at the next run', er_cshow($c));
+}
 exec('rm -rf ' . escapeshellarg($copy));
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -258,6 +273,7 @@ $callerMutants = [
         ['followup', 2], fn(array $c) => $c['sends'] === 2 && ($c['probe']['draft'] ?? '') === 'approved', 'the follow-up went twice'],
 ];
 foreach ($withMutants ? $callerMutants : [] as $name => [$rel, $o_, $n_, [$what, $runs], $caught, $why]) {
+    if ($what === 'followup' && $winZone === '') { skip_("caught: {$name}", $winWhy); continue; }
     [$tree, $n] = sj_weakened_copy($root, $rel, $o_, $n_);
     if ($n !== 1) { is_(false, "caught: {$name}", "the anchor was not found exactly once in {$rel}"); exec('rm -rf ' . escapeshellarg($tree)); continue; }
     $c = er_caller($tree, 'uganda', $what, $runs);
@@ -274,5 +290,5 @@ foreach ($withMutants ? $mutants : [] as $name => [$rel, $o_, $n_, [$op, $mode, 
     exec('rm -rf ' . escapeshellarg($tree));
 }
 
-echo "\n{$pass} passed, {$fail} failed\n";
+echo "\n{$pass} passed, {$fail} failed" . ($skip ? ", {$skip} skipped" : '') . "\n";
 exit($fail ? 1 : 0);

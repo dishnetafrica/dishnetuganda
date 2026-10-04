@@ -418,7 +418,11 @@ class StaffLedgerWriter
                 $ledgerDir = 'in';
                 $ledgerCat = 'collection';
             } elseif ($cat === 'USD Received') {
-                $currency  = 'USD';
+                // 5.18.68: 'USD Received' is the BASE-bag category. The ledger row is labelled with the
+                // cash-in's own currency (UGX on a Uganda book). A missing or SSP-marked currency stays
+                // USD exactly as before, so every South Sudan row is unchanged.
+                $currency  = strtoupper(trim((string)($ci['currency'] ?? '')));
+                if ($currency === '' || $currency === 'SSP') $currency = 'USD';
                 $amount    = round((float)($ci['amount'] ?? 0), 2);
                 $ledgerDir = 'in';
                 $ledgerCat = 'collection';

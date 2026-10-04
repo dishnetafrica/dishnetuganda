@@ -291,9 +291,15 @@ try {
 <a href="?page=dashboard&tab=accounts_ledger" class="kyc-tab <?= $tab==='accounts_ledger'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-journal-text"></i></span> Revenue Ledger
 </a>
+<?php // 5.18.68: on the Uganda install the accounts/bank model is not shown (the operator's decision, docs/07);
+      // the screen stays reachable by its address for an administrator, and South Sudan's strip is unchanged.
+      require_once __DIR__ . '/../lib/TenantProfile.php';
+      $_navTenantUganda = TenantProfile::current($GLOBALS['config'] ?? [], $GLOBALS['dataDir'] ?? null)->id() === 'uganda';
+      if (!$_navTenantUganda): ?>
 <a href="?page=dashboard&tab=opening_balances" class="kyc-tab <?= $tab==='opening_balances'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-bank"></i></span> Opening Balances
 </a>
+<?php endif; ?>
 <?php if (in_array('SSP', dn_book_currencies($GLOBALS['config'] ?? null), true)): // Sudan-only books ?>
 <a href="?page=dashboard&tab=ssp_overview" class="kyc-tab <?= $tab==='ssp_overview'?'active':'' ?>">
     <span class="nav-icon"></span> SSP Overview

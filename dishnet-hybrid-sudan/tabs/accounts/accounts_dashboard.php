@@ -80,7 +80,19 @@ $_activeCustomers = count($_acIds);
 require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
 $cbDash    = new CashbookService($store, $dataDir);
 $_dashSSP  = dn_ssp_selectable($config ?? null);
-$_dashPositions = $_dashSSP ? [] : $cbDash->currencyPositions();
+// 5.18.71: on a book without SSP (Uganda) the hero shows CASH IN HAND per currency — the ledger's running balance, the
+// figure the Cashbook page's card shows — never the Phase-C account position (bank balances, working capital), which the
+// operator asked not to see on this book. The chips are the base currency per project, as South Sudan's hero shows its
+// projects. currencyPositions() is not called on this page any more.
+$_dashBase    = dn_book_base($config ?? null);
+$_dashCih     = [];
+$_dashCihProj = [];
+if (!$_dashSSP) {
+    foreach (dn_book_currencies($config ?? null) as $_dc) $_dashCih[$_dc] = $cbDash->cashInHand($_dc);
+    $_dashCihProj = ['Fiber & Starlink' => $cbDash->cashInHand($_dashBase, 'dishnet'),
+                     'DishNet 4G'       => $cbDash->cashInHand($_dashBase, '4g'),
+                     'BlueCARD'         => $cbDash->cashInHand($_dashBase, 'bluecard')];
+}
 $cbBals    = $cbDash->getBothBalances();
 $cbDishBal = (float)($cbBals['dishnet']['balance'] ?? 0);
 $cb4gBal   = (float)($cbBals['4g']['balance']     ?? 0);
@@ -153,7 +165,24 @@ foreach ($fieldPositions as $_fp) {
     $_cpByStaff[] = ['name'=>$_fp['staff_name'],'amount'=>$exp,'agent_id'=>(int)$_fp['agent_id']];
     $_cpFieldTotal += $exp;
 }
-$_cpOffice = round(max(0, $cbTotalBal - $_cpFieldTotal), 2);
+// 5.18.71: on a book without SSP the office holds the BASE cash in hand (getBothBalances() reads the literal USD stream,
+// which on a UGX book is the dollar bag, not the shillings).
+$_cpOffice = round(max(0, ($_dashSSP ? $cbTotalBal : ($_dashCih[$_dashBase] ?? 0.0)) - $_cpFieldTotal), 2);
+// 5.18.71: money held by staff on a book without SSP — each person's base balance exactly as Staff Cashbooks shows it
+// (advances and collections received, net of their expenses and handovers). The exposure rows below come from the
+// collections view and read 0 for a technician who only holds an advance, which is why this list exists.
+$_dashHeld = []; $_dashHeldTotal = 0.0;
+if (!$_dashSSP) {
+    foreach ($_adAllRetailers as $_hr) {
+        if (empty($_hr['is_active']) || !empty($_hr['is_admin']) || in_array($_hr['role'] ?? '', ['accountant', 'admin'], true)) continue;
+        $_hid = (int)($_hr['id'] ?? 0); if ($_hid <= 0) continue;
+        $_held = $_adJsonSvc->getUSDBalance($_hid);
+        if ($_held <= 0) continue;
+        $_dashHeld[] = ['agent_id' => $_hid, 'staff_name' => (string)($_hr['name'] ?? ''), 'held' => $_held];
+        $_dashHeldTotal = round($_dashHeldTotal + $_held, 2);
+    }
+    usort($_dashHeld, fn($a, $b) => $b['held'] <=> $a['held']);
+}
 
 // ── Pending actions ──
 $_adHqPend=0; $_adHqAmt=0; $_adExpPend=0; $_adAdvActive=0; $_adIjPend=0;
@@ -286,19 +315,20 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
   </div>
   <div class="d2-bal">
     <?php if (!$_dashSSP): ?>
-    <!-- Phase C: one position per currency, never a combined figure -->
-    <div class="d2-bal-lbl">Cash Position — per currency</div>
-    <?php $_dpFirst = true; foreach ($_dashPositions as $_dp): ?>
+    <!-- 5.18.71: cash in hand per currency — the ledger's running balance, as the Cashbook page's card shows it.
+         The account position (bank balances, working capital) is not shown on this book. -->
+    <div class="d2-bal-lbl">Cash in hand — per currency</div>
+    <?php $_dpFirst = true; foreach ($_dashCih as $_dcCur => $_dcAmt): ?>
       <?php if ($_dpFirst): ?>
-      <div class="d2-bal-val"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format($_dp['total'],2) ?></div>
+      <div class="d2-bal-val"><?= htmlspecialchars($_dcCur) ?> <?= number_format($_dcAmt,2) ?></div>
       <?php $_dpFirst = false; else: ?>
-      <div class="d2-bal-val" style="font-size:20px;margin-top:2px;"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format($_dp['total'],2) ?></div>
+      <div class="d2-bal-val" style="font-size:20px;margin-top:2px;"><?= htmlspecialchars($_dcCur) ?> <?= number_format($_dcAmt,2) ?></div>
       <?php endif; ?>
-    <?php endforeach; if ($_dpFirst): ?><div class="d2-bal-val"><?= htmlspecialchars(dn_book_base($config ?? null)) ?> 0.00</div><?php endif; ?>
+    <?php endforeach; if ($_dpFirst): ?><div class="d2-bal-val"><?= htmlspecialchars($_dashBase) ?> 0.00</div><?php endif; ?>
     <div class="d2-bal-split">
-      <?php foreach ($_dashPositions as $_dp): foreach ($_dp['accounts'] as $_da): if (!$_da['active'] && !(float)$_da['balance']) continue; ?>
-      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl"><?= htmlspecialchars($_da['name']) ?></span><span class="d2-bal-chip-val"><?= htmlspecialchars($_dp['currency']) ?> <?= number_format((float)$_da['balance'],2) ?></span></div>
-      <?php endforeach; endforeach; ?>
+      <?php foreach ($_dashCihProj as $_dpLbl => $_dpAmt): ?>
+      <div class="d2-bal-chip"><span class="d2-bal-chip-lbl"><?= htmlspecialchars($_dpLbl) ?></span><span class="d2-bal-chip-val"><?= htmlspecialchars($_dashBase) ?> <?= number_format($_dpAmt,2) ?></span></div>
+      <?php endforeach; ?>
     </div>
     <?php else: ?>
     <div class="d2-bal-lbl">Total Cash Position</div>
@@ -518,6 +548,9 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
       <?php if ($totalFieldCash > 0): ?>
         <span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;"><?= dn_cur($config) ?><?= number_format($totalFieldCash,0) ?> in field</span>
       <?php endif; ?>
+      <?php if (!$_dashSSP && $_dashHeldTotal > 0): ?>
+        <span style="font-size:11px;color:#7c3aed;font-weight:700;margin-left:6px;"><?= dn_cur($config) ?><?= number_format($_dashHeldTotal,0) ?> with staff</span>
+      <?php endif; ?>
       <?php if ($agentsOverLimit): ?><span class="d2-badge" style="background:#dc2626;"><?= count($agentsOverLimit) ?> over</span><?php endif; ?>
       <?php if (!empty($agentsAging)): ?><span class="d2-badge" style="background:#d97706;">⏱ <?= count($agentsAging) ?></span><?php endif; ?>
     </span>
@@ -533,6 +566,29 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
       </div>
       <span style="font-size:20px;">✅</span>
     </div>
+    <?php if (!$_dashSSP): ?>
+    <!-- 5.18.71: money held by staff — the base balance Staff Cashbooks shows for each person -->
+    <?php foreach ($_dashHeld as $_hrow): ?>
+    <div class="mm-field" style="background:#faf5ff;">
+      <span style="font-size:18px;">💵</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:#1e293b;"><?= h($_hrow['staff_name']) ?></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px;">
+          <span style="font-size:9px;background:#f5f3ff;color:#7c3aed;border-radius:4px;padding:1px 5px;font-weight:700;">Held · advances &amp; collections, net of expenses</span>
+          <a href="?page=dashboard&tab=staff_cashbooks&sc_staff=<?= (int)$_hrow['agent_id'] ?>" style="font-size:9px;color:#7c3aed;font-weight:700;text-decoration:none;">Staff Cashbook →</a>
+        </div>
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;color:#7c3aed;text-align:right;flex-shrink:0;"><?= dn_cur($config) ?><?= number_format($_hrow['held'],2) ?></div>
+    </div>
+    <?php endforeach; ?>
+    <?php if ($_dashHeld): ?>
+    <div style="display:flex;justify-content:space-between;padding:8px 12px;border-top:2px solid #e5e7eb;margin-top:6px;font-size:12px;font-weight:800;color:#374151;">
+      <span>With staff</span><span style="color:#7c3aed;"><?= dn_cur($config) ?><?= number_format($_dashHeldTotal,2) ?></span>
+    </div>
+    <?php else: ?>
+    <div style="padding:8px 12px;font-size:12px;color:#6b7280;font-style:italic;">All cash is in office — nothing held by staff.</div>
+    <?php endif; ?>
+    <?php else: ?>
     <!-- Field staff with aging -->
     <?php foreach ($fieldPositions as $pos):
       $aid   = (int)($pos['agent_id']??0);
@@ -570,6 +626,7 @@ $_fiberSuspended      = $_fsCounts['inactive'] ?? 0;
     <?php endif; ?>
     <?php if (empty($_cpByStaff)): ?>
     <div style="padding:8px 12px;font-size:12px;color:#6b7280;font-style:italic;">All cash is in office — no field holdings.</div>
+    <?php endif; ?>
     <?php endif; ?>
     <div style="font-size:10px;color:#94a3b8;padding-top:6px;">Limit <?= dn_cur($config) ?><?= number_format($carryLimitCfg,0) ?> · <a href="?page=dashboard&tab=staff_cash_control" style="color:#7c3aed;text-decoration:none;">Full view →</a></div>
   </div>
