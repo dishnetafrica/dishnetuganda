@@ -4010,4 +4010,9 @@ SSP, South Sudan's branch untouched:
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.71 && mkdir -p /root/dnb-5.18.71 && bash scripts/deploy-5.18.71.sh 2>&1 | tee /root/dnb-5.18.71/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `cba7faf`. (2) The rollback, printed by the deploy's log on its own.
 - **Still open:** the 5.18.70 VOID (the operator's terminal stopped at the prompt; the records log was not received); the
-  Staff Cashbooks UGX balance confirming the 5.18.68 backfill. SUITE_PENDING_5_18_71 **RESULT:** not deployed.
+  Staff Cashbooks UGX balance confirming the 5.18.68 backfill.
+- **The full plugin suite on the final 5.18.71 tree (`72de8be`'s plugin files, at `437a93d`): `tests/run.sh` 268 files,
+  12,241 passed / 0 failed, exit 0**, one verdict per file — the 5.18.70 total of 12,214 + the 30 of the dashboard test −
+  the 3 checks `test_notify_evo_retry.php` **skipped as designed** at 09:17 UTC on a Sunday (no zone on Earth inside the
+  follow-up sending window; each skip printed with that reason, counted apart, never a failure). 27 minutes, 09:04–09:31
+  UTC, alongside the second rehearsal without a flake. **RESULT:** not deployed.
