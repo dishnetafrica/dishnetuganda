@@ -4265,3 +4265,24 @@ there, so every gate is true).
 - **A fragility recorded, not new:** with no `.dishnet-starlink-finance-data` or `.dishnet-data-report-data` directory, the
   kit register and the usage files live under `<plugin>/data`, the directory uCRM deletes when that plugin is upgraded
   (`cron/dr_snapshot.php` exists for exactly this). The site page's kit comes from there today.
+
+**Addendum 2 — the three reads (operator, read-only, ~12:2x UTC):** `dishnet-data-report` is a **complete, uCRM-installed
+plugin**: `ucrm.json` (1 Oct 06:31), `manifest.json` **v2.8.80** (2 Jul), `main.php`, `cron.php`, `client.php`,
+`dr_wifi_change.php`, `public.php` **hand-edited on the server on 3 Oct 08:25** (412 KB, with a root-owned
+`public.php.bak.<epoch>` beside it) and a root-owned `official_api/` directory (3 Oct 07:57); its `data/` was written at
+11:45 today, so its cron runs. **The plain public page answers 200 and `?action=dr_wifi_get_status&router_id=x` answers
+200**: uCRM serves it. **So the 404 is that plugin's own answer to the portal's client-view link**
+(`?clientId=…&kit=…&token=…`). Two candidate causes, both on the other plugin's side:
+- **the token does not verify there.** Our hand-off is signed with `JwtAuth::legacySecret()` =
+  `sha256(webhook_secret | crm_app_key (or crm_auth_token) | 'DishNet-Hybrid-JWT-v2-2026')` — the Hybrid plugin's own two
+  configuration values. The data-report plugin can only accept it if it derives the same secret from the **same two
+  values**; on an install made on 1 Oct from the South Sudan build, they very likely differ. A plugin that answers 404 to
+  an unverifiable token is answering as designed.
+- **the client or kit is not in that plugin's own data** (its caches are rebuilt by its cron from the Starlink account it
+  is configured for), and the client view says *not found*.
+  Handed over, read-only: the body of the 404 with and without a token; `grep -n clientId public.php | head`;
+  `grep -n -i "secret\|verify" public.php | head`; `ls -la data/`. **Nothing on our side can be concluded until then**;
+  the 5.18.73 proposal is amended: the hand-off to the other plugin should be a **tenant setting** (on where that plugin is
+  configured to accept it, as in South Sudan; off on Uganda until it is), with the in-app Usage view as the default — not a
+  presence probe, which this case defeats, and not a "page answers" probe, which this case also defeats (200 on the page,
+  404 on the view).
