@@ -3826,7 +3826,7 @@ cash-ins (`fr3fInCurrency`, twice), expenses (`fr3fCurrency`, five times), the h
 **So the page still stamped USD on 5.18.69**, and would have gone on doing so. The same literal drove that page's filter
 whitelist, its two sums, its pending-row label, its filter button, and the Field Register CSV export in `routes.php`.
 
-**What changed** (`c…` on the branch, release `RELEASE_HASH_5_18_70` on `fec15bc`):
+**What changed** (`c3f9bac` on the branch, release `cba7faf` on `fec15bc`):
 - `tabs/sales/wallet.php` — `var _fr3Base = <?= json_encode(dn_book_base($config)) ?>` next to the pill token, and every
   submission for the base pill sends it (`_fr3Base`, or `isSsp ? 'SSP' : _fr3Base`, or `_fr3Curr === 'SSP' ? 'SSP' :
   _fr3Base`); server-side `$_frBase` for the filter whitelist, the collection rows' currency (their own stamp, the base when
@@ -3863,17 +3863,29 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   submission sent as the literal again; the tool blind to cash-ins; VOID leaving the ledger row live.
 - `tests/test_staff_manual_entry_currency.php` 36/0 (two assertions follow the tool's new listing and version),
   `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_staff_cash_chain` 73/0.
-- **Release commit `release/5.18.70` = `RELEASE_HASH_5_18_70`, parent `fec15bc` (5.18.69, production since 06:26 UTC):** the
+- **Release commit `release/5.18.70` = `cba7faf`, parent `fec15bc` (5.18.69, production since 06:26 UTC):** the
   branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.69 left out:
-  RELEASE_DELTA_5_18_70.
-- **`scripts/deploy-5.18.70.sh`** (pinned `RELEASE_HASH_5_18_70` over `fec15bc`), the 5.18.69 script's shape: A0 refuses a
+  11 files, 1 added, 0 migrations, hunks byte for byte the branch's (diffed), 0 partner-portal/CSRF hits.
+- **`scripts/deploy-5.18.70.sh`** (pinned `cba7faf` over `fec15bc`), the 5.18.69 script's shape: A0 refuses a
   pin whose parent is not 5.18.69 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the base
   token, the two base submissions, no literal submission, the export's base and the 5.18.70 tool, beside the 5.18.69 fixes,
   the 5.18.68 chain and the photo surface; **R7** runs the tool in LIST mode inside the container — read-only — **which on
   production will name the three cash-ins**, each with its category, stamp, amount and description, for the operator to read
   before typing VOID; RB after a rollback checks the token and the 5.18.70 tool are gone and the 5.18.69 fixes still there;
   F prints the rollback alone, then the tool's `--void` command as a third block, naming `--relabel` as the alternative.
-- **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`:** REHEARSAL_RESULT_PENDING_5_18_70
+- **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.69 base
+  holding a UGX book with the pilot *on* and **the three cash-ins the old pill stamped USD seeded — production's shape**
+  (Collection, 200,000 / 50,000 / 50,000, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
+  copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST reads
+  `cash_ins USD 3 ◄ not the base` and names each cash-in with its category, stamp, amount, status and description, and
+  **the data digest of every table is unchanged across the deploy: the LIST wrote nothing, the three still approved and
+  still stamped USD**); R1/R6 teeth (the Field Register reverted → R1 names it and R6 names `field-register:no-base-token`
+  and `field-register:literal-usd-submit`; the tool reverted → R1 and R6 `records-tool:not-5.18.70`; the export reverted →
+  `export:literal-usd-collection`); R5 teeth; the switch flipped; a live channel and a planted `partner_api.php` caught by
+  name; the rollback restores 5.18.69's pill and tool with the 5.18.69 and 5.18.68 fixes and the photo surface intact and
+  no data change; the R1-blinded copy caught; the rollback printed once after the verdict and the `--void` command once
+  after the rollback, with `--relabel` named once. No defect on the first run. Run 1 on the working copy of the script;
+  run 2 on the committed script: REHEARSAL_RUN2_PENDING_5_18_70.
 - **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.70 && mkdir -p /root/dnb-5.18.70 && bash scripts/deploy-5.18.70.sh 2>&1 | tee /root/dnb-5.18.70/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `fec15bc`. (2) The rollback, printed by the deploy's log on its own. (3) The
