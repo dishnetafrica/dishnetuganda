@@ -3643,4 +3643,26 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.68 && mkdir -p /root/dnb-5.18.68 && bash scripts/deploy-5.18.68.sh 2>&1 | tee /root/dnb-5.18.68/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `96857d8`. (2) The rollback, printed by the deploy's log on its own. (3) The
   backfill's `--apply`, printed after it, to run only after reading R7's plan in the same log; it asks for `APPLY`, writes only
-  the CREATE/FIX rows listed, sends no message, and reads SKIP throughout on a second run. **RESULT: pending the operator's run.**
+  the CREATE/FIX rows listed, sends no message, and reads SKIP throughout on a second run.
+- **RESULT — DEPLOYED to production 2026-10-04, 04:35 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  04:34:40 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves d8d2068"*; the 23 files were
+  stamped at 04:35:10 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file
+  stays on the server as `/root/dnb-5.18.68/deploy-20261004T043440Z.log`.
+  - **A.** Checkout `b8a0483`; branch tip `e66faf8` (not installed); release commit `d8d2068` cut on `96857d8`; 23 files
+    (21 changed, 2 added, 0 removed), **0 migrations**; **A0** clean. Live `96857d8` / 5.18.67. The container's PHP
+    **8.1.34** accepted all 14 changed server files and the 7 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.68/backup-20261004T043440Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.67 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 23 files as `d8d2068` has them, manifest 5.18.68; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 179 files from Release A through 5.18.67 intact; **R6
+    the staff-cash chain is in place** beside the photo surface; **R7 the backfill's dry run on the live data: 5
+    staff-advance OUT rows in UGX name a person, 8 cash-in records exist — plan: 0 to create, 5 to FIX, 0 skipped**, each
+    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX 50,000 + 250,000 + 100,000 + 100,000 + 150,000) matched to the
+    one staff member (#4) and each already carrying a cash-in with **amount 0** (cash-ins #1, #2, #6, #7, #8). **That is the
+    diagnosis confirmed on production**: the 5.18.67 auto-link did fire for every advance and wrote 0. The photo tables and
+    files read exactly as before (`present:3:1`, `files:3`) — the dry run touched no data.
+  - **Not yet done:** the backfill's `--apply` (the operator's separate command, after reading R7's plan; result to be
+    recorded here), a look at the UGX CASH IN HAND card against the ledger's latest Balance, and
+    `bash scripts/deploy-5.18.68.sh --after-only`.
