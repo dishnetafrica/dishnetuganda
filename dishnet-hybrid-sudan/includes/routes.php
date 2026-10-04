@@ -466,7 +466,8 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     $r = $auth->requireLogin();
     $agId = (int)($r['id'] ?? 0);
-    $fr_curr = $_GET['fr_curr'] ?? '';
+    $fr_curr = strtoupper((string)($_GET['fr_curr'] ?? ''));
+    $frBase3 = dn_book_base($config ?? null); // 5.18.70: the base bag by its own code, not the literal 'USD'
     $fr_from = $_GET['fr_from'] ?? '';
     $fr_to   = $_GET['fr_to']   ?? '';
     $rows = [];
@@ -475,8 +476,9 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
         $dt = substr($c['collected_at']??$c['created_at']??'',0,10);
         if ($fr_from && $dt < $fr_from) continue;
         if ($fr_to   && $dt > $fr_to)   continue;
-        if ($fr_curr && $fr_curr !== 'USD') continue;
-        $rows[] = [$dt,'IN','USD',$c['amount']??0,0,'Collection',$c['customer_name']??$c['client_name']??'',empty($c['crm_synced'])?'pending':'approved'];
+        $cCur3 = strtoupper($c['currency'] ?? $frBase3);
+        if ($fr_curr && $fr_curr !== $cCur3) continue;
+        $rows[] = [$dt,'IN',$cCur3,$c['amount']??0,0,'Collection',$c['customer_name']??$c['client_name']??'',empty($c['crm_synced'])?'pending':'approved'];
     }
     foreach ($store->load('cash_expenses.json') ?: [] as $e) {
         if ((int)($e['collector_id']??0) !== $agId) continue;
@@ -492,8 +494,9 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
         $dt = substr($h['created_at']??'',0,10);
         if ($fr_from && $dt < $fr_from) continue;
         if ($fr_to   && $dt > $fr_to)   continue;
-        if ($fr_curr && $fr_curr !== 'USD') continue;
-        $rows[] = [$dt,'OUT','USD',$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
+        $hCur3 = strtoupper($h['currency'] ?? $frBase3);
+        if ($fr_curr && $fr_curr !== $hCur3) continue;
+        $rows[] = [$dt,'OUT',$hCur3,$h['amount']??0,0,'Handover',$h['note']??'',$h['status']??'pending'];
     }
     foreach ($store->load('cash_ins.json') ?: [] as $i) {
         if ((int)($i['collector_id']??0) !== $agId) continue;

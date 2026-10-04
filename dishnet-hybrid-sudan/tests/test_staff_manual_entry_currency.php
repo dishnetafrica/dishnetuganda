@@ -101,12 +101,12 @@ $before = json_encode($cols($s));
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php');
 is_($rc === 0 && strpos($out, 'LIST — nothing was changed') !== false, 'LIST exits 0 and says nothing was changed', $rc . ' ' . substr($out, 0, 400));
 is_(preg_match('/payment_collections\s+.*USD 1 ◄ not the base/', $out) === 1, '…the census names payment_collections: USD 1 ◄ not the base', $out);
-is_(preg_match('/#' . $ghostId . '\s+2026-09-25\s+Sandbox Tech\s+USD\s+50,000\.00\s+approved\s+hand copy of an advance/', $out) === 1, "…and lists the candidate #$ghostId (USD 50,000.00, approved)", $out);
+is_(preg_match('/collection #' . $ghostId . '\s+2026-09-25\s+Sandbox Tech\s+Manual Entry\s+USD\s+50,000\.00\s+approved\s+hand copy of an advance/', $out) === 1, "…and lists the candidate collection #$ghostId (Manual Entry, USD 50,000.00, approved)", $out);
 is_(json_encode($cols($s)) === $before, 'LIST wrote nothing');
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php', ['--void', '--yes']);
 is_($rc === 0 && strpos($out, "collection #$ghostId voided (USD 50,000.00, Sandbox Tech)") !== false, 'VOID exits 0 and names the row', $rc . ' ' . substr($out, 0, 400));
 $g = null; foreach ($cols($s) as $x) if ($x['_id'] === $ghostId) $g = $x;
-is_($g !== null && ($g['status'] ?? '') === 'voided' && ($g['prev_status'] ?? '') === 'approved' && ($g['voided_by'] ?? '') === 'staff_records_currency 5.18.69'
+is_($g !== null && ($g['status'] ?? '') === 'voided' && ($g['prev_status'] ?? '') === 'approved' && ($g['voided_by'] ?? '') === 'staff_records_currency 5.18.70'
     && is_array($g['audit_log'] ?? null) && end($g['audit_log'])['action'] === 'void' && ($g['currency'] ?? '') === 'USD',
     "the row is voided the page's way (prev_status, voided_by, audit_log), its stamp untouched, nothing deleted", json_encode($g));
 $al = $s->q("SELECT data FROM activity_log ORDER BY id DESC LIMIT 1")[0]['data'] ?? '';
