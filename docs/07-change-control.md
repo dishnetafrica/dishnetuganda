@@ -3754,7 +3754,7 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   the rollback restores 5.18.68's stamp and export with the 5.18.68 chain, card and photo surface intact and no data change;
   the R1-blinded copy caught; the rollback printed once after the verdict and the `--void` command once after the rollback,
   with `--relabel` named once as the alternative. No defect on the first run this time (the 5.18.68 dry-run lesson was
-  applied before it). Run 1 on the working copy of the script; run 2 on the committed script: REHEARSAL_RUN2_PENDING_5_18_69.
+  applied before it). Run 1 on the working copy of the script, run 2 on the committed script (`1e718c3`): **129/0 both times, the same 18 runs**.
 - **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.69 && mkdir -p /root/dnb-5.18.69 && bash scripts/deploy-5.18.69.sh 2>&1 | tee /root/dnb-5.18.69/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `d8d2068`. (2) The rollback, printed by the deploy's log on its own. (3) The
