@@ -3688,6 +3688,12 @@ three more literal `'USD'` sources — measured on the code and on the export, n
    the staff page while the advance link wrote 0. The 5.18.68 backfill links those advances to the technician's ledger, so
    **counting both would double the money**: the tool's default repair is VOID, and RELABEL is offered only for a hand entry
    that is the only record of its money. **Void or keep is the operator's call; the deploy repairs nothing by itself.**
+   **Verified line by line at 06:25 UTC**, when the operator re-sent the export (byte-identical to the 04:42 copy, so the
+   server was still on 5.18.68): CB-72 (24 Sep, 250,000) reads *"Paid for Buying Material and 50K UGx as Advance"* and the
+   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* 200,000 + *"Advance for other expenses"*
+   50,000; CB-66 (23 Sep, 50,000) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
+   (advance)"* 50,000. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
+   190,000, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
 2. **The stored category `'USD Received'`.** The base-bag cash-in category is stored under South Sudan's name, and the
    Staff Cashbooks page, My Cash and the export printed it as stored. Each now prints it as **`<base> Received`** — "UGX
    Received" on Uganda; the stored value is unchanged (the ledger writer, the position service and the backfill key on it).
