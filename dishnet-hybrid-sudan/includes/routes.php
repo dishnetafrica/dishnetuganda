@@ -373,9 +373,9 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 
     $led3 = [];
     foreach ($cols3 as $c) { $led3[] = ['date'=>substr($c['collected_at']??$c['created_at']??'',0,10),'dir'=>'IN','cur'=>($c['currency'] ?? dn_book_base($config ?? null)),'usd'=>(float)($c['amount']??0),'ssp'=>0,'cat'=>'Collection','desc'=>$c['customer_name']??'','status'=>empty($c['crm_synced'])?'pending':'approved']; }
-    foreach ($cins3 as $i) { $xc=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP'); $led3[]=['date'=>substr($i['created_at']??'',0,10),'dir'=>'IN','cur'=>$xc,'usd'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>$i['category']??'SSP Received','desc'=>$i['description']??'','status'=>$i['status']??'approved']; }
-    foreach ($exps3 as $e) { $xc=$e['currency']??'USD'; $led3[]=['date'=>substr($e['submitted_at']??$e['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$e['category']??'Expense','desc'=>$e['description']??'','status'=>$e['status']??'pending']; }
-    foreach ($hovs3 as $h) { $xc=strtoupper($h['currency']??'USD'); $led3[]=['date'=>substr($h['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending']; }
+    foreach ($cins3 as $i) { $xc=($i['category']??'')==='Exchange'?'SSP':($i['currency']??'SSP'); $led3[]=['date'=>substr($i['created_at']??'',0,10),'dir'=>'IN','cur'=>$xc,'usd'=>(float)($i['amount']??0),'ssp'=>(float)($i['ssp_amount']??0),'cat'=>((($i['category']??'')==='USD Received')?dn_book_base($config ?? null).' Received':($i['category']??'SSP Received')),'desc'=>$i['description']??'','status'=>$i['status']??'approved']; }
+    foreach ($exps3 as $e) { $xc=strtoupper($e['currency']??dn_book_base($config ?? null)); $led3[]=['date'=>substr($e['submitted_at']??$e['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($e['amount']??0),'ssp'=>(float)($e['ssp_amount']??0),'cat'=>$e['category']??'Expense','desc'=>$e['description']??'','status'=>$e['status']??'pending']; }
+    foreach ($hovs3 as $h) { $xc=strtoupper($h['currency']??dn_book_base($config ?? null)); $led3[]=['date'=>substr($h['created_at']??'',0,10),'dir'=>'OUT','cur'=>$xc,'usd'=>(float)($h['amount']??0),'ssp'=>(float)($h['ssp_amount']??$h['amount']??0),'cat'=>'Handover','desc'=>'To '.($h['to_name']??'Rupesh'),'status'=>$h['status']??'pending']; }
 
     // ── Advances received (root only) ───────────────────────────────────
     try {
@@ -428,7 +428,9 @@ if (($tab ?? '') === 'staff_cashbooks' && !empty($_GET['sc_export']) && $_GET['s
 
     $xFrom3 = $_GET['sc_from'] ?? date('Y-m-d', strtotime('-30 days'));
     $xTo3   = $_GET['sc_to'] ?? date('Y-m-d');
-    $xCur3  = dn_entry_currency($_GET['sc_cur'] ?? '', $config ?? null);
+    // 5.18.69: the page's base tab is named 'usd' (South Sudan's vocabulary); it means the BOOK's base bag — UGX on
+    // Uganda. Only an explicit SSP tab exports SSP; everything else exports the base, and the labels follow.
+    $xCur3  = strtolower(trim((string)($_GET['sc_cur'] ?? ''))) === 'ssp' ? 'SSP' : dn_book_base($config ?? null);
     $led3 = array_filter($led3, fn($r) => $r['date'] >= $xFrom3 && $r['date'] <= $xTo3 && $r['cur'] === $xCur3);
     usort($led3, fn($a,$b) => strcmp($a['date'], $b['date']));
 

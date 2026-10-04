@@ -929,7 +929,7 @@ $_ledgerUSD = [];
 foreach ($_mcCashIn as $ci) {
     if (in_array($ci['status'] ?? 'approved', ['rejected','voided'])) continue;
     if (($ci['category']??'') === 'USD Received' && strtoupper($ci['currency'] ?? $_mcBase) === $_mcBase && (float)($ci['amount']??0) > 0) {
-        $_ledgerUSD[] = ['date'=>$ci['created_at']??'','dir'=>'in','amount'=>(float)$ci['amount'],'desc'=>($ci['description']??'USD Received'),'from'=>'Office'];
+        $_ledgerUSD[] = ['date'=>$ci['created_at']??'','dir'=>'in','amount'=>(float)$ci['amount'],'desc'=>($ci['description']??($_mcBase.' Received')),'from'=>'Office'];
     }
 }
 foreach ($_mcExpenses2 as $e) {
@@ -1274,7 +1274,7 @@ foreach ($_ubCashIn as $ci) {
     $_ubDesc = $ci['description'] ?? 'Office';
     while (stripos($_ubDesc, 'From ') === 0) $_ubDesc = substr($_ubDesc, 5);
     $_ubRows[] = ['date'=>$ci['created_at']??'','dir'=>'IN','amt'=>$amt,
-        'desc'=>$_ubDesc, 'cat'=>'USD Received',
+        'desc'=>$_ubDesc, 'cat'=>$_mcBase.' Received',
         'status'=>$ci['status']??'approved'];
 }
 // ── USD collections from staff_ledger ────────────────────────────────────────
