@@ -92,7 +92,7 @@ is_(count($c) === 1 && ($c0['currency'] ?? '') === 'UGX' && (float)($c0['amount'
 $pg = $s->page('tech', $Q);
 is_(preg_match('/Collections<\/span><span>UGX\s?20,000\.00/u', $pg) === 1, "the wallet's Collections line counts it: UGX 20,000.00");
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 20,000\.00/si', $pgA) === 1, 'the Staff Cashbooks UGX tile counts it: UGX 20,000.00', 'len ' . strlen($pgA));
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pgA) === 1, 'the Staff Cashbooks UGX tile counts it: UGX 20,000.00', 'len ' . strlen($pgA));
 $pgF = $s->page('tech', $Q . '&fr_curr=UGX');
 is_(strpos($pgF, 'cash from office for cable') !== false, 'the UGX filter keeps the row in view');
 
@@ -108,7 +108,7 @@ $pg = $s->page('tech', $Q);
 is_(preg_match('/Collections<\/span><span>UGX\s?320,000\.00/u', $pg) === 1,
     "control: the wallet's Collections line counts the three mislabelled rows too — UGX 320,000.00 (20,000 + 300,000): the label lied and the figure followed");
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 20,000\.00/si', $pgA) === 1, 'control: the Staff Cashbooks UGX tile does not count them (still 20,000.00) — the two screens disagreed by 300,000');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pgA) === 1, 'control: the Staff Cashbooks UGX tile does not count them (still 20,000.00) — the two screens disagreed by 300,000');
 $s->store()->load('cash_expenses.json');   // a table that exists and is empty
 $before = json_encode($cins($s));
 [$rc, $out] = $s->run($s->plug . $TOOL);
@@ -139,7 +139,7 @@ is_(substr_count($al, '"void_cash_in"') === 4 && strpos($al, '"staff_records_cur
 $pg = $s->page('tech', $Q);
 is_(preg_match('/Collections<\/span><span>UGX\s?20,000\.00/u', $pg) === 1, "the wallet's Collections line is back to UGX 20,000.00");
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 20,000\.00/si', $pgA) === 1, 'the Staff Cashbooks UGX tile is unchanged (20,000.00) — the two screens agree again');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pgA) === 1, 'the Staff Cashbooks UGX tile is unchanged (20,000.00) — the two screens agree again');
 [$rc, $out] = $s->run($s->plug . $TOOL);
 is_($rc === 0 && strpos($out, 'cash-ins stamped in a currency other than UGX: 4 (0 not yet voided)') !== false, 'LIST now reads 4 (0 not yet voided)', $out);
 [$rc, $out] = $s->run($s->plug . $TOOL, ['--void', '--yes']);
@@ -155,7 +155,7 @@ is_($rc === 0 && strpos($out, 'Nothing to VOID: no Manual Entry collection and n
 $h1 = $plantOne($s, $tech, '70000', 'Collection', 'the only record of this money');
 $h2 = $plantOne($s, $tech, '30000', 'USD Received', 'the only record, with a ledger row', true);
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 100,000\.00/si', $pgA) !== 1, 'control: stamped USD, neither counts in the UGX tile');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 100,000\.00/si', $pgA) !== 1, 'control: stamped USD, neither counts in the UGX tile');
 [$rc, $out] = $s->run($s->plug . $TOOL, ['--relabel', '--yes']);
 is_($rc === 0 && strpos($out, "cash-in #$h1 relabelled USD → UGX (70,000.00, Collection, Sandbox Tech)") !== false && strpos($out, "staff_ledger CIN-$h2: currency → UGX") !== false,
     'RELABEL exits 0, names each row and the ledger row it relabelled', $rc . ' ' . substr($out, -500));
@@ -166,7 +166,7 @@ is_(($w['currency'] ?? '') === 'UGX' && ($w['status'] ?? '') === 'approved' && (
 $L = $ledger($s, 'CIN-' . $h2);
 is_(($L['currency'] ?? '') === 'UGX' && ($L['status'] ?? '') === 'active', "the staff_ledger row CIN-$h2 reads UGX and is still live", json_encode($L));
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
-is_(preg_match('/UGX Collected.{0,800}?UGX 100,000\.00/si', $pgA) === 1, 'both now count in the UGX tile: UGX 100,000.00 (70,000 + 30,000)');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 100,000\.00/si', $pgA) === 1, 'both now count in the UGX tile: UGX 100,000.00 (70,000 + 30,000)');
 $s->stop();
 
 echo "\nF. South Sudan — base USD: the page submits USD exactly as before; the tool refuses\n";

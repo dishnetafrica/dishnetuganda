@@ -1123,10 +1123,20 @@ function scApply(){
 </div>
 
 <!-- Stat Grid -->
+<?php /* 5.18.72: on a book without SSP (Uganda) the staff member's inflow is advances — and any collections — to be spent
+         and accounted for, not collections to hand over: "collected" and "Needs handover" are South Sudan's collections
+         wording. The tiles below say "received · Advances & collections" and "Still to account for" there instead. The
+         figures are unchanged, and South Sudan's branch is the same bytes as before (the PHP tags sit at column 0). */ ?>
 <div class="cb3-stats">
   <div class="cb3-stat">
+<?php if ($scSSP): ?>
     <div class="cb3-stat-lbl"><?=$curTab==='ssp'?'SSP':$scBaseCode?> collected</div>
     <div class="cb3-stat-val g"><?=$curTab==='ssp'?number_format($sIn,0):scM($uIn)?></div>
+<?php else: ?>
+    <div class="cb3-stat-lbl"><?=$scBaseCode?> received</div>
+    <div class="cb3-stat-val g"><?=scM($uIn)?></div>
+    <div class="cb3-stat-sub">Advances &amp; collections</div>
+<?php endif; ?>
   </div>
   <div class="cb3-stat">
     <div class="cb3-stat-lbl">Handed over</div>
@@ -1136,7 +1146,7 @@ function scApply(){
   <div class="cb3-stat">
     <div class="cb3-stat-lbl" style="color:#dc2626;">💰 Cash with staff</div>
     <div class="cb3-stat-val" style="color:<?=($_uCashWithStaff??0)>0?'#dc2626':'#059669'?>;"><?=$curTab==='ssp'?number_format($sc_ssp,0):scM($_uCashWithStaff ?? ($uIn-$uOut))?></div>
-    <div class="cb3-stat-sub"><?=($_uCashWithStaff??0)>0?'Needs handover':'All settled ✓'?></div>
+    <div class="cb3-stat-sub"><?=($_uCashWithStaff??0)>0?($scSSP?'Needs handover':'Still to account for'):'All settled ✓'?></div>
   </div>
   <div class="cb3-stat">
     <div class="cb3-stat-lbl">💳 Wallet balance</div>
