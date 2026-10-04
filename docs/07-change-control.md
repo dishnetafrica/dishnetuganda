@@ -3666,3 +3666,6 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
   - **Not yet done:** the backfill's `--apply` (the operator's separate command, after reading R7's plan; result to be
     recorded here), a look at the UGX CASH IN HAND card against the ledger's latest Balance, and
     `bash scripts/deploy-5.18.68.sh --after-only`.
+  - **The full plugin suite on the final 5.18.68 tree (`6c7a4df` + `e66faf8`): `tests/run.sh` 265 files, 12,129 passed /
+    0 failed, exit 0**, one verdict per file (12,055 before this release + the 73 of the chain test + the currency test's
+    one new assertion).
