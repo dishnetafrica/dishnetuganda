@@ -4514,7 +4514,7 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
     `deploy-5.18.73.sh` installs it again whenever wanted (its summary printed the command). The six fixes are only
     available by installing 5.18.73 or a later release.
 
-## 04 Oct — 5.18.74: the Usage links stay; the hand-off token is refused until the signing values exist; `webhook_secret` can be generated, never shown; "How to pay" on the invoice screen — BUILT, rehearsed, NOT deployed
+## 04 Oct — 5.18.74: the Usage links stay; the hand-off token is refused until the signing values exist; `webhook_secret` can be generated, never shown; "How to pay" on the invoice screen — DEPLOYED 19:59 UTC (PASSED 24/0/0); the secret generated 20:0x UTC
 
 **Decided by the operator** (*"Yes."* to the proposal that followed the 5.18.73 rollback). 5.18.73 had switched the Data
 Report hand-off off in the Uganda profile; the operator wants the *Usage details* link kept. 5.18.74 keeps everything else
@@ -4620,3 +4620,37 @@ not available yet, no 404; an unpaid invoice shows *How to pay*; the Account foo
 **Still open from the walkthrough:** the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles
 against a Uganda router; the resend lockout countdown; and, for whoever owns the data-report plugin, that its client view
 answered **200 with no token at all**.
+
+- **RESULT — DEPLOYED to production 2026-10-04, 19:59 UTC: PASSED, 24 ok / 0 failed / 0 notes** — the 24 the rehearsal
+  predicted (the sandbox reads 25). The run began at 19:59:11 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered
+  *"✓ container now serves db18ad9"*; the 16 files were stamped at 20:00:23 UTC. Recorded from the terminal the operator
+  pasted (the script prints no secret); the log file stays on the server as
+  `/root/dnb-5.18.74/deploy-20261004T195911Z.log`.
+  - **A.** Checkout `52e1951`; branch tip `b4b4c80` (not installed); release commit `db18ad9` cut on `88d8442`; 16 files
+    (15 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `88d8442` / 5.18.72 (since the 16:59 rollback).
+    PHP **8.1.34** accepted the 6 changed server files and the 7 test files. Pilot `on`; photo tables `present:6:2`, 6 files.
+  - **Backup** `/root/dnb-5.18.74/backup-20261004T195911Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    242 tables; the data directory 135 MB; the installed 5.18.72 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed on the public
+    address; **V5** 302 / 401; **V3** the pilot unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after
+    the copy.
+  - **R.** R1 all 16 files as `db18ad9` has them, manifest 5.18.74; R2 `pilot=on`; R3 084 still installed, `6:2` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
+    the hand-off ON in both profiles, the portal gates on it, the token refused under empty inputs, the secret generator
+    present, "How to pay" present, zoom, no invented uptime, no hard-coded version**, beside every earlier marker; **R7**
+    (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G
+    0.00, BlueCARD 0.00** — the same figures as at 10:59, 11:56 and 16:24, no cash movement today; the photo tables and
+    files read exactly as before.
+- **Step 2 — DONE, about 20:0x UTC.** `set_config.php --key webhook_secret --generate` answered *"webhook_secret generated
+  and stored (32 characters). It is not shown here"*, and the listing that followed reads **`webhook_secret set (32
+  characters) — not shown`** — the value appeared nowhere in the terminal, as designed. The listing also still shows
+  `portal_data_report_handoff = "yes"` (the key stored at 16:5x; harmless now that the profile says yes — `--clear` is
+  optional) and the usual *[ConfigVault] restored after re-install* line, which is the in-memory fill explained under
+  Addendum 4 above, not a write.
+- **Step 3 — PENDING:** the Admin Auth Token in Settings → UCRM Connection (CRM Base URL left blank), then a Usage link
+  opened as a customer. If it still answers 404, the Data Report plugin reads the two values from a different file than the
+  override file and the store row this plugin writes; the read that decides it:
+  `grep -n "kyc_config\|config.json\|sqlite" /home/unms/data/ucrm/ucrm/data/plugins/dishnet-data-report/public.php | head`.
+- **Pending from the operator on the AI brief (`docs/55`):** whether to fix the live lead-path defects (a) and (b) behind
+  the existing `ai_lead_capture` / `ai_crm_lead_sync` flags — an external write (uCRM lead clients) that is configured
+  but has never happened. The dark media batch does not depend on that answer.
