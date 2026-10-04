@@ -3938,3 +3938,65 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
     *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
     the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+
+## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — BUILT, rehearsed, NOT deployed
+
+**Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
+accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: UGX −24,119,205.00 / USD
+−139.37"** and the account tiles (Ecobank Uganda UGX −24,922,777, Cash Uganda 29,137,000, Airtel 0, MTN 0, Ecobank USD
+−1,039.37, Cash USD 0), beside the Cashbook page's card **UGX CASH IN HAND 723,072.00 / USD 10,871.37**. The 5.18.68
+decision ("I don't want working capital and bank amount to be shown in the plugin in Uganda — cash in hand only") had been
+applied to the Cashbook page; the landing hero still drew `currencyPositions()`, the Phase-C account model, on a book
+without SSP (`tabs/accounts/accounts_dashboard.php`: `$_dashSSP ? [] : $cbDash->currencyPositions()`), while South Sudan's
+branch of the same hero draws the ledger's running balance per project ("Total Cash Position" with Fiber & Starlink /
+DishNet 4G / BlueCARD chips). Two more things on that page, read from the code: `getBothBalances()` is hard-coded to the
+**USD** stream (`getBalanceByCurrency($project, 'USD')`), so the Money Locations office figure on a UGX book was the dollar
+bag; and Money Locations lists staff by *collection exposure* (the `staff_cash_position` view), which reads 0 for a
+technician who only holds an advance — so the page said *"All cash is in office — no field holdings"* while the technician
+held about UGX 339,672.
+
+**What changed** (`MAIN_HASH_5_18_71` on the branch, release `RELEASE_HASH_5_18_71` on `cba7faf`), all on a book without
+SSP, South Sudan's branch untouched:
+- **The hero reads "Cash in hand — per currency"**: `CashbookService::cashInHand()` per book currency — the Cashbook card's
+  own figure (UGX 723,072.00 / USD 10,871.37 today) — and the base per project in the three chips (Fiber & Starlink /
+  DishNet 4G / BlueCARD), the shape South Sudan's hero has. `currencyPositions()` is not called on the page any more; no
+  bank balance, no unassigned stream, no "position".
+- **Money Locations**: the office figure is the base cash in hand (not the literal-USD project balances); the block lists
+  **money held by staff** — `StaffCashPositionService::getUSDBalance()` per active non-admin staff, exactly the base
+  balance Staff Cashbooks shows (advances and collections received, net of expenses and handovers), each row linking to
+  that person's Staff Cashbook; a "With staff" total and a header badge; the empty line reads *"nothing held by staff"*.
+  The **Field Cash KPI and its "collectors" count are unchanged** — collection exposure is a different question.
+- **`tools/cash_in_hand.php`** (new, READ-ONLY): prints the ledger's running balance per currency and the base per project —
+  what the hero shows — for the operator to read beside the screen and for the deploy's R7.
+- `manifest.json` 5.18.71; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
+- Not changed, recorded: `getBothBalances()`'s literal USD (used by the South Sudan hero, the API balances and the evening
+  summary's SSP branch) — identity on South Sudan, a latent base-currency item elsewhere; the Cashbook card's USD figure
+  (10,871.37) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
+
+**Tests.**
+- `tests/test_accounts_dashboard_cash.php` — **30/0.** A: an empty Uganda book — the hero "Cash in hand — per currency",
+  UGX 0.00, USD 0.00 beneath, three project chips UGX 0.00, no account position and no South Sudan total, Money Locations
+  "nothing held by staff", office UGX 0.00. B: a UGX 1,000,000 receipt and a UGX 150,000 Staff Advance to the technician
+  through the real Add Entry wizard — the hero reads UGX 850,000.00, the Fiber & Starlink chip 850,000.00 and the others
+  0.00, the USD line untouched, the office UGX 850,000.00, the technician listed holding UGX 150,000.00 with the "With
+  staff" total and badge, the Field Cash KPI still UGX 0 / 0 collectors, and **the Cashbook page's card reads the same
+  850,000.00**. C: the technician logs a UGX 40,000 expense on the Field Register — the held figure follows Staff
+  Cashbooks, the hero does not move. D: South Sudan — "Total Cash Position", the three chips and the exposure list's own
+  empty line, unchanged. E: three weakened copies caught — the hero drawing the account position again; the office figure
+  reading the literal USD stream again (UGX 0.00 against a 1,000,000 receipt); the held-by-staff list emptied.
+- `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0, `test_sales_support_tenant` 37/0, `test_staff_cash_chain` 73/0.
+- **Release commit `release/5.18.71` = `RELEASE_HASH_5_18_71`, parent `cba7faf` (5.18.70, production since 07:12 UTC):**
+  the branch commit's plugin changes applied on the live version, the four pins for files absent at 5.18.70 left out:
+  RELEASE_DELTA_5_18_71.
+- **`scripts/deploy-5.18.71.sh`** (pinned `RELEASE_HASH_5_18_71` over `cba7faf`), the 5.18.70 script's shape: A0 refuses a
+  pin whose parent is not 5.18.70 or a delta carrying a migration or any partner-portal / CSRF file; **R6** checks the hero
+  label, no `currencyPositions()` call, the held-by-staff list and the tool, beside the 5.18.69/5.18.70 fixes, the 5.18.68
+  chain and the photo surface; **R7** runs the read-only cash-in-hand tool inside the container and prints the live book's
+  figures — what the hero will show; RB after a rollback checks the hero is gone and the 5.18.69/5.18.70 fixes still there;
+  F prints the rollback alone after the verdict and **no repair command — this release has none**.
+- **Rehearsal `scripts/harness/deploy-5.18.71/rehearse.sh`:** REHEARSAL_RESULT_PENDING_5_18_71
+- **The operator's commands — two, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.71 && mkdir -p /root/dnb-5.18.71 && bash scripts/deploy-5.18.71.sh 2>&1 | tee /root/dnb-5.18.71/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `cba7faf`. (2) The rollback, printed by the deploy's log on its own.
+- **Still open:** the 5.18.70 VOID (the operator's terminal stopped at the prompt; the records log was not received); the
+  Staff Cashbooks UGX balance confirming the 5.18.68 backfill. SUITE_PENDING_5_18_71 **RESULT:** not deployed.
