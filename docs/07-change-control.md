@@ -4167,3 +4167,83 @@ The rollback is printed by the script, alone, at the end of its log — never ha
 - **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
   before); the full plugin suite's result (running at the time of the deploy); the 5.18.70 VOID's records log (still not
   received); Money Locations seen in a browser; `bash scripts/deploy-5.18.72.sh --after-only`.
+
+## 04 Oct — Customer sign-in walkthrough on Uganda — FINDINGS, no change made
+
+**Asked by the operator** after a link out of the portal answered 404 (the browser console line they pasted:
+`…/_plugins/dishnet-data-report/public.php?clientId=…&kit=…&token=…` → *404 Not Found*): *"now think like end user and do
+test for customer login does our app is user friendly to customer or not"*. The link's token is a ten-minute hand-off minted
+by `app_data_report_token` at 12:00:27 UTC; it is not copied here and must never be. What the 404 means is read from the
+code: `DishNet.openDataReport()` sends the customer to **another plugin, `dishnet-data-report`**, which is **not installed
+on the Uganda host** — the portal's Starlink-fleet screens were written for the South Sudan plugin set.
+
+**Method.** A sandbox copy of the plugin (v5.18.72) served under `/plugins/dishnet-hybrid-sudan/` the way uCRM serves it,
+the **uganda** profile, UGX, one Starlink customer with one kit in a sibling kit register (`.dishnet-starlink-finance-data/
+sl_kits.json`, as production evidently has one — the operator's link carried a kit number) and one unpaid invoice,
+WhatsApp in dry-run. Driven over real HTTP with a cookie jar as a customer would: the sign-in page, six spellings of the
+number, the mistakes, the code, the consent step, **fourteen portal screens**, the hand-off token, logout, the back button.
+Script and output in the session scratchpad; nothing touched the real plugin or any server.
+
+**What works well (keep):**
+- **The number is accepted however people type it** — `0772 XXX XXX`, `0772XXXXXX`, `+256 772 XXX XXX`, `256772XXXXXX`,
+  `772XXXXXX`, `+256772XXXXXX` all reach the same customer and the same WhatsApp destination; the hint reads *"Include
+  country code. Uganda: +256"*.
+- **The code message** is short and clear (*"Your code: ****** — Valid for 15 minutes. If you did not request this,
+  ignore."*); the screen shows a live countdown from the server clock, auto-submits at six digits, offers *Resend* and the
+  e-mail route; *"Wrong code."* on a wrong code; five wrong attempts need a new code; a malformed code is refused.
+- **Privacy by design:** an unknown number or e-mail gets the same *"Code sent"* answer (nobody can probe which numbers are
+  customers), and the help copy covers the case (*"No code after a couple of minutes? …"*). Ten codes per number per hour,
+  then *"Too many requests. Try again in 1 hour."*
+- **The session** is an HttpOnly cookie (no token in the page or URL); the portal before consent bounces to the consent
+  step; logout revokes the session on the server — the back button then shows *"Session ended. Please sign in again"* and
+  returns to sign-in in 3 s.
+- **The Support screen** leads with WhatsApp, then the Uganda call and e-mail from the profile; the Terms/Privacy step is
+  one tap; the portal is installable to the home screen; ~100 KB per screen, five tabs, one consistent design.
+
+**Findings, ranked (as a Uganda customer sees them):**
+1. **Usage links lead to a 404 — three places.** Home card *"Usage details →"* / *"See details →"* and the site page's
+   *"Usage Details"* tile all call `openDataReport()`, which mints the hand-off token and navigates, in the same tab, to
+   `dishnet-data-report/public.php` — absent here. Reproduced: the token endpoint answers 200 with a 600 s token, the link
+   answers **404**. The token (customer name, phone, account list) lands in the URL of a 404 page — in browser history and
+   the web server's log. **Fix:** draw those links only when `SiblingPlugin::installed('dishnet-data-report')`; otherwise
+   send the customer to the in-app *Usage* view (`view=usage`, which exists) and have `app_data_report_token` refuse when
+   the plugin is absent.
+2. **The WiFi, Connected-devices and Hotspot features on the site page assume the same absent plugin.** *"Change WiFi"*
+   (site version, `wifi_site`) shows a full form — *"Changes are sent via Starlink cloud… Update WiFi"* — whose submit
+   fetches `dr_wifi_change_password` from the absent plugin; *"Connected devices"* shows *"Router offline — The router must
+   be online…"* plus a developer message (*"Network error: Unexpected token '<'"*, the 404 page parsed as JSON); the
+   *"Hotspot"* tile's picker says *"Checking…"* and fails the same way. The top-level *Wi-Fi Settings* (Support → *Change
+   Wi-Fi password*) is honest: *"No routers found… Contact support to set up remote WiFi management."* **Fix:** one gate on
+   the plugin's presence; where absent, the honest text everywhere, or hide the tiles.
+3. **A Uganda customer is not told how to pay.** The invoice screen reads *"Payment reference — Reference: INV-… Amount:
+   UGX 350,000 — I've paid this invoice (notifies accounts via WhatsApp)"*: no bank account, no mobile-money number, no
+   *Pay Now* (DPO is not enabled for Uganda; `profiles/uganda.json` has `payment_instructions: null`). The home card says
+   *"Pay to keep service active"* and the path ends there. **Fix:** the operator supplies the Uganda payment instructions
+   (bank, MTN/Airtel merchant codes) for the profile — a configuration decision, then one profile edit — and/or enables DPO
+   for Uganda.
+4. **Usage copy promises a sync that may never come.** *"No usage data — Usage will appear once the billing cycle syncs"*
+   (site page) and *"Usage tracking is not yet available for your service. This will update automatically once data
+   syncs"* (Usage screen). On Uganda the only source is the plugin's own hourly collector (`cron/starlink_usage.php`),
+   which needs a Starlink session on the server; *Dish status — Refresh* (`app_site_refresh`) needs the same. Whether that
+   session exists on the Uganda host is **not known here**.
+5. **Service status overstates:** *"All services operational · 24h uptime 100%"* is fixed text in the template, not a
+   measurement. **Fix:** drop the uptime figures (keep *Report an outage* and the speed test) or measure them.
+6. **Small copy and polish:** the Account screen footer says *"DishNet Africa · v4.12.20"* while the sign-in page says
+   v5.18.72 (`portal.php:1293`, hard-coded); *"Require biometric at app open — Loading…"* never resolves in a browser
+   (native-only row; hide it outside the app); the sign-in page blocks pinch-zoom (`maximum-scale=1,user-scalable=no`)
+   while the portal allows it — remove it for customers with poor eyesight; a customer who taps *Resend* repeatedly can
+   lock the number for an hour with no countdown shown.
+
+**Verdict.** Sign-in: friendly and robust. Portal: the money and support paths are clear, but on Uganda **five tiles and
+links end in a 404 or a technical error** because they belong to the South Sudan plugin set, and **the one thing a customer
+most needs — how to pay — is missing**.
+
+**One production fact only the operator can read (read-only):** `ls -la /home/unms/data/ucrm/ucrm/data/plugins/` —
+which sibling plugins and `.<plugin>-data` directories exist. The site page rendered a kit, so a kit register was found;
+the data-report plugin's page was not. That listing decides whether finding 1–2 is "gate on presence" alone or also
+"stale data directory".
+
+**Proposed 5.18.73 (not built):** (a) gate every data-report feature on the plugin's presence — honest *not available*
+text, usage links to the in-app Usage view, the token endpoint refusing when absent; (b) Uganda payment instructions in
+the profile once the operator supplies them; (c) the six small fixes above. South Sudan unchanged (the plugin is present
+there, so every gate is true).
