@@ -1,4 +1,6 @@
 <?php
+// 5.18.70: the book's base bag — what this page's code called 'USD'. UGX on Uganda, USD on South Sudan (identity there).
+$_frBase = dn_book_base($config ?? null);
 // ── CSV Export ──────────────────────────────────────────────────────────────
 if (!empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     // (ledger built below — rebuild inline for export)
@@ -17,7 +19,7 @@ if (!empty($_GET['fr_export']) && $_GET['fr_export'] === 'csv') {
     if (!class_exists('ExpenseGateway')) require_once __DIR__ . '/../../lib/ExpenseGateway.php';
     $_frGw = new ExpenseGateway($store);
     foreach ($_frGw->getByStaff($agId) as $e) {
-        $rows[] = [substr($e['submitted_at']??'',0,10),'OUT',$e['currency']??'USD',$e['amount']??0,$e['ssp_amount']??0,$e['category']??'Expense',$e['description']??'',$e['status']??'pending'];
+        $rows[] = [substr($e['submitted_at']??'',0,10),'OUT',$e['currency']??$_frBase,$e['amount']??0,$e['ssp_amount']??0,$e['category']??'Expense',$e['description']??'',$e['status']??'pending'];
     }
     foreach ($store->load('cash_handovers.json') ?: [] as $h) {
         if ((int)($h['from_id']??0)!==$agId) continue;
@@ -94,7 +96,7 @@ try {
     $__advStmt = $store->getPdo()->prepare("SELECT issued_by_id, recipient_id, amount, currency FROM cash_advances WHERE (issued_by_id=? OR recipient_id=?) AND status IN ('active','partial','settled')");
     $__advStmt->execute([$fr_agentId, $fr_agentId]);
     foreach ($__advStmt->fetchAll(\PDO::FETCH_ASSOC) as $__a) {
-        $__aCur = strtoupper($__a['currency'] ?? 'USD');
+        $__aCur = strtoupper($__a['currency'] ?? $_frBase);
         $__aAmt = (float)($__a['amount'] ?? 0);
         if ((int)$__a['recipient_id'] === $fr_agentId) {
             if ($__aCur === 'SSP') $fr_ssp_adv_in += $__aAmt; else $fr_usd_adv_in += $__aAmt;
@@ -202,7 +204,7 @@ $fr_is_support_role = dn_ssp_selectable($config ?? null) && in_array($userRole ?
 // ── View / filters ────────────────────────────────────────────────────────
 $fr_view = $_GET['fr_view'] ?? 'ledger';
 $fr_curr = strtoupper($_GET['fr_curr'] ?? '');
-if (!in_array($fr_curr, dn_ssp_selectable($config ?? null) ? ['USD','SSP'] : ['USD'])) $fr_curr = '';
+if (!in_array($fr_curr, dn_ssp_selectable($config ?? null) ? [$_frBase, 'SSP'] : [$_frBase], true)) $fr_curr = ''; // 5.18.70: the base bag by its own code
 $fr_from = $_GET['fr_from'] ?? '';
 $fr_to   = $_GET['fr_to']   ?? '';
 
@@ -210,11 +212,12 @@ $fr_to   = $_GET['fr_to']   ?? '';
 $fr_ledger = [];
 // Collections (USD IN)
 foreach ($fr_collections as $c) {
-    if ($fr_curr && $fr_curr !== 'USD') continue;
+    $_cCur = strtoupper($c['currency'] ?? $_frBase); // 5.18.70: the collection's own stamp; the base when it carries none
+    if ($fr_curr && $fr_curr !== $_cCur) continue;
     $fr_ledger[] = [
         'date'      => substr($c['collected_at'] ?? $c['created_at'] ?? date('Y-m-d'), 0, 10),
         'dir'       => 'in',
-        'currency'  => 'USD',
+        'currency'  => $_cCur,
         'amount'    => (float)($c['amount'] ?? 0),
         'ssp_amount'=> 0,
         'category'  => 'Collection',
@@ -243,7 +246,7 @@ foreach ($fr_cashin as $i) {
         'id'        => 'CIN-'.($i['id'] ?? ''),
     ];
     // Exchange also creates a USD OUT
-    if (($i['category'] ?? '') === 'Exchange' && !$fr_curr || $fr_curr === 'USD') {
+    if (($i['category'] ?? '') === 'Exchange' && !$fr_curr || $fr_curr === $_frBase) {
         $fr_ledger[] = [
             'date'      => substr($i['created_at'] ?? date('Y-m-d'), 0, 10),
             'dir'       => 'out',
@@ -260,7 +263,7 @@ foreach ($fr_cashin as $i) {
 }
 // Expenses (USD or SSP OUT)
 foreach ($fr_expenses as $e) {
-    $cur = $e['currency'] ?? 'USD';
+    $cur = $e['currency'] ?? $_frBase;
     if ($fr_curr && $fr_curr !== $cur) continue;
     $isStaff = !empty($e['is_staff_payment']) || !empty($e['staff_name']);
     $catLabel = $isStaff
@@ -289,7 +292,7 @@ foreach ($fr_expenses as $e) {
 }
 // Handovers (USD or SSP OUT)
 foreach ($fr_handovers as $h) {
-    $hCur = strtoupper($h['currency'] ?? 'USD');
+    $hCur = strtoupper($h['currency'] ?? $_frBase);
     if ($fr_curr && $fr_curr !== $hCur) continue;
     $hAmt    = (float)($h['amount'] ?? 0);
     $hSsp    = (float)($h['ssp_amount'] ?? 0);
@@ -314,7 +317,7 @@ try {
     );
     $_advReceived->execute([$fr_agentId]);
     foreach ($_advReceived->fetchAll(\PDO::FETCH_ASSOC) as $adv) {
-        $aCur = strtoupper($adv['currency'] ?? 'USD');
+        $aCur = strtoupper($adv['currency'] ?? $_frBase);
         if ($fr_curr && $fr_curr !== $aCur) continue;
         $aAmt = (float)($adv['amount'] ?? 0);
         $fr_ledger[] = [
@@ -339,7 +342,7 @@ try {
     );
     $_advGiven->execute([$fr_agentId]);
     foreach ($_advGiven->fetchAll(\PDO::FETCH_ASSOC) as $adv) {
-        $aCur = strtoupper($adv['currency'] ?? 'USD');
+        $aCur = strtoupper($adv['currency'] ?? $_frBase);
         if ($fr_curr && $fr_curr !== $aCur) continue;
         $aAmt = (float)($adv['amount'] ?? 0);
         $fr_ledger[] = [
@@ -364,8 +367,8 @@ usort($fr_ledger, fn($a,$b) => strcmp($b['date'], $a['date']));
 $fr_ledger = array_values($fr_ledger);
 
 // ── Summary data ──────────────────────────────────────────────────────────
-$fr_sum_usd_in  = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='in'&&$r['currency']==='USD'&&$r['status']==='approved')), 'amount'));
-$fr_sum_usd_out = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='out'&&$r['currency']==='USD'&&$r['status']==='approved')), 'amount'));
+$fr_sum_usd_in  = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='in'&&$r['currency']===$_frBase&&$r['status']==='approved')), 'amount'));
+$fr_sum_usd_out = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='out'&&$r['currency']===$_frBase&&$r['status']==='approved')), 'amount'));
 $fr_sum_ssp_in  = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='in'&&$r['currency']==='SSP'&&!in_array($r['status'],['rejected','voided']))), 'ssp_amount'));
 $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, fn($r)=>$r['dir']==='out'&&$r['currency']==='SSP'&&$r['status']==='approved')), 'ssp_amount'));
 ?>
@@ -686,8 +689,8 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 <div class="fr3-tb">
   <button class="fr3-curr-btn <?php echo $fr_curr===''?'on':''; ?>"
     onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>'">All</button>
-  <button class="fr3-curr-btn <?php echo $fr_curr==='USD'?'on':''; ?>"
-    onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=USD<?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">💵 <?= dn_book_base($config) ?></button>
+  <button class="fr3-curr-btn <?php echo $fr_curr===$_frBase?'on':''; ?>"
+    onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=<?= $_frBase ?><?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">💵 <?= dn_book_base($config) ?></button>
   <?php if (dn_ssp_selectable($config ?? null)): ?>
   <button class="fr3-curr-btn <?php echo $fr_curr==='SSP'?'on':''; ?>"
     onclick="location.href='?page=dashboard&tab=wallet&fr_view=<?php echo $fr_view; ?>&fr_curr=SSP<?php echo $fr_from?"&fr_from=$fr_from":""; ?><?php echo $fr_to?"&fr_to=$fr_to":""; ?>'">🇸🇸 SSP</button>
@@ -780,7 +783,7 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
     $isExp = isset($row['collector_id']) && !isset($row['from_id']);
     $isHov = isset($row['from_id']);
     $isCin = isset($row['collector_id']) && !isset($row['from_id']) && !isset($row['category_raw']);
-    $typ = $isHov ? 'Handover' : (($row['currency']??'USD')==='SSP'?'SSP Expense':'USD Expense');
+    $typ = $isHov ? 'Handover' : (($row['currency']??$_frBase)==='SSP'?'SSP Expense':$_frBase.' Expense');
     $amt = ($row['currency']??'USD')==='SSP'
       ? number_format($row['ssp_amount']??0,0).' SSP'
       : dn_cur($config) . number_format($row['amount']??0,2);
@@ -1282,6 +1285,9 @@ $fr_sum_ssp_out = array_sum(array_column(array_values(array_filter($fr_ledger, f
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 var _fr3Curr = 'USD', _fr3Dir = '', _fr3Cat = '';
+// 5.18.70: 'USD' above is the base PILL's token, not a currency. What every form SUBMITS for that pill is the book's base —
+// UGX on Uganda. The pill used to submit the literal 'USD', so a technician's UGX entry was stamped as dollars.
+var _fr3Base = <?= json_encode(dn_book_base($config)) ?>;
 var _fr3UsdHolding   = Math.max(0, <?php echo $fr_usd_holding; ?>);
 var _fr3IsAcct       = <?php echo $fr_isAcct ? 'true' : 'false'; ?>; // all cash-handling roles
 var _fr3IsFieldAcct  = <?php echo ($userRole === 'field_accountant') ? 'true' : 'false'; ?>; // field_accountant only (staff payments)
@@ -1883,7 +1889,7 @@ function fr3Submit() {
     document.getElementById('fr3fHovNote').value     = desc;
     document.getElementById('fr3fHovTo').value       = toId;
     document.getElementById('fr3fHovToName').value   = toName;
-    document.getElementById('fr3fHovCurrency').value = _fr3Curr;
+    document.getElementById('fr3fHovCurrency').value = _fr3Curr === 'SSP' ? 'SSP' : _fr3Base;
     document.getElementById('fr3FormHov').submit();
 
   } else if (_fr3Cat === 'Give Advance') {
@@ -1892,7 +1898,7 @@ function fr3Submit() {
     var toName = sel.options[sel.selectedIndex].getAttribute('data-name') || sel.options[sel.selectedIndex].text;
     var toId   = sel.value;
     document.getElementById('fr3fAdvAmount').value   = amt;
-    document.getElementById('fr3fAdvCurrency').value = _fr3Curr;
+    document.getElementById('fr3fAdvCurrency').value = _fr3Curr === 'SSP' ? 'SSP' : _fr3Base;
     document.getElementById('fr3fAdvTo').value       = toId;
     document.getElementById('fr3fAdvToName').value   = toName;
     document.getElementById('fr3fAdvPurpose').value  = _fr3AdvPurpose;
@@ -1924,7 +1930,7 @@ function fr3Submit() {
   } else if (_fr3Cat === 'Collection') {
     // Collections come from the Collect tab, not here
     // But allow manual entry → log as expense reverse / cash_in
-    document.getElementById('fr3fInCurrency').value  = 'USD';
+    document.getElementById('fr3fInCurrency').value  = _fr3Base;
     document.getElementById('fr3fInCategory').value  = 'Collection';
     document.getElementById('fr3fInSspAmount').value = 0;
     document.getElementById('fr3fInUsdGiven').value  = 0;
@@ -1935,7 +1941,7 @@ function fr3Submit() {
 
   } else if (_fr3Cat === 'Advance Received' || _fr3Cat === 'Return' || _fr3Cat === 'Collection') {
     // USD Cash IN for field_accountant
-    document.getElementById('fr3fInCurrency').value  = 'USD';
+    document.getElementById('fr3fInCurrency').value  = _fr3Base;
     document.getElementById('fr3fInCategory').value  = _fr3Cat;
     document.getElementById('fr3fInSspAmount').value = 0;
     document.getElementById('fr3fInUsdGiven').value  = 0;
@@ -1950,7 +1956,7 @@ function fr3Submit() {
     var staffName = document.getElementById('fr3StaffName').value.trim();
     var staffType = document.getElementById('fr3StaffType').value;
     if (!staffName) { alert('Please enter the staff member name.'); return; }
-    document.getElementById('fr3fCurrency').value      = isSsp ? 'SSP' : 'USD';
+    document.getElementById('fr3fCurrency').value      = isSsp ? 'SSP' : _fr3Base;
     document.getElementById('fr3fCategory').value      = staffType; // Salary/Advance/Fuel etc
     document.getElementById('fr3fExpType').value       = staffType;
     document.getElementById('fr3fAmount').value        = isSsp ? 0 : amt;
@@ -1977,7 +1983,7 @@ function fr3Submit() {
     var isSsp = (_fr3Curr === 'SSP');
     var autoDesc = commReason + ' — ' + commName + ' (' + commPhone + ')';
     if (commInvoice) autoDesc += ' [' + commInvoice + ']';
-    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : 'USD';
+    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : _fr3Base;
     document.getElementById('fr3fCategory').value  = 'Commission';
     document.getElementById('fr3fExpType').value   = 'Commission';
     document.getElementById('fr3fAmount').value    = isSsp ? 0 : amt;
@@ -2001,7 +2007,7 @@ function fr3Submit() {
     var plate = (document.getElementById('fr3VehiclePlate').value || '').trim();
     var autoDesc = _fr3VehicleType + (plate ? ' — ' + plate : '');
     if (desc && desc !== autoDesc) autoDesc = desc;
-    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : 'USD';
+    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : _fr3Base;
     document.getElementById('fr3fCategory').value  = 'Vehicle';
     document.getElementById('fr3fExpType').value   = _fr3VehicleType;
     document.getElementById('fr3fAmount').value    = isSsp ? 0 : amt;
@@ -2022,7 +2028,7 @@ function fr3Submit() {
     // v4.9.10: Refund / Power — submit as expense with proper cashbook category
     var catMap = {'Refund':'Refund','Power':'Site Power'};
     var isSsp = (_fr3Curr === 'SSP');
-    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : 'USD';
+    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : _fr3Base;
     document.getElementById('fr3fCategory').value  = catMap[_fr3Cat] || _fr3Cat;
     document.getElementById('fr3fExpType').value   = catMap[_fr3Cat] || _fr3Cat;
     document.getElementById('fr3fAmount').value    = isSsp ? 0 : amt;
@@ -2042,7 +2048,7 @@ function fr3Submit() {
   } else {
     // My own Expense (USD or SSP)
     var isSsp = (_fr3Curr === 'SSP');
-    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : 'USD';
+    document.getElementById('fr3fCurrency').value  = isSsp ? 'SSP' : _fr3Base;
     document.getElementById('fr3fCategory').value  = document.getElementById('fr3ExpType').value;
     document.getElementById('fr3fExpType').value   = document.getElementById('fr3ExpType').value;
     document.getElementById('fr3fAmount').value    = isSsp ? 0 : amt;
