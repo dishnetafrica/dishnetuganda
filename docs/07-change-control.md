@@ -3604,3 +3604,43 @@ nobody for the ambiguous row, states each staff member's UGX in hand, is in the 
 run reads SKIP throughout; **I four weakened copies each caught** (the wizard's amount rule, `onCashIn`'s label, the
 Staff Cashbooks filter, the position service's base). Also green: `test_cashbook_currency` 86/0, `test_cashbook_tenant`
 26/0, `test_cashbook_accounts` 118/0, `test_cashbook_seeds` 37/0, `test_staff_cashbook_scope` 9/0. PHP 7.4 syntax throughout.
+Wider regression, all green: `test_notify_staff_side` 53, `test_notify_staff_controls` 45, `test_job_notifier` 130,
+`test_staff_jobs_south_sudan` 51, `test_job_access` 83, `test_job_notifications_day` 50 (the byte-for-byte 5.18.51 baseline
+on both countries), `test_currency_sweep` 9, `test_sales_support_tenant` 36, `test_starlink_accounts` 52, `test_dpo_screens` 51.
+
+**6. Deployment — prepared the project's way, NOT run.** Main commits `6c7a4df` (the build), `e66faf8` (a fix the rehearsal
+found, below), `eaec5ca`/`6ba8593` (the deploy script and its pin). **Release commit `release/5.18.68` = `d8d2068`, parent
+`96857d8` (5.18.67, production since 3 Oct 20:07 UTC)** — the two main commits' plugin changes cherry-picked onto the live
+version, the four pins for test files that do not exist at 5.18.67 left out: **23 files, 2 added, 0 migrations, and the hunks
+on those 23 files are byte for byte the branch's** (diffed), with none of the undeployed portal/CSRF files (A0's pattern: 0
+hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_currency` 86/0, `test_cashbook_tenant` 26/0,
+`test_distributor_registry` 59/0, `test_staff_cashbook_scope` 9/0.
+- **`scripts/deploy-5.18.68.sh`** (pinned `d8d2068` over `96857d8`), the 5.18.67 script's shape: **A0** refuses a pin whose
+  parent is not 5.18.67, or whose delta carries a migration or any partner-portal / CSRF file; **R6** checks the chain's
+  markers beside the photo surface (the auto-link's amount rule twice, the ledger writer's label, the position service's
+  base, `cashInHand()`, the CASH IN HAND card, no `currencyPositions()` on the page, the strip gate, the evening summary, the
+  tool installed); **R7** runs the backfill tool **without `--apply`** inside the container — a dry run on the live data, its
+  plan printed (SR, date, category, the name as typed, the staff member matched, amount, action) for the operator to read,
+  and the photo tables/files re-read to prove nothing moved; **F** prints the rollback alone after the verdict, and the
+  backfill's `--apply` command after that as a **third separate block** (`docker exec -it ucrm php …/tools/
+  backfill_staff_cash_ins.php --apply`, typed `APPLY`). Code only; no migration; 22 checks on a clean deploy before R7's two.
+- **Rehearsal `scripts/harness/deploy-5.18.68/rehearse.sh`: 134/0 over 17 runs of the script, twice** on the final script,
+  against a 5.18.67 base holding a UGX book (`cashbook_base_currency=UGX`) with the pilot *on* and **one unlinked Staff Advance
+  seeded** (a staff member the live link never saw): the three NO-GO gates (a 5.18.66 server, a placeholder pin, a copy pinned
+  to the branch tip refused before any live read); the deploy as the operator runs it (24 ok; R7 plans *1 to create* for the
+  seeded advance and **the data digest of every table is unchanged across the deploy — the dry run wrote nothing**); R1/R6
+  teeth (the position service reverted → R1 names it and R6 says `position-service:literal-usd`; the Cashbook page reverted →
+  R6 names the missing card and the position cards); R5 teeth; the switch flipped; a live channel and a planted
+  `partner_api.php` caught by name; the rollback restores 5.18.67's page and service with the photo surface intact and no
+  data change; the R1-blinded copy caught; the rollback printed once after the verdict and the `--apply` command once after
+  the rollback.
+- **The first rehearsal run found a real defect (132/2):** the dry run had left an **empty `cash_ins` table** behind — the
+  store creates a JSON-list table the first time a name is loaded — so the digest moved. The tool now reads the cash-ins only
+  where the table exists (`e66faf8`); proved on the rehearsal's seed: no table change after a dry run, `--apply` still writes.
+  The other miss was the harness's own stale expectation (the backup is of 5.18.67, not 5.18.66). The release was re-cut
+  (`358117d` → `d8d2068`) and the script re-pinned.
+- **The operator's commands — three, never pasted together.** (1) The deploy, in the script's header:
+  `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.68 && mkdir -p /root/dnb-5.18.68 && bash scripts/deploy-5.18.68.sh 2>&1 | tee /root/dnb-5.18.68/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+  — it refuses unless the container serves `96857d8`. (2) The rollback, printed by the deploy's log on its own. (3) The
+  backfill's `--apply`, printed after it, to run only after reading R7's plan in the same log; it asks for `APPLY`, writes only
+  the CREATE/FIX rows listed, sends no message, and reads SKIP throughout on a second run. **RESULT: pending the operator's run.**
