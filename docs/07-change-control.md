@@ -4005,7 +4005,7 @@ SSP, South Sudan's branch untouched:
   caught by name; the rollback restores 5.18.70's dashboard with the 5.18.70, 5.18.69 and 5.18.68 fixes and the photo
   surface intact and no data change; the R1-blinded copy caught; the rollback printed once after the verdict and **no
   repair command anywhere in the log**. No defect on the first run. Run 1 on the working copy of the script; run 2 on the
-  committed script: REHEARSAL_RUN2_PENDING_5_18_71.
+  committed script (`91edb18`): **119/0 both times, the same 17 runs**.
 - **The operator's commands — two, never pasted together.** (1) The deploy, in the script's header:
   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.71 && mkdir -p /root/dnb-5.18.71 && bash scripts/deploy-5.18.71.sh 2>&1 | tee /root/dnb-5.18.71/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
   — it refuses unless the container serves `cba7faf`. (2) The rollback, printed by the deploy's log on its own.
