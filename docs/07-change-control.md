@@ -4334,7 +4334,7 @@ at 0640, which is why the tool could print *nginx:nginx · 0640* after the load.
 recorded: a tool that goes through the boot path is not read-only by construction; `PluginConfig::read()` is the path
 that *"changes nothing on disk"*, and the next diagnostic handed over must use it. **Decision pending: A, B or C above.**
 
-## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — DEPLOYED 16:24 UTC (PASSED 24/0/0)
+## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — DEPLOYED 16:24 UTC (PASSED 24/0/0), ROLLED BACK 16:59 UTC on the operator's decision (PASSED 18/0/1); production is 5.18.72 again
 
 **Decided by the operator** (*"c build it"*) after Addendum 4 above confirmed the root cause: on the Uganda install the
 portal minted a ten-minute hand-off token signed with `sha256(webhook_secret | crm_auth_token | constant)`, **both
@@ -4480,3 +4480,33 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
   page without the *Usage Details* tile, the Account footer at v5.18.73, *No outage reported*, the sign-in page zooming);
   `bash scripts/deploy-5.18.73.sh --after-only`; the Uganda payment details for the profile; the 5.18.70 VOID's records
   log and the Money Locations look (still open from the earlier entries).
+- **ROLLED BACK 2026-10-04, 16:59 UTC, on the operator's decision — PASSED, 18 ok / 0 failed / 1 note.** The operator
+  wrote *"how to cancel last update usage link i want to keep"*: they want the portal's *Usage details* link kept. Given
+  three routes (the setting, making the hand-off verify, the rollback) they ran **two**: first the setting
+  `portal_data_report_handoff = yes` (stored at about 16:5x UTC through `tools/set_config.php`; on 5.18.72 no code reads
+  it, so it is inert until 5.18.73 or later is installed again, when it will draw the links and let the mint decide),
+  then `deploy-5.18.73.sh --rollback`, typed `ROLLBACK`. The documented deploy put `88d8442` back; the 16 files were
+  stamped at 16:59:13 UTC; V1–V4 green (sign-in 200 with no redirect, the portal 302, no South Sudan contact, the pilot
+  `on` → `on`, no fatal in 60 s); **RB** all seven: manifest 5.18.72, the hand-off unconditional again, and the 5.18.72,
+  5.18.71, 5.18.70/69, 5.18.68 and 5.18.66/67 code intact. Backup `/root/dnb-5.18.73/backup-20261004T165847Z` holds the
+  5.18.73 install. Recorded from the pasted terminal; the log file is on the server.
+  - **State of production now:** 5.18.72. The *Usage details* link, the *See details* hand-off and the *Usage Details*
+    tile are drawn again for Uganda customers **and still open the Data Report plugin's 404 page**, because the two
+    signing values are still empty — the rollback changed code only. The hand-off token is again minted under the
+    all-empty secret. The six small fixes (installed version in the footer, biometric row, sign-in zoom, no invented
+    uptime, devices message, no tokenless navigation) are off production again.
+  - **What makes the link work on 5.18.72, without any deploy:** set `webhook_secret` and `crm_auth_token` in the plugin's
+    Settings tab (the fields the old admin form writes; `set_config.php` does not accept them). 5.18.72 then signs the
+    hand-off with them, and the Data Report plugin, which rebuilds the same secret from the Hybrid's stored
+    configuration, accepts it — provided it reads the file the Settings form writes, which one read of its code decides.
+    Cautions, from the code: the uCRM webhook refuses a request only when it carries a **different** `X-Crm-Key`, so an
+    empty uCRM webhook secret stays harmless; `crm_auth_token` overrides the automatic uCRM API credential **only when
+    `crm_base_url` is also set**, so leave the base URL empty.
+  - **Also visible in the pasted settings:** Uganda's payment instructions already exist in configuration —
+    `ai_fact_payment` (Airtel Money merchant, Ecobank account, how to reference a payment) and `pay_airtel_merchant` —
+    written for the AI assistant and the quotations. Finding 3 of the walkthrough (*a Uganda customer is not told how to
+    pay*) can therefore be closed from configuration the operator has already approved: a later release can show the
+    same instructions on the portal's invoice screen. Not built; noted for the operator's decision.
+  - **Branch and release state unchanged:** `release/5.18.73` = `9fd9f88` stays valid against the live `88d8442`;
+    `deploy-5.18.73.sh` installs it again whenever wanted (its summary printed the command). The six fixes are only
+    available by installing 5.18.73 or a later release.
