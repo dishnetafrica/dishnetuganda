@@ -4334,7 +4334,7 @@ at 0640, which is why the tool could print *nginx:nginx · 0640* after the load.
 recorded: a tool that goes through the boot path is not read-only by construction; `PluginConfig::read()` is the path
 that *"changes nothing on disk"*, and the next diagnostic handed over must use it. **Decision pending: A, B or C above.**
 
-## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — BUILT, rehearsed, NOT deployed
+## 04 Oct — 5.18.73: the customer portal keeps Uganda customers in the app — the Data Report hand-off is a tenant setting; the hand-off token is refused under empty signing inputs; six walkthrough fixes — DEPLOYED 16:24 UTC (PASSED 24/0/0)
 
 **Decided by the operator** (*"c build it"*) after Addendum 4 above confirmed the root cause: on the Uganda install the
 portal minted a ten-minute hand-off token signed with `sha256(webhook_secret | crm_auth_token | constant)`, **both
@@ -4455,3 +4455,28 @@ values are set, however the key reads.
 details); the Usage collector's state on the Uganda host; the WiFi / devices / Hotspot tiles against a Uganda router; the
 resend lockout countdown; and, for whoever owns the data-report plugin, that its client view answered **200 with no token
 at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be checked there.
+
+- **RESULT — DEPLOYED to production 2026-10-04, 16:24 UTC: PASSED, 24 ok / 0 failed / 0 notes** — the 24 the rehearsal
+  predicted (5.18.72 read 23; V6 is the one check more). The run began at 16:24:00 UTC; `DEPLOY` was typed and
+  `deploy-hybrid.sh` answered *"✓ container now serves 9fd9f88"*; the 16 files were stamped at 16:24:27 UTC. Recorded from
+  the terminal the operator pasted (the script prints no secret); the log file stays on the server as
+  `/root/dnb-5.18.73/deploy-20261004T162400Z.log`.
+  - **A.** Checkout `8891c38`; branch tip `44c7dcf` (not installed); release commit `9fd9f88` cut on `88d8442`; 16 files
+    (15 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `88d8442` / 5.18.72. PHP **8.1.34** accepted the
+    6 changed server files and the 7 test files. Pilot `on`; photo tables `present:6:2`, 6 files (3:1 and 3 at 11:56 —
+    technicians have taken photos since; the deploy touched neither).
+  - **Backup** `/root/dnb-5.18.73/backup-20261004T162400Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    242 tables; the data directory 135 MB; the installed 5.18.72 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6 the sign-in page allows
+    pinch-zoom on the public address**; **V5** 302 / 401; **V3** the pilot unchanged (`on` → `on`); **V4** no fatal or
+    parse error in the 60 s after the copy.
+  - **R.** R1 all 16 files as `9fd9f88` has them, manifest 5.18.73; R2 `pilot=on`; R3 084 still installed, `6:2` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
+    the hand-off is a tenant setting, the portal gates on it, the token is refused under empty inputs, zoom allowed, no
+    invented uptime, no hard-coded version**, beside every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN
+    HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as
+    at 10:59 and 11:56, no cash movement since; the photo tables and files read exactly as before.
+- **Not yet done:** a Uganda customer's look at the portal on 5.18.73 (home card without the *Usage details* link, a site
+  page without the *Usage Details* tile, the Account footer at v5.18.73, *No outage reported*, the sign-in page zooming);
+  `bash scripts/deploy-5.18.73.sh --after-only`; the Uganda payment details for the profile; the 5.18.70 VOID's records
+  log and the Money Locations look (still open from the earlier entries).
