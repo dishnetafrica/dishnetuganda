@@ -3515,3 +3515,92 @@ line per file, no fatal, no file skipped. Among them: `test_job_photos` 72/0, `t
 `test_staff_jobs_south_sudan` 51/0, `test_api_csrf_guard` 51/0, `test_partner_api` 32/0, `test_dist_isolation` 39/0. Run 1,
 during the 5.18.66 build, had been green except for the six version pins that still read 5.18.65 — bumped before the
 commit, each re-run green. This is the whole-suite confirmation the 5.18.66 entry above lists only per test.
+
+## 04 Oct — 5.18.68: staff money in the book's own currency (Uganda); the Cashbook shows cash in hand — BUILT, NOT deployed
+
+**Reported by the operator (two screenshots and two exports, 06:36 UTC):** South Sudan's cashbook "is a proper system";
+on Uganda "if we give any staff any money then it is not reflecting in that staff", and "I don't want working capital
+and bank amount to be shown in the plugin in Uganda — the UGX cash book is correct". Diagnosed from the code and the
+exports, then three decisions put to the operator and taken (AskUserQuestion): **cash in hand only** on the Cashbook
+page (display only, no data change); **backfill** the five earlier advances to Elisha; and **USD is sometimes handed to
+Uganda staff too** — so the UGX fix keeps a USD bag in view and the USD staff bag is scoped as a follow-up.
+
+**1. What was actually wrong — measured.** The chain *Add Entry → auto-link → cash_ins.json → StaffLedgerWriter::onCashIn →
+staff_ledger → Staff Cashbooks* existed and worked for South Sudan's literal `'USD'` bag only:
+- the auto-link wrote the staff cash-in with `amount = currency === 'USD' ? amount : 0` — **a UGX advance arrived as 0**
+  (`includes/post/post_cashbook.php`, two blocks; the same line in `post_field.php` ×3 and `my_account.php`);
+- `onCashIn` then returned on `amount <= 0`, and would have labelled the row `USD` anyway (`lib/StaffLedgerWriter.php`);
+- `StaffCashPositionService::getUSDBalance()` (14 literal `'USD'` tests), `DualReadCashPosition` (`position($id,'USD')`),
+  `staff_cashbooks.php` (`$uL = cur === 'USD'`), `my_account.php` and `wallet.php` **dropped every UGX row**. Elisha's
+  eight approved field expenses had reached the staff ledger in UGX and were invisible too. From the export: five
+  advances (UGX 650,000, 23 Sep–3 Oct) against UGX 310,328 of expenses — a page that should read about UGX 339,672
+  read nothing.
+- The Cashbook page's POSITION card (UGX −24,119,205) was the Phase-C account model: money accounts (Cash–Uganda
+  +29,137,000, Ecobank −24,922,777 — the statement import brought only card purchases) plus "unassigned rows"
+  −28,333,428, which includes the operator's **UGX 29,056,500 "ADJUSTMENT ENTRY" of 12 Sep** that zeroed the running
+  balance. The ledger's running balance (UGX 723,072) is right *because* the adjustment cancels the account rows; cash
+  rows alone, adjustment excluded, give exactly 723,072 as well. Two arithmetics on one table.
+
+**2. The principle (5.18.57's, applied to the money logic):** the code's "USD" bag is the BOOK's BASE bag. Every "is this
+the USD bag?" question became "is this the book's base bag?" — `dn_book_base()` — and every writer that said "amount only
+when USD" now says "amount for every non-SSP currency" (SSP alone lives in `ssp_amount`). On South Sudan the base is USD
+and the only other currency is SSP, so each change is an identity there.
+
+**3. Files.**
+- `includes/post/post_cashbook.php` (the wizard `cb_action=add_entry` and the `action=cashbook_add_entry` auto-links, and
+  the staff-payment auto-link), `includes/post/post_field.php` (three field-register writers), `tabs/sales/my_account.php`
+  (the staff-pay writer): `!== 'SSP' ? $amount : 0`.
+- `lib/StaffLedgerWriter.php::onCashIn` — a `'USD Received'` row is labelled with the cash-in's own currency; missing or
+  SSP-marked stays `USD` exactly as before.
+- `lib/StaffCashPositionService.php` (`$this->base = dn_book_base(null)`, every comparison and SQL literal),
+  `lib/DualReadCashPosition.php` (`position()/allPositions()` asked for the base bag).
+- `tabs/accounts/staff_cashbooks.php` — collections carry their currency; `$uL`/`$_allUsd` filter on `$scBaseCode`;
+  advances/expenses/transfers carry every non-SSP amount. `tabs/sales/my_account.php` — one `$_mcBase`; the guard, the hero
+  figures, the two ledgers, the book view and the labels read the base; **the two currency radios' `value` is the base code**
+  (they were literal `USD` under a UGX label — a Uganda staff's own expense form recorded dollars). `tabs/sales/wallet.php`
+  — the three USD filters. `lib/NotificationService.php::staffCashReceived` — money in a currency other than the base is
+  named by its code ("USD 100.00"), the display symbol belongs to the base.
+- `tabs/accounts/cashbook.php` — on a book without SSP the hero is one **CASH IN HAND** card per currency =
+  `CashbookService::cashInHand($currency, $project)` (**new**: the same rows and arithmetic as `getEntries()`' running-balance
+  streams; accounts, counterparts and the unassigned split play no part). `cron/cashbook_summary.php` — the evening
+  WhatsApp summary on such a book says the same figure per currency, then today's P&L, instead of POSITION/accounts/
+  unassigned/counterparts. `includes/navigation.php` — the *Opening Balances* strip link is not drawn on the Uganda tenant
+  (the screen stays reachable by address; South Sudan's strip unchanged).
+- `tools/backfill_staff_cash_ins.php` (**new**) — every cb_ledger OUT in the base currency with a staff-advance category
+  (Staff Advance, Commission, SSP Advance; never Salary or an allowance) naming a person: no cash-in with that SR → CREATE;
+  a cash-in with amount 0 → FIX; an amount → SKIP already linked; a name fitting no or two staff members → SKIP, never
+  guessed. Dry run by default; `--apply` asks for a typed `APPLY` (`--yes` for tests); writes through the live chain's own
+  record shape and `onCashIn` (idempotent `CIN-<id>`); dates the created cash-in on the day the money went out; no
+  WhatsApp; refuses any book that is not the Uganda tenant with a non-USD base; logs to `activity_log.json`.
+- `SAFETY.md` RULE 8 — a clarification: `amount` is in the BOOK's base currency (USD on South Sudan, UGX on Uganda since
+  Phase A); the substance — never SSP in `amount` — unchanged. `manifest.json` 5.18.68; the nine version pins.
+- Tests: `tests/test_staff_cash_chain.php` (**new**); `tests/test_cashbook_currency.php` — the two assertions that pinned the
+  old POSITION hero rewritten to the new truth plus one asserting no account/bank/unassigned figure on the non-SSP hero.
+
+**4. What was deliberately NOT done.** No data change by the deploy (the backfill is its own command, typed); the 12 Sep
+adjustment and the 34 bank-import rows stay as they are (the operator chose "cash in hand only"); the account tables and the
+Opening Balances screen stay (hidden from the strip, not removed); `tools/bank_statement.php` is left in place but should not
+be run again on Uganda; the USD staff bag on Uganda (a second tab like South Sudan's SSP bag) is a follow-up — today a USD
+advance reaches the ledger labelled USD and is kept out of the UGX figure; the passbook's `fr_curr=USD` filter and the
+`collection`-named ledger category of a cash-in are pre-existing and untouched.
+
+**5. Tests.** `test_staff_cash_chain.php` **73/0**, driven through the REAL web wizard and the real field-expense forms on
+sandboxed plugins (fake uCRM, fake Evolution): **A** a UGX 150,000 Staff Advance → cb_ledger OUT, a cash-in carrying UGX
+150,000 (not 0), a UGX staff-ledger IN row keyed `CIN-<id>`, the technician's WhatsApp text "UGX 150,000.00"; **B** Staff
+Cashbooks for the technician reads UGX 150,000.00 and lists the advance, the landing tiles too, the technician's own My
+Cash hero reads UGX 150,000.00 and never says USD, the expense form offers UGX as the base; **C** a UGX 40,000 field
+expense submitted and approved → cashbook OUT, ledger OUT, both pages read 110,000.00; **D** a USD 100 advance is its own
+bag (cash-in USD, ledger USD, UGX still 110,000, text "USD 100.00"); **E** a Transport Allowance creates no cash-in (the
+personal-pay rule, unchanged); **F** the Cashbook page reads "UGX CASH IN HAND · UGX 290,000.00" and "USD CASH IN HAND ·
+USD -100.00", no POSITION, no "unassigned rows", no account count, no Opening Balances tab, the other tabs present;
+**G South Sudan** — a USD 50 and an SSP 100,000 Staff Advance through the same forms produce cash_ins, staff_ledger,
+cb_ledger rows and WhatsApp texts **byte for byte equal to a golden captured from the 5.18.67 tree** (scratchpad
+`ss_capture.php`, run on both trees: IDENTICAL), the page keeps its USD BALANCE / SSP BALANCE cards and the Opening
+Balances tab, the backfill tool refuses the book (exit 2); **H the backfill** — a planted 5.18.67-style ghost (amount 0,
+no ledger row), an advance to a person hired later, and an ambiguous name with no cash-in: the dry run plans FIX / CREATE /
+SKIP ambiguous, omits the USD advance, and writes nothing (cash-ins and ledger identical); `--apply --yes` restores UGX
+150,000 and its CIN row, creates the late hire's cash-in dated the day the money went out with its ledger row, guesses
+nobody for the ambiguous row, states each staff member's UGX in hand, is in the activity log, sent no message; a second
+run reads SKIP throughout; **I four weakened copies each caught** (the wizard's amount rule, `onCashIn`'s label, the
+Staff Cashbooks filter, the position service's base). Also green: `test_cashbook_currency` 86/0, `test_cashbook_tenant`
+26/0, `test_cashbook_accounts` 118/0, `test_cashbook_seeds` 37/0, `test_staff_cashbook_scope` 9/0. PHP 7.4 syntax throughout.

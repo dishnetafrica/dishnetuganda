@@ -245,10 +245,16 @@ t('the unreachable tab-side exporter is gone (links to the live one remain)',
   && strpos($cb, '$_csvIsAll') === false && strpos($cb, 'fputcsv') === false, true);
 
 echo "\nPhase C hero: a balance always names its OWN currency\n";
-t('non-SSP hero renders per-currency POSITION cards',
-  strpos($cb, "htmlspecialchars(\$_pos['currency']) ?> POSITION") !== false, true);
-t('the position amount is prefixed by the position currency, not the display symbol',
-  strpos($cb, "<?= htmlspecialchars(\$_pos['currency']) ?> <?php echo number_format(\$_pos['total'], 2); ?>") !== false, true);
+// 5.18.68: the non-SSP hero is what the LEDGER says is in hand, per currency — the Phase-C
+// POSITION cards (accounts + unassigned rows) left the Uganda screen on the operator's decision.
+t('non-SSP hero renders a per-currency CASH IN HAND card from the ledger itself',
+  strpos($cb, "htmlspecialchars(\$_cihCur) ?> CASH IN HAND") !== false
+  && strpos($cb, '$cb->cashInHand($_cihCur, $proj)') !== false, true);
+t('the cash-in-hand amount is prefixed by its own currency code, not the display symbol',
+  strpos($cb, "<?= htmlspecialchars(\$_cihCur) ?> <?php echo number_format(\$_cihBal, 2); ?>") !== false, true);
+t('the non-SSP hero shows no account, bank or unassigned-rows figure',
+  strpos($cb, "?> POSITION</div>") === false && strpos($cb, 'unassigned rows') === false
+  && strpos($cb, '$cb->currencyPositions()') === false, true);
 t('the legacy mislabeled hero only survives behind the SSP gate',
   strpos($cb, "<?php if (\$_cbSSP && (\$filterCurr === '' || \$filterCurr === \$_cbBase)): ?>") !== false, true);
 t('no combined figure on a non-SSP book (COMBINED card is SSP-gated)',

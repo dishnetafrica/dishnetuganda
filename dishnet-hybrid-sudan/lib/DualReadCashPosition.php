@@ -43,6 +43,9 @@ class DualReadCashPosition
     /** @var int Max mismatches to store in log */
     const MAX_LOG = 500;
 
+    /** 5.18.68: the base bag is the BOOK's base currency — UGX on Uganda, USD on South Sudan. */
+    private string $base = 'USD';
+
     public function __construct(\StoreInterface $store, \PDO $pdo, string $dataDir = '')
     {
         $this->store   = $store;
@@ -51,6 +54,7 @@ class DualReadCashPosition
 
         // Read config flags
         $config = $store->load('kyc_config.json') ?? [];
+        $this->base = function_exists('dn_book_base') ? dn_book_base(is_array($config) ? $config : null) : 'USD';
         $this->ledgerEnabled = ($config['ledger_enabled'] ?? true) !== false;
 
         // compareEnabled: whether to also read the old JSON system and log mismatches.
@@ -88,11 +92,11 @@ class DualReadCashPosition
 
         // Fast path: ledger only, no old-system read (default)
         if (!$this->compareEnabled) {
-            return $this->getLedger()->position($agentId, 'USD');
+            return $this->getLedger()->position($agentId, $this->base);
         }
 
         // Compare path: used by Ledger Health tab only
-        $newPos = $this->getLedger()->position($agentId, 'USD');
+        $newPos = $this->getLedger()->position($agentId, $this->base);
         $oldPos = $this->getOld()->getPosition($agentId);
         $this->compareAndLog($agentId, $newPos, $oldPos);
         return $newPos;
@@ -117,11 +121,11 @@ class DualReadCashPosition
 
         // Fast path: ledger only, no old-system read (default)
         if (!$this->compareEnabled) {
-            return $this->getLedger()->allPositions('USD');
+            return $this->getLedger()->allPositions($this->base);
         }
 
         // Compare path: used by Ledger Health tab only
-        $newAll = $this->getLedger()->allPositions('USD');
+        $newAll = $this->getLedger()->allPositions($this->base);
         $oldAll = $this->getOld()->getAllPositions();
         $allIds = array_unique(array_merge(array_keys($newAll), array_keys($oldAll)));
         foreach ($allIds as $sid) {

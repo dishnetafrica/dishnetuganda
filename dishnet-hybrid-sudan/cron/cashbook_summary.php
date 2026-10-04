@@ -54,33 +54,21 @@ if (empty($recipients)) {
 // ── Build stats ────────────────────────────────────────────────────────────
 $today   = date('Y-m-d');
 
-// Phase C: on a book without SSP the evening summary is rendered from the
-// account-aware readers — one position per currency, trading P&L only,
-// nothing summed across currencies, no $ symbols. The legacy USD/SSP
+// On a book without SSP (Uganda) the evening summary says what the LEDGER says is
+// in hand, one figure per currency — the same running balance the Cashbook page's
+// hero shows (5.18.68; accounts, bank balances and the account/no-account split are
+// not reported, the operator's decision, docs/07) — then today's trading P&L per
+// currency, nothing summed across currencies, no $ symbols. The legacy USD/SSP
 // message below remains exactly as-is for the dual-currency (Sudan) book.
 if (!dn_ssp_selectable($config)) {
-    $positions = $cb->currencyPositions();
     $plToday   = $cb->plByPeriod('', $today, $today);
     $lines   = [];
     $lines[] = "💰 *DishNet Cashbook — " . date('d M Y') . "*";
     $lines[] = "";
-    foreach ($positions as $pos) {
-        $lines[] = "*{$pos['currency']} POSITION: {$pos['currency']} " . number_format($pos['total'], 2) . "*";
-        foreach ($pos['accounts'] as $a) {
-            if (empty($a['active']) && !(float)$a['balance']) continue;
-            $lines[] = "  {$a['name']}: {$pos['currency']} " . number_format((float)$a['balance'], 2);
-        }
-        if (abs($pos['unassigned']) > 0.004) {
-            $lines[] = "  (unassigned rows: {$pos['currency']} " . number_format($pos['unassigned'], 2) . ")";
-        }
-        foreach ($pos['counterparts'] ?? [] as $cpt) {
-            if (!(float)$cpt['balance'] && empty($cpt['active'])) continue;
-            $kindLbl = $cpt['kind'] === 'equity' ? 'capital' : $cpt['kind'];
-            $lines[] = "  [{$kindLbl}] {$cpt['name']}: {$pos['currency']} " . number_format((float)$cpt['balance'], 2);
-        }
-        $lines[] = "";
+    foreach (dn_book_currencies($config) as $cihCur) {
+        $lines[] = "*{$cihCur} CASH IN HAND: {$cihCur} " . number_format($cb->cashInHand($cihCur), 2) . "*";
     }
-    if (!$positions) { $lines[] = "No cash positions yet."; $lines[] = ""; }
+    $lines[] = "";
     foreach ($plToday as $pl) {
         $lines[] = "{$pl['currency']} today — IN: +{$pl['currency']} " . number_format($pl['revenue_total'], 2)
                  . "  OUT: −{$pl['currency']} " . number_format($pl['expense_total'], 2)

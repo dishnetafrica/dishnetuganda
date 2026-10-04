@@ -150,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && in_array($_POST['action']??'', ['appr
                                     'id'            => count($_geCashIns) + 1,
                                     'collector_id'  => $_geMatchId,
                                     'collector_name'=> $_geMatchName,
-                                    'amount'        => $expCur === 'USD' ? $usdAmount : 0,
+                                    'amount'        => $expCur !== 'SSP' ? $usdAmount : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                                     'currency'      => $expCur,
                                     'ssp_amount'    => $expCur === 'SSP' ? $sspAmt : 0,
                                     'usd_given'     => 0,
@@ -1303,7 +1303,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='approve_sta
                             'id'            => count($_spCashIns) + 1,
                             'collector_id'  => $_spMatchId,
                             'collector_name'=> $_spMatchName,
-                            'amount'        => $cur === 'USD' ? $usdAmt : 0,
+                            'amount'        => $cur !== 'SSP' ? $usdAmt : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                             'currency'      => $cur,
                             'ssp_amount'    => $cur === 'SSP' ? $sspAmt : 0,
                             'usd_given'     => 0,
@@ -1419,7 +1419,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='batch_appro
                             'id'            => count($_bCashIns) + 1,
                             'collector_id'  => $_bMatchId,
                             'collector_name'=> $_bMatchName,
-                            'amount'        => $cur === 'USD' ? $usdAmt : 0,
+                            'amount'        => $cur !== 'SSP' ? $usdAmt : 0, // 5.18.68: every non-SSP currency carries its amount (UGX on a Uganda book); SSP alone lives in ssp_amount
                             'currency'      => $cur,
                             'ssp_amount'    => $cur === 'SSP' ? $sspAmt : 0,
                             'usd_given'     => 0,
