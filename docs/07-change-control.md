@@ -4105,8 +4105,10 @@ zero. Neither label is gated on the book.
   word alone would have matched the hero's "received" pill**; the anchor is the tile's own class.
 - Neighbours, unchanged: `test_accounts_dashboard_cash` 30/0 · `test_staff_cash_chain` 73/0 · `test_staff_cashbook_scope`
   9/0 · `test_sales_support_tenant` 37/0 · `test_cashbook_currency` 86/0 · `test_cashbook_tenant` 26/0.
-- **The full plugin suite on the final tree** (`tests/run.sh`, 269 files): **running at the time of this entry**; its
-  result is recorded in this entry when it ends.
+- **The full plugin suite on the final 5.18.72 tree** (`008e74d`'s plugin files, run from `c9377b4` while the deploy
+  went out): **`tests/run.sh` 269 files, 12,264 passed, 0 failed, 3 skipped** (the three clock-bound checks of
+  `test_notify_evo_retry`, skipped by design on a Sunday afternoon UTC, as at 5.18.71). Was 268 / 12,241 at 5.18.71: one
+  file and 23 assertions more, the new wording test.
 
 **Release commit `release/5.18.72` = `88d8442`, parent `b350192` (5.18.71, production since 10:59 UTC):** 10 files — the
 page, the new test, the two re-anchored tests, `manifest.json` and the five distributor pins that exist on the release
@@ -4165,7 +4167,7 @@ The rollback is printed by the script, alone, at the end of its log — never ha
     Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as at 10:59, no cash movement since; the
     photo tables and files read exactly as before.
 - **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
-  before); the full plugin suite's result (running at the time of the deploy); the 5.18.70 VOID's records log (still not
+  before); the 5.18.70 VOID's records log (still not
   received); Money Locations seen in a browser; `bash scripts/deploy-5.18.72.sh --after-only`.
 
 ## 04 Oct — Customer sign-in walkthrough on Uganda — FINDINGS, no change made
