@@ -3769,3 +3769,6 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
 - **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
   own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
   `tools/bank_statement.php` is not for the Uganda book. **RESULT:** not deployed.
+- **The full plugin suite on the final 5.18.69 tree (`c1c2f62`, the plugin files of `1e718c3`): `tests/run.sh` 266 files,
+  12,165 passed / 0 failed, exit 0**, one verdict per file — 12,129 before this release + the 36 of the manual-entry test,
+  exactly. 26 minutes, run alongside the second rehearsal without a flake.
