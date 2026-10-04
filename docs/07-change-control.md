@@ -4247,3 +4247,21 @@ the data-report plugin's page was not. That listing decides whether finding 1–
 text, usage links to the in-app Usage view, the token endpoint refusing when absent; (b) Uganda payment instructions in
 the profile once the operator supplies them; (c) the six small fixes above. South Sudan unchanged (the plugin is present
 there, so every gate is true).
+
+**Addendum — the production listing (operator, 12:1x UTC, read-only `ls -la …/plugins/`):** `dishnet-hybrid-sudan`,
+`dishnet-data-report` (modified 3 Oct 08:25) and `dishnet-starlink-finance` (3 Oct 09:02) are all **on disk**; the only
+`.<plugin>-data` directory is ours (`.dishnet-hybrid-sudan-data`), beside the vault. Two consequences:
+- **The 404 is not "plugin missing".** uCRM also runs that plugin's `main.php` on its tick — the container log has carried
+  its `main.php:105` flock TypeError since 25 Sep (recorded above) — so uCRM knows the plugin. The 404 is therefore either
+  uCRM not serving its *public page* (disabled, or its `public.php` not in the installed copy), or that plugin's own answer
+  to the client view the portal links to (`?clientId=…&kit=…&token=…`), which the Uganda copy may not have. Which one
+  needs three read-only reads on the server, handed over: the plugin directory's listing (`public.php`, `manifest.json`,
+  `ucrm.json` present?), its manifest version, and the HTTP status of `GET …/_plugins/dishnet-data-report/public.php` and
+  `…?action=dr_wifi_get_status&router_id=x` from the server (uCRM's 404 for both = not served; JSON or a non-404 for the
+  second = served, and the client-view route is the problem).
+- **"Gate on presence" would change nothing here.** `SiblingPlugin::installed()` is `is_dir()`, true on Uganda. The 5.18.73
+  gate must be *"the page answers"*: a server-side probe of the plugin's public page with a cached verdict (an hour), or an
+  explicit setting — never a directory test.
+- **A fragility recorded, not new:** with no `.dishnet-starlink-finance-data` or `.dishnet-data-report-data` directory, the
+  kit register and the usage files live under `<plugin>/data`, the directory uCRM deletes when that plugin is upgraded
+  (`cron/dr_snapshot.php` exists for exactly this). The site page's kit comes from there today.
