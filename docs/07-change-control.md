@@ -4058,7 +4058,7 @@ SSP, South Sudan's branch untouched:
     and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
     (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
 
-## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — READY TO DEPLOY (rehearsed 121/0 twice)
+## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — DEPLOYED 11:56 UTC (PASSED 23/0/0)
 
 **Reported by the operator (14:1x Kampala, after the 5.18.71 screenshots):** *"fix the collected and handover wording for
 uganda"*. On the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out) the tiles read
@@ -4145,5 +4145,25 @@ the clone is left as found.
 The rollback is printed by the script, alone, at the end of its log — never handed over beside the deploy (root docs/44
 §16.9).
 
-- **Not yet done:** the deploy itself (RESULT to be recorded from the log file); the 5.18.70 VOID's records log (still not
+- **RESULT — DEPLOYED to production 2026-10-04, 11:56 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  11:56:06 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 88d8442"*; the 10 files were
+  stamped at 11:56:34 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.72/deploy-20261004T115606Z.log`. The server reads 23 where the sandbox read 24, exactly
+  as 5.18.71 did.
+  - **A.** Checkout `331a5a0`; branch tip `008e74d` (not installed); release commit `88d8442` cut on `b350192`; 10 files
+    (9 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `b350192` / 5.18.71. PHP **8.1.34** accepted the
+    1 changed server file and the 8 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.72/backup-20261004T115606Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    **242 tables** (241 at the 10:59 backup — one store table more, created lazily by a page opened since: the store makes
+    a JSON-list table on its first load); the data directory 133 MB; the installed 5.18.71 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 10 files as `88d8442` has them, manifest 5.18.72; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 196 files from Release A through 5.18.71 intact; **R6
+    the 5.18.72 wording is in place and South Sudan's `collected` / `Needs handover` branch is still in the file**, beside
+    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber &
+    Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as at 10:59, no cash movement since; the
+    photo tables and files read exactly as before.
+- **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
+  before); the full plugin suite's result (running at the time of the deploy); the 5.18.70 VOID's records log (still not
   received); Money Locations seen in a browser; `bash scripts/deploy-5.18.72.sh --after-only`.
