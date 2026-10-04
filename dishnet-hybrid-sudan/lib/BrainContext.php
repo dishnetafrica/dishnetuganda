@@ -15,8 +15,9 @@ require_once __DIR__ . '/ConversationService.php';
  * complete uCRM client record, internal ids, the Splynx id and service
  * address, the customer's phone number, our own WhatsApp instance.
  *
- * This is the allowlist that replaces it. Twelve keys, and every one earns
+ * This is the allowlist that replaces it. Thirteen keys, and every one earns
  * its place by deciding what the model DOES rather than by being available.
+ * (Twelve until Batch 0 of docs/55 added 'location', below.)
  *
  * ── CONSTRUCTED, NEVER FILTERED ─────────────────────────────────────────
  *
@@ -53,7 +54,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Twelve top-level keys, and the only twelve.
+     * The contract. Thirteen top-level keys, and the only thirteen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -74,6 +75,11 @@ final class BrainContext
         'attachments'    => ['*'],
         'signature'      => ['*'],
         'constraints'    => ['*'],
+        // Batch 0 (docs/55 defect c): the pin THIS turn carried, as evo_webhook recorded it. The customer's own
+        // message content, not account data; it decides what the model does — acknowledge the pin, never guess
+        // the place (DishNetAiBrain's LOCATION PIN block). Before this the sales number, where customers send
+        // their location, never showed the assistant the pin at all.
+        'location'       => ['lat', 'lng', 'name', 'in_bounds'],
     ];
 
     /**
@@ -150,6 +156,15 @@ final class BrainContext
             if (array_key_exists('has_service', $in['customer'])) {
                 $out['customer']['has_service'] = (bool)$in['customer']['has_service'];
             }
+        }
+
+        // Batch 0 (docs/55 defect c): the pin this turn carried. Only numeric coordinates travel, with the
+        // webhook's own in-area verdict and the label the customer attached, if any.
+        $loc = $in['location'] ?? null;
+        if (is_array($loc) && isset($loc['lat'], $loc['lng']) && is_numeric($loc['lat']) && is_numeric($loc['lng'])) {
+            $out['location'] = ['lat' => (float)$loc['lat'], 'lng' => (float)$loc['lng'], 'in_bounds' => !empty($loc['in_bounds'])];
+            $name = self::str($loc['name'] ?? '');
+            if ($name !== '') $out['location']['name'] = $name;
         }
 
         // The public catalogue. Not customer data — identical for every

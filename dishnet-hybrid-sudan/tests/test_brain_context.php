@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 /**
- * test_brain_context.php — the brain is told twelve things, and only twelve.
+ * test_brain_context.php — the brain is told thirteen things, and only thirteen (twelve until Batch 0 of docs/55
+ * added the pin this turn carried, 'location').
  *
  * What this replaces: a context its caller assembled freely, most of which
  * dataBlock() rendered into every prompt whether the question needed it or
@@ -82,11 +83,12 @@ function everything(): array
 $built = BrainContext::build(ConversationService::STATE_IDENTIFIED, everything());
 $json  = json_encode($built);
 
-echo "\nTwelve keys, and only the twelve\n";
+echo "\nThirteen keys, and only the thirteen\n";
 foreach (array_keys($built) as $k) {
     is_(array_key_exists($k, BrainContext::CONTRACT), "\"{$k}\" is in the contract");
 }
-t('and every one of them is declared', count(BrainContext::CONTRACT), 12);
+t('and every one of them is declared', count(BrainContext::CONTRACT), 13);   // Batch 0 (docs/55 defect c): + location
+t('the thirteenth is the pin, with exactly its four leaves', BrainContext::CONTRACT['location'] ?? null, ['lat', 'lng', 'name', 'in_bounds']);
 t('nothing outside it was built', array_diff(array_keys($built), array_keys(BrainContext::CONTRACT)), []);
 
 echo "\nBlanket customer data is gone\n";
