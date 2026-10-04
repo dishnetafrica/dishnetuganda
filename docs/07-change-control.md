@@ -3813,7 +3813,7 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   12,165 passed / 0 failed, exit 0**, one verdict per file — 12,129 before this release + the 36 of the manual-entry test,
   exactly. 26 minutes, run alongside the second rehearsal without a flake.
 
-## 04 Oct — 5.18.70: the Field Register speaks the book's base; the records tool covers cash-ins — BUILT, rehearsed, NOT deployed
+## 04 Oct — 5.18.70: the Field Register speaks the book's base; the records tool covers cash-ins — DEPLOYED 07:12 UTC (PASSED 23/0/0)
 
 **Why.** The 5.18.69 deploy's R7 census (06:26 UTC) placed the technician's three "USD" rows in **`cash_ins`**, not in the
 Manual Entry collections 5.18.69's tool repairs, and the operator's `--void` run found *nothing in scope* (and said "already
@@ -3892,4 +3892,32 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   tool's `--void` (or `--relabel`), printed after it, **this time with the three cash-ins in scope**: it asks for `VOID`,
   voids only the rows the LIST named, sends no message.
 - **Still open:** the 5.18.68 backfill's `APPLY` log (the ledger count says it ran — confirm on the page); the operator's
-  void/keep answer (void recommended: CB-66 + CB-72 are the same money). SUITE_PENDING_5_18_70 **RESULT:** not deployed.
+  void/keep answer (void recommended: CB-66 + CB-72 are the same money). SUITE_PENDING_5_18_70
+- **RESULT — DEPLOYED to production 2026-10-04, 07:12 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
+  07:12:45 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves cba7faf"*; the 11 files were
+  stamped at 07:13:19 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
+  on the server as `/root/dnb-5.18.70/deploy-20261004T071245Z.log`.
+  - **A.** Checkout `4d19f49`; branch tip `c3f9bac` (not installed); release commit `cba7faf` cut on `fec15bc`; 11 files
+    (10 changed, 1 added, 0 removed), **0 migrations**; **A0** clean. Live `fec15bc` / 5.18.69. PHP **8.1.34** accepted the
+    3 changed server files and the 7 test files. Pilot `on`; photo tables `present:3:1`, 3 files.
+  - **Backup** `/root/dnb-5.18.70/backup-20261004T071245Z`: `plugin.sqlite3` 27 MB, one consistent copy, integrity ok,
+    241 tables; the data directory 132 MB; the installed 5.18.69 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V5** 302 / 401; **V3** the pilot
+    unchanged (`on` → `on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 11 files as `cba7faf` has them, manifest 5.18.70; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
+    untouched; R4 the pilot as before, no portal/CSRF file; R5 all 192 files from Release A through 5.18.69 intact; **R6
+    the Field Register's base token, both base submissions, no literal submission, the export's base and the 5.18.70 tool**
+    beside the 5.18.69 fixes, the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the live data,
+    read-only:** `payment_collections UGX 1 · cash_ins UGX 5 · USD 3 ◄ not the base · cash_expenses 0 · cash_handovers 0 ·
+    staff_expenses UGX 8 · cash_advances 0 · staff_transfers 0 · staff_ledger UGX 13` (the four empty tables now read `0`),
+    and **the three candidates, named: cash-in #3 (Collection, USD, 200,000.00, 25 Sep, "Outdoor ethernet cable roll
+    305 m"), #4 (50,000.00, "Advance for other expenses"), #5 (50,000.00, "6th street installation allowance
+    (advance )")**, all approved, all the technician's (#4). The photo tables and files read exactly as before
+    (`present:3:1`, `files:3`) — the LIST touched no data.
+  - **The operator then ran the tool's `--void` command** (its own command, after the deploy): the same census, the three
+    rows listed, then the prompt *"Type VOID to void the 3 row(s) above, anything else to stop:"* — **the paste ends at
+    the prompt; whether VOID was typed is not yet known.** Nothing is written until it is.
+  - **Not yet done:** the typed `VOID` and its records log (expected: three `cash-in #n voided (USD …, Collection, …)`
+    lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
+    *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
+    the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
