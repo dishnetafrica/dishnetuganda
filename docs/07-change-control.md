@@ -3904,7 +3904,12 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   rewrote**: the wallet's filter gate `? ['USD','SSP'] : ['USD']` is now `? [$_frBase, 'SSP'] : [$_frBase], true` — the same
   gate, the base by its own code; the pin follows and a second one asserts the literal is gone; 37/0. **Rule, binding:** a
   test must not depend on the hour it runs at; where the product has a window, the test controls the clock or skips with
-  the reason. SUITE_PENDING_5_18_70
+  the reason.
+- **The full plugin suite on the final 5.18.70 tree (`5518eb3`; plugin files of `c3f9bac` + the two test corrections of
+  `8cde7ca`): `tests/run.sh` 267 files, 12,214 passed / 0 failed, nothing skipped, exit 0**, one verdict per file — the
+  5.18.69 total of 12,165 + the 48 of the Field Register test + the one assertion the tenant test gained, exactly. 27
+  minutes, 07:26–07:53 UTC; the retry test ran its window checks in full (zone UTC−12, Saturday evening there). The first
+  run on the same plugin code (06:59–07:2x UTC) had read 2 files red for the two reasons above, both in the tests.
 - **RESULT — DEPLOYED to production 2026-10-04, 07:12 UTC: PASSED, 23 ok / 0 failed / 0 notes.** The run began at
   07:12:45 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves cba7faf"*; the 11 files were
   stamped at 07:13:19 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the log file stays
