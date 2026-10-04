@@ -133,7 +133,8 @@ Do not touch: `DishNetAiBrain`'s rules 1–7, the channel roles, qualification, 
 Multimodal input must arrive as **text the brain already understands** (a transcript, an image description, a document
 summary), inside the existing context, so none of this moves.
 
-Three defects found on the live lead path (verified by reading the code; not yet reproduced by a test):
+Three defects found on the live lead path (verified by reading the code; **fixed in Batch 0, release 5.18.75 on the
+branch, proved by `tests/test_lead_path_batch0.php` — NOT deployed; see `docs/07`, 4 Oct, "Batch 0"**):
 - **(a) WhatsApp lead capture never runs.** `AiReplyWorker.php:257-258` calls `$this->latestPin($convId, $ctx)`; `$ctx`
   is undefined in `handle()` (the variable is `$context`), so PHP passes null to an `array` parameter, throws, and the
   catch at :275 logs *lead capture failed*. `AiLeadService::capture()` is never reached; `crm.lead.sync` is never emitted.
@@ -261,7 +262,7 @@ every new path is dark unless its flag is set; South Sudan is unchanged while it
 
 | Batch | Scope | Flag / switch | Tests |
 |---|---|---|---|
-| 0 | Fix lead-path defects (a) (b) (c); add a worker-level test that drives a LEAD marker to a `leads` row and a `crm.lead.sync` event whose worker reads `_payload` | existing `ai_lead_capture`, `ai_crm_lead_sync` | worker-level, not reflection |
+| 0 | **BUILT (5.18.75), not deployed.** Lead-path defects (a) (b) (c) fixed; `tests/test_lead_path_batch0.php` drives a LEAD marker to a `leads` row with the real pin, a `crm.lead.sync` event and the uCRM worker reading `_payload`; four weakened copies caught | existing `ai_lead_capture`, `ai_crm_lead_sync` — **both ON in Uganda's production listing**; the operator decides before any deploy | worker-level, 25 assertions |
 | 1 | `wa_media` table + InboundMessage normalisation + MediaFetcher (limits, timeouts, no retention, scrubbed logs) + idempotency | `ai_media_enabled` (default off) | fake Evolution, oversized, bad MIME, timeout, duplicate webhook |
 | 2 | Voice → transcript → brain | `ai_media_voice` | fake STT; transcript labelled; same brain path as text |
 | 3 | Image → description → brain; payment screenshot = evidence, escalation, never a financial write | `ai_media_image` | fixtures (redacted), human-review rule |

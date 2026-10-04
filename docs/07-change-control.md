@@ -4673,3 +4673,92 @@ answered **200 with no token at all**.
     whoever maintains that plugin should carry the change. A symlink named `dishnet-hybrid-telecom` in uCRM's plugins
     directory was considered and rejected: uCRM would see a plugin directory with no manifest.
   - Then step 3 (the Admin Auth Token) and the test: a Usage link opened as a customer.
+  - **Path fix APPLIED by the operator, ~20:1x UTC.** The two checks held (`plugin.sqlite3` present in
+    `.dishnet-hybrid-sudan-data`, the old path exactly once); `public.php` was backed up with a timestamp, line 868 now
+    reads `'/.dishnet-hybrid-sudan-data/plugin.sqlite3'`, and `php -l` in the container passed. The Data Report plugin
+    now reads the store row this plugin writes. **Step 3 (the Admin Auth Token in Settings) and the Usage-link test are
+    still the operator's.** Reminder recorded: a Data Report plugin update overwrites that file.
+
+## 04 Oct — AI communication layer, Batch 0 (5.18.75): the three live lead-path defects fixed — BUILT and proved at the worker level, NOT deployed; STOPPED for review before Batch 1
+
+**Instruction:** the operator approved the HYBRID architecture (`docs/55`) and ordered Batch 0 only — fix the three
+defects on the live lead path, prove them with worker-level tests, report, and stop before Batch 1. Nothing was deployed
+and no configuration changed. **The existing flags `ai_lead_capture` and `ai_crm_lead_sync` were not touched — and both
+read ON in the Uganda production listing the operator pasted at 20:0x UTC** (see *Production impact* below).
+
+**The defects, as found in the code** (`docs/55` §3; each re-read before the fix):
+- **(a)** `workers/AiReplyWorker.php` called `$this->latestPin($convId, $ctx)` with `$ctx`, a variable that does not
+  exist in `handle()` — the context is `$context`. PHP passed null to an `array` parameter, the TypeError landed in the
+  catch as *lead capture failed*, and `AiLeadService::capture()` was never reached. **No WhatsApp lead has ever been
+  written by the live assistant, whatever the flag said.**
+- **(b)** `workers/UcrmLeadWorker.php` read `$event['payload']` as an array. `WorkerBase::run()` decodes the stored JSON
+  into `_payload` and leaves `payload` the string, so `lead_id` was always 0, the event was logged *no lead_id — dropped*
+  and acknowledged. **No lead could ever have reached uCRM through the queue** (and the queue is the only writer:
+  `UcrmLeadSync` has no other caller).
+- **(c)** The sales channel's context is built by `BrainContext`, which carries no conversation id or customer id by
+  design (`NEVER_PRESENT`) and, until now, no pin: the assistant never saw the *LOCATION PIN* block on the sales number,
+  and the guard's log lines and `ai_security_events.json` rows recorded conversation 0 / customer 0 on every sales turn.
+
+**The fixes** (`b0674bd` on the branch; six files + the new test + the version and nine pins):
+- **(a)** one word: `latestPin($convId, $context)`, with the defect recorded beside it.
+- **(b)** `UcrmLeadWorker::payloadOf()` — the decoded `_payload` first, else an array `payload`, else the JSON string
+  decoded — used in `handle()` and `onDead()`.
+- **(c)** two parts, both deliberate about what the model may see:
+  - `BrainContext` gains a **thirteenth key, `location`** (`lat`, `lng`, `name`, `in_bounds`) — the pin THIS turn
+    carried, as `evo_webhook` recorded it: the customer's own message content, which decides what the model does
+    (acknowledge the pin, never guess the place). Only numeric coordinates travel. The sales branch of
+    `AiReplyWorker::buildContext()` passes it. `conversation_id` and the customer id stay out of the model's context.
+  - The guard's bookkeeping ids now come from the worker's own `$turnIds` (set in `buildContext()` once identity is
+    resolved, cleared at the start of every event) with the legacy context as fallback, so support and account record
+    exactly what they recorded before and sales records the real conversation and customer.
+- `tests/test_brain_context.php`: twelve → thirteen keys, with the thirteenth pinned to exactly its four leaves.
+- `manifest.json` 5.18.75; the nine pins. **No migration, no new table, no uCRM write in development, no message.**
+
+**Proofs — `tests/test_lead_path_batch0.php`, 25/0, at the WORKER level:** a fake Evolution server and the fake uCRM
+server from the existing fixtures; a brain that never leaves the process but parses its canned answer with the **real**
+`DishNetAiBrain::parseMarkers`; the workers constructed and run as `run_worker.php` runs them.
+- **A.** A sales turn whose answer carries `<<LEAD{…}>>`: the customer gets one reply with the marker stripped; **exactly
+  one `leads` row** (requirement, phone, source `whatsapp_ai`, conversation id) whose **coordinates are the pin the
+  conversation sent two turns earlier** — looked up, never believed; the log says *lead created*, never *lead capture
+  failed*; **one `crm.lead.sync` event naming lead #1**.
+- **B.** The sales context carries the pin this turn sent, with its label; the *LOCATION PIN* block appears in the sales
+  prompt; `conversation_id` still does not travel to the model.
+- **C.** A reply blocked by the guard on the sales number (*"our cost…"*) is audited against the **real** conversation
+  on channel `sales`; the customer received the safe fallback and never the blocked text; the staff alert went out.
+- **D.** `UcrmLeadWorker`, run as `WorkerBase` runs it, processes the event to `done`; the fake uCRM receives **exactly one
+  new client** for that phone; the lead row carries the uCRM client id; the log says the lead reached uCRM.
+- **E. Four weakened copies, each caught** by re-running the same scenario against the copy (the test re-enters itself as
+  a driver): (a) put back → no lead, *lead capture failed*, no sync event; (b) put back → the event is acknowledged with
+  *dropped* and uCRM receives nothing; (c) the pin removed from the sales context → no pin block; (c) the guard reading
+  the stripped context → conversation 0 again. A first version of the uCRM copy was not weakened at all, because the
+  helper only weakens a UNIQUE anchor and the fix text appeared twice; the anchor now includes the comment that
+  precedes the one read in `handle()`. **A mutant that passes because it was never applied is the control that caught
+  itself.**
+- Neighbours, unchanged: `test_brain_context` 123 · `test_location_pin` 79 · `test_ai_lead_capture` 71 ·
+  `test_ucrm_lead_sync` 62 · `test_bot_stays_awake` 59 · `test_handover_message` 9 · `test_human_takes_over` 16 ·
+  `test_prospect_sales` 60 · `test_shadow_runtime` 74 · `test_prices_are_grounded` 36 · `test_shop_part1` 48 ·
+  `test_guard_blocks_send` 41 · `test_reply_privacy_guard` 71 · `test_ai_brain` 153 · `test_brain_customer_tools` 110 ·
+  `test_shopbot_payload` 65 · `test_ai_minimal_context` 61 · `test_ai_security_policy` 146 — all 0 failed.
+- **Full suite:** **`tests/run.sh` 271 files, 12,355 passed, 0 failed, 0 skipped** (was 270 / 12,329 at 5.18.74: the new test's 25 and one more in `test_brain_context`). **Second run:** **271 / 12,355 / 0 again** (a first second run was killed at 205 files, 0 failures, by a container restart on this side; it was re-run in full).
+- `git diff --check` clean; no credential-shaped value in the diff; no file under Domain B (`plugin/`, `src/`,
+  `migrations/`) touched; South Sudan's suites are part of the full run.
+
+**Production impact — exactly what happens when 5.18.75 is installed, flag by flag:**
+
+| Flag (existing) | Uganda value in the 20:0x UTC listing | With the flag ON, after this release | With the flag OFF |
+|---|---|---|---|
+| `ai_lead_capture` | **ON** | a qualified WhatsApp enquiry (a stated requirement plus location, pin, customer type or a quote request — the existing floor in `AiLeadService`) is written to the plugin's own `leads` table, linked to the conversation, audited in `ai_crm_actions.json`; the Sales → Leads screens show it. **An internal write; nothing leaves the plugin.** | as today: nothing written |
+| `ai_crm_lead_sync` | **ON** | each such lead is queued and, off the reply path, **a uCRM client is created or patched**: the existing phone-match rules (link one exact match, refuse an ambiguous one, create an `isLead` client with a note otherwise; `UcrmLeadSync`). **An external write to uCRM that is configured today and has never happened.** | the queue event is acknowledged as *disabled*; nothing reaches uCRM |
+
+So installing this release with the flags as they are **switches both on in production**. Nothing here changes a flag.
+The operator's choice before any deploy: (i) `set_config.php --key ai_crm_lead_sync --value 0` first, keeping local
+lead capture only; (ii) both off; (iii) accept both. Nothing is deployed until that is decided and the deploy is
+separately approved.
+
+**Rollback:** the release is code only — the deploy script's own `--rollback` restores the previous commit; a flag set
+to 0 stops the behaviour without any deploy; nothing written by the fixed path needs undoing (leads are rows the sales
+team already has screens for; uCRM lead clients are ordinary lead clients).
+
+**External side effects in development:** none — the fake servers only. **Database changes:** none. **Deployment
+requirement:** a 5.18.75 release commit cut on the live 5.18.74 (`db18ad9`), its deploy script and rehearsal — **not cut
+yet; awaiting the operator's review of this batch.** **STOPPED here; Batch 1 (the media foundation) waits for approval.**
