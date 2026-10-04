@@ -4495,13 +4495,16 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
     signing values are still empty — the rollback changed code only. The hand-off token is again minted under the
     all-empty secret. The six small fixes (installed version in the footer, biometric row, sign-in zoom, no invented
     uptime, devices message, no tokenless navigation) are off production again.
-  - **What makes the link work on 5.18.72, without any deploy:** set `webhook_secret` and `crm_auth_token` in the plugin's
-    Settings tab (the fields the old admin form writes; `set_config.php` does not accept them). 5.18.72 then signs the
-    hand-off with them, and the Data Report plugin, which rebuilds the same secret from the Hybrid's stored
-    configuration, accepts it — provided it reads the file the Settings form writes, which one read of its code decides.
-    Cautions, from the code: the uCRM webhook refuses a request only when it carries a **different** `X-Crm-Key`, so an
-    empty uCRM webhook secret stays harmless; `crm_auth_token` overrides the automatic uCRM API credential **only when
-    `crm_base_url` is also set**, so leave the base URL empty.
+  - **What would make the link work on 5.18.72 — and why it cannot be done from the screens today.** The hand-off verifies
+    once `webhook_secret` and `crm_auth_token` are both set in the Hybrid's stored configuration. `crm_auth_token` **is**
+    settable: Settings → *UCRM Connection* → *Admin Auth Token* (a real uCRM API token; the field says Quotes need it
+    anyway). **`webhook_secret` is not:** the Settings tab shows it **read-only with a Copy button** (*"Setup Webhook never
+    generates it as a side effect"*), the field has no form name so the admin form never posts it, and `set_config.php`
+    does not accept the key. **Corrected from the first draft of this bullet**, which said both were Settings fields.
+    So making the link work needs either a small release that gives the operator a way to set the secret, or the Data
+    Report side accepting a different key (option B). Cautions, from the code: the uCRM webhook refuses a request only
+    when it carries a **different** `X-Crm-Key`, so an empty uCRM webhook secret stays harmless; `crm_auth_token`
+    overrides the automatic uCRM API credential **only when `crm_base_url` is also set**, so the base URL stays empty.
   - **Also visible in the pasted settings:** Uganda's payment instructions already exist in configuration —
     `ai_fact_payment` (Airtel Money merchant, Ecobank account, how to reference a payment) and `pay_airtel_merchant` —
     written for the AI assistant and the quotations. Finding 3 of the walkthrough (*a Uganda customer is not told how to
