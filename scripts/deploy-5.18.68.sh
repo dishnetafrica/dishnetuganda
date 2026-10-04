@@ -67,7 +67,7 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="358117d"   # 5.18.68 (release) — staff cash in the book's own currency, cut on 5.18.67; branch release/5.18.68
+EXPECTED_PLUGIN_COMMIT="d8d2068"   # 5.18.68 (release) — staff cash in the book's own currency, cut on 5.18.67; branch release/5.18.68
 EXPECTED_VERSION="5.18.68"
 BASELINE_COMMIT="96857d8"          # 5.18.67 (release) — what the server runs first, and the rollback
 BASELINE_VERSION="5.18.67"
