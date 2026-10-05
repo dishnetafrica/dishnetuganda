@@ -39,6 +39,7 @@ final class MediaPolicy
 
     // Batch 4 (docs/55 §9, docs/58): documents. ai_media_document is OFF unless set, and it needs ai_media_enabled too.
     // Three settings (the document cap, the PDF page cap, the extraction deadline) and the fixed caps every reader obeys.
+    // Batch 5 (docs/60): two more rungs above it, ai_media_document_handover and ai_media_document_reply — see documentMode().
     public const DOCUMENT_DEFAULT_MAX_BYTES     = 10 * 1024 * 1024;   // the fetch cap (ai_media_max_bytes) applies first; the smaller wins
     public const DOCUMENT_DEFAULT_MAX_PAGES     = 20;                 // PDF pages read (Slice 4b, docs/58 D-1); beyond them the text is not "seen whole" — a person
     public const DOCUMENT_MIN_PAGES             = 1;
@@ -107,6 +108,46 @@ final class MediaPolicy
     public static function documentEnabled(array $config): bool
     {
         return self::enabled($config) && self::flag($config['ai_media_document'] ?? null);
+    }
+
+    /**
+     * Batch 5 (docs/60 §2): the document LADDER. Each rung needs every rung below it, so a higher flag can never bypass a
+     * lower one, and the four words below are the only states there are:
+     *
+     *   off       — ai_media_enabled or ai_media_document off: a document is stored as before (and fetched only, when the
+     *               media flag alone is on); nothing is read.
+     *   dry_run   — ai_media_document on, nothing above it: the document is fetched, extracted, classified and RECORDED on
+     *               the wa_media row and the stored message's metadata — and that is all. Nobody is told, nothing is
+     *               answered, the stored message's body is untouched (the model's history reads the body, so the extract
+     *               never reaches the assistant, now or on a later turn), and a caption is answered as text as it always was.
+     *   handover  — ai_media_document_handover on as well: the classification is ACTED ON for a person — a human-only class,
+     *               a refusal, a fetch that failed for good or a queue that gave up hands the conversation to a person
+     *               (needs_human, the alert, the holding line). Still no AI turn; the body still untouched.
+     *   reply     — ai_media_document_reply on as well: a harmless document, seen whole, becomes the customer's turn through
+     *               the EXISTING assistant, labelled; the stored body carries the labelled extract (or the evidence label);
+     *               a caption is answered once, by that turn (evo_webhook.php step 9b). The only customer-facing document AI.
+     */
+    public const DOCUMENT_MODES = ['off', 'dry_run', 'handover', 'reply'];
+
+    /** A document's classification is acted on for a person only when the three flags below it are on too. */
+    public static function documentHandoverEnabled(array $config): bool
+    {
+        return self::documentEnabled($config) && self::flag($config['ai_media_document_handover'] ?? null);
+    }
+
+    /** The assistant answers a harmless document only when every rung is on: this flag alone, or without hand-over, does nothing. */
+    public static function documentReplyEnabled(array $config): bool
+    {
+        return self::documentHandoverEnabled($config) && self::flag($config['ai_media_document_reply'] ?? null);
+    }
+
+    /** off | dry_run | handover | reply — the one word the worker, the extraction, the webhook and the status tool agree on. */
+    public static function documentMode(array $config): string
+    {
+        if (!self::documentEnabled($config)) return 'off';
+        if (self::documentReplyEnabled($config)) return 'reply';
+        if (self::documentHandoverEnabled($config)) return 'handover';
+        return 'dry_run';
     }
 
     /** The document cap, never above the fetch cap: the smaller of ai_media_document_max_bytes and ai_media_max_bytes. */

@@ -104,6 +104,8 @@ function vd_core(string $root, int $evoPort, int $ucrmPort): array
     $HOLD  = 'Let me get a colleague to help you with that.';
     $cfg = ['evo_api_url' => "http://127.0.0.1:{$evoPort}", 'evo_api_key' => 'TESTKEY', 'evo_instance_sales' => 'dishnet_ug',
             'evo_instance_support' => 'dishnet_ug', 'ai_enabled' => '1', 'ai_media_enabled' => '1', 'ai_media_document' => '1',
+            // Batch 5 (docs/60): the two rungs above it, so this suite keeps proving the REPLY mode that Slices 4a and 4b built
+            'ai_media_document_handover' => '1', 'ai_media_document_reply' => '1',
             'ai_media_max_bytes' => 131072, 'ai_media_document_max_bytes' => 65536, 'ai_media_timeout_s' => 3, 'ai_media_document_timeout_s' => 5,
             'ai_provider' => 'openai', 'openai_api_key' => 'test-key-never-called',
             'crm_base_url' => "http://127.0.0.1:{$ucrmPort}", 'crm_auth_token' => 'test-key',
@@ -470,6 +472,7 @@ function vd_cli(string $root): array
 {
     $HOLD = 'Let me get a colleague to help you with that.';
     $s = SjSandbox::start($root, ['ai_enabled' => '1', 'ai_media_enabled' => '1', 'ai_media_document' => '1', 'ai_document_provider' => 'fake',
+        'ai_media_document_handover' => '1', 'ai_media_document_reply' => '1',   // Batch 5 (docs/60): the reply rung, as before this batch
         'tenant_profile' => 'uganda', 'ai_currency' => 'UGX', 'ai_provider' => 'openai', 'openai_api_key' => 'test-key-never-called',
         'ai_media_max_bytes' => 131072, 'ai_media_document_max_bytes' => 65536, 'ai_media_timeout_s' => 3, 'ai_media_document_timeout_s' => 5,
         'alert_whatsapp' => '256700000999', 'ai_handover_message' => $HOLD], 'vd');
@@ -845,7 +848,9 @@ is_(strpos($dcCode, 'ReplyPrivacyGuard::secretShapesIn(') !== false && strpos($d
 is_(strpos($mwCode, 'ai_media_document') === false && strpos($mwCode, 'MediaPolicy::documentEnabled($this->config)') !== false, 'the worker reads the document flag through the policy only');
 is_(strpos($deCode, 'DocumentClassifier::classify(') !== false && strpos($deCode, "if (\$cls['route'] === 'human' && \$class === null) {") !== false && strpos($deCode, "if (\$cls['route'] === 'human') {") !== false,
     'the classification is this plugin\'s, and both human routes are decided before any event is queued');
-is_(strpos(vd_codeOf($root . '/evo_webhook.php'), "if (\$mediaEvent && (string)(\$media['kind'] ?? '') === 'document' && MediaPolicy::documentEnabled(\$config)) {") !== false, 'the webhook skips the caption\'s text turn only for a recorded document with the document flag on');
+// Batch 5 (docs/60 §2): the caption's text turn is skipped only on the REPLY rung — in the dry-run and hand-over modes there is no
+// document turn, so the caption must be answered as text. tests/test_document_activation.php proves the three lower modes answer it.
+is_(strpos(vd_codeOf($root . '/evo_webhook.php'), "if (\$mediaEvent && (string)(\$media['kind'] ?? '') === 'document' && MediaPolicy::documentReplyEnabled(\$config)) {") !== false, 'the webhook skips the caption\'s text turn only for a recorded document with the document flag on');
 $forbidden = ['tempnam(', 'tmpfile(', 'file_put_contents(', 'fopen(', 'exec(', 'shell_exec(', 'proc_open(', 'system(', 'passthru(', 'eval(', 'unserialize(', 'ZipArchive', 'LIBXML_NOENT', 'curl_'];
 $readers = ['lib/DocumentExtraction.php', 'lib/DocumentClassifier.php', 'lib/DocumentSniffer.php', 'lib/OoxmlArchive.php', 'lib/DocxReader.php', 'lib/SheetReader.php', 'lib/TextReader.php', 'lib/PdfReader.php', 'lib/DocumentDeadline.php'];
 $bad = [];
@@ -865,7 +870,7 @@ $scOut2 = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . 
 is_(strpos((string)$scOut2, 'between 1 and 200') !== false && strpos((string)$scOut2, 'rc=1') !== false, 'the tool refuses a page cap outside its range rather than clamping it', (string)$scOut2);
 $ve = (string)file_get_contents($root . '/tests/validate_environment.php');
 is_(strpos($ve, "'zlib' => 'gzinflate', 'xmlreader' => 'XMLReader', 'iconv' => 'iconv'") !== false, 'validate_environment reports the three optional extensions the readers need');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.80', 'manifest version is 5.18.80');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.81', 'manifest version is 5.18.81');
 
 echo "\n19. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

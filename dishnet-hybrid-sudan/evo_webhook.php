@@ -405,11 +405,13 @@ foreach ($messages as $msg) {
         continue;
     }
 
-    // ── 9b. Batch 4 (docs/55 §9, docs/58 §1): a captioned DOCUMENT with ai_media_document on is answered ONCE — by the
+    // ── 9b. Batch 4 (docs/55 §9, docs/58 §1): a captioned DOCUMENT with the document turn on is answered ONCE — by the
     // document turn the media worker queues (the caption beside the extract, each under its label), or by the hand-over a
     // human-only document gets, where the person sees the caption in the Inbox — not here as well. The caption is already
-    // stored and its STOP already read (8b). With the flag off, nothing changes: the caption is answered as text.
-    if ($mediaEvent && (string)($media['kind'] ?? '') === 'document' && MediaPolicy::documentEnabled($config)) {
+    // stored and its STOP already read (8b). Batch 5 (docs/60 §2): that is the REPLY rung, ai_media_document_reply with every
+    // flag below it. In the dry-run and hand-over modes there is no document turn, so the caption is answered here as text,
+    // exactly as with every flag off.
+    if ($mediaEvent && (string)($media['kind'] ?? '') === 'document' && MediaPolicy::documentReplyEnabled($config)) {
         error_log(sprintf('[evo_webhook] caption carried by the media worker — the document turn answers it (%s)', $channel));
         $skipped++;
         continue;

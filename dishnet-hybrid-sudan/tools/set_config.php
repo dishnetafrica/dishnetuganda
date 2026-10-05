@@ -107,8 +107,14 @@ $FLAGS = [
     // payment receipt, statement, invoice, contract, quotation, identity document or credential — and anything the rules
     // cannot classify with certainty — goes to a person instead; nothing is recorded, marked paid, accepted or verified. A
     // PDF's text layer is read in this process since Slice 4b (docs/58 D-1 = P-1); a scanned document has no OCR (D-2).
+    // Batch 5 (docs/60): a LADDER. ai_media_document alone is the dry run; _handover adds the person; _reply adds the assistant.
+    // Each needs every flag below it, so a higher flag can never bypass a lower one. All OFF unless set.
     'ai_media_document' => ['bool',
-        'Read the documents customers send (Word, Excel, CSV, text, PDF text) and answer the harmless ones like typed text (needs ai_media_enabled); financial, contractual, identity and credential documents go to a person'],
+        'Read the documents customers send (Word, Excel, CSV, text, PDF text) and RECORD what each is — alone, a DRY RUN: nobody is told and nothing is answered (needs ai_media_enabled; docs/60)'],
+    'ai_media_document_handover' => ['bool',
+        'Act on a document\'s classification for a PERSON: a payment proof, statement, invoice, contract, quotation, identity document, credential or an unreadable file hands the chat over (needs ai_media_document); still no AI answer'],
+    'ai_media_document_reply' => ['bool',
+        'Let the assistant answer a harmless document like typed text, and its caption once in that turn (needs ai_media_document_handover) — the only customer-facing document AI switch'],
     'ai_media_document_max_bytes' => ['number',
         'Largest document read, in bytes (default 10485760 = 10 MiB; 65536 to 67108864; never above ai_media_max_bytes)'],
     'ai_media_document_max_pages' => ['number',

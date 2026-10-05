@@ -5411,3 +5411,70 @@ and a 5.18.79 runner reads every row 4b wrote.
 **Git:** committed locally as the sixth unpushed commit on `claude/study-this-jhe2eg`, after `ce16324`, `73ae827`,
 `b08c9d4`, `67b6c9d` and `4c931ef`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone, no
 money, no identity decision. Stopped for the operator's review.
+
+## 05 Oct — AI communication layer, Batch 5 (5.18.81): DOCUMENT ACTIVATION SAFETY — the four-rung flag ladder, the dry run, the counters tool, the lost-worker guard; NOTHING enabled, NOT deployed, NOT pushed; E-3 and E-6 still NOT MEASURED; STOPPED for review
+
+**Instruction.** After docs/59's NO-GO the operator ordered Batch 5: *the minimum safety layer required before document AI can be
+activated* — an explicit dry-run / hand-over-only mode, explicit activation flags with a documented dependency that a higher flag
+can never bypass, safe counters and logging, a review of the EventBus retry finding without silently altering the shared
+queue, E-3 and E-6 left NOT MEASURED, focused tests, the full suite twice, weakened copies, the Domain B and South Sudan checks,
+a secret scan and lint, a design record, a local commit and no push. Development only. Slice 4b (`7901ffe`) is unmodified in
+what it reads; `archive/slice-4b-2026-10-05` holds it on GitHub. The record is **`docs/60`**.
+
+**The ladder (`MediaPolicy::documentMode`).** `ai_media_enabled` fetches; `ai_media_document` alone is the **dry run** — a document
+is fetched, extracted, classified and RECORDED on the `wa_media` row and in the stored message's metadata, and nothing else
+happens: nobody is told, no AI turn is queued, the stored body the model reads as history is untouched, a caption is answered
+as text by the webhook as it always was; `ai_media_document_handover` adds the person (a human-only class, a refusal, a fetch
+that failed for good, a queue that gave up); `ai_media_document_reply` adds the assistant's turn for a harmless document and the
+caption-once rule (step 9b). Each rung needs every rung below it, proved over all sixteen combinations; every default is off.
+
+**What was built.**
+- `lib/MediaPolicy.php` — `documentHandoverEnabled()`, `documentReplyEnabled()`, `documentMode()` (off · dry_run · handover ·
+  reply), `DOCUMENT_MODES`.
+- `lib/DocumentExtraction.php` — `complete()` is mode-aware: the body rewritten and the `ai.reply` queued **only** on the reply
+  rung; `evidence` returned only on the hand-over rung and above; otherwise the new outcome `recorded`; the metadata gains
+  `mode`, `ms` and `body_rewritten`. The record itself (understanding, record policy) is the same in every mode — that is what
+  the dry run observes.
+- `workers/MediaWorker.php` — hands over only on the hand-over rung, for refusals, failed fetches and dead rows alike; one
+  structured outcome line per document (outcome, kind, class, reason, mode, ms, attempts — never content, a name, a number or
+  a hash); the **lost-worker guard**: a row the queue has claimed as many times as its event allows is settled `dead`
+  (`worker_lost`), a person told as for a dead letter, the event acknowledged — the EventBus counts attempts only on a reported
+  failure, so a killed worker was retried for ever (docs/59 §5.6).
+- `evo_webhook.php` step 9b — the caption's text turn is skipped only on the reply rung.
+- `tools/set_config.php` — the two new bool keys; `tools/media_status.php` — **new**, read-only (`SQLITE_OPEN_READONLY`), the
+  counters docs/59 §5.2 asked for, codes and counts only.
+- `manifest.json` 5.18.81 and the fourteen pins. **No migration** (still 085); `lib/EventBus.php` untouched.
+
+**The EventBus decision (docs/60 §6).** The shared queue is not altered. The media exposure is closed inside the worker; the
+shared fix — `releaseStale()` counting a release as an attempt, with a dead path each waiting-person worker must notice — is
+designed and recommended as its own batch, with the proof that text events are unchanged (D-60-2). Both halves of today's
+behaviour are pinned by test so they cannot drift unnoticed.
+
+**E-3 / E-6: NOT MEASURED**, unchanged; the safe staff-only, read-only, flags-off procedure of docs/59 §2.6 is preserved by
+reference.
+
+**Guards amended deliberately, never deleted.** `test_document_media.php` and `test_document_pdf.php` climb the whole ladder in
+their configurations, so they keep proving the REPLY rung Slices 4a/4b built; the 9b wiring guard names the new condition and
+`test_document_activation.php` proves the three lower modes answer the caption.
+
+**Proofs.**
+- `tests/test_document_activation.php` **92 passed, 0 failed**, twice: the sixteen-combination matrix, the dry run (the record, no event, no
+  hand-over, the body untouched, a later typed turn seeing only the placeholder), the hand-over and reply modes, the bypass attempts, fifteen
+  human-only-class × mode combinations with no AI turn, the lost-worker guard with its control, the queue's own semantics pinned, the privacy of
+  every log line and of the counters tool, the real webhook and the real runner in a sandbox over all four modes with typed text still queued;
+  **11 weakened copies each caught**, and the control (core and cli) trips none.
+- `tests/test_document_media.php` 166 and `tests/test_document_pdf.php` 102: unchanged tallies on the reply rung.
+- **Full suite:** **`tests/run.sh` 277 files, 12,991 passed, 0 failed, 0 skipped** (was 276 / 12,899 at 5.18.80: the new `test_document_activation` 92;
+  no other suite moved). **Second run: 277 / 12,991 / 0 again**, every suite's tally identical. PHP warnings in either run: 5
+  (test_dpo_endpoints 5). The South Sudan and tenant suites, unchanged: `test_notify_schedule_health` 19 · `test_staff_jobs_south_sudan` 51 · `test_tenant_profile` 108 · `test_email_no_sudan` 62 · `test_notify_tenant_text` 30 · `test_cashbook_tenant` 26 · `test_portal_tenant` 112 · `test_sales_support_tenant` 37 · `test_ai_country_facts` 21 · `test_phone_country` 26.
+- `git diff --check` clean; `php -l` on every changed PHP file; no post-7.4 syntax in the plugin files; no secret-shaped value in the diff; the two
+  banned values absent; no file under `dishnet-mikrotik-control-plane/` touched; no migration added (the last is still 085).
+
+**Not done, by decision:** no flag on anywhere, no deployment, no production configuration, no customer-facing document AI; the
+shared EventBus remediation (designed only); a scheduled copy of the counters; OCR; E-3/E-6.
+
+**Rollback:** code only, flag first (docs/60 §5): reply off, hand-over off, document off, media off — each proved as a behaviour;
+reverting the commit restores 5.18.80 exactly; a row written by 5.18.81 is read by 5.18.80.
+
+**Git:** committed locally as the seventh unpushed commit on `claude/study-this-jhe2eg`, after `7901ffe`. Nothing pushed,
+nothing deployed, no configuration changed, nothing sent to anyone. Stopped for the operator's review.

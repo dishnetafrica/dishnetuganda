@@ -128,14 +128,19 @@ final class DocumentExtraction
     }
 
     /**
-     * @return array ['outcome' => 'understood', 'event_id' => int, 'chars' => int, 'classification' => string, 'kind' => string]
-     *               | ['outcome' => 'evidence', 'classification' => string, 'kind' => string, 'chars' => int]
+     * @return array ['outcome' => 'understood', 'event_id' => int, 'chars' => int, 'classification' => string, 'kind' => string, 'mode' => 'reply']
+     *               | ['outcome' => 'evidence', 'classification' => string, 'kind' => string, 'chars' => int, 'mode' => 'handover'|'reply']
+     *               | ['outcome' => 'recorded', 'route' => 'brain'|'evidence', 'classification' => string, 'kind' => string, 'chars' => int, 'mode' => 'dry_run'|'handover']
      *               | ['outcome' => 'already_understood']
      *               | ['outcome' => 'failed', 'reason' => string, 'retryable' => bool, 'detail' => string]
+     *
+     * Batch 5 (docs/60 §3): `recorded` is the dry-run and hand-over-mode outcome — the classification and the record were
+     * written, no AI turn was queued and (dry run) nobody is to be told; the worker logs it and does nothing else.
      */
     public function process(array $row, MediaBlob $doc): array
     {
         $id = (int)($row['id'] ?? 0);
+        $t0 = microtime(true);   // Batch 5 (docs/60 §4): the processing time, recorded as a number beside the classification
         if ((string)($row['kind'] ?? '') !== 'document') return self::fail('malformed_document', 'not a document message');
 
         $max = MediaPolicy::documentMaxBytes($this->config);
@@ -250,12 +255,13 @@ final class DocumentExtraction
         }
         if ($cls['route'] === 'human') {
             return $this->complete($row, ['route' => 'evidence', 'class' => (string)$class, 'kind' => $kind, 'facts' => $facts, 'provider' => $provider,
-                                          'excerpt' => self::RECORD[$class] === 'excerpt' ? self::maskExcerpt($text) : '', 'truncated' => !$sawEverything]);
+                                          'excerpt' => self::RECORD[$class] === 'excerpt' ? self::maskExcerpt($text) : '', 'truncated' => !$sawEverything,
+                                          'ms' => (int)round((microtime(true) - $t0) * 1000)]);
         }
         [$capped, $truncated] = self::cut(self::normalise($brainRaw ?? $text), MediaPolicy::DOCUMENT_MAX_BRAIN_CHARS);
         if ($brainRaw !== null && !$truncated && mb_strlen($text) > mb_strlen(self::normalise($brainRaw))) $truncated = true;
         return $this->complete($row, ['route' => 'brain', 'class' => (string)$class, 'kind' => $kind, 'facts' => $facts, 'provider' => $provider,
-                                      'text' => $capped, 'truncated' => $truncated]);
+                                      'text' => $capped, 'truncated' => $truncated, 'ms' => (int)round((microtime(true) - $t0) * 1000)]);
     }
 
     /**
@@ -265,12 +271,22 @@ final class DocumentExtraction
      * event, finds the guard and does nothing); the stored message is rewritten under its label with what the record policy
      * allows; for a human-only class nothing is queued (the worker hands over after this returns); otherwise the one ai.reply
      * event is queued. A database failure rolls all of it back and is thrown, so the worker retries the whole thing.
+     *
+     * Batch 5 (docs/60 §3): what happens is decided by MediaPolicy::documentMode(). The wa_media record (understanding,
+     * understanding_kind, the record policy) is the same in every mode — it is what the dry run exists to observe. The stored
+     * message's BODY is rewritten only in `reply` mode, because the body is what the model reads as history on a later turn
+     * (AiReplyWorker, getMessagesForAi); in `dry_run` and `handover` only its metadata is written, so the extract never
+     * reaches the assistant. The ai.reply event is queued only in `reply` mode. A human-only class is returned as `evidence`
+     * (a person is told) only in `handover` and `reply`; in `dry_run` it is `recorded`, like everything else.
      */
     public function complete(array $row, array $r): array
     {
         $id       = (int)($row['id'] ?? 0);
         $convId   = (int)($row['conversation_id'] ?? 0);
         $evidence = (string)($r['route'] ?? '') === 'evidence';
+        $mode     = MediaPolicy::documentMode($this->config);
+        $reply    = $mode === 'reply';
+        $tell     = $mode === 'reply' || $mode === 'handover';   // may a person be told what arrived?
         $class    = (string)($r['class'] ?? 'general');
         $kind     = (string)($r['kind'] ?? '');
         $facts    = (array)($r['facts'] ?? []);
@@ -306,17 +322,38 @@ final class DocumentExtraction
                     $md = is_array($md) ? $md : [];
                     $md['document'] = ['media_id' => $id, 'kind' => $kind, 'classification' => $class, 'pages_total' => (int)($facts['pages_total'] ?? 0),
                                        'pages_read' => (int)($facts['pages_read'] ?? 0), 'rows' => (int)($facts['rows'] ?? 0), 'truncated' => !empty($r['truncated']),
-                                       'evidence' => $evidence, 'record' => $record, 'provider' => (string)($r['provider'] ?? ''), 'extracted_at' => gmdate('Y-m-d H:i:s')];
-                    $this->pdo->prepare("UPDATE wa_messages SET body = ?, metadata = ? WHERE id = ? AND media_type = 'document'")
-                              ->execute([$labelled, json_encode($md, JSON_UNESCAPED_UNICODE), $msgId]);
+                                       'evidence' => $evidence, 'record' => $record, 'provider' => (string)($r['provider'] ?? ''), 'extracted_at' => gmdate('Y-m-d H:i:s'),
+                                       // Batch 5 (docs/60 §4): the mode this ran under, the processing time, and whether the body carries the record.
+                                       'mode' => $mode, 'ms' => max(0, (int)($r['ms'] ?? 0)), 'body_rewritten' => $reply];
+                    if ($reply) {
+                        $this->pdo->prepare("UPDATE wa_messages SET body = ?, metadata = ? WHERE id = ? AND media_type = 'document'")
+                                  ->execute([$labelled, json_encode($md, JSON_UNESCAPED_UNICODE), $msgId]);
+                    } else {
+                        // dry_run / handover: the record goes to the metadata only; the body the model reads stays as the webhook stored it.
+                        $this->pdo->prepare("UPDATE wa_messages SET metadata = ? WHERE id = ? AND media_type = 'document'")
+                                  ->execute([json_encode($md, JSON_UNESCAPED_UNICODE), $msgId]);
+                    }
                 }
             }
 
             if ($evidence) {
                 $this->pdo->commit();
+                if (!$tell) {
+                    ($this->log)('info', sprintf('media #%d (conversation %d): document is %s (%s, %s) — dry run: recorded, nobody told, nothing answered',
+                        $id, $convId, self::CLASS_WORDS[$class] ?? $class, $class, $kind));
+                    return ['outcome' => 'recorded', 'route' => 'evidence', 'classification' => $class, 'kind' => $kind, 'chars' => mb_strlen($understanding), 'mode' => $mode];
+                }
                 ($this->log)('info', sprintf('media #%d (conversation %d): document is %s (%s, %s) — no AI turn; a person handles it',
                     $id, $convId, self::CLASS_WORDS[$class] ?? $class, $class, $kind));
-                return ['outcome' => 'evidence', 'classification' => $class, 'kind' => $kind, 'chars' => mb_strlen($understanding)];
+                return ['outcome' => 'evidence', 'classification' => $class, 'kind' => $kind, 'chars' => mb_strlen($understanding), 'mode' => $mode];
+            }
+
+            if (!$reply) {
+                // dry_run or handover: a harmless document is recorded and that is all — no AI turn; its caption was answered as text (step 9b).
+                $this->pdo->commit();
+                ($this->log)('info', sprintf('media #%d (conversation %d): document classified %s (%s) — %s: recorded, no AI turn',
+                    $id, $convId, $class, $kind, $mode === 'dry_run' ? 'dry run' : 'hand-over mode'));
+                return ['outcome' => 'recorded', 'route' => 'brain', 'classification' => $class, 'kind' => $kind, 'chars' => mb_strlen($understanding), 'mode' => $mode];
             }
 
             // The one ai.reply event: the shape evo_webhook.php queues for a typed message, plus where it came from.
@@ -348,7 +385,7 @@ final class DocumentExtraction
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
             throw $e;   // the worker retries: the row is not understood, nothing was queued
         }
-        return ['outcome' => 'understood', 'event_id' => (int)$eventId, 'chars' => mb_strlen($understanding), 'classification' => $class, 'kind' => $kind];
+        return ['outcome' => 'understood', 'event_id' => (int)$eventId, 'chars' => mb_strlen($understanding), 'classification' => $class, 'kind' => $kind, 'mode' => $mode];
     }
 
     /** What a person is told. Generic by design: no amount, no name, no reference travels in an alert. */

@@ -68,6 +68,7 @@ function vp_core(string $root): array
     $svc   = new ConversationService($tmp, $pdo);
     $bus   = new EventBus($pdo);
     $cfg = ['ai_enabled' => '1', 'ai_media_enabled' => '1', 'ai_media_document' => '1', 'ai_media_max_bytes' => 262144, 'ai_media_document_max_bytes' => 131072,
+            'ai_media_document_handover' => '1', 'ai_media_document_reply' => '1',   // Batch 5 (docs/60): the reply rung, as before this batch
             'ai_media_document_timeout_s' => 10, 'ai_media_document_max_pages' => 20, 'data_dir' => $tmp];
     $f = ['tmp' => $tmp];
     $logLines = [];
@@ -375,7 +376,7 @@ $de = vd_codeOf($root . '/lib/DocumentExtraction.php');
 is_(strpos($de, "self::requireCapabilities(['gzuncompress', 'inflate_init']);") !== false && strpos($de, "return self::fail('pdf_no_text'") !== false && strpos($de, 'pdf_not_read') === false,
     'the extractor guards the PDF path with the zlib capability, refuses an empty text layer as pdf_no_text, and pdf_not_read is gone');
 is_(strpos((string)file_get_contents($root . '/tools/set_config.php'), 'PDF text') !== false && strpos((string)file_get_contents($root . '/tools/set_config.php'), 'PDF facts only') === false, 'set_config describes PDF text, not facts only');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.80', 'manifest version is 5.18.80');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.81', 'manifest version is 5.18.81');
 is_(count(glob($root . '/migrations/08[6-9]_*.sql') ?: []) === 0, 'no migration');
 
 echo "\nE. Weakened copies — each caught, and the control\n";

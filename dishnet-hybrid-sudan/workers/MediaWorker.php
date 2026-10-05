@@ -52,11 +52,21 @@ require_once dirname(__DIR__) . '/lib/ConversationService.php';
  * records a human-only class — payment evidence, a statement, an invoice, a contract, a quotation, an identity document, a
  * credential — and queues nothing: the worker hands the conversation to a person. Anything uncertain is a person too. No
  * payment, invoice, ledger, KYC or CRM record is read or written. A captioned document is answered once (step 9b).
+ *
+ * Batch 5 (docs/60): the document LADDER (MediaPolicy::documentMode). With ai_media_document alone the document is extracted,
+ * classified and RECORDED and nothing else happens — the DRY RUN: no hand-over, no AI turn, the stored body untouched, the
+ * caption answered as text by the webhook. ai_media_document_handover adds the person (a human-only class, a refusal, a fetch
+ * that failed for good, a queue that gave up); ai_media_document_reply adds the assistant's turn for a harmless document. And
+ * one guard the shared queue lacks: a row the queue has claimed as many times as it allows is a worker that died mid-way each
+ * time (the EventBus counts attempts only on a reported failure), so it is settled `dead` here instead of being fetched for ever.
  */
 final class MediaWorker extends WorkerBase
 {
     /** Rows in one of these states are settled: a second event for the same message changes nothing. */
     public const SETTLED = ['fetched', 'understood', 'unsupported', 'skipped', 'dead'];
+
+    /** Batch 5 (docs/60 §5): the row was claimed as often as its event may be attempted and never settled — a worker was lost each time. */
+    public const REASON_WORKER_LOST = 'worker_lost';
 
     /** @var MediaFetcher|null a fetcher injected by a test; otherwise built per event from the configuration */
     private $fetcher = null;
@@ -151,6 +161,21 @@ final class MediaWorker extends WorkerBase
             return;
         }
 
+        // Batch 5 (docs/60 §5): the row counts its own claims (attempts, below). The queue counts an attempt only when the worker
+        // REPORTS a failure, so a worker killed mid-way — a memory fatal, an OOM kill, a restart — leaves an event that is released
+        // after five minutes and claimed again, with no path to dead. The row's count closes that loop here, without touching the
+        // shared queue: as many claims as the event allows attempts, and the row is dead, a person is told as the queue's own dead
+        // letter would tell them, and the event is acknowledged. A reported failure never gets here first: on the fifth claim the
+        // row reads four, the event four; the fifth failure makes the event dead through fail() and onDead(), as before.
+        $maxAttempts = max(1, (int)($event['max_attempts'] ?? 5));
+        if ((int)$row['attempts'] >= $maxAttempts) {
+            $this->update($mediaId, ['status' => 'dead', 'failure_reason' => self::REASON_WORKER_LOST]);
+            $this->gaveUp($row, $mediaId, (int)($row['conversation_id'] ?? 0),
+                sprintf('claimed %d times, the queue allows %d — a worker was lost each time', (int)$row['attempts'], $maxAttempts));
+            $this->outcome($mediaId, $row, 'dead', ['reason' => self::REASON_WORKER_LOST]);
+            return;
+        }
+
         $this->update($mediaId, ['status' => 'fetching', 'attempts' => (int)$row['attempts'] + 1]);
         $fetcher = $this->fetcher ?? new MediaFetcher($this->evoClient(), $this->config);
         $res = $fetcher->fetch($row);
@@ -198,16 +223,35 @@ final class MediaWorker extends WorkerBase
         $this->update($mediaId, ['status' => $status, 'failure_reason' => $reason]);
         $this->log('info', sprintf('media #%d: %s — %s (%s); not retried', $mediaId, $status, $reason, $detail));
         // Batch 2 / 3 / 4: a voice note, a picture or a document that will never be fetched is a customer who sent something
-        // and would hear nothing — a person.
-        if ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentWanted($row)) {
+        // and would hear nothing — a person. Batch 5: for a document only when its hand-over rung is on (a dry run tells nobody).
+        if ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentHandoverWanted($row)) {
             $this->handover($row, 'a ' . $this->mediaName($row) . ' could not be fetched (' . $reason . ') — look at it in WhatsApp');
         }
+        if ((string)($row['kind'] ?? '') === 'document') $this->outcome($mediaId, $row, $status, ['reason' => $reason]);
     }
 
     /** Batch 4: is this row a document that ai_media_document (with ai_media_enabled) wants read? */
     private function documentWanted(array $row): bool
     {
         return (string)($row['kind'] ?? '') === 'document' && MediaPolicy::documentEnabled($this->config);
+    }
+
+    /** Batch 5 (docs/60 §2): is this row a document whose classification may be acted on for a PERSON (ai_media_document_handover, with every flag below it)? */
+    private function documentHandoverWanted(array $row): bool
+    {
+        return (string)($row['kind'] ?? '') === 'document' && MediaPolicy::documentHandoverEnabled($this->config);
+    }
+
+    /**
+     * Batch 5 (docs/60 §4): one structured line per document, for the counters — the outcome, the kind, the class or the reason,
+     * the mode, the time and the row's attempts. Never the text, the file name, the caption, the number or the hash.
+     */
+    private function outcome(int $mediaId, array $row, string $outcome, array $o = []): void
+    {
+        $fresh = $this->row($mediaId) ?? $row;
+        $this->log('info', sprintf('media #%d (conversation %d): document outcome=%s kind=%s class=%s reason=%s mode=%s ms=%d attempts=%d',
+            $mediaId, (int)($fresh['conversation_id'] ?? 0), $outcome, (string)($o['kind'] ?? '-') ?: '-', (string)($o['class'] ?? '-') ?: '-',
+            (string)($o['reason'] ?? '-') ?: '-', MediaPolicy::documentMode($this->config), (int)($o['ms'] ?? 0), (int)($fresh['attempts'] ?? 0)));
     }
 
     /**
@@ -222,21 +266,31 @@ final class MediaWorker extends WorkerBase
         $svc = new DocumentExtraction($this->pdo, $this->store, $this->config, $this->ocrFor(),
             function (string $level, string $message): void { $this->log($level, $message); });
         if ($this->documentDeadline !== null) $svc->useDeadline($this->documentDeadline);
+        $t0 = microtime(true);
         try {
             $r = $svc->process($row, $blob);
         } finally {
             $blob->wipe();
         }
+        $ms      = (int)round((microtime(true) - $t0) * 1000);
         $outcome = (string)($r['outcome'] ?? 'failed');
+        $kind    = (string)($r['kind'] ?? '');
+        $class   = (string)($r['classification'] ?? '');
         if ($outcome === 'understood') {
             $this->log('info', sprintf('media #%d (conversation %d): document read (%s, %s) — %d characters, ai.reply #%d queued',
-                $mediaId, (int)($row['conversation_id'] ?? 0), (string)($r['kind'] ?? ''), (string)($r['classification'] ?? 'general'),
-                (int)($r['chars'] ?? 0), (int)($r['event_id'] ?? 0)));
+                $mediaId, (int)($row['conversation_id'] ?? 0), $kind, $class !== '' ? $class : 'general', (int)($r['chars'] ?? 0), (int)($r['event_id'] ?? 0)));
+            $this->outcome($mediaId, $row, 'understood', ['kind' => $kind, 'class' => $class, 'ms' => $ms]);
+            return;
+        }
+        if ($outcome === 'recorded') {
+            // Batch 5 (docs/60 §3): dry run, or hand-over mode with a harmless document — the record was written and that is all.
+            $this->outcome($mediaId, $row, 'recorded', ['kind' => $kind, 'class' => $class, 'ms' => $ms]);
             return;
         }
         if ($outcome === 'evidence') {
             // A human-only class: no AI turn was queued. The hand-over names the class, never what the document says.
-            $this->handover($row, DocumentExtraction::handoverReason('evidence', (string)($r['classification'] ?? '')));
+            $this->handover($row, DocumentExtraction::handoverReason('evidence', $class));
+            $this->outcome($mediaId, $row, 'evidence', ['kind' => $kind, 'class' => $class, 'ms' => $ms]);
             return;
         }
         if ($outcome === 'already_understood') {
@@ -249,8 +303,14 @@ final class MediaWorker extends WorkerBase
         if (!empty($r['retryable'])) {
             throw new \RuntimeException(sprintf('media #%d document extraction %s (%s)', $mediaId, $reason, $detail));
         }
-        $this->log('warn', sprintf('media #%d: document not read — %s (%s); handed to a person, nothing answered', $mediaId, $reason, $detail));
-        $this->handover($row, DocumentExtraction::handoverReason('failed', $reason, $detail));
+        if ($this->documentHandoverWanted($row)) {
+            $this->log('warn', sprintf('media #%d: document not read — %s (%s); handed to a person, nothing answered', $mediaId, $reason, $detail));
+            $this->handover($row, DocumentExtraction::handoverReason('failed', $reason, $detail));
+        } else {
+            // Batch 5 (docs/60 §3): the dry run tells nobody — the refusal is recorded on the row and counted, nothing more.
+            $this->log('warn', sprintf('media #%d: document not read — %s (%s); dry run: recorded, nobody told, nothing answered', $mediaId, $reason, $detail));
+        }
+        $this->outcome($mediaId, $row, 'failed', ['kind' => $kind, 'reason' => $reason, 'ms' => $ms]);
     }
 
     private function ocrFor(): ?DocumentOcrPort
@@ -406,15 +466,27 @@ final class MediaWorker extends WorkerBase
         $row = $this->row($mediaId);
         $this->update($mediaId, ['status' => 'dead']);
         $convId = (int)($row['conversation_id'] ?? ($p['conversation_id'] ?? 0));
-        // Batch 2 / 3: a voice note or a picture the queue gave up on is handed to a person through the full path — the
-        // alert and the holding line too, not only the inbox mark — because the customer sent something and has heard
-        // nothing.
-        if (is_array($row) && ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentWanted($row))) {
+        $this->gaveUp(is_array($row) ? $row : [], $mediaId, $convId, $e->getMessage());
+        if (is_array($row) && (string)($row['kind'] ?? '') === 'document') {
+            $this->outcome($mediaId, $row, 'dead', ['reason' => (string)($row['failure_reason'] ?? '')]);
+        }
+    }
+
+    /**
+     * The automatic path has given up on this row (the queue's dead letter, or Batch 5's lost-worker guard). Batch 2 / 3: a
+     * voice note or a picture is handed to a person through the full path — the alert and the holding line too, not only the
+     * inbox mark — because the customer sent something and has heard nothing. Batch 5: a document likewise, but only when its
+     * hand-over rung is on; in a dry run, and for a kind nobody wanted understood, the conversation is marked for the inbox as
+     * Batch 1 did, and no message is sent.
+     */
+    private function gaveUp(array $row, int $mediaId, int $convId, string $why): void
+    {
+        if ($row !== [] && ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentHandoverWanted($row))) {
             $name = $this->mediaName($row);
             $this->handover($row, 'a ' . $name . ' could not be ' . ($name === 'voice message' ? 'transcribed' : ($name === 'document' ? 'read' : 'understood'))
                 . ' after every attempt — look at it in WhatsApp');
             $this->log('error', sprintf('media #%d (conversation %d): %s given up after every attempt — handed to a person: %s',
-                $mediaId, $convId, $name, $e->getMessage()));
+                $mediaId, $convId, $name, $why));
             return;
         }
         if ($convId > 0) {
@@ -425,7 +497,7 @@ final class MediaWorker extends WorkerBase
             }
         }
         $this->log('error', sprintf('media #%d (conversation %d) could not be fetched after every attempt — handed to a person: %s',
-            $mediaId, $convId, $e->getMessage()));
+            $mediaId, $convId, $why));
     }
 
     private function row(int $id): ?array

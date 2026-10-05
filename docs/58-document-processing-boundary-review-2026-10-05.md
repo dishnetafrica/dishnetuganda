@@ -457,6 +457,11 @@ name, number or account in it:
 operator's instruction decides when, and nothing in the code decides for them. No other flag: the classification rules,
 the caps and the record policy are code, like `IMAGE_MAX_SIDE_PX`.
 
+> **Superseded in part by `docs/60` (Batch 5, 5.18.81).** `ai_media_document` alone is now the **dry run** — extract, classify
+> and record, nobody told, no AI turn, the stored body untouched. Two rungs above it, `ai_media_document_handover` and
+> `ai_media_document_reply`, add the person and then the assistant; each needs every flag below it. The caps and the record
+> policy in this table are unchanged.
+
 ## 16. Question 14 — compatibility, proved rather than asserted
 
 | Property | Why it holds | How Batch 4 proves it |
