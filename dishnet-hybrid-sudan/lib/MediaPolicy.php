@@ -29,6 +29,14 @@ final class MediaPolicy
     public const VOICE_CAP_TIMEOUT_S         = 120;
     public const VOICE_MAX_TRANSCRIPT_CHARS  = 4000;   // a transcript is cut here; a voice note is not an essay
 
+    // Batch 3 (docs/55 §9, docs/57): pictures. ai_media_image is OFF unless set, and it needs ai_media_enabled too.
+    public const IMAGE_DEFAULT_TIMEOUT_S     = 30;     // the provider's whole answer, within this
+    public const IMAGE_MIN_TIMEOUT_S         = 5;
+    public const IMAGE_CAP_TIMEOUT_S         = 120;
+    public const IMAGE_MAX_SIDE_PX           = 8000;   // read from the header before any provider sees the picture
+    public const IMAGE_MAX_PIXELS            = 25000000;
+    public const IMAGE_MAX_DESCRIPTION_CHARS = 2000;   // a description is cut here
+
     /**
      * The base media types accepted per kind (the part before any ';' — WhatsApp announces voice notes as
      * "audio/ogg; codecs=opus"). Anything else is refused as unsupported_mime without being kept.
@@ -54,6 +62,19 @@ final class MediaPolicy
     public static function voiceEnabled(array $config): bool
     {
         return self::enabled($config) && self::flag($config['ai_media_voice'] ?? null);
+    }
+
+    /** Pictures are described only when BOTH flags are on: ai_media_enabled off wins, whatever ai_media_image says. */
+    public static function imageEnabled(array $config): bool
+    {
+        return self::enabled($config) && self::flag($config['ai_media_image'] ?? null);
+    }
+
+    public static function imageTimeoutSeconds(array $config): int
+    {
+        $v = $config['ai_media_image_timeout_s'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::IMAGE_DEFAULT_TIMEOUT_S;
+        return max(self::IMAGE_MIN_TIMEOUT_S, min(self::IMAGE_CAP_TIMEOUT_S, $n));
     }
 
     public static function voiceMaxSeconds(array $config): int

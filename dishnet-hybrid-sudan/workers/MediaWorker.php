@@ -7,6 +7,8 @@ require_once dirname(__DIR__) . '/lib/MediaFetcher.php';
 require_once dirname(__DIR__) . '/lib/EvolutionApiService.php';
 require_once dirname(__DIR__) . '/lib/Transcriber.php';
 require_once dirname(__DIR__) . '/lib/VoiceTranscription.php';
+require_once dirname(__DIR__) . '/lib/ImageDescriber.php';
+require_once dirname(__DIR__) . '/lib/ImageUnderstanding.php';
 require_once dirname(__DIR__) . '/lib/Handover.php';
 require_once dirname(__DIR__) . '/lib/ConversationService.php';
 
@@ -34,6 +36,12 @@ require_once dirname(__DIR__) . '/lib/ConversationService.php';
  * existing assistant answers it exactly as it answers typed text. A retryable failure is thrown (the EventBus retries;
  * the retry fetches again, since nothing was kept); a permanent one, or the queue giving up, hands the conversation to a
  * person through lib/Handover.php — the same path AiReplyWorker uses — and never answers from a guess.
+ *
+ * Batch 3 (docs/55 §9, docs/57): a PICTURE goes the same way, only while ai_media_image is on as well. ImageUnderstanding
+ * reads the header and the caps before any provider, asks the one configured provider for a description, and then
+ * EITHER queues the one ai.reply event (an ordinary picture) OR, for a payment screenshot or receipt — this plugin's own
+ * decision, PaymentEvidence — queues nothing: the worker hands the conversation to a person, and no invoice, payment or
+ * ledger is read or written. A captioned picture is answered once, by that turn (evo_webhook.php, step 9a).
  */
 final class MediaWorker extends WorkerBase
 {
@@ -46,6 +54,10 @@ final class MediaWorker extends WorkerBase
     private $transcriber = null;
     /** @var bool */
     private $transcriberInjected = false;
+    /** @var ImageDescriberPort|null a describer injected by a test; otherwise ImageDescriberFactory::fromConfig() */
+    private $describer = null;
+    /** @var bool */
+    private $describerInjected = false;
     /** @var EvolutionApiService|null */
     private $evoClient = null;
 
@@ -65,6 +77,13 @@ final class MediaWorker extends WorkerBase
     {
         $this->transcriber         = $transcriber;
         $this->transcriberInjected = true;
+    }
+
+    /** For tests: the image describer to use (null = none configured). Production builds it from the configuration. */
+    public function useImageDescriber(?ImageDescriberPort $describer): void
+    {
+        $this->describer         = $describer;
+        $this->describerInjected = true;
     }
 
     protected function handle(array $event): void
@@ -94,7 +113,7 @@ final class MediaWorker extends WorkerBase
         // note whose transcript is still to come is not settled while ai_media_voice is on — the bytes were not kept,
         // so this attempt fetches them again and transcribes; once `understood` it is settled for good.
         $settled = in_array((string)$row['status'], self::SETTLED, true);
-        if ($settled && (string)$row['status'] === 'fetched' && $this->voiceWanted($row)
+        if ($settled && (string)$row['status'] === 'fetched' && ($this->voiceWanted($row) || $this->imageWanted($row))
             && trim((string)($row['understanding'] ?? '')) === '') {
             $settled = false;
         }
@@ -124,6 +143,11 @@ final class MediaWorker extends WorkerBase
                 $this->transcribe($mediaId, $blob);   // wipes the blob, whatever happens
                 return;
             }
+            // Batch 3 (docs/55 §9, docs/57): a picture goes on to understanding — or to a person, if it is a payment.
+            if ($this->imageWanted($row)) {
+                $this->understandImage($mediaId, $blob);   // wipes the blob, whatever happens
+                return;
+            }
             $blob->wipe();
             unset($blob, $res);
             return;
@@ -139,9 +163,10 @@ final class MediaWorker extends WorkerBase
         $status = in_array($reason, ['unsupported_kind', 'unsupported_mime'], true) ? 'unsupported' : 'failed';
         $this->update($mediaId, ['status' => $status, 'failure_reason' => $reason]);
         $this->log('info', sprintf('media #%d: %s — %s (%s); not retried', $mediaId, $status, $reason, $detail));
-        // Batch 2: a voice note that will never be fetched is a customer who spoke and would hear nothing — a person.
-        if ($this->voiceWanted($row)) {
-            $this->handover($row, 'a voice message could not be fetched (' . $reason . ') — listen to it in WhatsApp');
+        // Batch 2 / 3: a voice note or a picture that will never be fetched is a customer who sent something and would
+        // hear nothing — a person.
+        if ($this->voiceWanted($row) || $this->imageWanted($row)) {
+            $this->handover($row, 'a ' . $this->mediaName($row) . ' could not be fetched (' . $reason . ') — look at it in WhatsApp');
         }
     }
 
@@ -149,6 +174,62 @@ final class MediaWorker extends WorkerBase
     private function voiceWanted(array $row): bool
     {
         return (string)($row['kind'] ?? '') === 'audio' && MediaPolicy::voiceEnabled($this->config);
+    }
+
+    /** Batch 3: is this row a picture that ai_media_image (with ai_media_enabled) wants described? */
+    private function imageWanted(array $row): bool
+    {
+        return (string)($row['kind'] ?? '') === 'image' && MediaPolicy::imageEnabled($this->config);
+    }
+
+    /** What a hand-over reason calls the thing the customer sent. */
+    private function mediaName(array $row): string
+    {
+        $kind = (string)($row['kind'] ?? '');
+        return $kind === 'audio' ? 'voice message' : ($kind === 'image' ? 'photo' : 'file');
+    }
+
+    /**
+     * Batch 3 (docs/55 §9, docs/57): the fetched picture becomes the customer's turn through ImageUnderstanding — or,
+     * when it is payment evidence, a person's job and nothing else. The blob is wiped here whatever happens. A
+     * retryable failure is thrown so the EventBus retries the event; a permanent one hands the conversation to a
+     * person and is acknowledged. The log never carries the description.
+     */
+    private function understandImage(int $mediaId, MediaBlob $blob): void
+    {
+        $row = $this->row($mediaId) ?? [];
+        $svc = new ImageUnderstanding($this->pdo, $this->store, $this->config, $this->describerFor(),
+            function (string $level, string $message): void { $this->log($level, $message); });
+        try {
+            $r = $svc->process($row, $blob);
+        } finally {
+            $blob->wipe();
+        }
+        $outcome = (string)($r['outcome'] ?? 'failed');
+        if ($outcome === 'understood') {
+            $this->log('info', sprintf('media #%d (conversation %d): picture described (%s) — %d characters, ai.reply #%d queued',
+                $mediaId, (int)($row['conversation_id'] ?? 0), (string)($r['classification'] ?? 'general'),
+                (int)($r['chars'] ?? 0), (int)($r['event_id'] ?? 0)));
+            return;
+        }
+        if ($outcome === 'payment_evidence') {
+            // Evidence for a person: no AI turn was queued. The hand-over says what arrived, never what it shows.
+            $this->handover($row, PaymentEvidence::handoverReason());
+            return;
+        }
+        if ($outcome === 'already_understood') {
+            $this->log('info', sprintf('media #%d: already understood — nothing queued twice', $mediaId));
+            return;
+        }
+        $reason = (string)($r['reason'] ?? 'provider_error');
+        $detail = (string)($r['detail'] ?? '');
+        $this->update($mediaId, ['status' => 'failed', 'failure_reason' => $reason]);
+        if (!empty($r['retryable'])) {
+            throw new \RuntimeException(sprintf('media #%d image understanding %s (%s)', $mediaId, $reason, $detail));
+        }
+        $this->log('warn', sprintf('media #%d: picture not understood — %s (%s); handed to a person, nothing answered',
+            $mediaId, $reason, $detail));
+        $this->handover($row, 'a photo could not be understood (' . $reason . ') — look at it in WhatsApp');
     }
 
     /**
@@ -220,6 +301,11 @@ final class MediaWorker extends WorkerBase
         return $this->transcriberInjected ? $this->transcriber : TranscriberFactory::fromConfig($this->config);
     }
 
+    private function describerFor(): ?ImageDescriberPort
+    {
+        return $this->describerInjected ? $this->describer : ImageDescriberFactory::fromConfig($this->config);
+    }
+
     /**
      * The queue has given up on this fetch. The row says dead; the conversation is handed to a person, as AiReplyWorker
      * does when it cannot answer. Nothing is sent to the customer.
@@ -232,12 +318,15 @@ final class MediaWorker extends WorkerBase
         $row = $this->row($mediaId);
         $this->update($mediaId, ['status' => 'dead']);
         $convId = (int)($row['conversation_id'] ?? ($p['conversation_id'] ?? 0));
-        // Batch 2: a voice note the queue gave up on is handed to a person through the full path — the alert and the
-        // holding line too, not only the inbox mark — because the customer spoke and has heard nothing.
-        if (is_array($row) && $this->voiceWanted($row)) {
-            $this->handover($row, 'a voice message could not be transcribed after every attempt — listen to it in WhatsApp');
-            $this->log('error', sprintf('media #%d (conversation %d): voice note given up after every attempt — handed to a person: %s',
-                $mediaId, $convId, $e->getMessage()));
+        // Batch 2 / 3: a voice note or a picture the queue gave up on is handed to a person through the full path — the
+        // alert and the holding line too, not only the inbox mark — because the customer sent something and has heard
+        // nothing.
+        if (is_array($row) && ($this->voiceWanted($row) || $this->imageWanted($row))) {
+            $name = $this->mediaName($row);
+            $this->handover($row, 'a ' . $name . ' could not be ' . ($name === 'voice message' ? 'transcribed' : 'understood')
+                . ' after every attempt — look at it in WhatsApp');
+            $this->log('error', sprintf('media #%d (conversation %d): %s given up after every attempt — handed to a person: %s',
+                $mediaId, $convId, $name, $e->getMessage()));
             return;
         }
         if ($convId > 0) {

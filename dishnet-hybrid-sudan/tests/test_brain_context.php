@@ -83,16 +83,20 @@ function everything(): array
 $built = BrainContext::build(ConversationService::STATE_IDENTIFIED, everything());
 $json  = json_encode($built);
 
-echo "\nFourteen keys, and only the fourteen\n";
+echo "\nFifteen keys, and only the fifteen\n";
 foreach (array_keys($built) as $k) {
     is_(array_key_exists($k, BrainContext::CONTRACT), "\"{$k}\" is in the contract");
 }
-t('and every one of them is declared', count(BrainContext::CONTRACT), 14);   // Batch 0 (docs/55 defect c): + location; Batch 2: + voice
+t('and every one of them is declared', count(BrainContext::CONTRACT), 15);   // Batch 0 (docs/55 defect c): + location; Batch 2: + voice; Batch 3: + image
 t('the thirteenth is the pin, with exactly its four leaves', BrainContext::CONTRACT['location'] ?? null, ['lat', 'lng', 'name', 'in_bounds']);
 t('the fourteenth is the voice note, with exactly its one leaf', BrainContext::CONTRACT['voice'] ?? null, ['seconds']);
 t('a voice note travels as its duration only', BrainContext::build(ConversationService::STATE_UNKNOWN,
     ['channel' => 'sales', 'message' => 'x', 'voice' => ['seconds' => 7, 'transcript' => 'never carried', 'media_id' => 9]])['voice'] ?? null, ['seconds' => 7]);
 t('and not at all when the turn was typed', array_key_exists('voice', BrainContext::build(ConversationService::STATE_UNKNOWN, ['channel' => 'sales', 'message' => 'x'])), false);
+t('the fifteenth is the picture, with exactly its one leaf', BrainContext::CONTRACT['image'] ?? null, ['classification']);
+t('a picture travels as its classification only', BrainContext::build(ConversationService::STATE_UNKNOWN,
+    ['channel' => 'sales', 'message' => 'x', 'image' => ['classification' => 'site_photo', 'description' => 'never carried', 'media_id' => 9, 'width' => 800]])['image'] ?? null, ['classification' => 'site_photo']);
+t('and not at all when the turn was typed, either', array_key_exists('image', BrainContext::build(ConversationService::STATE_UNKNOWN, ['channel' => 'sales', 'message' => 'x'])), false);
 t('nothing outside it was built', array_diff(array_keys($built), array_keys(BrainContext::CONTRACT)), []);
 
 echo "\nBlanket customer data is gone\n";

@@ -395,6 +395,16 @@ foreach ($messages as $msg) {
         continue;
     }
 
+    // ── 9a. Batch 3 (docs/55 §9, docs/57 §1): a captioned PHOTO with ai_media_image on is answered ONCE — by the
+    // image turn the media worker queues, which carries the caption beside the description — not here as well. The
+    // caption is already stored and its STOP already read (8b). With the flag off, nothing changes: the caption is
+    // answered as text, as it always was.
+    if ($mediaEvent && (string)($media['kind'] ?? '') === 'image' && MediaPolicy::imageEnabled($config)) {
+        error_log(sprintf('[evo_webhook] caption carried by the media worker — the image turn answers it (%s)', $channel));
+        $skipped++;
+        continue;
+    }
+
     try {
         $bus->emit(
             'ai.reply',

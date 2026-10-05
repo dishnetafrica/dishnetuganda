@@ -15,10 +15,10 @@ require_once __DIR__ . '/ConversationService.php';
  * complete uCRM client record, internal ids, the Splynx id and service
  * address, the customer's phone number, our own WhatsApp instance.
  *
- * This is the allowlist that replaces it. Fourteen keys, and every one earns
+ * This is the allowlist that replaces it. Fifteen keys, and every one earns
  * its place by deciding what the model DOES rather than by being available.
  * (Twelve until Batch 0 of docs/55 added 'location'; thirteen until Batch 2
- * added 'voice', below.)
+ * added 'voice'; fourteen until Batch 3 added 'image', below.)
  *
  * ── CONSTRUCTED, NEVER FILTERED ─────────────────────────────────────────
  *
@@ -55,7 +55,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Fourteen top-level keys, and the only fourteen.
+     * The contract. Fifteen top-level keys, and the only fifteen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -85,6 +85,10 @@ final class BrainContext
         // Presence is the fact the prompt acts on (DishNetAiBrain's VOICE MESSAGE block: an automatic transcript,
         // every name and figure unconfirmed, ask rather than guess); the one leaf is the announced duration.
         'voice'          => ['seconds'],
+        // Batch 3 (docs/55 §9, docs/57): this turn's message is the automatic description of a picture the customer
+        // sent. Presence is the fact the prompt acts on (DishNetAiBrain's IMAGE block: a description, not the
+        // customer's words; every figure unconfirmed; never confirm a payment); the one leaf is the classification.
+        'image'          => ['classification'],
     ];
 
     /**
@@ -177,6 +181,14 @@ final class BrainContext
         $voice = $in['voice'] ?? null;
         if (is_array($voice)) {
             $out['voice'] = ['seconds' => max(0, (int)(self::int($voice['seconds'] ?? 0) ?? 0))];
+        }
+
+        // Batch 3 (docs/55 §9): the picture this turn's message describes. Only when the caller says so (an array),
+        // and only its classification travels — 'general' when the caller named none.
+        $image = $in['image'] ?? null;
+        if (is_array($image)) {
+            $cls = self::str($image['classification'] ?? '');
+            $out['image'] = ['classification' => $cls !== '' ? $cls : 'general'];
         }
 
         // The public catalogue. Not customer data — identical for every

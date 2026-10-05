@@ -185,7 +185,7 @@ class AiReplyWorker extends WorkerBase
 
         // One line per message: enough to trace the pipeline, no content. Batch 2: a transcript says so.
         $this->log('info', sprintf('conv %d: in channel=%s len=%d%s', $convId, $channel, mb_strlen($message),
-            ($p['origin'] ?? '') === 'voice' ? ' origin=voice' : ''));
+            in_array((string)($p['origin'] ?? ''), ['voice', 'image'], true) ? ' origin=' . (string)$p['origin'] : ''));
 
         // Let the customer see something is happening while the model thinks.
         $this->evo->sendTyping($channel, $phone);
@@ -348,6 +348,11 @@ class AiReplyWorker extends WorkerBase
             // The model is told how to treat it in DishNetAiBrain's VOICE MESSAGE block — nothing else changes.
             'voice'             => (($p['origin'] ?? '') === 'voice' && is_array($p['voice'] ?? null))
                                    ? ['seconds' => max(0, (int)($p['voice']['seconds'] ?? 0))] : null,
+            // Batch 3 (docs/55 §9, docs/57): this turn's message is the automatic description of a picture, queued by
+            // ImageUnderstanding with origin=image. Presence is the fact; the one leaf is the classification. A payment
+            // screenshot never arrives here — it is handed to a person before any event is queued.
+            'image'             => (($p['origin'] ?? '') === 'image' && is_array($p['image'] ?? null))
+                                   ? ['classification' => (string)($p['image']['classification'] ?? 'general')] : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -548,6 +553,8 @@ class AiReplyWorker extends WorkerBase
                     'location'  => $ctx['location'] ?? null,
                     // Batch 2 (docs/55 §9): the voice note this message was transcribed from, if it was.
                     'voice'     => $ctx['voice'] ?? null,
+                    // Batch 3 (docs/55 §9): the picture this message describes, if it does.
+                    'image'     => $ctx['image'] ?? null,
                 ]);
         }
 
@@ -794,7 +801,8 @@ class AiReplyWorker extends WorkerBase
                 'blocked_length'  => strlen($reply),
                 // Batch 2 (docs/55 §9): the audit event's own modality field — voice when the turn that produced the
                 // blocked reply was a transcript, text otherwise (its default).
-                'modality'        => is_array($ctx['voice'] ?? null) ? 'voice' : 'text',
+                'modality'        => is_array($ctx['voice'] ?? null) ? 'voice'
+                                   : (is_array($ctx['image'] ?? null) ? 'image' : 'text'),
             ]));
         } catch (\Throwable $e) {
             $this->log('warn', 'guard event not stored: ' . $e->getMessage());

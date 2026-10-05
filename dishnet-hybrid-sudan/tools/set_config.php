@@ -90,6 +90,17 @@ $FLAGS = [
         'Seconds to wait for the transcription provider (default 30; 5 to 120)'],
     'ai_transcription_provider' => ['text',
         'Speech-to-text provider: none is the only value today (docs/56); the test-only fake is refused here'],
+    // Batch 3 (docs/55 §9, docs/57): pictures. OFF unless set, and ai_media_enabled must be on as well. On, a photo is
+    // described through the configured vision provider and the description is answered by the SAME assistant as typed
+    // text, labelled as a description — EXCEPT a payment screenshot or receipt, which is evidence for a person: no AI
+    // answer, nothing marked paid, nothing recorded. No provider exists yet (docs/57): with none configured every
+    // photo is handed to a person with the hand-over message instead — never an invented answer.
+    'ai_media_image' => ['bool',
+        'Describe photos and answer them like typed text (needs ai_media_enabled and a vision provider); payment screenshots go to a person'],
+    'ai_media_image_timeout_s' => ['number',
+        'Seconds to wait for the vision provider (default 30; 5 to 120)'],
+    'ai_image_provider' => ['text',
+        'Vision provider: none is the only value today (docs/57); the test-only fake is refused here'],
 
     // Phase 2 of the customer-login audit — the tenant profile and the
     // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
@@ -438,6 +449,7 @@ $mediaRanges = [
     'ai_media_timeout_s'         => [MediaPolicy::MIN_TIMEOUT_S,     MediaPolicy::CAP_TIMEOUT_S],
     'ai_media_voice_max_seconds' => [MediaPolicy::VOICE_MIN_SECONDS, MediaPolicy::VOICE_CAP_SECONDS],
     'ai_media_voice_timeout_s'   => [MediaPolicy::VOICE_MIN_TIMEOUT_S, MediaPolicy::VOICE_CAP_TIMEOUT_S],
+    'ai_media_image_timeout_s'   => [MediaPolicy::IMAGE_MIN_TIMEOUT_S, MediaPolicy::IMAGE_CAP_TIMEOUT_S],
 ];
 if (!$clear && isset($mediaRanges[$key])) {
     [$lo, $hi] = $mediaRanges[$key];
@@ -447,10 +459,12 @@ if (!$clear && isset($mediaRanges[$key])) {
     }
     $new = (string)(int)$new;
 }
-// Batch 2 (docs/56): no transcription provider is integrated yet, so `none` is the only value; the fake is for tests.
-if (!$clear && $key === 'ai_transcription_provider') {
+// Batch 2 (docs/56) and Batch 3 (docs/57): no transcription or vision provider is integrated yet, so `none` is the only
+// value of either provider key; the fakes are for tests and are refused here by name like anything else.
+if (!$clear && in_array($key, ['ai_transcription_provider', 'ai_image_provider'], true)) {
     if (strtolower(trim($new)) !== 'none') {
-        echo "\n  \"" . $new . "\" is not a transcription provider this plugin has — none is the only value today (docs/56),\n";
+        $doc = $key === 'ai_image_provider' ? 'docs/57' : 'docs/56';
+        echo "\n  \"" . $new . "\" is not a provider this plugin has — none is the only value today (" . $doc . "),\n";
         echo "  so nothing was saved. Use --clear to leave it unset, which means the same.\n\n";
         exit(1);
     }

@@ -5045,3 +5045,166 @@ development:** none — fake servers only. **Database changes:** none (no migrat
 release commit cut on the live 5.18.74 (`db18ad9`) carrying 5.18.75–5.18.77, its deploy script and rehearsal — **not
 cut, not pushed, awaiting the operator's instruction.** **STOPPED here; Batch 3 (image) waits for explicit approval,
 and a transcription provider waits for the operator's decision on `docs/56`.**
+
+## 05 Oct — AI communication layer, Batch 3 (5.18.78): IMAGES, dark — the provider boundary and the payment-screenshot rule documented, the image path built on the existing assistant, NO provider selected, NOT deployed, NOT pushed; STOPPED before Batch 4
+
+**Instruction (in substance):** *Batch 2 accepted; keep `ce16324` and `73ae827` local and unpushed; do not deploy, do not
+enable `ai_media_enabled` or `ai_media_voice`, do not select a transcription provider. Batch 3 approved — IMAGE MEDIA ONLY:
+read `docs/55`, `docs/56`, the Batch 1 and 2 contracts, the webhook/media path and the guard/hand-over/audit path first;
+document the image provider boundary before any real provider; implement image classification through the foundation,
+safe fetching, validation (MIME, announced size, decoded size, timeout, supported types), a deterministic fake provider, an
+adapter interface, the description into the EXISTING brain path with explicit image modality metadata, STOP/privacy/
+hand-over/audit preserved, idempotency, no permanent storage, no bytes in logs. CRITICAL: a payment screenshot may be
+classified, described and routed to the existing human process and nothing more — never an invoice marked paid, a
+payment created or modified, acceptance promised, a record altered, or vision output treated as financial evidence.
+Flags off, no production change; the eighteen tests; local commit allowed; no push, no deploy; stop and report.* All of
+it honoured. **Nothing left this machine; both flags are off everywhere; no provider exists; no money was touched.**
+
+**The boundary first — `docs/57`** (mirrors `docs/56`): `ImageDescriberPort` (`describe(MediaBlob, hints, timeoutSeconds)`
+→ a description with an ADVISORY classification and signals, or a FIXED reason code with a retryable flag; `detail` never
+carries bytes, text, a key, a number or a JID), `ImageDescriberFactory` (`ai_image_provider` unset or `none` → no
+provider; `fake` → test-only, needs its environment; anything else → no provider and one log line — **no value selects a
+real provider**), `FakeImageDescriber` (scripted by the picture's sha256; records hash prefixes and sizes, never bytes or
+text). Size, time and cost assumptions and the test strategy are in `docs/57` §7–§8. **The provider, and whether a
+customer's picture — a payment screenshot carries names, numbers and amounts — may leave the server at all, are the
+operator's decisions, not taken here.**
+
+**Where the description enters — the same single place as voice.** `ImageUnderstanding`, called by the Batch 1 media
+worker once it holds the picture in memory, queues ONE `ai.reply` event of the webhook's shape with `message` =
+`[image, described automatically] <description>` and, when the customer typed one, `[caption from the customer] <caption>`
+on the next line, plus `origin: image` and `image: {media_id, classification, width, height, has_caption}`. **A captioned
+photo is answered once:** with the image flag on, the webhook no longer queues the caption as a typed turn (step 9a); the
+image turn carries both. With the flag off the caption is answered as text exactly as before. STOP stays the webhook's,
+read off the caption at receipt (8b) — a description is the provider's words, not the customer's, and is never read for
+STOP (proved: a description reading "stop" records nothing).
+
+**The payment-screenshot rule, as built:**
+- **The decision is the plugin's, not the provider's.** `lib/PaymentEvidence.php`: yes when the provider's class is
+  `payment_proof`, OR when the description or signals carry both a money token (an amount, a currency, "total",
+  "balance") and a transaction token ("paid", "transaction", "receipt", "transfer", "confirmation", "reference", mobile
+  money, bank). A shop front with a telecom sign or a price list is not a payment; "UGX 420,000 … transfer … successful …
+  reference" is, whatever the provider called it. The rule errs towards yes.
+- **Evidence only.** The row becomes `understood` / `payment_evidence` with the description as the record; the stored
+  message reads `[image, payment evidence — a colleague will verify] <description>` plus the caption, so the person
+  verifying reads it in the inbox against the books. **No `ai.reply` is queued — the brain never sees it.** The
+  conversation is handed over through `lib/Handover.php`: `needs_human`, a `wa.escalation` event by `media_worker`, the
+  staff alert — which says a payment screenshot or receipt arrived and **nothing was recorded or marked paid**, and
+  deliberately carries no amount or reference — and the operator's own holding line to the customer once.
+- **No financial write, proved three ways:** every money table (`dpo_payments`, `dpo_payment_events`, `cb_ledger`,
+  `staff_ledger`, `wallet_transactions`, `cash_advances`, `expense_receipts`, `stock_purchase_payments`,
+  `lte_financial_ledger`, … — every table whose name says pay, invoice, cash, ledger, money, receipt, wallet or
+  transaction) has exactly the rows it had after a payment screenshot is processed; the fake uCRM received no payment
+  (core) and no POST/PATCH to payments or invoices (CLI); and the image path and the hand-over name no payment, ledger,
+  cashbook or CRM writer (`CrmApiClient`, `createPayment`, `DpoPaymentService`, `CashbookService`, …), checked on the
+  code with comments stripped.
+- **A second line in the prompt.** Should a payment image ever reach the brain, the IMAGE block forbids confirming,
+  accepting or promising anything about payment, saying money was received or an invoice is settled, or quoting the
+  figures as facts; a colleague verifies. `ReplyPrivacyGuard` still refuses figures the tools did not return.
+
+**Validation before any provider, and the layers behind each other:** the Batch 1 fetcher refuses a type outside
+JPEG/PNG/WebP, an announced size over the limit (before the fetch) and an actual size over it (after); then
+`ImageUnderstanding` reads the header with `getimagesizefromstring()` (no decoder library): bytes that are not an image
+are `malformed_image`, a GIF behind a PNG label is `unsupported_mime`, a header declaring more than 8,000 px a side or
+25 megapixels is `too_large_image` — all permanent, all before the provider, all handed to a person. One weakened copy
+taught something worth recording: **removing the first header check alone changes nothing, because the next layer (no
+type in the header → `unsupported_mime`) still refuses the junk** — so the copy that is caught is the one that trusts the
+label instead of reading the header.
+
+**What was built, file by file:**
+- **`lib/ImageDescriber.php`** — the port, the factory, the fake (above). **`lib/PaymentEvidence.php`** — the rule and the
+  hand-over wording. **`lib/ImageUnderstanding.php`** — `process()` (header, caps, provider, normalisation to 2,000
+  characters, classification fixed to the known list: `payment_proof · site_photo · equipment_photo · screenshot ·
+  document_photo · general · unreadable`, the payment decision) and `complete()` — one transaction: the row `understood`
+  only if it was not already (`status <> 'understood'`), the stored message rewritten, then either nothing queued
+  (payment) or the one event. A database failure rolls all of it back and is thrown, so the worker retries.
+- **`workers/MediaWorker.php`** — after a fetch of an image row, **only when `MediaPolicy::imageEnabled()`** (both flags),
+  the blob goes to `ImageUnderstanding` and is wiped whatever happens: `understood` → logged by class and length;
+  `payment_evidence` → `Handover::escalate()` with `PaymentEvidence::handoverReason()`; a retryable failure thrown (the
+  retry fetches again); a permanent failure, a Batch 1 fetch refusal and the queue giving up → handed over. The settled
+  rule covers a fetched picture awaiting its description; `useImageDescriber()` for tests.
+- **`evo_webhook.php`** — step 9a: a recorded picture with the image flag on skips the caption's text turn, logged
+  (*caption carried by the media worker*). Every anchor the other suites hold on this file is intact.
+- **`workers/AiReplyWorker.php`** — `image => {classification}` in the turn's context when the event says `origin: image`;
+  passed to `BrainContext::build()`; a blocked reply's audit event says `modality: image`; the log line says
+  `origin=image`. **`lib/BrainContext.php`** — the **fifteenth** key, `image => ['classification']`, present only when the
+  caller says so (`test_brain_context` pins fifteen). **`lib/DishNetAiBrain.php`** — a conditional **IMAGE JUST RECEIVED
+  (classified as …)** block beside the pin and voice blocks: an automatic description, not the customer's words; every
+  figure unconfirmed; the payment prohibition; the caption marked as the customer's; content under rule 7. A typed
+  turn's prompt is byte-for-byte what it was.
+- **`lib/MediaPolicy.php`** — `imageEnabled()` (= `enabled()` AND `ai_media_image`), the image timeout (default 30, range
+  5–120), the side and pixel caps, the description cap. **`tools/set_config.php`** — `ai_media_image`,
+  `ai_media_image_timeout_s` (range refused), `ai_image_provider` (`none` only; the fake refused by name, as the
+  transcription provider's). **`manifest.json` 5.18.78; the nine pins.** **No migration.**
+
+**Not built, deliberately:** a vision provider; document extraction (Batch 4); any voice change; lead state, follow-up,
+e-mail, marketing, n8n, another gateway, another brain; any financial automation; any customer-facing sentence about
+payments beyond the operator's own holding line.
+
+**Proofs — `tests/test_image_media.php`, 89/0** (a core scenario in-process against the fake Evolution and the fake uCRM
+with the deterministic fake describer injected and a fake brain that parses its canned answer with the real marker
+parser, on genuine PNG headers built by the test; a CLI scenario in the real plugin tree under `php -S`; both return facts
+so a weakened copy can run them). The eighteen areas the instruction names:
+1. **valid image → row → fetch → understanding**: `understood` / `description`, the stored `[IMAGE]` message rewritten with
+   the labelled description and image metadata; one fetch, one provider call that received the bytes, the header facts
+   (640×480) and the 7 s budget and recorded a hash prefix and sizes.
+2. **enters the brain exactly once**: one `ai.reply` by `media_worker`, the webhook's shape, no voice key; one brain call.
+3. **image modality preserved**: the label, `origin: image`, classification, dimensions, caption flag and row id on the
+   event; `image = {classification}` in the sales contract; the IMAGE block in the prompt (and not for a typed turn); a
+   later typed turn sees the labelled description in history; a captioned picture carries description and caption under
+   their own labels, once; a blocked reply's audit event says `modality: image`.
+4. **duplicate idempotent**: no second fetch, call or event; `complete()` on an understood row answers `already_understood`.
+5. **unsupported MIME**: an SVG announced is refused by the Batch 1 fetcher; a GIF behind a PNG label is refused by the
+   header — both before any provider, both handed over.
+6. **oversized**: an announced 20 MB refused before the fetch; a header declaring 9000×7000 refused before the provider;
+   both handed over.
+7. **malformed**: bytes that are not an image → `malformed_image`, no provider call, no event, handed over.
+8. **timeout / failure retried**: row `failed/timeout`, event failed with one attempt, not handed over; made due, the
+   retry fetches again, describes and queues the one event; a provider error retried likewise.
+9. **permanent failure → hand-over**: no provider → `provider_missing`, the holding line, the alert; the factory yields
+   nothing for unset, `none`, an unknown name or `fake` without its environment; the queue giving up → `dead`, handed over.
+10. **STOP intact**: a description reading "stop" is not an opt-out; under C, a caption "stop" with a photo records the
+    opt-out through the webhook exactly as typed text does, and the picture still makes its turn.
+11. **guard intact**: a reply the description induced ("our cost…") is blocked, the fallback sent, audited against the
+    real conversation with `modality: image`, a person takes over.
+12. **payment screenshot → evidence and escalation only**: by class (an MTN Mobile Money confirmation) and by words
+    alone (a "screenshot" of a bank transfer marked successful) — row `payment_evidence`, **no event**, `needs_human`, one
+    `wa.escalation` by `media_worker` naming the rule, the alert saying nothing was recorded and carrying no amount or
+    reference, the holding line once, the inbox showing the evidence under the payment label; a speed-test screenshot is
+    an ordinary picture; the detector's seven cases.
+13. **no financial write**: every money table unchanged (≥ 8 tables compared), the fake uCRM received no payment, no
+    writer named in the image path or the hand-over.
+14. **no bytes / base64 persisted**: no file under the data directory holds the picture, its base64, its hash, a
+    description or a transaction id.
+15. **no sensitive content logged**: the worker logs carry no base64, no description, no amount or reference, no JID; the
+    provider saw hash prefixes and sizes only.
+16. **image OFF**: fetched (Batch 1), zero provider calls, zero events, zero messages, no hand-over; the caption stays the
+    stored text.
+17. **media OFF overrides**: `imageEnabled()` needs both flags; media off with image on → `skipped`, nothing fetched.
+18. **ten weakened copies, each caught**: the image flag alone turning images on; the worker ignoring the flag; the words
+    no longer deciding (a mislabelled payment reaches the brain); payment evidence queued for the brain after all; the
+    label removed; the prompt block removed; the header trusted instead of read; the dimension cap removed; the
+    permanent-failure hand-over removed; the description logged. Control: the real tree trips none.
+- **CLI, in the real tree:** a captioned photo with both flags on — the webhook queues no text turn (`queued 0`,
+  `media_queued 1`); `run_media_worker.php` with the fake provider through its test-only environment describes it and
+  queues ONE event carrying description and caption; a caption "stop" records the opt-out through the webhook; **a
+  payment screenshot through the real tree: evidence, hand-over, no event, no uCRM payment or invoice request, no amount
+  in the alert or the log**; image OFF → the caption answered as text by the webhook as always and the picture fetched
+  only; media OFF → nothing recorded; provider `fake` without its environment fails closed.
+- **Neighbours in the full run, all 0 failed:** `test_image_media` 89 · `test_voice_media` 74 · `test_media_foundation` 102 · `test_brain_context` 129 · `test_handover_message` 9 · `test_plan_fence` 53 · `test_lead_path_batch0` 25 · `test_bot_stays_awake` 59 · `test_guard_blocks_send` 41 · `test_reply_privacy_guard` 71 · `test_ai_brain` 153 · `test_ai_minimal_context` 61 · `test_location_pin` 79 · `test_human_handover` 14 · `test_human_takes_over` 16 · `test_human_reply_visible` 9 · `test_history_identity` 94 · `test_contact_optout` 49 · `test_ai_security_policy` 146 · `test_shadow_runtime` 74 · `test_notify_evo_retry` 23 · `test_kit_tax_note` 68 · `test_ai_unlimited_and_network` 159 · `test_ai_indoor_routers` 84 · `test_notify_schedule_health` 19 · `test_cron_no_exit` 10 · `test_config_one_truth` 16 · `test_portal_handoff` 62 · `test_dist_isolation` 39.
+- **Full suite:** **`tests/run.sh` 274 files, 12,627 passed, 0 failed, 0 skipped** (was 273 / 12,535 at 5.18.77: the new test's 89 and the 3 added to `test_brain_context`; nothing else moved). **Second run: 274 / 12,627 / 0 again**, on the same code, start to finish.
+- `git diff --check` clean; the diff's only phone-shaped strings are the synthetic `2567720006xx` / `2567720007xx` fixture
+  numbers and the staff-alert fixture number the existing tests already use; no credential-shaped value; **no file under
+  Domain B touched; South Sudan's scheduler list unchanged** (`test_notify_schedule_health` 19/0; no job added).
+
+**Production impact — none today**: nothing is deployed, both flags are off everywhere, no provider exists. If 5.18.78
+were installed with the flags off: the webhook stores media as before and records nothing; captions are answered as text
+as always; no job runs; the settings listing shows three more keys. With both flags on **and no provider** (the only
+possible state today): every photo is fetched, refused as `provider_missing`, and handed to a person with the holding
+line — and a captioned photo's caption is answered by that person, not by the assistant. **5.18.78 sits on 5.18.75–77;
+any deploy carries Batches 0–2, and the operator's rule on the two Batch 0 flags stands.**
+
+**Rollback:** code only; the flags off restore today's behaviour without a deploy. **External side effects in
+development:** none — fake servers only. **Database changes:** none (no migration). **Deployment requirement:** a
+release commit cut on the live 5.18.74 (`db18ad9`) carrying 5.18.75–5.18.78, its deploy script and rehearsal — **not cut,
+not pushed, awaiting the operator's instruction.** **STOPPED here; Batch 4 (documents) waits for explicit approval, and a
+vision provider waits for the operator's decision on `docs/57`.**
