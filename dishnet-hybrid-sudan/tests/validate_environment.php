@@ -62,6 +62,13 @@ foreach ($required as $ext) {
     line("ext: {$ext}", $ok ? 'loaded' : 'MISSING', $ok ? pass() : fail());
     if (!$ok) $verdictBlockers[] = "PHP extension '{$ext}' is missing.";
 }
+// Batch 4 (docs/58 §6.1): what the document readers need. Optional today — ai_media_document is off everywhere — so a
+// warning, not a blocker: with the flag on and one of these missing, every Word or Excel file is handed to a person.
+foreach (['zlib' => 'gzinflate', 'xmlreader' => 'XMLReader', 'iconv' => 'iconv'] as $ext => $needs) {
+    $ok = extension_loaded($ext) && (function_exists($needs) || class_exists($needs));
+    line("ext: {$ext} (documents, optional)", $ok ? 'loaded' : 'missing', $ok ? pass() : warn());
+    if (!$ok) $verdictWarnings[] = "PHP extension '{$ext}' is missing — with ai_media_document on, Word and Excel files would be handed to a person unread.";
+}
 
 // ── 2. Process spawning ──────────────────────────────────────────────────────
 section('2. Background processing');

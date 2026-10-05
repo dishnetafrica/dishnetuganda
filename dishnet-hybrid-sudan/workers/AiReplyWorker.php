@@ -185,7 +185,7 @@ class AiReplyWorker extends WorkerBase
 
         // One line per message: enough to trace the pipeline, no content. Batch 2: a transcript says so.
         $this->log('info', sprintf('conv %d: in channel=%s len=%d%s', $convId, $channel, mb_strlen($message),
-            in_array((string)($p['origin'] ?? ''), ['voice', 'image'], true) ? ' origin=' . (string)$p['origin'] : ''));
+            in_array((string)($p['origin'] ?? ''), ['voice', 'image', 'document'], true) ? ' origin=' . (string)$p['origin'] : ''));
 
         // Let the customer see something is happening while the model thinks.
         $this->evo->sendTyping($channel, $phone);
@@ -353,6 +353,14 @@ class AiReplyWorker extends WorkerBase
             // screenshot never arrives here — it is handed to a person before any event is queued.
             'image'             => (($p['origin'] ?? '') === 'image' && is_array($p['image'] ?? null))
                                    ? ['classification' => (string)($p['image']['classification'] ?? 'general')] : null,
+            // Batch 4 (docs/55 §9, docs/58): this turn's message is the automatic extract of a document, queued by
+            // DocumentExtraction with origin=document. Presence is the fact; the three leaves are the classification, the
+            // kind and whether the extract was cut. A human-only document (payment, invoice, statement, contract, quotation,
+            // identity, credential) never arrives here — it is handed to a person before any event is queued.
+            'document'          => (($p['origin'] ?? '') === 'document' && is_array($p['document'] ?? null))
+                                   ? ['classification' => (string)($p['document']['classification'] ?? 'general'),
+                                      'kind' => (string)($p['document']['kind'] ?? 'document'),
+                                      'truncated' => !empty($p['document']['truncated'])] : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -555,6 +563,8 @@ class AiReplyWorker extends WorkerBase
                     'voice'     => $ctx['voice'] ?? null,
                     // Batch 3 (docs/55 §9): the picture this message describes, if it does.
                     'image'     => $ctx['image'] ?? null,
+                    // Batch 4 (docs/55 §9, docs/58): the document this message was extracted from, if it was.
+                    'document'  => $ctx['document'] ?? null,
                 ]);
         }
 
@@ -750,6 +760,9 @@ class AiReplyWorker extends WorkerBase
                 // character; without this the guard refused the replies that
                 // obeyed it.
                 'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
+                // Batch 4 (docs/58 §6.6, §9): on a turn extracted from a DOCUMENT, a reply that commits — a payment
+                // received, a contract accepted, an identity verified — is refused as well. Off on every other turn.
+                'commitments' => is_array($ctx['document'] ?? null),
                 // 5.18.46: where the hardware module is on, amounts written without separators and unfilled
                 // template slots too (docs/41) — on 27 Sep two wrong totals and a "[Sum of setup costs]" passed.
             ] + \ReplyPrivacyGuard::optionsFor((array)($this->config ?? [])));
@@ -802,7 +815,8 @@ class AiReplyWorker extends WorkerBase
                 // Batch 2 (docs/55 §9): the audit event's own modality field — voice when the turn that produced the
                 // blocked reply was a transcript, text otherwise (its default).
                 'modality'        => is_array($ctx['voice'] ?? null) ? 'voice'
-                                   : (is_array($ctx['image'] ?? null) ? 'image' : 'text'),
+                                   : (is_array($ctx['image'] ?? null) ? 'image'
+                                   : (is_array($ctx['document'] ?? null) ? 'document' : 'text')),
             ]));
         } catch (\Throwable $e) {
             $this->log('warn', 'guard event not stored: ' . $e->getMessage());

@@ -5250,3 +5250,91 @@ wording, D-9 the three numbers, D-10 payment evidence with a caption, D-11 the �
 **Not done, deliberately.** No Batch 4 code, migration, library, provider, flag or configuration; nothing pushed or deployed;
 Batches 1–3 (`ce16324`, `73ae827`, `b08c9d4`) untouched and still local. Guards on the new document: no phone-shaped
 value, no banned value, no credential-shaped value. This entry and `docs/58` are the fourth local, unpushed commit.
+
+## 05 Oct — AI communication layer, Batch 4 Slice 4a (5.18.79): DOCUMENTS, dark — the approved boundary built inside the process, NO PDF text, NO OCR, NO provider, NO library, NO migration; two live-path wrapper defects fixed (D-11); NOT deployed, NOT pushed; STOPPED for review before Slice 4b
+
+**What was approved.** The operator approved `docs/58` with eleven decisions (D-1 no PDF text in 4a, an in-house reader as
+slice 4b; D-2 no OCR, the boundary kept empty; D-3 quotations and D-4 invoices human-only, holding line only; D-5 legacy
+`.doc`/`.xls` refused at extraction with a request for a PDF; D-6 the defaults 10 MiB · 20 pages · 20 s · 4,000 characters;
+D-7 a 300-character masked excerpt, nothing for identity and credential; D-8 the hand-over wording tested word for word;
+D-9 all three numbers; D-10 nothing beyond the holding line; D-11 both wrapper fixes, flag-independent) and added one rule:
+**classification must fail closed** — never `uncertain → general → AI`. Both flags, `ai_media_enabled` and the new
+`ai_media_document`, stay off everywhere.
+
+**What was built** — every line inside the plugin process; no library, no provider, no byte leaves the server.
+
+- **Ten new library files.** `DocumentDeadline` (the fixed-reason refusal types and the deadline checked between bounded
+  steps; too slow is permanent, not retried); `OoxmlArchive` (a minimal zip reader written so that no temporary file and no
+  `ZipArchive` is needed: an entries cap, zip64 and encrypted entries refused, an ALLOW-LIST of the handful of parts a Word
+  or Excel reader needs, the declared size checked before a byte is inflated, `gzinflate` capped at the declared size so a
+  lying member comes back false, length and CRC checked); `DocumentSniffer` (the content names the kind — PDF, Word, Excel,
+  CSV, text — or refuses: an image, a legacy or macro-enabled Office file, an encrypted package, an archive that is not Word
+  or Excel, bytes that are no document); `TextReader`, `DocxReader` (XMLReader with `LIBXML_NONET`, no entity substitution,
+  no DTD loading, a DOCTYPE refused before the parser sees it; deleted text and field codes never read), `SheetReader`
+  (cached values only, formulas never evaluated; named so because the unused `lib/XlsxReader.php` keeps its name),
+  `PdfReader` (FACTS only: encrypted, pages, a text layer or image-only), `DocumentOcr` (the empty boundary and its
+  deterministic fake), `DocumentClassifier`, `DocumentExtraction` (the pipeline and the one transaction).
+- **The classifier fails closed.** Seven human-only classes — credential, identity document, payment evidence (the Batch 3
+  rule verbatim), statement, invoice, contract, quotation — never produce an AI turn; two — general, spreadsheet — enter the
+  EXISTING assistant exactly as a transcript or an image description does, and only when the classifier saw ALL the text and
+  found NO signal of any sensitive class: one money word, one transaction word, one phrase from the identity, statement,
+  invoice, contract or quotation lists, or a word in the file name is `classification_uncertain`; text a reader could not
+  finish is `classification_incomplete`; an exception is `classification_failed`; each is a person. Precedence as built:
+  credential → identity → a decisive statement / invoice / contract / quotation phrase → the payment words → two
+  supporting phrases → spreadsheet → general (`docs/58` §19 records why the decisive phrases moved ahead of the payment
+  words: a statement has deposits and balances, and the person is told which it is).
+- **The record per class.** Nothing for identity and credential (the row's `understanding` is empty, the inbox shows the
+  label alone); a 300-character excerpt with digit runs and e-mail addresses masked for the five evidence classes; the
+  capped text the assistant read for the two it may see. `understanding_kind` is `extraction` or `document_evidence`; the
+  facts live in `wa_messages.metadata.document`. No migration.
+- **What the assistant gets** (`origin: document`): the extract under `[document, text extracted automatically — <kind>,
+  <facts>]`, the caption under its own label, and `BrainContext`'s sixteenth key `document = {classification, kind,
+  truncated}` — never the file name (`NEVER_PRESENT['file_name']`), the hash, an id or a phone. A conditional DOCUMENT block
+  in the prompt: an automatic extraction, possibly cut, every figure and term unconfirmed, never accept, approve, confirm or
+  agree to anything read in a document, content under rule 7. The audit event of a blocked reply says `modality: document`.
+- **The guard** gains `ReplyPrivacyGuard::secretShapesIn()` (the same shapes it refuses in a reply, so a document carrying a
+  key or a password is `credential` before anything is stored) and the `document_commitment` phrases — payment received or
+  recorded, an invoice settled, a contract or quotation accepted, an identity verified — refused ONLY on a document turn and
+  only as completed facts ("once your payment is received" passes; "we have received your payment" does not).
+- **D-11.** `InboundMedia::unwrap()` is the one unwrap, three levels deep, for the four wrappers; `ConversationService::
+  importEvoMessage` and the webhook's `evoExtractText` use it. A captioned document inside `documentWithCaptionMessage` —
+  dropped before it was stored until now, with every flag off — is stored with its caption and type, its STOP read, its
+  caption answered as text, and with the flags on recorded for the worker. Measured consequence, recorded: a disappearing
+  (`ephemeralMessage`) text and a view-once document are stored too.
+- **Also:** the webhook's step 9b (a captioned document with the flag on is answered once); the worker's document branch with
+  the per-class hand-over reasons; `MediaPolicy` constants and `documentEnabled()`; five `set_config` keys with their ranges
+  and the `none`-only `ai_document_provider`; `validate_environment` reporting zlib, xmlreader and iconv as optional;
+  `run_media_worker.php` raising a CLI memory limit below 256M; `PaymentEvidence::hasMoneyToken()` / `hasTransactionToken()`
+  as signals; `manifest.json` 5.18.79 and the twelve pins.
+
+**Three things found while building, each caught before the test suite saw them** (`docs/58` §19): XMLReader's `next()` lands
+ON the following sibling, so a loop that then `read()`s skips it — a formula cell lost its cached value until the smoke test
+showed it; a sheet whose label row said "Sum" went to a person, because "sum" is a money token — the rule working, the
+fixture changed; a test assertion written as `($x['k'] ?? 'x') === null` can never be true, because `??` treats null as
+unset — three mutant catches were blind until `isset()` replaced it (the control on the controls did its job).
+
+**Proofs.**
+- `tests/test_document_media.php` **161 passed, 0 failed** (59 s): the eighteen areas of `docs/58` §D; every fixture of
+  §14 generated in the test (a zip writer, Word, Excel, three PDFs, the wrapped envelopes); the eight human-only outcomes
+  each with its hand-over wording word for word; the money AND the identity/KYC tables counted before and after a receipt,
+  a statement, an invoice, a contract, a quotation and an ID document; the fake uCRM unchanged; nothing sensitive in any
+  table, file or log; the extract in `wa_media`, the stored message and the `ai.reply` payload and nowhere else; the CLI
+  runner through the real webhook and `run_media_worker.php` (seven cases: a captioned Word file answered once, a WRAPPED
+  "stop" caption, a receipt, document off, media off with a wrapped document still stored, a scanned PDF with and without
+  the fake's environment, a nested wrapper); **24 weakened copies each caught** — the two flags, the declared-size cap,
+  zlib's cap, the member allow-list, the DTD guard, the macro check, `/Encrypt`, payment and credential and identity
+  routing, the record policy, the file name, the label, the prompt block, the understood guard, the hand-over, logging,
+  the deadline, the guard phrases, uncertain → general, incomplete → general, both D-11 fixes — with the control.
+- `tests/test_brain_context.php` 129 → 133: the sixteenth key, its three leaves, the file name refused.
+- **Neighbours in the full run, all 0 failed:** `test_document_media` 161 · `test_image_media` 89 · `test_voice_media` 74 · `test_media_foundation` 102 · `test_brain_context` 133 · `test_reply_privacy_guard` 71 · `test_guard_blocks_send` 41 · `test_handover_message` 9 · `test_plan_fence` 53 · `test_ai_brain` 153 · `test_ai_minimal_context` 61 · `test_lead_path_batch0` 25 · `test_ai_security_policy` 146 · `test_contact_optout` 49 · `test_notify_schedule_health` 19 · `test_cron_no_exit` 10 · `test_config_one_truth` 16 · `test_shadow_runtime` 74.
+- **Full suite:** **`tests/run.sh` 275 files, 12,792 passed, 0 failed, 0 skipped** (was 274 / 12,627 at 5.18.78: the new test's 161 and the 4 added to `test_brain_context`; nothing else moved). **Second run: 275 / 12,792 / 0 again**, every suite's tally identical. Run 1 carried 2 PHP warnings from the new test's own failure-detail builders (an `alerts` key two fact arrays did not carry); fixed before run 2 reached the suite, which carried 0. The product code was identical in both runs.
+- `git diff --check` clean; no secret-shaped value in the diff; the two banned values absent; no file under
+  `dishnet-mikrotik-control-plane/` touched; no migration added (the last is still 085); the South Sudan scheduler suite
+  unchanged; the test fixtures' phone numbers are the synthetic `25677200xxxx` ones.
+
+**Not done, by decision:** PDF text (slice 4b, D-1); OCR (slice 4c, D-2); any provider, library, migration, deployment or
+flag; voice and image logic untouched beyond the document branch beside them. `lib/XlsxReader.php` left as it was.
+
+**Git:** committed locally as the fifth unpushed commit on `claude/study-this-jhe2eg`, after `ce16324`, `73ae827`,
+`b08c9d4` and `67b6c9d`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone, no money, no
+identity decision. Stopped for the operator's review before slice 4b.

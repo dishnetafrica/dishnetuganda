@@ -101,6 +101,22 @@ $FLAGS = [
         'Seconds to wait for the vision provider (default 30; 5 to 120)'],
     'ai_image_provider' => ['text',
         'Vision provider: none is the only value today (docs/57); the test-only fake is refused here'],
+    // Batch 4 (docs/55 §9, docs/58, Slice 4a): documents. OFF unless set, and ai_media_enabled must be on as well. On, a
+    // Word, Excel, CSV or text file is read inside this process (no library, no provider, nothing leaves the server) and,
+    // only when it is harmless and was seen whole, answered by the SAME assistant as typed text, labelled as an extract. A
+    // payment receipt, statement, invoice, contract, quotation, identity document or credential — and anything the rules
+    // cannot classify with certainty — goes to a person instead; nothing is recorded, marked paid, accepted or verified. A
+    // PDF yields its facts only in this slice (docs/58 D-1); a scanned document has no OCR (D-2).
+    'ai_media_document' => ['bool',
+        'Read the documents customers send (Word, Excel, CSV, text; PDF facts only) and answer the harmless ones like typed text (needs ai_media_enabled); financial, contractual, identity and credential documents go to a person'],
+    'ai_media_document_max_bytes' => ['number',
+        'Largest document read, in bytes (default 10485760 = 10 MiB; 65536 to 67108864; never above ai_media_max_bytes)'],
+    'ai_media_document_max_pages' => ['number',
+        'PDF pages read, once PDF text is read at all (default 20; 1 to 200)'],
+    'ai_media_document_timeout_s' => ['number',
+        'Seconds a document extraction may take (default 20; 5 to 60)'],
+    'ai_document_provider' => ['text',
+        'OCR provider for scanned documents: none is the only value today (docs/58); the test-only fake is refused here'],
 
     // Phase 2 of the customer-login audit — the tenant profile and the
     // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
@@ -450,6 +466,9 @@ $mediaRanges = [
     'ai_media_voice_max_seconds' => [MediaPolicy::VOICE_MIN_SECONDS, MediaPolicy::VOICE_CAP_SECONDS],
     'ai_media_voice_timeout_s'   => [MediaPolicy::VOICE_MIN_TIMEOUT_S, MediaPolicy::VOICE_CAP_TIMEOUT_S],
     'ai_media_image_timeout_s'   => [MediaPolicy::IMAGE_MIN_TIMEOUT_S, MediaPolicy::IMAGE_CAP_TIMEOUT_S],
+    'ai_media_document_max_bytes' => [MediaPolicy::MIN_MAX_BYTES,        MediaPolicy::CAP_MAX_BYTES],
+    'ai_media_document_max_pages' => [MediaPolicy::DOCUMENT_MIN_PAGES,   MediaPolicy::DOCUMENT_CAP_PAGES],
+    'ai_media_document_timeout_s' => [MediaPolicy::DOCUMENT_MIN_TIMEOUT_S, MediaPolicy::DOCUMENT_CAP_TIMEOUT_S],
 ];
 if (!$clear && isset($mediaRanges[$key])) {
     [$lo, $hi] = $mediaRanges[$key];
@@ -459,11 +478,12 @@ if (!$clear && isset($mediaRanges[$key])) {
     }
     $new = (string)(int)$new;
 }
-// Batch 2 (docs/56) and Batch 3 (docs/57): no transcription or vision provider is integrated yet, so `none` is the only
-// value of either provider key; the fakes are for tests and are refused here by name like anything else.
-if (!$clear && in_array($key, ['ai_transcription_provider', 'ai_image_provider'], true)) {
+// Batch 2 (docs/56), Batch 3 (docs/57) and Batch 4 (docs/58): no transcription, vision or document OCR provider is
+// integrated yet, so `none` is the only value of any provider key; the fakes are for tests and are refused here by name
+// like anything else.
+if (!$clear && in_array($key, ['ai_transcription_provider', 'ai_image_provider', 'ai_document_provider'], true)) {
     if (strtolower(trim($new)) !== 'none') {
-        $doc = $key === 'ai_image_provider' ? 'docs/57' : 'docs/56';
+        $doc = $key === 'ai_image_provider' ? 'docs/57' : ($key === 'ai_document_provider' ? 'docs/58' : 'docs/56');
         echo "\n  \"" . $new . "\" is not a provider this plugin has — none is the only value today (" . $doc . "),\n";
         echo "  so nothing was saved. Use --clear to leave it unset, which means the same.\n\n";
         exit(1);

@@ -33,6 +33,13 @@ require_once __DIR__ . '/workers/MediaWorker.php';
 $store  = SqliteStore::create($dataDir);
 $config = PluginConfig::load(__DIR__, $dataDir);
 
+// Batch 4 (docs/58 §4): a document, its base64 and its inflated parts are in memory at once. Where the CLI's limit is lower
+// than 256M it is raised to that; an unlimited CLI (-1) is left alone. The extractor also refuses a file that would not fit
+// whatever the limit is, rather than fail half-way.
+$mediaMemoryLimit = DocumentExtraction::memoryLimitBytes();
+if ($mediaMemoryLimit > 0 && $mediaMemoryLimit < 256 * 1024 * 1024) @ini_set('memory_limit', '256M');
+unset($mediaMemoryLimit);
+
 if (!PluginConfig::toBool($config['ai_enabled'] ?? false)) {
     return;
 }

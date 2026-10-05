@@ -9,6 +9,8 @@ require_once dirname(__DIR__) . '/lib/Transcriber.php';
 require_once dirname(__DIR__) . '/lib/VoiceTranscription.php';
 require_once dirname(__DIR__) . '/lib/ImageDescriber.php';
 require_once dirname(__DIR__) . '/lib/ImageUnderstanding.php';
+require_once dirname(__DIR__) . '/lib/DocumentOcr.php';
+require_once dirname(__DIR__) . '/lib/DocumentExtraction.php';
 require_once dirname(__DIR__) . '/lib/Handover.php';
 require_once dirname(__DIR__) . '/lib/ConversationService.php';
 
@@ -42,6 +44,14 @@ require_once dirname(__DIR__) . '/lib/ConversationService.php';
  * EITHER queues the one ai.reply event (an ordinary picture) OR, for a payment screenshot or receipt — this plugin's own
  * decision, PaymentEvidence — queues nothing: the worker hands the conversation to a person, and no invoice, payment or
  * ledger is read or written. A captioned picture is answered once, by that turn (evo_webhook.php, step 9a).
+ *
+ * Batch 4 (docs/55 §9, docs/58, Slice 4a): a DOCUMENT goes the same way, only while ai_media_document is on as well, and
+ * entirely inside this process — no library, no provider, no byte leaving the server. DocumentExtraction sniffs the content,
+ * reads a Word, Excel, CSV or text file within every cap (a PDF yields its facts only in this slice), classifies the text with
+ * deterministic rules that FAIL CLOSED, and then EITHER queues the one ai.reply event (a harmless document, seen whole) OR
+ * records a human-only class — payment evidence, a statement, an invoice, a contract, a quotation, an identity document, a
+ * credential — and queues nothing: the worker hands the conversation to a person. Anything uncertain is a person too. No
+ * payment, invoice, ledger, KYC or CRM record is read or written. A captioned document is answered once (step 9b).
  */
 final class MediaWorker extends WorkerBase
 {
@@ -58,6 +68,12 @@ final class MediaWorker extends WorkerBase
     private $describer = null;
     /** @var bool */
     private $describerInjected = false;
+    /** @var DocumentOcrPort|null an OCR provider injected by a test; otherwise DocumentOcrFactory::fromConfig() — none today */
+    private $ocr = null;
+    /** @var bool */
+    private $ocrInjected = false;
+    /** @var DocumentDeadline|null a deadline injected by a test; otherwise built from ai_media_document_timeout_s */
+    private $documentDeadline = null;
     /** @var EvolutionApiService|null */
     private $evoClient = null;
 
@@ -84,6 +100,19 @@ final class MediaWorker extends WorkerBase
     {
         $this->describer         = $describer;
         $this->describerInjected = true;
+    }
+
+    /** For tests: the document OCR provider to use (null = none configured). Production builds it from the configuration. */
+    public function useDocumentOcr(?DocumentOcrPort $ocr): void
+    {
+        $this->ocr         = $ocr;
+        $this->ocrInjected = true;
+    }
+
+    /** For tests: the extraction deadline to use (a passed one proves the too_slow path). Production builds it from the policy. */
+    public function useDocumentDeadline(?DocumentDeadline $deadline): void
+    {
+        $this->documentDeadline = $deadline;
     }
 
     protected function handle(array $event): void
@@ -113,7 +142,7 @@ final class MediaWorker extends WorkerBase
         // note whose transcript is still to come is not settled while ai_media_voice is on — the bytes were not kept,
         // so this attempt fetches them again and transcribes; once `understood` it is settled for good.
         $settled = in_array((string)$row['status'], self::SETTLED, true);
-        if ($settled && (string)$row['status'] === 'fetched' && ($this->voiceWanted($row) || $this->imageWanted($row))
+        if ($settled && (string)$row['status'] === 'fetched' && ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentWanted($row))
             && trim((string)($row['understanding'] ?? '')) === '') {
             $settled = false;
         }
@@ -148,6 +177,11 @@ final class MediaWorker extends WorkerBase
                 $this->understandImage($mediaId, $blob);   // wipes the blob, whatever happens
                 return;
             }
+            // Batch 4 (docs/55 §9, docs/58): a document goes on to extraction and classification — or to a person.
+            if ($this->documentWanted($row)) {
+                $this->understandDocument($mediaId, $blob);   // wipes the blob, whatever happens
+                return;
+            }
             $blob->wipe();
             unset($blob, $res);
             return;
@@ -163,11 +197,65 @@ final class MediaWorker extends WorkerBase
         $status = in_array($reason, ['unsupported_kind', 'unsupported_mime'], true) ? 'unsupported' : 'failed';
         $this->update($mediaId, ['status' => $status, 'failure_reason' => $reason]);
         $this->log('info', sprintf('media #%d: %s — %s (%s); not retried', $mediaId, $status, $reason, $detail));
-        // Batch 2 / 3: a voice note or a picture that will never be fetched is a customer who sent something and would
-        // hear nothing — a person.
-        if ($this->voiceWanted($row) || $this->imageWanted($row)) {
+        // Batch 2 / 3 / 4: a voice note, a picture or a document that will never be fetched is a customer who sent something
+        // and would hear nothing — a person.
+        if ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentWanted($row)) {
             $this->handover($row, 'a ' . $this->mediaName($row) . ' could not be fetched (' . $reason . ') — look at it in WhatsApp');
         }
+    }
+
+    /** Batch 4: is this row a document that ai_media_document (with ai_media_enabled) wants read? */
+    private function documentWanted(array $row): bool
+    {
+        return (string)($row['kind'] ?? '') === 'document' && MediaPolicy::documentEnabled($this->config);
+    }
+
+    /**
+     * Batch 4 (docs/55 §9, docs/58): the fetched document becomes the customer's turn through DocumentExtraction — or a record
+     * and a person's job (a human-only class), or a reason and a person's job (a refusal, or a classification that could not be
+     * made safely). The blob is wiped here whatever happens. Only the OCR boundary can fail in a way worth retrying; everything
+     * else is permanent and handed over at once. The log never carries the text.
+     */
+    private function understandDocument(int $mediaId, MediaBlob $blob): void
+    {
+        $row = $this->row($mediaId) ?? [];
+        $svc = new DocumentExtraction($this->pdo, $this->store, $this->config, $this->ocrFor(),
+            function (string $level, string $message): void { $this->log($level, $message); });
+        if ($this->documentDeadline !== null) $svc->useDeadline($this->documentDeadline);
+        try {
+            $r = $svc->process($row, $blob);
+        } finally {
+            $blob->wipe();
+        }
+        $outcome = (string)($r['outcome'] ?? 'failed');
+        if ($outcome === 'understood') {
+            $this->log('info', sprintf('media #%d (conversation %d): document read (%s, %s) — %d characters, ai.reply #%d queued',
+                $mediaId, (int)($row['conversation_id'] ?? 0), (string)($r['kind'] ?? ''), (string)($r['classification'] ?? 'general'),
+                (int)($r['chars'] ?? 0), (int)($r['event_id'] ?? 0)));
+            return;
+        }
+        if ($outcome === 'evidence') {
+            // A human-only class: no AI turn was queued. The hand-over names the class, never what the document says.
+            $this->handover($row, DocumentExtraction::handoverReason('evidence', (string)($r['classification'] ?? '')));
+            return;
+        }
+        if ($outcome === 'already_understood') {
+            $this->log('info', sprintf('media #%d: already understood — nothing queued twice', $mediaId));
+            return;
+        }
+        $reason = (string)($r['reason'] ?? 'provider_error');
+        $detail = (string)($r['detail'] ?? '');
+        $this->update($mediaId, ['status' => 'failed', 'failure_reason' => $reason]);
+        if (!empty($r['retryable'])) {
+            throw new \RuntimeException(sprintf('media #%d document extraction %s (%s)', $mediaId, $reason, $detail));
+        }
+        $this->log('warn', sprintf('media #%d: document not read — %s (%s); handed to a person, nothing answered', $mediaId, $reason, $detail));
+        $this->handover($row, DocumentExtraction::handoverReason('failed', $reason, $detail));
+    }
+
+    private function ocrFor(): ?DocumentOcrPort
+    {
+        return $this->ocrInjected ? $this->ocr : DocumentOcrFactory::fromConfig($this->config);
     }
 
     /** Batch 2: is this row a voice note that ai_media_voice (with ai_media_enabled) wants transcribed? */
@@ -186,7 +274,7 @@ final class MediaWorker extends WorkerBase
     private function mediaName(array $row): string
     {
         $kind = (string)($row['kind'] ?? '');
-        return $kind === 'audio' ? 'voice message' : ($kind === 'image' ? 'photo' : 'file');
+        return $kind === 'audio' ? 'voice message' : ($kind === 'image' ? 'photo' : ($kind === 'document' ? 'document' : 'file'));
     }
 
     /**
@@ -321,9 +409,9 @@ final class MediaWorker extends WorkerBase
         // Batch 2 / 3: a voice note or a picture the queue gave up on is handed to a person through the full path — the
         // alert and the holding line too, not only the inbox mark — because the customer sent something and has heard
         // nothing.
-        if (is_array($row) && ($this->voiceWanted($row) || $this->imageWanted($row))) {
+        if (is_array($row) && ($this->voiceWanted($row) || $this->imageWanted($row) || $this->documentWanted($row))) {
             $name = $this->mediaName($row);
-            $this->handover($row, 'a ' . $name . ' could not be ' . ($name === 'voice message' ? 'transcribed' : 'understood')
+            $this->handover($row, 'a ' . $name . ' could not be ' . ($name === 'voice message' ? 'transcribed' : ($name === 'document' ? 'read' : 'understood'))
                 . ' after every attempt — look at it in WhatsApp');
             $this->log('error', sprintf('media #%d (conversation %d): %s given up after every attempt — handed to a person: %s',
                 $mediaId, $convId, $name, $e->getMessage()));

@@ -25,6 +25,15 @@ final class InboundMedia
 {
     public const KINDS = ['audio', 'image', 'document', 'video', 'sticker'];
 
+    /**
+     * The wrappers Evolution puts around a message, each carrying the real message under 'message': a captioned document
+     * arrives as documentWithCaptionMessage; disappearing and view-once messages wrap anything. Batch 4 (docs/58 §2.1,
+     * D-11): unwrapped up to MAX_WRAP_DEPTH levels, here and in ConversationService::importEvoMessage and the webhook's text
+     * extraction, through unwrap() — one list, one rule. Before that a wrapped document was dropped before it was stored.
+     */
+    public const WRAPPERS       = ['documentWithCaptionMessage', 'ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2'];
+    public const MAX_WRAP_DEPTH = 3;
+
     private const TYPE_KEYS = [
         'audioMessage'    => 'audio',
         'imageMessage'    => 'image',
@@ -38,10 +47,7 @@ final class InboundMedia
     {
         $m = $msg['message'] ?? null;
         if (!is_array($m)) return null;
-        // documentWithCaptionMessage wraps a documentMessage (and ephemeral/viewOnce wrappers wrap anything).
-        foreach (['documentWithCaptionMessage', 'ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2'] as $wrap) {
-            if (isset($m[$wrap]['message']) && is_array($m[$wrap]['message'])) { $m = $m[$wrap]['message']; break; }
-        }
+        $m = self::unwrap($m);
         $type = ''; $kind = '';
         foreach (self::TYPE_KEYS as $k => $v) {
             if (isset($m[$k]) && is_array($m[$k])) { $type = $k; $kind = $v; break; }
@@ -66,6 +72,23 @@ final class InboundMedia
             ],
             'message_type'   => $type,
         ];
+    }
+
+    /**
+     * The real message inside Evolution's wrappers, up to MAX_WRAP_DEPTH levels deep (an ephemeral message wrapping a
+     * captioned document is two). A message with no wrapper comes back exactly as it was.
+     */
+    public static function unwrap(array $m): array
+    {
+        for ($depth = 0; $depth < self::MAX_WRAP_DEPTH; $depth++) {
+            $inner = null;
+            foreach (self::WRAPPERS as $wrap) {
+                if (isset($m[$wrap]['message']) && is_array($m[$wrap]['message'])) { $inner = $m[$wrap]['message']; break; }
+            }
+            if ($inner === null) break;
+            $m = $inner;
+        }
+        return $m;
     }
 
     /** The body the conversation store writes for a captionless media message (unchanged since 5.18.x). */

@@ -1,7 +1,9 @@
 # 58 — Document processing: the Batch 4 boundary review — DESIGN ONLY, before any code (2026-10-05)
 
-**Status: DESIGN. Nothing is built.** No code, no migration, no library, no provider, no flag and no configuration changed;
-Batches 1–3 (`ce16324`, `73ae827`, `b08c9d4`) stay local, unpushed and unmodified. This document answers the operator's
+**Status: DESIGN APPROVED 2026-10-05 with decisions D-1…D-11 (§B, the operator's choices recorded in §19); Slice 4a BUILT the
+same day in the development schema only (5.18.79) — see §19. NOT deployed, NOT pushed; no migration, no library, no provider,
+no flag on anywhere.** The design below is the one that was approved; §19 records what the build did and the three places it
+sharpened the design. Batches 1–3 (`ce16324`, `73ae827`, `b08c9d4`) are unmodified. This document answers the operator's
 fifteen questions for Batch 4 — the documents a customer sends over WhatsApp: PDF, Word, Excel, CSV, plain text — and ends
 with the recommended scope (A), the decisions only the operator can take (B), what is prohibited (C) and the test plan (D).
 Where it states a number it is a proposed default to be confirmed, never a measurement; where it states a fact about the
@@ -572,7 +574,65 @@ through `sj_weakened_copy`, controls on the controls:
    suite twice; `git diff --check`; the secret-shaped-value scan; the Domain B diff empty; the South Sudan scheduler
    suite unchanged; counts reported exactly, as for Batches 1–3.
 
+## 19. Build record — Slice 4a, 2026-10-05, development only (5.18.79)
+
+**The operator's decisions** (verbatim in substance): D-1 no PDF text in 4a, P-1 in-house reader as slice 4b after 4a is
+proven; D-2 no OCR — no tesseract, no sidecar, `DocumentOcrPort` + the fake as the empty boundary, `ai_document_provider`
+stays `none`; D-3 quotations human-only; D-4 invoices human-only, holding line only, no "how to pay"; D-5 legacy `.doc`/`.xls`
+kept at the fetch, refused at extraction as `unsupported_document`, a person asked for a PDF; D-6 10 MiB · 20 pages · 20 s ·
+4,000 characters; D-7 the 300-character masked excerpt, nothing at all for identity and credential; D-8 the wording of §6.4,
+tested word for word; D-9 all three numbers; D-10 no acknowledgement beyond the holding line; D-11 both wrapper fixes,
+flag-independent, with envelope fixtures for every wrapper and the nested shapes. Plus the added rule: **classification must
+fail closed** — uncertain, ambiguous, truncated before safe classification, a missing extension, malformed content or any
+exception → a person; never `uncertain → general → AI`.
+
+**What was built**, all of it in the plugin process with no library and no provider: `lib/DocumentDeadline.php` (the refusal
+types and the deadline), `lib/OoxmlArchive.php` (the minimal zip reader: entries cap, zip64 and encrypted entries refused, an
+ALLOW-LIST of members, the declared size checked before inflating, `gzinflate` capped at the declared size, length and CRC
+checked), `lib/DocumentSniffer.php`, `lib/TextReader.php`, `lib/DocxReader.php`, `lib/SheetReader.php` (named so because the
+unused `lib/XlsxReader.php` keeps its name), `lib/PdfReader.php` (facts only), `lib/DocumentOcr.php`,
+`lib/DocumentClassifier.php`, `lib/DocumentExtraction.php`; `MediaPolicy` document constants and `documentEnabled()`;
+`PaymentEvidence::hasMoneyToken()` / `hasTransactionToken()` (signals); the worker's document branch; the webhook's step 9b
+and the D-11 unwrap in `evoExtractText`, `ConversationService::importEvoMessage` and `InboundMedia::unwrap()` (one list,
+three levels); `AiReplyWorker` origin, context and `modality: document`; `BrainContext`'s sixteenth key and
+`NEVER_PRESENT['file_name']`; the DOCUMENT block; `ReplyPrivacyGuard::secretShapesIn()` and the `document_commitment` phrases
+(payment, contract, identity — completed facts only, never the conditional); the five `set_config` keys with their ranges and
+the `none`-only provider; `validate_environment` reporting zlib, xmlreader and iconv; `run_media_worker.php` raising a CLI
+memory limit below 256M. No migration: `understanding_kind` gains the values `extraction` and `document_evidence`; the facts
+live in `wa_messages.metadata.document`.
+
+**Three places the build sharpened the design, recorded rather than hidden:**
+
+1. **Classification precedence.** §6.4 put `payment_proof` before statement, invoice, contract and quotation. Measured on the
+   fixtures: a bank statement has deposits and balances, an invoice has an amount and "pay by", so the Batch 3 money-and-
+   transaction rule fired first and the person was told "a payment screenshot or receipt arrived" about a statement. The
+   built order is: credential → identity → a DECISIVE phrase of statement / invoice / contract / quotation → the payment words
+   rule → two supporting phrases of those four → spreadsheet → general. Every one of those classes is human-only, so the
+   route is identical; only the person's wording is more precise.
+2. **A spreadsheet beyond the scanning caps is `classification_incomplete`, a person** — not "truncated and shown". §4 said
+   the caps bound what is scanned; the fail-closed rule then says text the classifier did not see all of is not harmless. A
+   2,100-row sheet goes to a person. The brain cap (4,000 characters) still only cuts what the assistant is SHOWN of a sheet
+   the classifier saw whole.
+3. **The fail-closed rule is literal.** A sheet whose label row said "Sum" went to a person in the test, because "sum" is a
+   money token. That is the rule working; the fixture was changed, the rule was not. Expect harmless documents with a stray
+   money, transaction, invoice, contract or identity word to reach a person — the cost the rule accepts.
+
+**A consequence of D-11, measured and recorded:** the same unwrap stores a disappearing (`ephemeralMessage`) text message and a
+view-once document that were dropped before; their text is answered as any typed text is. `test_document_media.php` pins it.
+
+**Proofs:** `tests/test_document_media.php` **161 / 0** — the eighteen areas of docs/58 §D, every fixture of §14 generated in
+the test (a zip writer, Word, Excel, three PDFs, the wrapped envelopes), the eight human-only outcomes each with its hand-over
+wording checked word for word, the money AND the identity/KYC tables counted before and after, the fake uCRM unchanged, nothing
+sensitive in any table, file or log, the CLI runner through the real webhook and `run_media_worker.php` (seven cases, the
+wrapped "stop" caption included), and **24 weakened copies each caught** (flags, the zip caps and allow-list, the DTD guard, the
+macro check, `/Encrypt`, payment and credential and identity routing, the record policy, the file name, the label, the
+prompt block, the understood guard, the hand-over, logging, the deadline, the guard phrases, uncertain → general, incomplete →
+general, both D-11 fixes) with the control. The suite totals are in `docs/07`.
+
+**Still not here, by decision:** PDF text (4b, D-1), OCR (4c, D-2), any provider, any deployment. `lib/XlsxReader.php` stays
+unused and untouched.
+
 ---
 
-*Design only. No code, migration, library, provider, flag or configuration was changed by this document; nothing was
-pushed or deployed; no customer document was processed.*
+*Design approved and Slice 4a built in development only; nothing was pushed or deployed; no flag is on; no customer document
+was processed.*

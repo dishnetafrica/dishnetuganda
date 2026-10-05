@@ -98,6 +98,24 @@ final class ReplyPrivacyGuard
     ];
 
     /**
+     * A commitment the assistant may never make about a document (Batch 4, docs/58 §6.6, §9): money received or recorded,
+     * an invoice settled, a contract or quotation accepted, an identity verified. Checked only where the caller asks —
+     * AiReplyWorker asks on a turn extracted from a document — and phrased as the completed fact, never the conditional
+     * ("once your payment is received" is a fair sentence; "we have received your payment" is the thing that must not be
+     * said from a file nobody has checked).
+     */
+    private const COMMITMENT_PHRASES = [
+        'payment'  => '/\b(?:we|dishnet)\s+(?:have\s+|\'ve\s+)?(?:received|confirmed|recorded|verified|credited)\s+(?:your|the|this|that)\s+(?:payment|transfer|deposit|money|funds|receipt)\b'
+                    . '|\b(?:payment|transfer|deposit|money|funds|amount)\s+(?:has\s+been|have\s+been|was|were|is\s+now|are\s+now)\s+(?:received|confirmed|credited|verified|recorded|accepted)\b'
+                    . '|\bmarked\s+(?:as\s+)?paid\b|\b(?:invoice|bill|account|balance)\s+(?:has\s+been|was|is\s+now)\s+(?:settled|paid|cleared|updated)\b'
+                    . '|\bthank you for (?:your|the) payment\b|\bpayment\s+(?:received|confirmed)\b/i',
+        'contract' => '/\b(?:we|dishnet)\s+(?:hereby\s+)?(?:accept|approve|agree\s+to|have\s+accepted|have\s+approved|have\s+agreed\s+to|confirm)\s+(?:your|the|this|these|that|those)\s+(?:contract|agreement|terms|quotation|quote|proposal|offer|conditions)\b'
+                    . '|\b(?:contract|agreement|terms|quotation|quote|proposal|offer)\s+(?:is|are|has\s+been|have\s+been)\s+(?:accepted|approved|signed|agreed|confirmed)\b/i',
+        'identity' => '/\b(?:identity|id|passport|kyc|documents?|application)\s+(?:is|are|has\s+been|have\s+been)\s+(?:verified|approved|accepted|confirmed|validated)\b'
+                    . '|\bkyc\s+(?:approved|complete|completed|passed)\b|\b(?:we|dishnet)\s+(?:have\s+)?(?:verified|approved|accepted)\s+(?:your|the)\s+(?:identity|id|passport|documents?|kyc)\b/i',
+    ];
+
+    /**
      * Money written with thousands separators — the only amounts the check read until 5.18.46.
      */
     private const SEPARATED_AMOUNT = '/(?<![\d.,])\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?(?![\d])/';
@@ -130,6 +148,22 @@ final class ReplyPrivacyGuard
     {
         $on = filter_var($config['ai_hardware_expert'] ?? false, FILTER_VALIDATE_BOOLEAN);
         return ['plain_amounts' => $on, 'placeholders' => $on, 'totals' => $on];
+    }
+
+    /**
+     * The secret shapes found in a text, by name — the same shapes check() refuses in a reply, made callable so that a
+     * document whose text carries a key or a password is classified `credential` before anything is stored or sent
+     * (Batch 4, docs/58 §6.4). Names only: the matched value is never returned.
+     *
+     * @return string[]
+     */
+    public static function secretShapesIn(string $text): array
+    {
+        $found = [];
+        foreach (self::SECRET_SHAPES as $name => $re) {
+            if (preg_match($re, $text) === 1) $found[] = $name;
+        }
+        return $found;
     }
 
     /**
@@ -200,6 +234,12 @@ final class ReplyPrivacyGuard
         }
         foreach (self::INTERNAL_PHRASES as $name => $re) {
             if (preg_match($re, $text) === 1) $cats[] = 'internal:' . $name;
+        }
+        // Batch 4 (docs/58 §9): on a turn extracted from a document, a reply that commits is refused.
+        if (!empty($permitted['commitments'])) {
+            foreach (self::COMMITMENT_PHRASES as $name => $re) {
+                if (preg_match($re, $text) === 1) $cats[] = 'commitment:' . $name;
+            }
         }
 
         $allow  = self::normaliseSet((array)($permitted['values'] ?? []));

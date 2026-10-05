@@ -405,6 +405,16 @@ foreach ($messages as $msg) {
         continue;
     }
 
+    // ── 9b. Batch 4 (docs/55 §9, docs/58 §1): a captioned DOCUMENT with ai_media_document on is answered ONCE — by the
+    // document turn the media worker queues (the caption beside the extract, each under its label), or by the hand-over a
+    // human-only document gets, where the person sees the caption in the Inbox — not here as well. The caption is already
+    // stored and its STOP already read (8b). With the flag off, nothing changes: the caption is answered as text.
+    if ($mediaEvent && (string)($media['kind'] ?? '') === 'document' && MediaPolicy::documentEnabled($config)) {
+        error_log(sprintf('[evo_webhook] caption carried by the media worker — the document turn answers it (%s)', $channel));
+        $skipped++;
+        continue;
+    }
+
     try {
         $bus->emit(
             'ai.reply',
@@ -496,6 +506,9 @@ function evoExtractText(array $msg): string
 {
     $m = $msg['message'] ?? [];
     if (!is_array($m)) return '';
+    // Batch 4, D-11 (docs/58 §2.1): a caption inside documentWithCaptionMessage — or anything inside an ephemeral or
+    // view-once wrapper — is the customer's text too. The same unwrap the conversation store and InboundMedia use.
+    $m = InboundMedia::unwrap($m);
 
     $candidates = [
         $m['conversation'] ?? null,

@@ -41,6 +41,18 @@ final class PaymentEvidence
         return preg_match(self::MONEY, $t) === 1 && preg_match(self::TRANSACTION, $t) === 1;
     }
 
+    /** Batch 4 (docs/58 §6.4): one money token alone is a SIGNAL — enough to keep a document from the assistant, not a decision. */
+    public static function hasMoneyToken(string $text): bool
+    {
+        return preg_match(self::MONEY, strtolower($text)) === 1;
+    }
+
+    /** Batch 4 (docs/58 §6.4): one transaction token alone is a SIGNAL — enough to keep a document from the assistant, not a decision. */
+    public static function hasTransactionToken(string $text): bool
+    {
+        return preg_match(self::TRANSACTION, strtolower($text)) === 1;
+    }
+
     /**
      * What a person is told. Deliberately generic: the alert travels by WhatsApp to the staff number, and the amounts,
      * names and references the picture may show stay on the record, for the inbox, not in a broadcast.

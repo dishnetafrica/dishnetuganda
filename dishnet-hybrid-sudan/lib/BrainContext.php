@@ -15,10 +15,11 @@ require_once __DIR__ . '/ConversationService.php';
  * complete uCRM client record, internal ids, the Splynx id and service
  * address, the customer's phone number, our own WhatsApp instance.
  *
- * This is the allowlist that replaces it. Fifteen keys, and every one earns
+ * This is the allowlist that replaces it. Sixteen keys, and every one earns
  * its place by deciding what the model DOES rather than by being available.
  * (Twelve until Batch 0 of docs/55 added 'location'; thirteen until Batch 2
- * added 'voice'; fourteen until Batch 3 added 'image', below.)
+ * added 'voice'; fourteen until Batch 3 added 'image'; fifteen until Batch 4
+ * added 'document', below.)
  *
  * ── CONSTRUCTED, NEVER FILTERED ─────────────────────────────────────────
  *
@@ -55,7 +56,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Fifteen top-level keys, and the only fifteen.
+     * The contract. Sixteen top-level keys, and the only sixteen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -89,12 +90,19 @@ final class BrainContext
         // sent. Presence is the fact the prompt acts on (DishNetAiBrain's IMAGE block: a description, not the
         // customer's words; every figure unconfirmed; never confirm a payment); the one leaf is the classification.
         'image'          => ['classification'],
+        // Batch 4 (docs/55 §9, docs/58 §12): this turn's message is the automatic extract of a document the customer
+        // sent. Presence is the fact the prompt acts on (DishNetAiBrain's DOCUMENT block: an extraction, possibly cut,
+        // every figure and term unconfirmed; never accept, approve or confirm anything read there); the three leaves are
+        // the classification, the kind and whether the extract was cut. Never the file name (NEVER_PRESENT).
+        'document'       => ['classification', 'kind', 'truncated'],
     ];
 
     /**
      * Named so a reviewer sees a decision rather than an omission.
      */
     public const NEVER_PRESENT = [
+        'file_name'      => 'a document\'s file name is often a person\'s name or an account number; a signal for the '
+                          . 'classifier, never for the model (docs/58 §12)',
         'account'        => 'balance, invoice and payment are answered by a tool, not injected',
         'invoice'        => 'likewise',
         'last_payment'   => 'likewise',
@@ -189,6 +197,16 @@ final class BrainContext
         if (is_array($image)) {
             $cls = self::str($image['classification'] ?? '');
             $out['image'] = ['classification' => $cls !== '' ? $cls : 'general'];
+        }
+
+        // Batch 4 (docs/55 §9, docs/58 §12): the document this turn's message was extracted from. Only when the caller
+        // says so (an array), and only the classification, the kind and the truncation flag travel — never the file name.
+        $doc = $in['document'] ?? null;
+        if (is_array($doc)) {
+            $cls  = self::str($doc['classification'] ?? '');
+            $kind = self::str($doc['kind'] ?? '');
+            $out['document'] = ['classification' => $cls !== '' ? $cls : 'general', 'kind' => $kind !== '' ? $kind : 'document',
+                                'truncated' => !empty($doc['truncated'])];
         }
 
         // The public catalogue. Not customer data — identical for every

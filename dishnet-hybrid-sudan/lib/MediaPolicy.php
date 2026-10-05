@@ -37,6 +37,32 @@ final class MediaPolicy
     public const IMAGE_MAX_PIXELS            = 25000000;
     public const IMAGE_MAX_DESCRIPTION_CHARS = 2000;   // a description is cut here
 
+    // Batch 4 (docs/55 §9, docs/58): documents. ai_media_document is OFF unless set, and it needs ai_media_enabled too.
+    // Three settings (the document cap, the PDF page cap, the extraction deadline) and the fixed caps every reader obeys.
+    public const DOCUMENT_DEFAULT_MAX_BYTES     = 10 * 1024 * 1024;   // the fetch cap (ai_media_max_bytes) applies first; the smaller wins
+    public const DOCUMENT_DEFAULT_MAX_PAGES     = 20;                 // PDF pages read, once PDF text is read at all (docs/58 D-1)
+    public const DOCUMENT_MIN_PAGES             = 1;
+    public const DOCUMENT_CAP_PAGES             = 200;
+    public const DOCUMENT_DEFAULT_TIMEOUT_S     = 20;                 // the whole extraction, checked between bounded steps
+    public const DOCUMENT_MIN_TIMEOUT_S         = 5;
+    public const DOCUMENT_CAP_TIMEOUT_S         = 60;
+    public const DOCUMENT_MAX_SHEETS            = 10;                 // spreadsheets: what is SCANNED for classification
+    public const DOCUMENT_MAX_ROWS_PER_SHEET    = 2000;
+    public const DOCUMENT_MAX_CELLS             = 20000;
+    public const DOCUMENT_MAX_CELL_CHARS        = 200;
+    public const DOCUMENT_SHOW_SHEETS           = 2;                  // spreadsheets: what the assistant is SHOWN
+    public const DOCUMENT_SHOW_ROWS             = 40;
+    public const DOCUMENT_SHOW_COLS             = 12;
+    public const DOCUMENT_MAX_TEXT_BYTES        = 1024 * 1024;        // txt / csv bytes read; beyond is truncated
+    public const DOCUMENT_MAX_SCAN_CHARS        = 50000;              // characters the classifier reads; beyond, nothing is harmless
+    public const DOCUMENT_MAX_BRAIN_CHARS       = 4000;               // the turn the assistant reads is cut here
+    public const DOCUMENT_EXCERPT_CHARS         = 300;                // the masked excerpt kept for an evidence class
+    public const DOCUMENT_ZIP_MAX_ENTRIES       = 2000;               // OOXML archive: central-directory entries
+    public const DOCUMENT_ZIP_MAX_MEMBER_BYTES  = 16 * 1024 * 1024;   // one member, declared and inflated (zlib stops here)
+    public const DOCUMENT_ZIP_MAX_TOTAL_BYTES   = 48 * 1024 * 1024;   // the members read, together
+    public const DOCUMENT_PDF_MAX_STREAM_BYTES  = 8 * 1024 * 1024;    // one PDF stream inflated to look for a text layer
+    public const DOCUMENT_PDF_MAX_OBJECTS       = 50000;
+
     /**
      * The base media types accepted per kind (the part before any ';' — WhatsApp announces voice notes as
      * "audio/ogg; codecs=opus"). Anything else is refused as unsupported_mime without being kept.
@@ -75,6 +101,35 @@ final class MediaPolicy
         $v = $config['ai_media_image_timeout_s'] ?? null;
         $n = is_numeric($v) ? (int)$v : self::IMAGE_DEFAULT_TIMEOUT_S;
         return max(self::IMAGE_MIN_TIMEOUT_S, min(self::IMAGE_CAP_TIMEOUT_S, $n));
+    }
+
+    /** Documents are read only when BOTH flags are on: ai_media_enabled off wins, whatever ai_media_document says. */
+    public static function documentEnabled(array $config): bool
+    {
+        return self::enabled($config) && self::flag($config['ai_media_document'] ?? null);
+    }
+
+    /** The document cap, never above the fetch cap: the smaller of ai_media_document_max_bytes and ai_media_max_bytes. */
+    public static function documentMaxBytes(array $config): int
+    {
+        $v = $config['ai_media_document_max_bytes'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::DOCUMENT_DEFAULT_MAX_BYTES;
+        $n = max(self::MIN_MAX_BYTES, min(self::CAP_MAX_BYTES, $n));
+        return min($n, self::maxBytes($config));
+    }
+
+    public static function documentMaxPages(array $config): int
+    {
+        $v = $config['ai_media_document_max_pages'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::DOCUMENT_DEFAULT_MAX_PAGES;
+        return max(self::DOCUMENT_MIN_PAGES, min(self::DOCUMENT_CAP_PAGES, $n));
+    }
+
+    public static function documentTimeoutSeconds(array $config): int
+    {
+        $v = $config['ai_media_document_timeout_s'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::DOCUMENT_DEFAULT_TIMEOUT_S;
+        return max(self::DOCUMENT_MIN_TIMEOUT_S, min(self::DOCUMENT_CAP_TIMEOUT_S, $n));
     }
 
     public static function voiceMaxSeconds(array $config): int
