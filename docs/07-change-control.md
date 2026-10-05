@@ -5208,3 +5208,45 @@ development:** none — fake servers only. **Database changes:** none (no migrat
 release commit cut on the live 5.18.74 (`db18ad9`) carrying 5.18.75–5.18.78, its deploy script and rehearsal — **not cut,
 not pushed, awaiting the operator's instruction.** **STOPPED here; Batch 4 (documents) waits for explicit approval, and a
 vision provider waits for the operator's decision on `docs/57`.**
+
+## 05 Oct — AI communication layer, Batch 4 DESIGN REVIEW (`docs/58`): the document processing boundary — DESIGN ONLY, nothing built, NOT pushed; STOPPED for the operator's decisions before any Batch 4 code
+
+**What was asked.** After accepting Batch 3, the operator asked for a design-only review of the Batch 4 boundary — documents
+a customer sends over WhatsApp — answering fifteen questions, with no code, no migration, no library, no provider, no
+configuration change, no push, no deploy and no real customer document processed. `docs/58` is that review.
+
+**What was read first.** `docs/55`–`57`; the Batch 1 media contracts; the Batch 2 voice and Batch 3 image contracts; the
+webhook and the conversation store; the assistant, the guard and the audit path; and every file or document handling path
+in the plugin (a read-only sweep: job photos, KYC intake, the media library, staff uploads, outbound invoice/quote/delivery
+PDFs, the unused `lib/XlsxReader.php`, the CLI PDF doctor, Finance's `pdftotext` import, e-mail attachments, restore zips).
+
+**What `docs/58` recommends.** Extract documents inside the plugin process — deterministic, no library, no provider, no
+byte leaving the server — for Word `.docx`, Excel `.xlsx`, CSV and text; read a PDF for its facts only until the operator
+decides how its text should be read (D-1) and whether scanned pages get OCR at all (D-2); classify every document before
+anything reaches the assistant: seven classes are human-only (payment proof, statement, invoice, contract, quotation,
+identity document, credential) and never produce an AI turn, two (general, spreadsheet) enter the EXISTING assistant exactly
+as a transcript or an image description does. Payment evidence in a document follows the Batch 3 rule unchanged. The one
+provider boundary declared is `DocumentOcrPort`, empty, with `none` as its only value. No migration, no new event type, no
+new table; rollback is the flag, then one commit. Six flags, all off; nine content classes with their hand-over wording;
+every limit with its reason; the egress stated exactly (only the capped extract of a brain-eligible document reaches the
+model vendor the brain already uses; a human-only document reaches nothing).
+
+**Two live-path defects found by the sweep, independent of any flag** (`docs/58` §2.1): a captioned document inside
+Evolution's `documentWithCaptionMessage` wrapper is dropped by `ConversationService::importEvoMessage` before it is stored
+— no Inbox row, no text turn, nothing for the media worker; and `InboundMedia` unwraps one wrapper level only. Both are
+small; whether Evolution 2.3.7 sends the wrapper is not recorded (E-6). Fixing the first changes the live text path for a
+shape that is dropped today, so it is the operator's call (D-11).
+
+**Also measured.** No inbound WhatsApp document is content-sniffed today (the announced type is trusted, proved by
+`test_media_foundation`); the uCRM container's `php -m` has never been recorded (zlib, xmlreader and iconv are unknown —
+E-1), nor the CLI `memory_limit` the media runner inherits (E-2); `pdftotext` is documented as absent from the uCRM image;
+the plugin bundles no PHP library at all. This sandbox's PHP (8.4, with zip/zlib/xmlreader) says only that the fixtures can
+be built here.
+
+**Decisions for the operator** (`docs/58` §B): D-1 PDF text (in-house reader recommended as slice 4b), D-2 OCR (none for
+now), D-3 quotations, D-4 invoices, D-5 legacy `.doc`/`.xls`, D-6 the defaults, D-7 the masked excerpt, D-8 the hand-over
+wording, D-9 the three numbers, D-10 payment evidence with a caption, D-11 the §2.1 fix.
+
+**Not done, deliberately.** No Batch 4 code, migration, library, provider, flag or configuration; nothing pushed or deployed;
+Batches 1–3 (`ce16324`, `73ae827`, `b08c9d4`) untouched and still local. Guards on the new document: no phone-shaped
+value, no banned value, no credential-shaped value. This entry and `docs/58` are the fourth local, unpushed commit.
