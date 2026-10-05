@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => ''];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -34,7 +34,7 @@ if ($path === '/__test/state') {
 }
 // Phase 2 test controls: start from nothing, and make the next N text sends fail.
 if ($path === '/__test/reset') {
-    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => ''];
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => []];
     fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
 }
 // 5.18.53: hold the next text send until the test releases it — a WhatsApp as slow to answer as the test needs, so that
@@ -101,5 +101,64 @@ if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
     // Unique like the real thing: the worker now records this id on the row
     // and a constant would make every second media send dedupe to nothing.
     fe2_out(['key' => ['id' => 'FAKE-EVO-MEDIA-' . count($state['media_calls'])], 'status' => 'PENDING']);
+}
+// Batch 1 of the AI communication layer (docs/55 §9): what the next media fetch answers. Set once, it stands until
+// changed or reset. POST JSON (or GET params): base64 | bytes (a deterministic payload of that many bytes is built here,
+// so a test never ships a large body), mimetype, fileName, hold (seconds to wait before answering — a slow Evolution),
+// fail (an HTTP status to answer with instead), raw (a non-JSON body to answer with instead).
+if ($path === '/__test/media') {
+    $in = $body ?: $_GET;
+    if (isset($in['bytes']) && (int)$in['bytes'] > 0) {
+        $n = (int)$in['bytes'];
+        $in['base64'] = base64_encode(substr(str_repeat('DN-MEDIA-TEST-PAYLOAD/', (int)ceil($n / 22)), 0, $n));
+    }
+    $next = [
+        'base64'   => (string)($in['base64'] ?? ''),
+        'mimetype' => (string)($in['mimetype'] ?? 'audio/ogg; codecs=opus'),
+        'fileName' => (string)($in['fileName'] ?? ''),
+        'hold'     => (int)($in['hold'] ?? 0),
+        'fail'     => (int)($in['fail'] ?? 0),
+        'raw'      => (string)($in['raw'] ?? ''),
+    ];
+    // for_id: the answer for ONE message id (several media in one worker run, each with its own type); else the default.
+    if ((string)($in['for_id'] ?? '') !== '') $state['media_next_by_id'][(string)$in['for_id']] = $next;
+    else                                       $state['media_next'] = $next;
+    fe2_out(['media_next' => array_merge($next, ['base64' => strlen($next['base64']) . ' chars']), 'for_id' => (string)($in['for_id'] ?? ''), 'marker' => 'FAKE-EVO-TEST']);
+}
+if (preg_match('#^/chat/getBase64FromMediaMessage/(.+)$#', $path, $m)) {
+    // Recorded first — a test asserts how many fetches happened and with what key, whatever the answer.
+    $k = isset($body['message']['key']) && is_array($body['message']['key']) ? $body['message']['key'] : [];
+    $state['media_fetch_calls'][] = [
+        'instance'     => $m[1],
+        'id'           => (string)($k['id'] ?? ''),
+        'remoteJid'    => (string)($k['remoteJid'] ?? ''),
+        'fromMe'       => !empty($k['fromMe']),
+        'convertToMp4' => $body['convertToMp4'] ?? null,
+    ];
+    $mid  = (string)($k['id'] ?? '');
+    $next = is_array($state['media_next_by_id'][$mid] ?? null) ? $state['media_next_by_id'][$mid]
+          : (is_array($state['media_next'] ?? null) ? $state['media_next'] : []);
+    if (($next['hold'] ?? 0) > 0) {
+        file_put_contents($stateFile, json_encode($state));   // the call is on record before the wait
+        sleep((int)$next['hold']);
+    }
+    if (($next['fail'] ?? 0) > 0) fe2_out(['status' => (int)$next['fail'], 'error' => 'FAKE-EVO-MEDIA-FAILURE (test control)'], (int)$next['fail']);
+    if (($next['raw'] ?? '') !== '') {
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo $next['raw'];
+        file_put_contents($stateFile, json_encode($state));
+        exit;
+    }
+    $b64 = (string)($next['base64'] ?? '');
+    if ($b64 === '') fe2_out(['status' => 404, 'error' => 'FAKE-EVO-TEST: no media set for this fetch (/__test/media)'], 404);
+    fe2_out([
+        'mediaType' => explode('/', (string)$next['mimetype'])[0],
+        'fileName'  => (string)$next['fileName'],
+        'size'      => ['fileLength' => (string)strlen((string)base64_decode($b64, true))],
+        'mimetype'  => (string)$next['mimetype'],
+        'base64'    => $b64,
+        'buffer'    => null,
+    ]);
 }
 fe2_out(['error' => 'FAKE-EVO-TEST: path not simulated: ' . $path], 404);

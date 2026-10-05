@@ -187,6 +187,11 @@ $_m_jobs = [
     // a worker the moment a message arrives, so replies are normally immediate.
     // This catches anything stranded when that spawn is unavailable.
     'ai_reply'      => ['interval' => 60,                  'script' => dirname(__DIR__) . '/run_worker.php'],
+    // Batch 1 of the AI communication layer (docs/55 §9): the media the customers send. Its own process and lock, so a
+    // slow download never delays a text reply. 'flag' names the setting it exists for: while ai_media_enabled is off —
+    // the shipped state — the job is neither dispatched (below) nor listed (tools/cron_status.php), so the schedule is
+    // the one it was before the job existed, on every install.
+    'ai_media'      => ['interval' => 60, 'flag' => 'ai_media_enabled', 'script' => dirname(__DIR__) . '/run_media_worker.php'],
     'efris'         => ['interval' => 120,                 'script' => __DIR__ . '/efris_sync.php'],
     // DPO Pay's third leg: the customer who paid on their phone and closed
     // the browser. Silent when no payment is open, which is most of the time.
@@ -317,6 +322,13 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
 
     // 5.18.54: a job that belongs to one install is not dispatched elsewhere — no run, no schedule row
     if (isset($_m_job['gate']) && !NotifyGate::applies((string)$_m_job['gate'], is_array($_m_config) ? $_m_config : [], $dataDir)) continue;
+
+    // Batch 1 (docs/55 §9): a job that exists only while its flag is on — same consequence as a gate that does not
+    // apply: no run, no schedule row. 1/true/on/yes count as on, as MediaPolicy::enabled() reads the same key.
+    if (isset($_m_job['flag'])) {
+        $_m_flagVal = is_array($_m_config) ? ($_m_config[(string)$_m_job['flag']] ?? null) : null;
+        if (!in_array(strtolower(trim((string)($_m_flagVal ?? ''))), ['1', 'true', 'on', 'yes'], true)) continue;
+    }
 
     $_m_scriptPath = $_m_job['script'];
 

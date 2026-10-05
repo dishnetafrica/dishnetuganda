@@ -67,6 +67,18 @@ $FLAGS = [
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
 
+    // Batch 1 of the AI communication layer (docs/55 §9): the media foundation. OFF unless set. Off, a voice note,
+    // photo or document is stored exactly as before (a placeholder and its type) and nothing else happens. On, the
+    // message is also recorded for the media worker, which fetches the file into memory, checks its type and size,
+    // keeps a hash and the size on the record and forgets the bytes — nothing is kept on disk, and nothing is answered
+    // or understood yet (Batch 2+). The two limits are refused outside their range rather than clamped silently.
+    'ai_media_enabled' => ['bool',
+        'Record and fetch the media customers send (voice, image, document) for the media worker — nothing is answered yet'],
+    'ai_media_max_bytes' => ['number',
+        'Largest media file the worker fetches, in bytes (default 15728640 = 15 MiB; 65536 to 67108864)'],
+    'ai_media_timeout_s' => ['number',
+        'Seconds the worker waits for Evolution to hand a file over (default 20; 3 to 60)'],
+
     // Phase 2 of the customer-login audit — the tenant profile and the
     // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
     // source of every country-dependent default; the gates are configurable
@@ -405,6 +417,18 @@ if (!$clear && $key === 'portal_data_report_handoff') {
         exit(1);
     }
     $new = strtolower(trim($new));
+}
+// Batch 1 (docs/55 §9): a media limit outside its range would be clamped silently by MediaPolicy. Refused here, naming
+// the range, so the listing never shows a number the worker is not using.
+if (!$clear && in_array($key, ['ai_media_max_bytes', 'ai_media_timeout_s'], true)) {
+    require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
+    $lo = $key === 'ai_media_max_bytes' ? MediaPolicy::MIN_MAX_BYTES : MediaPolicy::MIN_TIMEOUT_S;
+    $hi = $key === 'ai_media_max_bytes' ? MediaPolicy::CAP_MAX_BYTES : MediaPolicy::CAP_TIMEOUT_S;
+    if (!preg_match('/^\d+$/', trim($new)) || (int)$new < $lo || (int)$new > $hi) {
+        echo "\n  \"" . $new . "\" is not a whole number between " . $lo . " and " . $hi . ", so nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = (string)(int)$new;
 }
 if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";

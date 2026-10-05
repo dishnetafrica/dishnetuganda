@@ -4762,3 +4762,144 @@ team already has screens for; uCRM lead clients are ordinary lead clients).
 **External side effects in development:** none — the fake servers only. **Database changes:** none. **Deployment
 requirement:** a 5.18.75 release commit cut on the live 5.18.74 (`db18ad9`), its deploy script and rehearsal — **not cut
 yet; awaiting the operator's review of this batch.** **STOPPED here; Batch 1 (the media foundation) waits for approval.**
+
+## 05 Oct — AI communication layer, Batch 1 (5.18.76): the media foundation — BUILT dark, proved against a fake Evolution and the real webhook, NOT deployed, NOT pushed; STOPPED before Batch 2
+
+**Instruction (verbatim in substance):** *do not deploy 5.18.75; do not cut a release commit; keep Batch 0 recorded as
+`b0674bd`; do not modify production configuration; before any future deployment verify the actual production values of
+`ai_lead_capture` and `ai_crm_lead_sync` and treat both as NOT APPROVED for activation; approve development of Batch 1
+only — the MEDIA FOUNDATION — with `ai_media_enabled` remaining OFF, no voice/image/document processing, no transcription
+or vision provider, no customer-facing media replies, no production configuration change, no deployment, no live WhatsApp
+media test and no real customer messages; do not push or deploy unless explicitly requested; stop after Batch 1 with a
+complete report; do not begin Batch 2.* All of it honoured: this entry is the report. **Nothing left this machine.**
+
+**What the foundation is** (`docs/55` §9; every piece dark unless `ai_media_enabled` is set, and it is not set anywhere):
+- **`migrations/085_wa_media.sql`** — the one schema change, stated on its own: a new table `wa_media` (`CREATE TABLE IF
+  NOT EXISTS`, additive, never altered) with a **UNIQUE index on `wa_message_id`** and two lookup indexes. One row per
+  WhatsApp media message: the message key Evolution needs to hand the file over (`remote_jid`, `wa_message_id`,
+  `from_me`), what the webhook announced (`kind`, `mimetype`, `file_name`, `caption`, `declared_bytes`, `seconds`), the
+  fetch state (`status`, `attempts`, `failure_reason`), what remains after a fetch (`fetched_bytes`, `fetched_mimetype`,
+  `sha256`) and two columns reserved for Batch 2+ (`understanding`, `understanding_kind`). **It never holds the media.**
+  MigrationRunner applies it on the next boot of whatever tree carries it — development sandboxes today; production only
+  if 5.18.76 is ever deployed, and then as an empty table.
+- **`lib/InboundMedia.php`** — one normalised shape for the five media envelopes (`audioMessage`, `imageMessage`,
+  `documentMessage`, `videoMessage`, `stickerMessage`, with the `documentWithCaptionMessage` / ephemeral / view-once
+  wrappers unwrapped), `null` for text; `record()` writes the row with `INSERT OR IGNORE`, so a second pass over the same
+  message changes nothing and returns `null`; video and stickers are recorded as `unsupported` at once.
+- **`lib/MediaPolicy.php`** — every number and every allowed type in one place: `ai_media_enabled` OFF unless set to
+  1/true/yes/on; `ai_media_max_bytes` default **15 MiB**, clamped to 64 KiB–64 MiB; `ai_media_timeout_s` default **20 s**,
+  clamped 3–60; the allow-list per kind (audio: ogg/opus/mpeg/mp3/mp4/aac/amr/wav/webm; image: jpeg/png/webp; document:
+  pdf, Word, Excel, csv, text), so an audio type offered for an image is refused; Batch 1 fetches audio, image and
+  document only.
+- **`lib/MediaBlob.php`** — the fetched bytes in memory with size, type and sha256; `wipe()` forgets the bytes;
+  `describe()` never carries content.
+- **`lib/MediaFetcher.php`** — through the **existing** Evolution client: the new
+  `EvolutionApiService::getBase64FromMediaMessage($channel, $key)` (`POST /chat/getBase64FromMediaMessage/{instance}`,
+  the recorded key, `convertToMp4: false`), the timeout from the client's constructor. **The webhook registration still
+  asks for NO base64 in the payload** (`'base64' => false`, asserted): the bytes are fetched afterwards by the worker,
+  never carried in a request that meets the webhook's 512 KB cap. Order of checks: key complete, kind supported,
+  **announced size within the limit — all before any call**; then Evolution's reported type against the allow-list, a
+  strict base64 decode, the actual size, a sha256. Every refusal is a fixed code with a retryable flag:
+  `missing_identifier`, `unsupported_kind`, `unsupported_mime`, `too_large` (never retried); `fetch_failed` (a 5xx or no
+  connection retried, a 4xx not), `timeout`, `malformed` (retried). Nothing in it writes to disk or logs bytes.
+- **`workers/MediaWorker.php`** + **`run_media_worker.php`** — its own worker, its own lock file (`MediaWorker.lock`,
+  WorkerBase names it after the class) and its own runner, so a slow download can never hold up a text reply and the
+  reply worker's lock never holds up a fetch. Per `ai.media` event: read the row; **the flag OFF → the row is marked
+  `skipped`/`media_disabled`, the event acknowledged, nothing fetched**; a settled row (fetched, understood, unsupported,
+  skipped, dead) → duplicate event, acknowledged, **nothing fetched twice**; else `fetching`, attempts +1, fetch; success →
+  `fetched` with size, type and sha256, the bytes wiped; a transient failure → `failed` with its code and the exception
+  thrown so the EventBus retries with its backoff; a permanent one → `unsupported`/`failed`, acknowledged; **the last
+  attempt gone → `dead` and the conversation marked `needs_human`** — the same signal AiReplyWorker gives when it cannot
+  answer — and **no message is ever sent**. The runner is CLI-only, never `exit()`s (master.php includes it), returns
+  unless `ai_enabled`, and **with `ai_media_enabled` OFF returns after one indexed read** unless an event queued while the
+  flag was on is still pending (then the worker marks it skipped). Its trace goes to `ai_platform.log` as `[MediaWorker]`
+  lines plus `media worker: processed=… failed=… deferred=…`.
+- **`evo_webhook.php`** — one additive step **8c** between the opt-out check and the AI queue: the envelope is normalised;
+  **only if `ai_media_enabled` is on and the message was stored** is the row recorded and an `ai.media` event queued
+  (payload: `media_id`, `conversation_id`, `channel`, `whatsapp_instance`, `wa_message_id`, `kind`, `has_caption`,
+  `received_at` — **no phone and no JID**, those are on the row). The message is stored exactly as before (`[AUDIO]`,
+  `[IMAGE]`, `[DOCUMENT]`, `[VIDEO]` with its type); a caption still goes down the text path and is answered as it always
+  was; the media-only log line says *stored and queued for the media worker* when it was, and is **unchanged** when it was
+  not. The spawn block now starts `run_worker.php` when text was queued and `run_media_worker.php` when media was,
+  **each only when it has work**, with the same PHP-CLI discovery and the same silence when exec is unavailable. The
+  response gains `media_queued`; the log line gains `media=N`. Every anchor the other suites hold on this file is intact.
+- **`cron/master.php`** — a new job `ai_media` every 60 s running `run_media_worker.php` (the guaranteed path, as
+  `ai_reply` is for text), **registered with `'flag' => 'ai_media_enabled'`: a job that exists only while its flag is
+  on.** master.php does not dispatch it and `tools/cron_status.php` does not list it while the flag is off (both read
+  the new attribute the way they read `'gate'`), so **the scheduler's job list is the one it was before this batch, on
+  every install.** The first version registered it ungated and **the existing guard caught it**: `test_notify_schedule_health`
+  §4 pins South Sudan's `cron_status` list to the 5.18.53 tool's, and `ai_media` appeared on it (18/1). Flag-gated, the
+  list is identical again (19/0). One consequence, stated: events queued while the flag was on and still pending after
+  it is turned off are drained only by running `php run_media_worker.php` by hand, which marks their rows `skipped`.
+  **`cron/event_processor.php`** — `ai.media` joins `ai.reply` in the list of types the generic 30 s loop releases
+  rather than acknowledges as unknown (the lesson recorded there).
+- **`tools/set_config.php`** — three new keys: `ai_media_enabled` (bool), `ai_media_max_bytes`, `ai_media_timeout_s`
+  (numbers, **refused outside their range** naming it, so the listing never shows a value the worker is not using).
+- **`tests/fixtures/fake_evo_server.php`** — `POST /chat/getBase64FromMediaMessage/{instance}` recording every call and
+  answering from a test control (`/__test/media`: a deterministic payload of N bytes, type, file name, a hold, an HTTP
+  failure, a raw non-JSON body; optionally per message id). **`manifest.json` 5.18.76; the nine pins.**
+
+**Not changed, deliberately:** `ConversationService` (a wrapped envelope it does not store is normalised but not
+recorded — stated as a limit, not patched sideways), `AiReplyWorker`, `DishNetAiBrain`, `run_worker.php`, the Uganda
+profile, any flag's value, anything under South Sudan's paths or Domain B. **No transcription, vision or extraction;
+no provider; no reply to a media message; the customer still hears nothing about a photo — as today.**
+
+**Proofs — `tests/test_media_foundation.php`, 99/0** (one in-process scenario against the fake Evolution, one with the
+real plugin under `php -S` through `SjSandbox`, both returning facts so a weakened copy can run them too):
+- **A** normalisation of all five envelopes, text → null, a missing key id → an empty id nobody guesses at, the
+  document-with-caption wrapper unwrapped. **B** the policy: defaults, overrides, clamps, junk → default, `enabled()` on
+  twelve inputs, the per-kind allow-list. **C** the record: the table and its UNIQUE index, the second `record()` of one
+  message returns null and adds no row, the row points at the stored placeholder, a video is `unsupported` at once.
+- **D** the fetcher: a valid voice note gives 2048 bytes in memory with **the sha256 of exactly the bytes the fake
+  served** and the right call (instance, key, `convertToMp4` false); bad MIME refused not retried; **an announced size
+  over the limit makes NO call**; an actual size over the limit refused after; 500 retried, 404 not; non-base64 and
+  non-JSON answers `malformed`; no id / no JID / video kind → no call; a timeout classified as `timeout` whether curl or
+  the Uganda request path reported it; **one real Evolution that does not answer → `timeout` in 9.6 s** against a 3 s
+  setting (the client's three connection attempts).
+- **E** the worker: three pending media (voice, photo, PDF) fetched in one run with the right types and hashes; **the
+  worker log names kind, type, size and a hash prefix and never the bytes, the base64 or the JID; a scan of every file
+  under the data directory finds no media, no base64 and no hash — the database row is the only record**; a duplicate
+  event is acknowledged with no second fetch; **the flag OFF at the worker: skipped, acknowledged, nothing fetched**; a
+  500 leaves `failed`/`fetch_failed` with one attempt and an error naming no JID, and **when the retry is due the second
+  attempt fetches it**; the last attempt gone → row and event `dead`, **that conversation `needs_human`, the other
+  untouched**; **with `MediaWorker.lock` held the media worker does not run; with `AiReplyWorker.lock` held it still
+  does**; **nothing was sent to any customer**.
+- **F** the real webhook: **flag OFF — a voice note is accepted and stored as `[AUDIO]`, no row, no event, nothing
+  changes**; ON — `media_queued: 1`, the row pending with the key and the announced facts, pointing at the placeholder,
+  one event naming it, **the payload carrying ids and kind but no phone or JID**; **the same delivery again records
+  nothing twice**; **a captioned photo still queues `ai.reply` with the caption** and is also recorded; a document with its
+  file name; a video stored as `[VIDEO]`, `unsupported`, no event; text → no record; **the flag back OFF → as before**.
+- **G** `run_media_worker.php` over the CLI inside the sandbox: fetches the three recorded media silently with the right
+  hashes, `ai_platform.log` carries the trace and the summary and no bytes or JID, no file under the sandbox holds the
+  media; **flag OFF with nothing pending → one read, nothing written, nothing fetched; `ai_enabled` OFF → nothing**; no
+  WhatsApp message of any kind left the sandbox; **`tools/cron_status.php` in the sandbox lists `ai_reply` and not
+  `ai_media` while the flag is off, and both once it is on.**
+- **H** wiring: event_processor releases `ai.media`; master.php registers the job behind its flag and skips a flagged
+  job whose flag is off; the two runners share no worker; the runner
+  is CLI-only and never exits; the webhook records only behind the flag and spawns each runner only when it has work;
+  the registration still says `base64: false`; set_config manages the three keys and **refuses `ai_media_timeout_s 2`
+  naming the range 3–60**; version 5.18.76; migration 085 additive.
+- **I — six weakened copies, each caught** by re-running the scenario that guards it against the copy (the test re-enters
+  itself as a driver): the allow-list always saying yes (bad MIME accepted); the announced-size check removed (a call is
+  made); **the worker ignoring `ai_media_enabled` (the row is fetched)**; **the fetcher keeping the bytes on disk (the
+  retention scan finds them)**; the record no longer ignoring a duplicate (it throws); **the webhook recording with the
+  flag OFF (a row appears)**. Control: the real tree driven the same way trips none of them.
+- **Neighbours in the full run, all 0 failed:** `test_media_foundation` 102 · `test_notify_schedule_health` 19 · `test_lead_path_batch0` 25 · `test_bot_stays_awake` 59 · `test_human_reply_visible` 9 · `test_human_takes_over` 16 · `test_location_pin` 79 · `test_staff_whatsapp` 50 · `test_evolution_and_webhook` 55 · `test_wa_webhook_guard` 13 · `test_wa_webhook_url` 18 · `test_cron_no_exit` 10 · `test_cron_keepalive_order` 8 · `test_cron_status_lateness` 17 · `test_config_one_truth` 16 · `test_portal_handoff` 62 · `test_ucrm_lead_sync` 62 · `test_job_records_race` 46 · `test_notify_kyc_race` 14 · `test_partner_otp_delivery` 68 · `test_quote_cron_log` 10 · `test_plugin_config` 48 · `test_job_photos` 72 · `test_dist_isolation` 39.
+- **Full suite:** **`tests/run.sh` 272 files, 12,457 passed, 0 failed, 0 skipped** (was 271 / 12,355 at 5.18.75: the new test's 102; nothing else moved). **Second run: 272 / 12,457 / 0 again**, on the same code, start to finish.
+- `git diff --check` clean; the diff's only phone-shaped strings are the synthetic `2567720003xx` fixture numbers the
+  existing tests also use; no credential-shaped value; **no file under Domain B (`dishnet-mikrotik-control-plane/`)
+  touched**; South Sudan's suites are part of the full run and its behaviour is untouched (the flag is unset there too).
+
+**Production impact — none today, because nothing is deployed and the flag is unset everywhere.** If 5.18.76 were ever
+installed with the flag still OFF: the webhook behaves as before (placeholder stored, nothing recorded, no spawn); **no
+new scheduled job runs and none is listed** (the job registers only while the flag is on); the settings listing shows
+three more keys; `wa_media` is created empty. **5.18.76 sits on top of 5.18.75 (Batch 0), so any deploy of it carries Batch 0 as well —
+the operator's rule stands: verify the production values of `ai_lead_capture` and `ai_crm_lead_sync` first and treat both
+as NOT APPROVED for activation.** With the flag ON (not approved): each voice note, photo or document is recorded, fetched
+into memory by the media worker, checked and reduced to size, type and sha256 — and still **nothing is answered**.
+
+**Rollback:** code only; the flag off restores today's behaviour without a deploy; the empty table stays, harmless.
+**External side effects in development:** none — the fake Evolution only. **Database changes:** development sandboxes
+only (deleted by the tests). **Deployment requirement:** a release commit cut on the live 5.18.74 (`db18ad9`) carrying
+5.18.75 + 5.18.76, its deploy script and rehearsal — **not cut, not pushed, awaiting the operator's instruction.**
+**STOPPED here; Batch 2 (voice → transcript → brain) waits for explicit approval.**

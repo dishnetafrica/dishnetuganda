@@ -235,7 +235,7 @@ foreach ($events as $event) {
                 // silently drop a customer's message before AiReplyWorker's
                 // 60s run ever saw it. Release the claim instead, exactly as
                 // WorkerBase::consumeFiltered() releases unmatched events.
-                if (in_array($type, ['ai.reply'], true)) {
+                if (in_array($type, ['ai.reply', 'ai.media'], true)) {
                     $pdo->prepare("UPDATE events SET status='pending', locked_by=NULL, locked_at=NULL WHERE id=?")
                         ->execute([$eid]);
                     break;

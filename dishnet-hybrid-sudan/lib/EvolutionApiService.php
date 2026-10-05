@@ -487,6 +487,31 @@ class EvolutionApiService
     }
 
     /**
+     * The bytes of a media message a customer sent, from Evolution (v2: POST /chat/getBase64FromMediaMessage/{instance}).
+     *
+     * Batch 1 of the AI communication layer (docs/55 §9). The webhook stays registered with base64 OFF — a payload
+     * carrying the file would meet its 512 KB body cap — so the media worker asks for the file afterwards, by the
+     * message key the webhook recorded. The answer carries `base64`, `mimetype`, `fileName` and `size`; MediaFetcher
+     * validates it. convertToMp4 is always false: a voice note is wanted as sent. The timeout is the constructor's.
+     *
+     * @param array $key remoteJid, id, fromMe — the message key, exactly as Evolution delivered it
+     */
+    public function getBase64FromMediaMessage(string $channel, array $key): array
+    {
+        $instance = $this->requireInstance($channel);
+        if ($instance === '') return $this->fail("No instance for channel '{$channel}'");
+
+        return $this->request('POST', '/chat/getBase64FromMediaMessage/' . rawurlencode($instance), [
+            'message' => ['key' => [
+                'remoteJid' => (string)($key['remoteJid'] ?? ''),
+                'fromMe'    => !empty($key['fromMe']),
+                'id'        => (string)($key['id'] ?? ''),
+            ]],
+            'convertToMp4' => false,
+        ]);
+    }
+
+    /**
      * Typing indicator. Worth sending before an AI reply — the model takes a
      * few seconds and silence reads as being ignored.
      */

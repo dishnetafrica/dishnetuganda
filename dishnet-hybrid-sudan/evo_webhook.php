@@ -44,6 +44,8 @@ require_once __DIR__ . '/lib/EvoWebhookGuard.php';
 require_once __DIR__ . '/lib/ConversationService.php';
 require_once __DIR__ . '/lib/ContactOptOut.php';
 require_once __DIR__ . '/lib/WaLocation.php';
+require_once __DIR__ . '/lib/MediaPolicy.php';
+require_once __DIR__ . '/lib/InboundMedia.php';
 
 /** Always answer Evolution quickly and in a shape it will not retry on. */
 function evoRespond(int $code, string $outcome, array $extra = []): void
@@ -116,6 +118,7 @@ $messages = isset($data['key']) ? [$data] : (is_array($data) ? array_values($dat
 
 $queued  = 0;
 $skipped = 0;
+$mediaQueued = 0;   // Batch 1 (docs/55 §9): media messages recorded and queued for the media worker
 $_evoJ8  = null;   // 5.18.50 (docs/44 J8): Uganda's active staff numbers, read once per request when first needed
 $bus     = new EventBus($pdo);
 $convSvc = new ConversationService($dataDir, $pdo);
@@ -327,6 +330,53 @@ foreach ($messages as $msg) {
         }
     }
 
+    // ── 8c. Media — Batch 1 of the AI communication layer (docs/55 §9) ──
+    // A voice note, photo or document. Stored above exactly as before (a
+    // placeholder body and its type). With ai_media_enabled ON it is also
+    // recorded in wa_media — the message key Evolution needs to hand the file
+    // over, and what the webhook announced about it — and the media worker is
+    // queued to fetch and validate it in its own process. The bytes are never
+    // fetched here. With the flag OFF nothing below runs and nothing changes.
+    // A caption is still answered by the text path, as it always was.
+    $media      = InboundMedia::fromEvoMessage($msg);
+    $mediaEvent = false;
+    if ($media !== null && MediaPolicy::enabled($config)) {
+        if (!$convId) {
+            error_log(sprintf('[evo_webhook] %s message was not stored — not recorded for the media worker (%s)',
+                $media['kind'], $channel));
+        } else {
+            try {
+                $mediaId = InboundMedia::record($pdo, (int)$convId, $media, $instance, $channel, $messageId);
+                if ($mediaId !== null && MediaPolicy::kindSupported($media['kind'])) {
+                    $bus->emit(
+                        'ai.media',
+                        'conversation',
+                        (int)$convId,
+                        [
+                            'media_id'          => $mediaId,
+                            'conversation_id'   => (int)$convId,
+                            'channel'           => $channel,
+                            'whatsapp_instance' => $instance,
+                            'wa_message_id'     => $messageId,
+                            'kind'              => $media['kind'],
+                            'has_caption'       => $media['caption'] !== '',
+                            'received_at'       => gmdate('c'),
+                        ],
+                        3,
+                        'evo_webhook'
+                    );
+                    $mediaQueued++;
+                    $mediaEvent = true;
+                } elseif ($mediaId !== null) {
+                    error_log(sprintf('[evo_webhook] %s message recorded as unsupported — not fetched (%s)',
+                        $media['kind'], $channel));
+                }
+            } catch (\Throwable $e) {
+                error_log('[evo_webhook] media record failed: ' . $e->getMessage());
+            }
+        }
+    }
+
     // ── 9. Queue for the AI ──────────────────────────────────────────────
     // Media-only messages are stored and surfaced to staff but not sent to the
     // AI, which cannot act on them yet. A location pin is no longer one of
@@ -334,8 +384,13 @@ foreach ($messages as $msg) {
     // customer who sends one and hears nothing is the same failure in a
     // smaller coat. So it is logged rather than counted silently.
     if ($text === '') {
-        error_log(sprintf('[evo_webhook] no text to answer — %s message stored, AI not queued (%s)',
-            (string)(array_keys((array)($msg['message'] ?? []))[0] ?? 'unknown'), $channel));
+        if ($mediaEvent) {
+            error_log(sprintf('[evo_webhook] no text to answer — %s message stored and queued for the media worker (%s)',
+                $media['kind'], $channel));
+        } else {
+            error_log(sprintf('[evo_webhook] no text to answer — %s message stored, AI not queued (%s)',
+                (string)(array_keys((array)($msg['message'] ?? []))[0] ?? 'unknown'), $channel));
+        }
         $skipped++;
         continue;
     }
@@ -369,12 +424,19 @@ foreach ($messages as $msg) {
 // Kick a worker now so the customer is not waiting for the next scheduled
 // run. Best-effort: if exec() is unavailable in this container, main.php
 // picks the work up within a minute instead. Nothing is lost either way.
-if ($queued > 0) {
-    $worker = __DIR__ . '/run_worker.php';
+//
+// Two workers, two processes (Batch 1, docs/55 §9): run_worker.php for the
+// text queue and run_media_worker.php for the media queue, each only when it
+// has work. They never share a process or a lock, so a slow download cannot
+// delay an answer.
+$spawn = [];
+if ($queued > 0)      $spawn[] = __DIR__ . '/run_worker.php';
+if ($mediaQueued > 0) $spawn[] = __DIR__ . '/run_media_worker.php';
+if ($spawn !== []) {
     $execOk = function_exists('exec')
         && !in_array('exec', array_map('trim', explode(',', (string)ini_get('disable_functions'))), true);
 
-    if (is_file($worker) && $execOk) {
+    if ($execOk) {
         // PHP_BINARY is NOT the CLI binary here. Under php-fpm it is the FPM
         // master -- running "php-fpm run_worker.php" does nothing, and
         // run_worker.php refuses to start unless the SAPI is cli, so it would
@@ -394,13 +456,17 @@ if ($queued > 0) {
             if (@is_executable($c)) { $php = $c; break; }
         }
 
-        if ($php !== '') {
-            @exec(escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' > /dev/null 2>&1 &');
-        } else {
-            // Worth saying out loud: without this the customer waits for cron.
-            error_log('[evo_webhook] no PHP CLI binary found — replies will wait for the '
-                    . 'scheduled run instead of being immediate. Looked in: '
-                    . implode(', ', $candidates));
+        foreach ($spawn as $worker) {
+            if (!is_file($worker)) continue;
+            if ($php !== '') {
+                @exec(escapeshellarg($php) . ' ' . escapeshellarg($worker) . ' > /dev/null 2>&1 &');
+            } else {
+                // Worth saying out loud: without this the customer waits for cron.
+                error_log('[evo_webhook] no PHP CLI binary found — replies will wait for the '
+                        . 'scheduled run instead of being immediate. Looked in: '
+                        . implode(', ', $candidates));
+                break;   // said once
+            }
         }
     }
 }
@@ -408,8 +474,8 @@ if ($queued > 0) {
 // Opportunistic housekeeping, roughly 1 request in 200.
 if (random_int(1, 200) === 1) $guard->prune();
 
-error_log(EvoWebhookGuard::safeLogLine($event, $instance, "queued={$queued} skipped={$skipped}"));
-evoRespond(200, 'accepted', ['channel' => $channel, 'queued' => $queued, 'skipped' => $skipped]);
+error_log(EvoWebhookGuard::safeLogLine($event, $instance, "queued={$queued} skipped={$skipped} media={$mediaQueued}"));
+evoRespond(200, 'accepted', ['channel' => $channel, 'queued' => $queued, 'skipped' => $skipped, 'media_queued' => $mediaQueued]);
 
 
 /**

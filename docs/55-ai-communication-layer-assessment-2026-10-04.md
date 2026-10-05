@@ -263,7 +263,7 @@ every new path is dark unless its flag is set; South Sudan is unchanged while it
 | Batch | Scope | Flag / switch | Tests |
 |---|---|---|---|
 | 0 | **BUILT (5.18.75), not deployed.** Lead-path defects (a) (b) (c) fixed; `tests/test_lead_path_batch0.php` drives a LEAD marker to a `leads` row with the real pin, a `crm.lead.sync` event and the uCRM worker reading `_payload`; four weakened copies caught | existing `ai_lead_capture`, `ai_crm_lead_sync` — **both ON in Uganda's production listing**; the operator decides before any deploy | worker-level, 25 assertions |
-| 1 | `wa_media` table + InboundMessage normalisation + MediaFetcher (limits, timeouts, no retention, scrubbed logs) + idempotency | `ai_media_enabled` (default off) | fake Evolution, oversized, bad MIME, timeout, duplicate webhook |
+| 1 | **BUILT (5.18.76), not deployed, dark.** `wa_media` (migration 085) + `InboundMedia` normalisation + `MediaPolicy` + `MediaFetcher` (Evolution's `getBase64FromMediaMessage`, announced size refused before any call, allow-list per kind, strict decode, actual size, sha256, in memory only) + `MediaWorker` on its own lock and runner (`run_media_worker.php`, `ai_media` job) + the webhook's flag-gated branch; `tests/test_media_foundation.php` 99/0, six weakened copies caught — see `docs/07`, 5 Oct, "Batch 1" | `ai_media_enabled` (default off — **stays off**), `ai_media_max_bytes`, `ai_media_timeout_s` | fake Evolution media endpoint; OFF unchanged, ON recorded + fetched, duplicate delivery, caption still answered as text, unsupported kind, oversized (announced and actual), bad MIME, timeout, 500/404, malformed, retry, dead → `needs_human`, no disk retention, scrubbed logs, two locks |
 | 2 | Voice → transcript → brain | `ai_media_voice` | fake STT; transcript labelled; same brain path as text |
 | 3 | Image → description → brain; payment screenshot = evidence, escalation, never a financial write | `ai_media_image` | fixtures (redacted), human-review rule |
 | 4 | Document → extraction → brain; holding line when unreadable; no financial/contract action | `ai_media_document` | PDF/DOCX/XLSX/CSV fixtures, oversized, malformed |
@@ -278,7 +278,8 @@ with the deploy/rehearsal/rollback pattern used since 5.18.66.
 ## 11. Configuration, flags, observability — to be confirmed per batch
 
 Keys (all default off/empty): `ai_media_enabled`, `ai_media_voice`, `ai_media_image`, `ai_media_document`,
-`ai_media_max_bytes`, `ai_media_timeout_s`, `ai_lead_state`, `email_followup_drafts`, `marketing_weekly_draft`,
+`ai_media_max_bytes`, `ai_media_timeout_s` (the first and the last two exist since Batch 1, managed by `tools/set_config.php`;
+the limits are refused outside their range rather than clamped silently), `ai_lead_state`, `email_followup_drafts`, `marketing_weekly_draft`,
 `marketing_approval_email`. Secrets stay on the uCRM Configuration screen. Logging: one line per step in
 `ai_platform.log` with ids and sizes only — never media, tokens, keys, full payment data.
 
@@ -286,9 +287,9 @@ Keys (all default off/empty): `ai_media_enabled`, `ai_media_voice`, `ai_media_im
 
 | Capability | Status today |
 |---|---|
-| VOICE | NOT READY — no media path |
-| IMAGE | NOT READY |
-| DOCUMENT | NOT READY |
+| VOICE | NOT READY — the media foundation is built dark (Batch 1, 5.18.76: a voice note is recorded and fetched into memory with `ai_media_enabled` on); no transcript, no reply (Batch 2) |
+| IMAGE | NOT READY — recorded and fetched by the same foundation (JPEG/PNG/WebP); no description, no reply (Batch 3) |
+| DOCUMENT | NOT READY — recorded and fetched by the same foundation (PDF, Word, Excel, CSV, text); no extraction, no reply (Batch 4) |
 | WHATSAPP AUTO-FOLLOWUP | PARTIAL — engine exists (silence-triggered, two attempts, approval screen, auto-send flag); event triggers and the four gaps missing |
 | EMAIL FOLLOW-UP | PARTIAL — draft store and Drafts-folder approval exist for inbound mail; no lead-tied drafting |
 | WEEKLY MARKETING DRAFT | NOT READY — nothing exists |
