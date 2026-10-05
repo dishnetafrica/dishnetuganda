@@ -47,7 +47,7 @@ require_once dirname(__DIR__) . '/lib/ConversationService.php';
  *
  * Batch 4 (docs/55 §9, docs/58, Slice 4a): a DOCUMENT goes the same way, only while ai_media_document is on as well, and
  * entirely inside this process — no library, no provider, no byte leaving the server. DocumentExtraction sniffs the content,
- * reads a Word, Excel, CSV or text file within every cap (a PDF yields its facts only in this slice), classifies the text with
+ * reads a Word, Excel, CSV, text or PDF file within every cap (PDF text since Slice 4b; a scanned PDF still has no OCR), classifies the text with
  * deterministic rules that FAIL CLOSED, and then EITHER queues the one ai.reply event (a harmless document, seen whole) OR
  * records a human-only class — payment evidence, a statement, an invoice, a contract, a quotation, an identity document, a
  * credential — and queues nothing: the worker hands the conversation to a person. Anything uncertain is a person too. No

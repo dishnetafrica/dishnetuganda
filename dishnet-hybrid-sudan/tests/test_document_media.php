@@ -8,8 +8,9 @@ declare(strict_types=1);
  * through the EXISTING assistant (general text, a spreadsheet — seen whole, no sensitive signal) OR becomes a record and a
  * person's job (payment evidence, a statement, an invoice, a contract, a quotation, an identity document, a credential) OR a
  * reason and a person's job (a refusal, or a classification that could not be made safely). Only while ai_media_enabled AND
- * ai_media_document are on, and they are on nowhere. A PDF yields its facts only in this slice (D-1); a scanned document has no
- * OCR (D-2). The two D-11 wrapper fixes are flag-independent and proved here too.
+ * ai_media_document are on, and they are on nowhere. A PDF's text layer is read in this process since Slice 4b (D-1 = P-1;
+ * tests/test_document_pdf.php proves the reader); a scanned document has no OCR (D-2). The two D-11 wrapper fixes are
+ * flag-independent and proved here too.
  *
  * Two scenarios return FACTS (no asserting inside): `core`, in-process against the fake Evolution and the fake uCRM with the
  * deterministic FakeDocumentOcr injected and a fake brain (the real marker parser) on the reply worker; `cli`, the real plugin
@@ -308,10 +309,19 @@ function vd_core(string $root, int $evoPort, int $ucrmPort): array
                           'statement_over_payment' => DocumentClassifier::classify(VD_STATEMENT, 'txt', [], true)['class'],
                           'invoice_over_payment' => DocumentClassifier::classify(implode(' ', VD_INVOICE) . ' pay by bank transfer', 'docx', [], true)['class']];
 
-    // ── PDFs in this slice: facts only — a text layer is not read (D-1), a scan has no OCR (D-2) ─
-    $tpt = $probe('VD-PDFT', '256772000840', vd_pdf('text', 'Hello from a text PDF'), ['mime' => 'application/pdf', 'fileName' => 'letter.pdf']);
-    $f['t_pdf_text'] = ['row' => $tpt['row'], 'replies_added' => $tpt['replies_added'], 'state' => $tpt['state'], 'holding' => $tpt['holding'], 'esc_reason' => $tpt['esc']['reason'],
-                        'expected_reason' => DocumentExtraction::handoverReason('failed', 'pdf_not_read', '1 page with a text layer'), 'ocr_calls_added' => $tpt['ocr_calls_added']];
+    // ── PDFs: the text layer is read here since Slice 4b (D-1 = P-1); a scan has no OCR (D-2) ─────
+    $pdfText = vd_pdf('text', 'Hello from a text PDF');
+    $tpt = $probe('VD-PDFT', '256772000840', $pdfText, ['mime' => 'application/pdf', 'fileName' => 'letter.pdf']);
+    $lrp = $lastReply();
+    $f['t_pdf_text'] = ['row' => $tpt['row'], 'replies_added' => $tpt['replies_added'], 'state' => $tpt['state'], 'holding' => $tpt['holding'], 'ocr_calls_added' => $tpt['ocr_calls_added'],
+                        'label_ok' => strpos((string)($lrp['p']['message'] ?? ''), $L . ' — PDF, 1 page read of 1]') === 0, 'has_text' => strpos((string)($lrp['p']['message'] ?? ''), 'Hello from a text PDF') !== false,
+                        'document' => $lrp['p']['document'] ?? null, 'origin' => $lrp['p']['origin'] ?? null,
+                        'payload_has_pdf_bytes' => strpos((string)($lrp['payload'] ?? ''), '%PDF') !== false || strpos((string)($lrp['payload'] ?? ''), base64_encode(substr($pdfText, 0, 48))) !== false];
+    [$rwp] = $mkReply('Thank you for the letter.'); $run($rwp);
+    // a PDF with a font and no text at all: a person, told so — never a guess, never the assistant
+    $tpn = $probe('VD-PDFN', '256772000846', vd_pdfx(['pages' => [['lines' => []]]]), ['mime' => 'application/pdf', 'fileName' => 'blank.pdf']);
+    $f['t_pdf_no_text'] = ['row' => $tpn['row'], 'replies_added' => $tpn['replies_added'], 'state' => $tpn['state'], 'holding' => $tpn['holding'], 'esc_reason' => $tpn['esc']['reason'],
+                           'expected_reason' => DocumentExtraction::handoverReason('failed', 'pdf_no_text', '1 page, a text layer that yielded no text'), 'ocr_calls_added' => $tpn['ocr_calls_added']];
     $scanned = vd_pdf('scanned');
     $tps = $probe('VD-PDFS', '256772000841', $scanned, ['mime' => 'application/pdf', 'fileName' => 'scan.pdf']);
     $f['t_pdf_scanned'] = ['row' => $tps['row'], 'replies_added' => $tps['replies_added'], 'state' => $tps['state'], 'holding' => $tps['holding'], 'esc_reason' => $tps['esc']['reason'],
@@ -552,6 +562,20 @@ function vd_cli(string $root): array
     $f['c7'] = ['webhook' => ['queued' => $r[2]['queued'] ?? null, 'media_queued' => $r[2]['media_queued'] ?? null], 'msg' => $msg('VD-W-6'), 'row' => vd_brief(vd_row($pdo, 'VD-W-6'))];
     $f['disk'] = array_merge(vd_scan($s->data, [base64_encode($generalDocx), '7G4K2Q9']), vd_scan($s->plug, [base64_encode($generalDocx), '7G4K2Q9']));
     $f['cs_jobs'] = (function () use ($s): array { [$rc, $out] = $s->run('tools/cron_status.php', ['--all']); return ['rc' => $rc, 'ai_media' => strpos($out, 'ai_media') !== false]; })();
+    // C8 — the runner's memory floor, through the REAL runner under a 64M CLI limit (docs/58 §4, §7; the Slice 4b evidence gate): a
+    // 12 MiB text file needs usage + 48 MiB + 16 MiB under DocumentExtraction's budget rule, which 64M cannot hold. With the raise
+    // (run_media_worker.php lifts a CLI limit below 256M to 256M) the budget passes and the file is READ — to the 1 MiB text cap,
+    // so classification_incomplete, a person; WITHOUT the raise the budget refuses it as too_large_document before a byte is read.
+    // Either way a person; the REASON tells the two apart. The fake builds the payload on its side, so no large body ships here.
+    $flag(['ai_media_enabled' => '1', 'ai_media_document' => '1', 'ai_media_max_bytes' => 16 * 1024 * 1024, 'ai_media_document_max_bytes' => 14 * 1024 * 1024]);
+    $r = $post(vd_envelope('document', 'VD-W-7', '256772000919', ['mimetype' => 'text/plain', 'fileName' => 'big.txt', 'bytes' => 12 * 1024 * 1024]));
+    $s->http('POST', "{$s->evo}/__test/media", ['for_id' => 'VD-W-7', 'bytes' => 12 * 1024 * 1024, 'mimetype' => 'text/plain', 'fileName' => 'big.txt']);
+    $out8 = (string)shell_exec('cd ' . escapeshellarg($s->plug) . ' && DN_DATA_DIR=' . escapeshellarg($s->data) . ' DN_VAULT_FILE=' . escapeshellarg($s->vault)
+                               . ' php -d memory_limit=64M run_media_worker.php 2>&1');
+    $f['c8'] = ['webhook' => ['queued' => $r[2]['queued'] ?? null, 'media_queued' => $r[2]['media_queued'] ?? null], 'row' => vd_brief(vd_row($pdo, 'VD-W-7')),
+                'fatal' => stripos($out8, 'Allowed memory size') !== false || stripos($out8, 'Fatal') !== false, 'out_len' => strlen($out8),
+                'state' => $stateOf('256772000919'), 'alert_incomplete' => $alertsWith('classification_incomplete'), 'alert_budget' => $alertsWith('would not fit the memory budget')];
+    $s->http('GET', "{$s->evo}/__test/reset");
     $s->stop();
     return $f;
 }
@@ -689,10 +713,15 @@ is_(($tcl['uncertain_by_name']['route'] ?? '') === 'human' && ($tcl['uncertain_b
     && ($tcl['incomplete']['reason'] ?? '') === 'classification_incomplete' && ($tcl['empty']['reason'] ?? '') === 'empty_extraction' && $tcl['statement_over_payment'] === 'statement' && $tcl['invoice_over_payment'] === 'invoice',
     'the classifier: a file named "receipt" is a signal; a harmless plan is general; unseen text is incomplete; nothing is empty; a decisive statement or invoice phrase outranks the payment words', j($tcl));
 
-echo "\n11. PDFs in this slice: facts only — a text layer is not read (D-1), a scan has no OCR (D-2), the empty boundary works\n";
+echo "\n11. PDFs: the text layer is read (D-1 = P-1, Slice 4b), a layer with no text is a person, a scan has no OCR (D-2), the empty boundary works\n";
 $tpt = $c['t_pdf_text'];
-is_($tpt['row']['status'] === 'failed' && $tpt['row']['reason'] === 'pdf_not_read' && $tpt['replies_added'] === 0 && $tpt['state'] === 'needs_human' && $tpt['holding'] === 1 && $tpt['esc_reason'] === $tpt['expected_reason'] && $tpt['ocr_calls_added'] === 0,
-    'a PDF with a text layer: pdf_not_read, a person told it has 1 page with a text layer, no OCR call, no event', j($tpt));
+is_($tpt['row']['status'] === 'understood' && $tpt['row']['kind'] === 'extraction' && $tpt['replies_added'] === 1 && $tpt['state'] !== 'needs_human' && $tpt['holding'] === 0 && $tpt['ocr_calls_added'] === 0
+    && $tpt['label_ok'] && $tpt['has_text'] && ($tpt['document']['kind'] ?? '') === 'pdf' && ($tpt['document']['classification'] ?? '') === 'general' && ($tpt['document']['pages_read'] ?? 0) === 1 && $tpt['origin'] === 'document',
+    'a PDF with a text layer is READ in this process: one turn labelled "PDF, 1 page read of 1" carrying its text, class general, origin document, no OCR call', j($tpt));
+is_($tpt['payload_has_pdf_bytes'] === false, 'the event carries the extracted text and never the PDF\'s bytes or their base64', j($tpt['payload_has_pdf_bytes']));
+$tpn = $c['t_pdf_no_text'];
+is_($tpn['row']['status'] === 'failed' && $tpn['row']['reason'] === 'pdf_no_text' && $tpn['replies_added'] === 0 && $tpn['state'] === 'needs_human' && $tpn['holding'] === 1 && $tpn['esc_reason'] === $tpn['expected_reason'] && $tpn['ocr_calls_added'] === 0,
+    'a PDF whose text layer yields nothing: pdf_no_text, a person told so word for word, the holding line once, no OCR call, no event', j($tpn));
 $tps = $c['t_pdf_scanned'];
 is_($tps['row']['status'] === 'failed' && $tps['row']['reason'] === 'provider_missing' && $tps['replies_added'] === 0 && $tps['state'] === 'needs_human' && $tps['esc_reason'] === $tps['expected_reason'] && $tps['ocr_calls_added'] === 0,
     'a scanned PDF with no provider: provider_missing, a person told it is scanned, no event', j($tps));
@@ -803,6 +832,10 @@ is_(($c7['webhook']['queued'] ?? -1) === 0 && ($c7['webhook']['media_queued'] ??
     'ephemeral → documentWithCaption → document: stored with its caption and recorded for the worker', j($c7));
 is_($w['disk'] === [], 'no file under the sandbox holds a document, its base64 or a transaction reference', j($w['disk']));
 is_(($w['cs_jobs']['rc'] ?? 1) === 0 && $w['cs_jobs']['ai_media'] === true, 'cron_status lists the ai_media job while the media flag is on (unchanged since Batch 1)', j($w['cs_jobs']));
+$c8 = $w['c8'];
+is_(($c8['webhook']['media_queued'] ?? 0) === 1 && $c8['fatal'] === false && $c8['row']['status'] === 'failed' && $c8['row']['reason'] === 'classification_incomplete' && $c8['state'] === 'needs_human'
+    && $c8['alert_incomplete'] === 1 && $c8['alert_budget'] === 0,
+    'the runner started under a 64M CLI limit raises it to 256M: a 12 MiB text file passes the memory budget and is READ to the text cap (classification_incomplete, a person) — never refused for memory, never a fatal', j($c8));
 
 echo "\nD. Wiring\n";
 $mwCode = vd_codeOf($root . '/workers/MediaWorker.php'); $deCode = vd_codeOf($root . '/lib/DocumentExtraction.php'); $dcCode = vd_codeOf($root . '/lib/DocumentClassifier.php');
@@ -832,7 +865,7 @@ $scOut2 = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . 
 is_(strpos((string)$scOut2, 'between 1 and 200') !== false && strpos((string)$scOut2, 'rc=1') !== false, 'the tool refuses a page cap outside its range rather than clamping it', (string)$scOut2);
 $ve = (string)file_get_contents($root . '/tests/validate_environment.php');
 is_(strpos($ve, "'zlib' => 'gzinflate', 'xmlreader' => 'XMLReader', 'iconv' => 'iconv'") !== false, 'validate_environment reports the three optional extensions the readers need');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.79', 'manifest version is 5.18.79');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.80', 'manifest version is 5.18.80');
 
 echo "\n19. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [
@@ -887,20 +920,26 @@ $mutants = [
      'the D-11 fix is gone (a wrapped captioned document is dropped again)', function (array $m): bool { return isset($m['t_d11']) && !isset($m['t_d11']['stored']['w1']); }],
     ['lib/InboundMedia.php', "        for (\$depth = 0; \$depth < self::MAX_WRAP_DEPTH; \$depth++) {", "        for (\$depth = 0; \$depth < 1; \$depth++) {",
      'only one wrapper level is unwrapped again', function (array $m): bool { return isset($m['t_d11']) && !isset($m['t_d11']['inbound']['w2']); }],
+    ['run_media_worker.php', "if (\$mediaMemoryLimit > 0 && \$mediaMemoryLimit < 256 * 1024 * 1024) @ini_set('memory_limit', '256M');", "// the raise removed",
+     'the runner no longer raises a low CLI memory limit (a 12 MiB file is refused for memory under 64M)', function (array $m): bool { return ($m['c8']['row']['reason'] ?? '') === 'too_large_document' || ($m['c8']['alert_budget'] ?? 0) >= 1; }, 'cli'],
 ];
-$keysOfInterest = ['t17_policy' => 1, 't16' => 1, 't_refusals' => 1, 't_nested' => 1, 't_pdf_encrypted' => 1, 't12' => 1, 't12_words' => 1, 't_credential' => 1, 't_identity' => 1, 't1' => 1, 't3' => 1, 't4' => 1, 't_uncertain' => 1, 't15' => 1, 't_guard' => 1, 't_incomplete' => 1, 't_d11' => 1];
-foreach ($mutants as [$rel, $old, $new, $what, $flipped]) {
+$keysOfInterest = ['t17_policy' => 1, 't16' => 1, 't_refusals' => 1, 't_nested' => 1, 't_pdf_encrypted' => 1, 't_pdf_text' => 1, 't_pdf_no_text' => 1, 'c8' => 1, 't12' => 1, 't12_words' => 1, 't_credential' => 1, 't_identity' => 1, 't1' => 1, 't3' => 1, 't4' => 1, 't_uncertain' => 1, 't15' => 1, 't_guard' => 1, 't_incomplete' => 1, 't_d11' => 1];
+foreach ($mutants as $mut) {
+    [$rel, $old, $new, $what, $flipped] = $mut;
+    $drv = $mut[5] ?? 'core';   // a sixth element names the driver whose facts the detector reads: 'cli' for the real runner
     [$copy, $n] = sj_weakened_copy($root, $rel, $old, $new);
     is_($n === 1, "copy — the anchor in {$rel} is unique, so the copy is weakened ({$what})", 'occurrences: ' . $n);
-    $out = (string)shell_exec('DN_T_EVO_PORT=' . (int)$evoPort . ' DN_T_UCRM_PORT=' . (int)$ucrmPort . ' php ' . escapeshellarg($copy . '/tests/test_document_media.php') . ' --driver=core 2>/dev/null');
+    $out = (string)shell_exec('DN_T_EVO_PORT=' . (int)$evoPort . ' DN_T_UCRM_PORT=' . (int)$ucrmPort . ' php ' . escapeshellarg($copy . '/tests/test_document_media.php') . ' --driver=' . $drv . ' 2>/dev/null');
     $m = json_decode((string)strrchr("\n" . trim($out), "\n"), true) ?: [];
     is_($n === 1 && $m !== [] && $flipped($m), "caught — {$what}", $m === [] ? 'driver output: ' . substr($out, 0, 400) : j(array_intersect_key($m, $keysOfInterest)));
     exec('rm -rf ' . escapeshellarg($copy));
 }
 $out = (string)shell_exec('DN_T_EVO_PORT=' . (int)$evoPort . ' DN_T_UCRM_PORT=' . (int)$ucrmPort . ' php ' . escapeshellarg($root . '/tests/test_document_media.php') . ' --driver=core 2>/dev/null');
 $m = json_decode((string)strrchr("\n" . trim($out), "\n"), true) ?: [];
-$flips = 0; foreach ($mutants as [$rel, $old, $new, $what, $flipped]) { if ($m !== [] && $flipped($m)) $flips++; }
-is_($m !== [] && $flips === 0, 'control: the real tree, driven the same way, trips none of the ' . count($mutants) . ' catches', j(['facts' => count($m), 'flips' => $flips]));
+$outCli = (string)shell_exec('php ' . escapeshellarg($root . '/tests/test_document_media.php') . ' --driver=cli 2>/dev/null');
+$mCli = json_decode((string)strrchr("\n" . trim($outCli), "\n"), true) ?: [];
+$flips = 0; foreach ($mutants as $mut) { $facts = ($mut[5] ?? 'core') === 'cli' ? $mCli : $m; if ($facts !== [] && $mut[4]($facts)) $flips++; }
+is_($m !== [] && $mCli !== [] && $flips === 0, 'control: the real tree, driven the same way (core and cli), trips none of the ' . count($mutants) . ' catches', j(['facts' => count($m), 'cli_facts' => count($mCli), 'flips' => $flips]));
 
 foreach ([$evoSrv, $ucrmSrv] as $p) if (is_resource($p)) { proc_terminate($p); proc_close($p); }
 array_map('unlink', glob(sys_get_temp_dir() . '/fake_evo_state_*.json') ?: []);

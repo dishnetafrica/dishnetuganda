@@ -147,7 +147,7 @@ changes a message that is stored correctly today.
 
 | Announced / sniffed | In Batch 4 | How | Not supported, and why |
 |---|---|---|---|
-| **PDF** (`%PDF-` header) | **facts** in the first slice: encrypted? page count; a text layer or image-only pages? Then a person, with those facts. **Text layer** only after decision D-1 (§13). **Scanned pages** only after D-2 (OCR). | in-process | — |
+| **PDF** (`%PDF-` header) | **facts** in the first slice: encrypted? page count; a text layer or image-only pages? Then a person, with those facts. **Text layer**: read in this process since Slice 4b (D-1 = P-1, §20) — FlateDecode, object streams, simple fonts and ToUnicode CMaps; anything else, and a layer that yields no text, is a person. **Scanned pages** only after D-2 (OCR). | in-process | — |
 | **Word `.docx`** (a zip with `[Content_Types].xml` and `word/document.xml`) | **yes** — paragraphs, headings and table cells, in document order | in-process: a minimal zip reader + `XMLReader` | headers, footers, footnotes, comments, tracked-change deletions, field codes, embedded objects and images are never read |
 | **Excel `.xlsx`** (a zip with `xl/workbook.xml`) | **yes** — sheet names and cell values (cached values; shared and inline strings) | in-process | formulas are never evaluated; charts, pivot caches, external links, embedded objects are never read |
 | **CSV** (`text/csv`, or text that parses as separated values) | **yes** — rows and cells; delimiter sniffed among `,` `;` and tab | in-process | — |
@@ -259,8 +259,9 @@ the assistant cannot answer: the operator's holding line once, if one is configu
 ### 6.5 Reason codes
 
 Permanent, a person at once: `provider_missing` (a scanned document and no OCR provider) · `unsupported_mime` ·
-`unsupported_document` · `malformed_document` · `too_large_document` · `password_protected` · `pdf_not_read` (the first
-slice: a PDF with a text layer, before D-1) · `empty_extraction` · `extractor_unavailable` · `too_slow` ·
+`unsupported_document` · `malformed_document` · `too_large_document` · `password_protected` · `pdf_no_text` (Slice 4b: a
+PDF whose text layer yielded no text; it replaced `pdf_not_read`, the first slice's placeholder) · `empty_extraction` ·
+`extractor_unavailable` · `too_slow` ·
 `conversation_missing`. Retryable through the EventBus backoff, then a person: `provider_error` · `timeout` — both exist
 only for the OCR boundary; local extraction has no retryable failure, because repeating it changes nothing.
 
@@ -486,7 +487,7 @@ the caps and the record policy are code, like `IMAGE_MAX_SIDE_PX`.
 | E-1 | `php -m` inside the uCRM container — zlib, xml, xmlreader, iconv, mbstring — read-only | without zlib and xml the OOXML readers cannot run; the design fails closed, but would then hand over every `.docx` |
 | E-2 | the CLI `memory_limit` the media runner inherits on the server | sets the safe document cap; this sandbox has none, the server is unknown |
 | E-3 | how long Evolution takes to return the base64 of a 5–10 MiB document on the server | `ai_media_timeout_s` defaults to 20 s; a slow fetch is retried, but a cap that is always too short is a hand-over for every PDF |
-| E-4 | whether `wa_messages` and `events` should have a retention period — today none; `EventBus::prune()` has no caller | Batch 4 inherits it; the decision is the operator's, separately |
+| E-4 | whether `wa_messages` and `events` should have a retention period — `wa_messages` has none; `events` ARE pruned: `EventBus::prune(30)` is called by `cron_maintenance.php` Task 3B, daily at 02:00, completed events older than 30 days (this row said "no caller" when written — wrong; corrected by the Slice 4b evidence gate, §20) | Batch 4 inherits it; the decision is the operator's, separately |
 | E-5 | what document types customers actually send — a count by announced mimetype from `wa_media` once Batch 1 is on | decides whether D-1 (PDF text) is worth building, and D-2 |
 | E-6 | one real Evolution envelope of a captioned document from staging: does 2.3.7 send `documentWithCaptionMessage`, and nested under `ephemeralMessage`? | decides whether D-A is live today or latent; the fix is inert either way |
 
@@ -598,8 +599,9 @@ three levels); `AiReplyWorker` origin, context and `modality: document`; `BrainC
 `NEVER_PRESENT['file_name']`; the DOCUMENT block; `ReplyPrivacyGuard::secretShapesIn()` and the `document_commitment` phrases
 (payment, contract, identity — completed facts only, never the conditional); the five `set_config` keys with their ranges and
 the `none`-only provider; `validate_environment` reporting zlib, xmlreader and iconv; `run_media_worker.php` raising a CLI
-memory limit below 256M. No migration: `understanding_kind` gains the values `extraction` and `document_evidence`; the facts
-live in `wa_messages.metadata.document`.
+`memory_limit` that is below 256M to 256M (higher or unlimited values are left unchanged; wording clarified in the Slice 4b
+record, §20). No migration: `understanding_kind` gains the values `extraction` and `document_evidence`; the facts live in
+`wa_messages.metadata.document`.
 
 **Three places the build sharpened the design, recorded rather than hidden:**
 
@@ -634,5 +636,128 @@ unused and untouched.
 
 ---
 
-*Design approved and Slice 4a built in development only; nothing was pushed or deployed; no flag is on; no customer document
-was processed.*
+
+## 20. Build record — Slice 4b, 2026-10-05, development only (5.18.80): the PDF text layer, P-1
+
+**The operator's approval** (verbatim in substance): proceed with Slice 4b using the approved architecture and every existing
+safety boundary; implement P-1, the in-house PDF text extraction; OCR stays out; no external document or OCR provider; the
+Slice 4a classification and human-only safeguards preserved — payment proof, statement, invoice, contract, quotation,
+identity, credential human-only and never an `ai.reply`; general and spreadsheet documents send only the already-approved
+capped text to the existing AI vendor; the original document never leaves; every media and document flag off by default;
+`ai_document_provider = none`; no financial write, payment confirmation, KYC decision, order creation or other business
+action from document understanding; STOP, hand-over, privacy and `ReplyPrivacyGuard` behaviour preserved; Uganda and South
+Sudan unchanged; Domain B untouched; the memory policy unchanged except where strictly required (it was not required); no
+customer-facing automation. PDF scope: deterministic local text extraction only; the existing 20-page, 10 MiB, 20-second and
+4,000-character limits; fail closed on malformed, encrypted, unsupported or unsafe PDFs; no OCR of scanned pages; a PDF with
+no extractable text classified as needing a person, never guessed; no original bytes retained; only the Slice 4a retention
+model's derived, capped information persisted.
+
+**The evidence gate, as it stood when 4b was approved — recorded here exactly, and NOT converted into anything else:**
+
+| | Status | What was established |
+|---|---|---|
+| E-1 | **MEASURED** | the uCRM container (`docker exec ucrm php -m`): PHP 8.1.34 CLI; zlib, xml, xmlreader, libxml, mbstring, iconv, fileinfo, zip, curl, pdo_sqlite all loaded — every extension 4a and 4b need |
+| E-2 | **MEASURED** | the uCRM container's CLI `memory_limit` is **2048M**, from `/usr/local/etc/php/php.ini`; both launch paths of the media runner (the `main.php` tick that includes `cron/master.php`, and the webhook's background spawn) are CLI, so the runner's raise never fires there and the budget rule compares against 2 GiB |
+| E-3 | **NOT MEASURED** | live Evolution media-fetch latency for 5 and 10 MiB documents. The staff-phone test on the live gateway could not be performed safely; the only measurement is the plugin's own fetch path against the test fake in the sandbox (0.09 s for 5 MiB, 0.21 s for 10 MiB, peak memory 2.7× the file), which says nothing about Evolution |
+| E-4 | **MEASURED** (read-only code) | `wa_messages` has no retention; `events` are pruned after 30 days by `cron_maintenance.php` Task 3B, daily at 02:00, live at 5.18.74. §18's "`EventBus::prune()` has no caller" was wrong and is corrected above |
+| E-5 | **MEASURED, incomplete** | production inbound documents: 33 in September, 5 in the first five days of October — about one a day, a floor (wrapped documents were dropped before storage until D-11); the inbound mix is 96% text, 2.7% images, 0.5% documents, 0.3–0.9% voice. **The MIME/type mix of documents remains unknown** — the live store keeps no mimetype and `wa_media` is not deployed |
+| E-6 | **NOT MEASURED** | the actual Evolution 2.3.7 envelope of a captioned document. The live test could not be performed safely; the wrapper fixtures in the tests are this project's own and prove nothing about what the gateway sends |
+
+> **Risk exception, approved by the operator:** Slice 4b is implemented with E-3 and E-6 unmeasured. What that leaves open:
+> whether a 10 MiB document returns from Evolution within `ai_media_timeout_s` (a fetch that always times out is a hand-over
+> for every such document, never an exposure), and whether D-11 is live or latent today (the fix is inert either way). Neither
+> gap touches the data-egress or human-only boundaries. Both remain to be measured before any flag is turned on.
+
+**What was built** — in the plugin process, no library, no provider, no migration, no byte leaving the server.
+
+- **`lib/PdfReader.php` — `PdfReader::text()`** beside the Slice 4a `facts()`: objects found by scanning for `n g obj` with the
+  LAST definition in the file winning (incremental updates append), object streams (`/Type /ObjStm`) opened so a PDF 1.5+
+  file whose catalogue lives inside one still reads; **FlateDecode** through zlib's incremental API in 64 KiB pieces so a
+  stream inflating beyond `DOCUMENT_PDF_MAX_STREAM_BYTES` (8 MiB) is refused as **too large** the moment it crosses the cap
+  while one zlib cannot read is **malformed** (`gzuncompress()` returns false for both, which is why the incremental API);
+  the PNG predictors xref and object streams use; **ASCIIHexDecode** and **ASCII85Decode**; **any other filter on a stream
+  that must be read is `unsupported_document`**, naming the filter — never a guess; image streams are never read. The page
+  tree is walked from `/Root` → `/Pages` with `/Resources` inherited, a cycle or a depth beyond 64 refused, more than 20,000
+  nodes refused; without a catalogue the tree is found by its type; without a tree, `/Type /Page` objects in file order; with
+  neither, `malformed_document`. The content stream's text operators (`Tj` `TJ` `'` `"`) are decoded through the font the
+  stream selected: a **ToUnicode CMap** (codespace ranges, `bfchar`, `bfrange` with strings and arrays) where there is one,
+  else the simple-font encodings (**WinAnsi, MacRoman, Standard**) with **`/Differences`** through a glyph-name table; a
+  composite font without a ToUnicode map, a Type3 font without one, or a predefined CMap yields **nothing invented**: each
+  such glyph is **counted**, and above a 10% share the text is **not "seen whole"** (`classification_incomplete`, a person).
+  **Form XObjects** are followed to a depth of 8, never twice on the same drawing stack (a cycle is `malformed_document`),
+  4,000 per document; inline images are skipped between `ID` and a delimited `EI`; `Td`/`TD`/`Tm`/`T*`/`'`/`"` break lines
+  where the text matrix moves down, and a `TJ` adjustment wider than 180 thousandths becomes a space. Every loop has a
+  number: 50,000 objects, 512 object streams, 2,000,000 operators, 512 fonts, 65,536 CMap entries, 64 KiB per string token,
+  64 operands, 64 MiB inflated in all; **the deadline is asked between objects, between pages and every 2,000 operators**;
+  the text is cut at the caller's character cap. `facts()` changed in one line: an object stream is still opened after text
+  operators were seen, so a PDF 1.5 file's page count is right.
+- **`lib/DocumentExtraction.php`** — the `pdf` case: encrypted → `password_protected` as before; a text layer →
+  `requireCapabilities(['gzuncompress', 'inflate_init'])` (a missing zlib is now `extractor_unavailable`, not a misleading
+  `malformed_document`) → `PdfReader::text()` with `documentMaxPages()` and the 50,000-character scan cap → the SAME
+  normalisation, classification, record policy, label and one-event path every other kind takes; a layer that yields no
+  text → **`pdf_no_text`**, permanent, the person told *"a PDF arrived (N pages, a text layer that yielded no text) — no text
+  could be read from it automatically; open it in WhatsApp"*. **`pdf_not_read` is retired**: no path produces it. A scanned
+  PDF still meets the empty OCR boundary (D-2). `pages_read` / `pages_total` reach the label ("PDF, 3 pages read of 3"), the
+  stored message's metadata and the event's `document` facts.
+- **Settings and copy**: `set_config` describes PDF text (the page cap: "a longer PDF is read up to the cap and goes to a
+  person, never to the assistant"); `MediaPolicy`'s page-cap comment; the worker's docblock; `manifest.json` 5.18.80 and the
+  fourteen version pins.
+- **The Slice 4a memory-test gap, closed** (the planned controlled edit): `tests/test_document_media.php` C8 starts the REAL
+  runner under `php -d memory_limit=64M` on a 12 MiB text file — with the raise it is read to the text cap
+  (`classification_incomplete`, a person), and a weakened copy without the raise is refused for memory
+  (`too_large_document`, "would not fit the memory budget"); `tests/test_document_pdf.php` §8 lowers the live `memory_limit`
+  in-process and proves the budget rule refuses a 14 MiB document and passes a 1 MiB control, with its own weakened copy.
+  The mutant loop gained an optional per-mutant driver so a detector can read the real runner's facts.
+- **Wording cleanup**: §19 above, `docs/07`'s Slice 4a entry, and the `set_config` descriptions no longer say "a CLI memory
+  limit below 256M" or "PDF facts only"; the 4a commit message (`4c931ef`) is left as the record it is.
+
+**Three things found while building, recorded rather than hidden:**
+
+1. **`gzuncompress()` with a cap cannot tell an oversize stream from a corrupt one** — both come back `false`. The first
+   draft refused a 9 MiB stream as `malformed_document`; the incremental zlib API in pieces gives the honest reason.
+2. **The 4a test's fixture set is NOT the gateway's envelope** — a point the operator made and the record keeps: every
+   wrapper shape here is generated by the test. E-6 stays NOT MEASURED whatever the tests prove.
+3. **An alphanumeric transaction reference survives the masked excerpt by design** — D-7 masks digit runs of six or more and
+   e-mail addresses. A first assertion expected the reference masked; the policy, not the assertion, is the approved one, so
+   the fixture carries a twelve-digit reference and the test proves THAT is masked. Widening D-7 would be its own decision.
+
+**Proofs.**
+- `tests/test_document_pdf.php` **102 passed, 0 failed**, 24 s, no fake server at all: the reader on 29 generated PDFs (a
+  WinAnsi page; three pages with inherited resources; a composite font through its ToUnicode CMap inside an object stream
+  with an xref stream; `TJ` kerning, hex strings, é £ €; `/Differences`; MacRoman; a simple font with ToUnicode; nested
+  Form XObjects and an inline image; a form cycle; forms ten deep; ASCII85 over Flate; LZW; no text; no catalogue; no pages;
+  a junk xref; junk bytes; 25 pages; an expired deadline; 400,000 operators under a 30 ms budget — stopped INSIDE the content
+  loop; a 9 MiB inflate bomb; a lying `/Length`; 50,001 objects; Type3 and composite fonts without maps; half the glyphs
+  unnamed; the character cap; an encrypted file); the pipeline from bytes to the queue (a general PDF is one `ai.reply` with
+  the label, the text, origin `document`, kind `pdf`, never the file name, the bytes, their base64 or their hex; the brain
+  context names classification, kind and truncation; three pages in order; `pdf_no_text` word for word; 25 pages at the cap
+  a person and under a cap of 30 "25 pages read of 25"; malformed, encrypted, unsupported, oversized, bomb, expired,
+  unavailable each with its reason; the 4,000-character cut with its ellipsis and `truncated`; text beyond the scan cap a
+  person; the seven human-only classes from PDFs — evidence, no event, the money and KYC tables identical, identity and
+  credential recording nothing, a receipt's twelve-digit reference masked; nothing sensitive and no PDF byte in any table or
+  file; the general extract only in `wa_media`, the stored message and the event; "stop" in a PDF not an opt-out; a
+  committing reply on a document turn refused by the guard; logs with no extract, no bytes, no credential; the memory budget);
+  **15 weakened copies each caught, with the control**: the page cap, the character cap, the in-loop deadline, `pdf_no_text`,
+  the unknown-filter refusal, the form cycle, the form depth, the inflate cap, the object cap, the zlib guard, the
+  unnamed-glyph rule, the memory budget, `/Differences`, ToUnicode, `TJ` spacing.
+- `tests/test_document_media.php` **166 passed, 0 failed** (was 161): a text PDF now READ into one turn with its label and
+  text, never its bytes; `pdf_no_text` through the worker with the person's wording and the holding line; C8 under 64M;
+  **25 weakened copies each caught** (the 24 of 4a plus the runner's raise, through the real runner), control on core and
+  cli facts.
+- **Full suite:** **`tests/run.sh` 276 files, 12,899 passed, 0 failed, 0 skipped** (was 275 / 12,792 at 5.18.79: the new `test_document_pdf` 102 and the 5 added to `test_document_media`; nothing else moved). **Second run: 276 / 12,899 / 0 again**, every suite's tally identical. PHP warnings in either run: 5. The South Sudan and tenant suites, unchanged: `test_notify_schedule_health` 19 · `test_staff_jobs_south_sudan` 51 · `test_tenant_profile` 108 · `test_email_no_sudan` 62 · `test_notify_tenant_text` 30 · `test_cashbook_tenant` 26 · `test_portal_tenant` 112 · `test_sales_support_tenant` 37 · `test_ai_country_facts` 21 · `test_phone_country` 26.
+- `git diff --check` clean; no secret-shaped value; the two banned values absent; no file under
+  `dishnet-mikrotik-control-plane/` touched; no migration (the last is still 085); every tenant and South Sudan suite with the
+  tally it had.
+
+**Not done, by decision:** OCR (D-2, slice 4c); any provider, library, migration, deployment or flag; the document type mix
+(E-5) — it needs either `wa_media` recording in the dark or a flag-independent mimetype at import, both the operator's call;
+E-3 and E-6, which stay NOT MEASURED until a safe live test exists.
+
+**Rollback:** 4b is code only. Reverting the commit restores 5.18.79 exactly: no migration, no setting, no file on disk
+changes between the two, and a 5.18.79 runner reads every row 4b wrote (`understanding_kind` values unchanged;
+`wa_messages.metadata.document.kind = 'pdf'` is a string the 4a code already stores for scanned PDFs through the fake).
+
+---
+
+*Design approved; Slices 4a and 4b built in development only; nothing was pushed or deployed; no flag is on; no customer
+document was processed; E-3 and E-6 remain NOT MEASURED.*

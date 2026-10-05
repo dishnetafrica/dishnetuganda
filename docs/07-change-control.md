@@ -5304,7 +5304,7 @@ D-9 all three numbers; D-10 nothing beyond the holding line; D-11 both wrapper f
 - **Also:** the webhook's step 9b (a captioned document with the flag on is answered once); the worker's document branch with
   the per-class hand-over reasons; `MediaPolicy` constants and `documentEnabled()`; five `set_config` keys with their ranges
   and the `none`-only `ai_document_provider`; `validate_environment` reporting zlib, xmlreader and iconv as optional;
-  `run_media_worker.php` raising a CLI memory limit below 256M; `PaymentEvidence::hasMoneyToken()` / `hasTransactionToken()`
+  `run_media_worker.php` raising a CLI `memory_limit` that is below 256M to 256M (higher or unlimited values are left unchanged — wording clarified 5 Oct, Slice 4b); `PaymentEvidence::hasMoneyToken()` / `hasTransactionToken()`
   as signals; `manifest.json` 5.18.79 and the twelve pins.
 
 **Three things found while building, each caught before the test suite saw them** (`docs/58` §19): XMLReader's `next()` lands
@@ -5338,3 +5338,76 @@ flag; voice and image logic untouched beyond the document branch beside them. `l
 **Git:** committed locally as the fifth unpushed commit on `claude/study-this-jhe2eg`, after `ce16324`, `73ae827`,
 `b08c9d4` and `67b6c9d`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone, no money, no
 identity decision. Stopped for the operator's review before slice 4b.
+
+## 05 Oct — AI communication layer, Batch 4 Slice 4b (5.18.80): PDF TEXT, dark — the in-house reader (P-1) on the Slice 4a boundary; E-3 and E-6 NOT MEASURED under an approved risk exception; the 4a memory-test gap closed; NOT deployed, NOT pushed; STOPPED for review
+
+**What was approved.** After the Slice 4a review and an evidence gate (`docs/58` §20), the operator approved Slice 4b: the
+in-house PDF text extraction (P-1), OCR out, no external document or OCR provider, every Slice 4a safeguard kept — the seven
+human-only classes never an `ai.reply`, only the approved capped text of a harmless document to the existing AI vendor, the
+original document never leaving, every flag off, `ai_document_provider = none`, no business action from document
+understanding, STOP / hand-over / privacy / guard behaviour unchanged, Uganda and South Sudan unchanged, Domain B untouched.
+PDF scope: deterministic local extraction only, the existing 20 pages · 10 MiB · 20 s · 4,000 characters, fail closed on
+malformed, encrypted, unsupported or unsafe files, no OCR, a PDF with no readable text a person, no original bytes kept.
+
+**The evidence status, recorded as it stood and not converted into anything else:** E-1 **MEASURED** (the uCRM container:
+PHP 8.1.34 with zlib, xml, xmlreader, mbstring, iconv, fileinfo, zip loaded) · E-2 **MEASURED** (CLI `memory_limit` 2048M, so
+the runner's raise never fires there) · **E-3 NOT MEASURED** (live Evolution fetch latency for 5–10 MiB: the staff-phone test
+could not be performed safely) · E-4 **MEASURED** (`wa_messages` no retention; `events` pruned after 30 days by the
+maintenance cron — `docs/58` §18 had said "no caller", corrected) · E-5 **MEASURED but incomplete** (about one inbound
+document a day, a floor; the type mix unknown) · **E-6 NOT MEASURED** (the real Evolution envelope of a captioned document).
+**Slice 4b was built despite the E-3 and E-6 gaps under the operator's approved risk exception.** Neither gap touches the
+data-egress or human-only boundaries; both remain to be measured before any flag is turned on.
+
+**What was built** — all of it in the plugin process; no library, no provider, no migration.
+
+- **`lib/PdfReader.php` gains `text()`** beside the 4a `facts()`: objects found by scanning (the last definition wins), object
+  streams opened; FlateDecode through zlib's incremental API so a stream inflating beyond 8 MiB is refused as too large and
+  one that does not inflate as malformed; PNG predictors; ASCIIHex and ASCII85; **any other filter is a refusal**; the page
+  tree walked with inherited resources, cycles and depth refused, with two fallbacks and then `malformed_document`; text
+  operators decoded through ToUnicode CMaps, WinAnsi / MacRoman / Standard and `/Differences`; glyphs it cannot name counted,
+  never invented, and above a 10% share the text is not "seen whole"; Form XObjects to a depth of 8, a cycle refused; inline
+  images skipped; line breaks where the text matrix moves down. Every loop has a cap; the deadline is asked between objects,
+  between pages and every 2,000 operators; the text is cut at the caller's cap. One line of `facts()` changed so a PDF 1.5
+  file's page count is right.
+- **`lib/DocumentExtraction.php`**: the `pdf` case reads the text layer through the SAME classification, record, label and
+  one-event path as every other kind; `requireCapabilities(['gzuncompress', 'inflate_init'])` first; a layer that yields no
+  text is the new permanent reason **`pdf_no_text`** with the person's wording *"a PDF arrived (N pages, a text layer that
+  yielded no text) — no text could be read from it automatically; open it in WhatsApp"*; **`pdf_not_read` is retired**. A
+  scanned PDF still meets the empty OCR boundary (D-2).
+- `tools/set_config.php`, `lib/MediaPolicy.php` and the worker's docblock describe PDF text; `manifest.json` 5.18.80 and the
+  fourteen pins.
+- **The 4a memory-test gap closed** (the controlled edit the review asked for): `test_document_media` C8 runs the REAL runner
+  under `php -d memory_limit=64M` on a 12 MiB text file (read to the text cap with the raise; refused for memory without it,
+  by a weakened copy); `test_document_pdf` §8 lowers the live `memory_limit` in-process and proves the budget rule refuses a
+  14 MiB document and passes a 1 MiB control, with a weakened copy. The mutant loop gained a per-mutant driver.
+- **Wording cleanup** in `docs/58` §19, this file's Slice 4a entry and `set_config`: "a CLI memory limit below 256M" now reads
+  "a CLI `memory_limit` that is below 256M to 256M; higher or unlimited values are left unchanged".
+
+**Three things found while building, recorded rather than hidden** (`docs/58` §20): `gzuncompress()` with a cap cannot tell
+an oversize stream from a corrupt one, so the incremental API gives the honest reason; the tests' wrapper fixtures are this
+project's own and leave E-6 NOT MEASURED whatever they prove; an alphanumeric transaction reference survives the masked
+excerpt by the approved D-7 policy (digit runs of six or more and e-mails), so the test proves a twelve-digit reference is
+masked rather than widening the policy by assertion.
+
+**Proofs.**
+- `tests/test_document_pdf.php` **102 passed, 0 failed** (24 s, no fake server): 29 generated PDFs through the reader, the
+  pipeline from bytes to the queue for every outcome the brief lists, the seven human-only classes from PDFs with the money
+  and KYC tables identical, nothing sensitive and no PDF byte in any table or file, STOP and the guard, the memory budget;
+  **15 weakened copies each caught, with the control.**
+- `tests/test_document_media.php` **166 passed, 0 failed** (was 161): the text PDF read into one labelled turn, `pdf_no_text`
+  through the worker, C8 under 64M; **25 weakened copies each caught** (24 of 4a plus the runner's raise), control on core
+  and cli facts.
+- **Full suite:** **`tests/run.sh` 276 files, 12,899 passed, 0 failed, 0 skipped** (was 275 / 12,792 at 5.18.79: the new `test_document_pdf` 102 and the 5 added to `test_document_media`; nothing else moved). **Second run: 276 / 12,899 / 0 again**, every suite's tally identical. PHP warnings in either run: 5. The South Sudan and tenant suites, unchanged: `test_notify_schedule_health` 19 · `test_staff_jobs_south_sudan` 51 · `test_tenant_profile` 108 · `test_email_no_sudan` 62 · `test_notify_tenant_text` 30 · `test_cashbook_tenant` 26 · `test_portal_tenant` 112 · `test_sales_support_tenant` 37 · `test_ai_country_facts` 21 · `test_phone_country` 26.
+- `git diff --check` clean; no secret-shaped value in the diff; the two banned values absent; no file under
+  `dishnet-mikrotik-control-plane/` touched; no migration added (the last is still 085); every tenant and South Sudan suite at
+  the tally it had; the test fixtures' numbers are the synthetic `25677200xxxx` ones.
+
+**Not done, by decision:** OCR (D-2, slice 4c); any provider, library, migration, deployment or flag; the document type mix
+(E-5) and the live E-3 / E-6 measurements, which stay open.
+
+**Rollback:** code only. Reverting the commit restores 5.18.79 exactly — no migration, no setting, no file on disk differs,
+and a 5.18.79 runner reads every row 4b wrote.
+
+**Git:** committed locally as the sixth unpushed commit on `claude/study-this-jhe2eg`, after `ce16324`, `73ae827`,
+`b08c9d4`, `67b6c9d` and `4c931ef`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone, no
+money, no identity decision. Stopped for the operator's review.

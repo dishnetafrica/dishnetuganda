@@ -40,7 +40,7 @@ final class MediaPolicy
     // Batch 4 (docs/55 §9, docs/58): documents. ai_media_document is OFF unless set, and it needs ai_media_enabled too.
     // Three settings (the document cap, the PDF page cap, the extraction deadline) and the fixed caps every reader obeys.
     public const DOCUMENT_DEFAULT_MAX_BYTES     = 10 * 1024 * 1024;   // the fetch cap (ai_media_max_bytes) applies first; the smaller wins
-    public const DOCUMENT_DEFAULT_MAX_PAGES     = 20;                 // PDF pages read, once PDF text is read at all (docs/58 D-1)
+    public const DOCUMENT_DEFAULT_MAX_PAGES     = 20;                 // PDF pages read (Slice 4b, docs/58 D-1); beyond them the text is not "seen whole" — a person
     public const DOCUMENT_MIN_PAGES             = 1;
     public const DOCUMENT_CAP_PAGES             = 200;
     public const DOCUMENT_DEFAULT_TIMEOUT_S     = 20;                 // the whole extraction, checked between bounded steps

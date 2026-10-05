@@ -26,7 +26,8 @@ require_once __DIR__ . '/UtcClock.php';
  *   2. the sniff: the CONTENT names the kind — PDF, Word, Excel, CSV, text — or refuses it (an image, a legacy or macro-enabled
  *      Office file, an encrypted file, an archive that is not Word or Excel, bytes that are no document);
  *   3. the reader for that kind, bounded: Word paragraphs, Excel and CSV cells, text lines; a PDF yields FACTS only in this slice
- *      — encrypted → a person; a text layer → `pdf_not_read`, a person, until D-1; scanned → the empty OCR boundary → a person;
+ *      — encrypted → a person; a text layer → read by PdfReader (Slice 4b, D-1 = P-1), a layer that yields no text → `pdf_no_text`,
+ *        a person; scanned → the empty OCR boundary → a person;
  *   4. the classifier (DocumentClassifier): seven human-only classes, two the assistant may see, and FAIL CLOSED everywhere else;
  *   5. in one transaction: the wa_media row `understood` (guarded, so never twice), the stored "[DOCUMENT]" message rewritten
  *      under its label with what the record policy allows, and then EITHER one ordinary ai.reply event (origin document) OR
@@ -71,7 +72,7 @@ final class DocumentExtraction
         'malformed_document'        => false,   // not a document, or a part that does not parse, or a DTD
         'too_large_document'        => false,   // over the document cap, a member cap, a stream cap, or the memory budget
         'password_protected'        => false,   // encrypted PDF, encrypted Office package or archive entry
-        'pdf_not_read'              => false,   // a PDF with a text layer: not read in Slice 4a (D-1)
+        'pdf_no_text'               => false,   // a PDF with a text layer that yielded no text (Slice 4b): a person, never a guess
         'empty_extraction'          => false,   // nothing readable came out
         'extractor_unavailable'     => false,   // a PHP extension the reader needs is missing here
         'too_slow'                  => false,   // the deadline passed — permanent, a repeat would be as slow
@@ -158,7 +159,21 @@ final class DocumentExtraction
                     $pf = PdfReader::facts($doc->bytes, $deadline);
                     $facts['pages_total'] = (int)$pf['pages_total'];
                     if ($pf['encrypted']) return self::fail('password_protected', 'encrypted PDF');
-                    if ($pf['has_text_layer']) return self::fail('pdf_not_read', sprintf('%d page%s with a text layer', $pf['pages_total'], $pf['pages_total'] === 1 ? '' : 's'));
+                    if ($pf['has_text_layer']) {
+                        // Slice 4b (docs/58 D-1 = P-1): the text layer, read in this process by PdfReader — FlateDecode, object
+                        // streams, simple fonts and ToUnicode CMaps; anything else refuses, and a layer that yields no text is a
+                        // person (pdf_no_text), never a guess. The page cap, the character cap and the deadline bind inside.
+                        self::requireCapabilities(['gzuncompress', 'inflate_init']);
+                        $pt = PdfReader::text($doc->bytes, $deadline, MediaPolicy::documentMaxPages($this->config), MediaPolicy::DOCUMENT_MAX_SCAN_CHARS);
+                        $facts['pages_total'] = max($facts['pages_total'], (int)$pt['pages_total']);
+                        $facts['pages_read']  = (int)$pt['pages_read'];
+                        $raw = (string)$pt['text'];
+                        $sawEverything = !$pt['truncated'];
+                        if (trim(self::normalise($raw)) === '') {
+                            return self::fail('pdf_no_text', sprintf('%d page%s, a text layer that yielded no text', $facts['pages_total'], $facts['pages_total'] === 1 ? '' : 's'));
+                        }
+                        break;
+                    }
                     // Scanned, or nothing to read: the OCR boundary, which is empty (D-2).
                     if ($this->ocr === null) {
                         return self::fail('provider_missing', sprintf('scanned PDF, %d page%s; ai_document_provider is %s',
@@ -344,8 +359,8 @@ final class DocumentExtraction
             return self::HANDOVER[$classOrReason] ?? ('a ' . (self::CLASS_WORDS[$classOrReason] ?? 'document') . ' arrived — a person handles it; nothing was recorded');
         }
         switch ($classOrReason) {
-            case 'pdf_not_read':
-                return 'a PDF arrived (' . $detail . ') — PDF text is not read automatically yet; open it in WhatsApp';
+            case 'pdf_no_text':
+                return 'a PDF arrived (' . $detail . ') — no text could be read from it automatically; open it in WhatsApp';
             case 'provider_missing':
                 return 'a scanned document arrived (' . $detail . ') — it cannot be read automatically; open it in WhatsApp';
             case 'classification_uncertain':

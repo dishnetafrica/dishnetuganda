@@ -208,6 +208,236 @@ function vd_money(PDO $pdo): array
     }
     return $out;
 }
+/**
+ * A PDF built to order (Slice 4b, docs/58 D-1 = P-1): pages of lines, the font shapes the reader knows, the layouts PDF
+ * writers produce, and deliberate breakage — every byte deterministic, nothing real in it.
+ *
+ * $o:  pages    array of page specs: lines (array of strings) · font (resource name, default F1) · tj (TJ arrays with kerning)
+ *               · hex (hex strings) · form (an XObject name to draw) · inline (an inline image first) · raw (content override)
+ *      fonts    name => ['type' => 'simple'|'cid', 'enc' => 'WinAnsiEncoding'|'MacRomanEncoding'|null, 'diff' => [code => glyph],
+ *               'map' => [char => code] (how the builder encodes those chars), 'tounicode' => bool, 'type3' => bool]
+ *      forms    name => ['lines' => [...], 'font' => 'F1', 'nested' => 'Fy', 'self' => bool, 'image' => bool]
+ *      flate    compress content streams (default true) · filter 'a85' (ASCII85 over Flate) | 'lzw' (an unsupported filter)
+ *      objstm   PDF 1.5 layout: an object stream for every dictionary object, an xref STREAM with the PNG predictor, no table
+ *      inherit  /Resources on the Pages node rather than on each page · count (override the declared /Count) · encrypt
+ *      pad      bytes of comment padding after the header · extra_objects (N dummy objects) · bomb (a content stream that
+ *               inflates to 9 MiB) · lying_length (a wrong /Length) · broken 'nocatalog' | 'nopages' | 'junk'
+ */
+function vd_pdfx(array $o): string
+{
+    $pages  = $o['pages'] ?? [['lines' => ['Hello from a PDF']]];
+    $fonts  = $o['fonts'] ?? ['F1' => ['type' => 'simple', 'enc' => 'WinAnsiEncoding']];
+    $forms  = $o['forms'] ?? [];
+    $flate  = $o['flate'] ?? true;
+    $filter = $o['filter'] ?? null;
+    $objstm = !empty($o['objstm']);
+    $inherit = !empty($o['inherit']);
+
+    // Which characters each composite font must map: sequential codes from 1; digits through a bfrange at 0xA0.
+    $cidMaps = [];
+    $allText = function (string $font) use ($pages, $forms): string {
+        $t = '';
+        foreach ($pages as $pg) if (($pg['font'] ?? 'F1') === $font) $t .= implode('', $pg['lines'] ?? []);
+        foreach ($forms as $fm) if (($fm['font'] ?? 'F1') === $font) $t .= implode('', $fm['lines'] ?? []);
+        return $t;
+    };
+    foreach ($fonts as $name => $spec) {
+        if (($spec['type'] ?? 'simple') !== 'cid') continue;
+        $map = []; $next = 1;
+        foreach (preg_split('//u', $allText($name), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) {
+            if (isset($map[$ch])) continue;
+            $map[$ch] = ctype_digit($ch) ? 0xA0 + (int)$ch : $next++;
+        }
+        $cidMaps[$name] = $map;
+    }
+    $encode = function (string $text, string $font, bool $hex) use ($fonts, $cidMaps): string {
+        $spec = $fonts[$font] ?? ['type' => 'simple'];
+        if (($spec['type'] ?? 'simple') === 'cid') {
+            $h = '';
+            foreach (preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) $h .= sprintf('%04X', $cidMaps[$font][$ch] ?? 0);
+            return '<' . $h . '>';
+        }
+        $bytes = '';
+        foreach (preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) {
+            if (isset($spec['map'][$ch])) { $bytes .= chr((int)$spec['map'][$ch]); continue; }
+            // MacRoman through iconv (mbstring has no Macintosh table); WinAnsi through mbstring's Windows-1252.
+            $b = ($spec['enc'] ?? 'WinAnsiEncoding') === 'MacRomanEncoding' ? @iconv('UTF-8', 'MACINTOSH', $ch) : @mb_convert_encoding($ch, 'Windows-1252', 'UTF-8');
+            $bytes .= is_string($b) && $b !== '' ? $b : '?';
+        }
+        if ($hex) return '<' . strtoupper(bin2hex($bytes)) . '>';
+        $out = '';
+        foreach (str_split($bytes) as $c) {
+            $n = ord($c);
+            if ($c === '\\' || $c === '(' || $c === ')') $out .= '\\' . $c;
+            elseif ($n < 32 || $n > 126) $out .= sprintf('\\%03o', $n);
+            else $out .= $c;
+        }
+        return '(' . $out . ')';
+    };
+    $content = function (array $spec) use ($encode): string {
+        if (isset($spec['raw'])) return (string)$spec['raw'];
+        $font = $spec['font'] ?? 'F1';
+        $c = '';
+        if (!empty($spec['inline'])) $c .= "q 10 0 0 10 50 50 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\xff\xff\x00 EI Q\n";
+        $y = 720;
+        foreach ($spec['lines'] ?? [] as $line) {
+            if (!empty($spec['tj'])) {
+                $words = preg_split('/ /u', $line) ?: [$line];
+                $parts = [];
+                foreach ($words as $w) {
+                    if (mb_strlen($w) > 3) $parts[] = $encode(mb_substr($w, 0, 2), $font, false) . ' -20 ' . $encode(mb_substr($w, 2), $font, false);
+                    else $parts[] = $encode($w, $font, false);
+                }
+                $c .= sprintf("BT /%s 12 Tf 72 %d Td [%s] TJ ET\n", $font, $y, implode(' -300 ', $parts));
+            } else {
+                $c .= sprintf("BT /%s 12 Tf 72 %d Td %s Tj ET\n", $font, $y, $encode($line, $font, !empty($spec['hex'])));
+            }
+            $y -= 14;
+        }
+        if (!empty($spec['form'])) $c .= 'q 1 0 0 1 0 0 cm /' . $spec['form'] . " Do Q\n";
+        return $c;
+    };
+
+    $objs = [];      // num => body (dictionary objects, may move into an object stream)
+    $streams = [];   // num => [dict-without-length, data]  (always top level)
+    $n = 3;          // 1 catalogue, 2 pages
+    $fontRefs = []; $fontObjs = [];
+    foreach ($fonts as $name => $spec) {
+        $fnum = $n++;
+        $fontRefs[$name] = "$fnum 0 R";
+        if (($spec['type'] ?? 'simple') === 'cid') {
+            $desc = $n++; $tu = $n++;
+            $objs[$fnum] = "<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+TestSans /Encoding /Identity-H /DescendantFonts [$desc 0 R] /ToUnicode $tu 0 R >>";
+            $objs[$desc] = '<< /Type /Font /Subtype /CIDFontType2 /BaseFont /TestSans /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /DW 500 >>';
+            $chars = []; foreach ($cidMaps[$name] as $ch => $code) if ($code < 0xA0) $chars[] = sprintf('<%04X> <%s>', $code, strtoupper(bin2hex(mb_convert_encoding($ch, 'UTF-16BE', 'UTF-8'))));
+            $cmap = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /Adobe-Identity-UCS def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+                  . count($chars) . " beginbfchar\n" . implode("\n", $chars) . "\nendbfchar\n1 beginbfrange\n<00A0> <00A9> <0030>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+            $streams[$tu] = ['', $cmap];
+        } else {
+            $encName = $spec['enc'] ?? 'WinAnsiEncoding';
+            if (!empty($spec['diff'])) {
+                $d = []; foreach ($spec['diff'] as $code => $glyph) $d[] = $code . ' /' . $glyph;
+                $enc = '<< /BaseEncoding /' . $encName . ' /Differences [' . implode(' ', $d) . '] >>';
+            } else {
+                $enc = $encName === null ? '' : '/' . $encName;
+            }
+            $sub = !empty($spec['type3']) ? 'Type3' : 'TrueType';
+            $extra = !empty($spec['type3']) ? ' /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << >> /FontBBox [0 0 0 0]' : '';
+            $tuPart = '';
+            if (!empty($spec['tounicode'])) {
+                $tu = $n++;
+                $chars = [];
+                foreach (preg_split('//u', $allText($name), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) {
+                    $b = isset($spec['map'][$ch]) ? (int)$spec['map'][$ch] : ord((string)@mb_convert_encoding($ch, 'Windows-1252', 'UTF-8'));
+                    $chars[sprintf('<%02X>', $b)] = sprintf('<%02X> <%s>', $b, strtoupper(bin2hex(mb_convert_encoding($ch, 'UTF-16BE', 'UTF-8'))));
+                }
+                $cmap = "begincmap\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n" . count($chars) . " beginbfchar\n" . implode("\n", $chars) . "\nendbfchar\nendcmap\n";
+                $streams[$tu] = ['', $cmap];
+                $tuPart = " /ToUnicode $tu 0 R";
+            }
+            $objs[$fnum] = "<< /Type /Font /Subtype /$sub /BaseFont /TestSans" . ($enc !== '' ? " /Encoding $enc" : '') . $extra . $tuPart . ' >>';
+        }
+    }
+    $fontDict = '/Font << ' . implode(' ', array_map(function ($k, $v) { return "/$k $v"; }, array_keys($fontRefs), $fontRefs)) . ' >>';
+    // Form XObjects (streams), with their own resources; nested and self references by name.
+    $formNums = []; foreach ($forms as $name => $fm) $formNums[$name] = $n++;
+    $xobjDict = $formNums !== [] ? ' /XObject << ' . implode(' ', array_map(function ($k, $v) { return "/$k $v 0 R"; }, array_keys($formNums), $formNums)) . ' >>' : '';
+    $resources = '<< ' . $fontDict . $xobjDict . ' >>';
+    foreach ($forms as $name => $fm) {
+        $fc = $content(['lines' => $fm['lines'] ?? [], 'font' => $fm['font'] ?? 'F1']);
+        if (!empty($fm['nested'])) $fc .= 'q /' . $fm['nested'] . " Do Q\n";
+        if (!empty($fm['self'])) $fc .= 'q /' . $name . " Do Q\n";
+        $sub = !empty($fm['image']) ? 'Image' : 'Form';
+        $dict = "/Type /XObject /Subtype /$sub" . ($sub === 'Form' ? " /BBox [0 0 612 792] /Resources $resources" : ' /Width 2 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8');
+        $streams[$formNums[$name]] = [$dict, $sub === 'Form' ? $fc : "\x00\xff\xff\x00"];
+    }
+    // Pages and their content streams.
+    $kids = [];
+    foreach ($pages as $i => $pg) {
+        $pnum = $n++; $cnum = $n++;
+        $kids[] = "$pnum 0 R";
+        $objs[$pnum] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" . ($inherit ? '' : " /Resources $resources") . " /Contents $cnum 0 R >>";
+        $data = $content($pg);
+        if (!empty($o['bomb']) && $i === 0) $data = str_repeat(' ', 9 * 1024 * 1024) . $data;
+        $streams[$cnum] = ['', $data];
+    }
+    $count = $o['count'] ?? count($pages);
+    $objs[1] = ($o['broken'] ?? '') === 'nocatalog' ? '<< /Type /Foo >>' : '<< /Type /Catalog /Pages 2 0 R >>';
+    $objs[2] = ($o['broken'] ?? '') === 'nopages' ? '<< /Type /Pages /Kids [] /Count 0 >>'
+             : '<< /Type /Pages /Kids [' . implode(' ', $kids) . "] /Count $count" . ($inherit ? " /Resources $resources" : '') . ' >>';
+    if (($o['broken'] ?? '') === 'nopages') { foreach (array_keys($objs) as $k) if ($k > 2 && strpos($objs[$k], '/Type /Page ') !== false) unset($objs[$k]); }
+    for ($i = 0; $i < (int)($o['extra_objects'] ?? 0); $i++) $objs[$n++] = '<< /Foo ' . $i . ' >>';
+    if (!empty($o['encrypt'])) { $encNum = $n++; $objs[$encNum] = '<< /Filter /Standard /V 1 /R 2 /Length 40 /P -1 /O <0000> /U <0000> >>'; }
+
+    // Serialise: the stream bodies with their filters.
+    $writeStream = function (string $dictInner, string $data, bool $isContent) use ($flate, $filter, $o): string {
+        $filt = '';
+        if ($isContent && $filter === 'lzw') { $filt = ' /Filter /LZWDecode'; }
+        elseif ($isContent && $filter === 'a85') { $data = vd_a85(gzcompress($data)); $filt = ' /Filter [/ASCII85Decode /FlateDecode]'; }
+        elseif ($flate) { $data = gzcompress($data); $filt = ' /Filter /FlateDecode'; }
+        $len = !empty($o['lying_length']) && $isContent ? strlen($data) + 777 : strlen($data);
+        return '<< ' . trim($dictInner . " /Length $len" . $filt) . " >>\nstream\n" . $data . "\nendstream";
+    };
+    $pdf = "%PDF-1." . ($objstm ? '5' : '4') . "\n%\xE2\xE3\xCF\xD3\n";
+    if (!empty($o['pad'])) $pdf .= '% ' . str_repeat('x', (int)$o['pad']) . "\n";
+    $offsets = [];
+    $contentNums = []; foreach ($pages as $i => $pg) {} // (content streams are those not in $formNums and not ToUnicode: tracked below)
+    $cidTu = []; foreach ($streams as $k => $s) if ($s[0] === '' && strpos($s[1], 'begincmap') !== false) $cidTu[$k] = true;
+    $inStm = []; $topLevel = [];
+    if ($objstm) {
+        $stmNum = $n++; $xrefNum = $n++;
+        $header = ''; $body = ''; $members = [];
+        foreach ($objs as $num => $b) { $members[$num] = strlen($body); $header .= "$num " . strlen($body) . ' '; $body .= $b . "\n"; }
+        $stmData = $header . "\n" . $body;
+        $streams[$stmNum] = ['/Type /ObjStm /N ' . count($objs) . ' /First ' . (strlen($header) + 1), $stmData];
+        foreach ($objs as $num => $b) $inStm[$num] = $stmNum;
+        $objs = [];
+    }
+    foreach ($objs as $num => $b) { $offsets[$num] = strlen($pdf); $pdf .= "$num 0 obj\n$b\nendobj\n"; }
+    foreach ($streams as $num => $s) {
+        $isContent = !isset($formNums[$num]) && !isset($cidTu[$num]) && strpos($s[0], '/ObjStm') === false && strpos($s[0], '/XObject') === false;
+        $offsets[$num] = strlen($pdf);
+        $pdf .= "$num 0 obj\n" . $writeStream($s[0], $s[1], $isContent && $s[0] === '') . "\nendobj\n";
+    }
+    $size = $n + ($objstm ? 0 : 0);
+    if ($objstm) {
+        // The xref stream: W [1 4 2]; type 1 = at offset, type 2 = in object stream (index); PNG "Up" predictor, Columns 7.
+        $rows = [];
+        $idx = []; $i = 0; foreach (array_keys($inStm) as $num) $idx[$num] = $i++;
+        for ($num = 0; $num < $size; $num++) {
+            if ($num === 0) $rows[] = "\x00" . pack('N', 0) . pack('n', 0xFFFF);
+            elseif (isset($inStm[$num])) $rows[] = "\x02" . pack('N', $inStm[$num]) . pack('n', $idx[$num]);
+            elseif (isset($offsets[$num]) || $num === $xrefNum) $rows[] = "\x01" . pack('N', $num === $xrefNum ? strlen($pdf) : $offsets[$num]) . pack('n', 0);
+            else $rows[] = "\x00" . pack('N', 0) . pack('n', 0);
+        }
+        $prev = str_repeat("\0", 7); $enc = '';
+        foreach ($rows as $row) { $enc .= "\x02"; for ($k = 0; $k < 7; $k++) $enc .= chr((ord($row[$k]) - ord($prev[$k])) & 0xFF); $prev = $row; }
+        $xrefOff = strlen($pdf);
+        $comp = gzcompress($enc);
+        $pdf .= "$xrefNum 0 obj\n<< /Type /XRef /Size $size /W [1 4 2] /Root 1 0 R" . (!empty($o['encrypt']) ? " /Encrypt $encNum 0 R" : '')
+              . " /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 7 >> /Length " . strlen($comp) . " >>\nstream\n" . $comp . "\nendstream\nendobj\n";
+        return $pdf . "startxref\n$xrefOff\n%%EOF\n";
+    }
+    $xref = strlen($pdf);
+    if (($o['broken'] ?? '') === 'junk') return $pdf . "xref\n0 " . $size . "\n" . str_repeat('garbage ', 20) . "\ntrailer\n<< /Size $size /Root 1 0 R >>\nstartxref\n999999999\n%%EOF\n";
+    $pdf .= "xref\n0 $size\n0000000000 65535 f \n";
+    for ($i = 1; $i < $size; $i++) $pdf .= sprintf("%010d 00000 n \n", $offsets[$i] ?? 0);
+    return $pdf . "trailer\n<< /Size $size /Root 1 0 R" . (!empty($o['encrypt']) ? " /Encrypt $encNum 0 R" : '') . " >>\nstartxref\n$xref\n%%EOF\n";
+}
+/** ASCII85 (the PDF flavour, with the <~ ~> markers), for a chained-filter fixture. */
+function vd_a85(string $data): string
+{
+    $out = '<~';
+    foreach (str_split($data, 4) as $chunk) {
+        $len = strlen($chunk);
+        $v = unpack('N', str_pad($chunk, 4, "\0"))[1];
+        if ($len === 4 && $v === 0) { $out .= 'z'; continue; }
+        $s = '';
+        for ($i = 0; $i < 5; $i++) { $s = chr($v % 85 + 33) . $s; $v = intdiv($v, 85); }
+        $out .= substr($s, 0, $len + 1);
+    }
+    return $out . '~>';
+}
 /** Every table that holds identity or KYC state — what an identity document must never change. */
 function vd_kyc(PDO $pdo): array
 {
