@@ -78,6 +78,18 @@ $FLAGS = [
         'Largest media file the worker fetches, in bytes (default 15728640 = 15 MiB; 65536 to 67108864)'],
     'ai_media_timeout_s' => ['number',
         'Seconds the worker waits for Evolution to hand a file over (default 20; 3 to 60)'],
+    // Batch 2 (docs/55 §9, docs/56): voice notes. OFF unless set, and ai_media_enabled must be on as well. On, a voice
+    // note is transcribed through the configured provider and the transcript is answered by the SAME assistant as a
+    // typed message, labelled as a transcript. No provider exists yet (docs/56): with none configured every voice
+    // note is handed to a person with the hand-over message instead — never an invented answer.
+    'ai_media_voice' => ['bool',
+        'Transcribe voice notes and answer them like typed text (needs ai_media_enabled and a transcription provider)'],
+    'ai_media_voice_max_seconds' => ['number',
+        'Longest voice note transcribed, in seconds (default 120; 10 to 600) — a longer one is handed to a person'],
+    'ai_media_voice_timeout_s' => ['number',
+        'Seconds to wait for the transcription provider (default 30; 5 to 120)'],
+    'ai_transcription_provider' => ['text',
+        'Speech-to-text provider: none is the only value today (docs/56); the test-only fake is refused here'],
 
     // Phase 2 of the customer-login audit — the tenant profile and the
     // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
@@ -419,16 +431,30 @@ if (!$clear && $key === 'portal_data_report_handoff') {
     $new = strtolower(trim($new));
 }
 // Batch 1 (docs/55 §9): a media limit outside its range would be clamped silently by MediaPolicy. Refused here, naming
-// the range, so the listing never shows a number the worker is not using.
-if (!$clear && in_array($key, ['ai_media_max_bytes', 'ai_media_timeout_s'], true)) {
-    require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
-    $lo = $key === 'ai_media_max_bytes' ? MediaPolicy::MIN_MAX_BYTES : MediaPolicy::MIN_TIMEOUT_S;
-    $hi = $key === 'ai_media_max_bytes' ? MediaPolicy::CAP_MAX_BYTES : MediaPolicy::CAP_TIMEOUT_S;
+// the range, so the listing never shows a number the worker is not using. Batch 2 adds the two voice limits.
+require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
+$mediaRanges = [
+    'ai_media_max_bytes'         => [MediaPolicy::MIN_MAX_BYTES,     MediaPolicy::CAP_MAX_BYTES],
+    'ai_media_timeout_s'         => [MediaPolicy::MIN_TIMEOUT_S,     MediaPolicy::CAP_TIMEOUT_S],
+    'ai_media_voice_max_seconds' => [MediaPolicy::VOICE_MIN_SECONDS, MediaPolicy::VOICE_CAP_SECONDS],
+    'ai_media_voice_timeout_s'   => [MediaPolicy::VOICE_MIN_TIMEOUT_S, MediaPolicy::VOICE_CAP_TIMEOUT_S],
+];
+if (!$clear && isset($mediaRanges[$key])) {
+    [$lo, $hi] = $mediaRanges[$key];
     if (!preg_match('/^\d+$/', trim($new)) || (int)$new < $lo || (int)$new > $hi) {
         echo "\n  \"" . $new . "\" is not a whole number between " . $lo . " and " . $hi . ", so nothing was saved.\n\n";
         exit(1);
     }
     $new = (string)(int)$new;
+}
+// Batch 2 (docs/56): no transcription provider is integrated yet, so `none` is the only value; the fake is for tests.
+if (!$clear && $key === 'ai_transcription_provider') {
+    if (strtolower(trim($new)) !== 'none') {
+        echo "\n  \"" . $new . "\" is not a transcription provider this plugin has — none is the only value today (docs/56),\n";
+        echo "  so nothing was saved. Use --clear to leave it unset, which means the same.\n\n";
+        exit(1);
+    }
+    $new = 'none';
 }
 if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";

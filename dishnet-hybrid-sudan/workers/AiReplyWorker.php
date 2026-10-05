@@ -183,8 +183,9 @@ class AiReplyWorker extends WorkerBase
             }
         }
 
-        // One line per message: enough to trace the pipeline, no content.
-        $this->log('info', sprintf('conv %d: in channel=%s len=%d', $convId, $channel, mb_strlen($message)));
+        // One line per message: enough to trace the pipeline, no content. Batch 2: a transcript says so.
+        $this->log('info', sprintf('conv %d: in channel=%s len=%d%s', $convId, $channel, mb_strlen($message),
+            ($p['origin'] ?? '') === 'voice' ? ' origin=voice' : ''));
 
         // Let the customer see something is happening while the model thinks.
         $this->evo->sendTyping($channel, $phone);
@@ -342,6 +343,11 @@ class AiReplyWorker extends WorkerBase
             // prose: the description the model reads is in 'message', but what
             // gets written down comes from here.
             'location'          => is_array($p['location'] ?? null) ? $p['location'] : null,
+            // Batch 2 (docs/55 §9, docs/56): this turn's message is the transcript of a voice note, queued by
+            // VoiceTranscription with origin=voice. Presence is the fact; the one leaf is the announced duration.
+            // The model is told how to treat it in DishNetAiBrain's VOICE MESSAGE block — nothing else changes.
+            'voice'             => (($p['origin'] ?? '') === 'voice' && is_array($p['voice'] ?? null))
+                                   ? ['seconds' => max(0, (int)($p['voice']['seconds'] ?? 0))] : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -540,6 +546,8 @@ class AiReplyWorker extends WorkerBase
                     // customers send their location — never showed the assistant the pin block, because the
                     // contract had no key for it; support and account did.
                     'location'  => $ctx['location'] ?? null,
+                    // Batch 2 (docs/55 §9): the voice note this message was transcribed from, if it was.
+                    'voice'     => $ctx['voice'] ?? null,
                 ]);
         }
 
@@ -784,6 +792,9 @@ class AiReplyWorker extends WorkerBase
                 'channel'         => (string)($ctx['channel'] ?? ''),
                 'provider'        => 'ai_reply_worker',
                 'blocked_length'  => strlen($reply),
+                // Batch 2 (docs/55 §9): the audit event's own modality field — voice when the turn that produced the
+                // blocked reply was a transcript, text otherwise (its default).
+                'modality'        => is_array($ctx['voice'] ?? null) ? 'voice' : 'text',
             ]));
         } catch (\Throwable $e) {
             $this->log('warn', 'guard event not stored: ' . $e->getMessage());
@@ -1440,90 +1451,13 @@ class AiReplyWorker extends WorkerBase
     private function escalate(int $convId, string $channel, string $phone, string $reason,
                               bool $alreadyAnswered = false): void
     {
-        $this->log('info', "conv {$convId}: HANDOFF to human — {$reason}");
-        try {
-            if ($convId > 0) {
-                $this->pdo->prepare(
-                    "UPDATE wa_conversations SET state = 'needs_human', updated_at = datetime('now') WHERE id = ?"
-                )->execute([$convId]);
-            }
-            $this->bus->emit('wa.escalation', 'conversation', $convId, [
-                'channel' => $channel,
-                'phone'   => $phone,
-                'reason'  => $reason,
-            ], 2, 'ai_reply_worker');
-
-            // Tell a person now. The Inbox tab turning red only works if
-            // someone is looking at it; the phone in their pocket always is.
-            // 30-minute cooldown per conversation, so a customer who trips
-            // escalation three times in a row is one buzz, not three.
-            require_once dirname(__DIR__) . '/lib/AlertService.php';
-            $alerts = new \AlertService($this->store, $this->config, $this->evo);
-            $alerts->notify(
-                'escalate:conv:' . $convId,
-                "🔴 DishNet: the AI needs a human for {$phone} ({$channel})"
-                . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
-                30
-            );
-
-            // ── And tell the customer ────────────────────────────────────
-            // A handoff sent them nothing at all. The team gets a buzz, the
-            // Inbox turns red, and the person who asked the question hears
-            // silence — indistinguishable from being ignored. Six
-            // conversations were sitting like that, one of them since nine
-            // that morning.
-            //
-            // Empty by default: an installation that has not set a line keeps
-            // the old behaviour exactly.
-            $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
-            if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
-                $send = $this->evo->sendText($channel, $phone, $holding, ContactOptOut::CLASS_REPLY);
-                if (!empty($send['ok'])) {
-                    if ($convId > 0) {
-                        $this->convSvc->storeMessage($convId, [
-                            'direction'     => 'out',
-                            'role'          => 'assistant',
-                            'body'          => $holding,
-                            'agent_name'    => 'DishNet AI',
-                            'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
-                            'metadata'      => json_encode(['channel' => $channel, 'handover' => true]),
-                        ]);
-                    }
-                } else {
-                    $this->log('warn', "conv {$convId}: handover line not sent: "
-                        . (string)($send['error'] ?? '?'));
-                }
-            }
-        } catch (\Throwable $e) {
-            $this->log('error', 'escalation failed: ' . $e->getMessage());
-        }
+        // Batch 2 (docs/55 §9, docs/56 §5): the hand-over itself lives in lib/Handover.php, so the media worker hands
+        // a voice note it could not transcribe to a person through EXACTLY this path — needs_human, the wa.escalation
+        // event, the staff alert, the holding line once. The statements are the ones that stood here, in their order.
+        if (!class_exists('Handover')) require_once dirname(__DIR__) . '/lib/Handover.php';
+        \Handover::escalate($this->pdo, $this->bus, $this->store, (array)$this->config, $this->evo, $this->convSvc,
+            $convId, $channel, $phone, $reason, $alreadyAnswered,
+            function (string $level, string $message): void { $this->log($level, $message); }, 'ai_reply_worker');
     }
 
-    /**
-     * Have we said this already in the last few turns?
-     *
-     * A customer who trips the handoff three times running should hear it
-     * once. The team alert has a 30-minute cooldown for the same reason, and
-     * repeating a holding line at somebody already waiting reads worse than
-     * saying nothing.
-     *
-     * On any error it answers false: a duplicate is a smaller failure than
-     * another silence.
-     */
-    private function alreadySaid(int $convId, string $text): bool
-    {
-        if ($convId <= 0) return false;
-        try {
-            $stmt = $this->pdo->prepare(
-                "SELECT body FROM wa_messages
-                  WHERE conversation_id = ? AND direction = 'out'
-                  ORDER BY id DESC LIMIT 3"
-            );
-            $stmt->execute([$convId]);
-            foreach ((array)$stmt->fetchAll(\PDO::FETCH_COLUMN) as $b) {
-                if (trim((string)$b) === trim($text)) return true;
-            }
-        } catch (\Throwable $e) { /* fall through */ }
-        return false;
-    }
 }

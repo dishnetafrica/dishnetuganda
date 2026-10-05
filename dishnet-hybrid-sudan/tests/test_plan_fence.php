@@ -128,6 +128,12 @@ $ledger = [
     // never to a customer. So the plan fence (which guards model text in front of a customer) does not
     // apply. It is also NOT bound in the pilot: the live binding is NullWhatsAppChannel, which sends nothing.
     'WhatsAppChannel.php'      => 'distributor',
+    // Batch 2 of the AI communication layer (docs/55 §9, docs/56 §5): AiReplyWorker::escalate() moved into this library
+    // class so the media worker hands a voice note it could not transcribe to a person through the same path. The ONE
+    // text it sends a customer is the operator's own ai_handover_message, verbatim — a fixed line with no model output —
+    // so the plan fence does not apply. The model text a hand-over follows was fenced by its sender (AiReplyWorker)
+    // before the hand-over ran; the staff alert it sends goes through AlertService ('staff' above).
+    'Handover.php'             => 'fixed',
 ];
 // WaAutoReplyService is deliberately absent: it calls sendText nowhere. It
 // produces the reply and fences it in guard(), and something else posts it.

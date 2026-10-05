@@ -4903,3 +4903,145 @@ into memory by the media worker, checked and reduced to size, type and sha256 �
 only (deleted by the tests). **Deployment requirement:** a release commit cut on the live 5.18.74 (`db18ad9`) carrying
 5.18.75 + 5.18.76, its deploy script and rehearsal — **not cut, not pushed, awaiting the operator's instruction.**
 **STOPPED here; Batch 2 (voice → transcript → brain) waits for explicit approval.**
+
+## 05 Oct — AI communication layer, Batch 2 (5.18.77): VOICE, dark — the provider boundary documented, the voice path built end to end on the existing assistant, NO provider selected, NOT deployed, NOT pushed; STOPPED before Batch 3
+
+**Instruction (in substance):** *Batch 1 accepted as development-complete; keep `ce16324` local and unreleased; do not
+push, deploy, change production configuration, enable `ai_media_enabled`, activate voice/image/document processing,
+modify South Sudan behaviour, touch Domain B or start customer-facing media replies. Batch 2 approved — VOICE MEDIA
+ONLY: re-read the Batch 1 contracts, the brain, STOP, the guard, hand-over and message persistence first; find where the
+transcript enters the existing turn without a second brain or pipeline; document the provider boundary before selecting
+or integrating any provider; implement audio classification through the foundation, retrieval through Evolution, a
+transcription adapter with a deterministic fake, normalisation, an explicit voice indication, the transcript into the
+EXISTING DishNetAiBrain path with the existing guards, privacy, hand-over and audit, STOP on the transcript, safe
+fall-back on failure, idempotency and retry intact, no bytes on disk, no secrets or media in logs; flags off, no
+production change; the fourteen tests; local commit allowed, no push, no deploy; stop and report.* All of it honoured.
+**Nothing left this machine; both flags are off everywhere; no provider exists.**
+
+**Where the transcript enters — one place, nothing new in kind.** The webhook queues a typed message as an `ai.reply`
+event whose `message` is the text; `AiReplyWorker::handle()` does identity, history, the brain, the guard, the send,
+the store, the lead marker and the escalation. A voice note enters at exactly that event: `VoiceTranscription`, called
+by the Batch 1 media worker once it holds the audio in memory, queues ONE `ai.reply` event of the same shape with
+`message` = `[voice message, transcribed] <transcript>` plus `origin: voice` and `voice: {media_id, seconds, chars}`.
+No second brain, no second queue, no second worker for replies: the transcript is a customer turn like any other, and
+every guard that applies to typed text applies to it unchanged.
+
+**The provider boundary — `docs/56`, written before the adapter.** `lib/Transcriber.php`: `TranscriberPort`
+(`transcribe(MediaBlob, hints, timeoutSeconds)` → a transcript, or a FIXED reason code with a retryable flag; `detail`
+may never carry audio, text, a key, a number or a JID), `TranscriberFactory` (`ai_transcription_provider` unset or
+`none` → no provider; `fake` → the deterministic fake, constructible only when the test environment names its script
+file; anything else → no provider and one log line — **no value selects a real provider**), and `FakeTranscriber`
+(scripted by the audio's sha256: a transcript or a scripted failure; it records hash prefixes and counts, never bytes or
+text). The size, time and cost assumptions and the test strategy are in `docs/56` §6–§7. **The provider, the language
+hint, the cost ceiling and whether audio may leave the server at all are the operator's decisions, not taken here.**
+
+**What was built, file by file:**
+- **`lib/VoiceTranscription.php`** — `process(row, audio)`: refuses before any provider call a non-audio type, a note
+  longer than `ai_media_voice_max_seconds` (default 120, range 10–600) and a missing provider; marks the row
+  `transcribing`; asks the provider with the `ai_media_voice_timeout_s` budget (default 30, range 5–120); maps its
+  answer to the reason codes `provider_missing · too_long · unsupported_audio · invalid_audio · empty_transcript ·
+  conversation_missing` (permanent) and `provider_error · timeout` (retryable); normalises the text (control characters
+  out, whitespace collapsed, 4,000 characters at most, empty is a failure). `complete()` runs **one transaction**:
+  `UPDATE wa_media SET status = 'understood', understanding = …, understanding_kind = 'transcript' … WHERE id = ? AND
+  status <> 'understood'` — zero rows means already done, nothing else happens; the stored `[AUDIO]` message's body
+  becomes the labelled transcript and its metadata gains `voice` (so the inbox and the model's history show what was
+  said); `ContactOptOut::detect()` runs on the raw transcript exactly as the webhook runs it on typed text (source
+  `voice_keyword`, the message still answered); the one `ai.reply` event is queued. A database failure rolls all of it
+  back and is thrown, so the worker retries the whole thing.
+- **`workers/MediaWorker.php`** — after a successful fetch of an audio row, **only when `MediaPolicy::voiceEnabled()`**
+  (both flags), the blob goes to `VoiceTranscription` and is wiped whatever happens. A retryable failure is thrown (the
+  EventBus retries with its backoff; the retry fetches the audio again, since nothing was kept); a permanent failure —
+  and a Batch 1 fetch refusal for a voice note, and the queue giving up — hands the conversation to a person. The
+  settled rule is refined: a `fetched` voice note with no transcript yet is not settled while voice is on; `understood`
+  is settled for good, so a duplicate event never transcribes twice. `useTranscriber()` for tests; `TranscriberFactory`
+  otherwise.
+- **`lib/Handover.php`** — `AiReplyWorker::escalate()` **moved into a library class**, statement for statement:
+  `needs_human`, the `wa.escalation` event, the staff alert with its 30-minute cooldown, the operator's
+  `ai_handover_message` to the customer once (`alreadySaid` moved with it). The worker's `escalate()` keeps its
+  signature and delegates (`test_handover_message` 9/0 unchanged); the media worker calls the same function with source
+  `media_worker`. **One hand-over path, two callers.**
+- **`workers/AiReplyWorker.php`** — the turn's context carries `voice => {seconds}` when the event says
+  `origin: voice`; the sales contract passes it to `BrainContext::build()`; a blocked reply's audit event fills the
+  existing `modality` field with `voice` (its default `text` stands otherwise); the per-message log line says
+  `origin=voice`. Nothing else in the turn changed.
+- **`lib/BrainContext.php`** — the **fourteenth** contract key, `voice => ['seconds']`, present only when the caller says
+  so; `test_brain_context` now pins fourteen and proves the duration is the only leaf that travels.
+- **`lib/DishNetAiBrain.php`** — a conditional **VOICE MESSAGE JUST RECEIVED (N s)** block in the data section, beside
+  the pin block: the message is an AUTOMATIC TRANSCRIPT; every name, figure, amount, date, address and number is
+  UNCONFIRMED until the customer confirms it; an unclear transcript is asked about, never guessed; it is content under
+  rule 7. A typed turn's prompt is byte-for-byte what it was.
+- **`lib/MediaPolicy.php`** — `voiceEnabled()` (= `enabled()` AND `ai_media_voice`), the two voice limits with their
+  ranges, the transcript cap. **`tools/set_config.php`** — `ai_media_voice`, `ai_media_voice_max_seconds`,
+  `ai_media_voice_timeout_s` (ranges refused, not clamped) and `ai_transcription_provider`, which accepts `none` only
+  and refuses the fake by name. **`manifest.json` 5.18.77; the nine pins.** **No migration: `wa_media` carried
+  `understanding` and `understanding_kind` since 085.**
+
+**Not built, deliberately:** a transcription provider (the operator's decision after `docs/56`); a voice-specific
+fall-back sentence to the customer (the existing holding line is the operator's own text; a new sentence is a copy
+decision for the operator); image, document, payment screenshots, lead state, follow-up, e-mail, marketing, n8n,
+another gateway, another brain. `ConversationService` untouched (the transcript is written to the row it already stored).
+
+**Proofs — `tests/test_voice_media.php`, 74/0** (a core scenario in-process against the fake Evolution and the fake
+uCRM, with the deterministic fake transcriber injected and a fake brain that parses its canned answer with the real
+marker parser; a CLI scenario in the real plugin tree under `php -S`; both return facts so a weakened copy can run
+them):
+1. **valid voice note → row → fetch → transcript**: `understood`, the transcript on the row (`understanding_kind
+   transcript`), the stored `[AUDIO]` message rewritten as the labelled transcript with voice metadata; one fetch, one
+   provider call that received the bytes, the announced 7 s and the 5 s budget and recorded a hash prefix and a size.
+2. **enters the existing brain exactly once**: one `ai.reply` event by `media_worker`, the webhook's shape (phone,
+   channel, instance, message id, JID, push name, received_at, no location); the reply worker made one brain call.
+3. **clearly voice-originated**: the message starts with the label; the sales contract carries `voice = {seconds: 7}`;
+   the prompt carries the VOICE MESSAGE block and a typed turn's does not; the reply reached the customer once and was
+   stored; **a later typed turn sees the labelled transcript in history** (and carries no voice key itself).
+4. **a duplicate event does not transcribe twice**: acknowledged with no second fetch, call or event; and `complete()`
+   called directly on an understood row answers `already_understood` and changes nothing.
+5. **non-audio ignored**: a photo is fetched (Batch 1) and never transcribed or answered.
+6. **too long, unreadable, too large → rejected and handed over**: `too_long` before any provider call; `invalid_audio`;
+   the Batch 1 `too_large` refusal — each `needs_human`, one `wa.escalation` by `media_worker`, the staff alert naming
+   the reason, the holding line once (stored); no `ai.reply`.
+7. **timeout / provider error → retried**: row `failed/timeout`, the event `failed` with one attempt and an error naming
+   no JID, not handed over; made due, **the retry fetches again, transcribes and queues the one event** (row attempts 2).
+8. **provider failure → safe hand-over**: no provider → `provider_missing`, no call, no event, the holding line, the
+   alert; the factory yields nothing for `none`, an unknown name, or `fake` without its environment; the queue giving up
+   → `dead`, handed over, no event.
+9. **STOP in the transcript**: a spoken "stop" records the opt-out (proactive, source `voice_keyword`, the transcript as
+   evidence), proactive messages are blocked from then on, and the STOP is still acknowledged through the AI; a sentence
+   merely containing "stop" is not an opt-out.
+10. **the guard holds**: a transcript that induces "our cost…" is blocked — the safe fallback sent, the blocked text
+    never, the audit row against the real conversation with `modality: voice`, a person takes over.
+11. **nothing on disk, nothing in logs**: no file under the data directory holds the audio, its base64, its hash or the
+    transcript; the worker logs carry no base64, bytes, transcript or JID; the provider saw hash prefixes only.
+12. **voice OFF**: fetched (Batch 1), zero transcription, zero events, zero messages, no hand-over.
+13. **media OFF wins**: `voiceEnabled()` needs both flags; media off with voice on → `skipped`, nothing fetched.
+14. **eight weakened copies, each caught** by re-running the scenario: voice alone turning voice on; the worker
+    ignoring the voice flag; `understood` no longer settled (a duplicate transcribes again); STOP no longer detected;
+    the label removed; the permanent-failure hand-over removed; the transcript logged; the prompt block removed. Control:
+    the real tree trips none.
+- **CLI, in the real tree:** the webhook records the note; `run_media_worker.php` with the fake provider through its
+  test-only environment transcribes it and queues the one labelled event, the provider log holds one hash-prefix line,
+  `ai_platform.log` holds no transcript; voice OFF → fetched only; media OFF with voice ON → nothing recorded; provider
+  `fake` **without** its environment fails closed → `provider_missing`, hand-over, holding line, no event.
+- **One neighbour caught the refactor first:** `test_plan_fence` keeps a ledger of every file that reaches Evolution
+  with a decision on whether customers see model text through it; `lib/Handover.php` appeared without one (52/1). Its
+  entry is now recorded — `fixed`: the one text it sends a customer is the operator's own holding line, verbatim, no
+  model output, so the plan fence does not apply — and the suite is 53/0. **A sender that appears without a line in that
+  ledger fails until somebody chooses which side it is on; the guard worked.**
+- **Neighbours in the full run, all 0 failed:** `test_voice_media` 74 · `test_media_foundation` 102 · `test_brain_context` 126 · `test_handover_message` 9 · `test_plan_fence` 53 · `test_lead_path_batch0` 25 · `test_bot_stays_awake` 59 · `test_guard_blocks_send` 41 · `test_reply_privacy_guard` 71 · `test_ai_brain` 153 · `test_ai_minimal_context` 61 · `test_location_pin` 79 · `test_human_handover` 14 · `test_human_takes_over` 16 · `test_human_reply_visible` 9 · `test_history_identity` 94 · `test_contact_optout` 49 · `test_ai_security_policy` 146 · `test_shadow_runtime` 74 · `test_notify_evo_retry` 23 · `test_kit_tax_note` 68 · `test_ai_unlimited_and_network` 159 · `test_ai_indoor_routers` 84 · `test_notify_schedule_health` 19 · `test_cron_no_exit` 10 · `test_config_one_truth` 16 · `test_portal_handoff` 62 · `test_dist_isolation` 39.
+- **Full suite:** **`tests/run.sh` 273 files, 12,535 passed, 0 failed, 0 skipped** (was 272 / 12,457 at 5.18.76: the new test's 74, the 3 added to `test_brain_context` and the 1 added to `test_plan_fence`; nothing else moved). **Second run: 273 / 12,535 / 0 again**, on the same code, start to finish.
+- `git diff --check` clean; the diff's only phone-shaped strings are the synthetic `2567720004xx` / `25677200051x`
+  fixture numbers and the staff-alert fixture number the existing tests already use; no credential-shaped value; **no file under Domain B
+  touched; South Sudan's scheduler list is unchanged** (`test_notify_schedule_health` 19/0 — the `ai_media` job is
+  flag-gated since Batch 1 and no job was added).
+
+**Production impact — none today**: nothing is deployed, both flags are off everywhere, no provider exists. If
+5.18.77 were installed with the flags off: the webhook stores media as before and records nothing; no job runs; the
+settings listing shows four more keys; a hand-over from the reply worker behaves exactly as before, through the moved
+code. With both flags on **and no provider** (the only possible state today): every voice note is fetched, refused as
+`provider_missing`, and handed to a person with the holding line — nothing is answered from a guess. **5.18.77 sits on
+5.18.76 and 5.18.75; any deploy carries Batch 0, whose two flags read ON in Uganda's listing — the operator's rule stands.**
+
+**Rollback:** code only; the flags off restore today's behaviour without a deploy. **External side effects in
+development:** none — fake servers only. **Database changes:** none (no migration). **Deployment requirement:** a
+release commit cut on the live 5.18.74 (`db18ad9`) carrying 5.18.75–5.18.77, its deploy script and rehearsal — **not
+cut, not pushed, awaiting the operator's instruction.** **STOPPED here; Batch 3 (image) waits for explicit approval,
+and a transcription provider waits for the operator's decision on `docs/56`.**

@@ -20,6 +20,15 @@ final class MediaPolicy
     /** What Batch 1 will fetch and validate. Video and stickers are recorded as unsupported, never fetched. */
     public const SUPPORTED_KINDS = ['audio', 'image', 'document'];
 
+    // Batch 2 (docs/55 §9, docs/56): voice notes. ai_media_voice is OFF unless set, and it needs ai_media_enabled too.
+    public const VOICE_DEFAULT_MAX_SECONDS   = 120;    // longer than this is handed to a person, not transcribed
+    public const VOICE_MIN_SECONDS           = 10;
+    public const VOICE_CAP_SECONDS           = 600;
+    public const VOICE_DEFAULT_TIMEOUT_S     = 30;     // the provider's whole answer, within this
+    public const VOICE_MIN_TIMEOUT_S         = 5;
+    public const VOICE_CAP_TIMEOUT_S         = 120;
+    public const VOICE_MAX_TRANSCRIPT_CHARS  = 4000;   // a transcript is cut here; a voice note is not an essay
+
     /**
      * The base media types accepted per kind (the part before any ';' — WhatsApp announces voice notes as
      * "audio/ogg; codecs=opus"). Anything else is refused as unsupported_mime without being kept.
@@ -38,7 +47,32 @@ final class MediaPolicy
 
     public static function enabled(array $config): bool
     {
-        $v = $config['ai_media_enabled'] ?? null;
+        return self::flag($config['ai_media_enabled'] ?? null);
+    }
+
+    /** Voice notes are transcribed only when BOTH flags are on: ai_media_enabled off wins, whatever ai_media_voice says. */
+    public static function voiceEnabled(array $config): bool
+    {
+        return self::enabled($config) && self::flag($config['ai_media_voice'] ?? null);
+    }
+
+    public static function voiceMaxSeconds(array $config): int
+    {
+        $v = $config['ai_media_voice_max_seconds'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::VOICE_DEFAULT_MAX_SECONDS;
+        return max(self::VOICE_MIN_SECONDS, min(self::VOICE_CAP_SECONDS, $n));
+    }
+
+    public static function voiceTimeoutSeconds(array $config): int
+    {
+        $v = $config['ai_media_voice_timeout_s'] ?? null;
+        $n = is_numeric($v) ? (int)$v : self::VOICE_DEFAULT_TIMEOUT_S;
+        return max(self::VOICE_MIN_TIMEOUT_S, min(self::VOICE_CAP_TIMEOUT_S, $n));
+    }
+
+    /** 1/true/on/yes are on; unset, empty and everything else are off. */
+    private static function flag($v): bool
+    {
         if ($v === null || $v === '') return false;
         if (is_bool($v)) return $v;
         return in_array(strtolower(trim((string)$v)), ['1', 'true', 'on', 'yes'], true);

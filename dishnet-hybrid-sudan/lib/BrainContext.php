@@ -15,9 +15,10 @@ require_once __DIR__ . '/ConversationService.php';
  * complete uCRM client record, internal ids, the Splynx id and service
  * address, the customer's phone number, our own WhatsApp instance.
  *
- * This is the allowlist that replaces it. Thirteen keys, and every one earns
+ * This is the allowlist that replaces it. Fourteen keys, and every one earns
  * its place by deciding what the model DOES rather than by being available.
- * (Twelve until Batch 0 of docs/55 added 'location', below.)
+ * (Twelve until Batch 0 of docs/55 added 'location'; thirteen until Batch 2
+ * added 'voice', below.)
  *
  * ── CONSTRUCTED, NEVER FILTERED ─────────────────────────────────────────
  *
@@ -54,7 +55,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Thirteen top-level keys, and the only thirteen.
+     * The contract. Fourteen top-level keys, and the only fourteen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -80,6 +81,10 @@ final class BrainContext
         // the place (DishNetAiBrain's LOCATION PIN block). Before this the sales number, where customers send
         // their location, never showed the assistant the pin at all.
         'location'       => ['lat', 'lng', 'name', 'in_bounds'],
+        // Batch 2 (docs/55 §9, docs/56): this turn's message is the transcript of a voice note the customer sent.
+        // Presence is the fact the prompt acts on (DishNetAiBrain's VOICE MESSAGE block: an automatic transcript,
+        // every name and figure unconfirmed, ask rather than guess); the one leaf is the announced duration.
+        'voice'          => ['seconds'],
     ];
 
     /**
@@ -165,6 +170,13 @@ final class BrainContext
             $out['location'] = ['lat' => (float)$loc['lat'], 'lng' => (float)$loc['lng'], 'in_bounds' => !empty($loc['in_bounds'])];
             $name = self::str($loc['name'] ?? '');
             if ($name !== '') $out['location']['name'] = $name;
+        }
+
+        // Batch 2 (docs/55 §9): the voice note this turn's message was transcribed from. Only when the caller says so
+        // (an array), and only its duration travels — 0 when unknown.
+        $voice = $in['voice'] ?? null;
+        if (is_array($voice)) {
+            $out['voice'] = ['seconds' => max(0, (int)(self::int($voice['seconds'] ?? 0) ?? 0))];
         }
 
         // The public catalogue. Not customer data — identical for every
