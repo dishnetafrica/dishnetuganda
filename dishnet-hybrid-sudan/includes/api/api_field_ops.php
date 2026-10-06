@@ -217,14 +217,16 @@
 
         // 5.18.82 (Uganda, install_auth_enabled): a check-in STARTS the job in uCRM, so a Starlink installation needs
         // the customer's recorded acceptance first — refused HERE, before the check-in is stored (docs/61 §3; the brief's
-        // phase 5). The job must be read from uCRM to decide; when it cannot be, the check-in is refused, not let through.
+        // phase 5). The job must be read from uCRM to decide; when it cannot be, the plugin's own last record of the job
+        // decides whether it is a Starlink installation at all (5.18.83: a Fiber job no longer loses its check-in to a uCRM
+        // outage), and a job known nowhere is refused, not let through.
         $_iaCheckinStart = false;
         if (!empty($_sjUganda)) {
             require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
             $_iaCfg = is_array($config ?? null) ? $config : [];
             if (InstallAuth::enabled($_iaCfg, $dataDir ?? null)) {
-                $_iaJob = $crm->isConfigured() ? $crm->get("scheduling/jobs/{$jobId}") : null;
-                if (!is_array($_iaJob) || !$_iaJob) $er2('The job could not be read from uCRM, so the check-in was not recorded. Try again in a moment.', 502);
+                $_iaJob = InstallAuth::jobForGuard($crm, $store->getPdo(), $jobId);
+                if ($_iaJob === null) $er2('The job could not be read from uCRM, so the check-in was not recorded. Try again in a moment.', 502);
                 $_iaMsg = InstallAuth::guard($store->getPdo(), $_iaCfg, $dataDir ?? null, $_iaJob, 1, 'checkin', (int)($me2['id'] ?? 0));
                 if ($_iaMsg !== null) $er2($_iaMsg, 422);
                 $_iaCheckinStart = is_numeric($_iaJob['status'] ?? null) && (int)$_iaJob['status'] === 0;
@@ -285,6 +287,23 @@
         $note  = trim($body['note'] ?? '');
         if (!$jobId) $er2('job_id required.', 422);
 
+        // 5.18.83 (Uganda, install_auth_enabled; docs/64 §A.1): a check-out CLOSES the job in uCRM (status 2), so it is a
+        // completion like Complete Job — a Starlink installation needs the customer's recorded acceptance (or the D3
+        // exemption) first, refused HERE before the check-out is stored. 5.18.82 guarded check-in and Complete Job and
+        // left this path closing jobs unchecked.
+        $_iaCheckoutClose = false;
+        if (!empty($_sjUganda)) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            if (InstallAuth::enabled($_iaCfg, $dataDir ?? null)) {
+                $_iaJob = InstallAuth::jobForGuard($crm, $store->getPdo(), $jobId);
+                if ($_iaJob === null) $er2('The job could not be read from uCRM, so the check-out was not recorded. Try again in a moment.', 502);
+                $_iaMsg = InstallAuth::guard($store->getPdo(), $_iaCfg, $dataDir ?? null, $_iaJob, 2, 'checkout', (int)($me2['id'] ?? 0));
+                if ($_iaMsg !== null) $er2($_iaMsg, 422);
+                $_iaCheckoutClose = !(is_numeric($_iaJob['status'] ?? null) && (int)$_iaJob['status'] === 2);
+            }
+        }
+
         // Update check-in record with checkout time
         $checkins = $store->load('job_checkins.json') ?? [];
         $existing = $checkins[$jobId] ?? ['job_id' => $jobId, 'checkin_at' => null];
@@ -307,6 +326,7 @@
         if ($crm->isConfigured()) {
             $crm->patch("scheduling/jobs/{$jobId}", ['status' => 2]);
         }
+        if ($_iaCheckoutClose) InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $_iaJob, 'INSTALLATION_COMPLETED', 'checkout', (int)($me2['id'] ?? 0));   // 5.18.83
 
         // Clear active_job from live location
         $live = $store->load('staff_live_locations.json') ?? [];

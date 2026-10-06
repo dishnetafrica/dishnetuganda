@@ -1,6 +1,8 @@
 # 63 — Customer Installation Authorisation for Starlink installation jobs — BUILD RECORD and FINAL REPORT (plugin 5.18.82, 2026-10-05)
 
-**Status: BUILT in development only (plugin 5.18.82). The feature flag `install_auth_enabled` is OFF everywhere and was
+**Status: superseded in part by `docs/64` (plugin 5.18.83, 2026-10-06) — see §0.1 for the statements below that were not true of 5.18.82.**
+
+**Status at 5.18.82: BUILT in development only (plugin 5.18.82). The feature flag `install_auth_enabled` is OFF everywhere and was
 turned on nowhere. NOT deployed, NOT pushed, no production configuration touched, no message sent to any real person, no
 real financial record, no production installation job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched.**
 This is STEP 16 of the emergency brief — the final implementation report (sections A–T below) — written after STEP 4–15
@@ -29,6 +31,21 @@ pending, declined, cancelled, expired and "never requested" all fail closed with
 installation can commence."* — and a job already in progress with no record is exempt (D3). A reassignment after acceptance
 tells the new engineer "🟢 CUSTOMER ALREADY CONFIRMED INSTALLATION". With the flag off, or on South Sudan, every one of
 these paths is unreachable and the job workflow is byte for byte what it was.
+
+## 0.1 Corrections after the pre-release review (added 2026-10-06; fixed in 5.18.83 — `docs/64`)
+
+The final pre-release review of 5.18.82 found that the following statements in this record were not true of 5.18.82. They are
+corrected here rather than rewritten in place, so the record still shows what was claimed.
+
+| Claimed here | What was true of 5.18.82 | Fixed in 5.18.83 |
+|---|---|---|
+| "the raw token is never stored" (§0, §C) | the row held only the hash, but the send layer kept the whole request message, link included, in the WA Inbox's conversation store after a successful send and in the failure queue after a failed one; a staff member could accept for the customer from either | `docs/64` §B |
+| the server refuses "Accept Job, the GPS check-in and Complete Job" — the paths that start or complete a job | GPS check-out sets uCRM status 2 and was not guarded: it closed a pending Starlink installation that nobody had accepted | `docs/64` §A.1 |
+| D3: "a job at status 1 with no record is not refused" | this exempted any job uCRM showed in progress — including one started in uCRM's own screen after the feature was switched on, which then left no trace | `docs/64` §A.4, §A.2 |
+| D6: `inScope()` = `JobPhotos::isInstallJob()` AND the title names `starlink` | "starlink" is one of `isInstallJob()`'s keywords, so this meant "the title names Starlink": repairs, relocations and power-issue visits were bound, and so was any job whose customer's name contained Starlink | `docs/64` §A.3 |
+| D11: the rate ledger "holds a salted SHA-256 of the address" | behind a local proxy the address was the first X-Forwarded-For hop, which the client chooses — the limit could be bypassed, and every request wrote a row | `docs/64` §F |
+| the two e-mail keys: "absent means ON" (§F) | true, and the review judged it unsafe: an install with customer e-mails already on sent these without anyone choosing to | reversed to absent means off, `docs/64` §E |
+| the customer's confirmation: "Our assigned technician has been notified." | said even when both of the technician's channels had failed | `docs/64` §C |
 
 ## 1. The approved decisions and how each is implemented — VERIFIED
 

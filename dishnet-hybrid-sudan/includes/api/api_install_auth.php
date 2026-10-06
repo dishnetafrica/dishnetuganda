@@ -55,7 +55,7 @@ if (!empty($_sjUganda) && in_array($act, ['install_auth_status', 'install_auth_p
     // client's uCRM services and the KYC application when one exists; the staff member may change either.
     if ($act === 'install_auth_prefill' && $met === 'GET') {
         $job = $iaJobOf((int)($_GET['job_id'] ?? 0));
-        if (!InstallAuth::inScope($job)) $er2('Customer authorisation applies to Starlink installation jobs only.', 422);
+        if (!InstallAuth::inScope($job, $iaCfg)) $er2('Customer authorisation applies to Starlink installation jobs only.', 422);
         $client = $iaClientOf($job);
         $cid    = (int)($client['id'] ?? 0);
         $service = ''; $equipment = '';
@@ -103,6 +103,9 @@ if (!empty($_sjUganda) && in_array($act, ['install_auth_status', 'install_auth_p
             'terms_version' => InstallationTerms::VERSION,
             'terms_hash'    => InstallationTerms::hash(),
             'link_days'     => InstallAuth::linkDays($iaCfg),
+            // 5.18.83 (docs/64 §E): which channels are switched on, and why a request would be refused before it is made.
+            'channels'      => ['whatsapp' => InstallAuth::whatsappOn($iaCfg), 'email' => InstallAuth::emailOn('request', $iaCfg)],
+            'cannot_send'   => InstallAuth::noChannelReason($iaCfg, InstallAuth::clientPhone($client), InstallAuth::clientEmail($client)),
             'existing'      => $iaState($job),
         ]);
     }

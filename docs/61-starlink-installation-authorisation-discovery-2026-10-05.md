@@ -2,7 +2,9 @@
 
 **Status: DISCOVERY — APPROVED 2026-10-05 (D1–D11 as recommended; the terminology "Customer Installation Authorisation";
 uCRM-side status changes out of scope) and then BUILT in development as plugin 5.18.82 — the build record and the final
-report are `docs/63`, the terms draft is `docs/62`. At the time this document was written: no code changed, no migration,
+report are `docs/63`, the terms draft is `docs/62`; hardened after its pre-release review as plugin 5.18.83 — `docs/64`
+(D3 is now an explicit activation snapshot, and uCRM-side status changes, still not prevented, are recorded and alerted).
+At the time this document was written: no code changed, no migration,
 no commit, no push, no deploy, no configuration touched, no message sent.** This is STEP 2 of the emergency brief: what exists today around the Starlink Installation Job, read from
 the code at the current working tree (plugin 5.18.81 locally; 5.18.74 live), and the additive design proposed on top of
 it. STEP 3 — the operator's approval — comes before any code. Everything in §1 is VERIFIED from the files named;

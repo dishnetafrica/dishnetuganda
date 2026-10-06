@@ -18,6 +18,11 @@ declare(strict_types=1);
  * The notification is never the source of truth: every method here is called AFTER the record is committed, returns
  * outcomes, records them as events, and never throws into its caller — a failed send leaves the acceptance exactly as it
  * was (the brief's phase 6).
+ *
+ * 5.18.83 (docs/64): every WhatsApp message here goes only while install_auth_whatsapp is on (absent = off); the
+ * customer's confirmation names the technician only when the technician WAS told; and the leaders (active support
+ * leaders and admins) are alerted — once per job and kind — when uCRM shows a Starlink installation started or closed
+ * without the customer's acceptance, and when an accepting customer's technician could not be told.
  */
 require_once __DIR__ . '/InstallAuth.php';
 require_once __DIR__ . '/StaffDirectory.php';
@@ -33,6 +38,10 @@ final class InstallAuthNotifier
     public const LOG_REQUEST   = 'ops_install_auth_request';
     public const LOG_CONFIRMED = 'ops_install_auth_confirmed';
     public const LOG_TECH      = 'ops_install_auth_technician';
+    public const LOG_ALERT     = 'ops_install_auth_alert';
+
+    /** The three things the leaders are told about (alertLeaders()). */
+    public const ALERTS = ['INSTALLATION_STARTED_WITHOUT_ACCEPTANCE', 'INSTALLATION_COMPLETED_WITHOUT_ACCEPTANCE', 'technician_not_told'];
 
     /** @var mixed */ private $crm;
     /** @var mixed */ private $store;
@@ -91,14 +100,19 @@ final class InstallAuthNotifier
         } else {
             $tech = $this->technician($row, $assignee, self::technicianText($this->fields($row)), 'confirmed');
         }
-        $told = in_array($tech['outcome'], ['sent', 'email_only'], true);
+        $told = in_array($tech['outcome'], ['sent', 'email_only', 'already_told'], true);
         InstallAuth::event($pdo, $jobId, $told ? 'INSTALLATION_TECHNICIAN_NOTIFIED' : 'INSTALLATION_TECHNICIAN_NOTIFICATION_FAILED', 'system', null, 'accepted;' . $tech['detail']);
+        // 5.18.83 (docs/64 §C): nobody is told the technician knows unless the technician does. When the technician could
+        // not be told, the customer gets the "DishNet will assign/confirm the technician separately" line and the leaders
+        // are alerted, so a person closes the gap.
+        $alert = $told ? null : $this->alertLeaders($jobId, 'technician_not_told', ['reference' => (string)$row['acceptance_reference'],
+                                                                                'customer' => (string)$row['customer_name'], 'reason' => (string)$tech['outcome']]);
 
-        $f  = $this->fields($row, ['technician_first' => (string)($tech['first_name'] ?? '')]);
+        $f  = $this->fields($row, ['technician_first' => $told ? (string)($tech['first_name'] ?? '') : '']);
         $wa = $this->customerWhatsApp((string)$row['customer_phone'], self::confirmedText($f), self::LOG_CONFIRMED);
         $em = $this->customerEmail('confirmed', $row, $f, $jobId . ':' . (string)$row['acceptance_reference']);
         InstallAuth::event($pdo, $jobId, 'INSTALLATION_ACCEPTANCE_NOTIFICATION_SENT', 'system', null, "wa:{$wa};email:{$em}");
-        return ['technician' => $tech, 'customer' => ['whatsapp' => $wa, 'email' => $em]];
+        return ['technician' => $tech, 'told' => $told, 'customer' => ['whatsapp' => $wa, 'email' => $em], 'alert' => $alert];
     }
 
     // ── 3. Reassignment after acceptance ─────────────────────────────────────
@@ -111,8 +125,97 @@ final class InstallAuthNotifier
             $told = in_array($r['outcome'], ['sent', 'email_only'], true);
             InstallAuth::event($this->store->getPdo(), (int)$row['job_id'], $told ? 'INSTALLATION_TECHNICIAN_NOTIFIED' : 'INSTALLATION_TECHNICIAN_NOTIFICATION_FAILED',
                 'system', null, 'reassigned;' . $r['detail']);
+            if (!$told) {
+                $r['alert'] = $this->alertLeaders((int)$row['job_id'], 'technician_not_told', ['reference' => (string)$row['acceptance_reference'],
+                                                  'customer' => (string)$row['customer_name'], 'reason' => (string)$r['outcome']]);
+            }
         }
         return $r;
+    }
+
+    // ── 4. The leaders (5.18.83, docs/64 §A.2, §C) ───────────────────────────
+
+    /**
+     * Tell the leaders — every ACTIVE support leader and admin — about $kind on job $jobId, once per job and kind (a dedupe
+     * mark, so a webhook delivered twice alerts once), by WhatsApp while install_auth_whatsapp is on and by e-mail to each
+     * account's own address. $f carries what the text may name: title (the job's own title), customer (a name, never a
+     * number or an address), reference, reason. Never throws. Returns
+     * ['outcome' => sent | already_told | nobody | failed, 'leaders' => n, 'whatsapp' => n, 'email' => n].
+     */
+    public function alertLeaders(int $jobId, string $kind, array $f = []): array
+    {
+        $out = ['outcome' => 'failed', 'leaders' => 0, 'whatsapp' => 0, 'email' => 0];
+        try {
+            if ($jobId <= 0 || !in_array($kind, self::ALERTS, true)) return $out;
+            $rows = (array)($this->store->load('retailers.json') ?? []);
+            $leaders = array_values(array_filter($rows, function ($r) {
+                return is_array($r) && StaffDirectory::isActive($r)
+                    && (StaffDirectory::isAdmin($r) || StaffDirectory::role($r) === 'support_leader');
+            }));
+            $out['leaders'] = count($leaders);
+            if ($leaders === []) { $out['outcome'] = 'nobody'; return $out; }
+            if (!$this->notify->dedupMark('INSTAUTHALERT' . $jobId . ':' . $kind)) { $out['outcome'] = 'already_told'; return $out; }
+            $text    = self::alertText($kind, ['job_id' => $jobId] + $f);
+            $subject = self::alertSubject($kind, $jobId);
+            $waOn    = InstallAuth::whatsappOn($this->config);
+            foreach ($leaders as $l) {
+                if ($waOn) {
+                    $phone = StaffDirectory::phoneOf($l, $this->tenant);
+                    if ($phone !== null) {
+                        $this->notify->sendVia('support', $phone, $text, self::LOG_ALERT, [], ContactOptOut::CLASS_STAFF);
+                        if (!empty($this->notify->lastSendResult()['success'])) $out['whatsapp']++;
+                    }
+                }
+                if ($this->staffEmail($l, $subject, $text) === 'sent') $out['email']++;
+            }
+            $out['outcome'] = ($out['whatsapp'] + $out['email']) > 0 ? 'sent' : 'failed';
+        } catch (\Throwable $e) {
+            $out['outcome'] = 'failed';
+        }
+        return $out;
+    }
+
+    public static function alertSubject(string $kind, int $jobId): string
+    {
+        switch ($kind) {
+            case 'INSTALLATION_STARTED_WITHOUT_ACCEPTANCE':   return "Job #{$jobId}: Starlink installation started in uCRM without customer acceptance";
+            case 'INSTALLATION_COMPLETED_WITHOUT_ACCEPTANCE': return "Job #{$jobId}: Starlink installation closed in uCRM without customer acceptance";
+            default:                                          return "Job #{$jobId}: customer accepted, but the technician could not be told";
+        }
+    }
+
+    /** The leaders' alert: the job, its title or the customer's name, and what to do — never a phone, an e-mail or a link. */
+    public static function alertText(string $kind, array $f): string
+    {
+        $job   = self::s($f, 'job_id');
+        $title = self::s($f, 'title');
+        $who   = self::s($f, 'customer');
+        $head  = "Installation Job: {$job}\n\n" . ($title !== '' ? "Job: {$title}\n\n" : '') . ($who !== '' ? "Customer: {$who}\n\n" : '');
+        switch ($kind) {
+            case 'INSTALLATION_STARTED_WITHOUT_ACCEPTANCE':
+                return "⚠️ STARLINK INSTALLATION STARTED WITHOUT CUSTOMER ACCEPTANCE\n\n" . $head
+                     . "uCRM shows this Starlink installation in progress, but the customer has not accepted the Installation Terms. "
+                     . "The change was made in uCRM itself, not in the DishNet staff app, so it could not be stopped.\n\n"
+                     . "Please make sure no work is done until the customer accepts: request the customer's authorisation from the job page.";
+            case 'INSTALLATION_COMPLETED_WITHOUT_ACCEPTANCE':
+                return "⚠️ STARLINK INSTALLATION CLOSED WITHOUT CUSTOMER ACCEPTANCE\n\n" . $head
+                     . "uCRM shows this Starlink installation closed, but the customer never accepted the Installation Terms. "
+                     . "The change was made in uCRM itself, not in the DishNet staff app.\n\n"
+                     . "Please review the job: its installation charges have no recorded customer authorisation.";
+            default:
+                $why = [
+                    'ucrm_unreadable'         => 'uCRM could not be read for the job\'s assignee',
+                    'no_assignee'             => 'nobody is assigned to the job in uCRM',
+                    'no_staff_account'        => 'the assigned uCRM user has no verified staff account',
+                    'ambiguous_staff_account' => 'more than one staff account is linked to the assigned uCRM user',
+                    'failed'                  => 'neither the WhatsApp nor the e-mail to the technician went',
+                ][self::s($f, 'reason')] ?? 'the message to the technician did not go';
+                $ref = self::s($f, 'reference');
+                return "⚠️ TECHNICIAN NOT TOLD — CUSTOMER CONFIRMED INSTALLATION\n\n" . $head
+                     . ($ref !== '' ? "Acceptance Reference: {$ref}\n\n" : '')
+                     . "The customer accepted the Installation Terms, but the technician could not be told: {$why}.\n\n"
+                     . "Please tell the technician, and confirm the installation date with the customer.";
+        }
     }
 
     // ── The texts: pure functions of their fields (the brief's words, D8) ────
@@ -236,7 +339,9 @@ final class InstallAuthNotifier
             return ['outcome' => 'already_told', 'detail' => "already_told;staff:{$sid}", 'first_name' => $first, 'staff_id' => $sid];
         }
         $phone = StaffDirectory::phoneOf($staff, $this->tenant);
-        if ($phone === null) {
+        if (!InstallAuth::whatsappOn($this->config)) {
+            $wa = 'switched_off';
+        } elseif ($phone === null) {
             $wa = 'no_usable_number';
         } else {
             $this->notify->sendVia('support', $phone, $text, self::LOG_TECH, [], ContactOptOut::CLASS_STAFF);
@@ -277,6 +382,7 @@ final class InstallAuthNotifier
     /** The customer's WhatsApp: sent | failed | no_number. */
     private function customerWhatsApp(string $phone, string $text, string $log): string
     {
+        if (!InstallAuth::whatsappOn($this->config)) return 'switched_off';
         if (trim($phone) === '') return 'no_number';
         try {
             $this->notify->sendVia('support', $phone, $text, $log, [], ContactOptOut::CLASS_TRANSACTIONAL);

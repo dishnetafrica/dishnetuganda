@@ -149,14 +149,16 @@ function iaApi(method,action,body,qs){
   return fetch('?page=api&action='+action+(qs||''),o).then(function(r){return r.json();});
 }
 var CARD='background:#1e293b;border-radius:12px;padding:1rem;margin-bottom:12px;';
-var STATUS_WORDS={none:'Not requested yet',pending:'Awaiting the customer',accepted:'Accepted',declined:'Declined by the customer',cancelled:'Request withdrawn',expired:'Link expired'};
+var STATUS_WORDS={none:'Not requested yet',pending:'Awaiting the customer',accepted:'Accepted',declined:'Declined by the customer',cancelled:'Request withdrawn',expired:'Link expired',exempt:'Started before customer authorisation was switched on'};
 function ia(data){ return (data&&data.install_auth&&data.install_auth.applies)?data.install_auth:null; }
 function row(k,v){ if(v==null||v==='') return ''; return '<div style="margin-bottom:6px;"><span style="color:#94a3b8;font-size:12px;">'+iaEsc(k)+'</span><div style="color:#e2e8f0;font-size:14px;">'+iaEsc(v)+'</div></div>'; }
 function fmt(n){ n=Number(n||0); return Math.round(n)===n ? n.toLocaleString('en-GB') : n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function money(r){ if(!r||!r.price) return ''; var p=r.price; return (p.currency||'')+' '+fmt(p.total); }
 function history(list){ if(!list||!list.length) return 'No history yet.'; return list.map(function(e){ return iaEsc((e.at||e.created_at||'')+' · '+e.event+(e.detail?' · '+e.detail:'')); }).join('<br>'); }
-window.schIaBlocksStart=function(data){ var a=ia(data); return !!a && a.status!=='accepted'; };
-window.schIaBlocksComplete=function(data){ var a=ia(data); return !!a && a.status!=='none' && a.status!=='accepted'; };
+/* 5.18.83 (docs/64): the server's own answer (install_auth.authorised) decides what the screen shows — the same rule the
+   guard enforces, including the explicit D3 exemption and the client binding — never a guess from the status here. */
+window.schIaBlocksStart=function(data){ var a=ia(data); return !!a && a.authorised!==true; };
+window.schIaBlocksComplete=function(data){ var a=ia(data); return !!a && a.authorised!==true; };
 window.schIaNotice=function(kind){
   var what = kind==='complete' ? 'Installation cannot be completed until the customer accepts the Installation Terms.' : 'Installation cannot be started until the customer accepts the Installation Terms.';
   return '<div style="background:#450a0a;border:1px solid #7f1d1d;border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
@@ -166,15 +168,22 @@ window.schIaNotice=function(kind){
 window.schIaBadge=function(j){
   if(!j||!j._install_auth) return '';
   var s=j._install_auth;
-  var c = s==='accepted' ? ['#064e3b','#6ee7b7','🟢 Customer authorised'] : s==='pending' ? ['#422006','#fcd34d','🟡 Awaiting customer authorisation'] : ['#450a0a','#fca5a5','🔴 Customer authorisation required'];
+  var c = s==='accepted' ? ['#064e3b','#6ee7b7','🟢 Customer authorised'] : s==='pending' ? ['#422006','#fcd34d','🟡 Awaiting customer authorisation'] : s==='exempt' ? ['#1e293b','#cbd5e1','⚪ Started before authorisation was switched on'] : ['#450a0a','#fca5a5','🔴 Customer authorisation required'];
   return '<div style="margin-top:6px;"><span style="display:inline-block;background:'+c[0]+';color:'+c[1]+';border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;">'+c[2]+'</span></div>';
 };
 window.schIaCard=function(data,job,closed){
   var a=ia(data); if(!a) return '';
   var r=a.record||null, h='';
-  h+='<div style="'+CARD+'border:2px solid '+(a.status==='accepted'?'#166534':'#7f1d1d')+';" id="schIaCard">';
+  var exemptOnly = a.authorised===true && a.status!=='accepted';   /* D3: in progress when the feature was switched on */
+  h+='<div style="'+CARD+'border:2px solid '+(a.authorised===true?(exemptOnly?'#475569':'#166534'):'#7f1d1d')+';" id="schIaCard">';
   h+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">Customer authorisation</div>';
-  if(a.status==='accepted'){
+  if(exemptOnly){
+    h+='<div style="font-size:15px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">⚪ STARTED BEFORE AUTHORISATION WAS SWITCHED ON</div>';
+    h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">This job was already in progress when customer authorisation was switched on'+(a.activated_at?' ('+iaEsc(a.activated_at)+')':'')+', so it may be completed without a customer acceptance. You may still request one.</div>';
+    if(r) h+=row('Status',STATUS_WORDS[a.status]||a.status);
+    if(!closed && (!r || a.status!=='pending')) h+='<button onclick="schIaOpenRequest('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;margin-top:6px;">📨 Request customer authorisation</button>';
+    h+='<button onclick="schIaToggleEvents()" class="sch-act-btn" style="background:#1e1b4b;color:#a5b4fc;margin-top:8px;">📜 History</button>';
+  } else if(a.status==='accepted' && a.authorised===true){
     h+='<div style="font-size:16px;font-weight:800;color:#4ade80;margin-bottom:8px;">🟢 ACCEPTED</div>';
     h+=row('Customer',r.customer_name)+row('Terms',r.terms_version)+row('Accepted',r.accepted_at)+row('Acceptance Reference',r.acceptance_reference);
     h+=row('Service',r.scope&&r.scope.service)+row('Total',money(r));
@@ -184,7 +193,9 @@ window.schIaCard=function(data,job,closed){
       +'<button onclick="schIaToggleEvents()" class="sch-act-btn" style="background:#1e1b4b;color:#a5b4fc;margin:0;">📜 History</button></div>';
   } else {
     h+='<div style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:8px;">🔴 CUSTOMER ACCEPTANCE REQUIRED</div>';
-    h+='<div style="font-size:12px;color:#fecaca;margin-bottom:8px;">Installation cannot be started until the customer accepts the Installation Terms.</div>';
+    h+='<div style="font-size:12px;color:#fecaca;margin-bottom:8px;">'+(a.client_changed
+        ? 'The acceptance on record was given for another customer: this job now belongs to a different customer in uCRM. Create a new job for the new customer, or restore the job\'s customer in uCRM.'
+        : 'Installation cannot be started or completed until the customer accepts the Installation Terms.')+'</div>';
     h+=row('Status',STATUS_WORDS[a.status]||a.status);
     if(r){
       h+=row('Requested',r.requested_at+(r.requested_by_name?' by '+r.requested_by_name:''));
@@ -195,7 +206,7 @@ window.schIaCard=function(data,job,closed){
       if(a.status==='expired') h+=row('Link expired',r.token_expires_at);
       h+=row('Total',money(r));
     }
-    if(!closed){
+    if(!closed && !a.client_changed){
       h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
       if(a.status==='pending'){
         h+='<button onclick="schIaResend('+job.id+')" class="sch-act-btn" style="background:#1e3a5f;color:#93c5fd;margin:0;">🔁 Send the link again</button>';
@@ -233,7 +244,8 @@ window.schIaOpenRequest=function(jobId){
       +'<div><div style="font-size:11px;opacity:.6;font-weight:700;text-transform:uppercase;">Job #'+jobId+'</div><div style="font-size:17px;font-weight:800;">Request customer authorisation</div></div>'
       +'<button onclick="document.getElementById(\'schIaOverlay\').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:18px;cursor:pointer;">✕</button></div>'
       +'<div style="padding:16px;color:#111827;">'
-      +'<div style="font-size:13px;color:#374151;margin-bottom:6px;">The customer gets a WhatsApp and an e-mail with these details and a secure link to accept or decline. They accept exactly what is entered here — check the charges before sending.</div>'
+      +'<div style="font-size:13px;color:#374151;margin-bottom:6px;">The customer gets '+(p.channels&&p.channels.whatsapp&&p.channels.email?'a WhatsApp and an e-mail':(p.channels&&p.channels.whatsapp?'a WhatsApp (e-mail is switched off)':(p.channels&&p.channels.email?'an e-mail (WhatsApp is switched off)':'nothing — no channel is switched on')))+' with these details and a secure link to accept or decline. They accept exactly what is entered here — check the charges before sending.</div>'
+      +(p.cannot_send?'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:6px;">'+iaEsc(p.cannot_send)+'</div>':'')
       +'<div style="background:#eef2ff;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:6px;"><b>'+iaEsc(c.name||'(no name in uCRM)')+'</b><br>'
       +(c.phone?'WhatsApp: '+iaEsc(c.phone):'<span style="color:#b45309">No phone number in uCRM</span>')+'<br>'
       +(c.email?'E-mail: '+iaEsc(c.email):'<span style="color:#b45309">No e-mail address in uCRM</span>')
@@ -1427,6 +1439,9 @@ window.schCheckOut = function(jobId) {
             headers: {'Authorization': 'Bearer ' + _apiToken, 'Content-Type': 'application/json'},
             body: JSON.stringify({job_id: jobId, lat: 0, lon: 0})
         }).then(r => r.json()).then(function(res) {
+<?php if ($_sjUganda): ?>
+            if (!res || res.code !== 200) { if (statusEl) { statusEl.textContent = '⚠ ' + ((res && res.message) || 'Check-out failed'); statusEl.style.color = '#dc3545'; } return; }   // 5.18.83: a refused check-out is said, never shown as done
+<?php endif; ?>
             if (statusEl) { statusEl.textContent = '🏁 Checked out'; statusEl.style.color = '#1976d2'; }
         });
         return;
@@ -1439,6 +1454,9 @@ window.schCheckOut = function(jobId) {
             headers: {'Authorization': 'Bearer ' + _apiToken, 'Content-Type': 'application/json'},
             body: JSON.stringify({job_id: jobId, lat: pos.coords.latitude, lon: pos.coords.longitude})
         }).then(r => r.json()).then(function(res) {
+<?php if ($_sjUganda): ?>
+            if (!res || res.code !== 200) { if (statusEl) { statusEl.textContent = '⚠ ' + ((res && res.message) || 'Check-out failed'); statusEl.style.color = '#dc3545'; } return; }   // 5.18.83: a refused check-out is said, never shown as done
+<?php endif; ?>
             if (statusEl) { statusEl.textContent = '🏁 Checked out at ' + new Date().toLocaleTimeString(); statusEl.style.color = '#1976d2'; }
             schStopTracking();
         });

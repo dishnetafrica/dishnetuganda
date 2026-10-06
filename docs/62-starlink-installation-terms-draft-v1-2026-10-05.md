@@ -59,6 +59,9 @@ made under v1.0 stays reproducible after any later version.
 6. Whether the Starlink equipment and service terms (sections 16 and 18) should be referenced by name and version.
 7. Whether the heading should carry the registered company name exactly as it appears on the certificate of incorporation.
 
+The implementation facts a reviewer needs beside these questions (what the system records and what it does not) are in
+`docs/64` §I.2 — facts, not legal opinion. The text below is unchanged by 5.18.83.
+
 ## The text (INSTALLATION-TERMS-v1.0)
 
 ```text

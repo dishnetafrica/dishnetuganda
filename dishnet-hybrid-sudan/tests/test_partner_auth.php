@@ -146,7 +146,7 @@ is_((int)$intlRow === $uid, 'the international form resolves the account the nat
 
 echo "\nJ. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.82', 'manifest version is 5.18.71');
+is_(($mani['information']['version'] ?? '') === '5.18.83', 'manifest version is 5.18.71');
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

@@ -138,17 +138,22 @@ if ($_sjUganda) {
             $cfg = is_array($config ?? null) ? $config : [];
             if (!InstallAuth::enabled($cfg, $dataDir ?? null)) return $jobs;
             $ids = [];
-            foreach ($jobs as $j) { if (is_array($j) && InstallAuth::inScope($j)) $ids[] = (int)($j['id'] ?? 0); }
+            foreach ($jobs as $j) { if (is_array($j) && InstallAuth::inScope($j, $cfg)) $ids[] = (int)($j['id'] ?? 0); }
             $status = [];
             if ($ids) {
                 try {
-                    $st = $store->getPdo()->prepare('SELECT job_id, status FROM install_auth WHERE job_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+                    $in = implode(',', array_fill(0, count($ids), '?'));
+                    $st = $store->getPdo()->prepare('SELECT job_id, status FROM install_auth WHERE job_id IN (' . $in . ')');
                     $st->execute($ids);
                     foreach ($st->fetchAll(\PDO::FETCH_ASSOC) ?: [] as $r) $status[(int)$r['job_id']] = (string)$r['status'];
+                    // 5.18.83 (docs/64 §A.4): a job in progress when the feature was switched on, with no request, is 'exempt'.
+                    $st = $store->getPdo()->prepare('SELECT job_id FROM install_auth_exempt WHERE job_id IN (' . $in . ')');
+                    $st->execute($ids);
+                    foreach ($st->fetchAll(\PDO::FETCH_COLUMN) ?: [] as $id) { if (!isset($status[(int)$id])) $status[(int)$id] = 'exempt'; }
                 } catch (\Throwable $e) { /* no marks rather than no list */ }
             }
             foreach ($jobs as &$j) {
-                if (is_array($j) && InstallAuth::inScope($j)) $j['_install_auth'] = $status[(int)($j['id'] ?? 0)] ?? 'none';
+                if (is_array($j) && InstallAuth::inScope($j, $cfg)) $j['_install_auth'] = $status[(int)($j['id'] ?? 0)] ?? 'none';
             }
             unset($j);
             return $jobs;
@@ -528,8 +533,9 @@ if ($_sjUganda) {
         }
         if ($_sjUganda) $sjMayAct($sjCaller(), $job);   // J6, before anything is stored or sent
         // 5.18.82 (Uganda, install_auth_enabled): a Starlink installation is completed only with the customer's recorded
-        // acceptance — refused HERE, before anything is stored or sent (docs/61 §3). A job already in progress with no
-        // authorisation record (started before the feature, D3) is not refused.
+        // acceptance — refused HERE, before anything is stored or sent (docs/61 §3). 5.18.83 (docs/64 §A): only an accepted
+        // record for the job's own client, or the D3 exemption recorded when the feature was switched on, lets it through —
+        // a job is no longer exempt merely because uCRM shows it in progress now.
         $_iaComplete = false;
         if ($_sjUganda) {
             require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';

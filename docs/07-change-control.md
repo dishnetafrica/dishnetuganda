@@ -5537,3 +5537,76 @@ exactly; the tables are additive and ignored by older code.
 
 **Git:** committed locally as the eighth unpushed commit on `claude/study-this-jhe2eg`, after `1a190ce`. Nothing pushed, nothing
 deployed, no configuration changed, nothing sent to anyone. Stopped for the operator's review.
+
+## 06 Oct — Customer Installation Authorisation hardened for production (5.18.83) — the pre-release review's findings closed; BUILT, flag OFF, NOT deployed, NOT pushed
+
+**What and why.** The final pre-release review of 5.18.82 (read-only, 06 Oct) found the feature ready for legal review and
+not ready for production. Four code blockers: GPS check-out closed jobs unguarded; a start made in uCRM's own screen opened
+the completion guard (5.18.82 read D3 as "in progress now") and left no trace; scope took every title naming Starlink,
+repairs and customers' names included; the raw secure link sat in the WA Inbox's conversation store and the failure queue, so
+staff could accept for a customer. There were also should-fix items. The operator's instruction: implement and make it
+ready for production. Record: **`docs/64`**; `docs/63` gains §0.1, listing its statements that were not true of 5.18.82.
+
+**What changed.**
+- **One rule** (`InstallAuth::decision()`), read by every guard, the panel, the list badge and the uCRM-side check. Yes
+  only for an acceptance given by the client the job belongs to now, or an exemption recorded at activation; a declined
+  record refuses even an exempt job. The guard is on Accept Job / status updates, GPS check-in, **GPS check-out (new)** and
+  Complete Job.
+- **D3 explicit.** `tools/set_config.php --key install_auth_enabled --value 1` first reads uCRM's jobs in progress and records
+  the Starlink installations among them in `install_auth_exempt`, with `INSTALLATION_EXEMPTED` and an
+  `install_auth_activations` row, in one transaction. It refuses, saving nothing, when uCRM cannot be read or returns a full
+  page. Repeats change nothing; off and on is a new snapshot.
+- **uCRM-side starts and closes recorded.** `JobNotifier::observe` asks `InstallAuth::observeUcrm()` after its claim. The
+  events are `INSTALLATION_STARTED/COMPLETED_WITHOUT_ACCEPTANCE`, once per job and event; active support leaders and admins
+  are alerted by WhatsApp (when switched on) and e-mail; the webhook log gets one line. A job first seen already closed is
+  not reported.
+- **Scope by type.** The title before " — <customer>" must equal one of `install_auth_job_titles` (new; default
+  `Starlink Installation`).
+- **The link kept nowhere.** `NotificationService::storable()` withholds it in the conversation store, the Message Log
+  preview, the dry-run log, the unusable-number log and the failure queue; `NEVER_QUEUED` = `app_otp` +
+  `ops_install_auth_request`.
+- **Truthful messages.** The customer's confirmation names the technician only when told; otherwise the brief's fallback
+  line, and the leaders are alerted. The page claims only what happened. A first-sight reassignment still tells the new
+  engineer.
+- **Evidence integrity.** The client binding; triggers making an accepted record final and every record undeletable; the
+  status lifecycle and a sent request's snapshots fixed; the acceptance and its event in one transaction.
+- **Channels.** `install_auth_whatsapp` (new, absent = off); the two e-mail keys reversed to absent = off; a request no
+  channel can carry is refused before any record; the request form shows the channels.
+- **Page and webhook.**
+  - The rate ledger is keyed by the link's token hash, not an address; unknown links write nothing.
+  - Resend cooldown, 120 s.
+  - A posted `job.delete` withdraws a request only when uCRM answers 404.
+  - Check-in and check-out fall back to `job_notify_state` when uCRM is unreadable, so a Fiber job is no longer refused in an outage.
+  - On Uganda a refused check-out shows as refused.
+- **Migration 086 amended, not followed by 087.** It never ran outside test sandboxes: two append-only tables, eight triggers,
+  three events and one CHECK, all additive. `manifest.json` 5.18.83; 15 version pins.
+- **Two pins in other suites amended, not deleted:**
+  - `test_customer_otp_transport` counted two `app_otp` conditions in the send layer, and the queue's is now the
+    `NEVER_QUEUED` list. Both halves are still pinned.
+  - `test_notify_customer_fixes`' weakened copy of the unusable-number guard is anchored on that line, which now logs
+    `storable($message)`. The anchor follows it, and the copy is caught again. The first full run found this: its anchor
+    was gone.
+
+**Proofs.**
+- `tests/test_install_authorisation.php` **352/0, twice**: the brief's 32 cases, the lifecycle, the H block (one part per
+  finding) and **21 weakened copies, each caught**. Highlights:
+  - not one minted link is in any table or file of the data directory, read as raw bytes, with planted-value controls;
+  - each database floor is proved alone, and both together as the control on the controls.
+- **Full suite** (`tests/run.sh`): 278 files, 13,344 passed, 0 failed, 0 skipped, twice, on the final tree. It was
+  278 / 13,236 at 5.18.82: the feature test grew from 245 to 352, and the OTP-transport pin gained its `NEVER_QUEUED`
+  half (+1).
+- Each full run left `tests/test_customer_pwa.php`'s `php -S` server running after the run ended; both were stopped by
+  hand. That test predates this work and is recorded, not changed.
+- South Sudan suite 51 passed, 0 failed, 0 skipped, in each full run.
+- **Harness lesson, measured.** An in-process raw read of the sandbox database dropped this process's POSIX locks under its
+  own SQLite connections; the next read reported "malformed" while the file checked clean elsewhere. The scan runs in a
+  `grep` process now (`docs/64` §G).
+
+**Not done, by decision:** no deployment, no push, no flag on anywhere; the terms are unchanged and still await legal review;
+uCRM-side changes are recorded, not prevented; who may request and set charges is unchanged (J6), an operator decision;
+the check-in store's pre-existing nesting is recorded, not changed.
+
+**Rollback:** the flag first (`--clear`). Reverting this commit restores 5.18.82; the tables are additive.
+
+**Git:** committed locally after `8e5808a`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to
+anyone. The release cut on live 5.18.74 follows below.

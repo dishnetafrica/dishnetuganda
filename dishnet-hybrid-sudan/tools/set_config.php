@@ -272,20 +272,26 @@ $FLAGS = [
     // uCRM's own notification settings are read; 0 is the switch for the day it is taken.
     'kyc_quote_send_via_crm' => ['bool',
         'A KYC quote asks uCRM to send it, so uCRM e-mails the quotation (unset = on, as always; 0 = it does not ask)'],
-    // ── Customer Installation Authorisation (5.18.82, docs/61 §3, docs/63) — Uganda only ──────────────────────────
-    // A Starlink installation job may not be started (Accept Job, GPS check-in) or completed until the customer has
-    // accepted the Installation Terms and the charges on the secure page the request sends them. Off by default: with
-    // it off the job workflow is byte for byte what it was. On, every Starlink installation job still pending is bound;
-    // a job already in progress with no request is exempt (D3). The two e-mail keys sit under the customer e-mails
-    // master switch and, unlike the catalogue keys, ABSENT MEANS ON — the feature flag is the gate.
+    // ── Customer Installation Authorisation (5.18.82, hardened in 5.18.83; docs/61 §3, docs/63, docs/64) — Uganda only ──
+    // A Starlink installation job may not be started (Accept Job, GPS check-in) or completed (Complete Job, GPS check-out)
+    // until the customer has accepted the Installation Terms and the charges on the secure page the request sends them.
+    // Off by default: with it off the job workflow is byte for byte what it was. Switching it ON is its ACTIVATION: uCRM
+    // is read first and the Starlink installation jobs in progress at that moment are recorded as exempt (D3) — if uCRM
+    // cannot be read, nothing is saved. Every channel is off until set (5.18.83): install_auth_whatsapp for the WhatsApp
+    // messages, the two e-mail keys (under the customer e-mails master switch) for the e-mails; a request that no
+    // switched-on channel can carry is refused before anything is recorded.
     'install_auth_enabled' => ['bool',
-        'Customer Installation Authorisation for Starlink installation jobs (Uganda): the customer must accept the terms and charges on a secure link before a technician can accept, check in to or complete the job (docs/63). Off = the workflow as before'],
+        'Customer Installation Authorisation for Starlink installation jobs (Uganda): the customer must accept the terms and charges on a secure link before a technician can accept, check in to, check out of or complete the job (docs/63, docs/64). Turning it on first records the jobs already in progress (D3) and refuses if uCRM cannot be read. Off = the workflow as before'],
+    'install_auth_job_titles' => ['text',
+        'Which uCRM job titles are a Starlink installation: comma-separated, matched (case aside) on the title before " — <customer>" (default: Starlink Installation)'],
+    'install_auth_whatsapp' => ['bool',
+        'Send the authorisation messages by WhatsApp — the customer\'s request and confirmation, the technician\'s, the leaders\' alerts. Absent means OFF'],
     'install_auth_link_days' => ['number',
         'How many days the customer\'s authorisation link stays valid (default 14; 1 to 90), or until 3 days after the scheduled date if that is later'],
     'customer_email_install_auth_request' => ['bool',
-        'The authorisation REQUEST e-mail to the customer (needs the customer e-mails master switch). Absent means ON; set 0 to send the WhatsApp only'],
+        'The authorisation REQUEST e-mail to the customer (needs the customer e-mails master switch). Absent means OFF; set 1 to send it'],
     'customer_email_install_auth_confirmed' => ['bool',
-        'The confirmation e-mail after the customer accepts (needs the master switch). Absent means ON; set 0 to send the WhatsApp only'],
+        'The confirmation e-mail after the customer accepts (needs the master switch). Absent means OFF; set 1 to send it'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
@@ -508,6 +514,18 @@ if (!$clear && $key === InstallAuth::LINK_DAYS_KEY) {
     }
     $new = (string)(int)$new;
 }
+// 5.18.83 (docs/64 §A.3): the installation job titles — a list of real titles, each at most 80 characters.
+if (!$clear && $key === InstallAuth::TITLES_KEY) {
+    $items = array_values(array_filter(array_map(function ($t) { return trim((string)preg_replace('/\s+/u', ' ', $t)); }, preg_split('/[,\n]+/', $new) ?: []),
+        function ($t) { return $t !== ''; }));
+    $long  = array_filter($items, function ($t) { return mb_strlen($t) > 80; });
+    if ($items === [] || $long !== []) {
+        echo "\n  Give one or more job titles, separated by commas, each at most 80 characters — for example:\n";
+        echo "      --value \"Starlink Installation, Starlink Kit Installation\"\n  Nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = implode(', ', $items);
+}
 // Batch 2 (docs/56), Batch 3 (docs/57) and Batch 4 (docs/58): no transcription, vision or document OCR provider is
 // integrated yet, so `none` is the only value of any provider key; the fakes are for tests and are refused here by name
 // like anything else.
@@ -600,8 +618,55 @@ if (!$clear) {
     }
 }
 
+// 5.18.83 (docs/64 §A.4): switching Customer Installation Authorisation ON is its activation (D3, explicit). uCRM is read
+// FIRST and the Starlink installation jobs in progress at this moment are recorded as exempt — those, and only those, may
+// be completed without the customer's acceptance. If uCRM cannot be read, or the plugin's database does not exist yet,
+// nothing is saved. Already on and activated: nothing changes (switch it off and on again for a new snapshot).
+$iaActivation = null;
+if (!$clear && $key === InstallAuth::FLAG && InstallAuth::flagOn([InstallAuth::FLAG => $new])) {
+    $iaCur = PluginConfig::load($root, $dataDir);
+    require_once $root . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies([InstallAuth::FLAG => '1'] + $iaCur, $dataDir)) {
+        if (!is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) {
+            echo "\n  The plugin's database does not exist yet (open the plugin in uCRM once), so the jobs in progress\n";
+            echo "  cannot be recorded. Nothing was saved.\n\n";
+            exit(1);
+        }
+        require_once $root . '/lib/StoreInterface.php'; require_once $root . '/lib/JsonStore.php'; require_once $root . '/lib/SqliteStore.php';
+        require_once $root . '/lib/CrmApiClient.php';
+        $iaPdo  = SqliteStore::create($dataDir)->getPdo();
+        $iaLast = InstallAuth::lastActivation($iaPdo);
+        if (InstallAuth::flagOn($iaCur) && $iaLast !== null) {
+            echo "\n  " . $key . " is already on (activated " . $iaLast['activated_at'] . " UTC, #" . $iaLast['id'] . ") — nothing was changed.\n";
+            echo "  For a new snapshot of the jobs in progress, switch it off (--clear) and on again.\n\n";
+            exit(0);
+        }
+        $iaWho = 'tools/set_config.php';
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $iaPw = @posix_getpwuid(posix_geteuid());
+            if (is_array($iaPw) && !empty($iaPw['name'])) $iaWho .= ' as ' . $iaPw['name'];
+        }
+        $iaActivation = InstallAuth::activate($iaPdo, CrmApiClient::fromUcrm($root, $iaCur), [InstallAuth::FLAG => '1'] + $iaCur, $iaWho);
+        if (empty($iaActivation['ok'])) {
+            echo "\n  " . (string)($iaActivation['error'] ?? 'The activation failed.') . "\n\n";
+            exit(1);
+        }
+    }
+}
+
 list($ok, $err) = PluginConfig::saveOverrides($dataDir, [$key => $new]);
 if (!$ok) { echo "\n  Could not save: " . (string)$err . "\n\n"; exit(1); }
+if (is_array($iaActivation)) {
+    echo "\n  Activation #" . (int)$iaActivation['activation_id'] . ": uCRM had " . (int)$iaActivation['jobs_read'] . " job(s) in progress; "
+       . (int)$iaActivation['in_scope'] . " of them Starlink installation job(s), " . (int)$iaActivation['exempted'] . " newly recorded as exempt (D3)"
+       . ($iaActivation['job_ids'] ? ': job ' . implode(', ', array_map('intval', $iaActivation['job_ids'])) : '') . ".\n";
+    echo "  Every other Starlink installation job now needs the customer's acceptance before it starts or is completed.\n";
+    $iaNow = PluginConfig::load($root, $dataDir);
+    if (!InstallAuth::whatsappOn($iaNow) && !InstallAuth::emailOn('request', $iaNow)) {
+        echo "  Note: no channel is switched on yet (install_auth_whatsapp, customer_email_install_auth_request), so a request\n";
+        echo "  will be refused until one is.\n";
+    }
+}
 
 foreach ($warn as $w) echo "\n  Note: " . $w . "\n";
 

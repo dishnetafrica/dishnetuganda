@@ -2104,6 +2104,29 @@ class NotificationService
         return $this->enabled ? 'wasender' : '';
     }
 
+    /**
+     * 5.18.83 (docs/64 §B): the events whose text carries a one-time secret. They are never queued for a retry — a retry
+     * later would deliver a code or a link that may no longer open anything, and the queue keeps the whole text — and their
+     * secret is withheld from everything the plugin keeps of a send (storable()).
+     */
+    public const NEVER_QUEUED = ['app_otp', 'ops_install_auth_request'];
+
+    /** What replaces a Customer Installation Authorisation link wherever the plugin keeps a copy of a message. */
+    public const LINK_WITHHELD = '[secure authorisation link — withheld]';
+
+    /**
+     * A message as the plugin may KEEP it — in the Message Log preview, the conversation store the WA Inbox reads, the dry-run
+     * log and the failure queue: an installation authorisation link (public.php?page=install_auth&t=<64 hex>) is replaced
+     * by LINK_WITHHELD. The link was the whole credential of an acceptance; a copy in the Inbox let any member of staff
+     * accept for the customer, in a record that could not tell the difference (5.18.82 review, finding 4). Everything else
+     * passes unchanged.
+     */
+    public static function storable(string $message): string
+    {
+        if (strpos($message, 'install_auth') === false) return $message;
+        return (string)preg_replace('#\S*[?&]page=install_auth&(?:amp;)?t=[0-9a-fA-F]{16,}\S*#', self::LINK_WITHHELD, $message);
+    }
+
     /** The outcome of the last sendVia(): success, http_code, error. Reset at every call. (Phase 2) */
     public function lastSendResult(): array
     {
@@ -2120,7 +2143,7 @@ class NotificationService
         if (!$this->enabled && !$this->evoAvailable($sender)) { $this->noTransport($sender, $event); return; }
 
         [$to, $asGiven] = $this->recipient($toPhone);
-        if ($to === '' && $asGiven !== '') { $this->unusableNumber($sender, $event, $asGiven, $message); return; }
+        if ($to === '' && $asGiven !== '') { $this->unusableNumber($sender, $event, $asGiven, self::storable($message)); return; }
         if (empty($to)) return;
 
         if ($this->optedOut($to, $sender, $class, $event)) return;
@@ -2129,7 +2152,7 @@ class NotificationService
         
         // DRY RUN GUARD - log but don't send
         if ($this->dryRunMode) {
-            $this->logDryRunNotification($to, $message, $event, $vars);
+            $this->logDryRunNotification($to, self::storable($message), $event, $vars);
             return;
         }
 
@@ -2204,7 +2227,7 @@ class NotificationService
             'to'      => $to,
             // 5.18.37: a login code sits in the first line of its message, and the
             // log is read by staff screens and tools. The code is never written.
-            'preview' => $event === 'app_otp' ? '[one-time login code — text withheld]' : mb_substr($message, 0, 70),
+            'preview' => $event === 'app_otp' ? '[one-time login code — text withheld]' : mb_substr(self::storable($message), 0, 70),
             'success' => $success,
             'http_code' => $httpCode,
             'error'   => $curlErr ?: ($success ? null : mb_substr((string)$response, 0, 200)),
@@ -2215,8 +2238,9 @@ class NotificationService
         // Phase 2: a login code is never queued — a retry minutes later would
         // deliver a code that no longer opens anything, and the queue stores
         // the message text.
-        if (!$success && !$this->_retryMode && $event !== 'app_otp') {
-            $this->queueFailed($sender, $to, $message, $event, $vars, $httpCode, $curlErr ?: mb_substr((string)$response, 0, 500));
+        // 5.18.83: nor is an installation authorisation request (NEVER_QUEUED): staff send the link again, which replaces it.
+        if (!$success && !$this->_retryMode && !in_array($event, self::NEVER_QUEUED, true)) {
+            $this->queueFailed($sender, $to, self::storable($message), $event, $vars, $httpCode, $curlErr ?: mb_substr((string)$response, 0, 500));
         }
 
         // ── Log to conversation store (SQLite) ──────────────────────────
@@ -2242,7 +2266,9 @@ class NotificationService
                     $convSvc->storeMessage($conv['id'], [
                         'direction'  => 'out',
                         'role'       => 'agent',
-                        'body'       => $message,
+                        // 5.18.83: an authorisation request is kept with its link withheld — the Inbox shows the
+                        // request was sent, never the credential in it (storable()).
+                        'body'       => self::storable($message),
                         'event_key'  => $event ?: null,
                         'agent_name' => 'DishNet Plugin',
                         // UTC like every other sent_at. date() here ran under

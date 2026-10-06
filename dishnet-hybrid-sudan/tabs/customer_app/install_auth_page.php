@@ -12,9 +12,13 @@
  * those very terms — a second click reads "Installation already authorised." and changes nothing.
  *
  * Reachable only where StaffJobsGate reads Uganda AND install_auth_enabled is on; everywhere else it is a 404 page.
- * HTTPS is required (a loopback request, as in the tests, is allowed); every failure is one neutral page; every
- * address is rate-limited through a hashed ledger that keeps no address. No script runs on the page; styles are inline
- * and nothing is loaded from anywhere (Content-Security-Policy: default-src 'none').
+ * HTTPS is required (a loopback request, as in the tests, is allowed); every failure is one neutral page. No script runs
+ * on the page; styles are inline and nothing is loaded from anywhere (Content-Security-Policy: default-src 'none').
+ *
+ * 5.18.83 (docs/64 §F): a link that is malformed, or names no record, is answered without writing anything; only a link
+ * that names a record reaches the rate ledger, and its bucket is that link's own token hash — no header a client
+ * controls (5.18.82 trusted the first X-Forwarded-For hop) chooses it. After an acceptance the page says only what is
+ * true: that the technician was told, and that a confirmation went, only when they were and it did.
  */
 declare(strict_types=1);
 
@@ -109,24 +113,25 @@ if (!CustomerSession::isHttps() && !$iaLoop) {
     iaNeutral(403, '🔒', 'Secure connection required', 'Please open the link from your message again, using the https address.', $iaBrand);
 }
 
-// ── Rate limit, per address, hashed; the ledger keeps no address ─────────────
-$iaMethod  = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
-$iaIsPost  = $iaMethod === 'POST';
-$iaAddress = $iaRemote;
-if (($iaLoop || strpos($iaRemote, '10.') === 0 || strpos($iaRemote, '172.') === 0 || strpos($iaRemote, '192.168.') === 0) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-    $iaAddress = trim(explode(',', (string)$_SERVER['HTTP_X_FORWARDED_FOR'])[0]);   // behind uCRM's nginx the proxy is local; the client is the first hop
+// ── The token names the record, or nothing — and nothing is written for nothing ─
+// A malformed token never reaches the database; a well-formed one is looked up by its hash, read-only. Only a link that
+// names a record goes on to the rate ledger, bucketed by its own token hash (5.18.83, docs/64 §F).
+$iaMethod = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$iaIsPost = $iaMethod === 'POST';
+$iaToken  = trim((string)($iaIsPost ? ($_POST['t'] ?? '') : ($_GET['t'] ?? '')));
+if (!preg_match('/^[0-9a-f]{64}$/', $iaToken)) {
+    iaNeutral(404, '🔗', 'This link is not valid', 'This link is not valid or has expired. Please contact DishNet for a new one.', $iaBrand);
 }
 $iaPdo = $store->getPdo();
-[$iaLimit, $iaWindow] = $iaIsPost ? InstallAuth::RATE_POST : InstallAuth::RATE_PAGE;
-if (!InstallAuth::rateAllow($iaPdo, $iaIsPost ? 'post' : 'page', $iaAddress, $iaLimit, $iaWindow)) {
-    iaNeutral(429, '⏳', 'Too many attempts', 'Please wait a few minutes and open the link again.', $iaBrand);
-}
-
-// ── The token names the record, or nothing ───────────────────────────────────
-$iaToken = (string)($iaIsPost ? ($_POST['t'] ?? '') : ($_GET['t'] ?? ''));
-$iaRow   = InstallAuth::byToken($iaPdo, $iaToken);
+$iaRow = InstallAuth::byToken($iaPdo, $iaToken);
 if ($iaRow === null) {
     iaNeutral(404, '🔗', 'This link is not valid', 'This link is not valid or has expired. Please contact DishNet for a new one.', $iaBrand);
+}
+
+// ── Rate limit, per link: the bucket is the token's hash; no address is read or kept ─
+[$iaLimit, $iaWindow] = $iaIsPost ? InstallAuth::RATE_POST : InstallAuth::RATE_PAGE;
+if (!InstallAuth::rateAllow($iaPdo, $iaIsPost ? 'post' : 'page', InstallAuth::tokenHash($iaToken), $iaLimit, $iaWindow)) {
+    iaNeutral(429, '⏳', 'Too many attempts', 'Please wait a few minutes and open the link again.', $iaBrand);
 }
 $iaRow = InstallAuth::expireIfDue($iaPdo, $iaRow);
 $iaTz  = dn_tz_obj($iaConfig);
@@ -135,18 +140,27 @@ $iaP   = (array)$iaH['price'];
 $iaS   = (array)$iaH['scope'];
 $iaCur = (string)($iaP['currency'] ?? 'UGX');
 
-/** The acceptance, as a page: reference, time, terms. Shown to the holder of the link after the fact, as often as asked. */
-function iaAcceptedPage(array $h, \DateTimeZone $tz, array $b, bool $justNow): void
+/**
+ * The acceptance, as a page: reference, time, terms. Shown to the holder of the link after the fact, as often as asked.
+ * $sent is what afterAcceptance() reported for an acceptance made just now (null otherwise): the page claims a notified
+ * team and a sent confirmation only when they happened (5.18.83).
+ */
+function iaAcceptedPage(array $h, \DateTimeZone $tz, array $b, bool $justNow, ?array $sent = null): void
 {
     iaHeaders(200);
+    $told = $justNow && is_array($sent) && !empty($sent['told']);
+    $conf = $justNow && is_array($sent) && (($sent['customer']['whatsapp'] ?? '') === 'sent' || ($sent['customer']['email'] ?? '') === 'sent');
+    $lead = !$justNow ? 'This installation was authorised earlier. Nothing has changed.'
+          : ($told ? 'Thank you. Your authorisation has been recorded and our team has been notified.'
+                   : 'Thank you. Your authorisation has been recorded. DishNet will contact you to confirm the installation.');
     $body = '<div class="card state"><div class="ico">✅</div><h1>' . ($justNow ? 'Installation authorised' : iaEsc(InstallAuth::ALREADY)) . '</h1>'
-          . '<p class="sub">' . ($justNow ? 'Thank you. Your authorisation has been recorded and our team has been notified.' : 'This installation was authorised earlier. Nothing has changed.') . '</p>'
+          . '<p class="sub">' . iaEsc($lead) . '</p>'
           . '<div class="ref">' . iaEsc((string)$h['acceptance_reference']) . '</div>'
           . '<table class="f"><tr><td>Installation Job</td><td>' . (int)$h['job_id'] . '</td></tr>'
           . '<tr><td>Accepted</td><td>' . iaEsc(InstallAuth::when((string)$h['accepted_at'], $tz)) . '</td></tr>'
           . '<tr><td>Terms</td><td>' . iaEsc((string)$h['terms_version']) . '</td></tr>'
           . '<tr><td>Terms hash</td><td style="font-weight:400;font-size:12px;word-break:break-all">' . iaEsc((string)$h['terms_hash']) . '</td></tr></table>'
-          . '<p class="sub" style="margin-top:14px">Keep the reference: it identifies your authorisation. A confirmation has been sent to the contact details DishNet holds for you.</p></div>';
+          . '<p class="sub" style="margin-top:14px">Keep the reference: it identifies your authorisation.' . ($conf ? ' A confirmation has been sent to the contact details DishNet holds for you.' : '') . '</p></div>';
     echo iaPage('Installation authorised', $body, $b);
     exit;
 }
@@ -189,14 +203,17 @@ if ($iaIsPost) {
             $res = InstallAuth::accept($iaPdo, $iaRow, $shown, $name);
             switch ($res['outcome']) {
                 case 'accepted':
-                    // The record is committed. Only now are people told, and nothing they do can touch it.
+                    // The record is committed. Only now are people told, and nothing they do can touch it. A customer who
+                    // closes the page meanwhile does not stop the messages (5.18.83).
+                    $iaSent = null;
+                    ignore_user_abort(true);
                     try {
                         require_once dirname(__DIR__, 2) . '/lib/InstallAuthNotifier.php';
-                        (new InstallAuthNotifier(svc('crm'), $store, svc('notify'), $iaConfig, $iaDataDir))->afterAcceptance($res['row']);
+                        $iaSent = (new InstallAuthNotifier(svc('crm'), $store, svc('notify'), $iaConfig, $iaDataDir))->afterAcceptance($res['row']);
                     } catch (\Throwable $e) {
                         error_log('[install_auth] notifications after acceptance of job #' . (int)$iaRow['job_id'] . ' failed: ' . get_class($e));
                     }
-                    iaAcceptedPage(InstallAuth::hydrate($res['row']), $iaTz, $iaBrand, true);
+                    iaAcceptedPage(InstallAuth::hydrate($res['row']), $iaTz, $iaBrand, true, $iaSent);
                     // exit
                 case 'already':
                     iaAcceptedPage(InstallAuth::hydrate($res['row']), $iaTz, $iaBrand, false);

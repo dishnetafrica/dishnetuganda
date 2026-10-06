@@ -140,12 +140,19 @@ final class JobNotifier
             return self::result(null, 'unverified', 'the job state could not be read or written');
         }
 
+        // ── 5.18.83 (Uganda, install_auth_enabled; docs/64 §A.2): a Starlink installation uCRM now shows started or closed
+        // without the customer's acceptance — moved in uCRM's own screen, app or API, where this plugin cannot refuse it —
+        // is recorded in its authorisation trail and the leaders are told, once. Decided from the status this notifier held
+        // BEFORE this change (read inside the claim above), so two deliveries of one change report it once.
+        $iaUcrm = $job !== null ? $this->installAuthObserve($jobId, $was, (array)$job) : null;
+        $withIa = function (array $r) use ($iaUcrm): array { if ($iaUcrm !== null) $r['install_auth_ucrm'] = $iaUcrm; return $r; };
+
         // ── The messages, after the commit: never while the lock is held ────
         $assignee = $now['assignee'] ?? null;
-        if ($plan['event'] === null) return self::result(null, 'no_change', 'nothing to send', $assignee);
+        if ($plan['event'] === null) return $withIa(self::result(null, 'no_change', 'nothing to send', $assignee));
         if ($plan['messages'] === []) {
             $this->event($jobId, $plan['event'], null, $plan, $source, null, 'recorded', $plan['why']);
-            return self::result($plan['event'], 'recorded', $plan['why'], $assignee);
+            return $withIa(self::result($plan['event'], 'recorded', $plan['why'], $assignee));
         }
         $client = null; $sent = [];
         foreach ($plan['messages'] as $m) {
@@ -158,12 +165,33 @@ final class JobNotifier
         $r = self::result($plan['event'], $sent[0]['outcome'], $sent[0]['detail'], $assignee, $sent);
         // 5.18.82 (Uganda, install_auth_enabled): a job reassigned AFTER the customer accepted tells the new engineer so
         // (docs/61 §3; the brief's phase 12). The acceptance record is read, never written, and nothing here can undo a
-        // message above or the state already committed.
-        if ($plan['event'] === 'reassigned' && $assignee !== null) {
+        // message above or the state already committed. 5.18.83 (docs/64 §C): also on 'assigned' — a job this notifier
+        // first sees after a reassignment reads as a first assignment, and its engineer must be told all the same. The
+        // engineer told at the acceptance is not told twice (one dedupe mark per acceptance and engineer).
+        if (in_array($plan['event'], ['assigned', 'reassigned'], true) && $assignee !== null) {
             $ia = $this->installAuthReassigned($jobId, $assignee);
             if ($ia !== null) $r['install_auth'] = $ia;
         }
-        return $r;
+        return $withIa($r);
+    }
+
+    /** 5.18.83: the uCRM-side check (InstallAuth::observeUcrm) and the leaders' alert; null when nothing was recorded. */
+    private function installAuthObserve(int $jobId, ?array $was, array $job): ?array
+    {
+        try {
+            if (!is_file(__DIR__ . '/InstallAuth.php') || !is_file(__DIR__ . '/InstallAuthNotifier.php')) return null;
+            require_once __DIR__ . '/InstallAuth.php';
+            if (!InstallAuth::enabled($this->config, $this->dataDir)) return null;
+            $wasStatus = ($was !== null && (int)($was['gone'] ?? 0) !== 1 && $was['job_status'] !== null) ? (int)$was['job_status'] : null;
+            $event = InstallAuth::observeUcrm($this->store->getPdo(), $this->config, $this->dataDir, $wasStatus, $job);
+            if ($event === null) return null;
+            require_once __DIR__ . '/InstallAuthNotifier.php';
+            $alert = (new InstallAuthNotifier($this->crm, $this->store, $this->notify, $this->config, $this->dataDir))
+                ->alertLeaders($jobId, $event, ['title' => trim((string)($job['title'] ?? ''))]);
+            return ['event' => $event, 'alert' => $alert];
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /** The "customer already confirmed" message to a job's new engineer; null when the feature or the record is absent. */
@@ -556,11 +584,20 @@ final class JobNotifier
             }
             $out[] = $line . self::emailClause($m['email'] ?? null);
         }
-        if ($out !== []) return $out;
+        // 5.18.83: a Starlink installation moved in uCRM without the customer's acceptance has a line of its own — worded
+        // without the words WA Events files a WhatsApp line by.
+        if (isset($r['install_auth_ucrm']['event'])) {
+            $a = (array)($r['install_auth_ucrm']['alert'] ?? []);
+            $out[] = "Job #{$jobId} — Customer Installation Authorisation: uCRM shows this Starlink installation "
+                   . ($r['install_auth_ucrm']['event'] === 'INSTALLATION_COMPLETED_WITHOUT_ACCEPTANCE' ? 'closed' : 'started')
+                   . " without the customer's acceptance; recorded, leaders alerted ("
+                   . (int)($a['whatsapp'] ?? 0) . ' by WhatsApp, ' . (int)($a['email'] ?? 0) . ' by e-mail)';
+        }
+        if ($out !== [] && !empty($r['messages'])) return $out;
         switch ($r['outcome'] ?? '') {
-            case 'recorded':  return ["Job #{$jobId} (" . ($r['event'] ?? '') . ") — recorded, no message: {$r['detail']}"];
-            case 'no_change': return ["Job #{$jobId} — no new assignment, time or cancellation: nothing to send"];
-            default:          return ["Job #{$jobId} — could not be checked with uCRM: {$r['detail']}"];
+            case 'recorded':  return array_merge(["Job #{$jobId} (" . ($r['event'] ?? '') . ") — recorded, no message: {$r['detail']}"], $out);
+            case 'no_change': return array_merge(["Job #{$jobId} — no new assignment, time or cancellation: nothing to send"], $out);
+            default:          return array_merge(["Job #{$jobId} — could not be checked with uCRM: {$r['detail']}"], $out);
         }
     }
 

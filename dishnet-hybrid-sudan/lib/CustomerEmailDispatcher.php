@@ -356,20 +356,24 @@ class CustomerEmailDispatcher
     // Two e-mails off the catalogue, on the reminderDue pattern: the catalogue's
     // tests iterate CATALOGUE, so a feature with its own switch sits beside it.
     // The master switch still rules. Each has its own key —
-    // customer_email_install_auth_request / _confirmed — and, unlike the
-    // catalogue keys, ABSENT MEANS ON: the feature is already behind
-    // install_auth_enabled (off by default), and the brief asks for e-mail and
-    // WhatsApp together, so a second default-off switch would make the e-mail
-    // silently absent the day the feature is turned on. '0' / off / no turn it off.
+    // customer_email_install_auth_request / _confirmed.
+    //
+    // 5.18.83 (docs/64 §E): ABSENT MEANS OFF, like the catalogue keys. 5.18.82 had
+    // absent = on, so on an install whose customer e-mails were already switched
+    // on for receipts and invoices, turning the feature on sent these e-mails too
+    // without anyone having chosen to. Each channel is now a deliberate choice;
+    // a request no switched-on channel can carry is refused before any record is
+    // made (InstallAuth::noChannelReason), so "silently absent" cannot happen.
+    // 1 / on / true / yes turn one on.
 
-    /** Whether one of the two authorisation e-mails may send: the master switch, then its own key (absent = on). */
+    /** Whether one of the two authorisation e-mails may send: the master switch, then its own key (absent = off). */
     public static function installAuthEnabled(string $kind, array $config): bool
     {
         if (!self::masterEnabled($config)) return false;
         $c = self::effectiveConfig($config);
         $v = $c['customer_email_install_auth_' . $kind] ?? null;
-        if ($v === null || $v === '') return true;
-        return !in_array(strtolower(trim((string)$v)), ['0', 'off', 'false', 'no'], true);
+        if (is_bool($v)) return $v;
+        return in_array(strtolower(trim((string)$v)), ['1', 'on', 'true', 'yes'], true);
     }
 
     /**
