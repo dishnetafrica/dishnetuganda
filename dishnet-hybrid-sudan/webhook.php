@@ -194,6 +194,24 @@ function whCustomerEmail(string $key, int $clientId, string $name, array $data,
 }
 
 /**
+ * 5.18.84: the customer's WhatsApp beside the install_scheduled e-mail (lib/InstallScheduledWhatsApp.php) — Uganda only,
+ * off unless customer_wa_install_scheduled is on, once per job. One line in the webhook log says what happened, without
+ * the customer's number. Never throws: a failure here must not cost the job's other work.
+ */
+function whInstallScheduledWhatsApp(int $jobId, array $job, array $client, string $technician, array $config, string $dataDir,
+                                    $store, $notify, string $changeType = ''): void
+{
+    try {
+        require_once __DIR__ . '/lib/InstallScheduledWhatsApp.php';
+        if (!InstallScheduledWhatsApp::enabled($config, $dataDir)) return;   // off is not an error
+        $r = InstallScheduledWhatsApp::send($jobId, $job, $client, $technician, $config, $dataDir, $store, $notify);
+        whLog($changeType ?: 'job.add', "Job #{$jobId}: customer WhatsApp (installation scheduled) — " . $r['detail']);
+    } catch (\Throwable $e) {
+        error_log('[whInstallScheduledWhatsApp] job ' . $jobId . ': ' . $e->getMessage());
+    }
+}
+
+/**
  * Send the branded quotation email for a quote created anywhere.
  *
  * QuotationService covers quotes created through the DishNet app. A quote
@@ -2649,6 +2667,12 @@ switch ($changeType) {
                 'address'    => (string)$address,
                 'technician' => (string)($techName ?? ''),
             ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+            // 5.18.84 (Uganda, customer_wa_install_scheduled): the same news by WhatsApp, to the client's uCRM number — a
+            // customer with no e-mail address heard nothing before. Off by default; once per job. The technician's name
+            // only as uCRM holds it: never the "Technician" placeholder above.
+            whInstallScheduledWhatsApp($jobId, is_array($job) ? $job : [], is_array($client ?? null) ? $client : [],
+                $assignedUserId ? trim((string)(($user['firstName'] ?? '') . ' ' . ($user['lastName'] ?? ''))) : '',
+                is_array($config ?? null) ? $config : [], (string)$dataDir, $store, $notify, $changeType);
         } else {
             whLog($changeType, "Job #{$jobId}: no customer e-mail — "
                 . (!$clientId ? 'no client on the job' : (!$isInstall ? 'not an installation job' : 'no date yet')));
