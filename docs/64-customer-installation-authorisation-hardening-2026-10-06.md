@@ -1,10 +1,10 @@
 # 64 — Customer Installation Authorisation — production hardening (plugin 5.18.83, 2026-10-06)
 
-**Status: DEPLOYED to production 06 Oct, 11:38 UTC, SWITCHED OFF (plugin 5.18.83: release `2de810c` on live 5.18.74,
-PASSED 29/0/0 — `docs/07`). The feature flag `install_auth_enabled` is OFF everywhere — absent from both copies the plugin
-keeps — and was turned on nowhere, so every job, message and screen behaves as on 5.18.74. Migration 086 is applied, its
-five tables empty. No production configuration touched, no message sent to any real person, no production job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
-unchanged — `INSTALLATION-TERMS-v1.0`, the same SHA-256 — and still DRAFT — SUBJECT TO LEGAL REVIEW (`docs/62`).**
+**Status: LIVE in production and SWITCHED ON (Uganda). Deployed 06 Oct, 11:38 UTC (plugin 5.18.83: release `2de810c` on
+live 5.18.74, PASSED 29/0/0); switched on by the operator by 11:51 UTC — activation #1 exempted job 20, the one Starlink
+installation then in progress; `--after-only` PASSED 23/0/1 (`docs/07`). Scope: jobs titled `Starlink Installation`.
+Channel: WhatsApp only; this feature's e-mails are off. As of 11:51 UTC no request had been sent. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
+unchanged — `INSTALLATION-TERMS-v1.0`, the same SHA-256 — and still DRAFT — SUBJECT TO LEGAL REVIEW (`docs/62`) — a line every customer who opens a link sees.**
 
 This is the work the final pre-release review of 5.18.82 called for. That review found four code blockers and a list of
 should-fix items. The operator's instruction was to implement them and make the feature ready for production. Each finding
@@ -269,7 +269,11 @@ file.
 Every blocker and should-fix item of the pre-release review is closed in code and proved above. The design decisions D1–D11
 stand, with D3 now implemented as approved.
 
-### I.2 Still needed before the feature is switched on — OPEN
+### I.2 Still needed before the feature is switched on — the state when it was switched on, 06 Oct
+
+On 06 Oct the operator switched the feature on with item 1 still open. Of item 2: the titles are `Starlink Installation`,
+the channel is WhatsApp only, who may request is unchanged (the assignee may, J6), and the leaders' contact details were not
+checked here. Item 3 is done.
 
 1. **Legal approval of `docs/62`.** Its seven questions are unanswered. Four implementation facts belong with them. These are
    facts, not a legal opinion:

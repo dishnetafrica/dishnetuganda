@@ -5611,7 +5611,7 @@ the check-in store's pre-existing nesting is recorded, not changed.
 **Git:** committed locally after `8e5808a`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to
 anyone. The release cut on live 5.18.74 follows below.
 
-## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — PUSHED 10:50 UTC; DEPLOYED 11:38 UTC (PASSED 29/0/0), the feature switched off
+## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — PUSHED 10:50 UTC; DEPLOYED 11:38 UTC (PASSED 29/0/0); SWITCHED ON by 11:51 UTC (activation #1; `--after-only` PASSED 23/0/1)
 
 **Why a release commit.** Live is 5.18.74 (`db18ad9`). The branch between it and 5.18.83 also carries undeployed work: the
 distributor partner portal (migrations 081–083), the PD-8 CSRF guard, and the AI communication layer batches 0–5
@@ -5710,7 +5710,7 @@ Results:
 - The rehearsed deploy reads **30 ok / 0 failed / 0 notes**. On the server expect 29 or 30 ok: 5.18.74's server run read one fewer
   than its sandbox.
 
-**Handover — each step is the operator's; steps 0 and 1 are done, step 2 is not.**
+**Handover — each step is the operator's; all three are done.**
 0. **Push both branches — DONE 06 Oct, 10:50 UTC**, on the operator's instruction. The server pulls them from GitHub:
    `claude/study-this-jhe2eg` (pushed at `3991dd0`, a fast-forward from `7b73813`) carries the script, and `release/5.18.83`
    (`2de810c`, a new branch) carries the release commit. `git ls-remote` reads both tips equal to the local commits.
@@ -5721,7 +5721,8 @@ Results:
 
    The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
    docs/44 §16.9).
-2. **Switch the feature on — a separate decision, later.** It comes only after the legal review of the terms (`docs/62`)
+2. **Switch the feature on — DONE by 11:51 UTC**, by the operator's decision, before any legal review of `docs/62` was
+   recorded (the SWITCH-ON record below). As planned, it was to come only after the legal review of the terms (`docs/62`)
    and the operator's decisions in `docs/64` §I.2, by the configuration in `docs/64` §I.3. Deploying first changes nothing
    for staff or customers: the page answers 404 and no guard runs. After switching it on, `--after-only` (§I.3) confirms
    the switch is on in both copies the plugin keeps.
@@ -5751,8 +5752,25 @@ Results:
     every earlier marker and 5.18.83's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00; Fiber & Starlink
     591,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the book's own figures (5.18.83's changes touch no cash code); the
     photo tables and files read exactly as before.
-  - **What it means today:** nothing changed for staff or customers. The switch is off, so no guard runs, the job page
-    shows no panel and the customer page answers 404. Switching it on is step 2, not taken.
+  - **What it meant at 11:39 UTC:** nothing changed for staff or customers. The switch was off, so no guard ran, the job
+    page showed no panel and the customer page answered 404. Step 2 followed.
+- **SWITCH-ON — 06 Oct, by 11:51 UTC, by the operator** (`docs/64` §I.3; recorded from the terminal the operator pasted):
+  - `install_auth_job_titles = Starlink Installation` (the default, now set explicitly) and `install_auth_whatsapp = 1`.
+    The two e-mail keys were left unset, so this feature sends no e-mail. `set_customer_emails.php --show` read the
+    customer e-mails master switch already ON, with every lifecycle e-mail ON; nothing was changed there.
+  - `install_auth_enabled = 1` — **Activation #1: uCRM had 1 job in progress, 1 of them a Starlink installation,
+    recorded as exempt: job 20.** Only jobs in progress (uCRM status 1) are exempted. A Starlink installation job that
+    was open but not yet started needs its customer's acceptance, like a new one.
+  - `--after-only` at 11:51:42 UTC: **PASSED, 23 ok / 0 failed / 1 note.** The note is R2 reading the switch ON in both
+    copies (`files=on/yes store=on/yes`), as intended. V3b `ia=on/on` before and after; V7 the customer page answers
+    404 *"This link is not valid"* to a request without a link; R3 086's tables hold `0:1:1:1:0` — no request yet, one
+    event (job 20's `INSTALLATION_EXEMPTED`), one activation, one exemption; R7 the same cash figures; V4 no fatal or
+    parse error since the deploy. The log stays on the server as `/root/dnb-5.18.83/after-20261006T115142Z.log`.
+  - **Its summary is wrong for this run.** *"TODAY THE SWITCH IS OFF"* and *"Nothing to try yet"* are fixed text
+    written for the deploy run; the checks above them read the live state. Recorded, not changed.
+  - **The terms customers now accept** are `INSTALLATION-TERMS-v1.0`. Their text, and so their hash, begins
+    *"DRAFT — SUBJECT TO LEGAL REVIEW"*, and every customer who opens a link sees that line. Removing it is a new
+    version (v1.1) and a release. No legal review of `docs/62` is recorded.
 
 **Git:** `release/5.18.83` (`2de810c`) and the three branch commits — the feature (`6b3c22a`), the script and its
 rehearsal (`63e45ee`), this entry (`3991dd0`) — **pushed 06 Oct, 10:50 UTC**, on the operator's instruction. The same push
