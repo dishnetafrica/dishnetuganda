@@ -5947,6 +5947,25 @@ with 5.18.83: 30 rehearsed, 29 on the server.
     exempt job 20 (started, completed or signed off, marked `exempt`); a staff action a guard refused
     (`INSTALLATION_START_BLOCKED`); or a Starlink installation job started or completed in uCRM without acceptance
     (`…_WITHOUT_ACCEPTANCE`). Which, and on which job, the job page's panel shows; not read from here.
+- **PILOT — 06 Oct, 15:26 UTC (18:26 Kampala), by the operator** (recorded from the WhatsApp messages the operator
+  pasted; the secure link in them is not recorded): job #22, a Starlink installation for a test client whose number is a
+  staff member's, dated 7 Oct 18:30.
+  - **The booking WhatsApp arrived at 15:26:23 UTC**, about a minute after the switch-on, with the brand, the client's
+    first name, *Starlink Installation*, the date and time read in Kampala (*Wednesday 7 October 2026*, *6:30 PM*), the
+    location, the job number and the Starlink line, as specified. WhatsApp folded the rest behind *Read more*.
+  - **It had no Technician line, though the job had an assignee.** Measured on 27 Sep (docs/44 §13.1, §16.20):
+    `job.add` reads the assignee at `GET users/{id}`, which this uCRM answers with 404 even for a real user; its users
+    answer at `users/admins/{id}`. So the name `job.add` reads is always empty here, and 5.18.84 sent no line rather than
+    the *"Technician"* placeholder, as it does for any missing name. The test's fake uCRM answers both addresses, so the
+    suite could not see it. The same empty lookup is why the *"installation booked"* e-mail's technician reads
+    *"Technician"* (§16.20). A fix is proposed for 5.18.85, not built.
+  - **The location read only *Uganda***: what the job's address holds in uCRM. The authorisation request showed the same.
+  - **Then Customer Installation Authorisation, end to end for the first time:** the request at 15:27:56 UTC, its charges
+    typed by the sender; the customer's acceptance at 15:28:33 UTC, reference `ACC-20261006-000001`; the technician told,
+    and named to the customer by the first name on the staff account.
+  - **The operator asked** for the request form to take its charges and the kit from the customer's quotation instead of
+    being typed, and whether the kit number is compulsory. Answered in the session; the quotation prefill is proposed for
+    5.18.85, not built.
 
 **Git:** `58a6b15` (the feature), `2923296` (the script and its rehearsal), `release/5.18.84` (`79607d4`) and this entry
 (`cc0002e`) — **pushed 06 Oct, 15:19 UTC**, on the operator's instruction (*"yes push both branches"*): the branch to
