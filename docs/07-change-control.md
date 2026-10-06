@@ -5778,3 +5778,131 @@ published the branch's earlier local commits: the AI communication layer 5.18.76
 entries above record them as not pushed (*NOT pushed*, or *committed locally* for 5.18.82), as was true when each was
 written. The AI layer is not deployed and stays switched off (R4 found none of its files installed); 5.18.82's feature
 reached production only inside 5.18.83's release, switched off. No configuration changed, nothing sent to anyone.
+
+## 06 Oct — 5.18.84: the customer's WhatsApp when an installation job is booked (Uganda); `release/5.18.84` = `79607d4`, cut on live 5.18.83 (`2de810c`); `scripts/deploy-5.18.84.sh` pinned to it and rehearsed — NOT deployed; the switch arrives off
+
+**Why.** After Customer Installation Authorisation was switched on, the operator created a job for a customer with no e-mail
+address. The technician was told at once; the customer heard nothing. Two facts, read from the code:
+- uCRM's `job.add` told customers by e-mail only: the `install_scheduled` lifecycle e-mail. No address, no message.
+- The authorisation request is not sent when a job is created. Staff send it from the job page, once the charges are set:
+  the plugin has no price list to take them from (docs/61 D4). It goes by WhatsApp; no e-mail is needed.
+
+The operator asked for a proper WhatsApp for such customers, and approved the build ("yes build").
+
+**What 5.18.84 does.** Uganda only, and off until `customer_wa_install_scheduled` is set (absent means OFF).
+- **Where:** `webhook.php`'s `job.add`, beside the `install_scheduled` e-mail and under its three conditions: the job
+  belongs to a client, its title names an installation, it has a date. A job ＋ New Job makes is a job made through uCRM's
+  API with the plugin's own client, and uCRM delivers `job.add` for those too: measured on job #10, 28 Sep (docs/44 §16.26).
+- **To whom:** the client's first uCRM contact number, the rule the authorisation request uses
+  (`InstallAuth::clientPhone`). No e-mail address is needed; a client with one gets both.
+- **Once per job:** claimed in `notification_dedup` (`WAINSTALL<job>`) before the send, because uCRM redelivers webhooks.
+  The claim comes after the number is checked, so a client with no number claims nothing. A failed send goes to the
+  failure queue for a person to retry, and a redelivery does not send it again.
+- **A Starlink installation under Customer Installation Authorisation** gets one more line: the secure link follows.
+- **One webhook-log line per job**, without the customer's number or the message.
+- **Not done, by design:** a reschedule sends nothing new, and neither does a job created without a date and dated later
+  — both as the e-mail.
+
+The message (sample values; the support line carries the Uganda profile's support number):
+
+```
+🔧 *Installation Scheduled — DishNet Africa*
+
+Dear Sandbox,
+
+Your installation has been scheduled. ✅
+
+📋 *Starlink Installation*
+📅 Date: *Monday 5 October 2026*
+⏰ Time: *9:00 AM*
+📍 Location: Plot 9 Sandbox Road, Kampala
+👷 Technician: *Sandbox Tech*
+🔖 Job: #941
+
+📝 Before the installation, you will receive a separate WhatsApp from us with a secure link to review and accept the installation terms and charges.
+
+Our technician will contact you before arriving. Please make sure someone is available at the site.
+
+🛠 Support: wa.me/<the Uganda support number>
+— DishNet Africa Support
+```
+
+The date and time are read in the install's zone, as the technician's job message reads them. A value uCRM does not have
+gives no line at all: no Time line for a job at midnight, no Technician line for an unassigned job or a uCRM user with no
+name (never uCRM's "Technician" placeholder). Emphasis marks and line breaks are taken out of every value.
+
+**Files** (dev commit `58a6b15`): `lib/InstallScheduledWhatsApp.php` (new), `webhook.php`, `tools/set_config.php` (the key,
+listed and explained), `manifest.json` 5.18.84 and the 15 version pins, `tests/test_install_scheduled_whatsapp.php` (new).
+No migration.
+
+**Tests.**
+- `tests/test_install_scheduled_whatsapp.php`: **50 passed, 0 failed**, driving the real `webhook.php` of a sandboxed plugin
+  beside a fake uCRM, a fake WhatsApp and a mail relay. It covers: off by default; the message byte for byte; once per job,
+  with the same uuid and new ones; the customer with no e-mail address, and the customer with one getting both; nothing
+  without a client, a date, an installation title or a number; the Starlink line; South Sudan unchanged; a failed send;
+  the configuration tool.
+- **Eleven weakened copies of the code are each caught**: no switch, no Uganda gate, no claim, the claim before the number,
+  not wired into `job.add`, sent only when there is no e-mail address, uCRM's placeholder name, the accounts number, the
+  Starlink line on every installation, the time in uCRM's offset, values not cleaned.
+- Neighbouring suites unchanged: `test_set_config_tool` 40, `test_lifecycle_email_wiring` 73, `test_customer_email_dispatch`
+  45, `test_webhook_trust` 74, `test_staff_jobs_south_sudan` 51, `test_job_messages` 132, `test_customer_emails` 105.
+- **Full suite** on `58a6b15`: **279 files, 13,394 passed, 0 failed, 0 skipped**; run 2 the same, every file's tally
+  identical. Against 5.18.83's 278 / 13,344, the only change is the new test's 50, compared file by file.
+
+**The release, `release/5.18.84` = `79607d4`**, parent `2de810c` (live 5.18.83): 10 files against it, 2 added (the class
+and its test) and 8 changed. Nine are byte-identical to the branch's; each of the seven changed ones copied whole was
+identical on `2de810c` and on the branch before the feature. `tools/set_config.php` carries this feature's six added lines
+only, compared line for line: the branch's copy also holds the AI layer's keys. No migration; none of the undeployed work.
+The release tree's own suite, run from a worktree outside the session's private directory: **266 files, 12,454 passed, 0
+failed, 0 skipped**; run 2 the same, every file's tally identical, the tree unchanged by both. Against 5.18.83's release
+suite (265 / 12,404), the only change is the new test's 50, compared file by file.
+
+**`scripts/deploy-5.18.84.sh`**, 5.18.83's shape, pinned to `79607d4` over `2de810c`. What differs:
+- **Customer Installation Authorisation is live, and the script keeps it so.** `install_auth_enabled` must be readable
+  with its two copies agreeing before anything changes, and unchanged after (V3b, R2). Migration 086 must be complete
+  before the deploy and after it, its rows reported, not required empty (A, R3). Its rule, page, guards and switch are
+  checked present (R6), and present again after a rollback (RB).
+- **The new switch must arrive off** in both places the plugin keeps it (A). It must be unchanged by the run and off right
+  after a deploy (V3c), and the installed class must read it so (R2).
+- **A0 allows no migration** and exactly the release's 10 files.
+- **Evidence, never a NO-GO:** how many `job.add` deliveries the plugin's own webhook log holds, and the last one's time.
+- **The summary says what the switch reads.** 5.18.83's `--after-only` printed the deploy run's "TODAY THE SWITCH IS OFF"
+  with the switch on.
+- **The rollback goes ahead with the switch on.** 5.18.83 does not read it, so no booking WhatsApp is sent after it; a
+  note says so.
+- No command that switches either feature appears in the script or its log (asserted).
+
+**Rehearsal `scripts/harness/deploy-5.18.84/rehearse.sh`.** The base is installed as production runs it: 5.18.83, 086
+applied by its own runner, authorisation ON in both copies, activation #1 with one job exempt and its event. It covers:
+- the A refusals: a 5.18.74 server; a placeholder pin; the branch tip; a commit carrying the release plus an AI-layer file;
+  one without the class; the booking switch already on, in both copies and in the files alone; the authorisation's copies
+  disagreeing; 086 incomplete;
+- the deploy itself, which leaves every table — 086's included — the vault and the configuration files byte-identical;
+- the teeth: the call taken out of `job.add`, the class's claim taken out, a 5.18.83 file changed, a trigger dropped;
+- the pilot switch read live; the operator's switch-on emulated (both copies), and the copies made to disagree;
+- the rollback with the switch on; two weakened copies of the script (R1 blinded, R6's call check blinded).
+
+Results: **run 1 154/0**, 26 runs of the script (the committed script, sha256 `d65f4b958f96e4bd…`), no FAIL line, the
+clone left as found; **run 2 154/0**, 26 runs, the same script, the same check lines. The rehearsed deploy reads **32 ok /
+0 failed / 0 notes**; on the server expect 31. The sandbox has a `dishnet.sqlite` to back up and the server has none, as
+with 5.18.83: 30 rehearsed, 29 on the server.
+
+**Handover — each step is the operator's.**
+0. **Push both branches.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries the script, and
+   `release/5.18.84` the release commit.
+1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.84 && mkdir -p /root/dnb-5.18.84 && bash scripts/deploy-5.18.84.sh 2>&1 | tee /root/dnb-5.18.84/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
+   docs/44 §16.9).
+2. **Switch it on — after the deploy passed:**
+
+   `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key customer_wa_install_scheduled --value 1`
+
+   Then `cd /opt/dishnet && bash scripts/deploy-5.18.84.sh --after-only` confirms it is on in both places. Pilot it with
+   an installation job, with a date, for a test client whose WhatsApp number is a staff member's. To switch it off, run the
+   same tool with `--clear` instead of `--value 1`.
+
+**Git:** `58a6b15` (the feature), `2923296` (the script and its rehearsal), `release/5.18.84` (`79607d4`) and this entry
+are committed locally. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone.
