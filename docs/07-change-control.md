@@ -5972,7 +5972,7 @@ with 5.18.83: 30 rehearsed, 29 on the server.
 `cc0002e`, `release/5.18.84` new at `79607d4`. At the push nothing was deployed, no configuration had changed and nothing
 had been sent to anyone.
 
-## 06 Oct — 5.18.85: the authorisation's request form filled from the customer's quotation, and the technician's name in the booking messages (Uganda); `release/5.18.85` = `4790019`, cut on live 5.18.84 (`79607d4`); `scripts/deploy-5.18.85.sh` pinned to it and rehearsed — PUSHED 18:36 UTC; NOT deployed
+## 06 Oct — 5.18.85: the authorisation's request form filled from the customer's quotation, and the technician's name in the booking messages (Uganda); `release/5.18.85` = `4790019`, cut on live 5.18.84 (`79607d4`); `scripts/deploy-5.18.85.sh` pinned to it and rehearsed — PUSHED 18:36 UTC; DEPLOYED 19:13 UTC (PASSED 33/0/0)
 
 **Why.** The 5.18.84 pilot (above) showed two things. The first authorisation request went out with its charges typed by
 hand, while the customer's quotation already held them. And the booking WhatsApp had no Technician line. The operator
@@ -6121,10 +6121,11 @@ FAIL line, the checkout left as found; **run 2 167/0**, 25 runs, the same script
 deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the server expect 33: there is no
 `dishnet.sqlite` there to back up, as with 5.18.83 and 5.18.84.
 
-**Handover — each step is the operator's.**
+**Handover — each step is the operator's; the push and the deploy are done.**
 0. **Push both branches — done, 06 Oct 18:36 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
    the script, and `release/5.18.85` the release commit.
-1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+1. **Deploy, as root on the server — DONE 19:13 UTC, PASSED 33/0/0** (the RESULT below). It asks for `DEPLOY`; send
+   back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.85 && mkdir -p /root/dnb-5.18.85 && bash scripts/deploy-5.18.85.sh 2>&1 | tee /root/dnb-5.18.85/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
@@ -6134,7 +6135,36 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
    customer authorisation*, check the values the form took from the quotation, enter transport, send. A new installation
    job's booking WhatsApp now names its technician.
 
+- **RESULT — DEPLOYED to production 2026-10-06, 19:13 UTC: PASSED, 33 ok / 0 failed / 0 notes** — the 33 expected. The
+  rehearsal reads 34 because the sandbox holds a `dishnet.sqlite` to back up; the server holds none (*"nothing to
+  copy"*). The run began at 19:13:18 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves
+  4790019"*; the 16 files were stamped at 19:13:47 UTC. Recorded from the terminal the operator pasted (the script prints
+  no secret); the log file stays on the server under `/root/dnb-5.18.85/`.
+  - **A.** The checkout fast-forwarded `9898608` → `3274b1b`; branch tip `4a7127d` (not installed); release commit
+    `4790019` cut on `79607d4`; 16 files (14 changed, 2 added, 0 removed), no migration; **A0** clean. Live `79607d4` /
+    5.18.84. PHP **8.1.34** accepted the 5 changed server files and the 10 test files. Pilot `on`; **the authorisation
+    `ia=on/on`** and **the booking WhatsApp `wa=on/on`**, as the operator left them; 086 complete, its tables
+    `1:7:1:1:3` (`0:2:1:1:0` at 5.18.84's deploy: one request since, the pilot's); the webhook log's last 300 entries
+    hold **2** `job.add`, the last at 18:26:22 by the plugin's clock (UTC+3), 15:26:22 UTC, the pilot's booking by its
+    time; photo tables `present:11:3`, 11 files.
+  - **Backup** `/root/dnb-5.18.85/backup-20261006T191318Z`: `plugin.sqlite3` 29 MB, one consistent copy, integrity ok,
+    248 tables; the data directory 144 MB; the installed 5.18.84 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed; **V5** 302 / 401;
+    **V7** the customer authorisation page 404 *"This link is not valid"* to a request without a link; **V8**
+    `install_auth_request` and **V9** `install_auth_prefill` 401 without a login; **V3** the pilot unchanged (`on` →
+    `on`); **V3b** the authorisation unchanged (`on/on` → `on/on`); **V3c** the booking WhatsApp unchanged (`on/on` →
+    `on/on`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 16 files as `4790019` has them, manifest 5.18.85; R2 `pilot=on`, and the installed `InstallAuth` and
+    `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
+    before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
+    CSRF or AI-layer file; R5 all 219 files from Release A through 5.18.84 intact; R6 every earlier marker and 5.18.85's;
+    **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.84's deploy read; the photo tables
+    and files read exactly as before; **R8** the installed quotation reader read a 000181-shaped quotation as the form
+    will (the kit, the plan, installation 150000, transport asked for).
+  - **Not seen yet:** the form filled from a real quotation, and a booking WhatsApp naming its technician. Both wait for
+    the next Starlink installation job (step 2).
+
 **Git:** `4a7127d` (the feature), `24197d8` (the script and its rehearsal), `aaba731` (the rehearsal's fix),
 `release/5.18.85` (`4790019`) and this entry (`d42570d`) — **pushed 06 Oct, 18:36 UTC**, on the operator's instruction
-(*"yes push both branches"*): the branch to `d42570d`, `release/5.18.85` new at `4790019`. Nothing deployed, no
-configuration changed, nothing sent to anyone.
+(*"yes push both branches"*): the branch to `d42570d`, `release/5.18.85` new at `4790019`. At the push nothing was
+deployed, no configuration had changed and nothing had been sent to anyone.
