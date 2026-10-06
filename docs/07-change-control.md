@@ -5611,7 +5611,7 @@ the check-in store's pre-existing nesting is recorded, not changed.
 **Git:** committed locally after `8e5808a`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to
 anyone. The release cut on live 5.18.74 follows below.
 
-## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — NOT pushed, NOT deployed; the feature arrives switched off
+## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — PUSHED 10:50 UTC, NOT deployed; the feature arrives switched off
 
 **Why a release commit.** Live is 5.18.74 (`db18ad9`). The branch between it and 5.18.83 also carries undeployed work: the
 distributor partner portal (migrations 081–083), the PD-8 CSRF guard, and the AI communication layer batches 0–5
@@ -5711,8 +5711,9 @@ Results:
   than its sandbox.
 
 **Handover — nothing below has been done; each step is the operator's.**
-0. **Decide the release, then push both branches.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
-   the script, and `release/5.18.83` carries the release commit. This session pushed neither.
+0. **Push both branches — DONE 06 Oct, 10:50 UTC**, on the operator's instruction. The server pulls them from GitHub:
+   `claude/study-this-jhe2eg` (pushed at `3991dd0`, a fast-forward from `7b73813`) carries the script, and `release/5.18.83`
+   (`2de810c`, a new branch) carries the release commit. `git ls-remote` reads both tips equal to the local commits.
 1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.83 && mkdir -p /root/dnb-5.18.83 && bash scripts/deploy-5.18.83.sh 2>&1 | tee /root/dnb-5.18.83/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
@@ -5725,5 +5726,7 @@ Results:
    the switch is on in both copies the plugin keeps.
 
 **Git:** `release/5.18.83` (`2de810c`) and the three branch commits — the feature (`6b3c22a`), the script and its
-rehearsal (`63e45ee`), this entry — are committed locally. Nothing pushed, nothing deployed, no configuration changed,
-nothing sent to anyone.
+rehearsal (`63e45ee`), this entry (`3991dd0`) — **pushed 06 Oct, 10:50 UTC**, on the operator's instruction. The same push
+published the branch's earlier local commits: the AI communication layer 5.18.76–5.18.81 and `docs/58`, and 5.18.82. Their
+entries above record them as not pushed (*NOT pushed*, or *committed locally* for 5.18.82), as was true when each was
+written; none of them is deployed, and everything they built is still switched off. Nothing deployed, no configuration changed, nothing sent to anyone.

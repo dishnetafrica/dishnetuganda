@@ -1,8 +1,8 @@
 # 64 — Customer Installation Authorisation — production hardening (plugin 5.18.83, 2026-10-06)
 
 **Status: BUILT and tested in development only (plugin 5.18.83). The feature flag `install_auth_enabled` is OFF everywhere
-and was turned on nowhere. NOT deployed, NOT pushed, no production configuration touched, no message sent to any real
-person, no production job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
+and was turned on nowhere. NOT deployed; pushed 06 Oct, 10:50 UTC, with `release/5.18.83` (`docs/07`). No production
+configuration touched, no message sent to any real person, no production job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
 unchanged — `INSTALLATION-TERMS-v1.0`, the same SHA-256 — and still DRAFT — SUBJECT TO LEGAL REVIEW (`docs/62`).**
 
 This is the work the final pre-release review of 5.18.82 called for. That review found four code blockers and a list of
