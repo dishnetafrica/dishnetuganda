@@ -115,21 +115,7 @@ class EvolutionApiService
         $this->timeout = $timeout;
         $this->gateConfig = $config;
 
-        // Preferred, explicit per-channel config.
-        $map = [
-            self::CHANNEL_SALES   => trim((string)($config['evo_instance_sales']   ?? '')),
-            self::CHANNEL_SUPPORT => trim((string)($config['evo_instance_support'] ?? '')),
-            self::CHANNEL_ACCOUNT => trim((string)($config['evo_instance_account'] ?? '')),
-        ];
-
-        // Backward compatibility with the single-instance config that shipped
-        // before three numbers existed. Only fills gaps — never overrides.
-        if ($map[self::CHANNEL_SUPPORT] === '') {
-            $map[self::CHANNEL_SUPPORT] = trim((string)($config['evo_instance_name'] ?? ''));
-        }
-        if ($map[self::CHANNEL_ACCOUNT] === '') {
-            $map[self::CHANNEL_ACCOUNT] = trim((string)($config['evo_accounts_instance_name'] ?? ''));
-        }
+        $map = self::configInstanceMap($config);
 
         foreach ($map as $channel => $instance) {
             if ($instance === '') continue;
@@ -145,6 +131,144 @@ class EvolutionApiService
                 $this->instanceToChannel[$key] = $channel;
             }
         }
+    }
+
+    /**
+     * The instance the configuration binds to each of the three department numbers, in the order the inbound map is
+     * built (sales, support, account). Values may be ''. The constructor reads exactly this; 5.18.86 made it a function
+     * so the channel registry reads the same answer rather than a copy of the rule (docs/65 §E).
+     *
+     * @return array<string,string> channel => instance
+     */
+    public static function configInstanceMap(array $config): array
+    {
+        // Preferred, explicit per-channel config.
+        $map = [
+            self::CHANNEL_SALES   => trim((string)($config['evo_instance_sales']   ?? '')),
+            self::CHANNEL_SUPPORT => trim((string)($config['evo_instance_support'] ?? '')),
+            self::CHANNEL_ACCOUNT => trim((string)($config['evo_instance_account'] ?? '')),
+        ];
+
+        // Backward compatibility with the single-instance config that shipped
+        // before three numbers existed. Only fills gaps — never overrides.
+        if ($map[self::CHANNEL_SUPPORT] === '') {
+            $map[self::CHANNEL_SUPPORT] = trim((string)($config['evo_instance_name'] ?? ''));
+        }
+        if ($map[self::CHANNEL_ACCOUNT] === '') {
+            $map[self::CHANNEL_ACCOUNT] = trim((string)($config['evo_accounts_instance_name'] ?? ''));
+        }
+        return $map;
+    }
+
+    // ── The channel registry (5.18.86, docs/65 §F–§I) ────────────────────────
+    //
+    // Dark unless multi_number_channels_enabled is ON on a Uganda install. Then, and only then, this service routes by
+    // channel id through wa_channels: a channel that is not active has no instance (every send on it fails closed), an
+    // instance the registry has switched off is REFUSED rather than unknown, and a reply may leave only on the
+    // instance its message arrived on. OFF, forStore() returns exactly what `new EvolutionApiService($config)` returns.
+
+    /** @var array{refused: array<string,string>, contexts: array<string,ChannelContext>}|null null = registry off */
+    private ?array $registry = null;
+
+    /**
+     * The service every customer-facing path should build: the constructor's, plus the channel registry where it is on.
+     *
+     * A registry that cannot be read leaves the three department numbers exactly as configured and routes no other
+     * channel — the switch must never take the existing numbers down — and says so once in the log.
+     */
+    public static function forStore(array $config, ?\PDO $pdo, ?string $dataDir, int $timeout = 20): self
+    {
+        $evo = new self($config, $timeout);
+        if ($pdo === null) return $evo;
+        if (!class_exists('ChannelRegistry')) require_once __DIR__ . '/ChannelRegistry.php';
+        if (!\ChannelRegistry::enabled($config, $dataDir)) return $evo;
+        try {
+            $reg = new \ChannelRegistry($pdo);
+            if (!$reg->available()) {
+                self::sayOnce('[channels] ' . \ChannelRegistry::FLAG . ' is on but the channel registry is not installed '
+                            . '(migration 087) — the three department numbers route as configured; no other channel does');
+                return $evo;
+            }
+            $evo->useRegistry($reg->routing(self::configInstanceMap($config)));
+        } catch (\Throwable $e) {
+            self::sayOnce('[channels] the channel registry could not be read — the three department numbers route as '
+                        . 'configured; no other channel does: ' . $e->getMessage());
+        }
+        return $evo;
+    }
+
+    /** @param array $routing ChannelRegistry::routing() */
+    public function useRegistry(array $routing): void
+    {
+        $this->channelToInstance = (array)($routing['channel_to_instance'] ?? []);
+        $this->instanceToChannel = (array)($routing['instance_to_channel'] ?? []);
+        $this->registry = [
+            'refused'  => (array)($routing['refused'] ?? []),
+            'contexts' => (array)($routing['contexts'] ?? []),
+        ];
+    }
+
+    /** Is this service routing through the channel registry? */
+    public function registryOn(): bool
+    {
+        return $this->registry !== null;
+    }
+
+    /** The registry's view of a channel, or null (registry off, or no such channel). */
+    public function channelContext(string $channel): ?ChannelContext
+    {
+        return $this->registry['contexts'][$channel] ?? null;
+    }
+
+    /** 'mapped' — routes to a channel; 'refused' — the registry knows it and has switched it off; 'unknown'. */
+    public function instanceState(string $instance): string
+    {
+        $key = mb_strtolower(trim($instance));
+        if (isset($this->instanceToChannel[$key])) return 'mapped';
+        if (isset($this->registry['refused'][$key])) return 'refused';
+        return 'unknown';
+    }
+
+    /** May the assistant answer on this channel? Always, unless the registry says its AI is off. */
+    public function channelAllowsAi(string $channel): bool
+    {
+        if ($this->registry === null) return true;
+        $ctx = $this->registry['contexts'][$channel] ?? null;
+        return $ctx === null || $ctx->aiEnabled();
+    }
+
+    /**
+     * May a reply to a message that arrived on $inboundInstance leave on $channel NOW? (docs/65 §I)
+     *
+     * Only meaningful with the registry on. The channel must be known and active, must resolve to an instance, and
+     * that instance must be the one the message came in on: if the channel was moved to another number in between, a
+     * reply from the new one would reach the customer from a number they never wrote to. Nothing is sent on a refusal.
+     *
+     * @return array{ok:bool, reason:string, context:?ChannelContext}
+     *   reason: '' | unknown_channel | channel_<status> | ai_disabled | no_instance | no_inbound_instance | instance_mismatch
+     */
+    public function replyRoute(string $channel, string $inboundInstance): array
+    {
+        $ctx = $this->channelContext($channel);
+        if ($ctx === null)       return ['ok' => false, 'reason' => 'unknown_channel', 'context' => null];
+        if (!$ctx->isActive())   return ['ok' => false, 'reason' => 'channel_' . $ctx->status(), 'context' => $ctx];
+        if (!$ctx->aiEnabled())  return ['ok' => false, 'reason' => 'ai_disabled', 'context' => $ctx];
+        $now = $this->instanceFor($channel);
+        if ($now === '')         return ['ok' => false, 'reason' => 'no_instance', 'context' => $ctx];
+        $in = trim($inboundInstance);
+        if ($in === '')          return ['ok' => false, 'reason' => 'no_inbound_instance', 'context' => $ctx];
+        if (strcasecmp($in, $now) !== 0) return ['ok' => false, 'reason' => 'instance_mismatch', 'context' => $ctx];
+        return ['ok' => true, 'reason' => '', 'context' => $ctx];
+    }
+
+    /** @var array<string,bool> */
+    private static array $said = [];
+
+    private static function sayOnce(string $line): void
+    {
+        if (isset(self::$said[$line])) return;
+        self::$said[$line] = true;
+        error_log($line);
     }
 
     /**

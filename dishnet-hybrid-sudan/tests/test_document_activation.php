@@ -565,9 +565,9 @@ is_($claimSet !== '' && strpos($claimSet, 'attempts') === false && $ebStale !== 
     'EventBus is unchanged in kind: neither the claim nor the stale release touches attempts (the shared semantics Batch 5 did not alter)', j([$claimSet, substr($ebStale, 0, 120)]));
 $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_document_handover' => ['bool',") !== false && strpos($sc, "'ai_media_document_reply' => ['bool',") !== false, 'set_config.php manages the two new rungs');
-is_(count(glob($root . '/migrations/08[7-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql'), 'no migration: the mode and the time live in the stored message\'s metadata — 086 is Customer Installation Authorisation (5.18.82), not this feature\'s');
+is_(count(glob($root . '/migrations/08[8-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql') && is_file($root . '/migrations/087_wa_channels.sql'), 'no migration: the mode and the time live in the stored message\'s metadata — 086 is Customer Installation Authorisation (5.18.82) and 087 the WhatsApp channel registry (5.18.86), not this feature\'s');
 is_(is_file(dirname($root) . '/docs/60-document-activation-safety-2026-10-05.md'), 'the activation safety record exists (docs/60)');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.85', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.86', 'manifest version is 5.18.81');
 
 echo "\nE. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

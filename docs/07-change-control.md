@@ -6168,3 +6168,116 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
 `release/5.18.85` (`4790019`) and this entry (`d42570d`) — **pushed 06 Oct, 18:36 UTC**, on the operator's instruction
 (*"yes push both branches"*): the branch to `d42570d`, `release/5.18.85` new at `4790019`. At the push nothing was
 deployed, no configuration had changed and nothing had been sent to anyone.
+
+## 06 Oct — Multi-number sales, Batch 1 (5.18.86): the three numbers made safe — the Inbox answers from the conversation's own number — and the channel registry foundation, dark; BUILT in development, NOT pushed, NOT deployed
+
+**Instruction:** the operator reviewed `docs/65` (the discovery, `c8b3e36`, local) and approved *"MULTI-NUMBER SALES —
+BATCH 1 / FOUNDATION + EXISTING ROUTING SAFETY"*, parts A–R: fix the Inbox's reply routing; verify the Batch 0 lead path
+against the current code; protect worker-owned events in the event processor; build the channel registry (SQLite), its
+seed, resolver and `ChannelContext`; route inbound and outbound by channel id; carry the channel on leads; golden tests;
+flag `multi_number_channels_enabled` OFF by default; no admin UI; no Evolution instance, SIM, number or server change;
+SEC-1…SEC-5 recorded, not fixed; South Sudan and Domain B unchanged; a LOCAL commit only. **None of the STOP conditions
+was met:** no production behaviour changed beyond the approved Inbox fix (and part C, approved by name), no instance
+created, no configuration changed, no number connected, Domain B and South Sudan untouched, no customer data migrated,
+no destructive migration.
+
+**The record is `docs/65` §Z.** In short:
+- **Flag OFF (the production default) — exactly two behaviours change.** (1) **Uganda's Inbox** answers a `sales`
+  conversation from the sales number and an `account` conversation from the account number — both went out on support
+  until now — and a registry channel's conversation from its own number or not at all; it reports a failed send instead
+  of saying *sent*, and never falls back to another number. `support`, `accounts`, `web` and `marketing` keep their
+  `sendVia()` path exactly; **South Sudan keeps the 5.18.85 line verbatim.** (2) **Uganda's `cron/event_processor.php`**
+  no longer claims `ai.reply`, `ai.media` or `crm.lead.sync` (excluded in SQL through an additive `EventBus::consume()`
+  argument), acknowledges `wa.escalation` as a known type, and reaches its dead-letter pass on a run that claims nothing;
+  **South Sudan keeps the 5.18.85 loop exactly**, its two defects included (recorded for their own decision).
+  Everything else runs the 5.18.85 code: `EvolutionApiService::forStore()` returns the constructor's service.
+- **Flag ON, Uganda only:** migration **087** (`wa_channels`, `wa_channel_log`, the three numbers seeded under their
+  present ids with **no instance stored** — their instance stays in the configuration keys, read through the
+  constructor's own rule); the resolver (refuses an unknown or switched-off number, never re-routes); `ChannelContext`
+  (role, persona, territory, portfolio for the brain; instance and number server-side only); inbound and outbound by
+  channel id; the AI worker, the media worker and the hand-over send only on the instance the message arrived on;
+  follow-ups only on their own number; leads carry their channel, number, owner and territory beside the
+  `conversation_id` they always had.
+- `lib/ChannelRegistry.php`, `lib/ChannelContext.php`, `lib/InboxReplyRoute.php`, `migrations/087_wa_channels.sql`,
+  `tools/channels.php` (read-only) — new. Changed: `lib/EvolutionApiService.php`, `lib/NotificationService.php`
+  (`sendOnChannel()`, new), `lib/AiLeadService.php`, `lib/EventBus.php`, `evo_webhook.php`, `workers/AiReplyWorker.php`,
+  `workers/MediaWorker.php`, `cron/followup_send.php`, `cron/event_processor.php`, `includes/api/api_whatsapp.php`,
+  `tools/set_config.php` (the flag listed), `manifest.json` 5.18.86 and the fifteen version pins; five *"no migration"*
+  guards in the media tests and `test_media_foundation`'s event-processor pin moved past 087 deliberately, as when 086
+  arrived.
+
+**Proofs:**
+- `tests/test_channel_registry.php` **104 passed, 0 failed** — migration 087 (seeds, every CHECK and trigger, applied
+  twice, touches nothing else, names no credential); the switch (flag AND Uganda); `forStore()` identical to the
+  constructor OFF and outside Uganda for four configuration shapes; Part Q tests 1–6; writes (validation, trail,
+  idempotence, masking); `ChannelContext`; an unreadable registry; nothing logged or printed carries the key or a whole
+  number; the read-only CLI changes nothing; Domain B untouched; **six weakened copies, each caught**.
+- `tests/test_multi_number_routing.php` **89 passed, 0 failed** — the real plugin under `php -S` beside a fake Evolution
+  and fake uCRMs, the webhook POSTed as Evolution posts it, the Inbox called as the panel calls it, the crons and the
+  media runner run as the scheduler runs them, the AI worker with a brain that never leaves the process: Part Q tests
+  7–20 and 22–23, follow-ups, notifications, South Sudan, the golden comparison of the three numbers OFF and ON (webhook
+  answer, payload, conversation, role, context, prompt, reply number, the stand-down for a colleague — identical), and
+  **eight weakened copies, each caught**, among them test 13 twice: the worker answering on the role's department number,
+  and the Inbox sending a sales chat through support.
+- `tests/test_event_processor_protected.php` **35 passed, 0 failed** — part C on Uganda: success, transient failure,
+  retry, dead letter; South Sudan control scenarios showing the 5.18.85 loop unchanged; **seven weakened copies, each
+  caught** (two of them the country gate forced open and shut). Test 21.
+- `tests/test_lead_path_batch0.php` 25 passed, 0 failed — Part B: the Batch 0 path is in the current code (`$context`;
+  `payloadOf()`), verified, not copied; its four weakened copies still find their anchors and are still caught.
+- **Focused, twice** — the three new tests, the Batch 0 test and the 26 neighbouring suites whose code this batch
+  touches or pins (the webhook and its trust, Evolution, the brain context, lead capture and its uCRM sync, the hand-over
+  and the human stand-down, follow-ups, notifications, the media, voice, image and document workers, the migration
+  ledger, the Uganda gate, the configuration tool, web chat in the Inbox): **30 files, 1,797 passed, 0 failed, twice**
+  (21:35–21:41 and 21:41–21:46 UTC), every file's tally identical in both rounds, and each of the 27 existing ones
+  identical to 5.18.85's.
+- **Full suite, twice** — every `tests/run.sh` file, through the resumable runner described at the end of this entry
+  (pass A 22:20–22:59, pass B 22:59–23:38 UTC): **283 files, 13,678 passed, 0 failed, 0 skipped — twice**, every suite's
+  tally identical in both runs. Against 5.18.85 (280 files, 13,450 passed, 0 failed): exactly the three new suites are
+  added (+228 = 104 + 35 + 89) and **no other suite's tally moved**. PHP warnings: 5 per run, all from
+  `test_dpo_endpoints` (5), which printed the same in 5.18.85.
+- **South Sudan:** the new tests' own South Sudan controls (the Inbox line verbatim, the webhook and the registry off,
+  the 5.18.85 event-processor loop), and the nine South Sudan and tenant suites, each identical to 5.18.85 in both runs:
+  `test_staff_jobs_south_sudan` 51 · `test_tenant_profile` 108 · `test_portal_tenant` 112 · `test_email_no_sudan` 62 ·
+  `test_sales_support_tenant` 37 · `test_notify_tenant_text` 30 · `test_cashbook_tenant` 26 · `test_phone_country` 26 ·
+  `test_ai_country_facts` 21 — all 0 failed.
+- **Domain B:** no file under `dishnet-mikrotik-control-plane/` or `dishnet-hybrid-sudan/docs/` changed — asserted by the
+  registry test and by `git status`.
+- PHP lint of all 33 changed PHP files: clean; nothing newer than PHP 7.4 in them. `git diff --check`: clean. Secret scan
+  of the diff and the new files: clean — every phone-shaped value in the tests is a fictitious fixture in the style the
+  existing tests use, no banned value, and the only key-shaped string is the registry test's planted fake key
+  (`CR-SECRET-EVO-KEY-0042`), whose absence from every log line and printout is what that test asserts. Documentation
+  scan: clean. Migration review: 087 additive, no existing table touched, applied twice
+  without change; `test_migration_integrity` 28 passed, 0 failed.
+
+**Recorded, not fixed (`docs/65` §Z.6):** SEC-1…SEC-5 all still open, and Batch 1 adds no credential exposure (each
+asserted); South Sudan's event processor keeps its two defects and the early return; `efris.submit` acknowledged as
+unknown by the event processor (left as it was, mitigated); `wa.escalation` has no consumer; `wa_send_quote_pdf` still
+sends from support; `cron/wa_webhook_guard.php` not registry-aware; unread counts per channel; an Inbox support reply
+stored twice (as before); the Splynx null call in `ticket.status_changed`; with the switch on, the hand-over's staff
+alert follows the registry's `sales` row while the other staff alerts do not (§Z.3, for Batch 2); and, to read on the
+server before any
+deployment, whether the Inbox's settings row holds the Evolution connection (`docs/65` §Z.6, [SERVER?]).
+
+**Flags:** `multi_number_channels_enabled` OFF everywhere (absent means off) — set nowhere, by nothing. No other flag
+read or changed: `ai_lead_capture` and `ai_crm_lead_sync` keep whatever production holds.
+
+**Production impact if this were deployed as it stands:** on Uganda, Inbox replies on sales and account conversations
+start leaving from their own numbers (the approved fix); Uganda's event processor stops touching AI and lead-sync events;
+migration 087 creates two inert tables. The switch stays OFF; nothing else changes. Not deployed; no release commit
+cut; no deploy script.
+
+**Rollback:** nothing is deployed. Before a deployment: leaving the switch off disables the whole registry path; the two
+always-on changes are code (undone by deploying 5.18.85 again); migration 087 is additive and may stay.
+
+**The run, as it happened:** a first full run found two *"no migration"* guards that 087 made fail (fixed as above);
+a self-review then found part C applying to South Sudan, against *"DO NOT CHANGE: South Sudan behaviour"* — gated to
+Uganda, with South Sudan controls and two weakened copies added. The container then restarted twice during plain
+`tests/run.sh` runs (21:57 and 22:19 UTC, at different files — `test_job_notifications_day`, `test_notify_kyc_quote_send`,
+so no single test caused them); both focused rounds had finished before the first. The two counted full runs were
+therefore made with a resumable runner that does exactly what `run.sh` does — every `test_*.php` in the same order, each
+with its own fresh vault file — keeping each finished file's output and exit code, and running any file cut off by a
+restart again from scratch with a fresh vault; each pass was then assembled into `run.sh`'s own output format. Neither
+pass was interrupted (A 22:20–22:59, B 22:59–23:38 UTC).
+
+**Git:** committed locally after `c8b3e36` (the discovery, itself local) on `claude/study-this-jhe2eg` — **NOT pushed,
+NOT deployed**, no configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.

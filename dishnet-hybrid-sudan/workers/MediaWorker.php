@@ -68,6 +68,11 @@ final class MediaWorker extends WorkerBase
     /** Batch 5 (docs/60 §5): the row was claimed as often as its event may be attempted and never settled — a worker was lost each time. */
     public const REASON_WORKER_LOST = 'worker_lost';
 
+    /** 5.18.86 (docs/65 §I): the channel registry would not confirm the number this arrived on — nothing fetched, a person told. */
+    public const REASON_CHANNEL_REFUSED = 'channel_refused';
+    /** 5.18.86 (docs/65 §D): the assistant is off on that number — nothing fetched; the team has the message. */
+    public const REASON_CHANNEL_AI_OFF = 'channel_ai_off';
+
     /** @var MediaFetcher|null a fetcher injected by a test; otherwise built per event from the configuration */
     private $fetcher = null;
     /** @var TranscriberPort|null a transcriber injected by a test; otherwise TranscriberFactory::fromConfig() */
@@ -146,6 +151,30 @@ final class MediaWorker extends WorkerBase
             }
             $this->log('info', sprintf('media #%d: ai_media_enabled is off — nothing fetched, row skipped', $mediaId));
             return;
+        }
+
+        // 5.18.86 (docs/65 §I): with the channel registry on, a file is fetched — and anything is ever said about it —
+        // only on the number it arrived on, while that number's channel is active and its assistant on. Otherwise the row
+        // is settled as skipped and nothing is fetched: a person is told, with no holding line from a number that may not
+        // be the customer's; or, with the assistant off on that number, the team simply has the message. Registry off:
+        // nothing here runs.
+        if (!in_array((string)$row['status'], self::SETTLED, true) && $this->evoClient()->registryOn()) {
+            $route = $this->evoClient()->replyRoute((string)($row['channel'] ?? ''), (string)($row['instance'] ?? ''));
+            if (!$route['ok']) {
+                $aiOff = $route['reason'] === 'ai_disabled';
+                $this->update($mediaId, ['status' => 'skipped',
+                                         'failure_reason' => $aiOff ? self::REASON_CHANNEL_AI_OFF : self::REASON_CHANNEL_REFUSED]);
+                if ($aiOff) {
+                    $this->log('info', sprintf('media #%d: the assistant is off on channel %s — nothing fetched; kept for the team',
+                        $mediaId, (string)($row['channel'] ?? '')));
+                    return;
+                }
+                $this->log('warn', sprintf('media #%d: channel %s refused (%s) — nothing fetched; handed to a person',
+                    $mediaId, (string)($row['channel'] ?? ''), $route['reason']));
+                $this->handover($row, 'a ' . $this->mediaName($row) . ' arrived but the number for this chat could not be confirmed ('
+                    . $route['reason'] . ') — look at it in WhatsApp', true);
+                return;
+            }
         }
 
         // Idempotency: one WhatsApp message is fetched once, however many events name it. Batch 2: a fetched voice
@@ -416,8 +445,11 @@ final class MediaWorker extends WorkerBase
         $this->handover($row, 'a voice message could not be transcribed (' . $reason . ') — listen to it in WhatsApp');
     }
 
-    /** The one hand-over path (lib/Handover.php): needs_human, the wa.escalation event, the staff alert, the holding line once. */
-    private function handover(array $row, string $reason): void
+    /**
+     * The one hand-over path (lib/Handover.php): needs_human, the wa.escalation event, the staff alert, the holding line once.
+     * 5.18.86: $noHoldingLine when the number itself is in doubt — then nothing is sent to the customer.
+     */
+    private function handover(array $row, string $reason, bool $noHoldingLine = false): void
     {
         $convId = (int)($row['conversation_id'] ?? 0);
         $phone  = '';
@@ -432,14 +464,18 @@ final class MediaWorker extends WorkerBase
         }
         $dataDir = dirname((string)($this->pdo->query('PRAGMA database_list')->fetch()['file'] ?? sys_get_temp_dir()));
         Handover::escalate($this->pdo, $this->bus, $this->store, $this->config, $this->evoClient(),
-            new ConversationService($dataDir, $this->pdo), $convId, (string)($row['channel'] ?? ''), $phone, $reason, false,
+            new ConversationService($dataDir, $this->pdo), $convId, (string)($row['channel'] ?? ''), $phone, $reason, $noHoldingLine,
             function (string $level, string $message): void { $this->log($level, $message); }, 'media_worker');
     }
 
     private function evoClient(): EvolutionApiService
     {
         if ($this->evoClient === null) {
-            $this->evoClient = new EvolutionApiService($this->config, MediaPolicy::timeoutSeconds($this->config));
+            // 5.18.86 (docs/65 §I): the constructor's service unless the channel registry is on (Uganda, behind
+            // multi_number_channels_enabled); then a channel id resolves through wa_channels.
+            $dataDir = dirname((string)($this->pdo->query('PRAGMA database_list')->fetch()['file'] ?? sys_get_temp_dir()));
+            $this->evoClient = EvolutionApiService::forStore($this->config, $this->pdo, $dataDir,
+                                                             MediaPolicy::timeoutSeconds($this->config));
         }
         return $this->evoClient;
     }

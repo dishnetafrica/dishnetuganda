@@ -620,7 +620,13 @@ is_($cn['rc'] === 0 && in_array('ai_media', $cn['jobs'], true) && in_array('ai_r
 
 echo "\nH. Wiring that must stay as it is\n";
 $ep = (string)file_get_contents($root . '/cron/event_processor.php');
-is_(strpos($ep, "in_array(\$type, ['ai.reply', 'ai.media'], true)") !== false, 'event_processor releases ai.media instead of acknowledging it as unknown');
+// 5.18.86: on Uganda the processor no longer claims a worker's types at all; everywhere it still releases one that
+// reaches it — proved by behaviour in test_event_processor_protected.php; this line only pins that ai.media stays on
+// the list in both countries.
+is_(strpos($ep, "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'crm.lead.sync'] : ['ai.reply', 'ai.media'];") !== false
+    && strpos($ep, "consume(20, '', [], \$_epWorkerOwned)") !== false
+    && strpos($ep, 'in_array($type, $_epWorkerOwned, true)') !== false,
+    'event_processor never acknowledges ai.media as unknown: not claimed on Uganda, released elsewhere');
 $ma = (string)file_get_contents($root . '/cron/master.php');
 is_(preg_match("/^\s*'ai_media'\s*=>\s*\['interval'\s*=>\s*60,\s*'flag'\s*=>\s*'ai_media_enabled',\s*'script'\s*=>\s*dirname\(__DIR__\) \. '\/run_media_worker\.php'\],/m", $ma) === 1,
     'master.php runs run_media_worker.php every 60 s as its own job, registered with flag ai_media_enabled');
@@ -639,7 +645,7 @@ $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_enabled' => ['bool',") !== false && strpos($sc, "'ai_media_max_bytes' => ['number',") !== false && strpos($sc, "'ai_media_timeout_s' => ['number',") !== false, 'set_config.php manages the three media settings');
 $scOut = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . ' --key ai_media_timeout_s --value 2 2>&1; echo "rc=$?"');
 is_(strpos((string)$scOut, 'between 3 and 60') !== false && strpos((string)$scOut, 'rc=1') !== false, 'a limit outside its range is refused by the tool, naming the range', (string)$scOut);
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.85', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.86', 'manifest version is 5.18.81');
 is_(is_file($root . '/migrations/085_wa_media.sql') && strpos((string)file_get_contents($root . '/migrations/085_wa_media.sql'), 'CREATE TABLE IF NOT EXISTS wa_media') !== false, 'migration 085 creates wa_media additively');
 
 echo "\nI. Weakened copies — each caught by the scenario that guards it\n";

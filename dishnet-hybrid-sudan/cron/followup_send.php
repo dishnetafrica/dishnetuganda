@@ -45,7 +45,9 @@ $pdo     = $store->getPdo();
 $svc     = new FollowUpService($pdo);
 $convSvc = new ConversationService($dataDir, $pdo);
 $oo      = ContactOptOut::fromStore($store);
-$evo     = new EvolutionApiService($config);
+// 5.18.86 (docs/65 §I): the constructor's service unless the channel registry is on (Uganda, behind
+// multi_number_channels_enabled); then a conversation's channel id resolves through wa_channels.
+$evo     = EvolutionApiService::forStore($config, $pdo, $dataDir);
 $guard   = new EvoWebhookGuard($pdo, $config);
 $now     = gmdate('Y-m-d H:i:s');
 
@@ -115,6 +117,17 @@ foreach ($svc->approvedDrafts(10) as $d) {
                   'priority-data fact appended before sending', 'system');
     }
 
+    // 5.18.86 (docs/65 §I): with the channel registry on, a follow-up leaves only on its own conversation's number. A
+    // paused number keeps it approved for later; a number switched off for good closes it. Never sent from another.
+    if ($evo->registryOn() && $evo->instanceFor($chan) === '') {
+        $cx = $evo->channelContext($chan);
+        if ($cx === null || $cx->status() !== 'paused') {
+            $svc->close($fuId, 'cancelled', 'the number this chat belongs to is not active (channel ' . $chan . ')', 'sender');
+        }
+        $held++;
+        continue;
+    }
+
     $res = $evo->sendText($chan, $phone, $body, ContactOptOut::CLASS_PROACTIVE);
 
     // Claim our own echo FIRST — before storing, before bookkeeping. The echo
@@ -124,7 +137,8 @@ foreach ($svc->approvedDrafts(10) as $d) {
     $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
     if ($waId !== '') {
         try {
-            $guard->claim($waId, (string)($config['evo_instance_' . $chan] ?? ''), 'followup.send');
+            $guard->claim($waId, $evo->registryOn() ? $evo->instanceFor($chan)
+                                                     : (string)($config['evo_instance_' . $chan] ?? ''), 'followup.send');
         } catch (\Throwable $e) { /* dedupe is a backstop */ }
     }
 

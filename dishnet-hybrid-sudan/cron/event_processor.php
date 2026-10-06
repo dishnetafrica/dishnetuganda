@@ -38,9 +38,39 @@ $splynx       = ($splynxUrl && $splynxKey && $splynxSecret)
     ? new SplynxApiClient($splynxUrl, $splynxKey, $splynxSecret)
     : null;
 
+// ── Types a dedicated worker owns: never claimed here ───────────────────────
+// This loop claims every type, so it must leave these alone at the claim itself (5.18.86, docs/65):
+//   - acknowledging one as "unknown" swallows the worker's job. crm.lead.sync was not on the old list, so this
+//     30-second loop could acknowledge a lead's sync before UcrmLeadWorker ever saw it;
+//   - claiming one and releasing it (what ai.reply and ai.media got) lets a backlog of it, which sorts first,
+//     fill this batch of 20 every run and starve the types handled below.
+// efris.submit is also a worker's (EfrisWorker, cron/efris_sync.php) and is deliberately left exactly as it was:
+// outside this change's scope, recorded in docs/65 for its own decision.
+//
+// Uganda only (docs/65 §Z.5). Every other install keeps the 5.18.85 loop exactly: it claims every type, releases
+// ai.reply and ai.media, logs wa.escalation as unknown, and returns early on an empty claim.
+$_epUg = false;
+try {
+    require_once $pluginDir . '/lib/StaffJobsGate.php';
+    $_epDir = (isset($dataDir) && is_string($dataDir) && $dataDir !== '') ? $dataDir
+            : (method_exists($store, 'getDataDir') ? (string)$store->getDataDir() : null);
+    $_epUg = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $_epDir);
+} catch (\Throwable $e) {
+    $_epUg = false;
+}
+$_epWorkerOwned = $_epUg ? ['ai.reply', 'ai.media', 'crm.lead.sync'] : ['ai.reply', 'ai.media'];
+
 // ── Consume events ──────────────────────────────────────────────────────────
-$events = $bus->consume(20);
-if (empty($events)) return; // nothing to process
+if ($_epUg) {
+    // No early return when nothing is claimed: the dead-letter pass at the end must still run. It used to run only on a
+    // run that had claimed something, and the AI's own events counted until 5.18.86; they are no longer claimed here,
+    // so an install whose only traffic is AI messages would otherwise never have its dead letters reported. The pass is
+    // one query, and each dead letter is still reported once.
+    $events = $bus->consume(20, '', [], $_epWorkerOwned);
+} else {
+    $events = $bus->consume(20);
+    if (empty($events)) return; // nothing to process
+}
 
 $processed = 0;
 $failed    = 0;
@@ -229,15 +259,23 @@ foreach ($events as $event) {
             // ── Unknown event type ───────────────────────────────────────
             default:
                 // Types owned by dedicated workers must NOT be acked here.
-                // consume() claims unfiltered batches, so acking an unknown
-                // type swallows the owning worker's job — on the exec()-less
-                // fallback path an ai.reply claimed by this 30s loop would
-                // silently drop a customer's message before AiReplyWorker's
-                // 60s run ever saw it. Release the claim instead, exactly as
-                // WorkerBase::consumeFiltered() releases unmatched events.
-                if (in_array($type, ['ai.reply', 'ai.media'], true)) {
+                // On Uganda consume() no longer claims them at all (above) and
+                // this is the second line; elsewhere it is the first, as it
+                // was. Release the claim, exactly as
+                // WorkerBase::consumeFiltered() releases unmatched events, so
+                // the owning worker still gets its job.
+                if (in_array($type, $_epWorkerOwned, true)) {
                     $pdo->prepare("UPDATE events SET status='pending', locked_by=NULL, locked_at=NULL WHERE id=?")
                         ->execute([$eid]);
+                    break;
+                }
+                // 5.18.86 (docs/65 §Z.5), Uganda: the AI hand-over emits wa.escalation AFTER it has marked the
+                // conversation needs_human, alerted a person and told the customer. Nothing consumes it yet, and it
+                // must not wait for a consumer that does not exist: acknowledged as a known type, not logged as
+                // unknown. When owners are notified (docs/65 §L) a consumer will own it and it joins the list above.
+                if ($_epUg && $type === 'wa.escalation') {
+                    $bus->ack($eid);
+                    $processed++;
                     break;
                 }
                 // Everything else: don't fail — just ack and log

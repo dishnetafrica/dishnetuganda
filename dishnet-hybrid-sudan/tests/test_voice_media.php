@@ -655,12 +655,12 @@ is_(strpos($mwCode, 'DishNetAiBrain') === false && strpos($mwCode, 'ReplyPrivacy
     'neither the media worker nor the voice service knows the brain or the guard: the transcript joins the ai.reply queue and nothing else');
 is_(strpos($mwCode, 'ai_media_voice') === false && strpos($mwCode, 'MediaPolicy::voiceEnabled($this->config)') !== false, 'the worker reads the voice flag through the policy only');
 is_(is_file($root . '/docs/../../docs/56-voice-transcription-provider-boundary-2026-10-05.md') || is_file(dirname($root) . '/docs/56-voice-transcription-provider-boundary-2026-10-05.md'), 'the provider boundary is documented (docs/56) before any provider exists');
-is_(count(glob($root . '/migrations/08[7-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql'), 'no migration: wa_media already carries understanding and understanding_kind — 086 is Customer Installation Authorisation (5.18.82), not this feature\'s');
+is_(count(glob($root . '/migrations/08[8-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql') && is_file($root . '/migrations/087_wa_channels.sql'), 'no migration: wa_media already carries understanding and understanding_kind — 086 is Customer Installation Authorisation (5.18.82) and 087 the WhatsApp channel registry (5.18.86), not this feature\'s');
 $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_voice' => ['bool',") !== false && strpos($sc, "'ai_media_voice_max_seconds' => ['number',") !== false && strpos($sc, "'ai_transcription_provider' => ['text',") !== false, 'set_config.php manages the voice settings');
 $scOut = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . ' --key ai_transcription_provider --value fake 2>&1; echo "rc=$?"');
 is_(strpos((string)$scOut, 'none is the only value today') !== false && strpos((string)$scOut, 'rc=1') !== false, 'the tool refuses a provider that does not exist, the fake included', (string)$scOut);
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.85', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.86', 'manifest version is 5.18.81');
 
 echo "\nE. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

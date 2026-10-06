@@ -4,6 +4,9 @@
 table, no configuration, no push, no deploy, no WhatsApp message. Nothing here is approved for building. The operator
 reviews it and approves the next batch explicitly.
 
+**Update — Batch 1 built in development (5.18.86), §Z.** Approved 06 Oct; NOT pushed, NOT deployed, the new switch
+`multi_number_channels_enabled` OFF everywhere. Sections A–Y are the discovery as written and are not edited.
+
 **What was inspected.**
 - The code production runs: release commit `4790019` (plugin 5.18.85, deployed 06 Oct 19:13 UTC), read from a detached
   checkout. Every citation is `dishnet-hybrid-sudan/<path>:<line>` at that commit unless it says BRANCH.
@@ -808,3 +811,172 @@ Also outstanding from docs/49: WS-B's onboarding, messaging policy, cost and rol
 - **Data:** lead counts by source and assignee; staff rows by role; distributor rows.
 - **The Evolution server:** version, per-instance tokens, capacity, and whether it is shared with the South Sudan tenant.
 - **Business rules:** D1–D12.
+
+---
+
+## Z. Batch 1 — built in development (5.18.86): the three numbers made safe, and the registry foundation, dark
+
+**Status: BUILT and proved in development only. NOT pushed, NOT deployed. No production flag set, no Evolution instance
+created, no number connected, no real message sent, no production data read or written.** Approved on 06 Oct as
+*"MULTI-NUMBER SALES — BATCH 1 / FOUNDATION + EXISTING ROUTING SAFETY"* (parts A–R). The local commit and every number
+below are recorded in docs/07.
+
+### Z.1 With the flag OFF — the production default — exactly two behaviours change
+
+1. **The Inbox fix (Part A, approved by name). Uganda only.** Every Inbox send chose its sender with one line,
+   `channel === 'accounts' ? 'accounts' : 'support'`, so a sales conversation — and an `account` conversation, which is
+   not `accounts` — was answered from the support number. `lib/InboxReplyRoute.php` now decides, for all four send
+   actions (`wa_send_reply`, `wa_send_document`, `wa_send_image`, `wa_send_media`):
+
+   | Conversation channel | Before (5.18.85) | Uganda, 5.18.86 |
+   |---|---|---|
+   | `sales` | support number | **the sales number** (`NotificationService::sendOnChannel`) |
+   | `account` | support number | **the account number** |
+   | a registry channel id | support number | **its own number**, or not sent when it has none (flag off: always not sent) |
+   | `support` | `sendVia('support')` | unchanged |
+   | `accounts` (notification thread) | `sendVia('accounts')` → account number | unchanged |
+   | `web`, `marketing`, empty | `sendVia('support')` | unchanged |
+
+   The channel route takes the steps of `sendVia()` that apply (the number's WhatsApp form, the opt-out check against
+   this channel, dry run, the rate limit, the Message Log row, the echo claim) and refuses three: **no other number and
+   no WASender** (a channel that cannot send sends nothing, and the person in the Inbox is told — 502 with *"Not sent on
+   the sales number … Nothing was sent from any other number."*, or *"May have been sent … check the chat"* when
+   WhatsApp did not answer); **no failure queue** (its retry goes through `sendVia()` and would send from support); **no
+   conversation-store copy** (the Inbox stores the message once, in its own conversation, now with the WhatsApp message
+   id, so the echo dedupes on the row as well). Support and accounts keep their `sendVia()` path and its reporting
+   exactly. **South Sudan keeps the 5.18.85 line verbatim.**
+2. **The event processor (Part C). Uganda only.** See Z.5; South Sudan keeps the 5.18.85 loop exactly.
+
+Everything else runs the 5.18.85 code: `EvolutionApiService::forStore()` — now used by the webhook, the AI worker, the
+media worker, the follow-up sender and the Inbox's channel route — returns exactly `new EvolutionApiService($config)` when the flag is off, and
+when the flag is on anywhere but Uganda (proved for four configuration shapes, including the legacy gap-fill keys and
+a shared instance). Migration 087 adds two tables and three seed rows that no running path reads while the flag is off
+(only the read-only `tools/channels.php`, when someone runs it).
+
+### Z.2 With `multi_number_channels_enabled` ON — Uganda only (dark: nobody has set it)
+
+- **Registry (Part D, migration 087).** `wa_channels` holds the columns of Part D plus CHECKs (role, owner type and the
+  matching owner id, status, portfolio, hand-over, AI switch), a case-insensitive unique instance and a unique business
+  number. `wa_channel_log` is the append-only trail (UPDATE and DELETE refused by trigger); a channel is retired, never
+  deleted (trigger). **The three numbers are seeded under their present ids** — `sales`, `support`, `account`, the very
+  strings in `wa_conversations.channel` — **with no instance stored**: their instance stays in the configuration keys
+  and their legacy fallbacks, read through `EvolutionApiService::configInstanceMap()` (the constructor's own rule, now
+  shared). No production value is guessed; a department row carrying an instance is ignored. Nothing in 001–086 is
+  touched; no conversation, message, lead or event is rewritten.
+- **Resolver (Part F).** Exact, case-insensitive instance match. The first department naming an instance owns it for
+  inbound, as the constructor always had it — and when that department is not active the instance is **refused, never
+  handed to the next department sharing it**. A channel that is not `active` (paused, disabled, retired) is refused in
+  and out. An unknown instance is unknown. A registry channel naming a department's instance is never routed and is
+  logged once. An unreadable registry leaves the three department numbers routing as configured and routes nothing
+  else, said once.
+- **ChannelContext (Part G).** `lib/ChannelContext.php`: the instance and the business number are server-side only;
+  `forBrain()` is `role`, `persona`, `territory`, `portfolio` — no instance, no number, no owner id.
+- **Inbound (Part H).** instance → registry → channel id → conversation `(phone, channel id)`. A switched-off number is
+  answered `channel_disabled` (an unknown one, as before, `unknown_instance`); neither stores anything. A number with the
+  assistant off stores the message and its STOP, and queues nothing (no `ai.reply`, no `ai.media`). The `ai.reply`
+  payload keeps its exact shape; its `whatsapp_instance` is used only for the check below.
+- **Outbound (Part I).** The AI worker, before any send (the typing indicator included), asks
+  `EvolutionApiService::replyRoute()`: the channel known and active, its assistant on, and its instance **the instance
+  the message arrived on**. On a mismatch, an unknown or a switched-off channel **nothing is sent** — no reply and no
+  holding line — the conversation goes to `needs_human`, `wa.escalation` is queued and the staff alert goes; with the
+  assistant off the event is settled quietly. The dead-letter hand-over sends its holding line only on a confirmed
+  route. The media worker checks the same route before fetching anything; refused, the row is settled `skipped` /
+  `channel_refused` and a person is told with no holding line. Follow-ups leave only on their own conversation's
+  number: a paused number keeps an approved follow-up waiting, a disabled or retired one closes it (`cancelled`).
+- **Brain (Part J).** One brain. The worker passes the channel's **role** where it passed the department (for the three
+  numbers the same string), so a second sales number gets the sales behaviour, the sales knowledge and the uCRM prices,
+  with this conversation's history only. Proved: the same question on the department sales number and on a second
+  sales number produces the identical context and the identical system prompt. **BrainContext gains no key:** its rule
+  is that a key earns its place by changing what the model does, and persona and territory have no approved wording
+  yet (D3). They wait in `ChannelContext::forBrain()` for Batch 3.
+- **Leads (Part K).** With the registry on, a lead records `channel_id`, `channel_role`, `source_number` (the registry's
+  number, null until verified), `channel_owner_type`, `channel_owner_id`, `territory_region_id` — beside the
+  `conversation_id` every WhatsApp lead already carried, which is unchanged. Set on creation; on an
+  existing lead filled in only where missing and only from the lead's own conversation (first touch keeps the lead).
+  `crm.lead.sync` carries `channel_id`. Assignment is unchanged (the existing round-robin; D5 is open). The uCRM sync
+  writes its own keys and never these (proved).
+- **No admin UI (Part M).** The registry's methods and `tools/channels.php` (read-only: the switch, every channel, where
+  its instance comes from, whether it routes, `--resolve <instance>`, `--trail <channel>`; numbers masked to two
+  digits, never a key). The flag is listed by `tools/set_config.php`.
+- **Nothing touches Evolution itself (Part N):** no instance created, no webhook registered, no setting changed.
+  `cron/wa_webhook_guard.php` still registers the three configured instances only (Batch 2).
+
+### Z.3 Decisions taken inside the instruction — and those left open
+
+- **D9 (a disabled channel):** refused inbound, as Part F orders (*fail closed for unknown and disabled*). "Store
+  without the AI" exists as the per-channel `ai_enabled = 0`; it does not alert anyone. Revisit with D4.
+- **A new channel is created `disabled`**: switched on deliberately, never by being created.
+- **Department notifications do not consult the registry.** `sendVia()` (OTP, invoices, alerts…) still addresses a
+  department sender. Only sends that belong to a conversation route by channel. A department number switched off in
+  the registry therefore stops its conversation replies, its inbound and the AI on it, but not its notifications.
+- **Staff alerts leave from the `sales` number (`AlertService`) — with one difference, recorded for Batch 2.** The
+  hand-over's alert, raised by the AI and media workers, is sent through their registry-aware service, so with `sales`
+  switched off in the registry that one alert is not sent (it is recorded as failed; the conversation is still marked
+  `needs_human` and `wa.escalation` still queued). The watchdog, webhook-guard, web-chat and Starlink-mail alerts build
+  their own service and keep sending on the configured number, as department notifications do. Dark: with the flag off
+  every alert is exactly as in 5.18.85. Which number staff alerts leave on once the department numbers are managed in
+  the registry is for Batch 2 to decide.
+- **The legacy support/account context object** still carries `whatsapp_instance` and `customer_phone`, as it has since
+  before 5.18.85 (BrainContext's B3.5 migration debt). Neither is rendered into the prompt, and the external ShopBot
+  payload's contract excludes both. Unchanged here because the golden test requires it.
+- **Left open, untouched:** D1–D8, D10–D12; persona wording (D3); owner-based lead assignment (D5); portfolio
+  visibility (D7); per-channel webhook authentication (D12).
+
+### Z.4 Part B — the Batch 0 lead path, verified against the current code, not copied
+
+- `workers/AiReplyWorker.php` passes `$context` to `latestPin()` (the defect was `$ctx`); unchanged by Batch 1, and the
+  Batch 0 weakened copy still finds its anchor.
+- `workers/UcrmLeadWorker.php` reads the payload through `payloadOf()`; unchanged.
+- `tests/test_lead_path_batch0.php`: 25/0. Batch 1's own lead proof (routing test, part L) runs the chain with the flag
+  off and on: WhatsApp AI lead → capture → `crm.lead.sync` → `UcrmLeadWorker` → a uCRM client per lead, both linked.
+- No production flag was changed: `ai_lead_capture` and `ai_crm_lead_sync` keep whatever production holds.
+
+### Z.5 Part C — the event processor never swallows a worker's event
+
+`cron/event_processor.php` claims every type, and two worker-owned ones were lost through it: `crm.lead.sync` was not
+on its list, so this 30-second loop could acknowledge a lead's sync as an unknown type before `UcrmLeadWorker` saw it;
+and `ai.reply` / `ai.media` were claimed and released, so a backlog of more than twenty (priority 3, sorted first)
+starved every type it does handle. Now:
+- `EventBus::consume()` takes an optional exclusion list (additive; every existing caller passes none);
+- the processor excludes `ai.reply`, `ai.media`, `crm.lead.sync` in SQL, and still releases one if it ever sees it;
+- `wa.escalation` — emitted by the hand-over after it has already acted, consumed by nothing — is acknowledged as a
+  known type instead of being logged as unknown (protecting it would leave it pending for ever);
+- the early `return` on an empty claim is gone: an install whose only traffic is AI events never reached the
+  dead-letter pass (found by the new test).
+Success, transient failure, retry and dead letter are proved against the real `UcrmLeadWorker` and a fake uCRM.
+**Uganda only.** The processor is shared code, and South Sudan's behaviour may not change: there it still claims every
+type, releases `ai.reply` / `ai.media`, logs `wa.escalation` as unknown and returns early on an empty claim — proved by
+South Sudan control scenarios beside the Uganda ones, and by a weakened copy that ignores the country gate.
+
+### Z.6 Recorded, not fixed
+
+- **SEC-1 … SEC-5 (§O.3): untouched, all five still open,** each awaiting its own approval. **Batch 1 adds no credential
+  exposure:** the registry stores no credential (the migration names none, asserted); nothing it logs carries the
+  Evolution key or a whole number (asserted); the CLI prints neither (asserted); Inbox error texts name no instance
+  (asserted); the brain is never given the instance or our number (asserted); the external ShopBot contract is unchanged.
+- **South Sudan's event processor keeps its two defects** — `crm.lead.sync` can be acknowledged as unknown before
+  `UcrmLeadWorker` sees it, and a backlog of AI events starves the processor's own types — and the early return that
+  skips the dead-letter pass on an empty run. Fixing them there changes South Sudan's behaviour: its own decision.
+- **`efris.submit`** is owned by `EfrisWorker` (`cron/efris_sync.php`) yet acknowledged by the event processor as an
+  unknown type. Left as it was (*do not modify unrelated event types*). Mitigated today: the sync runs only with
+  `efris_environment = test`, and its scan re-queues any invoice still unsubmitted.
+- **`wa.escalation` has no consumer.** Acknowledged as known (Z.5); a consumer is for D4.
+- **`wa_send_quote_pdf`** (the KYC quotation sender) names no conversation and still sends from support.
+- **`cron/wa_webhook_guard.php`** is not registry-aware: a registry instance's webhook is not watched (Batch 2).
+- **`ConversationService` unread counts** cover `support`, `web`, `accounts` only; `sales`, `account` and registry
+  channels are not counted there (display only).
+- **An Inbox reply on a `support` or `accounts` conversation is stored twice** — the Inbox's row and `sendVia()`'s
+  conversation-store copy — as before 5.18.86 (measured: two rows, one carrying the message id); the channel route
+  stores it once.
+- **`event_processor` `ticket.status_changed`** calls `$splynx->isConfigured()` on null when Splynx is not configured.
+- **[SERVER?] Whether the Inbox can see the Evolution connection.** The Inbox's send path reads the SQLite settings
+  row (`public.php`), not the settings files the webhook and workers read. If that row lacks the Evolution URL or key,
+  a support reply has been reported *sent* while nothing left (`sendVia()` finds no transport and returns quietly);
+  with 5.18.86 a sales or account reply says *"WhatsApp (Evolution) is not configured here"* instead. The same
+  question as SEC-1; to be read on the server before any deployment (§X.2).
+
+### Z.7 Rollback
+
+Nothing is deployed, so nothing in production needs rolling back. Before deployment, the registry is undone by leaving
+the flag off; its tables are inert. The two always-on changes (Z.1) are code: undoing them means deploying 5.18.85
+again. Migration 087 is additive and its tables may stay.
