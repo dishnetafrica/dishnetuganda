@@ -5779,7 +5779,7 @@ entries above record them as not pushed (*NOT pushed*, or *committed locally* fo
 written. The AI layer is not deployed and stays switched off (R4 found none of its files installed); 5.18.82's feature
 reached production only inside 5.18.83's release, switched off. No configuration changed, nothing sent to anyone.
 
-## 06 Oct — 5.18.84: the customer's WhatsApp when an installation job is booked (Uganda); `release/5.18.84` = `79607d4`, cut on live 5.18.83 (`2de810c`); `scripts/deploy-5.18.84.sh` pinned to it and rehearsed — PUSHED 15:19 UTC; NOT deployed; the switch arrives off
+## 06 Oct — 5.18.84: the customer's WhatsApp when an installation job is booked (Uganda); `release/5.18.84` = `79607d4`, cut on live 5.18.83 (`2de810c`); `scripts/deploy-5.18.84.sh` pinned to it and rehearsed — PUSHED 15:19 UTC; DEPLOYED 15:23 UTC (PASSED 31/0/0); SWITCHED ON by 15:25 UTC (`--after-only` PASSED 25/0/1)
 
 **Why.** After Customer Installation Authorisation was switched on, the operator created a job for a customer with no e-mail
 address. The technician was told at once; the customer heard nothing. Two facts, read from the code:
@@ -5887,16 +5887,17 @@ clone left as found; **run 2 154/0**, 26 runs, the same script, the same check l
 0 failed / 0 notes**; on the server expect 31. The sandbox has a `dishnet.sqlite` to back up and the server has none, as
 with 5.18.83: 30 rehearsed, 29 on the server.
 
-**Handover — each step is the operator's.**
+**Handover — each step is the operator's; all three are done.**
 0. **Push both branches — done, 06 Oct 15:19 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries the script, and
    `release/5.18.84` the release commit.
-1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+1. **Deploy, as root on the server — DONE 15:23 UTC, PASSED 31/0/0** (the RESULT below). It asks for `DEPLOY`; send
+   back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.84 && mkdir -p /root/dnb-5.18.84 && bash scripts/deploy-5.18.84.sh 2>&1 | tee /root/dnb-5.18.84/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
    The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
    docs/44 §16.9).
-2. **Switch it on — after the deploy passed:**
+2. **Switch it on, after the deploy passed — DONE by 15:25 UTC** (the SWITCH-ON record below):
 
    `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key customer_wa_install_scheduled --value 1`
 
@@ -5904,6 +5905,50 @@ with 5.18.83: 30 rehearsed, 29 on the server.
    an installation job, with a date, for a test client whose WhatsApp number is a staff member's. To switch it off, run the
    same tool with `--clear` instead of `--value 1`.
 
+- **RESULT — DEPLOYED to production 2026-10-06, 15:23 UTC: PASSED, 31 ok / 0 failed / 0 notes** — the 31 expected. The
+  sandbox reads 32 because it holds a `dishnet.sqlite` to back up; the server holds none (*"nothing to copy"*). The run
+  began at 15:21:37 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 79607d4"*; the 10
+  files were stamped at 15:23:06 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the
+  log file stays on the server under `/root/dnb-5.18.84/`.
+  - **A.** The checkout fast-forwarded `0e882f3` → `9898608`; branch tip `58a6b15` (not installed); release commit
+    `79607d4` cut on `2de810c`; 10 files (8 changed, 2 added, 0 removed), no migration; **A0** clean. Live `2de810c` /
+    5.18.83. PHP **8.1.34** accepted the 3 changed server files and the 6 test files. Pilot `on`; **the authorisation
+    `ia=on/on`**, as the operator left it; **the new switch `wa=absent/absent`**; 086 complete, its tables
+    `0:2:1:1:0`; the webhook log's last 300 entries hold **1** `job.add`, the last at 15:27:39 by the plugin's clock
+    (UTC+3), 12:27:39 UTC; photo tables `present:11:3`, 11 files.
+  - **Backup** `/root/dnb-5.18.84/backup-20261006T152137Z`: `plugin.sqlite3` 29 MB, one consistent copy, integrity ok,
+    248 tables; the data directory 144 MB; the installed 5.18.83 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed; **V5** 302 / 401;
+    **V7** the customer authorisation page 404 *"This link is not valid"* to a request without a link; **V8**
+    `install_auth_request` 401 without a login; **V3** the pilot unchanged (`on` → `on`); **V3b** the authorisation
+    unchanged (`on/on` → `on/on`); **V3c** the new switch unchanged (`absent/absent` → `absent/absent`): off; **V4** no
+    fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 10 files as `79607d4` has them, manifest 5.18.84; R2 `pilot=on`, the installed `InstallAuth` reads the
+    authorisation ON in both copies, and the installed `InstallScheduledWhatsApp` reads the new switch OFF in both; R3 086
+    still applied and complete, `0:2:1:1:0` before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the
+    channel `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 217 files from Release A through 5.18.83
+    intact; R6 every earlier marker and 5.18.84's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the
+    figures 5.18.83's deploy read; the photo tables and files read exactly as before.
+- **SWITCH-ON — 06 Oct, by 15:25 UTC, by the operator** (recorded from the terminal the operator pasted):
+  - `set_config.php --key customer_wa_install_scheduled --value 1` printed *"customer_wa_install_scheduled = 1"*, the
+    usual *[ConfigVault] restored after re-install* line, and the listing, where the key reads **ON**. No other key was
+    changed.
+  - `--after-only` at 15:25:01 UTC: **PASSED, 25 ok / 0 failed / 1 note** — what the rehearsal read with the switch on. The
+    note is R2 reading the new switch ON in both copies (`files=on/yes store=on/yes`), as intended. **V3c** `wa=on/on`
+    before and after; **V3b** the authorisation `ia=on/on`; R3 `0:2:1:1:0`; V4 no fatal or parse error since the deploy.
+    The log stays on the server under `/root/dnb-5.18.84/`.
+  - **The summary says what the switch reads:** *"customer_wa_install_scheduled reads ON in both places (V3c, R2): the
+    next installation job created with a date sends it"*. 5.18.83's fixed *"TODAY THE SWITCH IS OFF"* is gone.
+  - **Not yet seen: a message on a phone.** The first installation job created with a date after 15:25 UTC sends it. The
+    pilot, a test client whose number is a staff member's, is the operator's. A job created before the switch does not
+    get it, the one made for the customer without an e-mail address included: the message is sent only at `job.add`.
+  - **086 holds one event more than at 5.18.83's switch-on, and still no request** (`0:1:1:1:0` at 11:51 UTC,
+    `0:2:1:1:0` before this deploy; this run changed none). With no request, 5.18.83's code records only: a step on the
+    exempt job 20 (started, completed or signed off, marked `exempt`); a staff action a guard refused
+    (`INSTALLATION_START_BLOCKED`); or a Starlink installation job started or completed in uCRM without acceptance
+    (`…_WITHOUT_ACCEPTANCE`). Which, and on which job, the job page's panel shows; not read from here.
+
 **Git:** `58a6b15` (the feature), `2923296` (the script and its rehearsal), `release/5.18.84` (`79607d4`) and this entry
 (`cc0002e`) — **pushed 06 Oct, 15:19 UTC**, on the operator's instruction (*"yes push both branches"*): the branch to
-`cc0002e`, `release/5.18.84` new at `79607d4`. Nothing deployed, no configuration changed, nothing sent to anyone.
+`cc0002e`, `release/5.18.84` new at `79607d4`. At the push nothing was deployed, no configuration had changed and nothing
+had been sent to anyone.
