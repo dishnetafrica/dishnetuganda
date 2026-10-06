@@ -336,15 +336,25 @@ check "$(has "$OUT" "STOP: the pin carries files that are not 5.18.85's, which t
 V_DROP="$(release_variant drop "$QP_LIB")"; S="$(pinned_copy short "$V_DROP")"; fresh; OUT="$(run --answer DEPLOY --script "$S")"; rm -f "$S"
 check "$(has "$OUT" "STOP: the pin lacks files 5.18.85 is made of: $QP_LIB(added)")$(live)$(backups)" "yes${BASE}0" \
   "1e a commit cut on 5.18.84 carrying the release WITHOUT the quotation reader: refused, naming it"
-cfg_set customer_wa_install_scheduled off; cfg_set customer_wa_install_scheduled on files; fresh; OUT="$(run --answer DEPLOY)"
-check "$(has "$OUT" "STOP: NO-GO: customer_wa_install_scheduled reads 'wa=on/absent' (files/store) — this script must find it readable, its two copies agreeing")$(live)$(backups)" "yes${BASE}0" \
-  "1f the booking WhatsApp's two copies disagree (the files on, the store row the webhook reads first silent): NO-GO — nothing deployed, no backup"
-cfg_set customer_wa_install_scheduled on
+# 1f and 1g take the configuration's two copies apart. cfg_set re-adds a key at the END of the store row, so putting a
+# switch back with it changes the row's bytes though not its meaning: the copies are kept byte for byte here and put back
+# exactly, and each refusal is checked on its own to leave the data as the test set it.
+cfg_keep() { cp "$DATA/kyc_config.json" "$SB/kyc_config.kept"
+  php -r '$p = new PDO("sqlite:" . $argv[1]); file_put_contents($argv[2], (string)$p->query("SELECT data FROM kyc_config WHERE id = 0")->fetchColumn());' "$DATA/plugin.sqlite3" "$SB/kyc_row.kept"; }
+cfg_back() { cp "$SB/kyc_config.kept" "$DATA/kyc_config.json"
+  php -r '$p = new PDO("sqlite:" . $argv[1]); $p->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $p->prepare("UPDATE kyc_config SET data = ? WHERE id = 0")->execute([(string)file_get_contents($argv[2])]);' "$DATA/plugin.sqlite3" "$SB/kyc_row.kept"; }
+cfg_keep
+cfg_set customer_wa_install_scheduled off; cfg_set customer_wa_install_scheduled on files; DX="$(data_digest)"; fresh; OUT="$(run --answer DEPLOY)"
+check "$(has "$OUT" "STOP: NO-GO: customer_wa_install_scheduled reads 'wa=on/absent' (files/store) — this script must find it readable, its two copies agreeing")$(live)$(backups)$(data_digest)" "yes${BASE}0$DX" \
+  "1f the booking WhatsApp's two copies disagree (the files on, the store row the webhook reads first silent): NO-GO — nothing deployed, no backup, no data changed"
+cfg_back
 php -r '$f = json_decode((string)file_get_contents($argv[1]), true); unset($f["install_auth_enabled"]); file_put_contents($argv[1], json_encode($f));' "$DATA/kyc_config.json"
-fresh; OUT="$(run --answer DEPLOY)"
-check "$(has "$OUT" "STOP: NO-GO: install_auth_enabled reads 'ia=absent/on' (files/store) — this script must find it readable, its two copies agreeing")$(live)$(backups)" "yes${BASE}0" \
-  "1g the authorisation's two copies disagree (the store row on, the files silent): NO-GO — a deploy would leave the tools and the pages acting differently"
-cfg_set install_auth_enabled on
+DX="$(data_digest)"; fresh; OUT="$(run --answer DEPLOY)"
+check "$(has "$OUT" "STOP: NO-GO: install_auth_enabled reads 'ia=absent/on' (files/store) — this script must find it readable, its two copies agreeing")$(live)$(backups)$(data_digest)" "yes${BASE}0$DX" \
+  "1g the authorisation's two copies disagree (the store row on, the files silent): NO-GO — a deploy would leave the tools and the pages acting differently; no data changed"
+cfg_back
+check "$(both_copies install_auth_enabled)$(both_copies customer_wa_install_scheduled)$(data_digest)" "1111$D0" "control: both copies put back byte for byte — both switches ON in both, the data as seeded"
 check "$(sqx 'DROP TRIGGER install_auth_status_moves')" "done" "control: one trigger dropped from 086 — what a PARTIAL run would leave"
 fresh; OUT="$(run --answer DEPLOY)"
 check "$(has "$OUT" "STOP: NO-GO: migration 086 (5.18.83's) is recorded but not complete on this server")$(live)$(backups)" "yes${BASE}0" \
