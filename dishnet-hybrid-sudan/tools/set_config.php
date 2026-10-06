@@ -272,6 +272,20 @@ $FLAGS = [
     // uCRM's own notification settings are read; 0 is the switch for the day it is taken.
     'kyc_quote_send_via_crm' => ['bool',
         'A KYC quote asks uCRM to send it, so uCRM e-mails the quotation (unset = on, as always; 0 = it does not ask)'],
+    // ── Customer Installation Authorisation (5.18.82, docs/61 §3, docs/63) — Uganda only ──────────────────────────
+    // A Starlink installation job may not be started (Accept Job, GPS check-in) or completed until the customer has
+    // accepted the Installation Terms and the charges on the secure page the request sends them. Off by default: with
+    // it off the job workflow is byte for byte what it was. On, every Starlink installation job still pending is bound;
+    // a job already in progress with no request is exempt (D3). The two e-mail keys sit under the customer e-mails
+    // master switch and, unlike the catalogue keys, ABSENT MEANS ON — the feature flag is the gate.
+    'install_auth_enabled' => ['bool',
+        'Customer Installation Authorisation for Starlink installation jobs (Uganda): the customer must accept the terms and charges on a secure link before a technician can accept, check in to or complete the job (docs/63). Off = the workflow as before'],
+    'install_auth_link_days' => ['number',
+        'How many days the customer\'s authorisation link stays valid (default 14; 1 to 90), or until 3 days after the scheduled date if that is later'],
+    'customer_email_install_auth_request' => ['bool',
+        'The authorisation REQUEST e-mail to the customer (needs the customer e-mails master switch). Absent means ON; set 0 to send the WhatsApp only'],
+    'customer_email_install_auth_confirmed' => ['bool',
+        'The confirmation e-mail after the customer accepts (needs the master switch). Absent means ON; set 0 to send the WhatsApp only'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
@@ -345,9 +359,10 @@ $show = function () use ($root, $dataDir, $FLAGS) {
             $shown = '"' . (string)$raw . '"';
         }
 
-        printf("    %-32s %s\n", $k, $shown);
-        if ($note !== '') printf("    %-32s %s\n", '', $note);
-        printf("    %-32s %s\n\n", '', $what);
+        // 5.18.82: the name field is 40 wide (was 32; 27 before Phase 2) — customer_email_install_auth_confirmed is 37 characters.
+        printf("    %-40s %s\n", $k, $shown);
+        if ($note !== '') printf("    %-40s %s\n", '', $note);
+        printf("    %-40s %s\n\n", '', $what);
     }
 };
 
@@ -480,6 +495,15 @@ if (!$clear && isset($mediaRanges[$key])) {
     [$lo, $hi] = $mediaRanges[$key];
     if (!preg_match('/^\d+$/', trim($new)) || (int)$new < $lo || (int)$new > $hi) {
         echo "\n  \"" . $new . "\" is not a whole number between " . $lo . " and " . $hi . ", so nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = (string)(int)$new;
+}
+// 5.18.82 (docs/63): the customer authorisation link's life in days, 1 to 90 — refused outside the range, never clamped silently.
+require_once dirname(__DIR__) . '/lib/InstallAuth.php';
+if (!$clear && $key === InstallAuth::LINK_DAYS_KEY) {
+    if (!preg_match('/^\d+$/', trim($new)) || (int)$new < InstallAuth::LINK_DAYS_MIN || (int)$new > InstallAuth::LINK_DAYS_MAX) {
+        echo "\n  \"" . $new . "\" is not a whole number between " . InstallAuth::LINK_DAYS_MIN . " and " . InstallAuth::LINK_DAYS_MAX . " days, so nothing was saved.\n\n";
         exit(1);
     }
     $new = (string)(int)$new;

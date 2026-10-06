@@ -778,12 +778,12 @@ is_(strpos($mwCode, 'ai_media_image') === false && strpos($mwCode, 'MediaPolicy:
 is_(strpos($iuCode, 'PaymentEvidence::looksLikePayment(') !== false && strpos($iuCode, "if (\$payment) {") !== false, 'the payment decision is this plugin\'s (PaymentEvidence) and is taken before any event is queued');
 is_(strpos(vi_codeOf($root . '/evo_webhook.php'), "if (\$mediaEvent && (string)(\$media['kind'] ?? '') === 'image' && MediaPolicy::imageEnabled(\$config)) {") !== false, 'the webhook skips the caption\'s text turn only for a recorded picture with the image flag on');
 is_(is_file(dirname($root) . '/docs/57-image-understanding-provider-boundary-2026-10-05.md'), 'the image provider boundary and the payment rule are documented (docs/57) before any provider exists');
-is_(count(glob($root . '/migrations/08[6-9]_*.sql') ?: []) === 0, 'no migration: wa_media already carries understanding and understanding_kind');
+is_(count(glob($root . '/migrations/08[7-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql'), 'no migration: wa_media already carries understanding and understanding_kind — 086 is Customer Installation Authorisation (5.18.82), not this feature\'s');
 $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_image' => ['bool',") !== false && strpos($sc, "'ai_media_image_timeout_s' => ['number',") !== false && strpos($sc, "'ai_image_provider' => ['text',") !== false, 'set_config.php manages the image settings');
 $scOut = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . ' --key ai_image_provider --value fake 2>&1; echo "rc=$?"');
 is_(strpos((string)$scOut, 'none is the only value today (docs/57)') !== false && strpos((string)$scOut, 'rc=1') !== false, 'the tool refuses a vision provider that does not exist, the fake included', (string)$scOut);
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.81', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.82', 'manifest version is 5.18.81');
 
 echo "\n18. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

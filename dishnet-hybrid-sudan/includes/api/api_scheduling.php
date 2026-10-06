@@ -129,6 +129,30 @@ if ($_sjUganda) {
 
     // ── Scheduling: fetch jobs assigned to THIS support staff ─────────────────
     if ($act === 'scheduling_jobs') {
+        // 5.18.82 (Uganda, install_auth_enabled): each Starlink installation in the list says where its customer
+        // authorisation stands (_install_auth: none | pending | accepted | declined | cancelled | expired), for the card's
+        // badge. Other jobs, other installs and the flag off: the list is exactly what it was.
+        $_iaMark = function (array $jobs) use ($store, $config, $dataDir, $_sjUganda): array {
+            if (!$_sjUganda) return $jobs;
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $cfg = is_array($config ?? null) ? $config : [];
+            if (!InstallAuth::enabled($cfg, $dataDir ?? null)) return $jobs;
+            $ids = [];
+            foreach ($jobs as $j) { if (is_array($j) && InstallAuth::inScope($j)) $ids[] = (int)($j['id'] ?? 0); }
+            $status = [];
+            if ($ids) {
+                try {
+                    $st = $store->getPdo()->prepare('SELECT job_id, status FROM install_auth WHERE job_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+                    $st->execute($ids);
+                    foreach ($st->fetchAll(\PDO::FETCH_ASSOC) ?: [] as $r) $status[(int)$r['job_id']] = (string)$r['status'];
+                } catch (\Throwable $e) { /* no marks rather than no list */ }
+            }
+            foreach ($jobs as &$j) {
+                if (is_array($j) && InstallAuth::inScope($j)) $j['_install_auth'] = $status[(int)($j['id'] ?? 0)] ?? 'none';
+            }
+            unset($j);
+            return $jobs;
+        };
         $myAdminId  = (int)($me2['ucrm_user_id']       ?? 0); // CRM admin user ID pool
         $myClientId = (int)($me2['ftth_crm_client_id'] ?? 0); // CRM client ID pool
         $isAdminU   = $me2['is_admin'] ?? false;
@@ -156,6 +180,7 @@ if ($_sjUganda) {
                     fn($j) => (int)($j['_ucrm_user_id'] ?? 0) === $myId
                 ));
                 usort($jobList, fn($a,$b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
+                $jobList = $_iaMark($jobList);   // 5.18.82
                 $ok2(['jobs' => $jobList, 'needs_mapping' => false,
                       'from_cache' => true, 'cache_age_sec' => $cacheAge,
                       'last_sync' => $meta['last_sync_ts'] ?? '']);
@@ -214,6 +239,7 @@ if ($_sjUganda) {
             ));
         }
         usort($jobList, fn($a,$b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
+        $jobList = $_iaMark($jobList);   // 5.18.82
         $ok2(['jobs' => $jobList, 'needs_mapping' => false, 'from_cache' => false,
               'last_sync' => date('Y-m-d H:i:s')]);
     }
@@ -234,6 +260,15 @@ if ($_sjUganda) {
         if ($_sjUganda) {
             require_once dirname(__DIR__, 2) . '/lib/JobPhotos.php';
             $_jpExtra = JobPhotos::detailExtras($store->getPdo(), $jobId, $job, is_array($config ?? null) ? $config : []);
+        }
+        // 5.18.82 (Uganda, install_auth_enabled): where the customer's installation authorisation stands travels with the
+        // detail — the panel and the Accept button are drawn from it; the rule itself is enforced below (docs/61 §3).
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            if (InstallAuth::enabled($_iaCfg, $dataDir ?? null)) {
+                $_jpExtra['install_auth'] = InstallAuth::detailExtras($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, dn_tz_obj($_iaCfg));
+            }
         }
 
         // Security: job was fetched via assigneeId filter — trust the query filter, skip assignee array check
@@ -336,8 +371,23 @@ if ($_sjUganda) {
             if (!$job) $er2('Job not found.', 404);
             $sjMayAct($_sjMe, $job);
         }
+        // 5.18.82 (Uganda, install_auth_enabled): a Starlink installation starts (status 1) or closes (status 2) only
+        // with the customer's recorded acceptance — refused HERE, before uCRM is written, whatever the screen showed
+        // (docs/61 §3; the brief's phase 5). The lifecycle events follow the write.
+        $_iaStarted = false; $_iaClosed = false;
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            $_iaMsg = InstallAuth::guard($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, $statusInt, 'accept', (int)($_sjMe['id'] ?? 0));
+            if ($_iaMsg !== null) $er2($_iaMsg, 422);
+            $_iaWas     = is_numeric($job['status'] ?? null) ? (int)$job['status'] : null;
+            $_iaStarted = $statusInt === 1 && $_iaWas === 0;
+            $_iaClosed  = $statusInt === 2 && $_iaWas !== 2;
+        }
         $result = $crm->patch("scheduling/jobs/{$jobId}", ['status' => $statusInt]);
         if ($result === null) $er2('CRM update failed: ' . json_encode($crm->getLastError()), 502);
+        if ($_iaStarted) InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, 'INSTALLATION_STARTED', 'accept', (int)($_sjMe['id'] ?? 0));
+        if ($_iaClosed)  InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, 'INSTALLATION_COMPLETED', 'status_update', (int)($_sjMe['id'] ?? 0));
 
         // ── notify_accept: send WhatsApp confirmations when engineer accepts ─
         if (!empty($body['notify_accept']) && $statusInt === 1) {
@@ -477,6 +527,17 @@ if ($_sjUganda) {
 // Access verified via assigneeId query filter
         }
         if ($_sjUganda) $sjMayAct($sjCaller(), $job);   // J6, before anything is stored or sent
+        // 5.18.82 (Uganda, install_auth_enabled): a Starlink installation is completed only with the customer's recorded
+        // acceptance — refused HERE, before anything is stored or sent (docs/61 §3). A job already in progress with no
+        // authorisation record (started before the feature, D3) is not refused.
+        $_iaComplete = false;
+        if ($_sjUganda) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            $_iaMsg = InstallAuth::guard($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, 2, 'complete', $rid);
+            if ($_iaMsg !== null) $er2($_iaMsg, 422);
+            $_iaComplete = true;
+        }
 
         // Check all tasks are done before allowing completion
         $allTasks = $crm->get("scheduling/jobs/{$jobId}/job-tasks") ?? [];
@@ -530,6 +591,7 @@ if ($_sjUganda) {
         // Mark job closed in UCRM (status = 2 = Closed — integer required by UCRM API)
         $patchResult = $crm->patch("scheduling/jobs/{$jobId}", ['status' => 2]);
         if ($patchResult === null) $er2('CRM update failed: ' . json_encode($crm->getLastError()), 502);
+        if ($_iaComplete) InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $job, 'INSTALLATION_COMPLETED', 'complete', $rid);   // 5.18.82
 
         // Add comment to UCRM job if provided
         if ($comment) {

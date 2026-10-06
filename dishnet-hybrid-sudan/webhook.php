@@ -3765,6 +3765,16 @@ switch ($changeType) {
             whResp(200, "Event '{$changeType}' received and logged (no action configured).");
         }
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
+        // 5.18.82 (Uganda, install_auth_enabled): a job deleted in uCRM takes its PENDING customer-authorisation request
+        // with it — the link stops working at once (docs/61 §3). An accepted record is history and stays as it is. Done
+        // before the notifier's own observation, which is unchanged (and keeps its place beside the answer).
+        if (in_array($changeType, ['job.delete', 'JOB_DELETE'], true)) {
+            require_once __DIR__ . '/lib/InstallAuth.php';
+            if (InstallAuth::enabled(is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                && InstallAuth::cancelForDeletedJob($store->getPdo(), $jobId)) {
+                whLog($changeType, "Customer installation authorisation request for job #{$jobId} cancelled: the job was deleted in uCRM");
+            }
+        }
         whJobNotify($jobId, null, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
         whResp(200, "{$changeType} processed.");
     }

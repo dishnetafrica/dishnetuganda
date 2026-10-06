@@ -5478,3 +5478,62 @@ reverting the commit restores 5.18.80 exactly; a row written by 5.18.81 is read 
 
 **Git:** committed locally as the seventh unpushed commit on `claude/study-this-jhe2eg`, after `7901ffe`. Nothing pushed,
 nothing deployed, no configuration changed, nothing sent to anyone. Stopped for the operator's review.
+
+## 05 Oct — Customer Installation Authorisation for Starlink installation jobs (5.18.82) — BUILT, flag OFF, NOT deployed
+
+**What and why.** The emergency brief: sometimes a customer refuses, disputes or denies having authorised a Starlink installation after a
+technician is involved. Around the EXISTING Starlink Installation Job (uCRM's scheduling job — not rebuilt, not replaced) the plugin now
+holds one Customer Installation Authorisation record per job: a staff member requests it from the job page, confirming the charges; the
+customer gets the request by WhatsApp and e-mail with a secure link; the page shows the job, location, service, equipment, charges and
+total as SNAPSHOTS, the full Installation Terms (`INSTALLATION-TERMS-v1.0`, SHA-256 pinned) and two buttons, ACCEPT & AUTHORISE
+INSTALLATION / DECLINE INSTALLATION; acceptance is one idempotent UPDATE; only then the technician uCRM names on the job NOW (WhatsApp +
+e-mail copy) and the customer (confirmation) are told; the server refuses Accept Job, the GPS check-in and Complete Job on a Starlink
+installation without an accepted record — pending, declined, cancelled, expired and never-requested all fail closed with the brief's
+words; a job already in progress with no record is exempt (D3); a reassignment after acceptance tells the new engineer "CUSTOMER
+ALREADY CONFIRMED INSTALLATION". Discovery and approval: `docs/61` (D1–D11 approved as recommended, 2026-10-05). Terms draft for legal
+review: `docs/62`. Build record and the final report A–T: **`docs/63`**. Uganda only, Starlink installation titles only,
+`install_auth_enabled` OFF by default, additive migration 086, South Sudan byte for byte unchanged, no production message, no deployment,
+local commit only.
+
+**What was built.**
+- `migrations/086_install_authorisation.sql` — `install_auth` (one row per job: reference `ACC-YYYYMMDD-NNNNNN`, status, terms version
+  and hash, price and scope snapshots, the contact the request went to, SHA-256 of the token — never the token — expiry, the acceptance
+  or decline), `install_auth_events` (append-only by trigger; the fourteen event names by CHECK), `install_auth_rate` (hashed address
+  buckets, no address). Additive; empty on every other install.
+- `lib/InstallationTerms.php` — the versioned terms as a constant with its hash; `lib/InstallAuth.php` — the record, the token, the
+  acceptance and decline statements, the guard, the lifecycle events, the rate ledger; `lib/InstallAuthNotifier.php` and
+  `lib/InstallAuthEmails.php` — the brief's texts through `NotificationService::sendVia`, `CustomerEmailDispatcher::sendInstallAuth`
+  (new, off the catalogue, under the master switch; its two keys default ON) and `MailService`; `tabs/customer_app/install_auth_page.php`
+  — the customer's page (`?page=install_auth&t=<token>`: HTTPS, hash lookup, rate limit, neutral failures, no script, CSP
+  `default-src 'none'`); `includes/api/api_install_auth.php` — six staff actions behind Uganda + flag + J6.
+- The guard in `scheduling_job_update`, `install_checkin` and `scheduling_complete`; `install_auth` in the job detail; marks in the
+  jobs list; `CUSTOMER_SIGNED_OFF` from the completion signature; `job.delete` cancels a pending request; the `reassigned` hook in
+  `JobNotifier::observe`; the panel, the Accept / Complete replacements and the list badge in `tabs/support/scheduling.php` (Uganda
+  only — every added line a `<?php if ($_sjUganda): ?>` branch, so South Sudan's page is byte for byte 5.18.81's); four keys in
+  `tools/set_config.php`, whose listing's name column widens from 32 to 40 characters for the 37-character key (and its test's reader with it); `manifest.json` 5.18.82; 15 version pins; 5 migration pins amended with the reason; two weakened-copy anchors in
+  `tests/test_job_access.php` amended (never deleted) to span the new guard and the guard's returned job.
+
+**Proofs.**
+- `tests/test_install_authorisation.php` **245 passed, 0 failed, twice**: the brief's thirty-two cases in its order (the request by
+  fake WhatsApp and fake SMTP, the page's details, price and terms version, the acceptance and its record, reference, hash and time, the
+  customer's and the technician's messages, the CRM panel, start and completion after acceptance, every refusal before it, a decline and
+  what it refuses, invalid and expired tokens, a token being one job's, price tampering, duplicate acceptance, duplicate technician
+  messages, a failed WhatsApp, a failed e-mail, no assignee, reassignment, the historical terms, the existing workflow with the flag off
+  and for Fiber and in-progress jobs, South Sudan, Domain B), the lifecycle beside the brief, and **5 weakened copies each caught**.
+- **Full suite:** **`tests/run.sh` 278 files, 13,236 passed, 0 failed, 0 skipped** (was 277 / 12,991 at 5.18.81: the new
+  `test_install_authorisation` 245; no other suite moved). **Second run: 278 / 13,236 / 0 again**, every suite's tally identical.
+  PHP warnings in either run: 5 (test_dpo_endpoints 5), all pre-existing. The South Sudan and tenant suites, unchanged: `test_notify_schedule_health` 19 · `test_staff_jobs_south_sudan` 51 · `test_tenant_profile` 108 · `test_email_no_sudan` 62 · `test_notify_tenant_text` 30 · `test_cashbook_tenant` 26 · `test_portal_tenant` 112 · `test_sales_support_tenant` 37 · `test_ai_country_facts` 21 · `test_phone_country` 26.
+- `git diff --check` clean; `php -l` on every changed PHP file; no post-7.4 syntax in the added plugin lines; no secret-shaped value in the
+  diff; the two banned values absent; no phone number in the documents; no file under `dishnet-mikrotik-control-plane/` touched
+  (asserted by the test too); migration 086 reviewed: additive, idempotent, no backfill, append-only trail by trigger.
+
+**Not done, by decision:** no deployment, no push, no flag on anywhere, no production configuration; no admin waiver (D5); no IP or
+agent stored (D11); a decline notifies nobody (the panel and the trail carry it); the technician message is not in `NotificationRetry`'s
+allow-list; uCRM-side status changes are neither prevented nor recorded (the operator's accepted limitation); `install_checkin`'s access
+rule unchanged; the terms await legal review.
+
+**Rollback:** the flag first (`--clear`: every path unreachable, the records stay as evidence); reverting the commit restores 5.18.81
+exactly; the tables are additive and ignored by older code.
+
+**Git:** committed locally as the eighth unpushed commit on `claude/study-this-jhe2eg`, after `1a190ce`. Nothing pushed, nothing
+deployed, no configuration changed, nothing sent to anyone. Stopped for the operator's review.

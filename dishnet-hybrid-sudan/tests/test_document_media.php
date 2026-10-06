@@ -860,7 +860,7 @@ $dx = vd_codeOf($root . '/lib/DocxReader.php');
 is_(strpos($dx, 'LIBXML_NONET') !== false && strpos($dx, 'XMLReader::SUBST_ENTITIES, false') !== false && strpos($dx, 'XMLReader::LOADDTD, false') !== false && strpos($dx, "'/<!DOCTYPE|<!ENTITY/i'") !== false,
     'XMLReader runs with LIBXML_NONET, no entity substitution, no DTD loading, and a DOCTYPE is refused before the parser sees it');
 is_(is_file(dirname($root) . '/docs/58-document-processing-boundary-review-2026-10-05.md'), 'the document boundary, the fail-closed rule and the human-only classes are documented (docs/58) before any code');
-is_(count(glob($root . '/migrations/08[6-9]_*.sql') ?: []) === 0, 'no migration: wa_media already carries understanding and understanding_kind');
+is_(count(glob($root . '/migrations/08[7-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql'), 'no migration: wa_media already carries understanding and understanding_kind — 086 is Customer Installation Authorisation (5.18.82), not this feature\'s');
 $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_document' => ['bool',") !== false && strpos($sc, "'ai_media_document_max_bytes' => ['number',") !== false && strpos($sc, "'ai_media_document_max_pages' => ['number',") !== false && strpos($sc, "'ai_media_document_timeout_s' => ['number',") !== false && strpos($sc, "'ai_document_provider' => ['text',") !== false,
     'set_config.php manages the five document settings');
@@ -870,7 +870,7 @@ $scOut2 = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . 
 is_(strpos((string)$scOut2, 'between 1 and 200') !== false && strpos((string)$scOut2, 'rc=1') !== false, 'the tool refuses a page cap outside its range rather than clamping it', (string)$scOut2);
 $ve = (string)file_get_contents($root . '/tests/validate_environment.php');
 is_(strpos($ve, "'zlib' => 'gzinflate', 'xmlreader' => 'XMLReader', 'iconv' => 'iconv'") !== false, 'validate_environment reports the three optional extensions the readers need');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.81', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.82', 'manifest version is 5.18.81');
 
 echo "\n19. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

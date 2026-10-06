@@ -215,6 +215,22 @@
         $note  = trim($body['note'] ?? '');
         if (!$jobId) $er2('job_id required.', 422);
 
+        // 5.18.82 (Uganda, install_auth_enabled): a check-in STARTS the job in uCRM, so a Starlink installation needs
+        // the customer's recorded acceptance first — refused HERE, before the check-in is stored (docs/61 §3; the brief's
+        // phase 5). The job must be read from uCRM to decide; when it cannot be, the check-in is refused, not let through.
+        $_iaCheckinStart = false;
+        if (!empty($_sjUganda)) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            if (InstallAuth::enabled($_iaCfg, $dataDir ?? null)) {
+                $_iaJob = $crm->isConfigured() ? $crm->get("scheduling/jobs/{$jobId}") : null;
+                if (!is_array($_iaJob) || !$_iaJob) $er2('The job could not be read from uCRM, so the check-in was not recorded. Try again in a moment.', 502);
+                $_iaMsg = InstallAuth::guard($store->getPdo(), $_iaCfg, $dataDir ?? null, $_iaJob, 1, 'checkin', (int)($me2['id'] ?? 0));
+                if ($_iaMsg !== null) $er2($_iaMsg, 422);
+                $_iaCheckinStart = is_numeric($_iaJob['status'] ?? null) && (int)$_iaJob['status'] === 0;
+            }
+        }
+
         // Save check-in record to job_checkins.json (keyed by job_id)
         $checkins = $store->load('job_checkins.json') ?? [];
         $checkins[$jobId] = [
@@ -233,6 +249,7 @@
         if ($crm->isConfigured()) {
             $crm->patch("scheduling/jobs/{$jobId}", ['status' => 1]);
         }
+        if ($_iaCheckinStart) InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $_iaJob, 'INSTALLATION_STARTED', 'checkin', (int)($me2['id'] ?? 0));   // 5.18.82
 
         // Update live location
         $live = $store->load('staff_live_locations.json') ?? [];

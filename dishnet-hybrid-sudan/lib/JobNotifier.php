@@ -155,7 +155,31 @@ final class JobNotifier
             $sent[] = ['message' => $m['kind'], 'outcome' => $out['outcome'], 'detail' => $out['detail'], 'staff_id' => $out['staff_id'],
                        'email' => $out['email'], 'email_detail' => $out['email_detail']];
         }
-        return self::result($plan['event'], $sent[0]['outcome'], $sent[0]['detail'], $assignee, $sent);
+        $r = self::result($plan['event'], $sent[0]['outcome'], $sent[0]['detail'], $assignee, $sent);
+        // 5.18.82 (Uganda, install_auth_enabled): a job reassigned AFTER the customer accepted tells the new engineer so
+        // (docs/61 §3; the brief's phase 12). The acceptance record is read, never written, and nothing here can undo a
+        // message above or the state already committed.
+        if ($plan['event'] === 'reassigned' && $assignee !== null) {
+            $ia = $this->installAuthReassigned($jobId, $assignee);
+            if ($ia !== null) $r['install_auth'] = $ia;
+        }
+        return $r;
+    }
+
+    /** The "customer already confirmed" message to a job's new engineer; null when the feature or the record is absent. */
+    private function installAuthReassigned(int $jobId, int $assignee): ?array
+    {
+        try {
+            if (!is_file(__DIR__ . '/InstallAuth.php') || !is_file(__DIR__ . '/InstallAuthNotifier.php')) return null;
+            require_once __DIR__ . '/InstallAuth.php';
+            if (!InstallAuth::enabled($this->config, $this->dataDir)) return null;
+            $row = InstallAuth::find($this->store->getPdo(), $jobId);
+            if ($row === null || ($row['status'] ?? '') !== 'accepted') return null;
+            require_once __DIR__ . '/InstallAuthNotifier.php';
+            return (new InstallAuthNotifier($this->crm, $this->store, $this->notify, $this->config, $this->dataDir))->alreadyConfirmed($row, $assignee);
+        } catch (\Throwable $e) {
+            return ['outcome' => 'failed', 'detail' => 'the already-confirmed message could not be sent'];
+        }
     }
 
     /**

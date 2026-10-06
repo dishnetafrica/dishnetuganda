@@ -21,8 +21,8 @@ if ($_cmUganda) {
     require_once dirname(__DIR__, 2) . '/lib/StaffDirectory.php';
     require_once dirname(__DIR__, 2) . '/lib/JobAccess.php';
 }
-$_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2): void {
-    if (!$_cmUganda) return;
+$_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2): ?array {
+    if (!$_cmUganda) return null;
     $caller = JobAccess::caller($me2, $store);
     if ($caller === null) $er2(JobAccess::INACTIVE, 403);
     if (!$crm || !$crm->isConfigured()) $er2('uCRM is not configured, so the job cannot be checked.', 503);
@@ -30,6 +30,7 @@ $_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2):
     if (!is_array($job) || !$job) $er2('Job not found.', 404);
     $assignee = JobAccess::assigneeOf($job);
     if (!JobAccess::canActOn($caller, $assignee)) $er2(JobAccess::refusal($assignee), 403);
+    return $job;   // 5.18.82: uCRM's job, for the caller that needs it; the check itself is unchanged
 };
 
 
@@ -40,7 +41,7 @@ $_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2):
         $sigData  = trim($body['signature']   ?? ''); // base64 PNG data URL
         $sigName  = trim($body['signer_name'] ?? '');
         if (!$jobId || !$sigData) $er2('job_id and signature required.', 422);
-        $_cmJobGuard($jobId);   // J6 on Uganda
+        $_cmJob = $_cmJobGuard($jobId);   // J6 on Uganda
 
         $signatures = $store->load('job_signatures.json') ?? [];
         $idx = array_search($jobId, array_column($signatures, 'job_id'));
@@ -54,6 +55,16 @@ $_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2):
         if ($idx !== false) $signatures[$idx] = $record;
         else $signatures[] = $record;
         $store->save('job_signatures.json', $signatures);
+        // 5.18.82 (Uganda, install_auth_enabled): a completion signature on a Starlink installation that carries an
+        // authorisation record is the customer's SIGN-OFF of the completed work — its own event, kept apart from the
+        // acceptance that authorised the work (docs/61 §3; the brief's phase 16).
+        if ($_cmUganda && is_array($_cmJob)) {
+            require_once dirname(__DIR__, 2) . '/lib/InstallAuth.php';
+            $_iaCfg = is_array($config ?? null) ? $config : [];
+            if (InstallAuth::enabled($_iaCfg, $dataDir ?? null)) {
+                InstallAuth::recordLifecycle($store->getPdo(), $_iaCfg, $dataDir ?? null, $_cmJob, 'CUSTOMER_SIGNED_OFF', 'signature', (int)($me2['id'] ?? 0));
+            }
+        }
 
         // Log note to UCRM client
         if (!empty($body['crm_client_id'])) {
