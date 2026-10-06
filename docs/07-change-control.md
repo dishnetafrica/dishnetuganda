@@ -5971,3 +5971,169 @@ with 5.18.83: 30 rehearsed, 29 on the server.
 (`cc0002e`) — **pushed 06 Oct, 15:19 UTC**, on the operator's instruction (*"yes push both branches"*): the branch to
 `cc0002e`, `release/5.18.84` new at `79607d4`. At the push nothing was deployed, no configuration had changed and nothing
 had been sent to anyone.
+
+## 06 Oct — 5.18.85: the authorisation's request form filled from the customer's quotation, and the technician's name in the booking messages (Uganda); `release/5.18.85` = `4790019`, cut on live 5.18.84 (`79607d4`); `scripts/deploy-5.18.85.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+
+**Why.** The 5.18.84 pilot (above) showed two things. The first authorisation request went out with its charges typed by
+hand, while the customer's quotation already held them. And the booking WhatsApp had no Technician line. The operator
+asked for the form to take *"as much information as we can"* from the quotation, and whether the kit number is
+compulsory. The operator then sent quotation 000181 and DishNet Uganda's quotation template (`template-v4.zip`), from
+which the lines below were read.
+
+**What DishNet Uganda's quotations carry**, read from 000181 with the plugin's own PDF reader:
+
+| Line | Unit | Price |
+|---|---|---|
+| the kit, e.g. *Starlink Mini Kit + Mini Router* | Pc | the kit's price |
+| the plan, e.g. *Residential Lite (up to 100 Mbps)* | Monthly | the plan's price |
+| *Professional Installation* | Time | UGX 150,000 |
+| *Transportation charges to and from the site shall be borne by the customer.* | Time | **UGX 0** |
+
+The template prints each line's label, type, unit, quantity, price and total, which are the fields uCRM's quotations carry
+and the plugin already reads. **Transport is never priced on the quotation**, so it cannot come from there.
+
+**What 5.18.85 does.** Uganda only, no switch, no migration.
+- **The request form starts from the customer's latest uCRM quotation** (`lib/QuotationPrefill.php`, new):
+  - the installation line → the installation charge;
+  - a transport or delivery line → the transport charge. A transport line at 0 is **asked for, never filled with 0**, and
+    the form refuses to send with it empty;
+  - a monthly line, or a plan known by its speed → the service;
+  - other one-time lines with an amount → the other agreed charge, their labels what it is for. A discount is never a
+    charge;
+  - every other line (the kit, a router, a cable) → the equipment, *"x2"* for two.
+
+  The kit's and the plan's prices are not authorisation charges: the customer pays for them through the quotation.
+- **Which quotation:** the latest by date. Never another client's, even a newer one; never a rejected or void one, by
+  the plugin's own reading of uCRM's statuses (`cron_quote_wa.php`: 3 rejected, 4 void); never one without lines. The
+  form says which: *"📄 Filled from quotation 000181 of 6 Oct 2026, the customer's latest in uCRM. Check every value:
+  the customer accepts exactly what you send."*
+- **Reading it** (`install_auth_prefill`): one `GET billing/quotes?clientId=` when the form opens, with the admin token when
+  one is set, else the plugin's key, as the quote screens read quotes. If uCRM does not answer, the form says so and opens
+  as before. Nothing is sent or stored by opening the form.
+- This is what `docs/61` D4 decided: charges *"typed or confirmed by staff at request time, prefilled when a KYC
+  application or quotation exists"*. Until now only the KYC application was read, and never for the charges.
+- **The kit number is not compulsory.** It never was: the Equipment box takes any description. The quotation now fills
+  it with the kit's name.
+- **The technician's name** (`InstallScheduledWhatsApp::technicianName`): the first name on the verified staff account
+  linked to the assignee, where the authorisation's messages to the customer already take it from, else uCRM's
+  `users/admins/{id}`, else no line. `job.add`'s own lookup, `users/{id}`, answers 404 on this uCRM for every user
+  (docs/44 §13.1).
+  - The booking WhatsApp now carries the 👷 line.
+  - The customer's *"installation booked"* e-mail on Uganda carries the same first name, or no technician row when there
+    is none, instead of the *"Technician"* placeholder `job.add` printed when its lookup found nobody.
+  - South Sudan's e-mail is unchanged.
+
+**Files** (dev commit `4a7127d`):
+- new: `lib/QuotationPrefill.php`, `tests/test_install_quote_prefill.php`;
+- changed: `includes/api/api_install_auth.php`, `tabs/support/scheduling.php`, `lib/InstallScheduledWhatsApp.php`,
+  `webhook.php`, `tests/test_install_scheduled_whatsapp.php`, `tests/test_job_notifications_day.php`, the two test
+  fixtures, `manifest.json` 5.18.85 and the 15 version pins.
+
+No migration and no configuration key.
+
+**Tests.**
+- `tests/test_install_quote_prefill.php`: **44 passed, 0 failed**, 33 checks and 11 weakened copies. It covers:
+  - the quotation read as the form reads it: 000181's four lines, a priced transport, other charges, quantities, a
+    discount, decimals, broken and long labels, a quotation with no units;
+  - which quotation;
+  - through the real plugin: the prefill names 000181 and carries its values. It reads uCRM once, for this client.
+    Another client's newer quotation is never used. No quotation, or no answer from uCRM, leaves the form as before. The
+    prefill sends and stores nothing;
+  - the request then made with those values, and the customer's WhatsApp carrying them;
+  - the form on the job page.
+
+  **Eleven weakened copies are each caught**: another client's quotation; a rejected or void one; the oldest; transport
+  at 0 filled as 0; the installation line not found; the plan taken for equipment; a discount counted; the quotation's
+  kit and plan not used; the charges not passed to the form; the form not filled; an empty transport sent as none.
+- `tests/test_install_scheduled_whatsapp.php`: **61 passed, 0 failed** (was 50): 46 checks and 15 weakened copies, where
+  5.18.84 had 39 and 11.
+  - The fake uCRM now answers `users/{id}` with 404, **as production does**. 5.18.84's tests ran against a fake that
+    answered it, which is how the missing name got through.
+  - The name comes from the staff account, else uCRM's `users/admins`, else no line; never a guess between two staff
+    accounts on one user (with a control proving both are linked). The Uganda e-mail carries the same name, and South
+    Sudan's e-mail is as before.
+  - Four new weakened copies are caught: the name asked at `users/{id}` again; the staff account ignored; the e-mail
+    keeping the placeholder on Uganda; the e-mail's change reaching South Sudan.
+- `tests/test_job_notifications_day.php`: **51 passed** (was 50). Its T4.11 check compares the customer's e-mail with
+  5.18.51's byte for byte; it now does so **except for the Technician value**, the one deliberate difference, which a
+  new check pins.
+- Neighbouring suites unchanged: `test_install_authorisation` 352, `test_set_config_tool` 40, `test_webhook_trust` 74,
+  `test_lifecycle_email_wiring` 73, `test_customer_email_dispatch` 45, `test_customer_emails` 105, `test_staff_jobs_gate`
+  41, `test_staff_jobs_south_sudan` 51, `test_job_messages` 132, `test_job_notifier` 130, `test_job_access` 83,
+  `test_job_time` 34, `test_job_photos` 72, `test_notify_staff_side` 53, `test_kyc_crm_create` 147, `test_mail_quote` 92,
+  `test_notify_kyc_quote_send` 24.
+- **Full suite** on `4a7127d`: **280 files, 13,450 passed, 0 failed, 0 skipped**; run 2 the same, every file's tally
+  identical, the tree unchanged by both. Against 5.18.84's 279 / 13,394, compared file by file: the new test's 44,
+  `test_install_scheduled_whatsapp` 50 → 61 and `test_job_notifications_day` 50 → 51; every other file the same.
+
+**The release, `release/5.18.85` = `4790019`**, parent `79607d4` (live 5.18.84): 16 files against it, 2 added and 14
+changed. **All sixteen are byte-identical to the branch's**; each changed one was identical on `79607d4` and on the branch
+before the feature. No migration; none of the undeployed work. The release tree's own suite, from a worktree outside the
+session's private directory: **267 files, 12,510 passed, 0 failed, 0 skipped**; run 2 the same, every file's tally
+identical, the tree unchanged by both. Against 5.18.84's release suite (266 / 12,454), compared file by file: the new
+test's 44, `test_install_scheduled_whatsapp` 50 → 61 and `test_job_notifications_day` 50 → 51; every other file the
+same.
+
+**`scripts/deploy-5.18.85.sh`**, 5.18.84's shape, pinned to `4790019` over `79607d4`. What differs:
+- **Both live features are kept as they are.** `install_auth_enabled` and `customer_wa_install_scheduled` must each be
+  readable, with their two copies agreeing, before anything changes. Both must be unchanged after (V3b, V3c) and read so
+  through the installed classes (R2).
+  - The booking WhatsApp's switch is no longer required off: it is the operator's, on since 06 Oct.
+  - R2 now also fails when the installed class and the configuration disagree.
+- **A0** allows no migration and exactly the release's 16 files.
+- **V9:** the form's data refuses an anonymous caller before any quotation is read.
+- **R6:** 5.18.85's pieces are present.
+- **R8:** the installed reader runs, under the server's own PHP, on a quotation shaped like 000181. It is a pure function:
+  nothing is read from uCRM and nothing is written.
+- **The rollback goes back to 5.18.84**, both features whole and both switches as they are (RB). The empty form and the
+  nameless booking WhatsApp come back.
+- 086 is labelled 5.18.83's wherever the script names it: the derived wording first said *"the baseline's"*, which would
+  now read 5.18.84.
+- The script is made by a derivation from 5.18.84's, with every replacement asserted. It reproduces the committed script
+  byte for byte.
+
+**Rehearsal `scripts/harness/deploy-5.18.85/rehearse.sh`.** The base is installed as production runs it: 5.18.84, 086
+applied, authorisation ON in both copies with activation #1, the booking WhatsApp ON in both copies. It covers:
+- **the A refusals:** a 5.18.83 server; a placeholder pin; the branch tip; a commit carrying the release plus an AI-layer
+  file; one without the quotation reader; the booking switch's copies disagreeing; the authorisation's disagreeing; 086
+  incomplete;
+- **the deploy itself:** no note, both switches unchanged, every table, the vault and the configuration files
+  byte-identical;
+- **the teeth:** the quotation read taken out of the staff API; the technician's name taken out of `job.add`; a 5.18.84
+  file changed; a trigger dropped;
+- the pilot switch read live; the operator turning the booking WhatsApp off, then its copies made to disagree;
+- the rollback with both switches on;
+- two weakened copies of the script: R1 blinded, and R6's quotation-read check blinded.
+
+**The first two runs read 164 passed, 2 failed**, on the same two checks: the control after the refusals (*the data is
+as seeded*) and *the deploy wrote no record and no configuration value*. Both found the data digest changed, and the
+rehearsal had changed it, not the script. 1f and 1g take the switches' two copies apart and put them back with `cfg_set`,
+which re-adds a key at the end of the stored configuration row: the same content in other bytes, and the digest hashes raw
+rows. The deploy left the digest exactly where it found it. Fixed in the rehearsal (`aaba731`):
+- the two copies are kept byte for byte and put back exactly;
+- 1f and 1g each check that their refusal changed no data;
+- a new control checks both switches on in both copies and the data as seeded.
+
+The fix was proved offline first, with the old re-add as the control producing a different digest.
+
+Results after the fix: **run 1 167/0**, 25 runs of the script (the committed script, sha256 `18eaae9ca8a3b149…`), no
+FAIL line, the checkout left as found; **run 2 167/0**, 25 runs, the same script, the same check lines. The rehearsed
+deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the server expect 33: there is no
+`dishnet.sqlite` there to back up, as with 5.18.83 and 5.18.84.
+
+**Handover — each step is the operator's.**
+0. **Push both branches**, when the operator says so. The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
+   the script, and `release/5.18.85` the release commit.
+1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.85 && mkdir -p /root/dnb-5.18.85 && bash scripts/deploy-5.18.85.sh 2>&1 | tee /root/dnb-5.18.85/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
+   docs/44 §16.9).
+2. **Nothing to switch on.** Try it on a Starlink installation job whose customer has a quotation in uCRM: press *Request
+   customer authorisation*, check the values the form took from the quotation, enter transport, send. A new installation
+   job's booking WhatsApp now names its technician.
+
+**Git:** `4a7127d` (the feature), `24197d8` (the script and its rehearsal), `aaba731` (the rehearsal's fix),
+`release/5.18.85` (`4790019`) and this entry are committed locally. Nothing pushed, nothing deployed, no configuration
+changed, nothing sent to anyone.
