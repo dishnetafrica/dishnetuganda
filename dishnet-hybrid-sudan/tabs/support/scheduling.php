@@ -132,6 +132,156 @@ if ($_correctId && (int)($myUcrmId) !== (int)$_correctId) {
 </div>
 <?php else: ?>
 
+<?php if ($_sjUganda): ?>
+<script>
+/* ── Customer Installation Authorisation (5.18.82, Uganda only; docs/61 §3, docs/63) ─────────────────────────────
+   Drawn only from data.install_auth, which the job detail carries only while install_auth_enabled is on: with the
+   flag off this block defines functions nobody calls and the page is exactly what it was. The server enforces the
+   rule in every case (api_scheduling.php, api_field_ops.php); what is here only shows it. Nothing here reaches the
+   customer directly: every button is a staff API call the server checks (J6) and sends through the plugin's own
+   send layers. South Sudan never prints this block. */
+(function(){
+var IA_TOKEN='<?= h($retailer['api_token'] ?? '') ?>';
+function iaEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function iaApi(method,action,body,qs){
+  var o={credentials:'same-origin',method:method,headers:{'Authorization':'Bearer '+IA_TOKEN,'Content-Type':'application/json'}};
+  if(body) o.body=JSON.stringify(body);
+  return fetch('?page=api&action='+action+(qs||''),o).then(function(r){return r.json();});
+}
+var CARD='background:#1e293b;border-radius:12px;padding:1rem;margin-bottom:12px;';
+var STATUS_WORDS={none:'Not requested yet',pending:'Awaiting the customer',accepted:'Accepted',declined:'Declined by the customer',cancelled:'Request withdrawn',expired:'Link expired',exempt:'Started before customer authorisation was switched on'};
+function ia(data){ return (data&&data.install_auth&&data.install_auth.applies)?data.install_auth:null; }
+function row(k,v){ if(v==null||v==='') return ''; return '<div style="margin-bottom:6px;"><span style="color:#94a3b8;font-size:12px;">'+iaEsc(k)+'</span><div style="color:#e2e8f0;font-size:14px;">'+iaEsc(v)+'</div></div>'; }
+function fmt(n){ n=Number(n||0); return Math.round(n)===n ? n.toLocaleString('en-GB') : n.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function money(r){ if(!r||!r.price) return ''; var p=r.price; return (p.currency||'')+' '+fmt(p.total); }
+function history(list){ if(!list||!list.length) return 'No history yet.'; return list.map(function(e){ return iaEsc((e.at||e.created_at||'')+' · '+e.event+(e.detail?' · '+e.detail:'')); }).join('<br>'); }
+/* 5.18.83 (docs/64): the server's own answer (install_auth.authorised) decides what the screen shows — the same rule the
+   guard enforces, including the explicit D3 exemption and the client binding — never a guess from the status here. */
+window.schIaBlocksStart=function(data){ var a=ia(data); return !!a && a.authorised!==true; };
+window.schIaBlocksComplete=function(data){ var a=ia(data); return !!a && a.authorised!==true; };
+window.schIaNotice=function(kind){
+  var what = kind==='complete' ? 'Installation cannot be completed until the customer accepts the Installation Terms.' : 'Installation cannot be started until the customer accepts the Installation Terms.';
+  return '<div style="background:#450a0a;border:1px solid #7f1d1d;border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
+    +'<div style="font-size:14px;font-weight:800;color:#fca5a5;">🔴 CUSTOMER ACCEPTANCE REQUIRED</div>'
+    +'<div style="font-size:12px;color:#fecaca;margin-top:4px;">'+iaEsc(what)+'</div></div>';
+};
+window.schIaBadge=function(j){
+  if(!j||!j._install_auth) return '';
+  var s=j._install_auth;
+  var c = s==='accepted' ? ['#064e3b','#6ee7b7','🟢 Customer authorised'] : s==='pending' ? ['#422006','#fcd34d','🟡 Awaiting customer authorisation'] : s==='exempt' ? ['#1e293b','#cbd5e1','⚪ Started before authorisation was switched on'] : ['#450a0a','#fca5a5','🔴 Customer authorisation required'];
+  return '<div style="margin-top:6px;"><span style="display:inline-block;background:'+c[0]+';color:'+c[1]+';border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;">'+c[2]+'</span></div>';
+};
+window.schIaCard=function(data,job,closed){
+  var a=ia(data); if(!a) return '';
+  var r=a.record||null, h='';
+  var exemptOnly = a.authorised===true && a.status!=='accepted';   /* D3: in progress when the feature was switched on */
+  h+='<div style="'+CARD+'border:2px solid '+(a.authorised===true?(exemptOnly?'#475569':'#166534'):'#7f1d1d')+';" id="schIaCard">';
+  h+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">Customer authorisation</div>';
+  if(exemptOnly){
+    h+='<div style="font-size:15px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">⚪ STARTED BEFORE AUTHORISATION WAS SWITCHED ON</div>';
+    h+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">This job was already in progress when customer authorisation was switched on'+(a.activated_at?' ('+iaEsc(a.activated_at)+')':'')+', so it may be completed without a customer acceptance. You may still request one.</div>';
+    if(r) h+=row('Status',STATUS_WORDS[a.status]||a.status);
+    if(!closed && (!r || a.status!=='pending')) h+='<button onclick="schIaOpenRequest('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;margin-top:6px;">📨 Request customer authorisation</button>';
+    h+='<button onclick="schIaToggleEvents()" class="sch-act-btn" style="background:#1e1b4b;color:#a5b4fc;margin-top:8px;">📜 History</button>';
+  } else if(a.status==='accepted' && a.authorised===true){
+    h+='<div style="font-size:16px;font-weight:800;color:#4ade80;margin-bottom:8px;">🟢 ACCEPTED</div>';
+    h+=row('Customer',r.customer_name)+row('Terms',r.terms_version)+row('Accepted',r.accepted_at)+row('Acceptance Reference',r.acceptance_reference);
+    h+=row('Service',r.scope&&r.scope.service)+row('Total',money(r));
+    if(!closed) h+='<div style="font-size:12px;color:#94a3b8;margin-top:6px;">The customer has authorised this installation. Accepting the job starts it.</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
+      +'<button onclick="schIaDispute('+job.id+')" class="sch-act-btn" style="background:#422006;color:#fb923c;margin:0;">⚠ Record a dispute</button>'
+      +'<button onclick="schIaToggleEvents()" class="sch-act-btn" style="background:#1e1b4b;color:#a5b4fc;margin:0;">📜 History</button></div>';
+  } else {
+    h+='<div style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:8px;">🔴 CUSTOMER ACCEPTANCE REQUIRED</div>';
+    h+='<div style="font-size:12px;color:#fecaca;margin-bottom:8px;">'+(a.client_changed
+        ? 'The acceptance on record was given for another customer: this job now belongs to a different customer in uCRM. Create a new job for the new customer, or restore the job\'s customer in uCRM.'
+        : 'Installation cannot be started or completed until the customer accepts the Installation Terms.')+'</div>';
+    h+=row('Status',STATUS_WORDS[a.status]||a.status);
+    if(r){
+      h+=row('Requested',r.requested_at+(r.requested_by_name?' by '+r.requested_by_name:''));
+      h+=row('Sent to',(r.has_phone?'WhatsApp '+r.customer_phone_masked:'')+(r.has_phone&&r.has_email?' · ':'')+(r.has_email?'e-mail '+r.customer_email_masked:''));
+      if(a.status==='pending') h+=row('Link valid until',r.token_expires_at);
+      if(a.status==='declined') h+=row('Declined',r.declined_at+(r.decline_reason?' — '+r.decline_reason:''));
+      if(a.status==='cancelled') h+=row('Withdrawn',r.cancelled_at+(r.cancel_reason?' — '+r.cancel_reason:''));
+      if(a.status==='expired') h+=row('Link expired',r.token_expires_at);
+      h+=row('Total',money(r));
+    }
+    if(!closed && !a.client_changed){
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
+      if(a.status==='pending'){
+        h+='<button onclick="schIaResend('+job.id+')" class="sch-act-btn" style="background:#1e3a5f;color:#93c5fd;margin:0;">🔁 Send the link again</button>';
+        h+='<button onclick="schIaCancel('+job.id+')" class="sch-act-btn" style="background:#422006;color:#fb923c;margin:0;">✖ Withdraw request</button>';
+      } else {
+        h+='<button onclick="schIaOpenRequest('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;margin:0;grid-column:1/3;">📨 Request customer authorisation</button>';
+      }
+      h+='</div>';
+    }
+    h+='<button onclick="schIaToggleEvents()" class="sch-act-btn" style="background:#1e1b4b;color:#a5b4fc;margin-top:8px;">📜 History</button>';
+  }
+  h+='<div id="schIaEvents" style="display:none;margin-top:8px;font-size:11px;color:#94a3b8;line-height:1.5;">'+history(a.events)+'</div>';
+  h+='<div id="schIaMsg" style="font-size:12px;color:#94a3b8;min-height:16px;margin-top:6px;"></div>';
+  h+='</div>';
+  return h;
+};
+window.schIaToggleEvents=function(){ var el=document.getElementById('schIaEvents'); if(el) el.style.display=el.style.display==='none'?'block':'none'; };
+function iaSay(t,bad){ var el=document.getElementById('schIaMsg'); if(el){ el.textContent=t; el.style.color=bad?'#fca5a5':'#86efac'; } }
+function iaReload(){ setTimeout(function(){ window.location.reload(); }, 900); }
+function iaCall(action,body,done){ iaApi('POST',action,body).then(function(d){ if(d.status==='success'){ done(d); iaReload(); } else iaSay('⚠ '+(d.message||'Failed'),true); }).catch(function(){ iaSay('⚠ Network error',true); }); }
+window.schIaResend=function(jobId){ iaSay('Sending…'); iaCall('install_auth_resend',{job_id:jobId},function(d){ iaSay('Link sent again — WhatsApp: '+d.data.sent.whatsapp+', e-mail: '+d.data.sent.email); }); };
+window.schIaCancel=function(jobId){ var why=window.prompt('Withdraw the authorisation request? Say why (optional):',''); if(why===null) return; iaSay('Withdrawing…'); iaCall('install_auth_cancel',{job_id:jobId,reason:why},function(){ iaSay('Request withdrawn.'); }); };
+window.schIaDispute=function(jobId){ var why=window.prompt('Record a dispute. What does the customer dispute?',''); if(why===null) return; iaSay('Recording…'); iaCall('install_auth_dispute',{job_id:jobId,reason:why},function(){ iaSay('Dispute recorded.'); }); };
+window.schIaOpenRequest=function(jobId){
+  iaSay('Loading…');
+  iaApi('GET','install_auth_prefill',null,'&job_id='+jobId).then(function(d){
+    if(d.status!=='success'){ iaSay('⚠ '+(d.message||'Failed'),true); return; }
+    var p=d.data, c=p.customer||{}, s=p.suggest||{};
+    var overlay=document.createElement('div'); overlay.id='schIaOverlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:4000;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;';
+    var inp='width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px;font-size:14px;box-sizing:border-box;';
+    var lbl='font-size:12px;font-weight:800;color:#374151;margin:10px 0 4px;';
+    var h='<div style="background:#f8fafc;max-width:520px;width:100%;margin:20px auto;border-radius:20px;overflow:hidden;">'
+      +'<div style="background:linear-gradient(135deg,#1565C0,#1976D2);padding:16px 20px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+      +'<div><div style="font-size:11px;opacity:.6;font-weight:700;text-transform:uppercase;">Job #'+jobId+'</div><div style="font-size:17px;font-weight:800;">Request customer authorisation</div></div>'
+      +'<button onclick="document.getElementById(\'schIaOverlay\').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:18px;cursor:pointer;">✕</button></div>'
+      +'<div style="padding:16px;color:#111827;">'
+      +'<div style="font-size:13px;color:#374151;margin-bottom:6px;">The customer gets '+(p.channels&&p.channels.whatsapp&&p.channels.email?'a WhatsApp and an e-mail':(p.channels&&p.channels.whatsapp?'a WhatsApp (e-mail is switched off)':(p.channels&&p.channels.email?'an e-mail (WhatsApp is switched off)':'nothing — no channel is switched on')))+' with these details and a secure link to accept or decline. They accept exactly what is entered here — check the charges before sending.</div>'
+      +(p.cannot_send?'<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:6px;">'+iaEsc(p.cannot_send)+'</div>':'')
+      +'<div style="background:#eef2ff;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:6px;"><b>'+iaEsc(c.name||'(no name in uCRM)')+'</b><br>'
+      +(c.phone?'WhatsApp: '+iaEsc(c.phone):'<span style="color:#b45309">No phone number in uCRM</span>')+'<br>'
+      +(c.email?'E-mail: '+iaEsc(c.email):'<span style="color:#b45309">No e-mail address in uCRM</span>')
+      +(p.job&&p.job.date_label?'<br>Scheduled: '+iaEsc(p.job.date_label):'')+'</div>'
+      +'<div style="'+lbl+'">Service</div><input id="iaService" style="'+inp+'" maxlength="160" value="'+iaEsc(s.service||'')+'">'
+      +'<div style="'+lbl+'">Starlink kit / equipment</div><input id="iaEquipment" style="'+inp+'" maxlength="160" value="'+iaEsc(s.equipment||'')+'" placeholder="e.g. Starlink Standard Kit x1">'
+      +'<div style="'+lbl+'">Installation location</div><input id="iaLocation" style="'+inp+'" maxlength="200" value="'+iaEsc(s.location||'')+'">'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+      +'<div><div style="'+lbl+'">Installation charge ('+iaEsc(p.currency)+')</div><input id="iaInstallation" style="'+inp+'" inputmode="decimal" placeholder="0"></div>'
+      +'<div><div style="'+lbl+'">Transport charge ('+iaEsc(p.currency)+')</div><input id="iaTransport" style="'+inp+'" inputmode="decimal" placeholder="0"></div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+      +'<div><div style="'+lbl+'">Other agreed charge ('+iaEsc(p.currency)+')</div><input id="iaOther" style="'+inp+'" inputmode="decimal" placeholder="0"></div>'
+      +'<div><div style="'+lbl+'">What for</div><input id="iaOtherLabel" style="'+inp+'" maxlength="80" placeholder="e.g. Extra cable 30 m"></div></div>'
+      +'<div style="font-size:12px;color:#6b7280;margin-top:10px;">Terms sent: '+iaEsc(p.terms_version)+' · the link stays valid for '+iaEsc(p.link_days)+' days, or until 3 days after the scheduled date if that is later.</div>'
+      +'<div id="iaFormErr" style="color:#dc3545;font-size:12px;min-height:14px;margin:6px 0;"></div>'
+      +'<button onclick="schIaSubmit('+jobId+')" id="iaSubmitBtn" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:15px;">📨 Send the request</button>'
+      +'</div></div>';
+    overlay.innerHTML=h;
+    overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    iaSay('');
+  }).catch(function(){ iaSay('⚠ Network error',true); });
+};
+window.schIaSubmit=function(jobId){
+  var v=function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+  var err=document.getElementById('iaFormErr'), btn=document.getElementById('iaSubmitBtn');
+  var body={job_id:jobId,service:v('iaService'),equipment:v('iaEquipment'),location:v('iaLocation'),installation:v('iaInstallation')||'0',transport:v('iaTransport')||'0',other:v('iaOther')||'0',other_label:v('iaOtherLabel')};
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Sending…'; }
+  iaApi('POST','install_auth_request',body).then(function(d){
+    if(d.status==='success'){ var o=document.getElementById('schIaOverlay'); if(o) o.remove(); iaSay('Request sent — WhatsApp: '+d.data.sent.whatsapp+', e-mail: '+d.data.sent.email); iaReload(); }
+    else { if(err) err.textContent='⚠ '+(d.message||'Failed'); if(btn){ btn.disabled=false; btn.textContent='📨 Send the request'; } }
+  }).catch(function(){ if(err) err.textContent='⚠ Network error'; if(btn){ btn.disabled=false; btn.textContent='📨 Send the request'; } });
+};
+})();
+</script>
+<?php endif; ?>
 <?php if ($jobDetailId): ?>
 <!-- ═══════════════════════════════════════════════════════════
      JOB DETAIL PAGE VIEW (full page, no overlay)
@@ -286,14 +436,28 @@ apiGet('scheduling_job_detail','&job_id='+jobId).then(function(resp){
         html+='</div>';
     }
 
+<?php if ($_sjUganda): ?>
+    if(window.schIaCard) html+=schIaCard(data,job,closed);   // 5.18.82: customer authorisation (Uganda, install_auth_enabled)
+
+<?php endif; ?>
     // Actions
     if(!closed){
         html+='<div style="'+card+'border:2px solid #166534;">';
         html+='<div style="font-size:11px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">⚡ Actions</div>';
+<?php if ($_sjUganda): ?>
+        if(job.status===0&&window.schIaBlocksStart&&schIaBlocksStart(data)) html+=schIaNotice();   // 5.18.82: the customer has not authorised this installation
+        else if(job.status===0) html+='<button onclick="schAcceptJob('+job.id+')" data-jobid="'+job.id+'" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:16px;padding:18px;box-shadow:0 4px 16px rgba(21,101,192,.4);">✔ Accept Job</button>';
+<?php else: ?>
         if(job.status===0) html+='<button onclick="schAcceptJob('+job.id+')" data-jobid="'+job.id+'" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:16px;padding:18px;box-shadow:0 4px 16px rgba(21,101,192,.4);">✔ Accept Job</button>';
+<?php endif; ?>
         if(job.status===1){
             var allDone=tasks.length===0||tasks.every(function(t){return t.closed;});
+<?php if ($_sjUganda): ?>
+            if(allDone&&window.schIaBlocksComplete&&schIaBlocksComplete(data)) html+=schIaNotice('complete');   // 5.18.82
+            else if(allDone) html+='<button onclick="schOpenCompleteForm('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#166534,#16a34a);color:#fff;font-size:15px;">✅ Mark as Completed</button>';
+<?php else: ?>
             if(allDone) html+='<button onclick="schOpenCompleteForm('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#166534,#16a34a);color:#fff;font-size:15px;">✅ Mark as Completed</button>';
+<?php endif; ?>
             else{var rem=tasks.filter(function(t){return !t.closed;}).length;html+='<div style="background:#422006;border-radius:10px;padding:10px 12px;text-align:center;margin-bottom:8px;color:#fbbf24;font-size:13px;font-weight:700;">⚠ '+rem+' task'+(rem>1?'s':'')+' remaining</div>';}
         }
         html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
@@ -804,6 +968,9 @@ window._schLoadJobsReady = window.schLoadJobs = function(forceRefresh) {
             h +=   '<div class="sch-job-title" style="flex:1;" title="' + title + '">' + title + '</div>';
             h +=   badge;
             h += '</div>';
+<?php if ($_sjUganda): ?>
+            if (window.schIaBadge) h += schIaBadge(j);   // 5.18.82: where the customer authorisation stands
+<?php endif; ?>
             // Row 2: date + duration
             h += '<div class="sch-job-meta">';
             h +=   '<span>📅 ' + dateStr + '</span>';
@@ -1020,16 +1187,32 @@ function renderJobDetail(data) {
         html += '</div>';
     }
 
+<?php if ($_sjUganda): ?>
+    if (window.schIaCard) html += schIaCard(data, job, isClosed2);   // 5.18.82: customer authorisation (Uganda, install_auth_enabled)
+
+<?php endif; ?>
     // ── JOB ACTIONS ───────────────────────────────────────────────
     if (!isClosed2) {
         html += '<div style="' + card + 'border:2px solid #166534;">';
         html += '<div style="font-size:11px;font-weight:800;color:#4ade80;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">⚡ Actions</div>';
+<?php if ($_sjUganda): ?>
+        if (job.status === 0 && window.schIaBlocksStart && schIaBlocksStart(data)) {   // 5.18.82: the customer has not authorised this installation
+            html += schIaNotice();
+        } else if (job.status === 0) {  // Pending → accept
+<?php else: ?>
         if (job.status === 0) {  // Pending → accept
+<?php endif; ?>
             html += '<button onclick="schAcceptJob('+job.id+')" data-jobid="'+job.id+'" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:16px;padding:18px;box-shadow:0 4px 16px rgba(21,101,192,.4);">✔ Accept Job</button>';
         }
         if (job.status === 1) {  // Open/InProgress → complete
             var allDone = tasks.length === 0 || tasks.every(function(t){ return t.closed; });
+<?php if ($_sjUganda): ?>
+            if (allDone && window.schIaBlocksComplete && schIaBlocksComplete(data)) {
+                html += schIaNotice('complete');   // 5.18.82
+            } else if (allDone) {
+<?php else: ?>
             if (allDone) {
+<?php endif; ?>
                 html += '<button onclick="schOpenCompleteForm('+job.id+')" class="sch-act-btn" style="background:linear-gradient(135deg,#166534,#16a34a);color:#fff;font-size:15px;">✅ Mark as Completed</button>';
             } else {
                 var rem = tasks.filter(function(t){ return !t.closed; }).length;
@@ -1256,6 +1439,9 @@ window.schCheckOut = function(jobId) {
             headers: {'Authorization': 'Bearer ' + _apiToken, 'Content-Type': 'application/json'},
             body: JSON.stringify({job_id: jobId, lat: 0, lon: 0})
         }).then(r => r.json()).then(function(res) {
+<?php if ($_sjUganda): ?>
+            if (!res || res.code !== 200) { if (statusEl) { statusEl.textContent = '⚠ ' + ((res && res.message) || 'Check-out failed'); statusEl.style.color = '#dc3545'; } return; }   // 5.18.83: a refused check-out is said, never shown as done
+<?php endif; ?>
             if (statusEl) { statusEl.textContent = '🏁 Checked out'; statusEl.style.color = '#1976d2'; }
         });
         return;
@@ -1268,6 +1454,9 @@ window.schCheckOut = function(jobId) {
             headers: {'Authorization': 'Bearer ' + _apiToken, 'Content-Type': 'application/json'},
             body: JSON.stringify({job_id: jobId, lat: pos.coords.latitude, lon: pos.coords.longitude})
         }).then(r => r.json()).then(function(res) {
+<?php if ($_sjUganda): ?>
+            if (!res || res.code !== 200) { if (statusEl) { statusEl.textContent = '⚠ ' + ((res && res.message) || 'Check-out failed'); statusEl.style.color = '#dc3545'; } return; }   // 5.18.83: a refused check-out is said, never shown as done
+<?php endif; ?>
             if (statusEl) { statusEl.textContent = '🏁 Checked out at ' + new Date().toLocaleTimeString(); statusEl.style.color = '#1976d2'; }
             schStopTracking();
         });

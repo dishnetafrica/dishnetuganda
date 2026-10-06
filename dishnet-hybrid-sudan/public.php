@@ -880,6 +880,16 @@ if ($page === 'customer_login') {
 // ── Public legal pages (v4.12.19) — Terms of Service & Privacy Policy ──
 // No auth required. Accessible to anyone at ?page=terms or ?page=privacy.
 // Content and version lives in lib/LegalContent.php.
+// ── Customer Installation Authorisation (5.18.82, docs/61 §3, docs/63) ─────
+// ?page=install_auth&t=<token>: the secure page a customer accepts or declines a Starlink installation on. No login:
+// the token in the link is the whole credential, looked up by hash. Uganda and install_auth_enabled only — everywhere
+// else the page answers 404 like any page that does not exist. Nothing is loaded from anywhere; no script runs on it.
+if ($page === 'install_auth') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require __DIR__ . '/tabs/customer_app/install_auth_page.php';
+    exit;
+}
+
 if ($page === 'terms' || $page === 'privacy') {
     while (ob_get_level() > 0) ob_end_clean();
     require __DIR__ . '/tabs/customer_app/legal_page.php';

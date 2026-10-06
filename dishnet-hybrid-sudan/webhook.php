@@ -3765,6 +3765,30 @@ switch ($changeType) {
             whResp(200, "Event '{$changeType}' received and logged (no action configured).");
         }
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
+        // 5.18.82 (Uganda, install_auth_enabled): a job deleted in uCRM takes its PENDING customer-authorisation request
+        // with it — the link stops working at once (docs/61 §3). An accepted record is history and stays as it is. Done
+        // before the notifier's own observation, which is unchanged (and keeps its place beside the answer).
+        // 5.18.83 (docs/64 §F): the posted body is a doorbell, never evidence (R3, 5.18.37) — this endpoint carries no key,
+        // so anyone who can reach it could post a job.delete. The request is withdrawn only when uCRM itself answers 404
+        // for the job; a job uCRM still holds, or cannot be asked about, keeps its request.
+        if (in_array($changeType, ['job.delete', 'JOB_DELETE'], true)) {
+            require_once __DIR__ . '/lib/InstallAuth.php';
+            if ($jobId > 0 && InstallAuth::enabled(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+                $_iaGone = false;
+                if ($crm && $crm->isConfigured()) {
+                    $_iaStill = $crm->get("scheduling/jobs/{$jobId}");
+                    $_iaGone  = !is_array($_iaStill) && (int)($crm->getLastError()['http_code'] ?? 0) === 404;
+                }
+                if ($_iaGone && InstallAuth::cancelForDeletedJob($store->getPdo(), $jobId)) {
+                    whLog($changeType, "Customer installation authorisation request for job #{$jobId} cancelled: the job was deleted in uCRM");
+                } elseif (!$_iaGone) {
+                    $_iaRow = InstallAuth::find($store->getPdo(), $jobId);
+                    if ($_iaRow !== null && $_iaRow['status'] === 'pending') {
+                        whLog($changeType, "Customer installation authorisation request for job #{$jobId} kept: uCRM did not confirm the job was deleted");
+                    }
+                }
+            }
+        }
         whJobNotify($jobId, null, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
         whResp(200, "{$changeType} processed.");
     }
