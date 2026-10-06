@@ -5779,7 +5779,7 @@ entries above record them as not pushed (*NOT pushed*, or *committed locally* fo
 written. The AI layer is not deployed and stays switched off (R4 found none of its files installed); 5.18.82's feature
 reached production only inside 5.18.83's release, switched off. No configuration changed, nothing sent to anyone.
 
-## 06 Oct — 5.18.84: the customer's WhatsApp when an installation job is booked (Uganda); `release/5.18.84` = `79607d4`, cut on live 5.18.83 (`2de810c`); `scripts/deploy-5.18.84.sh` pinned to it and rehearsed — NOT deployed; the switch arrives off
+## 06 Oct — 5.18.84: the customer's WhatsApp when an installation job is booked (Uganda); `release/5.18.84` = `79607d4`, cut on live 5.18.83 (`2de810c`); `scripts/deploy-5.18.84.sh` pinned to it and rehearsed — PUSHED 15:19 UTC; NOT deployed; the switch arrives off
 
 **Why.** After Customer Installation Authorisation was switched on, the operator created a job for a customer with no e-mail
 address. The technician was told at once; the customer heard nothing. Two facts, read from the code:
@@ -5888,7 +5888,7 @@ clone left as found; **run 2 154/0**, 26 runs, the same script, the same check l
 with 5.18.83: 30 rehearsed, 29 on the server.
 
 **Handover — each step is the operator's.**
-0. **Push both branches.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries the script, and
+0. **Push both branches — done, 06 Oct 15:19 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries the script, and
    `release/5.18.84` the release commit.
 1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
 
@@ -5905,4 +5905,5 @@ with 5.18.83: 30 rehearsed, 29 on the server.
    same tool with `--clear` instead of `--value 1`.
 
 **Git:** `58a6b15` (the feature), `2923296` (the script and its rehearsal), `release/5.18.84` (`79607d4`) and this entry
-are committed locally. Nothing pushed, nothing deployed, no configuration changed, nothing sent to anyone.
+(`cc0002e`) — **pushed 06 Oct, 15:19 UTC**, on the operator's instruction (*"yes push both branches"*): the branch to
+`cc0002e`, `release/5.18.84` new at `79607d4`. Nothing deployed, no configuration changed, nothing sent to anyone.
