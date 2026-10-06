@@ -20,6 +20,10 @@ declare(strict_types=1);
  *   8. the text, a pure function: every line, the lines left out, emphasis marks and line breaks in values, the zone
  *   9. a failed send: in the failure queue for a manual retry, said in the log, not sent again on a redelivery
  *  10. tools/set_config.php sets, lists and clears the switch
+ *  12. 5.18.85, the technician's name: uCRM answers users/{id} with 404 for every user, as production does (measured
+ *      27 Sep, docs/44 §13.1), so the name comes from the verified staff account, else uCRM's users/admins/{id} — first
+ *      name only, as the authorisation names the technician; none → no line. The customer's e-mail on Uganda carries the
+ *      same name, never the "Technician" placeholder; on South Sudan the e-mail is as it was
  *  11. weakened copies of the code each fail this test
  *
  * What this proves is what the plugin hands to WhatsApp and to the mail server, not delivery to a phone. Every person,
@@ -49,7 +53,7 @@ $SUPPORT_WA = (string)preg_replace('/\D+/', '', (string)($prof['contacts']['supp
 is_($SUPPORT_WA !== '', 'the Uganda profile has a support WhatsApp number (the message\'s Support line reads it)');
 
 /** A Uganda sandbox: the scenario's uCRM, plus a client with no e-mail, one with no number, a user with no name. */
-$start = function (string $tag, array $cfg = []) use ($root): SjSandbox {
+$start = function (string $tag, array $cfg = [], bool $prod = true) use ($root): SjSandbox {
     $s = SjSandbox::start($root, $cfg + ['tenant_profile' => 'uganda', 'timezone' => 'Africa/Kampala'], $tag);
     file_put_contents($s->plug . '/ucrm.json', json_encode(['pluginDataDir' => $s->data, 'pluginPublicUrl' => $s->base]));
     $crm = SjScenario::crm();
@@ -60,7 +64,10 @@ $start = function (string $tag, array $cfg = []) use ($root): SjSandbox {
         'street2' => '', 'city' => 'Kampala', 'note' => '', 'isLead' => false,
         'contacts' => [['email' => 'nophone@example.test', 'phone' => '', 'isBilling' => true]]];
     $crm['users']['1101'] = ['id' => 1101, 'username' => 'sb-noname', 'firstName' => '', 'lastName' => '', 'email' => 'noname@example.test', 'isActive' => true];
+    $crm['users']['1102'] = ['id' => 1102, 'username' => 'sb-agnes', 'firstName' => 'Agnes', 'lastName' => 'Sandbox', 'email' => 'agnes@example.test', 'isActive' => true];
+    $crm['users']['1104'] = ['id' => 1104, 'username' => 'sb-brenda', 'firstName' => 'Brenda', 'lastName' => 'Sandbox', 'email' => 'brenda@example.test', 'isActive' => true];
     $s->seedCrm($crm);
+    if ($prod) $s->usersV1Missing(true);   // 5.18.85: GET users/{id} answers 404 for every user, as production's uCRM does
     return $s;
 };
 $setJob = function (SjSandbox $s, int $id, array $fields): void {
@@ -116,8 +123,8 @@ is_($r[0] === 200, 'job.add answers 200', 'HTTP ' . $r[0]);
 $t = $texts($s, CUST);
 is_(count($t) === 1, 'one WhatsApp to the client\'s first uCRM contact number', count($t) . ' message(s)');
 is_(($t[0]['instance'] ?? '') === 'sj-support', 'from the support number', (string)($t[0]['instance'] ?? ''));
-$want = $expected('Fiber installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 9 Sandbox Road, Kampala', 'Sandbox Tech', 901);
-is_(($t[0]['text'] ?? '') === $want, 'the message, byte for byte: the date and the time in Kampala, the location, the technician, the job',
+$want = $expected('Fiber installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 9 Sandbox Road, Kampala', 'Sandbox', 901);
+is_(($t[0]['text'] ?? '') === $want, 'the message, byte for byte: the date and the time in Kampala, the location, the technician\'s first name, the job',
     "got:\n" . ($t[0]['text'] ?? '') . "\nwant:\n" . $want);
 $log = $s->q("SELECT event, phone, success FROM notification_audit_log WHERE event = 'ops_installation_scheduled'");
 is_(count($log) === 1 && (int)$log[0]['success'] === 1 && strpos((string)$log[0]['phone'], '700000915') !== false,
@@ -210,7 +217,7 @@ $setJob($s, 920, ['title' => 'Starlink Installation — Nomail Customer', 'clien
 $m0 = count($s->mails());
 $s->fire('job.add', 'job', 920, 'isw-4a');
 $t = $texts($s, NOMAIL);
-is_(count($t) === 1 && $t[0]['text'] === $expected('Starlink Installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 16 Sandbox Lane, Kampala', 'Sandbox Tech', 920, false, 'Nomail'),
+is_(count($t) === 1 && $t[0]['text'] === $expected('Starlink Installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 16 Sandbox Lane, Kampala', 'Sandbox', 920, false, 'Nomail'),
     'a client with no e-mail address gets the WhatsApp', $t[0]['text'] ?? '(none)');
 is_(count($s->mails()) === $m0, '…and no e-mail went: there was nowhere to send it');
 $setJob($s, 921, ['title' => 'Fiber installation — Sandbox Customer']);
@@ -225,7 +232,7 @@ $s = $start('isw-auth', [FLAG => '1', 'install_auth_enabled' => '1']);
 $setJob($s, 941, ['title' => 'Starlink Installation — Sandbox Customer']);
 $s->fire('job.add', 'job', 941, 'isw-6b');
 $t = $texts($s, CUST);
-is_(count($t) === 1 && $t[0]['text'] === $expected('Starlink Installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 9 Sandbox Road, Kampala', 'Sandbox Tech', 941, true),
+is_(count($t) === 1 && $t[0]['text'] === $expected('Starlink Installation', 'Monday 5 October 2026', '9:00 AM', 'Plot 9 Sandbox Road, Kampala', 'Sandbox', 941, true),
     'under Customer Installation Authorisation, a Starlink installation says that a separate secure link follows', $t[0]['text'] ?? '(none)');
 $s->fire('job.add', 'job', 911, 'isw-6c');
 $t = $texts($s, CUST);
@@ -242,6 +249,62 @@ echo "\n7. South Sudan\n";
 $s = $start('isw-ss', [FLAG => '1', 'tenant_profile' => 'south-sudan', 'timezone' => 'Africa/Juba']);
 $s->fire('job.add', 'job', 901, 'isw-7a');
 is_(count($texts($s, CUST)) === 0 && !$claimed($s, 901) && $waLines($s, 901) === [], 'the switch on changes nothing: no WhatsApp, no claim, no line');
+$s->stop();
+
+// ── 12 ────────────────────────────────────────────────────────────────────────
+echo "\n12. The technician's name (5.18.85)\n";
+$s = $start('isw-tech', [FLAG => '1', 'customer_emails_enabled' => '1', 'customer_email_install_scheduled' => '1']);
+$s->mailRelay(120);
+// A verified link: the uCRM user and the e-mail it was verified against, which must still be the account's (StaffDirectory).
+$sl = function (int $id, string $email): array { return ['email' => $email, 'ucrm_user_id' => $id, 'ucrm_link' => ['user_id' => $id, 'email' => $email, 'verified_at' => '2026-10-01T00:00:00Z', 'verified_by' => 1]]; };
+$s->staff('tech', ['name' => 'Tendo Kato', 'role' => 'support', 'phone' => '+256700000111'] + $sl(1099, 'tech@example.test'));
+$s->staff('twin1', ['name' => 'Twin One', 'role' => 'support'] + $sl(1104, 'twin1@example.test'));
+$s->staff('twin2', ['name' => 'Twin Two', 'role' => 'support'] + $sl(1104, 'twin2@example.test'));
+require_once $root . '/lib/StaffDirectory.php';
+$staffRows = (array)($s->store()->load('retailers.json') ?? []);
+is_(count(StaffDirectory::byUcrmUser($staffRows, 1099)) === 1 && count(StaffDirectory::byUcrmUser($staffRows, 1104)) === 2,
+    'control: the staff list really holds one verified account for 1099 and two for 1104');
+$techLine = function (string $text): string { return preg_match('/^👷 Technician: \*(.*)\*$/mu', $text, $m) ? $m[1] : ''; };
+/** The customer's e-mails since $from (the technician's own job e-mail is not one): [how many, its Technician row]. */
+$mailTech = function (SjSandbox $s, int $from) {
+    $m = array_values(array_filter(array_slice($s->mails(), $from), function ($x) { return ($x['to'] ?? []) === ['customer@example.test']; }));
+    $t = (string)($m[0]['text'] ?? '');
+    return [count($m), preg_match('/^Technician: (.*)$/m', $t, $x) ? trim($x[1]) : ''];
+};
+$m0 = count($s->mails()); $n0 = count($s->texts());
+$setJob($s, 960, ['title' => 'Fiber installation — Sandbox Customer', 'assignedUserId' => 1099]);
+$s->fire('job.add', 'job', 960, 'isw-12a');
+$t = $texts($s, CUST, $n0);
+is_(count($t) === 1 && $techLine($t[0]['text']) === 'Tendo', 'a technician with a verified staff account: that account\'s first name — not uCRM\'s', $t[0]['text'] ?? '(none)');
+[$mc, $mt] = $mailTech($s, $m0);
+is_($mc === 1 && $mt === 'Tendo', 'the customer\'s e-mail names the same technician — never the "Technician" placeholder', "{$mc} mail(s), Technician: '{$mt}'");
+$m0 = count($s->mails()); $n0 = count($s->texts());
+$setJob($s, 961, ['title' => 'Fiber installation — Sandbox Customer', 'assignedUserId' => 1102]);
+$s->fire('job.add', 'job', 961, 'isw-12b');
+$t = $texts($s, CUST, $n0);
+[$mc, $mt] = $mailTech($s, $m0);
+is_(count($t) === 1 && $techLine($t[0]['text']) === 'Agnes' && $mt === 'Agnes', 'no staff account: uCRM\'s own record at users/admins/{id}, its first name — in both', ($t[0]['text'] ?? '(none)') . " / e-mail: '{$mt}'");
+$m0 = count($s->mails()); $n0 = count($s->texts());
+$setJob($s, 962, ['title' => 'Fiber installation — Sandbox Customer', 'assignedUserId' => 1104]);
+$s->fire('job.add', 'job', 962, 'isw-12c');
+$t = $texts($s, CUST, $n0);
+is_(count($t) === 1 && $techLine($t[0]['text']) === 'Brenda', 'two staff accounts on one uCRM user: neither is guessed — uCRM\'s name', $t[0]['text'] ?? '(none)');
+$m0 = count($s->mails()); $n0 = count($s->texts());
+$setJob($s, 963, ['title' => 'Fiber installation — Sandbox Customer', 'assignedUserId' => 1103]);
+$s->fire('job.add', 'job', 963, 'isw-12d');
+$t = $texts($s, CUST, $n0);
+[$mc, $mt] = $mailTech($s, $m0);
+is_(count($t) === 1 && strpos($t[0]['text'], 'Technician') === false && $mc === 1 && $mt === '',
+    'a user neither the staff list nor uCRM knows: no Technician line, and no Technician row in the e-mail', ($t[0]['text'] ?? '(none)') . " / e-mail: '{$mt}'");
+$s->stop();
+$s = $start('isw-tech-ss', [FLAG => '1', 'tenant_profile' => 'south-sudan', 'timezone' => 'Africa/Juba', 'customer_emails_enabled' => '1',
+                            'customer_email_install_scheduled' => '1'], false);
+$s->mailRelay(120);
+$m0 = count($s->mails());
+$s->fire('job.add', 'job', 901, 'isw-12e');
+[$mc, $mt] = $mailTech($s, $m0);
+is_($mc === 1 && $mt === 'Sandbox Tech' && count($texts($s, CUST)) === 0,
+    'South Sudan: the e-mail\'s technician as before — uCRM\'s users/{id} answer, here the full name — and no WhatsApp', "{$mc} mail(s), Technician: '{$mt}'");
 $s->stop();
 
 // ── 8 ─────────────────────────────────────────────────────────────────────────
@@ -284,8 +347,15 @@ if ($withMutants) {
             "            if (false) whInstallScheduledWhatsApp(\$jobId, is_array(\$job) ? \$job : [], is_array(\$client ?? null) ? \$client : [],"]]],
         ['only when the customer has no e-mail address', [['lib/InstallScheduledWhatsApp.php', "        if (\$phone === '') return self::out('no_phone', 'not sent: the client has no phone number in uCRM');",
             "        if (\$phone === '') return self::out('no_phone', 'not sent: the client has no phone number in uCRM');\n        if (InstallAuth::clientEmail(\$client) !== '') return self::out('off', 'the e-mail covers it');"]]],
-        ['uCRM\'s "Technician" placeholder passed', [['webhook.php', "                \$assignedUserId ? trim((string)((\$user['firstName'] ?? '') . ' ' . (\$user['lastName'] ?? ''))) : '',",
-            "                (string)(\$techName ?? ''),"]]],
+        ['uCRM\'s "Technician" placeholder passed', [['webhook.php', "                \$_whTech,\n",
+            "                (string)(\$techName ?? ''),\n"]]],
+        ['the name asked at users/{id} again (5.18.84)', [['webhook.php', "            \$_whTech = \$_whJobNotifier ? whInstallTechName(\$assignedUserId, \$store, \$crm) : '';",
+            "            \$_whTech = \$assignedUserId ? trim((string)((\$user['firstName'] ?? '') . ' ' . (\$user['lastName'] ?? ''))) : '';"]]],
+        ['the staff account ignored', [['lib/InstallScheduledWhatsApp.php', "            if (count(\$hits) === 1) {", "            if (false) {"]]],
+        ['the e-mail keeps the placeholder on Uganda', [['webhook.php', "                'technician' => \$_whJobNotifier ? \$_whTech : (string)(\$techName ?? ''),",
+            "                'technician' => (string)(\$techName ?? ''),"]]],
+        ['the e-mail\'s change reaches South Sudan', [['webhook.php', "                'technician' => \$_whJobNotifier ? \$_whTech : (string)(\$techName ?? ''),",
+            "                'technician' => \$_whTech,"]]],
         ['from the accounts number', [['lib/InstallScheduledWhatsApp.php', "        \$notify->sendVia('support', \$phone,", "        \$notify->sendVia('accounts', \$phone,"]]],
         ['the Starlink line on every installation', [['lib/InstallScheduledWhatsApp.php', "            'starlink_auth' => InstallAuth::enabled(\$config, \$dataDir) && InstallAuth::inScope(\$job, \$config),",
             "            'starlink_auth' => true,"]]],
