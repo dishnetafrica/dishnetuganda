@@ -235,6 +235,12 @@ $FLAGS = [
         'The authorisation REQUEST e-mail to the customer (needs the customer e-mails master switch). Absent means OFF; set 1 to send it'],
     'customer_email_install_auth_confirmed' => ['bool',
         'The confirmation e-mail after the customer accepts (needs the master switch). Absent means OFF; set 1 to send it'],
+    // ── The customer's WhatsApp when an installation is booked (5.18.84) — Uganda only ──
+    // uCRM's job.add sent the customer the install_scheduled e-mail and nothing else, so a customer with no e-mail address
+    // heard nothing while the technician was told. With this on the customer also gets a WhatsApp, to the first number on
+    // their uCRM record: the e-mail's conditions (a client, an installation title, a date), once per job.
+    'customer_wa_install_scheduled' => ['bool',
+        'The customer\'s WhatsApp when an installation job is created with a date (Uganda): the date and time, the location, the technician, and for a Starlink installation under authorisation that the secure link follows. Sent whether or not the customer has an e-mail address. Absent means OFF'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
