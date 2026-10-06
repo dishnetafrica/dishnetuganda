@@ -5972,7 +5972,7 @@ with 5.18.83: 30 rehearsed, 29 on the server.
 `cc0002e`, `release/5.18.84` new at `79607d4`. At the push nothing was deployed, no configuration had changed and nothing
 had been sent to anyone.
 
-## 06 Oct — 5.18.85: the authorisation's request form filled from the customer's quotation, and the technician's name in the booking messages (Uganda); `release/5.18.85` = `4790019`, cut on live 5.18.84 (`79607d4`); `scripts/deploy-5.18.85.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+## 06 Oct — 5.18.85: the authorisation's request form filled from the customer's quotation, and the technician's name in the booking messages (Uganda); `release/5.18.85` = `4790019`, cut on live 5.18.84 (`79607d4`); `scripts/deploy-5.18.85.sh` pinned to it and rehearsed — PUSHED 18:36 UTC; NOT deployed
 
 **Why.** The 5.18.84 pilot (above) showed two things. The first authorisation request went out with its charges typed by
 hand, while the customer's quotation already held them. And the booking WhatsApp had no Technician line. The operator
@@ -6122,7 +6122,7 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
 `dishnet.sqlite` there to back up, as with 5.18.83 and 5.18.84.
 
 **Handover — each step is the operator's.**
-0. **Push both branches**, when the operator says so. The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
+0. **Push both branches — done, 06 Oct 18:36 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
    the script, and `release/5.18.85` the release commit.
 1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
 
@@ -6135,5 +6135,6 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
    job's booking WhatsApp now names its technician.
 
 **Git:** `4a7127d` (the feature), `24197d8` (the script and its rehearsal), `aaba731` (the rehearsal's fix),
-`release/5.18.85` (`4790019`) and this entry are committed locally. Nothing pushed, nothing deployed, no configuration
-changed, nothing sent to anyone.
+`release/5.18.85` (`4790019`) and this entry (`d42570d`) — **pushed 06 Oct, 18:36 UTC**, on the operator's instruction
+(*"yes push both branches"*): the branch to `d42570d`, `release/5.18.85` new at `4790019`. Nothing deployed, no
+configuration changed, nothing sent to anyone.
