@@ -1,8 +1,9 @@
 # 64 — Customer Installation Authorisation — production hardening (plugin 5.18.83, 2026-10-06)
 
-**Status: BUILT and tested in development only (plugin 5.18.83). The feature flag `install_auth_enabled` is OFF everywhere
-and was turned on nowhere. NOT deployed; pushed 06 Oct, 10:50 UTC, with `release/5.18.83` (`docs/07`). No production
-configuration touched, no message sent to any real person, no production job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
+**Status: DEPLOYED to production 06 Oct, 11:38 UTC, SWITCHED OFF (plugin 5.18.83: release `2de810c` on live 5.18.74,
+PASSED 29/0/0 — `docs/07`). The feature flag `install_auth_enabled` is OFF everywhere — absent from both copies the plugin
+keeps — and was turned on nowhere, so every job, message and screen behaves as on 5.18.74. Migration 086 is applied, its
+five tables empty. No production configuration touched, no message sent to any real person, no production job altered. Domain B (`dishnet-mikrotik-control-plane/`) untouched. The Installation Terms are
 unchanged — `INSTALLATION-TERMS-v1.0`, the same SHA-256 — and still DRAFT — SUBJECT TO LEGAL REVIEW (`docs/62`).**
 
 This is the work the final pre-release review of 5.18.82 called for. That review found four code blockers and a list of
@@ -334,9 +335,9 @@ docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_conf
 Tell staff not to start or close Starlink installations from uCRM's own screen: it will be recorded and the leaders alerted.
 Pilot the first request on a test uCRM client whose contact details belong to a staff member.
 
-### I.4 Deployment — prepared; see `docs/07`, 06 Oct, the 5.18.83 release entry
+### I.4 Deployment — DEPLOYED 06 Oct, 11:38 UTC, switched off; see `docs/07`, the 5.18.83 release entry
 
-Live is 5.18.74 (`db18ad9`). Between it and this commit sit undeployed work (the distributor portal, the AI communication
+Live was 5.18.74 (`db18ad9`). Between it and this commit sat undeployed work (the distributor portal, the AI communication
 layer batches), so the deployment is a release commit cut on live that carries this feature alone, with a pinned deploy
 script, as 5.18.66–5.18.74 were:
 - **`release/5.18.83` = `2de810c`**, parent `db18ad9`: 31 files — this feature's, and two test files the branch had already
@@ -345,7 +346,9 @@ script, as 5.18.66–5.18.74 were:
 
 The script switches nothing on. It refuses to run if `install_auth_enabled` is already on in either place the plugin keeps
 it, and checks afterwards that it is still off. Deploying therefore does not wait for the legal review; switching the
-feature on does (§I.2, §I.3). The deploy itself is the operator's: this work runs nothing on the server.
+feature on does (§I.2, §I.3). The operator ran it on 06 Oct at 11:38 UTC: PASSED, 29 ok / 0 failed / 0 notes. 086 was
+applied and complete, its tables empty; the switch was absent from both copies before and after; the customer page answers
+404 *"This page is not available."*
 
 ## J. Observations — recorded, not changed
 

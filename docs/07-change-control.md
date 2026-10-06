@@ -5611,7 +5611,7 @@ the check-in store's pre-existing nesting is recorded, not changed.
 **Git:** committed locally after `8e5808a`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to
 anyone. The release cut on live 5.18.74 follows below.
 
-## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — PUSHED 10:50 UTC, NOT deployed; the feature arrives switched off
+## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — PUSHED 10:50 UTC; DEPLOYED 11:38 UTC (PASSED 29/0/0), the feature switched off
 
 **Why a release commit.** Live is 5.18.74 (`db18ad9`). The branch between it and 5.18.83 also carries undeployed work: the
 distributor partner portal (migrations 081–083), the PD-8 CSRF guard, and the AI communication layer batches 0–5
@@ -5710,11 +5710,12 @@ Results:
 - The rehearsed deploy reads **30 ok / 0 failed / 0 notes**. On the server expect 29 or 30 ok: 5.18.74's server run read one fewer
   than its sandbox.
 
-**Handover — nothing below has been done; each step is the operator's.**
+**Handover — each step is the operator's; steps 0 and 1 are done, step 2 is not.**
 0. **Push both branches — DONE 06 Oct, 10:50 UTC**, on the operator's instruction. The server pulls them from GitHub:
    `claude/study-this-jhe2eg` (pushed at `3991dd0`, a fast-forward from `7b73813`) carries the script, and `release/5.18.83`
    (`2de810c`, a new branch) carries the release commit. `git ls-remote` reads both tips equal to the local commits.
-1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+1. **Deploy, as root on the server — DONE 11:38 UTC, PASSED 29/0/0** (the RESULT below). It asks for `DEPLOY`; send
+   back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.83 && mkdir -p /root/dnb-5.18.83 && bash scripts/deploy-5.18.83.sh 2>&1 | tee /root/dnb-5.18.83/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
@@ -5725,8 +5726,37 @@ Results:
    for staff or customers: the page answers 404 and no guard runs. After switching it on, `--after-only` (§I.3) confirms
    the switch is on in both copies the plugin keeps.
 
+- **RESULT — DEPLOYED to production 2026-10-06, 11:38 UTC: PASSED, 29 ok / 0 failed / 0 notes** — the 29 expected. The
+  sandbox reads 30 because it holds a `dishnet.sqlite` to back up; the server holds none (*"nothing to copy"*). The run
+  began at 11:38:25 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 2de810c"*; the 31
+  files were stamped at 11:39:51 UTC. Recorded from the terminal the operator pasted (the script prints no secret); the
+  log file stays on the server as `/root/dnb-5.18.83/deploy-20261006T113825Z.log`.
+  - **A.** The checkout fast-forwarded `52e1951` → `0e882f3`; branch tip `6b3c22a` (not installed); release commit
+    `2de810c` cut on `db18ad9`; 31 files (23 changed, 8 added, 0 removed), one migration (086); **A0** clean. Live
+    `db18ad9` / 5.18.74. PHP **8.1.34** accepted the 17 changed server files and the 12 test files. Pilot `on`; **the
+    authorisation switch `ia=absent/absent`** — in neither copy; 086 absent (0/5 tables, 0/10 triggers, 0/4 indexes);
+    photo tables `present:6:2`, 6 files.
+  - **Backup** `/root/dnb-5.18.83/backup-20261006T113825Z`: `plugin.sqlite3` 29 MB, one consistent copy, integrity ok,
+    243 tables; the data directory 142 MB; the installed 5.18.74 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed; **V5** 302 / 401;
+    **V7** the customer page 404 *"This page is not available."*; **V8** `install_auth_request` 401 without a login;
+    **V3** the pilot unchanged (`on` → `on`); **V3b** the authorisation switch unchanged (`absent/absent` →
+    `absent/absent`); **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 31 files as `2de810c` has them, manifest 5.18.83; R2 `pilot=on`, and the installed `InstallAuth` reads
+    the switch OFF in both copies; **R3 086 applied and complete at the first look** — 5 tables, 10 triggers, 4 indexes,
+    both CHECKs, the ledger row matching the installed file, the five tables empty (`0:0:0:0:0`). `migration.log` reads
+    *"OK: 086_install_authorisation.sql (19 stmts, 15ms)"* at 14:39:51 by its own clock (UTC+3): 11:39:51 UTC, the
+    second of the copy. R3 084 still installed, `6:2` rows, untouched; R4 the pilot as before, the channel
+    `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 206 files from Release A through 5.18.74 intact; R6
+    every earlier marker and 5.18.83's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00; Fiber & Starlink
+    591,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the book's own figures (5.18.83's changes touch no cash code); the
+    photo tables and files read exactly as before.
+  - **What it means today:** nothing changed for staff or customers. The switch is off, so no guard runs, the job page
+    shows no panel and the customer page answers 404. Switching it on is step 2, not taken.
+
 **Git:** `release/5.18.83` (`2de810c`) and the three branch commits — the feature (`6b3c22a`), the script and its
 rehearsal (`63e45ee`), this entry (`3991dd0`) — **pushed 06 Oct, 10:50 UTC**, on the operator's instruction. The same push
 published the branch's earlier local commits: the AI communication layer 5.18.76–5.18.81 and `docs/58`, and 5.18.82. Their
 entries above record them as not pushed (*NOT pushed*, or *committed locally* for 5.18.82), as was true when each was
-written; none of them is deployed, and everything they built is still switched off. Nothing deployed, no configuration changed, nothing sent to anyone.
+written. The AI layer is not deployed and stays switched off (R4 found none of its files installed); 5.18.82's feature
+reached production only inside 5.18.83's release, switched off. No configuration changed, nothing sent to anyone.
