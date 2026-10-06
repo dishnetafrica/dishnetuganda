@@ -5610,3 +5610,120 @@ the check-in store's pre-existing nesting is recorded, not changed.
 
 **Git:** committed locally after `8e5808a`. Nothing pushed, nothing deployed, no configuration changed, nothing sent to
 anyone. The release cut on live 5.18.74 follows below.
+
+## 06 Oct — 5.18.83 release prepared: `release/5.18.83` = `2de810c`, cut on live 5.18.74 (`db18ad9`); `scripts/deploy-5.18.83.sh` pinned to it and rehearsed — NOT pushed, NOT deployed; the feature arrives switched off
+
+**Why a release commit.** Live is 5.18.74 (`db18ad9`). The branch between it and 5.18.83 also carries undeployed work: the
+distributor partner portal (migrations 081–083), the PD-8 CSRF guard, and the AI communication layer batches 0–5
+(migration 085, the media worker, voice, image and document paths). As for 5.18.66–5.18.74, the release is this feature
+alone, applied on the live release commit, and the deploy script installs that commit by its hash.
+
+**What it carries.** 31 files against `db18ad9`: 8 added (`lib/InstallAuth.php`, `lib/InstallAuthNotifier.php`,
+`lib/InstallAuthEmails.php`, `lib/InstallationTerms.php`, `includes/api/api_install_auth.php`,
+`tabs/customer_app/install_auth_page.php`, `migrations/086_install_authorisation.sql`, `tests/test_install_authorisation.php`)
+and 23 changed (the three API files carrying the four guards and the sign-off event, `JobNotifier`, `NotificationService`, `CustomerEmailDispatcher`, `webhook.php`,
+`public.php`, `includes/api_handlers.php`, the job page, the configuration tool, `manifest.json` 5.18.83, four neighbouring
+tests, the five distributor version pins on this line, and two suite files the branch had already aligned with
+5.18.70, below). **28 of the 31 are byte-identical to the branch's.** The other
+three (`public.php`, `includes/api_handlers.php`, `tools/set_config.php`) were also changed on the branch for undeployed
+work; the release carries exactly this feature's added and removed lines in each, compared line for line. In
+`tools/set_config.php` that meant resolving one conflict by hand: the AI layer's media-limit and provider blocks were left
+out, the authorisation link-days and job-titles checks kept. The remaining 20 changed files were copied whole:
+- 12 were identical on `db18ad9` and on the branch before the feature, so copying them carries nothing else;
+- `manifest.json` and the five distributor tests differ from `db18ad9` in their version line alone (5.18.74 → 5.18.83);
+- the last two are `8cde7ca`'s, below.
+
+**Two test files more, no code.** The release tree's own suite found that `test_sales_support_tenant.php` on the release
+line still asserted the wallet filter as it was before 5.18.70, although the line carries 5.18.70's `wallet.php`. Branch
+commit `8cde7ca` had already brought that test, and `test_notify_evo_retry.php`'s Sunday window search, into line with
+that code and the clock, but it never reached a release commit. Both files are carried as the branch has them, `8cde7ca`'s
+change line for line, and both pass on the release tree.
+
+**The release suite** (`tests/run.sh` on the release tree itself, a worktree of `2de810c`): **265 files, 12,404 passed, 0 failed, 0 skipped**; run 2:
+**265 files, 12,404 passed, 0 failed, 0 skipped**. Every file's tally is the same in both runs: the feature's own test 352, South Sudan's 51. The five PHP
+warnings in each run are the branch's own five, all from line 91 of `test_dpo_endpoints.php`, a file this release does not
+change. The worktree was unchanged afterwards. The release line has 265 test files where the branch has 278; the 13 missing are the undeployed work's
+own (the portal's, the CSRF guard's and the AI layer's). 5.18.74's suite ran on the branch commit, whose sixteen release
+files were byte-identical to the release's. Here three of the 31 are not, so the release tree ran its own. A lesson,
+measured:
+the first attempt ran the worktree from inside this session's private temporary directory (mode 700), and
+`test_cli_data_dir.php` failed 9 checks. That test drops to the user `nobody` to reach the fallback it is about, and
+`nobody` could not open the plugin's files there; the PHP fatal's exit code 255 even satisfied its own "EXIT:2"
+substring. Run from a directory `nobody` can reach, as the branch is, it passes. A release tree's suite must run from such
+a directory.
+
+**`scripts/deploy-5.18.83.sh`**, 5.18.74's shape, pinned to `2de810c` over `db18ad9`. What is new:
+- **A0 is an allow-list.** The delta must be exactly the 31 files, 8 of them as added, with exactly one migration (086).
+  Anything else in the pin, or anything missing from it, stops the script before the container is looked at.
+- **The switch must arrive off — in both places the plugin keeps it.** `set_config.php` writes the switch twice: into the
+  configuration files, which the tools and `webhook.php` read, and into the store row in `plugin.sqlite3`, which
+  `public.php` reads — and with it the customer page, the staff actions and the four guards. Stage A reads both
+  (`PluginConfig::read` for the files, the row read-only as the database's owner) and refuses to deploy if either is on.
+  With the switch already on, the copy itself would start enforcing without the activation step that records the jobs in
+  progress.
+- **No 086 may already be recorded.** If the plugin's migration ledger already names 086, its runner would skip this
+  release's 086 as applied, and the tables it adds would never exist.
+- **V7/V8.** With the switch off, the customer page answers 404 *"This page is not available."*, like a page that does not
+  exist. An anonymous `install_auth_request` is refused by the staff guard before any handler runs (401 in the rehearsal;
+  the script accepts 401 or 403).
+- **V3b and R2.** `install_auth_enabled` is unchanged by the run and, after a deploy, off in both copies. The installed
+  `InstallAuth` itself reads `enabled() = false` over each. If the two copies ever disagree, both checks fail: the tools and
+  the pages would act differently.
+- **R3 trusts objects, not the ledger.** The runner applies a file statement by statement and records it even when a
+  statement fails (*PARTIAL*). R3 therefore checks:
+  - the ledger row's checksum against the installed file;
+  - all five tables, ten triggers, four indexes and both CHECKs;
+  - no *PARTIAL* line for 086 in `migration.log`;
+  - right after a deploy, five empty tables.
+
+  If no request has reached the plugin by R3 (the public address unreachable from the server, for one), R3 looks again
+  after R7. R7's tool opens the plugin's store, the plugin's own runner applies 086 then, and the second look verifies it.
+- The new tables are read as the database's owner, **read-only**, so SQLite can never leave a root-owned `-wal`/`-shm`
+  beside the live database.
+- **R4** also refuses an installed AI-layer or portal file. **R6** adds the markers of the record's one rule, the activation
+  step, the uCRM-side check, the page's gate, the staff actions, the four guards, the never-queued list, the redacted Inbox
+  copy, the e-mails off by default and the job-page panel, beside every earlier release's marker.
+- **The rollback refuses while the switch is on.** Turning the switch off on its own stops everything 5.18.83 does for staff
+  and customers. A rollback under a switch that stays on would leave a later re-deploy enforcing against an old activation
+  snapshot. RB proves no 5.18.74 file reaches the authorisation code, and notes what stays: the eight added files, reached
+  by nothing (`deploy-hybrid.sh` never deletes), and 086's tables with their row counts.
+- **No command that switches the feature on** appears in the script or in its log (asserted).
+
+**Rehearsal `scripts/harness/deploy-5.18.83/rehearse.sh`.** The stand-in web server boots the installed plugin's store on
+every request, as `public.php` does, so migration 086 is applied by the plugin's own runner. V7 is answered by the
+installed customer page itself. The rehearsal covers:
+- the A refusals: a 5.18.72 server; a placeholder pin; the branch tip; a commit cut on 5.18.74 carrying the release plus an
+  AI-layer file; a commit carrying the release without 086; the switch already on, in both copies and in the files alone; a
+  planted 086 ledger row;
+- the deploy itself;
+- the teeth: a gate-less page caught by V7, R1 and R6; a dropped trigger caught by R3; a *PARTIAL* log line; an edited 086
+  caught by R1 and R3's ledger check; a changed 5.18.74 file caught by R5;
+- the pilot switch read live;
+- the operator's activation, emulated as `set_config.php` writes it (both copies and an activation row): `--after-only`
+  passes with the switch on, and the rollback refuses until it is off; with the two copies made to disagree, V3b and R2
+  fail and V7 follows the store row, as `public.php` does;
+- the rollback, the lazy case and two weakened copies of the script (R1 blinded, R3's completeness check blinded).
+
+Results:
+- **Run 1:** 181/0, 28 runs of the script (the committed script, sha256 `11e634108af653c2…`), no FAIL line, the clone left as found.
+- **Run 2:** 181/0, 28 runs, the same script (sha256 `11e634108af653c2…`), the clone left as found.
+- The rehearsed deploy reads **30 ok / 0 failed / 0 notes**. On the server expect 29 or 30 ok: 5.18.74's server run read one fewer
+  than its sandbox.
+
+**Handover — nothing below has been done; each step is the operator's.**
+0. **Decide the release, then push both branches.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
+   the script, and `release/5.18.83` carries the release commit. This session pushed neither.
+1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.83 && mkdir -p /root/dnb-5.18.83 && bash scripts/deploy-5.18.83.sh 2>&1 | tee /root/dnb-5.18.83/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
+   docs/44 §16.9).
+2. **Switch the feature on — a separate decision, later.** It comes only after the legal review of the terms (`docs/62`)
+   and the operator's decisions in `docs/64` §I.2, by the configuration in `docs/64` §I.3. Deploying first changes nothing
+   for staff or customers: the page answers 404 and no guard runs. After switching it on, `--after-only` (§I.3) confirms
+   the switch is on in both copies the plugin keeps.
+
+**Git:** `release/5.18.83` (`2de810c`) and the three branch commits — the feature (`6b3c22a`), the script and its
+rehearsal (`63e45ee`), this entry — are committed locally. Nothing pushed, nothing deployed, no configuration changed,
+nothing sent to anyone.
