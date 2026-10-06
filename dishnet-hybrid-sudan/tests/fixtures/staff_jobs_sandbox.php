@@ -256,6 +256,10 @@ final class SjSandbox
         }));
     }
     public function usersDown(bool $down): void { $this->http('POST', "{$this->crm}/__test/users_down", ['down' => $down]); }
+    /** 5.18.85: GET users/{id} answers 404 for every id, as the production uCRM does (docs/44 §13.1). */
+    public function usersV1Missing(bool $on): void { $this->http('POST', "{$this->crm}/__test/users_v1_404", ['on' => $on]); }
+    /** 5.18.85: GET billing/quotes answers 502. */
+    public function quotesDown(bool $down): void { $this->http('POST', "{$this->crm}/__test/quotes_down", ['down' => $down]); }
 
     // ── The fake Evolution ───────────────────────────────────────────────────
     public function texts(): array { return (array)($this->http('GET', "{$this->evo}/__test/state")[2]['text_calls'] ?? []); }

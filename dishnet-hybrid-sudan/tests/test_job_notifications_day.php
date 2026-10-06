@@ -152,8 +152,25 @@ if ($old) {
     is_($other($old) === $other($new), 'each is the same text to the same number, in the same order, as 5.18.51', json_encode(['5.18.51' => $other($old), 'this' => $other($new)], JSON_UNESCAPED_UNICODE));
     is_($logOther($old) === $logOther($new), 'the Message Log\'s other rows are the same, row for row');
     $customerMail = array_values(array_filter($new['mail'], function ($m) { return $m['to'] !== ['tech@example.test']; }));
-    is_(count($customerMail) === 1 && $old['mail'] === $customerMail, 'the customer\'s "installation scheduled" e-mail: the same message, byte for byte (T4.11) — the engineer\'s five aside',
+    // 5.18.85 (docs/07): on Uganda the customer's e-mail names the technician by the first name on the verified staff
+    // account, else uCRM's users/admins/{id}. job.add's own lookup, users/{id}, answers 404 on the production uCRM for every
+    // user (docs/44 §13.1), where 5.18.51 printed uCRM's "Technician" placeholder; this fake answers it, so 5.18.51 printed
+    // the full name. The Technician value is the one deliberate difference; everything else stays byte for byte.
+    $techOf = function (array $mails): array {
+        return array_map(function ($m) { preg_match_all('/Technician: ([^\r\n]*)/', (string)($m['data'] ?? ''), $x); return $x[1]; }, $mails);
+    };
+    $noTech = function (array $mails): array {
+        return array_map(function ($m) {
+            $m['data'] = preg_replace(['/(Technician: )[^\r\n]*/', '#(>Technician</td><td[^>]*>)[^<]*#'], ['$1<technician>', '$1<technician>'], (string)($m['data'] ?? ''));
+            return $m;
+        }, $mails);
+    };
+    is_(count($customerMail) === 1 && $noTech($old['mail']) === $noTech($customerMail),
+        'the customer\'s "installation scheduled" e-mail: the same message, byte for byte (T4.11), but for the technician\'s name — the engineer\'s five aside',
         count($old['mail']) . ' vs ' . count($customerMail));
+    is_($techOf($old['mail']) === [['Sandbox Tech']] && $techOf($customerMail) === [['Sandbox']],
+        '5.18.85: its Technician row is the first name on the staff account linked to the assignee, where 5.18.51 read users/{id}',
+        json_encode([$techOf($old['mail']), $techOf($customerMail)]));
     is_($whOther($old) === $whOther($new), 'the webhook log is the same, line for line, but for the one job line', json_encode([$whOther($old), $whOther($new)], JSON_UNESCAPED_UNICODE));
 } else {
     skip_('the byte-for-byte comparison with 5.18.51');

@@ -17,8 +17,9 @@ declare(strict_types=1);
  *   - a Starlink installation job under Customer Installation Authorisation says that a separate WhatsApp with a secure
  *     link follows: the request staff send from the job page once the charges are set (docs/64).
  *
- * Every value comes from uCRM's job and client and the tenant profile, never from anything a browser sent. A value uCRM
- * does not have gives no line at all. text() is a pure function, so a test can pin every byte.
+ * Every value comes from uCRM's job and client, the tenant profile and the technician's staff account (technicianName,
+ * 5.18.85), never from anything a browser sent. A value they do not have gives no line at all. text() is a pure function,
+ * so a test can pin every byte.
  *
  * PHP 7.4 compatible.
  */
@@ -42,6 +43,40 @@ final class InstallScheduledWhatsApp
         return StaffJobsGate::applies($config, $dataDir);
     }
 
+    /**
+     * 5.18.85: the technician's first name, for the customer. job.add's own lookup, GET users/{id}, answers 404 on this
+     * uCRM for every user (measured 27 Sep 2026, docs/44 §13.1), so it is never asked here. First the active staff account
+     * whose VERIFIED link is this uCRM user (StaffDirectory::byUcrmUser — where the authorisation's messages take the
+     * technician's name from), then uCRM's own user record at users/admins/{id}; '' when neither names one, and then the
+     * message has no Technician line. First name only, as the authorisation's customer messages give it.
+     */
+    public static function technicianName(int $ucrmUserId, $store, $crm): string
+    {
+        if ($ucrmUserId <= 0) return '';
+        self::load();
+        try {
+            if (!class_exists('StaffDirectory')) require_once __DIR__ . '/StaffDirectory.php';
+            $rows = (is_object($store) && method_exists($store, 'load')) ? (array)($store->load('retailers.json') ?? []) : [];
+            $hits = StaffDirectory::byUcrmUser($rows, $ucrmUserId);
+            if (count($hits) === 1) {
+                $first = InstallAuth::firstName((string)($hits[0]['name'] ?? ''));
+                if ($first !== '') return $first;
+            }
+        } catch (\Throwable $e) {
+            // the staff list could not be read: ask uCRM
+        }
+        try {
+            if ($crm instanceof \CrmApiClient) {
+                if (!class_exists('UcrmUsers')) require_once __DIR__ . '/UcrmUsers.php';
+                $f = UcrmUsers::find($crm, $ucrmUserId);
+                if (($f['status'] ?? '') === 'found') return InstallAuth::firstName((string)($f['user']['firstName'] ?? ''));
+            }
+        } catch (\Throwable $e) {
+            // uCRM could not be read: no name
+        }
+        return '';
+    }
+
     /** The notification_dedup key: one WhatsApp per job, whichever delivery of job.add arrives first. */
     public static function claimKey(int $jobId): string
     {
@@ -49,7 +84,7 @@ final class InstallScheduledWhatsApp
     }
 
     /**
-     * The values the message shows. $technician is the assignee's name as uCRM holds it, '' when the job has none.
+     * The values the message shows. $technician is the assignee's first name (technicianName), '' when there is none.
      * Times are the install's own zone (dn_tz), as the technician's job message reads them.
      */
     public static function fields(int $jobId, array $job, array $client, string $technician, array $config, ?string $dataDir): array

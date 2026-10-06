@@ -212,6 +212,23 @@ function whInstallScheduledWhatsApp(int $jobId, array $job, array $client, strin
 }
 
 /**
+ * 5.18.85 (Uganda): the technician's first name for the customer's booking e-mail and WhatsApp
+ * (InstallScheduledWhatsApp::technicianName — the verified staff account, else uCRM's users/admins/{id}); '' when there
+ * is none. Never throws: a name it cannot find is a line left out, never a failed job.add.
+ */
+function whInstallTechName(int $assignedUserId, $store, $crm): string
+{
+    if ($assignedUserId <= 0) return '';
+    try {
+        require_once __DIR__ . '/lib/InstallScheduledWhatsApp.php';
+        return InstallScheduledWhatsApp::technicianName($assignedUserId, $store, $crm);
+    } catch (\Throwable $e) {
+        error_log('[whInstallTechName] user ' . $assignedUserId . ': ' . $e->getMessage());
+        return '';
+    }
+}
+
+/**
  * Send the branded quotation email for a quote created anywhere.
  *
  * QuotationService covers quotes created through the DishNet app. A quote
@@ -2660,18 +2677,22 @@ switch ($changeType) {
                 try { return $iso ? (new DateTime((string)$iso))->format('g:i A') : ''; } catch (\Throwable $e) { return ''; }
             };
             $window = $clock($timeFrom) . ($timeFrom && $timeTo ? ' - ' . $clock($timeTo) : '');
+            // 5.18.85 (Uganda): the technician's first name from the verified staff account, else uCRM's users/admins/{id}.
+            // The lookup above, users/{id}, answers 404 on this uCRM for every user (docs/44 §13.1), so $techName is the
+            // "Technician" placeholder there and the customer's e-mail printed it. South Sudan keeps $techName.
+            $_whTech = $_whJobNotifier ? whInstallTechName($assignedUserId, $store, $crm) : '';
             whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
                 'first_name' => (string)(($client ?? [])['firstName'] ?? ''),
                 'date'       => $dateLong !== '' ? $dateLong : $dateFormatted,
                 'window'     => $window,
                 'address'    => (string)$address,
-                'technician' => (string)($techName ?? ''),
+                'technician' => $_whJobNotifier ? $_whTech : (string)($techName ?? ''),
             ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
             // 5.18.84 (Uganda, customer_wa_install_scheduled): the same news by WhatsApp, to the client's uCRM number — a
-            // customer with no e-mail address heard nothing before. Off by default; once per job. The technician's name
-            // only as uCRM holds it: never the "Technician" placeholder above.
+            // customer with no e-mail address heard nothing before. Off by default; once per job. Never the "Technician"
+            // placeholder: the name above, or no Technician line.
             whInstallScheduledWhatsApp($jobId, is_array($job) ? $job : [], is_array($client ?? null) ? $client : [],
-                $assignedUserId ? trim((string)(($user['firstName'] ?? '') . ' ' . ($user['lastName'] ?? ''))) : '',
+                $_whTech,
                 is_array($config ?? null) ? $config : [], (string)$dataDir, $store, $notify, $changeType);
         } else {
             whLog($changeType, "Job #{$jobId}: no customer e-mail — "

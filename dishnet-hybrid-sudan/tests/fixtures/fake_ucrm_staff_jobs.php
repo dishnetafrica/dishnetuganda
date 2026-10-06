@@ -23,12 +23,16 @@ declare(strict_types=1);
  * /__test/jobs_partial {"partial":true} — a job read answers without assignedUserId (V4); /__test/post_override
  * {"fields":{…}} — uCRM stores these values on the next jobs it creates, whatever was posted (T4.13);
  * /__test/delete_job {"id":N} — the job is gone, as if deleted in uCRM's own screen.
+ *
+ * 5.18.85, each off unless set: /__test/users_v1_404 {"on":true} — GET users/{id} answers 404 for every id, as the
+ * production uCRM does (measured 27 Sep 2026, docs/44 §13.1), while users/admins/{id} still answers;
+ * /__test/quotes_down {"down":true} — GET billing/quotes answers 502.
  */
 $stateFile = (string)getenv('FAKE_UCRM_STATE');
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
 $state += ['jobs' => [], 'users' => [], 'clients' => [], 'tasks' => [], 'comments' => [], 'logs' => [],
            'requests' => [], 'next_job' => 950, 'next_task' => 7000, 'users_down' => false,
-           'jobs_down' => false, 'jobs_partial' => false, 'post_override' => []];
+           'jobs_down' => false, 'jobs_partial' => false, 'post_override' => [], 'users_v1_404' => false, 'quotes_down' => false];
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $uri    = (string)($_SERVER['REQUEST_URI'] ?? '');
@@ -54,6 +58,8 @@ if ($path === '/__test/jobs_down' && $method === 'POST') { $state['jobs_down'] =
 if ($path === '/__test/jobs_partial' && $method === 'POST') { $state['jobs_partial'] = !empty($body['partial']); fu_out(['ok' => true]); }
 if ($path === '/__test/post_override' && $method === 'POST') { $state['post_override'] = (array)($body['fields'] ?? []); fu_out(['ok' => true]); }
 if ($path === '/__test/delete_job' && $method === 'POST') { unset($state['jobs'][(string)(int)($body['id'] ?? 0)]); fu_out(['ok' => true]); }
+if ($path === '/__test/users_v1_404' && $method === 'POST') { $state['users_v1_404'] = !empty($body['on']); fu_out(['ok' => true]); }
+if ($path === '/__test/quotes_down' && $method === 'POST') { $state['quotes_down'] = !empty($body['down']); fu_out(['ok' => true]); }
 
 $state['requests'][] = ['method' => $method, 'path' => $path, 'query' => (string)parse_url($uri, PHP_URL_QUERY), 'body' => $body];
 
@@ -61,6 +67,7 @@ $state['requests'][] = ['method' => $method, 'path' => $path, 'query' => (string
 if ($method === 'GET' && ($path === '/users/admins' || preg_match('#^/users/(?:admins/)?\d+$#', $path))) {
     if (!empty($state['users_down'])) fu_out(['code' => 502, 'message' => 'Bad gateway (test control)'], 502);
     if ($path === '/users/admins') fu_out(array_values($state['users']));
+    if (!empty($state['users_v1_404']) && strpos($path, '/users/admins/') !== 0) fu_out(['code' => 404, 'message' => 'Not found'], 404);
     preg_match('#(\d+)$#', $path, $m);
     $u = $state['users'][$m[1]] ?? null;
     fu_out($u ?? ['code' => 404, 'message' => 'Not found'], $u ? 200 : 404);
@@ -191,7 +198,10 @@ if ($method === 'POST' && $path === '/billing/quotes') {
     $state['quotes'][(string)$id] = $q;
     fu_out($q, 201);
 }
-if ($method === 'GET' && $path === '/billing/quotes') fu_out(array_values((array)($state['quotes'] ?? [])));
+if ($method === 'GET' && $path === '/billing/quotes') {
+    if (!empty($state['quotes_down'])) fu_out(['code' => 502, 'message' => 'Bad gateway (test control)'], 502);
+    fu_out(array_values((array)($state['quotes'] ?? [])));   // every client's: the query is not applied, as a filter uCRM ignored would not be
+}
 if ($method === 'PATCH' && preg_match('#^/billing/quotes/(\d+)/send$#', $path)) fu_out(new stdClass());
 if ($method === 'PATCH' && preg_match('#^/billing/quotes/(\d+)$#', $path, $m)) {
     if (!isset($state['quotes'][$m[1]])) fu_out(['code' => 404], 404);

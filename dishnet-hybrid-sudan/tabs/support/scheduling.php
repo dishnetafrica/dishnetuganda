@@ -235,6 +235,10 @@ window.schIaOpenRequest=function(jobId){
   iaApi('GET','install_auth_prefill',null,'&job_id='+jobId).then(function(d){
     if(d.status!=='success'){ iaSay('⚠ '+(d.message||'Failed'),true); return; }
     var p=d.data, c=p.customer||{}, s=p.suggest||{};
+    // 5.18.85: the customer's latest uCRM quotation fills what it holds; a transport line it lists without a price is asked for
+    var q=p.quote||null, tAsk=!!(q&&q.transport_unpriced);
+    window._iaTransportAsk=tAsk;
+    var amt=function(v){ return (v===null||v===undefined)?'':String(v); };
     var overlay=document.createElement('div'); overlay.id='schIaOverlay';
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:4000;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;';
     var inp='width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px;font-size:14px;box-sizing:border-box;';
@@ -250,15 +254,18 @@ window.schIaOpenRequest=function(jobId){
       +(c.phone?'WhatsApp: '+iaEsc(c.phone):'<span style="color:#b45309">No phone number in uCRM</span>')+'<br>'
       +(c.email?'E-mail: '+iaEsc(c.email):'<span style="color:#b45309">No e-mail address in uCRM</span>')
       +(p.job&&p.job.date_label?'<br>Scheduled: '+iaEsc(p.job.date_label):'')+'</div>'
+      +(q?'<div id="iaQuoteNote" style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:6px;">📄 Filled from quotation <b>'+iaEsc(q.number)+'</b>'+(q.date?' of '+iaEsc(q.date):'')+', the customer\'s latest in uCRM. Check every value: the customer accepts exactly what you send.</div>'
+         :(p.quote_read==='unreadable'?'<div id="iaQuoteNote" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:6px;">The customer\'s quotations could not be read from uCRM: type the charges.</div>':''))
       +'<div style="'+lbl+'">Service</div><input id="iaService" style="'+inp+'" maxlength="160" value="'+iaEsc(s.service||'')+'">'
       +'<div style="'+lbl+'">Starlink kit / equipment</div><input id="iaEquipment" style="'+inp+'" maxlength="160" value="'+iaEsc(s.equipment||'')+'" placeholder="e.g. Starlink Standard Kit x1">'
       +'<div style="'+lbl+'">Installation location</div><input id="iaLocation" style="'+inp+'" maxlength="200" value="'+iaEsc(s.location||'')+'">'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-      +'<div><div style="'+lbl+'">Installation charge ('+iaEsc(p.currency)+')</div><input id="iaInstallation" style="'+inp+'" inputmode="decimal" placeholder="0"></div>'
-      +'<div><div style="'+lbl+'">Transport charge ('+iaEsc(p.currency)+')</div><input id="iaTransport" style="'+inp+'" inputmode="decimal" placeholder="0"></div></div>'
+      +'<div><div style="'+lbl+'">Installation charge ('+iaEsc(p.currency)+')</div><input id="iaInstallation" style="'+inp+'" inputmode="decimal" placeholder="0" value="'+iaEsc(amt(s.installation))+'"></div>'
+      +'<div><div style="'+lbl+'">Transport charge ('+iaEsc(p.currency)+')</div><input id="iaTransport" style="'+inp+(tAsk?'border-color:#f59e0b;':'')+'" inputmode="decimal" placeholder="'+(tAsk?'Agreed amount':'0')+'" value="'+iaEsc(amt(s.transport))+'"></div></div>'
+      +(tAsk?'<div id="iaTransportHint" style="font-size:12px;color:#92400e;margin-top:4px;">The quotation lists transport without a price. Enter the agreed transport charge, or 0 if there is none.</div>':'')
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-      +'<div><div style="'+lbl+'">Other agreed charge ('+iaEsc(p.currency)+')</div><input id="iaOther" style="'+inp+'" inputmode="decimal" placeholder="0"></div>'
-      +'<div><div style="'+lbl+'">What for</div><input id="iaOtherLabel" style="'+inp+'" maxlength="80" placeholder="e.g. Extra cable 30 m"></div></div>'
+      +'<div><div style="'+lbl+'">Other agreed charge ('+iaEsc(p.currency)+')</div><input id="iaOther" style="'+inp+'" inputmode="decimal" placeholder="0" value="'+iaEsc(amt(s.other))+'"></div>'
+      +'<div><div style="'+lbl+'">What for</div><input id="iaOtherLabel" style="'+inp+'" maxlength="80" placeholder="e.g. Extra cable 30 m" value="'+iaEsc(s.other_label||'')+'"></div></div>'
       +'<div style="font-size:12px;color:#6b7280;margin-top:10px;">Terms sent: '+iaEsc(p.terms_version)+' · the link stays valid for '+iaEsc(p.link_days)+' days, or until 3 days after the scheduled date if that is later.</div>'
       +'<div id="iaFormErr" style="color:#dc3545;font-size:12px;min-height:14px;margin:6px 0;"></div>'
       +'<button onclick="schIaSubmit('+jobId+')" id="iaSubmitBtn" class="sch-act-btn" style="background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:15px;">📨 Send the request</button>'
@@ -272,6 +279,8 @@ window.schIaOpenRequest=function(jobId){
 window.schIaSubmit=function(jobId){
   var v=function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
   var err=document.getElementById('iaFormErr'), btn=document.getElementById('iaSubmitBtn');
+  // 5.18.85: a transport line the quotation lists without a price is never sent as "none" by default — the sender says it
+  if(window._iaTransportAsk && v('iaTransport')===''){ if(err) err.textContent='⚠ Enter the agreed transport charge, or 0 if there is none.'; return; }
   var body={job_id:jobId,service:v('iaService'),equipment:v('iaEquipment'),location:v('iaLocation'),installation:v('iaInstallation')||'0',transport:v('iaTransport')||'0',other:v('iaOther')||'0',other_label:v('iaOtherLabel')};
   if(btn){ btn.disabled=true; btn.textContent='⏳ Sending…'; }
   iaApi('POST','install_auth_request',body).then(function(d){
