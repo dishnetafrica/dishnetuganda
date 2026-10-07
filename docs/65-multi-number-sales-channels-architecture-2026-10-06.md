@@ -779,7 +779,7 @@ conversation's channel; a STOP behaves as D8 decides.
 | D12 | Webhook authentication per channel: a per-channel secret, or confirming with Evolution. |
 
 **Decided 07 Oct, for salespeople's own numbers.** The operator, adding a salesperson (twenty in all), answered three of
-these for a number that belongs to one salesperson:
+these for a number that belongs to one salesperson, and D3 after 5.18.88's deploy:
 - **D4 — *"AI, hand-over to that person (Recommended)"*.** The assistant answers on that number, and a hand-over goes to
   that salesperson. Still open: the pause length, and whether some topics (payments, complaints) go to the central team.
 - **D5 — *"That salesperson, never moved (Recommended)"*.** A lead from that number belongs to that salesperson and is
@@ -787,6 +787,11 @@ these for a number that belongs to one salesperson:
   model (§J option a).
 - **D7 — *"Own chats and leads only (Recommended)"*.** A salesperson sees only their own chats and leads; admins and
   managers see everything.
+- **D3 — *"As [the salesperson]'s assistant (Recommended)"*, decided 07 Oct after 5.18.88's deploy.** On a number that
+  belongs to one salesperson, the assistant says it is that salesperson's assistant at DishNet. It names them by their
+  first name and **never claims to be them**, for example: *"Hi, I'm <first name>'s assistant at DishNet. <First name>
+  will follow up with you personally."* Hand-overs go to that salesperson (D4). This keeps the assistant's standing rule
+  never to impersonate a person. Branding on a retailer's number (D3's other half) stays open.
 
 None of it is built. It binds the design of the next batch: the screen that adds a number, the owner's hand-over, owned
 leads and own-only visibility. The new salesperson's Evolution instance is the intended pilot once it is connected (on
