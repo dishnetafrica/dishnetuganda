@@ -232,13 +232,19 @@ function mn_uganda(string $root, array $parts, int $ucrmPort): array
         $f['k2_reply_stored'] = (int)($q("SELECT COUNT(*) c FROM wa_messages WHERE conversation_id = ? AND direction = 'out' AND body LIKE '%MN-K2%'",
                                         [(int)($conv('256772300001', 'sales-002')['id'] ?? 0)])[0]['c']);
         // J: the same question from two strangers, on the department sales number and on the second sales number —
-        // the same context, the same prompt. The number changes nothing the brain sees.
+        // the same context, the same prompt. The number changes nothing the brain sees, but for one thing since 5.18.89
+        // (docs/65 §AA, D3): sales-002 is a salesperson's own number, so the brain is also told the owner's first name,
+        // for the persona. Without that key the context and the prompt are the department number's, byte for byte.
         $in('256772300011', 'Do you install in Gulu?', 'sj-sales');
         $in('256772300012', 'Do you install in Gulu?', 'sj-sales-2');
         $kj = $runWorker('Yes, we install across Uganda. MN-KJ');
         $c1 = $kj['brain']->contexts[0] ?? []; $c2 = $kj['brain']->contexts[1] ?? [];
-        $f['kj_same_context'] = $c1 !== [] && json_encode($c1) === json_encode($c2);
-        $f['kj_same_prompt']  = $c1 !== [] && $kj['brain']->promptPreview($c1) === $kj['brain']->promptPreview($c2);
+        $c2b = $c2; unset($c2b['line_owner']);
+        $f['kj_same_context'] = $c1 !== [] && json_encode($c1) === json_encode($c2b)
+                              && !array_key_exists('line_owner', $c1) && ($c2['line_owner'] ?? null) === 'Sandbox';
+        $f['kj_same_prompt']  = $c1 !== [] && $kj['brain']->promptPreview($c1) === $kj['brain']->promptPreview($c2b)
+                              && strpos($kj['brain']->promptPreview($c2), "You are Sandbox's assistant at DishNet") !== false
+                              && strpos($kj['brain']->promptPreview($c1), "assistant at DishNet, replying") === false;
         // 14: the channel moved to another instance between the message and the reply.
         $n0 = $nText(); $x0 = $nEvents('wa.escalation');
         $in('256772300004', 'Hello, moved number?', 'sj-sales-2');
@@ -432,10 +438,20 @@ function mn_uganda(string $root, array $parts, int $ucrmPort): array
                            'registry_sends' => count(array_filter($t, function ($c) { return strpos($c['text'], 'MN-F2') !== false; })),
                            'registry_closed' => $closed($b)];
             $flag(true);
+            // 5.18.89 (docs/65 §AA item 6): sales-002 is a salesperson's own number, where follow-ups are held unless
+            // wa_followups_on_owned_numbers is set. The routing this block proves is shown with the hold lifted; the hold
+            // itself, right after.
+            $setCfg(['wa_followups_on_owned_numbers' => '1']);
             $n0 = $nText();
             $s->run('cron/followup_send.php');   // the registry channel's draft, still approved, now routes
             $t = $textsSince($n0);
             $f['f_on_registry'] = array_column(array_filter($t, function ($c) { return strpos($c['text'], 'MN-F2') !== false; }), 'instance');
+            $setCfg(['wa_followups_on_owned_numbers' => null]);
+            $h4 = $approve('256772700004', 'sales-002', 'MN-F4 held on a salesperson\'s own number');
+            $n0 = $nText();
+            $s->run('cron/followup_send.php');
+            $f['f_owned_held'] = ['sends' => count(array_filter($textsSince($n0), function ($c) { return strpos($c['text'], 'MN-F4') !== false; })),
+                                  'closed' => $closed($h4)];
             $reg()->setStatus('sales-002', 'retired', 'routing test', 'retired for the follow-up test');
             $c3 = $approve('256772700003', 'sales-002', 'MN-F3 never sent');
             $n0 = $nText();
@@ -584,7 +600,7 @@ is_($f['k2_ctx_leaks'] === [false, false, false, false], 'J. the brain is never 
 is_($f['k2_history_isolated'], 'J. the history is this conversation\'s: nothing from the same customer\'s chat on another number');
 is_($f['k1_conv_crm'] === 77 && $f['k2_identity'][0] === 77 && $f['k2_identity'][1] === 'identified', '10. the customer\'s identity is global: the same uCRM client on both numbers', $j([$f['k1_conv_crm'], $f['k2_identity']]));
 is_($f['k2_reply_stored'] === 1, 'the reply is stored in the second number\'s conversation', (string)$f['k2_reply_stored']);
-is_($f['kj_same_context'] && $f['kj_same_prompt'], 'J. the same question on the department number and the second number: the same context and the same prompt — one brain');
+is_($f['kj_same_context'] && $f['kj_same_prompt'], 'J. the same question on the department number and the second number: the same context and the same prompt but for the owner\'s first name and the persona it sets (5.18.89, D3) — one brain');
 is_($f['k4']['customer_sends'] === 0 && $f['k4']['holding_line'] === 0 && $f['k4']['brain_called'] === 0, '14. the channel moved after the message arrived: nothing is sent to the customer, not even a holding line', $j($f['k4']));
 is_($f['k4']['state'] === 'needs_human' && $f['k4']['escalations'] === 1 && $f['k4']['alert_sends'] === 1 && $f['k4']['log'], '14. a person is told: the chat is marked, the escalation is queued, the staff alert goes', $j($f['k4']));
 is_($f['k5']['customer_sends'] === 0 && $f['k5']['holding_line'] === 0 && $f['k5']['brain_called'] === 0 && $f['k5']['log'], 'a channel switched off after the message arrived: nothing sent', $j($f['k5']));
@@ -638,7 +654,9 @@ if (($f['f_zone'] ?? '') === '') {
 } else {
     is_($f['f_off']['sales'] === ['sj-sales'], 'a follow-up on a sales chat leaves on the sales number', $j($f['f_off']));
     is_($f['f_off']['registry_sends'] === 0 && $f['f_off']['registry_closed'] === null, 'OFF: a registry channel\'s follow-up is not sent from any number (it waits)', $j($f['f_off']));
-    is_($f['f_on_registry'] === ['sj-sales-2'], 'ON: it leaves on its own number', $j($f['f_on_registry']));
+    is_($f['f_on_registry'] === ['sj-sales-2'], 'ON, with wa_followups_on_owned_numbers set: it leaves on its own number', $j($f['f_on_registry']));
+    is_($f['f_owned_held'] === ['sends' => 0, 'closed' => 'cancelled'],
+        'ON, by default (5.18.89): a follow-up on a salesperson\'s own number is closed, never sent', $j($f['f_owned_held']));
     is_($f['f_retired'] === ['sends' => 0, 'closed' => 'cancelled'], 'a retired number\'s follow-up is closed, never sent', $j($f['f_retired']));
 }
 

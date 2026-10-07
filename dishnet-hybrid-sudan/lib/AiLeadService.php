@@ -105,6 +105,19 @@ class AiLeadService
         return $this;
     }
 
+    /** @var LineOwner|null 5.18.89: the salesperson whose own number the next lead comes in on; null = a department's */
+    private ?LineOwner $owner = null;
+
+    /**
+     * 5.18.89 (docs/65 §AA, decision D5): the salesperson whose own number the next capture() comes in on, or null. A
+     * NEW lead from their number is theirs from the start; an existing lead keeps whoever has it (D2 is open).
+     */
+    public function withOwner(?LineOwner $owner): self
+    {
+        $this->owner = $owner;
+        return $this;
+    }
+
     /**
      * Create or update the lead for this conversation.
      *
@@ -146,8 +159,9 @@ class AiLeadService
         // withLock so two messages arriving together cannot both decide the
         // lead does not exist and both create it.
         $originRow = $this->cleanOrigin($origin);
+        $owner     = $this->owner;
         $this->store->withLock('leads.json', function (array $leads) use (
-            $clean, $phone, $convId, $source, $originRow, &$result
+            $clean, $phone, $convId, $source, $originRow, $owner, &$result
         ): array {
             // A conversation already linked to a lead IS that lead, whatever
             // the phone matcher would say.
@@ -172,6 +186,19 @@ class AiLeadService
             }
 
             $lead = $this->newLead($clean, $phone, $convId, $source, $now) + $originRow;
+            // 5.18.89 (docs/65 §AA, D5): it came in on a salesperson's own number, so it is theirs — assigned now, with
+            // the reason in its history. Only when the origin names the same person (one ChannelContext made both).
+            if ($owner !== null && ($originRow['channel_owner_type'] ?? '') === 'staff'
+                && (int)($originRow['channel_owner_id'] ?? 0) === $owner->id()) {
+                $by = 'channel:' . (string)($originRow['channel_id'] ?? '');
+                $lead['assigned_to']   = $owner->id();
+                $lead['assigned_name'] = $owner->name();
+                $lead['assigned_at']   = $now;
+                $lead['assigned_by']   = $by;
+                $lead['history']       = [['status' => 'open', 'by' => $by, 'at' => $now,
+                                           'note' => 'Assigned to ' . $owner->name()
+                                                   . ': the customer wrote to their own WhatsApp number']];
+            }
             $lead['id'] = $this->nextId($leads);
             $leads[]    = $lead;
             $result = ['ok' => true, 'action' => 'created',

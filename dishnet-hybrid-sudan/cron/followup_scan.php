@@ -40,6 +40,13 @@ $now = gmdate('Y-m-d H:i:s');
 require_once $pluginRoot . '/lib/ColleagueNumbers.php';
 $colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
 
+// 5.18.89 (docs/65 §AA item 6): with the channel registry on, a conversation on a salesperson's own number is never
+// opened — they follow up personally. It is left out of the query below, so it takes none of this scan's places.
+// wa_followups_on_owned_numbers lifts the hold. Registry off: nothing is held and the query is unchanged.
+require_once $pluginRoot . '/lib/OwnedNumberHold.php';
+$ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
+[$holdSql, $holdArgs] = $ownedHold->sqlExclusion('c.channel');
+
 $maxAge  = (float)($config['followup_max_age_hours'] ?? 336);   // two weeks
 $perScan = (int)($config['followup_scan_limit'] ?? 25);
 
@@ -54,7 +61,7 @@ $sql = "SELECT c.* FROM wa_conversations c
            AND c.state != 'human_active'
            AND c.last_customer_at IS NOT NULL
            AND c.last_customer_at <= ?
-           AND c.last_customer_at >= ?
+           AND c.last_customer_at >= ?" . $holdSql . "
          ORDER BY c.last_customer_at DESC
          LIMIT ?";
 
@@ -80,7 +87,7 @@ if ($floor !== '' && $floor > $notBefore) $notBefore = $floor;
 $opened = 0; $skipped = 0;
 try {
     $st = $pdo->prepare($sql);
-    $st->execute([$quietSince, $notBefore, $perScan]);
+    $st->execute(array_merge([$quietSince, $notBefore], $holdArgs, [$perScan]));
     $rows = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
 } catch (\Throwable $e) {
     error_log('[followup_scan] ' . $e->getMessage());
@@ -90,6 +97,7 @@ try {
 foreach ($rows as $conv) {
     $f = FollowUpPolicy::isFollowable($conv, $now, $maxAge, $colleagues !== null);
     if (!$f['ok']) { $skipped++; continue; }
+    if ($ownedHold->holds((string)$conv['channel'])) { $skipped++; continue; }   // the query already left these out
     if ($colleagues !== null && $colleagues->isColleague((string)$conv['phone'])) {
         $svc->log(null, (int)$conv['id'], 'skipped', "a colleague's number", 'scan');
         $skipped++;

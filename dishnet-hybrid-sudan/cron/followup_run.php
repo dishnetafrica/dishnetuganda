@@ -64,6 +64,11 @@ $evaluator = new FollowUpEvaluator($sel['client'], $config);
 require_once $pluginRoot . '/lib/ColleagueNumbers.php';
 $colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
 
+// 5.18.89 (docs/65 §AA item 6): a follow-up open on a salesperson's own number (opened while
+// wa_followups_on_owned_numbers was on) is closed here, before any model call. Registry off: nothing is held.
+require_once $pluginRoot . '/lib/OwnedNumberHold.php';
+$ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
+
 $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money
 $drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0; $autoSent = 0;
@@ -78,6 +83,11 @@ foreach ($svc->due($now, $perRun) as $fu) {
     if ($colleagues !== null
         && ($colleagues->isColleague((string)$fu['phone']) || $colleagues->isColleagueConversation($conv))) {
         $svc->close((int)$fu['id'], 'staff', "a colleague's number");
+        $closed++;
+        continue;
+    }
+    if ($ownedHold->holds((string)$fu['channel'])) {
+        $svc->close((int)$fu['id'], 'cancelled', OwnedNumberHold::REASON);
         $closed++;
         continue;
     }

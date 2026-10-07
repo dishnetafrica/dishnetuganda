@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => []];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -34,7 +34,7 @@ if ($path === '/__test/state') {
 }
 // Phase 2 test controls: start from nothing, and make the next N text sends fail.
 if ($path === '/__test/reset') {
-    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => []];
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => []];
     fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
 }
 // 5.18.53: hold the next text send until the test releases it — a WhatsApp as slow to answer as the test needs, so that
@@ -51,11 +51,25 @@ if ($path === '/__test/fail_next') {
     // that pass no code keep the original 500 behaviour exactly.
     $state['fail_status'] = (int)($_GET['code'] ?? 500) ?: 500;
     fe2_out(['fail_next' => $state['fail_next'], 'fail_status' => $state['fail_status'], 'marker' => 'FAKE-EVO-TEST']);
-}if ($path === '/instance/fetchInstances') {
+}
+// 5.18.89 (salesperson numbers): the instance list a test needs — POST a JSON list of rows as fetchInstances answers them
+// (name, connectionStatus, ownerJid, profileName); an empty list is "no instances". ?default=1 goes back to the one
+// default instance below.
+if ($path === '/__test/instances') {
+    $state['instances'] = !empty($_GET['default']) ? null : array_values($body);
+    fe2_out(['instances' => $state['instances'], 'marker' => 'FAKE-EVO-TEST']);
+}
+if ($path === '/instance/fetchInstances') {
+    if (is_array($state['instances'] ?? null)) fe2_out($state['instances']);
     fe2_out([[
         'name' => 'dishnet_ug', 'connectionStatus' => 'open',
         'ownerJid' => '256705993348@s.whatsapp.net', 'profileName' => 'FAKE EVO TEST',
     ]]);
+}
+// 5.18.89: pairing — a QR (base64 of a fixed test string) and a pairing code, and the call recorded.
+if (preg_match('#^/instance/connect/(.+)$#', $path, $m)) {
+    $state['connect_calls'][] = rawurldecode($m[1]);
+    fe2_out(['base64' => base64_encode('FAKE-QR-' . rawurldecode($m[1])), 'pairingCode' => 'FAKECODE']);
 }
 if (preg_match('#^/webhook/find/(.+)$#', $path, $m)) {
     fe2_out($state['webhooks'][$m[1]] ?? new stdClass());

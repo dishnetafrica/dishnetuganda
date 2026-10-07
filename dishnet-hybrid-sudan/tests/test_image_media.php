@@ -783,7 +783,7 @@ $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_image' => ['bool',") !== false && strpos($sc, "'ai_media_image_timeout_s' => ['number',") !== false && strpos($sc, "'ai_image_provider' => ['text',") !== false, 'set_config.php manages the image settings');
 $scOut = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . ' --key ai_image_provider --value fake 2>&1; echo "rc=$?"');
 is_(strpos((string)$scOut, 'none is the only value today (docs/57)') !== false && strpos((string)$scOut, 'rc=1') !== false, 'the tool refuses a vision provider that does not exist, the fake included', (string)$scOut);
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.86', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.89', 'manifest version is 5.18.81');
 
 echo "\n18. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [

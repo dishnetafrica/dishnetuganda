@@ -53,7 +53,59 @@ class AlertService
     {
         $to = $this->target();
         if ($to === '') { $this->record($key, '', $text, null, 'no_alert_number'); return ['sent' => false, 'reason' => 'no_alert_number']; }
+        return $this->sendTo($to, $key, $text, $cooldownMin);
+    }
 
+    /**
+     * 5.18.89 (docs/65 §AA, D4): one alert to a number the caller names — a salesperson's own phone — with the same
+     * cooldown, lock and record as notify(). Still sent from the DishNet sales number: never from a person's line.
+     *
+     * @return array{sent:bool,reason:string}
+     */
+    public function notifyTo(string $to, string $key, string $text, int $cooldownMin = 240): array
+    {
+        $to = (string)preg_replace('/[^0-9+]/', '', $to);
+        if ($to === '') return ['sent' => false, 'reason' => 'no_number'];
+        return $this->sendTo($to, $key, $text, $cooldownMin);
+    }
+
+    /**
+     * 5.18.89 (docs/65 §AA, decision D4): the hand-over alert for one conversation.
+     *
+     * No owner (every department number, and the registry off): exactly the alert the hand-over always sent — the same
+     * key, the same text, the central alert number. A salesperson's own number: the salesperson is alerted on their
+     * phone, and the central number gets a copy naming the line (the operator's 07 Oct choice;
+     * wa_handover_copy_central, default ON). An owner with no phone on record: the central number, always.
+     *
+     * @return array<string,array{sent:bool,reason:string}> keyed 'owner' and/or 'central'
+     */
+    public function handover(int $convId, string $phone, string $channel, string $reason, ?LineOwner $owner = null): array
+    {
+        $why = $reason !== '' ? " — {$reason}" : '';
+        if ($owner === null) {
+            return ['central' => $this->notify('escalate:conv:' . $convId,
+                "🔴 DishNet: the AI needs a human for {$phone} ({$channel}){$why}. Open Engage → WhatsApp → Inbox.", 30)];
+        }
+        $out = [];
+        $ownerPhone = $owner->phone();
+        if ($ownerPhone !== null) {
+            $out['owner'] = $this->notifyTo($ownerPhone, 'escalate:conv:' . $convId . ':owner',
+                "🔴 DishNet: a customer on your WhatsApp line needs you — {$phone}{$why}. Reply to them from your phone.", 30);
+        }
+        // Absent, or saved empty, means ON: the copy is the decision, switching it off the exception.
+        $raw  = $this->config['wa_handover_copy_central'] ?? null;
+        $copy = ($raw === null || $raw === '') ? true : filter_var($raw, FILTER_VALIDATE_BOOLEAN);
+        if ($copy || $ownerPhone === null) {
+            $out['central'] = $this->notify('escalate:conv:' . $convId,
+                "🔴 DishNet: the AI needs a human for {$phone} ({$channel}, {$owner->firstName()}'s line){$why}. "
+                . 'Open Engage → WhatsApp → Inbox.', 30);
+        }
+        return $out;
+    }
+
+    /** @return array{sent:bool,reason:string} */
+    private function sendTo(string $to, string $key, string $text, int $cooldownMin): array
+    {
         $now = time();
         if ($cooldownMin > 0 && $this->lastSent($key) > $now - $cooldownMin * 60) {
             return ['sent' => false, 'reason' => 'cooldown'];

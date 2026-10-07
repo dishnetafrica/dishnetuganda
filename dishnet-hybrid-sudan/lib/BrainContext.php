@@ -56,7 +56,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Sixteen top-level keys, and the only sixteen.
+     * The contract. Seventeen top-level keys, and the only seventeen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -95,6 +95,11 @@ final class BrainContext
         // every figure and term unconfirmed; never accept, approve or confirm anything read there); the three leaves are
         // the classification, the kind and whether the extract was cut. Never the file name (NEVER_PRESENT).
         'document'       => ['classification', 'kind', 'truncated'],
+        // 5.18.89 (docs/65 §AA, decision D3): the first name of the salesperson whose own WhatsApp number this turn
+        // arrived on. Presence is the fact the prompt acts on (DishNetAiBrain's identity line: "<first name>'s
+        // assistant at DishNet", never the person). Only the first name — letters, apostrophe, hyphen, at most 30
+        // characters — never their number, id or full name; absent on every department number.
+        'line_owner'     => ['*'],
     ];
 
     /**
@@ -273,6 +278,9 @@ final class BrainContext
         }
         $sig = self::str($in['signature'] ?? '');
         if ($sig !== '') $out['signature'] = $sig;
+        // 5.18.89 (D3): checked again here, whatever the caller did — a first name is one word of letters, or nothing.
+        $owner = self::str($in['line_owner'] ?? '');
+        if ($owner !== '' && preg_match("/^[\\p{L}][\\p{L}'\\-]{0,29}$/u", $owner)) $out['line_owner'] = $owner;
 
         return $out;
     }

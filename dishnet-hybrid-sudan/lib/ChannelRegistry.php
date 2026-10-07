@@ -265,6 +265,60 @@ final class ChannelRegistry
         $this->change($id, 'evo_instance', 'instance', $inst, $actor, $reason);
     }
 
+    /**
+     * 5.18.89 (docs/65 §AA.1): record the number a channel's instance is paired with, as Evolution itself reports it.
+     *
+     * The caller passes what Evolution said — the paired account's number, read from fetchInstances on the server —
+     * never a value somebody typed: a typed number is a claim, the report is the binding. Writes the number with
+     * verified_at and verified_by in one transaction with a trail row, which carries the number MASKED, like every other
+     * place outside the row itself. A department's number is configuration, not the registry's, and is refused here.
+     */
+    public function verifyNumber(string $id, string $number, string $actor, string $reason): void
+    {
+        $actor = $this->actor($actor);
+        if (in_array($id, self::DEPARTMENT, true)) {
+            throw new \InvalidArgumentException("{$id} is a department number: its instance is configuration, not the registry's");
+        }
+        $row = $this->row($id);
+        if ($row === null) throw new \InvalidArgumentException("no channel {$id}");
+        $raw = trim($number);
+        if (!preg_match('/^\+?[0-9]{8,15}$/', $raw)) throw new \InvalidArgumentException('business number: international form, 8 to 15 digits');
+        $n = '+' . ltrim($raw, '+');
+        $s = $this->pdo->prepare('SELECT channel_id FROM wa_channels WHERE business_number = ? AND channel_id <> ?');
+        $s->execute([$n, $id]);
+        $other = $s->fetchColumn();
+        if ($other !== false) throw new \InvalidArgumentException("that number is already channel {$other}'s");
+        $old = $row['business_number'] ?? null;
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare("UPDATE wa_channels SET business_number = ?, verified_at = datetime('now'), verified_by = ?,
+                                        updated_at = datetime('now') WHERE channel_id = ?")
+                      ->execute([$n, $actor, $id]);
+            $this->trailRow($id, 'number', $old === null ? null : self::mask((string)$old), self::mask($n), $actor, $reason);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * 5.18.89 (docs/65 §AA.1): give a salesperson's number to another salesperson — the one who left keeps nothing.
+     *
+     * Staff-owned channels only: a department number has no owner and a partner's number is a later batch's. The new
+     * owner must be an active staff row. The trail keeps the previous owner.
+     */
+    public function setOwner(string $id, int $staffId, string $actor, string $reason): void
+    {
+        $row = $this->row($id);
+        if ($row === null) throw new \InvalidArgumentException("no channel {$id}");
+        if ((string)($row['owner_type'] ?? '') !== 'staff') {
+            throw new \InvalidArgumentException("{$id} is not a salesperson's number (owner type " . (string)($row['owner_type'] ?? '?') . ')');
+        }
+        $this->staffOrFail($staffId);
+        $this->change($id, 'owner_staff_id', 'owner', $staffId, $actor, $reason);
+    }
+
     /** @return array<int,array> the trail of one channel, oldest first */
     public function trail(string $id): array
     {

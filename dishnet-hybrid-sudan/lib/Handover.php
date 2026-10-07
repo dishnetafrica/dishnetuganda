@@ -20,7 +20,7 @@ final class Handover
     public static function escalate(\PDO $pdo, EventBus $bus, $store, array $config, EvolutionApiService $evo,
                                     ConversationService $convSvc, int $convId, string $channel, string $phone,
                                     string $reason, bool $alreadyAnswered, callable $log,
-                                    string $source = 'ai_reply_worker'): void
+                                    string $source = 'ai_reply_worker', ?LineOwner $owner = null): void
     {
         $log('info', "conv {$convId}: HANDOFF to human — {$reason}");
         try {
@@ -41,12 +41,12 @@ final class Handover
             // escalation three times in a row is one buzz, not three.
             if (!class_exists('AlertService')) require_once __DIR__ . '/AlertService.php';
             $alerts = new \AlertService($store, $config, $evo);
-            $alerts->notify(
-                'escalate:conv:' . $convId,
-                "🔴 DishNet: the AI needs a human for {$phone} ({$channel})"
-                . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
-                30
-            );
+            // 5.18.89 (docs/65 §AA, D4): on a salesperson's own number the salesperson is alerted too; with no owner
+            // this is the alert it always was — the same key, the same text, the central number.
+            $sent = $alerts->handover($convId, $phone, $channel, $reason, $owner);
+            if ($owner !== null && !isset($sent['owner'])) {
+                $log('warn', "conv {$convId}: the line's owner has no phone on record — the central alert number only");
+            }
 
             // ── And tell the customer ────────────────────────────────────
             // A handoff sent them nothing at all. The team gets a buzz, the

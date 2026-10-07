@@ -7172,3 +7172,76 @@ later commit.
 
 No configuration changed, no switch set, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
 operator's decision.
+
+## 07 Oct — Multi-number sales, Batch 2 (5.18.89): salesperson numbers, dark — the card, the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only, the follow-up hold, the guard's watch; BUILT in development, NOT pushed, NOT deployed
+
+**Why.** After 5.18.88's deploy the operator asked to connect another salesperson's own WhatsApp number, with the
+assistant replying in that salesperson's name. The operator's answers, 07 Oct (the salesperson is named in the chat, not
+here):
+- **D3** — *"As [the salesperson]'s assistant (Recommended)"*: on a salesperson's own number the assistant is that
+  salesperson's assistant at DishNet, names them by first name and never claims to be them (`docs/65` §W).
+- **Batch 2** — *"Yes, start Batch 2 (Recommended)"*: built and rehearsed like 5.18.88, the push and the deploy approved
+  separately, and the salesperson's number connected only after that, as the first salesperson number.
+- **D4** — *"[The salesperson] + copy to central (Recommended)"*: a hand-over alerts the salesperson, with a copy to the
+  central alert number.
+- **Managers** — *"Admins + 'All Leads' grant (Recommended)"*: who sees every lead when own leads only is on.
+- **Chats** — *"On his phone only (Recommended)"*: the salesperson answers on their own phone; the Inbox gets no
+  per-salesperson view.
+
+**The record is `docs/65` §AA (the design) and §AB (as built).** In short, all behind `multi_number_channels_enabled`,
+which stays OFF, unless said otherwise:
+- **The card** (`lib/SalesNumbersAdmin.php`, `tabs/engage/wa_ai_setup.php`) — *Salesperson numbers* on the WhatsApp AI
+  screen, Uganda, admin only, shown wherever 087 has run **with the switch on or off** — the one thing that shows while
+  the switches are off. Add (switched off), pair, verify the number Evolution reports, register the webhook, switch on
+  (refused until the registry is on, the number verified and its owner active), pause, switch off, retire, the
+  assistant on or off, a new owner. Two new registry writers: `verifyNumber()`, `setOwner()`.
+- **The assistant (D3)** — `lib/LineOwner.php`; `line_owner` in `BrainContext` and `ShopBotPayload`; the identity line
+  and rule 4a in `DishNetAiBrain` read one answer, WhatsApp only. **With no owner the prompt is byte for byte the brain's
+  before Batch 2.**
+- **The hand-over (D4)** — `AlertService::handover()`: no owner → exactly the old alert; an owner → their phone, and the
+  central copy (`wa_handover_copy_central`, absent means ON).
+- **Owned leads (D5)** — a new lead from a salesperson's number is theirs (`AiLeadService::withOwner()`), and
+  `lib/OwnedLead.php` keeps it with them: the 72 h cron, smart distribution and the daily rota leave it alone; the
+  admin's `assign_leads` still moves it, writing a history note.
+- **Own leads only (D7)** — `lib/LeadVisibility.php`, behind its own switch `sales_own_leads_only` (absent means OFF,
+  Uganda only): the Leads page, the quote picker, the More menu's count, four lead handlers and the call log.
+- **Follow-ups** — `lib/OwnedNumberHold.php`: the scan, the drafter and the sender leave a salesperson's number alone
+  unless `wa_followups_on_owned_numbers` is set.
+- **The webhook guard** — also watches every active salesperson's number with the registry on.
+
+**Proofs:**
+- `tests/test_sales_numbers.php` (new) **128 passed, 0 failed, in both counted passes** — in-process facts, the golden prompts (24 against
+  `7195253`'s brain, identical), the real plugin under `php -S` (pages, handlers, API, crons, the card through its forms,
+  the worker end to end), South Sudan with every switch set, and **17 weakened copies, each caught**.
+- `tests/test_multi_number_routing.php` **90 passed** — two assertions rewritten to the new truth, not deleted (its second
+  sales number is a salesperson's: *"one brain"* allows exactly the persona; its follow-up is held unless the switch
+  lifts the hold). `tests/test_brain_context.php` — the new key's facts; its test names are fictitious (`Sandbox`).
+- **Full suite, twice** — every `tests/run.sh` file, through the resumable runner described in Batch 1's entry (pass A 12:10–12:52, pass B
+  12:52–13:36 UTC): **286 files, 13,862 passed, 0 failed, 0 skipped — twice**, every file's tally identical in both
+  passes, checked file by file. PHP warnings: 5 per pass, all from `test_dpo_endpoints`, as before.
+- **South Sudan: the full suite caught one byte.** The first counted pass (11:28–12:08 UTC) failed one file,
+  `test_staff_jobs_south_sudan`: the WhatsApp AI setup page on South Sudan was one byte longer than 5.18.49's. The card's
+  block, skipped there, left a blank line after its `endif`, and that newline reached the page. Removed (both the
+  development and the release copy); the test passed again, 51 passed, 0 failed; both counted passes were then run again
+  from scratch on the corrected code. In both passes: `test_staff_jobs_south_sudan` 51/0, `test_staff_jobs_gate` 41/0, `test_tenant_profile` 108/0,
+  `test_portal_tenant` 112/0, `test_email_no_sudan` 62/0, `test_sales_support_tenant` 37/0, `test_notify_tenant_text`
+  30/0, `test_cashbook_tenant` 26/0, `test_phone_country` 26/0, `test_ai_country_facts` 21/0; and `test_sales_numbers`'
+  South Sudan part, every switch set, applies nothing.
+- **Domain B:** no file under `dishnet-mikrotik-control-plane/` or `dishnet-hybrid-sudan/docs/` changed.
+- PHP lint of every changed PHP file: clean; nothing newer than PHP 7.4. `git diff --check`: clean. Secret scan of the diff
+  and the new files: clean — every phone-shaped value in the tests is a fictitious fixture in the style the existing tests
+  use (`256772700004` continues `test_multi_number_routing`'s own series), no banned value, no key or token.
+
+**Flags:** `multi_number_channels_enabled` OFF; `sales_own_leads_only`, `wa_handover_copy_central` and
+`wa_followups_on_owned_numbers` new and set nowhere (`tools/set_config.php` lists all three). No other flag read or
+changed.
+
+**Production impact if this were deployed with the switches as they are:** admins see the *Salesperson numbers* card on
+the WhatsApp AI screen (Uganda); nothing else changes — every conversation is a department's, so the prompt, the
+hand-over, the leads and the follow-ups are exactly 5.18.88's. Not deployed; the release and its deploy script are the
+next entry.
+
+**Rollback:** nothing is deployed. Before a deployment: the switches off disable everything but the card; the code is
+undone by deploying 5.18.88 again; there is no migration.
+
+**Git:** a local commit on `claude/study-this-jhe2eg`; not pushed. `docs/59` stays untracked by the operator's decision.

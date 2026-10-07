@@ -1111,3 +1111,135 @@ Evolution instance exists, not connected. Batch 2 makes that number work end to 
 - an in-plugin chat view for salespeople;
 - owner notifications beyond the hand-over and the existing lead alerts;
 - the media layer.
+
+## AB. Batch 2 as built (5.18.89, development, 07 Oct) — dark; NOT pushed, NOT deployed
+
+Built on the development branch as §AA designed it, behind the same switch, `multi_number_channels_enabled`, which stays
+OFF. Where the build went beyond the design, or stops short of it, the item says so.
+
+### AB.1 What is built
+
+1. **The screen** — a *Salesperson numbers* card on the WhatsApp AI screen (`tabs/engage/wa_ai_setup.php`); its rules
+   live in `lib/SalesNumbersAdmin.php`. It shows on Uganda wherever migration 087 has run, with the registry switch on
+   or off, and never on South Sudan. Admin only: the screen is, every action checks again, and every form carries the
+   screen's own CSRF check. The card lists every registry number — the three departments first, read-only (*"changed
+   under Numbers"*) — with the business number masked, the owner, the status, the assistant's switch, Evolution's state
+   and the last three trail rows. Its actions, each through `ChannelRegistry` with the admin's name and a reason:
+   - **add** — an instance Evolution reports and nobody uses (no department's in the configuration, no other number's),
+     an active salesperson (role `sales`, `sales_staff` or `field_agent`) and a display name (default *"Sales —
+     [their name]"*). The id is `sales-NNN`, the next free number; ids are never reused, because a channel is never
+     deleted. Role `sales`, owner `staff`, `handover_to = owner`, `portfolio_scope = own`, status **disabled**.
+   - **pair** — Evolution's QR code (and pairing code) for that number's instance.
+   - **verify** — the number Evolution reports for that instance (`fetchInstances`), only while it is connected,
+     through the new `ChannelRegistry::verifyNumber()`. It writes the number, `verified_at`, `verified_by`, and a trail
+     row with the number masked. Never typed.
+   - **webhook** — the plugin's webhook on that instance. The address and its secret go straight to Evolution and appear
+     on no page.
+   - **switch on** — refused until the registry switch is on, the number is verified and its owner is an active staff
+     member: the go-live order of §AA.3, enforced.
+   - **pause, switch off, retire** — retiring needs a ticked confirmation, and a retired number takes no further change.
+   - **assistant on/off** and **new owner** — the new `ChannelRegistry::setOwner()`, a salesperson only. The trail
+     keeps the previous owner.
+
+   *Found in Evolution* now marks an instance a salesperson's number uses as *in use*, so it is never offered to a
+   department. That card still shows an admin each instance's own number, as Evolution reports it, as it did before.
+2. **The assistant (D3).** `lib/LineOwner.php` finds the owner of a staff-owned, active number whose owner is an active
+   staff member with a usable first name. The AI worker asks once per turn, and only with the registry on.
+   - `line_owner` is a new key in `BrainContext` and in the external brain's payload (`ShopBotPayload`). It holds the
+     first name only: one word of letters, apostrophe and hyphen, at most 30 characters. `DishNetAiBrain` checks it
+     again.
+   - The identity line then says the assistant is [the salesperson]'s assistant at DishNet. It is not them, never signs
+     as them, and promises nothing on their behalf except that they will follow up personally. Rule 4a lets it use that
+     one name.
+   - WhatsApp only, never by e-mail or in the website chat. The identity line and rule 4a read one answer, so they
+     cannot disagree.
+   - **Without an owner, the prompt is byte for byte the brain's before Batch 2.** 24 prompts were compared against
+     `7195253`'s brain.
+3. **The hand-over (D4)** — `AlertService::handover()`.
+   - **No owner:** exactly the old alert — the same key, the same words, the central number.
+   - **An owner:**
+     - the salesperson's phone, under key `escalate:conv:N:owner` with a 30-minute cooldown;
+     - and the copy to the central number naming the line. That copy is `wa_handover_copy_central`, default ON; an
+       empty value counts as absent.
+   - **No phone on record:** the central number, and a log line saying why.
+   - Both are sent from the DishNet sales number. This happens only on a number whose `handover_to` is `owner`, which
+     the screen sets.
+4. **Owned leads (D5).**
+   - **At capture:** a NEW lead from a salesperson's number is assigned to them, with `assigned_by = channel:<id>` and a
+     history row.
+   - **The rule:** `lib/OwnedLead.php` protects the lead while it came from a staff-owned number, is still with that
+     owner, and the owner is active.
+   - **What leaves it alone:**
+     - `cron_leads.php`'s 72 h reassignment and 48 h warning skip it, and say how many they skipped;
+     - the admin's smart distribution leaves it out;
+     - **the Leads page's daily rota puts it on nobody's call list.** The design did not name the rota; without this it
+       would hand the lead to other callers every day.
+   - **Deliberate moves still work** — the admin's `assign_leads` and the leave cover (`reassign_agent_leads`).
+     `assign_leads` now writes a history row when an owned lead leaves its owner; the leave cover always wrote one.
+   - **An existing lead** keeps whoever has it (D2 stays open).
+   - **The lead alerts** (`cron_lead_alerts.php`) treat it as any assigned lead: the owner is told it is theirs, then
+     warned at 45 minutes, and the supervisor at 60 if no call is logged. **For the pilot:** a salesperson who answers on
+     WhatsApp without logging a call will trigger that 60-minute escalation.
+5. **Own leads only (D7)** — `lib/LeadVisibility.php`, behind `sales_own_leads_only` (default OFF; Uganda only).
+   - **A manager** is an admin, or anyone with All Leads by the page's own rule: an RBAC grant, the person's module list,
+     or the role default.
+   - **ON:** a salesperson sees and acts on a lead only if it is assigned to them, created by them, or on their call list
+     today.
+   - **Where it is checked:**
+     - the Leads page — every list, every count, and a lead opened by id; the check runs after the rota has saved;
+     - the quote page's lead picker and the More menu's count;
+     - `save_lead`, `send_lead_quote`, `update_lead_status` and `convert_lead`;
+     - the call log (`log_call`).
+   - **A refused lead** is answered *"Lead not found."* (404 on the API).
+   - **Beyond the design:** the design named only the status change and the call log. The quote picker, the menu count
+     and the other three handlers had the same leak.
+6. **Follow-ups (§AA item 6)** — `lib/OwnedNumberHold.php`. With the registry on, every salesperson's number is held
+   unless `wa_followups_on_owned_numbers` is set, **at all three steps**:
+   - the scan never opens one — those chats are left out of its query, so they take none of its 25 places;
+   - the drafter closes an open one before any model call;
+   - the sender closes an approved one before any send.
+
+   The departments are never held. A registry that cannot be read holds every number but the departments.
+7. **The webhook guard.** With the registry on it also watches every ACTIVE number's instance. A paused or switched-off
+   one is not re-registered, and the disconnected alert names the number. Registry off, or unreadable: the three
+   departments, exactly as before.
+
+**Switches** (`tools/set_config.php`):
+- `wa_handover_copy_central` — absent means ON;
+- `wa_followups_on_owned_numbers` — absent means OFF;
+- `sales_own_leads_only` — absent means OFF.
+
+`multi_number_channels_enabled` stays OFF.
+
+### AB.2 Known, and not done
+
+- **The media worker's hand-overs** still alert the central number alone. They exist on the development branch only;
+  production has no media layer.
+- **A staff row with no `is_active` field:** `cron_leads.php` counts it as active, `OwnedLead` does not, so a lead owned
+  by such a row is not protected. Every row the plugin writes carries the field.
+- **Counts outside the Leads area** still count every lead — the staff API's LTE dashboard. Counts only; no lead is
+  shown.
+- **The call-recording upload** (`upload_call_recording`) is not checked. It stores a file against the lead id the phone
+  app sends, and reads nothing from the lead.
+- **Pre-existing, observed, not changed:** the Leads page's add/edit form posts actions (`add_lead`, `update_lead`) that
+  no handler answers.
+- **The salesperson is not told** when their number disconnects; the guard alerts the central number.
+- §AA.4 stands.
+
+### AB.3 Tests
+
+- **`tests/test_sales_numbers.php`** (new) covers:
+  - in-process facts: the two writers, `LineOwner`, the persona, the hand-over, the lead's owner, `OwnedLead`,
+    `LeadVisibility`, the hold and the screen's service;
+  - the golden prompts against `7195253`;
+  - the real plugin under `php -S`: the pages, the handlers, the API, the crons, the screen through its forms, and the
+    worker end to end;
+  - South Sudan with every switch set;
+  - 17 weakened copies, each caught.
+- **`tests/test_multi_number_routing.php`** — two assertions rewritten to the new truth, not deleted. Its second sales
+  number is a salesperson's, so:
+  - *"one brain"* now allows exactly the persona;
+  - its follow-up is held unless the switch lifts the hold.
+- **South Sudan, found by the full suite.** `test_staff_jobs_south_sudan` compares South Sudan's pages with 5.18.49's,
+  byte for byte. It found the WhatsApp AI setup page one byte longer: the card's block is skipped on South Sudan, but a
+  blank line after its `endif` still reached the page. The blank line is gone, and the page is identical again.
