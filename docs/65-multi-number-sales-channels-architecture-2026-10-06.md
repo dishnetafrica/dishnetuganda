@@ -778,6 +778,20 @@ conversation's channel; a STOP behaves as D8 decides.
 | D11 | The approval boundary for creating Evolution instances on the production server (recorded as Domain A's gateway). |
 | D12 | Webhook authentication per channel: a per-channel secret, or confirming with Evolution. |
 
+**Decided 07 Oct, for salespeople's own numbers.** The operator, adding a salesperson (twenty in all), answered three of
+these for a number that belongs to one salesperson:
+- **D4 — *"AI, hand-over to that person (Recommended)"*.** The assistant answers on that number, and a hand-over goes to
+  that salesperson. Still open: the pause length, and whether some topics (payments, complaints) go to the central team.
+- **D5 — *"That salesperson, never moved (Recommended)"*.** A lead from that number belongs to that salesperson and is
+  never reassigned, so the 72 h workload reassignment leaves it alone. Still open: whether partners' numbers follow the same
+  model (§J option a).
+- **D7 — *"Own chats and leads only (Recommended)"*.** A salesperson sees only their own chats and leads; admins and
+  managers see everything.
+
+None of it is built. It binds the design of the next batch: the screen that adds a number, the owner's hand-over, owned
+leads and own-only visibility. The new salesperson's Evolution instance is the intended pilot once it is connected (on
+07 Oct the WhatsApp settings screen showed it *close*). Batch 1's registry, built and not deployed, is the foundation.
+
 Also outstanding from docs/49: WS-B's onboarding, messaging policy, cost and rollback approvals.
 
 ---

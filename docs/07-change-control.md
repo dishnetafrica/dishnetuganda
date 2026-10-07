@@ -6469,3 +6469,161 @@ entry (`988135d`) — **pushed 07 Oct, 04:20 UTC**, on the operator's instructio
 from `89047e0` to `988135d` (04:20:16 UTC), `release/5.18.86` new at `c2c96e1` (04:20:20 UTC). At the push nothing was
 deployed, no configuration had changed and nothing had been sent to anyone. `docs/59` stays untracked by the operator's
 decision.
+
+## 07 Oct — 5.18.87: the AI's WhatsApp leads recorded at last — Batch 0's lead fixes (Uganda); `release/5.18.87` = `9cc81af`, cut on live 5.18.86 (`c2c96e1`); `scripts/deploy-5.18.87.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+
+**Why.** The AI's lead path has never worked in production (`docs/55` §3). Three defects were found on 04 Oct:
+- **Every capture fails.** `AiReplyWorker` hands `latestPin()` the variable `$ctx`, which does not exist there. The call
+  throws, the worker logs *"lead capture failed"*, no lead is written and no uCRM sync is queued.
+- **Every uCRM lead sync is dropped.** `UcrmLeadWorker` reads `$event['payload']`, which `WorkerBase` leaves as a JSON
+  string; the decoded payload is `_payload`. So `lead_id` is 0.
+- **The sales context carries no pin**, and the reply guard's audit records conversation 0.
+
+Batch 0 (`b0674bd`, 5.18.75, the 04 Oct entry) fixed all three; it was never deployed. On 07 Oct the operator, adding a
+salesperson (twenty in all), asked for Batch 0's lead fixes to be released.
+
+**The decision, 07 Oct: *"Leads on, uCRM later (Recommended)"*.**
+- `ai_lead_capture` stays **ON**. A qualified WhatsApp enquiry becomes a lead in Sales → Leads: a write inside the
+  plugin; nothing leaves it.
+- `ai_crm_lead_sync` is switched **OFF** by the operator before the deploy (step 0 of the handover), and the deploy checks
+  it (A4). Nothing reaches uCRM. Switching it on is its own later step.
+- This is option (i) of the 04 Oct entry. It replaces the 05 Oct instruction to treat both switches as not approved for
+  activation: lead capture is approved; the uCRM write is not yet.
+
+**Also decided on 07 Oct, for salespeople's own numbers:** D4, D5 and D7, recorded in `docs/65` §W. They bind the design of
+the next batch; none of it is built.
+
+**Why Batch 0's files can be taken as they are.** Each of the four files Batch 0 changed (`workers/AiReplyWorker.php`,
+`workers/UcrmLeadWorker.php`, `lib/BrainContext.php` and `tests/test_brain_context.php`) was identical on live 5.18.86
+(`c2c96e1`) and on the branch just before Batch 0 (`6877bd8`). So the release takes them from `b0674bd` byte for byte,
+with Batch 0's own test.
+
+**What 5.18.87 does.** No switch, no migration.
+- **A qualified enquiry becomes a lead.** When the assistant's reply carries its LEAD line, `AiLeadService` writes the lead
+  to the plugin's `leads` table with the pin the customer sent, linked to the conversation, and audits it in
+  `ai_crm_actions.json`. Sales → Leads shows it.
+- **On which numbers.** The assistant is asked for a LEAD line only under `ai_qualification`. With
+  `ai_sales_on_all_numbers` on, the support and account numbers sell and record leads too. The deploy reports both (R10)
+  and changes neither.
+- **With the uCRM write off, nothing reaches uCRM.** The uCRM lead worker settles a sync it receives as done, *"lead #N
+  not synced — ai_crm_lead_sync is off"*, and never retries it.
+- **A lead recorded while the write is off is not sent when the write is switched on later.** Only the customer's next
+  qualified turn, which updates that lead, queues a sync that reaches uCRM (the switches test, B).
+- **5.18.86's event processor can take a lead's sync first.** Batch 1's part C is not in production, so
+  `cron/event_processor.php` can acknowledge a `crm.lead.sync` as an unknown type before the worker sees it (`docs/65`
+  §Z.5). While the write is off this changes nothing: nothing reaches uCRM either way. With the write on, such a lead
+  would not reach uCRM. **So part C should be in production before the uCRM write is switched on.**
+
+**Files**, 12 against `c2c96e1`: 2 added, 10 changed.
+- **Added:** `tests/test_lead_path_batch0.php` (Batch 0's, byte for byte) and `tests/test_lead_switches.php` (new).
+- **Changed:** `workers/AiReplyWorker.php`, `workers/UcrmLeadWorker.php`, `lib/BrainContext.php` and
+  `tests/test_brain_context.php` (Batch 0's, byte for byte); `manifest.json` 5.18.87 and the five distributor version
+  pins.
+
+**Tests.**
+- **`tests/test_lead_switches.php` (new): 27 passed, 0 failed**, on the branch and on the release tree. The AI worker and
+  the uCRM lead worker run in the sandbox beside a fake Evolution and a fake uCRM, with the switches as decided:
+  - **A** — a qualified enquiry becomes exactly one lead, with the pin; one sync is queued and settled *done*, "not synced
+    — ai_crm_lead_sync is off"; uCRM receives nothing; a second pass retries nothing;
+  - **B** — the uCRM write switched on afterwards: the earlier lead is not sent by itself; the customer's next qualified
+    turn updates that lead (still one row) and queues a second sync, which creates one lead client and links it;
+  - **C** — capture off: the reply is still sent; no lead, nothing queued;
+  - **D** — the support number, with `ai_sales_on_all_numbers` on: the reply leaves from that number, and the lead is
+    recorded, linked to that conversation;
+  - **E** — the assistant is asked for a lead on the sales number; on support and account only with
+    `ai_sales_on_all_numbers`; nowhere with qualification or capture off;
+  - **four weakened copies, each caught**: the capture handed `$ctx` again; the uCRM write ignoring its switch; capture
+    ignoring its switch; a switched-off sync retried.
+- **On the release tree** Batch 0's own test reads 25 passed and `test_brain_context` 123, 0 failed each.
+- **The release tree's own suite: 270 files, 12,586 passed, 0 failed, 0 skipped — twice**, every file's
+  tally identical in both passes.
+  - Against 5.18.86's release suite (268 files, 12,533 passed, 0 failed), exactly the two new tests
+    are added (+25, +27), and **one other file's tally moved, as Batch 0 moved it**: `test_brain_context` 122 → 123,
+    Batch 0's own added assertion. The five distributor tests read the new version pin and pass as before.
+  - PHP warnings: 5 per pass, all from `test_dpo_endpoints`, as in 5.18.86's.
+  - Run from a worktree beside the repository, with the resumable runner the Batch 1 entry describes: every
+    `tests/run.sh` file, in order, each with its own fresh vault. Neither pass was interrupted (A 05:09–05:42,
+    B 05:42–06:17 UTC).
+  - The tree was unchanged by both: still `9cc81af`, nothing modified, nothing untracked.
+- **On the branch** the new test ran twice on `8449d2d`, before its commit: **27 passed, 0 failed both times**. The
+  commit, `ad5371b`, adds exactly that file (blob `8085f071b021`, the same in both trees). The branch's full suite
+  was not run again for an added test file: since the two full runs on `b1865ea` (the Batch 1 entry) its plugin
+  directory has gained two test files and nothing else.
+
+**`scripts/deploy-5.18.87.sh`**, 5.18.86's shape, pinned to `9cc81af` over `c2c96e1`. It is made by a derivation from
+5.18.86's, with every replacement asserted. What differs:
+- **A4 (new), before anything changes.** `ai_lead_capture` must read ON in both copies (the configuration files the
+  workers read, and the store row) and `ai_crm_lead_sync` OFF in both, or the deploy stops and nothing is changed.
+  `ai_qualification` off is a note: no lead would be asked for.
+- **A3 is evidence now.** The Inbox's settings row is 5.18.86's concern, unchanged by this release: a missing number is a
+  note. An unreadable row still stops the deploy.
+- **V3e (new):** the four lead switches unchanged by the run, and the two decided ones each with its two copies agreeing.
+- **R4:** no media path in the AI worker, beside none of Batch 1.
+- **R6:** Batch 0's pieces in place; 5.18.86's Inbox as a regression.
+- **R10 (new):** what the installed lead path will do with this server's switches: on which numbers a lead is asked for,
+  whether it is recorded, and whether it reaches uCRM. Read-only.
+- **A0** allows no migration and exactly the release's 12 files.
+- **The rollback goes back to 5.18.86.** Every switch stays as it is. Its note says what that means: every capture fails
+  again and every sync is dropped; leads already recorded stay.
+- **The script switches nothing.** Step 0's command is in this entry only, never in the script or its log.
+
+**Rehearsal `scripts/harness/deploy-5.18.87/rehearse.sh`.** The base is installed as production runs it: 5.18.86, 086
+applied, the authorisation and the booking WhatsApp on in both copies, the Inbox's row naming Evolution and the three
+numbers (fictitious, never contacted), and the four lead switches ON in both copies, the uCRM write included. It covers:
+- **the A refusals:** a 5.18.85 server; a placeholder pin; the branch tip; the release plus an AI media-layer file; the
+  release plus migration 087; the release without the uCRM worker's fix; either live switch's copies disagreeing; 086
+  incomplete; **the uCRM write still ON (A4)**; **lead capture's two copies disagreeing (A4)**;
+- **step 0, as the operator runs it:** the installed `tools/set_config.php` through `docker exec`. It switches the uCRM
+  write off in both copies and leaves lead capture on;
+- **A3's note:** the account number taken out of the Inbox's row is said, and the run goes on to the `DEPLOY` prompt;
+- **the deploy itself:** no note; every table, the vault and the configuration files byte-identical; no Evolution
+  address, key or instance name and no switch command in the log;
+- **the teeth:** 5.18.86's AI worker back (R1, R6); 5.18.86's uCRM worker back (R1, R6); a 5.18.86 file changed (R5); a
+  trigger dropped (R3); a uCRM worker that would retry a switched-off sync (R1, R10);
+- **the switches after the deploy:** the uCRM write on, as its own step, with the same tool: R10 says leads reach uCRM,
+  and names the event processor's caveat; off again: byte for byte as before; lead capture's copies apart: V3e fails;
+  qualification off: R10 says no lead is asked for anywhere; the booking WhatsApp off: still PASSES; the Inbox's account
+  number taken away: R9 fails;
+- the pilot switch read live; the rollback;
+- **three weakened copies of the script**, each caught: A4 blinded, R6's Batch 0 check blinded, V3e's copies check
+  blinded.
+
+**Results.** The first run on the working copy read **205 passed, 0 failed**, 37 runs of the script, the rehearsed deploy
+**41 ok / 0 failed / 0 notes**: 5.18.86's 38 with A4, V3e and R10. A review of the script's wording then found one
+overstatement, fixed before the commit. R10, the header and the summary said the uCRM worker settles *each* lead's sync;
+5.18.86's event processor can acknowledge one first (above). They now say *a* lead's sync, and R10 names that caveat when
+the write is on. The second run on the working copy read 205/0 with the same check lines but 5b's, rewritten for the
+caveat. Then two runs on the committed script (`70eff0c`, sha256 `cc8bb53f894be7a9…`): **run 1 205/0**, 37 runs of the
+script, no FAIL line, the checkout left as found; **run 2 205/0**, the same check lines. Both match the working-copy runs
+line for line, except the branch tip that 1c refuses, now `ad5371b`.
+
+**Handover — each step is the operator's; nothing is pushed or deployed yet.** The push comes first, on the operator's
+word: the server pulls both branches from GitHub, `claude/study-this-jhe2eg` for the script and `release/5.18.87` for the
+release commit.
+0. **Switch the uCRM lead write off, as root on the server, before the deploy:**
+
+   `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key ai_crm_lead_sync --value 0`
+
+   It prints *"ai_crm_lead_sync = 0"* and the settings listing. It writes the configuration file and the store row. On
+   5.18.86 it changes nothing: no lead is captured there, so no sync is ever queued.
+1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.87 && mkdir -p /root/dnb-5.18.87 && bash scripts/deploy-5.18.87.sh 2>&1 | tee /root/dnb-5.18.87/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   **If A4 stops it**, nothing has changed. The log says what each lead switch reads in the files and in the store row:
+   send it back.
+
+   The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
+   docs/44 §16.9).
+
+   **Expect 40 ok / 0 failed / 0 notes.** The rehearsal reads 41 because the sandbox holds a `dishnet.sqlite` to back up;
+   the server holds none, as at 5.18.86's deploy. A note would say that `ai_qualification` is off, or that the Inbox's
+   row lacks a number.
+2. **Nothing to switch on.** The next customer who tells the assistant what they need, and where, appears in Sales →
+   Leads; R10 says on which numbers.
+3. **Later, as its own step: the uCRM write.** Not before Batch 1's part C, the event processor's protection of worker
+   events, is in production; that needs its own release.
+
+**Git:** `ad5371b` (the test), `70eff0c` (the script and its rehearsal), `release/5.18.87` (`9cc81af`), and this entry
+with `docs/65` §W's three decisions — committed locally, **NOT pushed**. Nothing deployed, no configuration changed,
+nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
