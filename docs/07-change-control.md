@@ -6283,7 +6283,7 @@ pass was interrupted (A 22:20–22:59, B 22:59–23:38 UTC).
 instruction (*"yes push branch"*): `claude/study-this-jhe2eg` from `cae0689` to `b1865ea`. Nothing deployed, no
 configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
 
-## 07 Oct — 5.18.86: the WhatsApp Inbox answers from the conversation's own number (Uganda); `release/5.18.86` = `c2c96e1`, cut on live 5.18.85 (`4790019`); `scripts/deploy-5.18.86.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+## 07 Oct — 5.18.86: the WhatsApp Inbox answers from the conversation's own number (Uganda); `release/5.18.86` = `c2c96e1`, cut on live 5.18.85 (`4790019`); `scripts/deploy-5.18.86.sh` pinned to it and rehearsed — PUSHED 07 Oct 04:20 UTC; NOT deployed
 
 **Why.** Batch 1 (above) fixed a live defect: every reply typed in the WhatsApp Inbox chose its sender with
 `channel === 'accounts' ? 'accounts' : 'support'`, so a customer who wrote to the **sales** number was answered from the
@@ -6411,8 +6411,8 @@ sha256 `57c4053090def6d0…`): **run 1 184/0**, 32 runs of the script, no FAIL l
 now `d818f6d`. The rehearsed deploy reads **38 ok / 0 failed / 0 notes**: 5.18.85's 34 with A3, V3d, V10 and R9. **On
 the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.18.85's deploy.
 
-**Handover — each step is the operator's; nothing is pushed or deployed.**
-0. **Push both branches**, when the operator says so. The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
+**Handover — each step is the operator's; the push is done, the deploy is not.**
+0. **Push both branches — done, 07 Oct 04:20 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
    the script, and `release/5.18.86` the release commit.
 1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
 
@@ -6429,5 +6429,7 @@ the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.1
    arrives in their chat with the sales number.
 
 **Git:** `d818f6d` (the test), `22e6c59` (the script and its rehearsal), `release/5.18.86` (`c2c96e1`) and this
-entry — **committed locally, NOT pushed.** Nothing deployed, no configuration changed, nothing sent to anyone. `docs/59`
-stays untracked by the operator's decision.
+entry (`988135d`) — **pushed 07 Oct, 04:20 UTC**, on the operator's instruction (*"yes push both branches"*): the branch
+from `89047e0` to `988135d` (04:20:16 UTC), `release/5.18.86` new at `c2c96e1` (04:20:20 UTC). At the push nothing was
+deployed, no configuration had changed and nothing had been sent to anyone. `docs/59` stays untracked by the operator's
+decision.
