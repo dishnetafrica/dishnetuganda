@@ -6687,7 +6687,7 @@ both branches"*): the branch from `8449d2d` to `6569047` (06:33:24 UTC), `releas
 UTC). At the push nothing was deployed, no configuration had changed and nothing had been sent to anyone. `docs/59`
 stays untracked by the operator's decision.
 
-## 07 Oct — 5.18.88: the remaining Batch 1 release — migration 087 (the channel registry) and the routing by channel, both dark behind a switch that stays OFF; Uganda's event processor leaves the workers' events to the workers; South Sudan unchanged. `release/5.18.88` = `6464204`, cut on live 5.18.87 (`9cc81af`); `scripts/deploy-5.18.88.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+## 07 Oct — 5.18.88: the remaining Batch 1 release — migration 087 (the channel registry) and the routing by channel, both dark behind a switch that stays OFF; Uganda's event processor leaves the workers' events to the workers; South Sudan unchanged. `release/5.18.88` = `6464204`, cut on live 5.18.87 (`9cc81af`); `scripts/deploy-5.18.88.sh` pinned to it and rehearsed — PUSHED 07 Oct 09:46 UTC; DEPLOYED 09:52 UTC (PASSED 54/0/0)
 
 **This is the remaining Batch 1 release.** Multi-number Batch 1 (`b1865ea` on the branch, `docs/65`) reaches production
 in two releases.
@@ -7015,15 +7015,17 @@ Then two runs on the committed script (`76b07d9`):
 
 ### Deployment runbook — each step is the operator's, and each needs the operator's approval first
 
-1. **Push** — only on the operator's separate word. It pushes the branch `claude/study-this-jhe2eg` (the script) and
-   `release/5.18.88` (the release commit). The server pulls both from GitHub.
-2. **Deploy, as root on the server** — only on the operator's separate word. It asks for `DEPLOY`. Send back the **log
-   file**, not a copy of the terminal:
+1. **Push — DONE 07 Oct, 09:46 UTC**, on the operator's word (*"yes push both branches"*). It pushed the branch
+   `claude/study-this-jhe2eg` (the script) and `release/5.18.88` (the release commit). The server pulls both from GitHub.
+2. **Deploy, as root on the server — DONE 09:50–09:53 UTC**, on the operator's word (*"yes deploy"*): **PASSED, 54 ok /
+   0 failed / 0 notes** (the RESULT below). It asks for `DEPLOY`. Send back the **log file**, not a copy of the
+   terminal:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.88 && mkdir -p /root/dnb-5.18.88 && bash scripts/deploy-5.18.88.sh 2>&1 | tee /root/dnb-5.18.88/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
-   - **Expect 53 ok / 0 failed / 0 notes.** The rehearsal reads 54 because the sandbox holds a `dishnet.sqlite` to back
-     up; the server holds none, as at 5.18.87's deploy.
+   - **Expect 54 ok / 0 failed / 0 notes**, the rehearsal's own figure. *Corrected after the deploy:* this line first
+     said 53. It carried 5.18.87's reason over (a `dishnet.sqlite` in the sandbox) without checking it, and this
+     rehearsal's sandbox holds none either (*"nothing to copy"*, as on the server). The server read 54.
    - A note would say that a lead switch is not as decided on 07 Oct (A4), that `ai_qualification` is off, or that the
      Inbox's row lacks a number. It would also say if no request had applied 087 by R7's end: then open the plugin once
      and run
@@ -7036,6 +7038,82 @@ Then two runs on the committed script (`76b07d9`):
      5.18.87's entry is gone once 5.18.88 is live;
    - the registry's switch: no command is given here, and it is not part of this release;
    - salespeople's numbers (Batch 2).
+
+### RESULT — DEPLOYED to production 2026-10-07, 09:52 UTC: PASSED, 54 ok / 0 failed / 0 notes
+
+Recorded from the terminal the operator pasted; the script prints no secret. The log file stays on the server under
+`/root/dnb-5.18.88/`.
+
+The run began at 09:50:23 UTC (`20261007T095023Z`). `DEPLOY` was typed, `deploy-hybrid.sh` answered *"✓ container now
+serves 6464204"*, and the 18 files were stamped at 09:52:18 UTC. **The rehearsal's 54 ok lines and the server's are the
+same 54, one for one** (the rehearsed deploy's full output, captured afterwards, compared line by line).
+
+- **The pull.**
+  - The checkout fast-forwarded `6569047` → `28f2570`, and `release/5.18.88` was fetched as new.
+  - Branch tip `ad5371b` (not installed); release commit `6464204`, cut on `9cc81af`.
+  - 18 files (13 changed, 5 added, 0 removed); no tracked edits.
+- **A — no refusal fired, and every check passed:**
+  - A7: Domain B untouched (`cf0b0e3`, `969d873`). A0: exactly the 18 files and the reviewed 087.
+  - Live was `9cc81af` / 5.18.87. **A2: PHP 8.1.34 accepted all 8 changed server files and the 8 test files.**
+  - The switches as the operator left them (A3–A5):
+    - pilot `on`, `ia=on/on`, `wa=on/on`;
+    - the lead switches `lc=on/on`, `ls=off/off`, `qu=on/on`, `sa=on/on`;
+    - the registry's switch `mn=absent/absent`;
+    - the Inbox's row `evo=yes sales=yes support=yes account=yes registry=absent`.
+  - 086 complete, its tables `2:12:1:1:1`. 087 absent, and none of its objects (A8).
+  - **The routing, read on the server for the first time:** `sales:in=sales support:in=support account:in=support
+    shared=support+account evo=yes registry=off`, in the configuration files and in the Inbox's row alike. This confirms
+    `docs/18`: support and account share one number here. A9: the pin's code routes exactly as live's.
+  - **A6, South Sudan:** live's and the pin's processor read the same signature as a South Sudan install
+    (`crm.lead.sync=done/0+unknown ai.reply=pending/0 ai.media=done/0+unknown wa.escalation=done/0+unknown
+    install.ready=done/0+unknown`). The pin reads Uganda's as designed (`crm.lead.sync=pending/0 ai.reply=pending/0
+    ai.media=done/0+unknown wa.escalation=done/0 install.ready=done/0+unknown`).
+  - The webhook log's last 300 entries hold 3 `job.add`, the last at 09:26:31 by the plugin's clock (UTC+3), the same
+    as at 5.18.87's deploy. Photos `present:16:3`, 16 files.
+- **Backup**, in `/root/dnb-5.18.88/backup-20261007T095023Z`:
+  - `plugin.sqlite3`, 29 MB: one consistent copy, integrity ok, 248 tables, SQLite 3.48.0;
+  - no `dishnet.sqlite` (*"nothing to copy"*);
+  - the data directory, 149 MB; the installed 5.18.87, 11 MB; the vault;
+  - the event queue's snapshot: **0 events not done** (8,088 in all, every one done).
+
+  Then `GO`.
+- **V.**
+  - The sign-in page answers 200 with zero redirects, and carries no South Sudan contact; the portal answers 302;
+    pinch-zoom is allowed.
+  - The photo viewer answers 302 and its upload 401. The authorisation page answers 404 *"This link is not valid"* to a
+    request without a link.
+  - `install_auth_request`, `install_auth_prefill` and `wa_send_reply` answer 401 without a login.
+  - Every switch, the Inbox's row and the AI settings are unchanged by the run (V3–V3g).
+  - **V4: no fatal or parse error in the 60 s after the copy, with 28 log lines read.** V4 reads the log now.
+- **R.**
+  - **R1:** all 18 files as `6464204` has them; manifest 5.18.88.
+  - **R2:** the pilot, the authorisation and the booking WhatsApp as the operator left them.
+  - **R3, 087 applied and complete:** 2 tables, 3 indexes, 3 triggers, both CHECKs, the ledger row matching the installed
+    file, the three department rows with no instance stored, and the trail of three. The runner's own line reads
+    `[2026-10-07 12:52:18] OK: 087_wa_channels.sql (14 stmts, 8ms)`, all 14 statements counted. 12:52:18 on the
+    plugin's clock is 09:52:18 UTC: the first request after the copy applied it.
+  - **R3, the earlier migrations:** 086 complete, `2:12:1:1:1` before and after; 084 `16:3`, 16 files.
+  - **R4:** no media-layer, portal or CSRF file. **R5:** all 230 files from Release A through 5.18.87 intact.
+    **R6:** every earlier surface, and 5.18.88's Batch 1 pieces.
+  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.87's deploy read. The photos as
+    before the run.
+  - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off, a lead carries
+    no channel fields (S7).
+  - **R11 (S4/S5):** the registry is dark. 0 statements on its tables, the three department rows alone, no instance
+    stored; `tools/channels.php` says OFF, not in effect, installed.
+  - **R12 (S1–S3):** the three numbers route exactly as on 5.18.87, in the files and in the Inbox's row.
+  - **R13 (S8):** the installed event processor reads Uganda's signature and South Sudan's as designed. **The queue
+    check held only trivially:** no event was pending at the snapshot (`kept=0/0`), so this time it had nothing to hold.
+  - **R14:** Domain B's 363 files, byte for byte.
+- **Not seen yet:** Uganda's event processor leaving a real worker event to its worker. The next real lead will show it:
+  its `crm.lead.sync` should be settled by `UcrmLeadWorker` (*"not synced — switched off"*), not acknowledged as an
+  unknown type.
+- **Optional, read-only.** The script's temporary code copies are removed at exit by a silent trap. To see that, run as
+  root:
+
+  `docker exec ucrm sh -c 'ls -d /tmp/dnb-5.18.88-* 2>/dev/null | wc -l'; ls -d /root/dnb-5.18.88/code-* /root/dnb-5.18.88/domainb-* 2>/dev/null | wc -l`
+
+  It should print `0` twice.
 
 ### Rollback runbook — its own command, never pasted with the deploy (root `docs/44` §16.9)
 
@@ -7062,10 +7140,11 @@ What stays as it is:
 - **The 504 case** of `test_multi_number_routing` is not in the release's copy: production's fake Evolution cannot answer
   one. It is driven in Batch 1's own test on the branch.
 - **Batch 1's comment tags read 5.18.86**, its number on the branch. Comments written for this release say 5.18.88.
-- **PHP 8.1 lint happens only on the server, at A2.** The sandbox lints with 8.4, and the scan above finds nothing newer
-  than 8.1.
-- **`docker cp` into the container's `/tmp` is new in these scripts** (A6, A9, R12, R13, RB). Removal at exit is
-  rehearsed, but this is its first use on the real server. A failed copy is a refusal (1r).
+- **PHP 8.1 lint ran only on the server, at A2:** PHP 8.1.34 accepted all 8 changed server files and the 8 test files
+  (the RESULT). The sandbox lints with 8.4, and the scan above found nothing newer than 8.1.
+- **`docker cp` into the container's `/tmp` was new in these scripts** (A6, A9, R12, R13, RB). Its first use on the
+  server worked: A6, A9, R12 and R13 read both releases' code there. Its removal at exit is silent; the RESULT gives an
+  optional read-only check. A failed copy is a refusal (1r).
 - **The runner tolerates some failing statements silently** (above). That is unchanged, and it applies to every
   migration; R3 does not depend on it. A statement that waits more than 5 s for a lock is logged PARTIAL, and R3 fails.
   The runner still records the file as applied, so it never retries it: re-applying 087's idempotent statements is then a
@@ -7078,14 +7157,17 @@ What stays as it is:
 ### Remaining blockers, and the call
 
 - **Technical blockers: none found.** Every check, test and rehearsal above passed.
-- **Open:** the operator's approval to push; then, separately, the approval to deploy.
-- **GO** for both, on those approvals. The release is dark: with the switch OFF, the only behaviour change is Uganda's
-  event processor, and that change protects the workers' events.
+- **Both approvals were given and both steps are done:** pushed at 09:46 UTC, deployed at 09:52 UTC.
+- **The call was GO, and the deploy passed, 54/0/0.** The release is dark: with the switch OFF, the only behaviour change
+  is Uganda's event processor, and that change protects the workers' events.
 
-**Git (local, not pushed):**
-- `release/5.18.88` = `6464204`;
-- on `claude/study-this-jhe2eg`: `76b07d9` (the script and its rehearsal) and this entry, on top of `4dbc6f2` and
-  `f3177fd` (the 5.18.87 records), which are also awaiting the push.
+**Git — pushed 07 Oct, 09:46 UTC**, on the operator's instruction (*"yes push both branches"*):
+- `claude/study-this-jhe2eg` from `6569047` to `28f2570` (09:46:33 UTC): `4dbc6f2` and `f3177fd` (the 5.18.87
+  records), `76b07d9` (the script and its rehearsal) and `28f2570` (this entry);
+- `release/5.18.88` new at `6464204` (09:46:41 UTC).
 
-Nothing deployed, no configuration changed, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
+At the push nothing was deployed, no configuration had changed and nothing had been sent. This record of the result is a
+later commit.
+
+No configuration changed, no switch set, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
 operator's decision.
