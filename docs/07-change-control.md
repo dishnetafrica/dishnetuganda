@@ -6169,9 +6169,9 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
 (*"yes push both branches"*): the branch to `d42570d`, `release/5.18.85` new at `4790019`. At the push nothing was
 deployed, no configuration had changed and nothing had been sent to anyone.
 
-## 06 Oct — Multi-number sales, Batch 1 (5.18.86): the three numbers made safe — the Inbox answers from the conversation's own number — and the channel registry foundation, dark; BUILT in development, NOT pushed, NOT deployed
+## 06 Oct — Multi-number sales, Batch 1 (5.18.86): the three numbers made safe — the Inbox answers from the conversation's own number — and the channel registry foundation, dark; BUILT in development, PUSHED 07 Oct 02:54 UTC, NOT deployed
 
-**Instruction:** the operator reviewed `docs/65` (the discovery, `c8b3e36`, local) and approved *"MULTI-NUMBER SALES —
+**Instruction:** the operator reviewed `docs/65` (the discovery, `c8b3e36`) and approved *"MULTI-NUMBER SALES —
 BATCH 1 / FOUNDATION + EXISTING ROUTING SAFETY"*, parts A–R: fix the Inbox's reply routing; verify the Batch 0 lead path
 against the current code; protect worker-owned events in the event processor; build the channel registry (SQLite), its
 seed, resolver and `ChannelContext`; route inbound and outbound by channel id; carry the channel on leads; golden tests;
@@ -6279,5 +6279,6 @@ with its own fresh vault file — keeping each finished file's output and exit c
 restart again from scratch with a fresh vault; each pass was then assembled into `run.sh`'s own output format. Neither
 pass was interrupted (A 22:20–22:59, B 22:59–23:38 UTC).
 
-**Git:** committed locally after `c8b3e36` (the discovery, itself local) on `claude/study-this-jhe2eg` — **NOT pushed,
-NOT deployed**, no configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
+**Git:** the discovery (`c8b3e36`) and this batch (`b1865ea`) — **pushed 07 Oct, 02:54 UTC**, on the operator's
+instruction (*"yes push branch"*): `claude/study-this-jhe2eg` from `cae0689` to `b1865ea`. Nothing deployed, no
+configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.

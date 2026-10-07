@@ -4,7 +4,7 @@
 table, no configuration, no push, no deploy, no WhatsApp message. Nothing here is approved for building. The operator
 reviews it and approves the next batch explicitly.
 
-**Update — Batch 1 built in development (5.18.86), §Z.** Approved 06 Oct; NOT pushed, NOT deployed, the new switch
+**Update — Batch 1 built in development (5.18.86), §Z.** Approved 06 Oct; pushed 07 Oct (`b1865ea`), NOT deployed, the new switch
 `multi_number_channels_enabled` OFF everywhere. Sections A–Y are the discovery as written and are not edited.
 
 **What was inspected.**
@@ -816,9 +816,9 @@ Also outstanding from docs/49: WS-B's onboarding, messaging policy, cost and rol
 
 ## Z. Batch 1 — built in development (5.18.86): the three numbers made safe, and the registry foundation, dark
 
-**Status: BUILT and proved in development only. NOT pushed, NOT deployed. No production flag set, no Evolution instance
+**Status: BUILT and proved in development only. Pushed 07 Oct (`b1865ea`, docs/07); NOT deployed. No production flag set, no Evolution instance
 created, no number connected, no real message sent, no production data read or written.** Approved on 06 Oct as
-*"MULTI-NUMBER SALES — BATCH 1 / FOUNDATION + EXISTING ROUTING SAFETY"* (parts A–R). The local commit and every number
+*"MULTI-NUMBER SALES — BATCH 1 / FOUNDATION + EXISTING ROUTING SAFETY"* (parts A–R). The commit and every number
 below are recorded in docs/07.
 
 ### Z.1 With the flag OFF — the production default — exactly two behaviours change
