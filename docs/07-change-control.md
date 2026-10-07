@@ -7219,6 +7219,13 @@ which stays OFF, unless said otherwise:
 - **Full suite, twice** — every `tests/run.sh` file, through the resumable runner described in Batch 1's entry (pass A 12:10–12:52, pass B
   12:52–13:36 UTC): **286 files, 13,862 passed, 0 failed, 0 skipped — twice**, every file's tally identical in both
   passes, checked file by file. PHP warnings: 5 per pass, all from `test_dpo_endpoints`, as before.
+- **Against the branch before Batch 2** (`7195253`; one pass of the same runner, 15:40–16:20 UTC, nothing beside it):
+  285 files, 13,726 passed, 0 failed. Exactly `test_sales_numbers` is added (+128); `test_brain_context` 133 → 138 and
+  `test_multi_number_routing` 89 → 90 move by their own new and rewritten assertions — the same +5 and +1 as in the
+  release. One more file reads differently for a reason outside the code: `test_quote_tax_line` 29 → 31. It runs its
+  two comparisons with an old commit only where `.git` is a directory; the counted passes ran in the main checkout, the
+  baseline in a git worktree, where `.git` is a file. Proved by running the baseline's own code in a plain clone: 31
+  passed. No other file moved, and no PHP warning is new; the checker refuses its three planted faults.
 - **South Sudan: the full suite caught one byte.** The first counted pass (11:28–12:08 UTC) failed one file,
   `test_staff_jobs_south_sudan`: the WhatsApp AI setup page on South Sudan was one byte longer than 5.18.49's. The card's
   block, skipped there, left a blank line after its `endif`, and that newline reached the page. Removed (both the
