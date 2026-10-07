@@ -6282,3 +6282,152 @@ pass was interrupted (A 22:20–22:59, B 22:59–23:38 UTC).
 **Git:** the discovery (`c8b3e36`) and this batch (`b1865ea`) — **pushed 07 Oct, 02:54 UTC**, on the operator's
 instruction (*"yes push branch"*): `claude/study-this-jhe2eg` from `cae0689` to `b1865ea`. Nothing deployed, no
 configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
+
+## 07 Oct — 5.18.86: the WhatsApp Inbox answers from the conversation's own number (Uganda); `release/5.18.86` = `c2c96e1`, cut on live 5.18.85 (`4790019`); `scripts/deploy-5.18.86.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+
+**Why.** Batch 1 (above) fixed a live defect: every reply typed in the WhatsApp Inbox chose its sender with
+`channel === 'accounts' ? 'accounts' : 'support'`, so a customer who wrote to the **sales** number was answered from the
+**support** number, in another chat, from a number they had never written to. An **account** chat went out on support
+too, because it is stored as `account`, not `accounts`. The operator approved releasing it and chose *"Release 5.18.86
+(Recommended)"*.
+
+**Why not a copy of the branch, as 5.18.85 was.** 5.18.85's rule is that every file the feature changes was identical on
+live and on the branch before the feature, so the release can take the branch's files. For Batch 1 that fails. Five of
+its production files carry undeployed work on the branch: Batch 0's lead fixes (5.18.75) and the dark AI communication
+layer (5.18.76–5.18.81). Those files are `cron/event_processor.php`, `evo_webhook.php`, `lib/EvolutionApiService.php`,
+`tools/set_config.php` and `workers/AiReplyWorker.php`. `workers/MediaWorker.php` does not exist on live. Applied onto
+live, Batch 1's changes conflict in three files; every conflict is Batch 0 or the media layer. The operator chose the
+scope (*"Inbox fix only (Recommended)"*): **5.18.86 is the Inbox fix alone, applied on live 5.18.85.** Migration 087,
+the event-processor change, the webhook and worker routing and the lead fields wait.
+
+**What 5.18.86 does.** Uganda only, no switch, no migration.
+- **A reply in a sales chat leaves on the sales number, and one in an account chat on the account number.** This holds for
+  text, images and documents, in all four Inbox send actions. It goes through `NotificationService::sendOnChannel()`:
+  - no other number and no WASender;
+  - no retry queue, because its retry would send from support;
+  - stored once, with the WhatsApp message id.
+- **A reply that cannot leave on its own number is refused, and the person in the Inbox is told.** It answers 502 with
+  *"Not sent on the sales number — … Nothing was sent from any other number."*, or, when WhatsApp did not answer, *"May
+  have been sent on the sales number — … Check the chat before sending again."* It is never sent from another number.
+- **Support, accounts and web chats keep `sendVia()` exactly**, their reporting included. **South Sudan keeps the 5.18.85
+  line verbatim.**
+- **The channel registry's code ships switched off and without its tables.** `ChannelRegistry`, `ChannelContext` and
+  `EvolutionApiService::forStore()` are present because the Inbox route uses them. `multi_number_channels_enabled` is
+  unset. Set, it would change nothing here: there is no migration 087, and the three numbers route as configured.
+
+**What the Inbox reads.** `public.php`'s `$config` is the `kyc_config` row of `plugin.sqlite3` alone, not the files and not
+the vault (`docs/65` §Z.6). If that row lacks the Evolution address, the key or the sales or account instance, a sales or
+account reply that leaves from support today would be refused under 5.18.86. The deploy script therefore reads that row
+first (A3).
+
+**Files**, 13 against `4790019`: 4 added, 9 changed.
+- **Added:** `lib/InboxReplyRoute.php`, `lib/ChannelRegistry.php`, `lib/ChannelContext.php` and
+  `tests/test_inbox_reply_route.php`.
+- **Changed:** `includes/api/api_whatsapp.php`, `lib/NotificationService.php`, `lib/EvolutionApiService.php`,
+  `manifest.json` 5.18.86 and the five distributor version pins.
+- **Twelve are byte-identical to the branch's**, and each of the eight among them that changed was identical on
+  `4790019` and on the branch before Batch 1 (`c8b3e36`).
+- **`lib/EvolutionApiService.php` is live's file with Batch 1's change applied.** Proved: it differs from the branch's by
+  exactly the 25-line AI-media method live does not have (`getBase64FromMediaMessage`).
+
+**Tests.**
+- **`tests/test_inbox_reply_route.php` (new) runs unchanged on the branch and on the release tree: 23 passed, 0 failed on
+  both.** It uses only what both trees hold. It covers:
+  - sales → the sales number;
+  - support → support;
+  - account → the account number;
+  - accounts → the account number;
+  - web → support;
+  - images and documents;
+  - a failed send reported as not sent;
+  - a chat on a number the plugin cannot send from refused, never sent from support;
+  - Evolution, or the account number, missing from the Inbox's own row while the files keep them: refused and said;
+  - the registry switch set: routes as without it;
+  - South Sudan: the 5.18.85 rule;
+  - **five weakened copies, each caught**: the route sending a sales chat through support; the reply action ignoring the
+    route; the channel send falling back to support; a failed send reported as sent; South Sudan answered by the Uganda
+    rule.
+- **The release tree's own suite: 268 files, 12,533 passed, 0 failed, 0 skipped — twice**, every file's tally
+  identical in both passes.
+  - Against 5.18.85's release suite (267 files, 12,510 passed, 0 failed), exactly one file is added, the new test
+    (+23), and **no other file's tally moved**: the five distributor tests read the new version pin and pass as before.
+  - PHP warnings: 5 per pass, all from `test_dpo_endpoints`, as in 5.18.85's.
+  - Run from a worktree beside the repository, because `test_cli_data_dir` drops to the user `nobody`, who cannot
+    enter the session's private directory (5.18.83's entry). The runner is the resumable one the Batch 1 entry
+    describes: every `tests/run.sh` file, in order, each with its own fresh vault. Neither pass was interrupted
+    (A 03:09–03:42, B 03:42–04:15 UTC).
+  - The tree was unchanged by both: still `c2c96e1`, nothing modified, nothing untracked.
+- **On the branch** the new test ran twice on `22e6c59`: **23 passed, 0 failed both times**. It is the very file the
+  release carries (blob `385f953e54e4` in both trees). The branch's full suite was not run again for an added test file:
+  its plugin code is unchanged since the two full runs on `b1865ea` (the Batch 1 entry above). Since then the branch
+  gains only this test, the script, its rehearsal and this entry.
+
+**`scripts/deploy-5.18.86.sh`**, 5.18.85's shape, pinned to `c2c96e1` over `4790019`. It is made by a derivation from
+5.18.85's, with every replacement asserted. What differs:
+- **A3 (new), before anything changes.** The settings row the Inbox reads is judged by the installed
+  `EvolutionApiService`. It must reach Evolution and name a sales and an account number, or the deploy stops and nothing
+  is changed. It prints yes/no only, never an address, a key or an instance name.
+- **V3d:** that row unchanged by the run.
+- **V10:** the Inbox's reply action refuses an anonymous caller before any conversation is read.
+- **R4:** none of the rest of Batch 1 is installed: no migration 087, no registry CLI, and 5.18.85's webhook, AI worker and
+  event processor.
+- **R6:** 5.18.86's pieces, 5.18.85's quotation form as a regression.
+- **R9 (new):** the installed Inbox route, under the server's own PHP, with the server's own Inbox row, answers which number
+  each kind of chat leaves on, with the registry dark. It is pure: nothing is sent or written.
+- **A0** allows no migration and exactly the release's 13 files.
+- **The rollback goes back to 5.18.85.** Every live feature and both switches stay as they are. Its note says what that
+  means: the Inbox answers sales and account chats from the support number again.
+- **Both live features are kept as they are**, as in 5.18.85 (V3b, V3c, R2).
+
+**Rehearsal `scripts/harness/deploy-5.18.86/rehearse.sh`.** The base is installed as production runs it: 5.18.85, 086
+applied, the authorisation on in both copies with activation #1, the booking WhatsApp on in both copies, and the Inbox's
+row naming Evolution and the three numbers (fictitious, never contacted). It covers:
+- **the A refusals:**
+  - a 5.18.84 server;
+  - a placeholder pin; the branch tip;
+  - the release plus an AI-layer file; the release plus migration 087; the release without its Inbox route;
+  - either switch's copies disagreeing; 086 incomplete;
+  - **Evolution's address, or the account number, missing from the Inbox's row (A3)**, with no data changed and nothing
+    printed but yes/no;
+- **the deploy itself:** no note, every table, the vault and the configuration files byte-identical, and the log carrying no
+  Evolution address, key or instance name;
+- **the teeth:** 5.18.85's Inbox API back (R1, R6); the channel send taken out (R1, R6); a 5.18.85 file changed (R5); a
+  trigger dropped (R3); the account number taken out of the Inbox's row after the deploy (R9);
+- the pilot switch read live; the booking WhatsApp turned off, then its copies made to disagree;
+- the rollback with both switches on;
+- **three weakened copies of the script**, each caught: A3 blinded, R1 blinded, R6's Inbox-route check blinded.
+
+**Results.** The first run read **181 passed, 3 failed**. It found two defects, both fixed before the commit:
+- **In the script:** its two count lines (`N_IR` in R6, `N_OLD` in the rollback's check) used `grep -c … || echo 0`,
+  which prints `0` twice when nothing matches. R6 still failed when the Inbox route was missing, but its line carried a
+  broken count and did not name the route. Now `|| true` and `${N:-0}`, proved on no match, a missing file and one match.
+- **In the rehearsal:** 5g compared the data with the digest seeded at the start, though section 5 had just switched the
+  booking WhatsApp off and on again. That re-adds the key at the end of the settings row: the same values, different
+  bytes. 5g now compares with the digest taken just before 5f.
+
+After the fix, two runs on the working copy read **184/0** each. Then two runs on the committed script (`22e6c59`,
+sha256 `57c4053090def6d0…`): **run 1 184/0**, 32 runs of the script, no FAIL line, the checkout left as found; **run 2
+184/0**, the same check lines. Both match the working-copy runs line for line, except the branch tip that 1c refuses,
+now `d818f6d`. The rehearsed deploy reads **38 ok / 0 failed / 0 notes**: 5.18.85's 34 with A3, V3d, V10 and R9. **On
+the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.18.85's deploy.
+
+**Handover — each step is the operator's; nothing is pushed or deployed.**
+0. **Push both branches**, when the operator says so. The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
+   the script, and `release/5.18.86` the release commit.
+1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.86 && mkdir -p /root/dnb-5.18.86 && bash scripts/deploy-5.18.86.sh 2>&1 | tee /root/dnb-5.18.86/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   **If A3 stops it**, nothing has changed. The log says, yes or no, which of Evolution, the sales number and the
+   account number the Inbox's own settings row lacks: send it back. If it is Evolution, `docs/65` §Z.6 applies: with no
+   Evolution in that row, a support reply can be reported sent while nothing leaves, so A3 may have found a live fault,
+   not only a 5.18.86 one.
+
+   The rollback is printed by the script, alone, at the end of its log. It is never handed over beside the deploy (root
+   docs/44 §16.9).
+2. **Nothing to switch on.** In Engage → WhatsApp → Inbox, reply to a customer who wrote to the sales number: the reply
+   arrives in their chat with the sales number.
+
+**Git:** `d818f6d` (the test), `22e6c59` (the script and its rehearsal), `release/5.18.86` (`c2c96e1`) and this
+entry — **committed locally, NOT pushed.** Nothing deployed, no configuration changed, nothing sent to anyone. `docs/59`
+stays untracked by the operator's decision.
