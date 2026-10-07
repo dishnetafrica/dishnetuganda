@@ -241,6 +241,13 @@ $FLAGS = [
     // their uCRM record: the e-mail's conditions (a client, an installation title, a date), once per job.
     'customer_wa_install_scheduled' => ['bool',
         'The customer\'s WhatsApp when an installation job is created with a date (Uganda): the date and time, the location, the technician, and for a Starlink installation under authorisation that the secure link follows. Sent whether or not the customer has an e-mail address. Absent means OFF'],
+    // ── The WhatsApp channel registry (5.18.86, docs/65; multi-number Batch 1) — Uganda only ──
+    // OFF, every number routes as it always has: three configuration keys, three departments. ON, the webhook, the
+    // assistant, the follow-ups and the Inbox route by CHANNEL through wa_channels (migration 087):
+    // a number the registry has switched off is refused, never routed to another, and a reply leaves only on the
+    // number its message arrived on. The three department numbers stay configured where they are. Batch 1: dark.
+    'multi_number_channels_enabled' => ['bool',
+        'Route WhatsApp by channel through the channel registry (Uganda; docs/65): a switched-off number is refused, a reply leaves only on the number the customer wrote to. Absent means OFF — the three department numbers exactly as before'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {

@@ -85,6 +85,27 @@ class AiLeadService
     }
 
     /**
+     * 5.18.86 (docs/65 §K): where a lead came in — which WhatsApp number, whose it is, which territory. Written by the
+     * worker from the channel registry, never by the model; absent unless the registry is on. Set when the lead is
+     * created; on an existing lead, filled in only where missing and only from the lead's own conversation, so the
+     * number a customer first wrote to keeps the lead. The uCRM sync writes its own keys and never these.
+     */
+    private const ORIGIN_FIELDS = ['channel_id', 'channel_role', 'source_number', 'channel_owner_type',
+                                   'channel_owner_id', 'territory_region_id'];
+
+    /** @var array|null 5.18.86: the origin the next capture() records; null = the lead as it always was */
+    private ?array $origin = null;
+
+    /**
+     * 5.18.86 (docs/65 §K): where the next lead came in — ORIGIN_FIELDS from the channel registry, or null.
+     */
+    public function withOrigin(?array $origin): self
+    {
+        $this->origin = $origin;
+        return $this;
+    }
+
+    /**
      * Create or update the lead for this conversation.
      *
      * @return array{ok:bool, action:string, lead_id:int|null, reason:string}
@@ -92,6 +113,7 @@ class AiLeadService
     public function capture(array $fields, string $phone, int $convId,
                             string $source = 'whatsapp_ai', array $trusted = []): array
     {
+        $origin = $this->origin;
         if (!$this->enabled())  return $this->no('disabled', 'ai_lead_capture is off');
         if (LeadMatcher::key($phone) === '') return $this->no('skipped', 'no usable phone number');
 
@@ -123,8 +145,9 @@ class AiLeadService
 
         // withLock so two messages arriving together cannot both decide the
         // lead does not exist and both create it.
+        $originRow = $this->cleanOrigin($origin);
         $this->store->withLock('leads.json', function (array $leads) use (
-            $clean, $phone, $convId, $source, &$result
+            $clean, $phone, $convId, $source, $originRow, &$result
         ): array {
             // A conversation already linked to a lead IS that lead, whatever
             // the phone matcher would say.
@@ -134,12 +157,21 @@ class AiLeadService
             $now = date('Y-m-d H:i:s');
             if ($idx !== null) {
                 $leads[$idx] = $this->merge($leads[$idx], $clean, $convId, $now);
+                // 5.18.86: filled in only where missing, and only from the conversation the lead belongs to — a lead
+                // found by phone from another number's chat is never re-attributed to the number written to later.
+                if ((int)($leads[$idx]['conversation_id'] ?? 0) === $convId) {
+                    foreach ($originRow as $k => $v) {
+                        if (!array_key_exists($k, $leads[$idx]) || $leads[$idx][$k] === null || $leads[$idx][$k] === '') {
+                            $leads[$idx][$k] = $v;
+                        }
+                    }
+                }
                 $result = ['ok' => true, 'action' => 'updated',
                            'lead_id' => (int)$leads[$idx]['id'], 'reason' => ''];
                 return ['records' => $leads, 'result' => true];
             }
 
-            $lead = $this->newLead($clean, $phone, $convId, $source, $now);
+            $lead = $this->newLead($clean, $phone, $convId, $source, $now) + $originRow;
             $lead['id'] = $this->nextId($leads);
             $leads[]    = $lead;
             $result = ['ok' => true, 'action' => 'created',
@@ -176,6 +208,28 @@ class AiLeadService
                 $out['location_lat']    = (float)$lat;
                 $out['location_lng']    = (float)$lng;
                 $out['location_source'] = 'whatsapp_pin';
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * 5.18.86: the origin as stored — the six known keys and nothing else, each a string, an integer or null. An empty
+     * origin (the registry off) is [], so the lead carries none of the keys.
+     *
+     * @return array<string,string|int|null>
+     */
+    private function cleanOrigin(?array $origin): array
+    {
+        if ($origin === null || trim((string)($origin['channel_id'] ?? '')) === '') return [];
+        $out = [];
+        foreach (self::ORIGIN_FIELDS as $k) {
+            $v = $origin[$k] ?? null;
+            if (in_array($k, ['channel_owner_id', 'territory_region_id'], true)) {
+                $out[$k] = ($v === null || $v === '') ? null : (int)$v;
+            } else {
+                $v = $v === null ? null : trim((string)$v);
+                $out[$k] = ($v === null || $v === '') ? null : mb_substr($v, 0, 64);
             }
         }
         return $out;

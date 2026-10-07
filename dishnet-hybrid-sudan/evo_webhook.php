@@ -93,12 +93,23 @@ if (!$guard->isAllowedEvent($event)) {
 // ── 4. Validate instance ─────────────────────────────────────────────────────
 // An unmapped instance is rejected rather than defaulted. Guessing here would
 // route one number's customers into another number's business context.
-$evo     = new EvolutionApiService($config);
+//
+// 5.18.86 (docs/65 §F, §H): forStore() is the constructor's service unless the channel registry is on (Uganda, behind
+// multi_number_channels_enabled). With it on, the instance resolves to a channel id through wa_channels, and a number
+// the registry knows but has switched off is refused exactly as an unknown one is — never routed to another channel.
+$evo     = EvolutionApiService::forStore($config, $pdo, $dataDir);
 $channel = $evo->channelFor($instance);
 if ($channel === '') {
+    if ($evo->instanceState($instance) === 'refused') {
+        error_log(EvoWebhookGuard::safeLogLine($event, $instance, 'channel_disabled'));
+        evoRespond(200, 'channel_disabled');
+    }
     error_log(EvoWebhookGuard::safeLogLine($event, $instance, 'unknown_instance'));
     evoRespond(200, 'unknown_instance');
 }
+// 5.18.86 (docs/65 §D): a channel whose assistant is switched off keeps every message for the team and queues nothing.
+// Always true with the registry off.
+$aiOnChannel = $evo->channelAllowsAi($channel);
 
 // Connection updates are worth recording but carry no message.
 if ($event === 'connection.update') {
@@ -325,6 +336,14 @@ foreach ($messages as $msg) {
                 error_log('[evo_webhook] opt-out store failed: ' . $e->getMessage());
             }
         }
+    }
+
+    // ── 8b2. 5.18.86 (docs/65 §D): the assistant is switched off on this number. The message is stored above and its
+    // STOP read; nothing is queued for the assistant. Never true with the registry off.
+    if (!$aiOnChannel) {
+        error_log('[evo_webhook] the assistant is off on this number — kept for the team, nothing queued (' . $channel . ')');
+        $skipped++;
+        continue;
     }
 
     // ── 9. Queue for the AI ──────────────────────────────────────────────
