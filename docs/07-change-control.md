@@ -7173,7 +7173,7 @@ later commit.
 No configuration changed, no switch set, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
 operator's decision.
 
-## 07 Oct — Multi-number sales, Batch 2 (5.18.89): salesperson numbers, dark — the card, the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only, the follow-up hold, the guard's watch; BUILT in development, NOT pushed, NOT deployed
+## 07 Oct — Multi-number sales, Batch 2 (5.18.89): salesperson numbers, dark — the card, the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only, the follow-up hold, the guard's watch; BUILT in development, PUSHED 07 Oct 18:45 UTC; deployed in release 5.18.89 (the entry below)
 
 **Why.** After 5.18.88's deploy the operator asked to connect another salesperson's own WhatsApp number, with the
 assistant replying in that salesperson's name. The operator's answers, 07 Oct (the salesperson is named in the chat, not
@@ -7251,9 +7251,10 @@ next entry.
 **Rollback:** nothing is deployed. Before a deployment: the switches off disable everything but the card; the code is
 undone by deploying 5.18.88 again; there is no migration.
 
-**Git:** a local commit on `claude/study-this-jhe2eg`; not pushed. `docs/59` stays untracked by the operator's decision.
+**Git:** `2c2771b` on `claude/study-this-jhe2eg`, pushed 07 Oct at 18:45:58 UTC on the operator's approval (*"APPROVED —
+PUSH 5.18.89"*). `docs/59` stays untracked by the operator's decision.
 
-## 07 Oct — 5.18.89: salesperson numbers (multi-number Batch 2), dark — the WhatsApp AI screen gains a "Salesperson numbers" card for admins; the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only and the follow-up hold all wait behind switches that stay OFF; no migration; South Sudan unchanged. `release/5.18.89` = `53d5c4d`, cut on live 5.18.88 (`6464204`); `scripts/deploy-5.18.89.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+## 07 Oct — 5.18.89: salesperson numbers (multi-number Batch 2), dark — the WhatsApp AI screen gains a "Salesperson numbers" card for admins; the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only and the follow-up hold all wait behind switches that stay OFF; no migration; South Sudan unchanged. `release/5.18.89` = `53d5c4d`, cut on live 5.18.88 (`6464204`); `scripts/deploy-5.18.89.sh` pinned to it and rehearsed — PUSHED 07 Oct 18:46 UTC; DEPLOYED 19:02 UTC (PASSED 62/0/1)
 
 **This is Batch 2's release** (`2c2771b` on the branch, `docs/65` §AA–§AB, the entry above). The operator asked, after
 5.18.88's deploy, to connect another salesperson's own WhatsApp number with the assistant replying in that salesperson's
@@ -7544,14 +7545,21 @@ two runs on the committed script (`b7848d9`):
 
 ### Deployment runbook — each step is the operator's, and each needs the operator's approval first
 
-1. **Push — NOT DONE; needs the operator's word.** It pushes the branch `claude/study-this-jhe2eg` (Batch 2, the script,
-   its rehearsal and these records) and `release/5.18.89` (the release commit). The server pulls both from GitHub.
-2. **Deploy, as root on the server — NOT DONE; needs the operator's word.** It asks for `DEPLOY`. Send back the **log
-   file**, not a copy of the terminal:
+1. **Push — DONE 07 Oct, 18:46 UTC**, on the operator's word (*"APPROVED — PUSH 5.18.89"*). It pushed the branch
+   `claude/study-this-jhe2eg` (Batch 2, the script, its rehearsal and these records) and `release/5.18.89` (the release
+   commit). The server pulls both from GitHub.
+2. **Deploy, as root on the server — DONE 19:02 UTC**, on the operator's word (*"APPROVED — PRODUCTION DEPLOY 5.18.89"*):
+   **PASSED, 62 ok / 0 failed / 1 note** (the RESULT below). It asks for `DEPLOY`. Send back the **log file**, not a copy
+   of the terminal:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.89 && mkdir -p /root/dnb-5.18.89 && bash scripts/deploy-5.18.89.sh 2>&1 | tee /root/dnb-5.18.89/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
-   - **Expect 62 ok / 0 failed / 0 notes**, the rehearsal's own figure.
+   - **Expect 62 ok / 0 failed / 0 notes**, the rehearsal's own figure. *Corrected after the deploy:* the server read
+     **62 ok / 0 failed / 1 note**. The note is R3's: `migration.log` holds no line for 087. At 5.18.88's deploy (09:52)
+     it held one, `OK: 087_wa_channels.sql (14 stmts, …)`; by 19:02 it was gone (rotated or rewritten; the log does not
+     say which). The rehearsal had planted this
+     very case (4t, *"no line for 087 in the log at all: R3 passes on the store"*), and R3 then read every one of 087's
+     statements' effects from the store and passed — but this line did not list it.
    - A note would say that a lead switch is not as decided on 07 Oct (A4), that `ai_qualification` is off, or that the
      Inbox's row lacks a number.
    - **If a refusal stops it, nothing has changed.** The log names the refusal: send it back.
@@ -7564,6 +7572,80 @@ two runs on the committed script (`b7848d9`):
    the registry for every number — the three departments' rows store no instance, so they keep routing as configured.
 5. **Later, each its own decision:** `sales_own_leads_only` (salespeople see only their own leads); the uCRM lead write;
    `wa_handover_copy_central` off (the salesperson alone), or `wa_followups_on_owned_numbers` on.
+
+### RESULT — DEPLOYED to production 2026-10-07, 19:02 UTC: PASSED, 62 ok / 0 failed / 1 note
+
+Recorded from the terminal the operator pasted, which carries the whole log (`tee`); the script prints no secret. The log
+file stays on the server under `/root/dnb-5.18.89/`.
+
+The run began at 19:02:00 UTC (`20261007T190200Z`). `DEPLOY` was typed, `deploy-hybrid.sh` answered *"✓ container now
+serves 53d5c4d"*, and the 34 files were stamped at 19:02:49 UTC. **The rehearsal's 62 ok lines and the server's are the
+same 62, one for one** (by check, against the rehearsed deploy's full output); the server adds one note, R3's (below).
+
+- **The pull.**
+  - The checkout fast-forwarded `28f2570` → `1541208`, and `release/5.18.89` was fetched as new.
+  - Branch tip `2c2771b` (not installed); release commit `53d5c4d`, cut on `6464204`.
+  - 34 files (28 changed, 6 added, 0 removed); no tracked edits.
+- **A — no refusal fired, and every check passed:**
+  - A7: Domain B untouched (`cf0b0e3`, `969d873`). A0: exactly the 34 files, no migration, 087 the reviewed one.
+  - Live was `6464204` / 5.18.88. **A2: PHP 8.1.34 accepted all 24 changed server files and 9 test files.**
+  - The switches as the operator left them:
+    - pilot `on`, `ia=on/on`, `wa=on/on`;
+    - the lead switches `lc=on/on`, `ls=off/off`, `qu=on/on`, `sa=on/on`;
+    - the registry's switch `mn=absent/absent` (A5); 5.18.89's three `absent/absent` (A5b);
+    - the Inbox's row `evo=yes sales=yes support=yes account=yes registry=absent` (A3).
+  - 086 complete, `2:18:1:1:1`. **087 applied and complete (A8):** 2 tables, 3 indexes, 3 triggers, both CHECKs, the
+    ledger row matching the installed file, the three department rows, no instance stored, no other channel.
+  - **The routing:** `sales:in=sales support:in=support account:in=support shared=support+account evo=yes registry=off`,
+    in the configuration files and in the Inbox's row. A9: the pin's code routes exactly as live's.
+  - **A10:** the pin's assistant builds 5.18.88's prompt for all twelve conversations, on the server's own configuration.
+  - **A6, South Sudan:** live's and the pin's processor read the same signatures on both countries. The pin's Batch 2
+    rules, every switch on, apply nothing as a South Sudan install; on Uganda, with the switches absent, they show the
+    card alone.
+  - The webhook log's last 300 entries hold 3 `job.add`, the last at 09:26:31 by the plugin's clock. Photos
+    `present:16:3`, 16 files.
+- **Backup**, in `/root/dnb-5.18.89/backup-20261007T190200Z`:
+  - `plugin.sqlite3`, 30 MB: one consistent copy, integrity ok, 250 tables, SQLite 3.48.0;
+  - no `dishnet.sqlite` (*"nothing to copy"*);
+  - the data directory, 150 MB; the installed 5.18.88, 11 MB; the vault;
+  - the event queue's snapshot: **0 events not done** (8,223 in all, every one done).
+
+  Then `GO`.
+- **V.**
+  - The sign-in page answers 200 with zero redirects, and carries no South Sudan contact; the portal answers 302;
+    pinch-zoom is allowed.
+  - The photo viewer answers 302 and its upload 401. The authorisation page answers 404 *"This link is not valid"* to a
+    request without a link.
+  - `install_auth_request`, `install_auth_prefill`, `wa_send_reply` and **`log_call` (V11)** answer 401 without a login.
+  - **V12:** the WhatsApp AI screen sends a visitor with no session to the sign-in page (302), with no part of the card.
+  - Every switch, the Inbox's row and the AI settings are unchanged by the run (V3–V3h).
+  - **V4: no fatal or parse error since the copy, with 17 log lines read.**
+- **R.**
+  - **R1:** all 34 files as `53d5c4d` has them; manifest 5.18.89.
+  - **R2, R2b:** the pilot, the authorisation and the booking WhatsApp as the operator left them; own leads only OFF,
+    the follow-up hold holding nothing, the card shown — the one thing this release shows.
+  - **R3:** 086 complete (`2:18:1:1:1` before and after); 084 `16:3`, 16 files; **087 applied and complete**, as at A8,
+    with the trail of three. **The one note:** *"migration.log holds no line for 087 (not written, or rotated away) —
+    every statement's effect was read from the store above, which is the verification"* — see the correction in the
+    runbook above.
+  - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 238 files from
+    Release A through 5.18.88 intact. **R6:** every earlier surface, and 5.18.89's pieces.
+  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.88's deploy read. The photos as
+    before the run.
+  - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off a lead is
+    5.18.88's, field for field, and the uCRM write is OFF.
+  - **R11:** the registry is dark — its switch OFF in both copies, `enabled()` and `forStore()` off, 0 statements on its
+    tables, 087's three department rows and no other number. **R12:** the three numbers route exactly as on 5.18.88.
+  - **R13:** the event processor as designed on both countries; the queue lost nothing (8,223, all done, before and
+    after). **R14:** Domain B, all 363 files, byte for byte.
+  - **R15:** the installed Batch 2 rules — in full on Uganda with every switch on, the card alone with the switches
+    absent, nothing as South Sudan. **R16:** the installed assistant's prompt is 5.18.88's for all twelve conversations.
+- **What the run did not do:** it set no switch and changed no configuration value (V3–V3h); it created, paired or
+  called no Evolution instance and added no number (R3, R11: the three department rows only); it sent nothing — its only
+  POSTs carried no data and were refused with 401 before any handler, and the event queue held 8,223 events, every one
+  done, before and after. The log cannot speak for anything else on the server in that window.
+- `--check` read *"NOT up to date"* before and after, as expected: it compares the container with the branch tip,
+  `2c2771b`, which this script does not install.
 
 ### Rollback runbook — its own command, never pasted with the deploy (root `docs/44` §16.9)
 
@@ -7615,8 +7697,8 @@ What stays as it is:
 ### Remaining blockers, and the call
 
 - **Technical blockers: none found.** Every check, test and rehearsal above passed.
-- **Two approvals are needed, each its own:** the push (both branches), then the deploy. Neither is given yet.
-- **The call: GO once both are given.** The release is dark. With the switches as they are, the only change a person
+- **Both approvals were given and both steps are done:** pushed at 18:46 UTC, deployed at 19:02 UTC.
+- **The call was GO, and the deploy passed, 62/0/1** (the one note is R3's, above). The release is dark. With the switches as they are, the only change a person
   sees is the *Salesperson numbers* card for admins on Uganda's WhatsApp AI screen; every conversation stays a
   department's, so the prompt, the hand-over, the leads and the follow-ups are 5.18.88's — A10 and R16 prove the prompt
   on the server's own configuration before and after.
@@ -7624,6 +7706,13 @@ What stays as it is:
   the card (switched off), pair, verify, register the webhook — and switching the registry on, a production change of
   its own.
 
-**Git:** local commits only — the branch (`2c2771b`, the script and rehearsal, this entry) and `release/5.18.89`
-(`53d5c4d`). **Nothing is pushed and nothing is deployed.** No configuration changed, no switch set, no Evolution
-instance created, nothing sent. `docs/59` stays untracked by the operator's decision.
+**Git — pushed 07 Oct, 18:46 UTC**, on the operator's instruction (*"APPROVED — PUSH 5.18.89"*):
+- `claude/study-this-jhe2eg` from `b7f92cf` to `1541208` (18:45:58 UTC): `7195253` (the design), `2c2771b` (Batch 2),
+  `b7848d9` (the script and its rehearsal), `1f730d5` (this entry) and `1541208` (the development entry's comparison);
+- `release/5.18.89` new at `53d5c4d` (18:46:04 UTC). Nothing else was pushed; no tag.
+
+At the push nothing was deployed, no configuration had changed and nothing had been sent. This record of the result is a
+later commit.
+
+No configuration changed, no switch set, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
+operator's decision.
