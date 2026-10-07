@@ -7716,3 +7716,55 @@ later commit.
 
 No configuration changed, no switch set, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
 operator's decision.
+
+## 07 Oct — The salesperson pilot: the acceptance test and the runbook — tests and documents only, no production code; NOT pushed, nothing deployed
+
+**Why.** 5.18.89 is in production since 19:02 UTC, dark. The operator's instruction of 07 Oct evening: the salespeople's
+lines are to answer from their own numbers, staged. One pilot is proved end to end first; then the others, one at a time.
+The operator answered the three decisions still missing (the salesperson is named in the chat, not here):
+- **follow-ups** on a salesperson's number — *"Send from their number (Recommended)"*;
+- **own leads only** — *"With the pilot (Recommended)"*;
+- **the pilot salesperson** — chosen.
+
+**What changed.** No production file: the plugin outside `tests/` is byte for byte `HEAD`'s.
+- **`tests/test_sales_pilot.php`** (new) — the pilot end to end on the real plugin, in production's shape. Production's
+  shape is as its 5.18.89 deploy read it (A9, R12): sales on its own instance, support and account sharing one,
+  `ai_sales_on_all_numbers` on. The instruction's tests A–Q, the pilot checks 1–15 and the rollback, with 12 weakened
+  copies (`docs/65` §AC.4).
+- **`tests/fixtures/fake_evo_server.php`** — one test control, `/__test/fail_instance`: one instance refuses every send,
+  and each refusal is recorded in `failed_calls`. Nothing it did before changes.
+- **`docs/66-salesperson-pilot-runbook-2026-10-07.md`** (new) — the operator's procedure. Placeholders only; every
+  command in its own block; the rollback in its own section.
+- **`docs/65` §AC** — the decisions, the facts found while proving the pilot, the test and the runbook.
+
+**Proofs:**
+- **`tests/test_sales_pilot.php`** — 122 passed, 0 failed:
+  - in both full development passes;
+  - twice on the live release's code. That copy of `53d5c4d` differs from it only in the two test files, checked with
+    `diff -r` against a pristine extract; the release's own fixture was given the same control.
+
+  12 weakened copies, each caught, on both trees.
+- **Full suite, twice**, alone (19:46–20:28 and 20:29–21:09 UTC):
+  - 287 files, 13,984 passed, 0 failed, 0 skipped — every file's tally identical in both passes;
+  - against Batch 2's counted passes (286 files, 13,862 passed): exactly `test_sales_pilot` added (+122); nothing
+    moved, nothing gone;
+  - PHP warnings: 5 per pass, all `test_dpo_endpoints`, as before;
+  - the checker refuses its three planted faults.
+- **Domain B:** `dishnet-mikrotik-control-plane/` and `dishnet-hybrid-sudan/docs/` are identical at `53d5c4d` and
+  `HEAD`, and this change touches neither.
+- **Checks:**
+  - `php -l` clean on both PHP files;
+  - `git diff --check` clean;
+  - the banned-value scan of every new and changed file clean — every person, number and instance in the test is
+    fictitious.
+
+**Flags:** none read or changed in production. The runbook sets `multi_number_channels_enabled`, `sales_own_leads_only`
+and `wa_followups_on_owned_numbers`, each the operator's step.
+
+**Production impact:** none. Nothing here is deployed or needs deploying. The pilot itself is a card on the WhatsApp AI
+screen, three settings and read-only checks (docs/66).
+
+**Rollback:** nothing deployed, nothing to roll back. The pilot's own rollback is docs/66 §R.
+
+**Git:** this commit, local, on `claude/study-this-jhe2eg`, on top of `8be69ec` (the 5.18.89 result). **NOT pushed:** both
+wait for the operator's approval. `docs/59` stays untracked by the operator's decision.

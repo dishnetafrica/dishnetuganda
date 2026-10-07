@@ -1243,3 +1243,186 @@ OFF. Where the build went beyond the design, or stops short of it, the item says
 - **South Sudan, found by the full suite.** `test_staff_jobs_south_sudan` compares South Sudan's pages with 5.18.49's,
   byte for byte. It found the WhatsApp AI setup page one byte longer: the card's block is skipped on South Sudan, but a
   blank line after its `endif` still reached the page. The blank line is gone, and the page is identical again.
+
+## AC. The salesperson pilot (07 Oct evening): the decisions, the acceptance test, the runbook — nothing changed in production
+
+**Where it starts.** 5.18.89 is in production since 07 Oct, 19:02 UTC (docs/07), dark:
+- `multi_number_channels_enabled`, `sales_own_leads_only` and `wa_followups_on_owned_numbers` are not set;
+- the registry holds the three department rows alone.
+
+The operator asked for the salespeople's lines to answer from their own numbers, staged: one pilot proved end to end,
+then the others, one at a time. **Production was not touched for this section**: no setting, no number, no message, no
+deploy.
+
+### AC.1 Decided on 07 Oct evening (the operator's answers; nothing settled before was reopened)
+
+- **Follow-ups on a salesperson's number: sent from their number** (*"Send from their number (Recommended)"*).
+  `wa_followups_on_owned_numbers` is set when the pilot is activated, which replaces §AA item 6's default (held).
+- **Own leads only (D7): with the pilot** (*"With the pilot (Recommended)"*). `sales_own_leads_only` is set before the
+  pilot number goes live.
+- **The pilot salesperson:** chosen by the operator. Documents say *[the salesperson]*.
+- D3, D4 (the owner plus a copy to central), D5, D7's manager rule, D8, D10, D11 and D12 stand. D2 stays open; D6 is
+  still "no territory".
+
+### AC.2 The pilot needs no code change
+
+5.18.89 already carries every part the pilot uses (§AB.1):
+- the card;
+- the routing by channel;
+- the persona;
+- the owner's hand-over;
+- owned leads;
+- own leads only;
+- the follow-up switch;
+- the guard.
+
+Read against the code and then proved by the test in AC.4, the gaps were **in the tests only**:
+- two salesperson numbers at once;
+- the assistant's photo and document on a salesperson's number;
+- an instance that cannot send.
+
+The registry can be switched on safely for the pilot alone: an added number stays switched off until it is switched on,
+and the department numbers behave the same with the registry off and on (AC.4, O and P).
+
+### AC.3 Found while proving it — facts the runbook depends on
+
+1. **The colleague rule covers admins, support and accounts only** (5.18.50, `StaffDirectory::STAFF_ROLES`). WhatsApp
+   from such a number is kept for the team and never answered; a salesperson's phone is answered like a customer's. A
+   live test must therefore come from a phone that is not an admin's, support's or accounts' number on record.
+2. **The Inbox is not filtered by number.** `wa_inbox_roles` (absent by default: administrators only) lets the named
+   roles read every number's chats. Granting a sales role would let one salesperson read another's customers. The
+   runbook checks it before the pilot (docs/66, P2), and finding a sales role there is a STOP condition. Sending from
+   the Inbox is never grantable.
+3. **The hand-over on a salesperson's number:**
+   - the customer's one message is the assistant's own hand-over line, on that number;
+   - the operator's holding line (`ai_handover_message`) goes out only when the assistant produced nothing or its
+     retries are spent — on that number too.
+4. **An instance that cannot send** (the phone off, the number logged out):
+   - the reply is retried on the same number only — five attempts over about forty minutes;
+   - then the salesperson and the central number are told;
+   - the customer is sent nothing from any other number;
+   - a send that may have gone (a gateway timeout) is never repeated; a person is told at once;
+   - the guard names the number on the central number within about ten minutes; the salesperson is not told (§AB.2).
+5. **A switched-off number's messages are stored nowhere** (`channel_disabled`). While a number is off, its chats reach
+   the salesperson's phone and not the Inbox.
+6. **A WhatsApp Business greeting or away message** on the salesperson's phone reads as them typing, and stands the
+   assistant down on that chat:
+   - shorter than 40 characters, always;
+   - longer, until the same words have reached three other chats within seven days.
+7. **The full `tools/set_config.php` listing prints the payment settings.** The runbook reads only the five settings it
+   needs, with a read-only one-liner. It was tested locally: it prints those five lines and nothing else, and leaves the
+   database byte-identical.
+8. **Recorded, unchanged:** the support number's brain context carries `line_owner` as an empty value, the same with the
+   registry off and on. The brain reads empty as no persona.
+
+### AC.4 The acceptance test — `tests/test_sales_pilot.php` (new)
+
+**What it runs.** The real plugin under `php -S`, a fake Evolution and a fake uCRM, the AI worker in-process with a brain
+that never leaves it. The plugin is in production's shape:
+- the sales department on its own instance;
+- support and account sharing one;
+- two salesperson numbers added through the card exactly as the runbook adds one: add, QR, verify, webhook, switch on;
+- the three switches set in the decided order.
+
+Every number, name and instance in it is fictitious.
+
+**What it covers** — the instruction's tests A–Q, the pilot checks 1–15 and the rollback:
+- **A–D:** each number answers on its own number, as its own salesperson's assistant:
+  - two customers on two numbers in one worker run;
+  - one customer on both numbers — two conversations, isolated histories, one uCRM identity;
+  - the lead assigned to the salesperson, with its channel and its number.
+- **E:** the Inbox's text, image and document leave on the chat's own number; a salesperson cannot send.
+- **F:** the hand-over line and the operator's holding line on the salesperson's number; the salesperson and the central
+  number alerted from the DishNet sales number.
+- **G:** a follow-up sent on the salesperson's number, and held without the decided switch. It needs a time zone inside
+  the sending window; one was found in every run.
+- **H:** the assistant's photo and document on the salesperson's number.
+- **I, J, K:** fail closed:
+  - a switched-off number;
+  - an instance that refuses — the first failure, the retries spent, a possible send, the Inbox, the guard and the
+    recovery;
+  - an unknown instance, an unknown channel id, and a number moved meanwhile.
+
+  In every case nothing reaches the customer from any other number, and a person is told.
+- **L:** own leads only on the pages, the lead opened by id and the call log; the Inbox refused to salespeople; AC.3's
+  measured exposure; the brain told nothing of another salesperson's customers.
+- **M:** one brain — the same context and prompt on the department number and the salesperson's, but for the persona;
+  never the instance, the business number, the channel id or the customer's number.
+- **N:** South Sudan with every switch set: nothing changes.
+- **O, P:** sales, support and account identical in every observable, in all three states — the registry off, on with
+  the departments alone, and on with the pilot:
+  - the webhook, the payload, the role, the context and the prompt;
+  - the reply's number, the Inbox and the stand-down;
+  - account's Inbox threads and notifications;
+  - a department hand-over.
+- **Q:** the scenario runs on a copy of the plugin without Domain B, and loads nothing from it. At the change-set level,
+  `dishnet-mikrotik-control-plane/` and the plugin's `docs/` are identical at `53d5c4d` and on this branch, and this
+  work touches neither.
+- **Rollback:**
+  - R1, the pilot off on the card: nothing stored or sent on it; a queued message handed to a person; the Inbox
+    refused; an approved follow-up closed; the departments unaffected; everything kept, the trail one row longer;
+  - R2, the registry off: the number unknown; nothing sent for it; the trail unchanged;
+  - R3, the two other switches cleared: the lead pages as before;
+  - R4, back on: the number answers on its own number again.
+
+**12 weakened copies, each caught:**
+- a failed send re-sent on the sales number;
+- an unmapped channel borrowing the sales number;
+- the registry routing a switched-off number;
+- the webhook taking a switched-off number's messages as sales;
+- the worker ignoring the route check;
+- the Inbox answering from support;
+- the follow-up, the photo, the document and the holding line each sent on the sales number;
+- account taking the shared instance's inbound;
+- own leads only letting everything through.
+
+**Results:** with the final file:
+- **the development tree** — 122 passed, 0 failed, in both full suite passes below;
+- **the live release's code** — 122 passed, 0 failed, twice. It ran on a copy of `53d5c4d` that differs from it
+  only in this test and the fixture, checked with `diff -r` against a pristine extract. There the fixture is the
+  release's own, given the same control.
+- **the 12 weakened copies** are each caught in every run, on both trees. On the release tree the holding-line copy
+  targets the worker, where 5.18.89 sends that line; the development tree has since moved it to `lib/Handover.php`
+  (docs/55 §9).
+
+**The fixture.** `tests/fixtures/fake_evo_server.php` gains one test control, `/__test/fail_instance` (an instance that
+refuses every send, recorded in `failed_calls`). Nothing it did before changes.
+
+The full development suite ran twice, alone (19:46–20:28 and 20:29–21:09 UTC):
+- 287 files, 13,984 passed, 0 failed, 0 skipped, both passes identical file by file;
+- against the counted Batch 2 passes (286 files, 13,862 passed): exactly this test added (+122); no file moved, none
+  gone;
+- the same 5 PHP warnings per pass, all from `test_dpo_endpoints`;
+- the comparer refuses its three planted faults.
+
+**What a test cannot prove** — the runbook's live steps do:
+- that the SIM is the right one;
+- that Evolution pairs and stays connected;
+- that WhatsApp delivers;
+- how customers respond.
+
+### AC.5 The runbook — docs/66
+
+`docs/66-salesperson-pilot-runbook-2026-10-07.md`, in order:
+- **0** — the operator's six confirmations before anything is paired;
+- **P** — read-only checks, repeated after each step;
+- **1** — the card, with the registry still off;
+- **2** — the registry on, with the departments alone, and a watch of their traffic;
+- **3** — the two decided switches;
+- **4** — the number on, with the assistant off;
+- **5** — the assistant on;
+- **6** — the Phase 10 checks;
+- the STOP conditions;
+- **R** — four rollback levels, each on its own;
+- salesperson #2, #3, … one at a time, the same steps, no code and no deploy.
+
+### AC.6 What stays the operator's
+
+Every production step:
+- the six confirmations;
+- how long to watch the departments with the registry on;
+- the go for the pilot number;
+- the go for each number after it.
+
+No push and no deploy are needed for the pilot. This section, the runbook and the test wait on the branch for the
+operator's approval to push.
