@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
+require_once dirname(__DIR__, 2) . '/lib/LeadVisibility.php';
 // ═══════════════════════════════════════════════════════════════
 // LEADS / CALL CENTER
 // ═══════════════════════════════════════════════════════════════
@@ -150,6 +151,8 @@ require_once dirname(__DIR__, 2) . '/lib/CustomerContact.php';
         $myId  = (int)($me2['id'] ?? 0);
         foreach ($leads as &$l) {
             if ((int)($l['id'] ?? 0) !== $leadId) continue;
+            // 5.18.89 (docs/65 §AA, D7): own leads only. A lead the caller may not see is answered as a missing one.
+            if (!LeadVisibility::allows((array)$l, (array)$me2, (array)($config ?? []), $dataDir ?? null, $rbac ?? null)) $er2('Lead not found.', 404);
             if ((int)($l['retailer_id'] ?? 0) !== $myId &&
                 (int)($l['assigned_to'] ?? 0) !== $myId &&
                 !($me2['is_admin'] ?? false) &&

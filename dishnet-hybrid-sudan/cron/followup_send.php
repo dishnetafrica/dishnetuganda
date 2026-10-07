@@ -56,6 +56,12 @@ $now     = gmdate('Y-m-d H:i:s');
 require_once $pluginRoot . '/lib/ColleagueNumbers.php';
 $colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
 
+// 5.18.89 (docs/65 §AA item 6): an approved follow-up on a salesperson's own number is closed, never sent — they follow
+// up personally, and every automated send from a person's number adds to its ban risk. wa_followups_on_owned_numbers
+// lifts the hold. Registry off: nothing is held and nothing here changes.
+require_once $pluginRoot . '/lib/OwnedNumberHold.php';
+$ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
+
 $sent = 0; $held = 0; $failed = 0;
 
 foreach ($svc->approvedDrafts(10) as $d) {
@@ -82,6 +88,11 @@ foreach ($svc->approvedDrafts(10) as $d) {
     }
     if ($colleagues !== null && ($colleagues->isColleague($phone) || $colleagues->isColleagueConversation($conv))) {
         $svc->close($fuId, 'staff', "a colleague's number", 'sender');
+        $held++;
+        continue;
+    }
+    if ($ownedHold->holds($chan)) {
+        $svc->close($fuId, 'cancelled', OwnedNumberHold::REASON, 'sender');
         $held++;
         continue;
     }

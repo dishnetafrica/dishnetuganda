@@ -13,7 +13,9 @@
  * the hand that never forgets.
  *
  * Every run (master.php schedules it):
- *   1. for each mapped channel instance, read Evolution's registered webhook;
+ *   1. for each mapped channel instance, read Evolution's registered webhook
+ *      (the three department numbers; with the channel registry on, every
+ *      other active number as well — 5.18.89, docs/65 §AA item 7);
  *   2. when it still holds our URL with the CURRENT token, and is enabled —
  *      stay silent;
  *   3. when it is missing, foreign, stale-tokened or disabled — re-register
@@ -89,8 +91,34 @@ try {
         return;
     }
 
-    foreach (EvolutionApiService::CHANNELS as $_wg_chn) {
-        $_wg_inst = $_wg_evo->instanceFor($_wg_chn);
+    // The three department numbers, from the configuration, exactly as before. 5.18.89 (docs/65 §AA item 7): with the
+    // channel registry on, every other ACTIVE channel's instance as well — a salesperson's number can lose its webhook
+    // the way the sales number once did. Registry off, or unreadable: the three departments alone.
+    $_wg_watch = [];
+    foreach (EvolutionApiService::CHANNELS as $_wg_c) $_wg_watch[$_wg_c] = $_wg_evo->instanceFor($_wg_c);
+    require_once $_wg_root . '/lib/ChannelRegistry.php';
+    if (ChannelRegistry::enabled($_wg_config, $_wg_data)) {
+        try {
+            $_wg_reg = new ChannelRegistry($_wg_store->getPdo());
+            if ($_wg_reg->available()) {
+                $_wg_rt = $_wg_reg->routing(EvolutionApiService::configInstanceMap($_wg_config));
+                foreach ($_wg_rt['channel_to_instance'] as $_wg_id => $_wg_i) {
+                    $_wg_id = (string)$_wg_id;
+                    if (in_array($_wg_id, ChannelRegistry::DEPARTMENT, true)) continue;   // watched above
+                    $_wg_dn = isset($_wg_rt['contexts'][$_wg_id]) ? $_wg_rt['contexts'][$_wg_id]->displayName() : '';
+                    $_wg_dn = mb_substr(trim((string)preg_replace("/[^\\p{L}\\p{N} '\\-]/u", '', $_wg_dn)), 0, 40);
+                    $_wg_watch[$_wg_dn !== '' ? "{$_wg_id} ({$_wg_dn})" : $_wg_id] = (string)$_wg_i;
+                }
+            }
+        } catch (\Throwable $_wg_re) {
+            $_wg_log('the channel registry could not be read — watching the three department numbers only: '
+                . $_wg_re->getMessage());
+        }
+    }
+
+    foreach ($_wg_watch as $_wg_chn => $_wg_inst) {
+        $_wg_chn  = (string)$_wg_chn;
+        $_wg_inst = (string)$_wg_inst;
         if ($_wg_inst === '') continue;
 
         $_wg_st = $_wg_live[$_wg_inst] ?? null;

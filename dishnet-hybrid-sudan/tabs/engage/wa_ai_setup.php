@@ -35,6 +35,13 @@ $_wData = $GLOBALS['dataDir'] ?? ($_wRoot . '/data');
 $_wCfg  = PluginConfig::load($_wRoot, $_wData);
 $_wEvo  = new EvolutionApiService($_wCfg);
 
+// 5.18.89 (docs/65 §AA.1 item 1): salesperson numbers. Uganda, wherever migration 087 has run; the registry switch may
+// be off. Every other install: null, and nothing below changes.
+require_once dirname(__DIR__, 2) . '/lib/SalesNumbersAdmin.php';
+$_wPdo = (isset($store) && is_object($store) && method_exists($store, 'getPdo')) ? $store->getPdo() : null;
+$_wSN  = ($_wPdo !== null && SalesNumbersAdmin::shown($_wCfg, $_wData, $_wPdo))
+       ? new SalesNumbersAdmin($_wPdo, $store, $_wCfg, $_wData, $_wEvo) : null;
+
 $_wMsg    = null;   // ['ok'=>bool,'text'=>string]
 $_wAiTest = null;   // result of an isolated AI test
 $_wQr  = null;      // ['channel','instance','qr','code']
@@ -286,6 +293,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
                 ? 'Evolution will now send ' . $ch . ' messages to this plugin.'
                 : 'Evolution refused: ' . $r['error']];
         }
+
+    } elseif ($_wSN !== null && in_array($act, SalesNumbersAdmin::ACTIONS, true)) {
+        // 5.18.89: a salesperson's number — every change through the channel registry, with this admin's name.
+        $r = $_wSN->handle($act, $_POST, (array)($retailer ?? []), function () use ($_wCfg, $_wData): string {
+            $secret = PluginConfig::isSet_($_wCfg, 'evo_webhook_secret')
+                ? (string)$_wCfg['evo_webhook_secret'] : EvoWebhookGuard::autoSecret($_wData);
+            return $secret === '' ? '' : (string)wa_ai_webhook_url($_wCfg, $secret);
+        });
+        $_wMsg = ['ok' => (bool)$r['ok'], 'text' => (string)$r['text']];
+        if (!empty($r['qr'])) $_wQr = $r['qr'];
     }
 }
 
@@ -759,7 +776,9 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
   <h3>Found in Evolution</h3>
   <?php foreach ($_wDetected as $d):
         $assigned = '';
-        foreach (EvolutionApiService::CHANNELS as $c) if ($_wEvo->instanceFor($c) === $d['name']) $assigned = $c; ?>
+        foreach (EvolutionApiService::CHANNELS as $c) if ($_wEvo->instanceFor($c) === $d['name']) $assigned = $c;
+        // 5.18.89: an instance a salesperson's number uses is in use too, never offered to a department.
+        if ($assigned === '' && $_wSN !== null) $assigned = $_wSN->instanceOwners()[mb_strtolower((string)$d['name'])] ?? ''; ?>
   <div class="wa-row">
     <span class="n"><?= h($d['name']) ?></span>
     <span class="d">
@@ -924,6 +943,118 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
   so nobody has to handle the secret.</div>
 </div>
 
+<?php if ($_wSN !== null):
+      // 5.18.89 (docs/65 §AA.1 item 1): salesperson numbers. Every number in the channel registry, the business number
+      // masked; actions only on a salesperson's number that is not retired.
+      $_snRows   = $_wSN->view($_wDetected);
+      $_snFree   = $_wLive !== null ? $_wSN->freeInstances() : [];
+      $_snPeople = $_wSN->salespeople();
+      $_snOn     = $_wSN->registryOn(); ?>
+<div class="wa-card" id="sales-numbers">
+  <h3>Salesperson numbers</h3>
+  <div class="wa-note" style="padding:10px 15px">
+    A salesperson's own WhatsApp number. The assistant answers on it as that salesperson's assistant at DishNet, sends
+    hand-overs to them (with a copy to the alert number), and the leads it brings in are theirs.
+    A number is added switched off; pair it, verify its number and register its webhook, then switch it on.
+    <?php if (!$_snOn): ?>
+      <br><b>The channel registry is off</b> (multi_number_channels_enabled), so nothing is received or answered on these
+      numbers yet. A number can be prepared here, but not switched on.
+    <?php endif; ?>
+  </div>
+  <?php foreach ($_snRows as $_sn): ?>
+  <div class="wa-row" style="display:block">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:600"><?= h($_sn['display_name']) ?></span>
+      <span class="d"><?= h($_sn['id']) ?> &middot; <?= h($_sn['instance'] !== '' ? $_sn['instance'] : 'no instance') ?>
+        &middot; number <?= h($_sn['number']) ?><?= $_sn['verified_at'] !== '' ? ' (verified ' . h($_sn['verified_at']) . ')' : '' ?>
+        <?php if ($_sn['owner'] !== null): ?>&middot; <?= h($_sn['owner']['name'] !== '' ? $_sn['owner']['name'] : ('staff #' . $_sn['owner']['id'])) ?><?= $_sn['owner']['active'] ? '' : ' (not active)' ?><?php endif; ?>
+      </span>
+      <span class="wa-pill <?= $_sn['status'] === 'active' ? 'wa-ok' : ($_sn['status'] === 'retired' ? 'wa-b' : 'wa-w') ?>"><?= h($_sn['status']) ?></span>
+      <span class="wa-pill <?= $_sn['ai'] ? 'wa-ok' : 'wa-w' ?>" style="margin-left:0">assistant <?= $_sn['ai'] ? 'on' : 'off' ?></span>
+      <span class="wa-pill <?= $_sn['connected'] ? 'wa-ok' : 'wa-w' ?>" style="margin-left:0"><?= h($_sn['connected'] ? 'connected' : $_sn['state']) ?></span>
+    </div>
+    <?php if ($_sn['department']): ?>
+      <div class="wa-note" style="padding:6px 0 0">A department number: its instance is set under Numbers, not here.</div>
+    <?php elseif ($_sn['status'] !== 'retired'): ?>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <button class="wa-btn" type="submit" name="wa_action" value="sn_pair">Show QR code</button>
+        <button class="wa-btn" type="submit" name="wa_action" value="sn_verify">Verify number</button>
+        <button class="wa-btn" type="submit" name="wa_action" value="sn_webhook">Register webhook</button>
+      </form>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <input type="hidden" name="wa_action" value="sn_status">
+        <input type="text" name="reason" maxlength="300" placeholder="Reason (optional)" style="min-width:200px">
+        <?php if ($_sn['status'] !== 'active'): ?><button class="wa-btn p" type="submit" name="status" value="active">Switch on</button><?php endif; ?>
+        <?php if ($_sn['status'] === 'active'): ?><button class="wa-btn" type="submit" name="status" value="paused">Pause</button><?php endif; ?>
+        <?php if ($_sn['status'] !== 'disabled'): ?><button class="wa-btn" type="submit" name="status" value="disabled">Switch off</button><?php endif; ?>
+      </form>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <input type="hidden" name="wa_action" value="sn_ai">
+        <input type="hidden" name="value" value="<?= $_sn['ai'] ? '0' : '1' ?>">
+        <button class="wa-btn" type="submit"><?= $_sn['ai'] ? 'Stop the assistant on this number' : 'Let the assistant answer on this number' ?></button>
+      </form>
+      <?php if ($_snPeople): ?>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <input type="hidden" name="wa_action" value="sn_owner">
+        <select name="owner_staff_id" required>
+          <option value="">— new owner —</option>
+          <?php foreach ($_snPeople as $_pid => $_pname): if ($_sn['owner'] !== null && (int)$_pid === (int)$_sn['owner']['id']) continue; ?>
+            <option value="<?= (int)$_pid ?>"><?= h($_pname) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <input type="text" name="reason" maxlength="300" placeholder="Reason (optional)" style="min-width:200px">
+        <button class="wa-btn" type="submit">Give the number to them</button>
+      </form>
+      <?php endif; ?>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <input type="hidden" name="wa_action" value="sn_status">
+        <input type="hidden" name="status" value="retired">
+        <label class="d"><input type="checkbox" name="confirm" value="yes"> retire for good — it is never used again</label>
+        <button class="wa-btn d" type="submit">Retire</button>
+      </form>
+    <?php endif; ?>
+    <?php if ($_sn['trail']): ?>
+      <div class="wa-note" style="padding:8px 0 0">
+        <?php foreach ($_sn['trail'] as $_t): ?>
+          <div><?= h((string)$_t['created_at']) ?> &middot; <?= h((string)$_t['action']) ?>
+            <?= ($_t['old_value'] ?? null) !== null ? h((string)$_t['old_value']) . ' &rarr; ' : '' ?><?= h((string)($_t['new_value'] ?? '')) ?>
+            &middot; <?= h((string)$_t['actor']) ?><?= trim((string)($_t['reason'] ?? '')) !== '' ? ' — ' . h((string)$_t['reason']) : '' ?></div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+  <?php endforeach; ?>
+  <?php if ($_wLive === null): ?>
+    <div class="wa-row"><span class="d">Evolution could not be reached, so its instances cannot be listed. Fix the
+      connection above, then reload this page to add a number.</span></div>
+  <?php elseif (!$_snFree): ?>
+    <div class="wa-row"><span class="d">Every instance in Evolution is already a number's. Create one under
+      Connect &amp; webhooks, then add it here.</span></div>
+  <?php elseif (!$_snPeople): ?>
+    <div class="wa-row"><span class="d">There is no active salesperson to give a number to.</span></div>
+  <?php else: ?>
+    <form method="post" class="wa-row"><?= $_csrf ?>
+      <input type="hidden" name="wa_action" value="sn_add">
+      <span style="font-weight:600">Add a number</span>
+      <select name="instance" required>
+        <option value="">— Evolution instance —</option>
+        <?php foreach ($_snFree as $_fi): ?><option value="<?= h($_fi) ?>"><?= h($_fi) ?></option><?php endforeach; ?>
+      </select>
+      <select name="owner_staff_id" required>
+        <option value="">— salesperson —</option>
+        <?php foreach ($_snPeople as $_pid => $_pname): ?><option value="<?= (int)$_pid ?>"><?= h($_pname) ?></option><?php endforeach; ?>
+      </select>
+      <input type="text" name="display_name" maxlength="80" placeholder="Shown to staff, e.g. Sales — Kampala 2">
+      <button class="wa-btn p" type="submit">Add, switched off</button>
+    </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php
 // ── Photos and documents the assistant can send ─────────────────────────────
 // A customer asked to see the kit and was told a colleague would confirm. The

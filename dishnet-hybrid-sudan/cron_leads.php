@@ -40,6 +40,7 @@ require_once __DIR__ . '/lib/StoreInterface.php';
 require_once __DIR__ . '/lib/JsonStore.php';
 require_once __DIR__ . '/lib/SqliteStore.php';
 require_once __DIR__ . '/lib/NotificationService.php';
+require_once __DIR__ . '/lib/OwnedLead.php';
 require_once __DIR__ . '/lib/bootstrap_data.php';
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
@@ -204,10 +205,14 @@ $staleReassigned = []; // agentId => [lead, ...]
 $staleFlagged    = []; // agentId => [lead, ...]
 foreach ($agents as $ag) { $staleReassigned[(int)$ag['id']] = []; $staleFlagged[(int)$ag['id']] = []; }
 
+$_ownedKept = 0;
 foreach ($leads as &$l) {
     if (!in_array($l['status'] ?? '', $openStatuses)) continue;
     if (empty($l['assigned_to'])) continue;
     if (!empty($l['stale_reassigned'])) continue; // already reassigned once
+    // 5.18.89 (docs/65 §AA, D5): a lead from a salesperson's own WhatsApp number stays theirs — never moved, and so
+    // never told it will be. Only while it is still with them and they are still an active member of staff.
+    if (OwnedLead::isProtected($l, $retailers)) { $_ownedKept++; continue; }
 
     $aid = (int)$l['assigned_to'];
 
@@ -266,6 +271,7 @@ foreach ($leads as &$l) {
     }
 }
 unset($l);
+if ($_ownedKept > 0) clog_leads("  ◆ {$_ownedKept} lead(s) from salespeople's own numbers left with their owners (never reassigned)");
 
 // Notify original agents about reassigned leads
 $staleByPrev = [];

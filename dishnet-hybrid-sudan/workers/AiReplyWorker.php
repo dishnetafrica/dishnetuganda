@@ -49,6 +49,7 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/EvolutionApiService.php';
         require_once $root . '/lib/DishNetTools.php';
         require_once $root . '/lib/ConversationService.php';
+        require_once $root . '/lib/LineOwner.php';
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
         require_once $root . '/lib/FlyerAsset.php';
@@ -141,6 +142,13 @@ class AiReplyWorker extends WorkerBase
      */
     private array $turnIds = [];
 
+    /**
+     * 5.18.89 (docs/65 §AA): the salesperson whose own number this turn arrived on, or null — always null with the
+     * registry off and on every department number. Resolved once per turn; the persona (D3), the hand-over (D4) and
+     * the lead (D5) all read it, so all three agree on who it is.
+     */
+    private ?\LineOwner $lineOwner = null;
+
     private function turnConversationId(array $ctx): int
     {
         return (int)($this->turnIds['conversation_id'] ?? ($ctx['conversation_id'] ?? 0));
@@ -154,6 +162,7 @@ class AiReplyWorker extends WorkerBase
     protected function handle(array $event): void
     {
         $this->turnIds = [];
+        $this->lineOwner = null;
         $p       = $event['_payload'] ?? [];
         $channel = (string)($p['channel'] ?? '');
         $phone   = (string)($p['customer_phone'] ?? '');
@@ -179,6 +188,11 @@ class AiReplyWorker extends WorkerBase
         // person is told, and the customer gets no holding line from a number that may not be the one they wrote to.
         $role = $this->replyRoleOrRefuse($channel, (string)($p['whatsapp_instance'] ?? ''), $convId, $phone);
         if ($role === null) return;
+        // 5.18.89 (docs/65 §AA): a salesperson's own number? Only the registry can say, so off it is never asked.
+        if ($this->evo->registryOn()) {
+            $this->lineOwner = \LineOwner::of($this->evo->channelContext($channel), $this->store, $this->config,
+                                              $this->dataDir !== '' ? $this->dataDir : null);
+        }
 
         // A colleague has this conversation. The question is not dropped —
         // "human active, skipping AI" acked the event, and that is how a
@@ -301,6 +315,8 @@ class AiReplyWorker extends WorkerBase
                         // 5.18.86 (docs/65 §K): with the channel registry on, the lead also records the number it came
                         // in on — channel, owner, territory. Off, null: the 5.18.87 lead, field for field.
                         $svc->withOrigin($this->leadOrigin($channel, $convId));
+                        // 5.18.89 (docs/65 §AA, D5): a new lead from a salesperson's own number is theirs.
+                        $svc->withOwner($this->lineOwner);
                         $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai',
                                              $this->latestPin($convId, $context));
                         $this->log($r['ok'] ? 'info' : 'info', sprintf(
@@ -362,6 +378,8 @@ class AiReplyWorker extends WorkerBase
             // prose: the description the model reads is in 'message', but what
             // gets written down comes from here.
             'location'          => is_array($p['location'] ?? null) ? $p['location'] : null,
+            // 5.18.89 (docs/65 §AA, D3): the first name of the salesperson whose own line this is; absent otherwise.
+            'line_owner'        => $this->lineOwner !== null ? $this->lineOwner->firstName() : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -560,6 +578,8 @@ class AiReplyWorker extends WorkerBase
                     // customers send their location — never showed the assistant the pin block, because the
                     // contract had no key for it; support and account did.
                     'location'  => $ctx['location'] ?? null,
+                    // 5.18.89 (docs/65 §AA, D3): whose own line this is, if a salesperson's.
+                    'line_owner' => $ctx['line_owner'] ?? null,
                 ]);
         }
 
@@ -1530,12 +1550,13 @@ class AiReplyWorker extends WorkerBase
             // escalation three times in a row is one buzz, not three.
             require_once dirname(__DIR__) . '/lib/AlertService.php';
             $alerts = new \AlertService($this->store, $this->config, $this->evo);
-            $alerts->notify(
-                'escalate:conv:' . $convId,
-                "🔴 DishNet: the AI needs a human for {$phone} ({$channel})"
-                . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
-                30
-            );
+            // 5.18.89 (docs/65 §AA, D4): on a salesperson's own number the salesperson is alerted too; with no owner
+            // this is the alert it always was — the same key, the same text, the central number.
+            $owner = $this->handoverOwner($channel);
+            $sent  = $alerts->handover($convId, $phone, $channel, $reason, $owner);
+            if ($owner !== null && !isset($sent['owner'])) {
+                $this->log('warn', "conv {$convId}: the line's owner has no phone on record — the central alert number only");
+            }
 
             // ── And tell the customer ────────────────────────────────────
             // A handoff sent them nothing at all. The team gets a buzz, the
@@ -1568,6 +1589,17 @@ class AiReplyWorker extends WorkerBase
         } catch (\Throwable $e) {
             $this->log('error', 'escalation failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * 5.18.89 (docs/65 §AA, decision D4): the salesperson a hand-over on this channel alerts, or null for the central
+     * number alone. Only a channel that hands over to its owner, and only an owner this turn resolved.
+     */
+    private function handoverOwner(string $channel): ?\LineOwner
+    {
+        if ($this->lineOwner === null || !$this->evo->registryOn()) return null;
+        $ctx = $this->evo->channelContext($channel);
+        return ($ctx !== null && $ctx->handoverTo() === 'owner') ? $this->lineOwner : null;
     }
 
     /**

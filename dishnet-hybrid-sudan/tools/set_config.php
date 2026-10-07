@@ -248,6 +248,13 @@ $FLAGS = [
     // number its message arrived on. The three department numbers stay configured where they are. Batch 1: dark.
     'multi_number_channels_enabled' => ['bool',
         'Route WhatsApp by channel through the channel registry (Uganda; docs/65): a switched-off number is refused, a reply leaves only on the number the customer wrote to. Absent means OFF — the three department numbers exactly as before'],
+    // ── A salesperson's own number (5.18.89, docs/65 §AA) — Uganda only. The first two act only with the registry on. ──
+    'wa_handover_copy_central' => ['bool',
+        'On a salesperson\'s own number, a hand-over alerts the salesperson and sends a copy to the central alert number (D4, decided 07 Oct). Absent means ON; 0 = the salesperson alone (the central number still gets it when they have no phone on record)'],
+    'wa_followups_on_owned_numbers' => ['bool',
+        'Allow follow-ups on a salesperson\'s own number (docs/65 §AA item 6). Absent means OFF: the salesperson follows up personally, and the follow-up scan, drafts and sends leave those conversations alone'],
+    'sales_own_leads_only' => ['bool',
+        'A salesperson sees only their own leads (assigned to them, created by them, or on their call list today) on Sales → Leads, in the quote picker, the status change and the call log (Uganda, D7). Admins and anyone granted All Leads see everything. Absent means OFF: every lead visible to every salesperson, as before'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
