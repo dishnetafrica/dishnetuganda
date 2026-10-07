@@ -6686,3 +6686,406 @@ with `docs/65` §W's three decisions (`6569047`) — **pushed 07 Oct, 06:33 UTC*
 both branches"*): the branch from `8449d2d` to `6569047` (06:33:24 UTC), `release/5.18.87` new at `9cc81af` (06:33:26
 UTC). At the push nothing was deployed, no configuration had changed and nothing had been sent to anyone. `docs/59`
 stays untracked by the operator's decision.
+
+## 07 Oct — 5.18.88: the remaining Batch 1 release — migration 087 (the channel registry) and the routing by channel, both dark behind a switch that stays OFF; Uganda's event processor leaves the workers' events to the workers; South Sudan unchanged. `release/5.18.88` = `6464204`, cut on live 5.18.87 (`9cc81af`); `scripts/deploy-5.18.88.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+
+**This is the remaining Batch 1 release.** Multi-number Batch 1 (`b1865ea` on the branch, `docs/65`) reaches production
+in two releases.
+- **5.18.86** (`c2c96e1`, deployed 07 Oct 04:26 UTC) shipped part A, the Inbox answering from the conversation's own
+  number. With it came, byte for byte, Batch 1's `ChannelRegistry`, `ChannelContext`, `InboxReplyRoute`,
+  `NotificationService` and `includes/api/api_whatsapp.php`, and the seven registry functions of `EvolutionApiService`:
+  the registry's code, dark.
+- **5.18.88** ships the rest: migration 087, the routing by channel in the webhook, the AI worker and the follow-ups, the
+  lead's origin, the registry's switch in `tools/set_config.php`, the read-only `tools/channels.php`, and part C, the
+  event processor's protection of worker events.
+
+Every file Batch 1 touched was checked against both releases' trees. After 5.18.88, nothing of Batch 1 remains outside
+production except what belongs to work that is not in production:
+- the AI media layer: part M (`workers/MediaWorker.php`), the media tests, and `EvolutionApiService::getBase64FromMediaMessage()`
+  (+23 lines, the one way live's copy of that file differs from Batch 1's);
+- the partner portal's tests (`test_partner_*`, `test_dist_isolation`).
+
+Both go with their own layers, if those are ever released.
+
+The operator's instruction, 07 Oct: build 5.18.88 directly on 5.18.87, selectively, not from the branch wholesale. Keep
+South Sudan's event list `['ai.reply']` and bring no `ai.media` into it. Registry behaviour is Uganda only. Domain B is
+untouched. **No deploy and no push without their separate approval.** `multi_number_channels_enabled` is not switched on,
+no Evolution instance is created or paired, and no message is sent.
+
+### The five-part form
+
+1. **What is configured now (5.18.87, `9cc81af`).**
+   - Batch 0's lead fixes are live. `ai_lead_capture` is ON and `ai_crm_lead_sync` is OFF (the 07 Oct decision);
+     `ai_qualification` and `ai_sales_on_all_numbers` are ON (5.18.87's RESULT).
+   - The registry's libraries are installed, but 087 is not, so `ChannelRegistry::available()` is false and
+     `EvolutionApiService::forStore()` returns the configured service. The deploy reads `multi_number_channels_enabled`
+     before anything changes, and refuses unless it is OFF in both copies (A5).
+   - Support and account share one WhatsApp number on this installation (`docs/18`), so inbound on it lands in
+     support: an instance named in two slots resolves to the first of sales → support → account (`docs/65` §B). The
+     deploy reads the server's own mapping and reports its shape (A9, R12).
+   - **Uganda's event processor runs the loop every install runs, unchanged since 5.18.85.** It claims every type and
+     releases `ai.reply`. It can acknowledge a
+     `crm.lead.sync` as an unknown type before `UcrmLeadWorker` sees it (`docs/65` §Z.5). It logs `wa.escalation` as
+     unknown, and it returns early on an empty claim.
+2. **Why.**
+   - 5.18.87's entry: *part C should be in production before the uCRM write is switched on*. Until it is, a lead's sync
+     can be swallowed.
+   - Salespeople's own numbers (the next batch, `docs/65` §W: D4, D5 and D7) build on the registry. Its table and the
+     routing by channel must be in production, dark, first.
+3. **Exactly what changes.** The 18 files below, and migration 087 applied by the plugin's own runner on its next
+   request:
+   - two tables, `wa_channels` and `wa_channel_log`;
+   - three indexes;
+   - three triggers: the trail refuses UPDATE and DELETE, and a channel is never deleted;
+   - the three department rows, `sales`, `support` and `account`, each with **no instance stored**. NULL means "the
+     department's configured key";
+   - three `seeded` trail rows.
+
+   **With the switch OFF, only Uganda's event processor behaves differently:**
+   - it does not claim `ai.reply` or `crm.lead.sync` at all (`EventBus::consume()`'s new exclusion list), and still
+     releases one if it ever holds one;
+   - it acknowledges `wa.escalation` as a known type, with no "unknown" log line;
+   - it no longer returns early on an empty claim, so the dead-letter pass runs on every run.
+
+   Everything else behaves as 5.18.87 does: with the switch off, every new path returns at its first line. The suite
+   proves it in the sandbox, and the deploy checks it on the server's own configuration (A9, R11, R12, R13).
+4. **Effect on UISP/uCRM.**
+   - UISP: none. Nothing outside the plugin directory changes.
+   - uCRM: the plugin's own SQLite gains two tables, and nothing reads them while the switch is off. No uCRM call is
+     added, and the uCRM write stays OFF.
+   - Evolution: no instance is created, paired or called by the deploy, and no message is sent.
+5. **Rollback.** `scripts/deploy-5.18.88.sh --rollback`, typed `ROLLBACK`, puts 5.18.87 (`9cc81af`) back through
+   `deploy-hybrid.sh` and checks it, in about the deploy's own time (minutes). 087's tables stay, and 5.18.87 does not read
+   them with the switch off. The runbook is its own section below, never beside the deploy command.
+
+### Release notes — what each change does
+
+- **`cron/event_processor.php`** (+47 −9).
+  - On Uganda (`StaffJobsGate::applies`) the worker-owned list is `['ai.reply', 'crm.lead.sync']`, passed to `consume()`
+    as an exclusion. `wa.escalation` is acknowledged as known, and there is no early return.
+  - **On every other install, South Sudan included, the 5.18.87 loop runs unchanged:** `consume(20)`, the early return,
+    and the list `['ai.reply']`. `ai.media` appears nowhere in the release's production code (0 files).
+- **`lib/EventBus.php`** (Batch 1's, byte for byte). `consume()` gains `$excludeTypes`. It is empty, so nothing changes,
+  for every other caller.
+- **`evo_webhook.php`** (+20 −1). Uses `forStore()`. Only with the registry on: a number the registry has switched off is
+  refused (`channel_disabled`), and a number whose assistant is off keeps the message for the team and queues nothing.
+- **`workers/AiReplyWorker.php`** (+77 −6). Uses `forStore()`. Only with the registry on:
+  - the brain is told the channel's role;
+  - a reply leaves only on the number the message arrived on, and on any doubt a person is told and the customer is sent
+    nothing;
+  - the lead records the number it came in on.
+  Off, `replyRoleOrRefuse()` returns at its first line and the lead's origin is null.
+- **`cron/followup_send.php`** (Batch 1's, byte for byte). Uses `forStore()`. Only with the registry on, a follow-up
+  leaves only on its own conversation's number. Off, the configured instance, as before.
+- **`lib/AiLeadService.php`** (Batch 1's, byte for byte). `withOrigin()` takes the lead's channel fields; null, which is
+  always the case with the registry off, writes 5.18.87's lead field for field.
+- **`tools/set_config.php`** (+7). The tool knows the key `multi_number_channels_enabled`. Nothing in this release sets it.
+- **`tools/channels.php`** (new, Batch 1's). A read-only report: the switch, whether the registry is in effect, whether 087
+  is installed, and the channels.
+- **`migrations/087_wa_channels.sql`** (new, Batch 1's, byte for byte; sha256 `3feda1b44ca79c1a…`, 14 statements).
+  Additive and idempotent: `CREATE … IF NOT EXISTS`, `INSERT OR IGNORE`, and trail rows guarded by `WHERE NOT EXISTS`.
+  No ALTER, UPDATE, DELETE or DROP, and no foreign key to an existing table.
+- **Tests.**
+  - `test_channel_registry.php` is Batch 1's, byte for byte.
+  - `test_event_processor_protected.php` is Batch 1's without `ai.media`. Production has no media layer, so the copy
+    proves neither list names it and that South Sudan keeps `['ai.reply']`.
+  - `test_multi_number_routing.php` is Batch 1's without part M (the media worker), its weakened copy, the media switch
+    and the 504 case.
+  - The five distributor tests read the version pin `5.18.88`.
+- **`manifest.json`** 5.18.88.
+
+Both derived tests were made by derivations in which every anchor and every replacement is asserted to land exactly once.
+A provenance check run both ways reads CLEAN:
+- the six whole files are byte-identical to `b1865ea`;
+- in the four merged files every line added or removed is one Batch 1 added or removed, apart from nine listed rewrites:
+  - `ai.media` and the media worker come out of one code line (the two lists) and four comments, because production has
+    no media layer;
+  - four comments' version numbers now name 5.18.87 and 5.18.88;
+- every Batch 1 hunk in those files is in the release, unless it is the media layer's.
+
+### Files — 18 against `9cc81af`: 5 added, 13 changed, none removed
+
+- **Added:** `migrations/087_wa_channels.sql`, `tools/channels.php`, `tests/test_channel_registry.php`,
+  `tests/test_event_processor_protected.php`, `tests/test_multi_number_routing.php`.
+- **Changed:** `cron/event_processor.php`, `cron/followup_send.php`, `evo_webhook.php`, `lib/AiLeadService.php`,
+  `lib/EventBus.php`, `manifest.json`, `tools/set_config.php`, `workers/AiReplyWorker.php`, and the five distributor
+  tests (`test_distributor_apply`, `_link_ucrm`, `_notify`, `_registry`, `_territory`; the pin only).
+- **Not in it:**
+  - the AI media layer (migration 085, the media worker, the voice, image and document paths);
+  - the partner portal;
+  - the CSRF guard;
+  - unrelated security fixes and refactors;
+  - Batch 2;
+  - any Evolution instance or number.
+
+  A0's allow-list refuses each of these.
+
+### Ancestry
+
+`6464204` (5.18.88, release) ← `9cc81af` (5.18.87, live) ← `c2c96e1` (5.18.86) ← `4790019` (5.18.85). The source is Batch
+1, `b1865ea`, on `c8b3e36`, on the branch. Only the files above come from it.
+
+`release/5.18.88` is local, not pushed.
+
+### Migration 087 — verified on fresh copies of 5.18.87
+
+The rehearsal is driven by `m087_rehearse.php`, in the session scratchpad. Each run starts from a `git archive` of `9cc81af`
+and builds the schema with live's own runner: 82 migrations, the last 086, 130 tables. It then writes rows into the tables
+087 must never touch, drops 087 in, and boots the plugin. The runner applying it is the one the release ships:
+`MigrationRunner.php` and `SqliteStore.php` are byte-identical at `9cc81af` and `6464204`.
+
+**16 of 16 checks pass:**
+- recorded once, with the file's md5;
+- `migration.log` reads `OK: 087_wa_channels.sql (14 stmts, …)`, every statement counted, and holds no PARTIAL;
+- all 8 objects exist;
+- the three department rows read `account/NULL/active`, `sales/NULL/active` and `support/NULL/active`, with the trail of
+  three;
+- the 128 pre-existing tables hold exactly the rows they held before;
+- the schema gained exactly 087's 8 objects and lost or redefined nothing;
+- one ledger row was added;
+- a second boot applies nothing, and the statements run again by hand add nothing;
+- the trail refuses UPDATE and DELETE, and a channel cannot be deleted.
+
+**Found while verifying, and binding on how 087 is checked.** The runner, which this release does not change, skips a
+failing statement silently when its error is one it calls safe: *already exists*, *duplicate column*, a UNIQUE or NOT NULL
+violation, *no such column* in a CREATE, or *no such table* in an INDEX. Such a statement is neither counted nor reported,
+and the runner still logs **OK**, so the OK line's count is the only trace. Two controls on fresh copies show this:
+- one of 087's indexes naming a missing column: the runner logs `OK … (13 stmts)` and no PARTIAL anywhere;
+- a trigger with a syntax error: the runner logs PARTIAL, *13 ok, 1 skipped*, and writes the ledger row all the same.
+
+Both are caught by the object checks (7 of 8) and by the count. The driver reads **18 of 18**.
+
+So the deploy's R3 judges 087 by what the store holds: every object, both CHECKs, the rows and the trail. Each of the 14
+statements leaves something R3 reads. It then reads the runner's log line strictly: OK must count all 14, and any PARTIAL,
+ERROR or WARNING fails. A log with no 087 line at all is a note, the store being the verification.
+
+### Tests
+
+- **The release tree's own suite: 273 files, 12,814 passed, 0 failed, 0 skipped — twice** (A 07:28–08:04, B 08:04–08:40
+  UTC). Every file's tally is identical in both passes.
+  - **Against 5.18.87's release suite** (270 files, 12,586 passed), exactly the three new tests are added (+104, +41,
+    +83 = +228). No other file's tally moved.
+  - PHP warnings: 5 per pass, all from `test_dpo_endpoints` (an undefined variable in the test itself, line 91), as in
+    5.18.87's.
+  - The checker refuses its own two controls: a base without the new tests, and a planted warning in one pass only.
+  - The tree was unchanged by both passes: still `6464204`, clean.
+- **Focused:** 45 files on the paths this release touches. Each reads the same in both passes and, where it existed, as
+  in 5.18.87's suite:
+  - the channel registry 104/0, the event processor 41/0, the routing 83/0;
+  - the Inbox route 23/0;
+  - the lead path (`test_lead_path_batch0` 25/0, `test_lead_switches` 27/0, `test_ai_lead_capture` 71/0,
+    `test_ucrm_lead_sync` 62/0, `test_brain_context` 123/0);
+  - migration integrity 28/0;
+  - the webhook files;
+  - the follow-up files;
+  - the South Sudan and tenant files (`test_staff_jobs_south_sudan` 51/0, `test_staff_jobs_gate` 41/0,
+    `test_tenant_profile` 108/0, `test_email_no_sudan` 62/0, …);
+  - the five distributor tests.
+- **Lint:** `php -l` on all 16 PHP files of the diff, read from the commit: 0 errors. The sandbox has PHP 8.4. A scan of
+  the 1,668 added PHP lines finds no syntax or function newer than 8.1; the server's own 8.1 lints at A2.
+- `git diff --check 9cc81af 6464204`: clean.
+- **Secret scans** of the release diff and of the script and its rehearsal: clean. No key-, token- or credential-shaped
+  value and no banned value. The phone-shaped values are Batch 1's synthetic fixtures; the URLs are loopback.
+
+### South Sudan — unchanged, and proved four ways
+
+1. **Statically, in the release:**
+   - the non-Uganda branch is `consume(20)` with the early return;
+   - South Sudan's list is `['ai.reply']`;
+   - `ai.media` appears in no production file;
+   - the registry is gated by `StaffJobsGate::applies` (Uganda), as since 5.18.86.
+2. **By behaviour, at A6 on the server before anything changes.** The event processor runs on a throwaway database with
+   five events, under a South Sudan profile:
+   - live's run must read `crm.lead.sync=done/0+unknown ai.reply=pending/0 ai.media=done/0+unknown
+     wa.escalation=done/0+unknown install.ready=done/0+unknown`;
+   - the pin's run as South Sudan must read the same;
+   - the pin's run as Uganda must read `crm.lead.sync=pending/0 ai.reply=pending/0 ai.media=done/0+unknown
+     wa.escalation=done/0 install.ready=done/0+unknown`.
+
+   Refusal 6 otherwise.
+3. **After the deploy (R13) and after a rollback (RB),** the same runs on the installed code.
+4. **In the suite:** `test_event_processor_protected`'s South Sudan scenarios, and the South Sudan and tenant files above.
+
+The rehearsal shows each South Sudan refusal firing: `ai.media` put on South Sudan's list, the early return removed, and
+Uganda's list without `crm.lead.sync`.
+
+### Domain B — untouched
+
+- `dishnet-mikrotik-control-plane/` is the same tree at `9cc81af` and `6464204` (`cf0b0e3`, 242 files).
+- The plugin's `docs/` is the same tree too (`969d873`, 121 files).
+- The whole repository's delta is the plugin's 18 files alone.
+- **A7** refuses any pin that touches either tree or anything outside the plugin.
+- **R14** after the deploy, and **RB** after a rollback, compare all 363 installed files byte for byte against the commit.
+
+### `scripts/deploy-5.18.88.sh` — 1,733 lines, sha256 `c6cfb10f4a23fa8e…`
+
+Made from 5.18.87's script by a derivation with every replacement asserted. **It refuses before anything changes:**
+1. live is not 5.18.87 at `9cc81af` (commit and manifest version);
+2. `multi_number_channels_enabled` reads ON in either copy (A5);
+3. 087 is already recorded (A8);
+4. any of 087's objects exists without its ledger row (A8);
+5. the delta is not exactly the 18 files, with 087 matching its sha256 (A0);
+6. South Sudan's protection fails (A6);
+7. Domain B's protection fails (A7);
+8. the backup, or the event-queue snapshot, is not confirmed.
+
+Before the backup, A9 compares how the live code and the pin's code route the three numbers on the server's own
+configuration. Both copies are run in throwaway directories inside the container (`docker cp` to `/tmp`, removed at exit).
+
+**The backup:** `plugin.sqlite3` (one consistent copy, integrity checked), the data directory, the installed plugin, the
+vault, and a snapshot of the event queue.
+
+**After the deploy, the smoke checks (PART 8), all on the server, on fake or throwaway data, sending nothing:**
+
+| | Check | What it proves |
+| --- | --- | --- |
+| S1–S3 | **R12** | The sales, support and account numbers route exactly as on 5.18.87. The installed code and 5.18.87's are compared on the server's own configuration files and on the Inbox's row: `sales:in=sales support:in=support account:in=support shared=support+account … registry=off`, with the exact names compared under a per-run key and never printed. Against A9's reading as well |
+| S4 | **R11** | The registry is dark: the switch OFF in both copies; `enabled()` and `forStore()` off for both; the Inbox's route for every kind of chat issues **0 statements**, none on the registry's tables (a recording database handle counts them). `tools/channels.php` says OFF, not in effect, installed |
+| S5 | **R11, R3** | 087 holds the three department rows alone, with no instance stored, so no Evolution instance was added |
+| S6 | **V3g** | Every AI and WhatsApp setting is unchanged by the run (compared by HMAC), and so are the lead switches and the pilot (V3–V3f) |
+| S7 | **R10** | With the registry off, a lead carries no channel fields and its sync names no channel: 5.18.87's lead, field for field. The uCRM worker settles the sync as *not synced — switched off* |
+| S8 | **R13** | The installed event processor, on throwaway databases, reads Uganda's signature and South Sudan's, with a control run of 5.18.87's code. Every event not done at the snapshot is still in the queue |
+
+Also:
+- R1, the 18 files as the commit has them;
+- R3, 087 as above, with 086 and 084 still complete;
+- R4, no media-layer, portal or CSRF file;
+- R5–R6, every earlier release's pieces in place;
+- R7, cash in hand read only, and the photos may only grow;
+- R14, Domain B.
+
+**5.18.87's two deploy defects are fixed (PART 4):**
+- **R7** fails only when photos are lost; growth (a technician at work) passes.
+- **V4** reads the container log since an ISO-8601 time stamp, the form docker compares. An `--after-only` run reads the
+  log again: 5.18.87's compact stamp read 0 lines in that mode.
+
+The script contains no command that changes a switch.
+
+### The rehearsal — `scripts/harness/deploy-5.18.88/rehearse.sh` (806 lines, sha256 `e939dee6c195d5e0…`)
+
+The base is installed as production runs it:
+- 5.18.87 with 086 applied;
+- the authorisation and the booking WhatsApp on;
+- the lead switches as since 5.18.87's step 0;
+- the Inbox's row naming three fictitious numbers, with support and account sharing one instance;
+- the registry's switch unset;
+- an event queue with 6 events, 3 of them not done;
+- two photos.
+
+It covers:
+- **every refusal (1a–1u):** 5.18.86 still live; the right commit with the wrong manifest; a placeholder pin; the branch
+  tip; a media-layer file; a second migration; 087 one comment different; a file missing; Domain B, the plugin's docs, or
+  a file outside the plugin; the switch ON in either copy or both; 087 recorded; 087 half there; `ai.media` on South
+  Sudan's list; Uganda's list without `crm.lead.sync`; no early return; the code copy failing; the backup failing. A4 and
+  A3 are evidence, not stops;
+- **weakened copies of stage A (2a–2h):** A5, A8, A6 and A7 each blinded and caught. A9 is shown to stop, on its own, a
+  pin that would land the shared number's inbound in account;
+- **the deploy (section 3):** the rehearsed deploy reads **54 ok / 0 failed / 0 notes**. Every table, the vault and the
+  configuration files are byte-identical; no Evolution address, key or instance name appears in the log; 087 is applied
+  by the plugin's own runner on its first request, and `migration.log` reads OK with 14 statements;
+- **the teeth (4a–4p):** ai.media on South Sudan's list on the server; 5.18.87's event processor or AI worker back; a
+  trigger dropped; a second channel or an instance in a department row; the switch ON; a Domain B file changed; an event
+  deleted; R13 and R11 blinded. And 087's log line: OK counting 13 of 14, a PARTIAL, no line at all (a note), and a copy
+  blind to the count;
+- **PART 4 (5a–5g):** a photo taken during the run passes, and with 5.18.87's rule put back the same photo fails; a photo
+  lost fails. An error planted after the deploy is found by `--after-only`'s V4, and with 5.18.87's stamp put back it is
+  missed, having read 0 lines;
+- **the switches after the deploy (6a–6h):** the uCRM write on (R10 says leads reach uCRM, the event processor no longer
+  taking their syncs), then off again, byte for byte. The registry's switch set in the sandbox with the installed tool:
+  the checks say at once the registry is not dark. Qualification off; the Inbox's account number taken away, or moved
+  during a run;
+- **the rollback (section 7):** typed `ROLLBACK`. RB reads:
+  - 5.18.87's files and manifest;
+  - Batch 0 kept, Batch 1 gone;
+  - **087's tables stay, and 5.18.87 does not read them with the switch off.** A recording handle counts 0 statements.
+    7b is the control on the control: with the switch ON in the Inbox's row, the same check sees the reads;
+  - the event processor 5.18.87's on both countries;
+  - the routing as before;
+  - the queue, which lost nothing;
+  - Domain B as `9cc81af` has it;
+  - no data changed.
+- **what is left behind:** the checkout as found, no weakened copy, nothing in `/tmp`, and no PHP fatal from the stand-in.
+
+**Results.** Earlier runs on the working copy read 229/0, then 235 passed and 1 failed. That one failure was a
+mis-written expectation in a new control (a count of `1` joined to `2:3:3` reads `12:3:3`), fixed before the commit.
+Then two runs on the committed script (`76b07d9`):
+- **run 1: 236 passed, 0 failed**, 67 runs of the script, no FAIL line, the checkout left as found;
+- **run 2: 236 passed, 0 failed**, 67 runs of the script, the same check lines as run 1 (time stamps aside). Both runs'
+  rehearsed deploy reads 54 ok / 0 failed / 0 notes.
+
+### Deployment runbook — each step is the operator's, and each needs the operator's approval first
+
+1. **Push** — only on the operator's separate word. It pushes the branch `claude/study-this-jhe2eg` (the script) and
+   `release/5.18.88` (the release commit). The server pulls both from GitHub.
+2. **Deploy, as root on the server** — only on the operator's separate word. It asks for `DEPLOY`. Send back the **log
+   file**, not a copy of the terminal:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.88 && mkdir -p /root/dnb-5.18.88 && bash scripts/deploy-5.18.88.sh 2>&1 | tee /root/dnb-5.18.88/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   - **Expect 53 ok / 0 failed / 0 notes.** The rehearsal reads 54 because the sandbox holds a `dishnet.sqlite` to back
+     up; the server holds none, as at 5.18.87's deploy.
+   - A note would say that a lead switch is not as decided on 07 Oct (A4), that `ai_qualification` is off, or that the
+     Inbox's row lacks a number. It would also say if no request had applied 087 by R7's end: then open the plugin once
+     and run
+     `cd /opt/dishnet && bash scripts/deploy-5.18.88.sh --after-only`.
+   - **If a refusal stops it, nothing has changed.** The log names the refusal: send it back.
+3. **Nothing to switch on.** With the registry dark, every number routes as before, and nothing a person sees changes.
+   The event processor's log no longer lists `wa.escalation` as an unknown type.
+4. **Later, each its own decision:**
+   - the uCRM lead write (`ai_crm_lead_sync`): the event processor no longer takes lead syncs, so the blocker named in
+     5.18.87's entry is gone once 5.18.88 is live;
+   - the registry's switch: no command is given here, and it is not part of this release;
+   - salespeople's numbers (Batch 2).
+
+### Rollback runbook — its own command, never pasted with the deploy (root `docs/44` §16.9)
+
+Only if it is ever needed. The deploy's log prints the same at its end. It asks for `ROLLBACK` before it changes anything,
+puts back 5.18.87 (`9cc81af`) through `deploy-hybrid.sh`, then checks it (RB):
+
+`cd /opt/dishnet && bash scripts/deploy-5.18.88.sh --rollback`
+
+If the script cannot run, by hand:
+
+`cd /opt/dishnet && git checkout 9cc81af && bash scripts/deploy-hybrid.sh && git checkout -`
+
+What stays as it is:
+- **087's tables stay.** 5.18.87 reads nothing in them with the switch off; RB proves it.
+- Every switch stays as it is, and the switch stays OFF.
+- Leads, conversations and events stay. The queue loses nothing; RB checks it.
+- If the rollback comes before any request applied 087, its file stays on disk (deploy-hybrid.sh never deletes), and
+  5.18.87's runner, the same code, applies it on the next request: additive, and unread.
+- After a rollback, Uganda's event processor can again take a lead's sync. So **the uCRM write must be OFF while
+  5.18.87 runs**, as it is today.
+
+### Known limitations
+
+- **The 504 case** of `test_multi_number_routing` is not in the release's copy: production's fake Evolution cannot answer
+  one. It is driven in Batch 1's own test on the branch.
+- **Batch 1's comment tags read 5.18.86**, its number on the branch. Comments written for this release say 5.18.88.
+- **PHP 8.1 lint happens only on the server, at A2.** The sandbox lints with 8.4, and the scan above finds nothing newer
+  than 8.1.
+- **`docker cp` into the container's `/tmp` is new in these scripts** (A6, A9, R12, R13, RB). Removal at exit is
+  rehearsed, but this is its first use on the real server. A failed copy is a refusal (1r).
+- **The runner tolerates some failing statements silently** (above). That is unchanged, and it applies to every
+  migration; R3 does not depend on it. A statement that waits more than 5 s for a lock is logged PARTIAL, and R3 fails.
+  The runner still records the file as applied, so it never retries it: re-applying 087's idempotent statements is then a
+  separate, reviewed step, which this script does not take.
+- **`wa.escalation` is acknowledged with no consumer**, as Batch 1 decided (`docs/65` §L): owners' notifications come
+  later. `efris.submit` is deliberately left as it was.
+- **Not in this release:** the AI media layer, the partner portal, the CSRF guard, and salespeople's numbers (Batch 2).
+- **The uCRM write stays OFF.** Switching it on is the operator's own later step.
+
+### Remaining blockers, and the call
+
+- **Technical blockers: none found.** Every check, test and rehearsal above passed.
+- **Open:** the operator's approval to push; then, separately, the approval to deploy.
+- **GO** for both, on those approvals. The release is dark: with the switch OFF, the only behaviour change is Uganda's
+  event processor, and that change protects the workers' events.
+
+**Git (local, not pushed):**
+- `release/5.18.88` = `6464204`;
+- on `claude/study-this-jhe2eg`: `76b07d9` (the script and its rehearsal) and this entry, on top of `4dbc6f2` and
+  `f3177fd` (the 5.18.87 records), which are also awaiting the push.
+
+Nothing deployed, no configuration changed, no Evolution instance created, nothing sent. `docs/59` stays untracked by the
+operator's decision.
