@@ -822,7 +822,9 @@ Also outstanding from docs/49: WS-B's onboarding, messaging policy, cost and rol
   `evo_instance_name` and `evo_accounts_instance_name`; whether support and account share an instance (§X.1).
 - **Switches and destinations:** whether the SQLite settings row holds the Evolution key (SEC-1 — answered 07 Oct: it
   does, §O.3); `wa_sync_enabled`, `wa_webhook_secret` set or not, `wa_bot_enabled` / `wa_auto_reply_enabled`;
-  `ai_lead_capture`, `ai_crm_lead_sync`, `alert_whatsapp`, `distributors_enabled`.
+  `ai_lead_capture` and `ai_crm_lead_sync` (answered 07 Oct: lead capture ON in both copies, the uCRM write OFF in both,
+  switched off by the operator before 5.18.87's deploy — `docs/07`); `alert_whatsapp`; `distributors_enabled` (the
+  pilot: ON, read at every deploy).
 - **Data:** lead counts by source and assignee; staff rows by role; distributor rows.
 - **The Evolution server:** version, per-instance tokens, capacity, and whether it is shared with the South Sudan tenant.
 - **Business rules:** D1–D12.

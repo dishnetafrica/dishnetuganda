@@ -6470,7 +6470,7 @@ from `89047e0` to `988135d` (04:20:16 UTC), `release/5.18.86` new at `c2c96e1` (
 deployed, no configuration had changed and nothing had been sent to anyone. `docs/59` stays untracked by the operator's
 decision.
 
-## 07 Oct — 5.18.87: the AI's WhatsApp leads recorded at last — Batch 0's lead fixes (Uganda); `release/5.18.87` = `9cc81af`, cut on live 5.18.86 (`c2c96e1`); `scripts/deploy-5.18.87.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+## 07 Oct — 5.18.87: the AI's WhatsApp leads recorded at last — Batch 0's lead fixes (Uganda); `release/5.18.87` = `9cc81af`, cut on live 5.18.86 (`c2c96e1`); `scripts/deploy-5.18.87.sh` pinned to it and rehearsed — PUSHED 07 Oct 06:33 UTC; DEPLOYED 06:35 UTC (39/1/0 — the one FAIL, R7's photo count, is three photos taken during the run)
 
 **Why.** The AI's lead path has never worked in production (`docs/55` §3). Three defects were found on 04 Oct:
 - **Every capture fails.** `AiReplyWorker` hands `latestPin()` the variable `$ctx`, which does not exist there. The call
@@ -6597,16 +6597,18 @@ caveat. Then two runs on the committed script (`70eff0c`, sha256 `cc8bb53f894be7
 script, no FAIL line, the checkout left as found; **run 2 205/0**, the same check lines. Both match the working-copy runs
 line for line, except the branch tip that 1c refuses, now `ad5371b`.
 
-**Handover — each step is the operator's; nothing is pushed or deployed yet.** The push comes first, on the operator's
-word: the server pulls both branches from GitHub, `claude/study-this-jhe2eg` for the script and `release/5.18.87` for the
-release commit.
-0. **Switch the uCRM lead write off, as root on the server, before the deploy:**
+**Handover — each step is the operator's; the push and the deploy are done.** The push came first, on the operator's
+word — done, 07 Oct 06:33 UTC: the server pulls both branches from GitHub, `claude/study-this-jhe2eg` for the script and
+`release/5.18.87` for the release commit.
+0. **Switch the uCRM lead write off, as root on the server, before the deploy — DONE before 06:35 UTC** (the RESULT
+   below):
 
    `docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/set_config.php --key ai_crm_lead_sync --value 0`
 
    It prints *"ai_crm_lead_sync = 0"* and the settings listing. It writes the configuration file and the store row. On
    5.18.86 it changes nothing: no lead is captured there, so no sync is ever queued.
-1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+1. **Deploy, as root on the server — DONE 06:35 UTC, 39 ok / 1 failed / 0 notes** (the RESULT below). It asks for
+   `DEPLOY`; send back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.87 && mkdir -p /root/dnb-5.18.87 && bash scripts/deploy-5.18.87.sh 2>&1 | tee /root/dnb-5.18.87/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
@@ -6624,6 +6626,54 @@ release commit.
 3. **Later, as its own step: the uCRM write.** Not before Batch 1's part C, the event processor's protection of worker
    events, is in production; that needs its own release.
 
+- **RESULT — DEPLOYED to production 2026-10-07, 06:35 UTC: 39 ok / 1 failed / 0 notes.** Every other check passed. The
+  one FAIL is R7's photo comparison, *"the photo tables/files changed across the deploy (present:13:3 → present:16:3,
+  files:13 → files:16)"*: three photos were taken on a job within the two minutes of the run. Recorded from the terminal
+  the operator pasted (the script prints no secret); the log file stays on the server under `/root/dnb-5.18.87/`. The
+  run began at 06:35:02 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves 9cc81af"*; the
+  12 files were stamped at 06:35:47 UTC.
+  - **Why the FAIL is not the deploy's.** The only writer of `job_photos` and of `uploads/job_photos/` is
+    `JobPhotos::store()`, behind the staff photo upload, which needs a staff login; V5's own call to it without one was
+    refused (401) before any handler. Rows and files rose together, by three; the GPS table did not move; nothing in
+    the script writes either. It was 09:35 local time on a working day, and two photos had already been added since
+    5.18.86's deploy (11 then, 13 at this run's start). **R7 compares the photo counts for equality, so it reads a
+    technician at work as a change.** The next release's script accepts growth (rows and files rising together) and
+    fails only on a loss. Not a reason to roll back, and the script said not to.
+  - **Step 0, before the run, by the operator.** `set_config.php --key ai_crm_lead_sync --value 0` printed
+    *"ai_crm_lead_sync = 0"*, the usual *[ConfigVault] restored after re-install* line and the settings list, where
+    `ai_crm_lead_sync` reads OFF and `ai_qualification`, `ai_lead_capture` and `ai_sales_on_all_numbers` read ON.
+  - **A.** The checkout fast-forwarded `17b8e8d` → `6569047`; branch tip `ad5371b` (not installed); release commit
+    `9cc81af` cut on `c2c96e1`; 12 files (10 changed, 2 added, 0 removed), no migration; **A0** clean. Live `c2c96e1` /
+    5.18.86. PHP **8.1.34** accepted the 3 changed server files and the 8 test files. Pilot `on`; the authorisation
+    `ia=on/on` and the booking WhatsApp `wa=on/on`, as the operator left them. **The lead switches: `lc=on/on`,
+    `ls=off/off`, `qu=on/on`, `sa=on/on`** — step 0 reached both copies. **A3** the Inbox's row `evo=yes sales=yes
+    support=yes account=yes registry=absent`, as at 5.18.86's deploy; **A4** clean. 086 complete, its tables
+    `2:9:1:1:1`; the webhook log's last 300 entries hold **3** `job.add`, the last at 09:26:31 by the plugin's clock
+    (UTC+3), 06:26:31 UTC; photo tables `present:13:3`, 13 files.
+  - **Backup** `/root/dnb-5.18.87/backup-20261007T063502Z`: `plugin.sqlite3` 29 MB, one consistent copy, integrity ok,
+    248 tables; no `dishnet.sqlite` (*"nothing to copy"*); the data directory 147 MB; the installed 5.18.86 11 MB; the
+    vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed; **V5** 302 / 401;
+    **V7** the customer authorisation page 404 *"This link is not valid"* to a request without a link; **V8**
+    `install_auth_request`, **V9** `install_auth_prefill` and **V10** `wa_send_reply` 401 without a login; **V3** the
+    pilot unchanged; **V3b** and **V3c** both live switches unchanged (`on/on`); **V3d** the Inbox's row unchanged;
+    **V3e** the four lead switches unchanged; **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 12 files as `9cc81af` has them, manifest 5.18.87; R2 `pilot=on`, and the installed `InstallAuth` and
+    `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `2:9:1:1:1`
+    before and after; 084 `16:3` rows, 16 files; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
+    CSRF or AI media-layer file, none of Batch 1, the AI worker Batch 0 alone; R5 all 225 files from Release A through
+    5.18.86 intact; R6 every earlier marker and Batch 0's pieces; **R7** (read-only) **UGX CASH IN HAND 591,072.00 ·
+    USD 0.00**, the figures 5.18.86's deploy read — and the photo comparison above; R8 the quotation reader as at
+    5.18.85; R9 the Inbox route as at 5.18.86's deploy; **R10: the assistant is asked for a lead on the sales number and
+    on the support/account number, `AiLeadService` records it in Sales → Leads, and nothing reaches uCRM.**
+  - **Not seen yet:** a lead from a real conversation. It waits for the next customer who tells the assistant what they
+    need and where (step 2).
+  - **Optional:** `cd /opt/dishnet && bash scripts/deploy-5.18.87.sh --after-only` runs every check again, read-only,
+    in under a minute. With no photo taken meanwhile it reads 33 ok / 0 failed / 0 notes, the rehearsal's figure for
+    that mode.
+
 **Git:** `ad5371b` (the test), `70eff0c` (the script and its rehearsal), `release/5.18.87` (`9cc81af`), and this entry
-with `docs/65` §W's three decisions — committed locally, **NOT pushed**. Nothing deployed, no configuration changed,
-nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
+with `docs/65` §W's three decisions (`6569047`) — **pushed 07 Oct, 06:33 UTC**, on the operator's instruction (*"yes push
+both branches"*): the branch from `8449d2d` to `6569047` (06:33:24 UTC), `release/5.18.87` new at `9cc81af` (06:33:26
+UTC). At the push nothing was deployed, no configuration had changed and nothing had been sent to anyone. `docs/59`
+stays untracked by the operator's decision.
