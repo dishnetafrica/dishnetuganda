@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__DIR__, 2) . '/lib/crm_url.php';
 require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_override(): links on the reachable address
+require_once dirname(__DIR__, 2) . '/lib/InboxReplyRoute.php';  // 5.18.86 (docs/65 §A): which number an Inbox reply leaves on
 // ═══════════════════════════════════════════════════════════════
 // WHATSAPP UNIFIED INBOX — API Endpoints
 // Uses ConversationService (SQLite) for all conversation data.
@@ -236,15 +237,20 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
         $conv = $_convSvc->getConversation($convId);
         if (!$conv) $er2('Conversation not found.', 404);
         $phone   = $conv['phone'];
-        $sender  = ($conv['channel'] ?? 'support') === 'accounts' ? 'accounts' : 'support';
+        // 5.18.86 (docs/65 §A): on Uganda the reply leaves on the conversation's own number — a sales chat is no longer
+        // answered from support — or not at all; every other install keeps the 5.18.85 rule (InboxReplyRoute::decide).
+        $_route  = InboxReplyRoute::decide((string)($conv['channel'] ?? ''), (array)$config, $dataDir, $store->getPdo());
+        if ($_route['mode'] === 'refused') $er2($_route['reason'], 409);
         $staffNm = $retailer['name'] ?? 'Staff';
 
-        svc('notify')->sendVia($sender, $phone, $text, 'wa_staff_reply');
+        $_sent   = InboxReplyRoute::send($_route, svc('notify'), 'text', $phone, $text, 'wa_staff_reply');
+        if (!$_sent['ok']) $er2($_sent['error'], 502);
+        $sender  = $_sent['channel'];
         $_convSvc->storeMessage($convId, [
             'direction' => 'out', 'role' => 'agent', 'body' => $text,
             'agent_name' => $staffNm, 'event_key' => 'wa_staff_reply',
             'sent_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        ] + $_sent['store']);
         // Disengage bot — staff is now handling this conversation
         try {
             $store->getPdo()->prepare(
@@ -263,16 +269,19 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
         if (!$convId || !$docUrl) $er2('conversation_id and document_url required.', 422);
         $conv = $_convSvc->getConversation($convId);
         if (!$conv) $er2('Conversation not found.', 404);
-        $sender = ($conv['channel'] ?? 'support') === 'accounts' ? 'accounts' : 'support';
+        // 5.18.86 (docs/65 §A): the conversation's own number on Uganda, or nothing; elsewhere the 5.18.85 rule.
+        $_route = InboxReplyRoute::decide((string)($conv['channel'] ?? ''), (array)$config, $dataDir, $store->getPdo());
+        if ($_route['mode'] === 'refused') $er2($_route['reason'], 409);
 
-        svc('notify')->sendDocument($sender, $conv['phone'], $docUrl, $fname, $cap, 'wa_send_document');
+        $_sent  = InboxReplyRoute::send($_route, svc('notify'), 'document', $conv['phone'], $cap, 'wa_send_document', $docUrl, $fname);
+        if (!$_sent['ok']) $er2($_sent['error'], 502);
         $_convSvc->storeMessage($convId, [
             'direction' => 'out', 'role' => 'agent',
             'body' => $cap ?: "[Document: {$fname}]",
             'media_type' => 'document', 'media_url' => $docUrl,
             'agent_name' => $retailer['name'] ?? 'Staff',
             'event_key' => 'wa_send_document', 'sent_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        ] + $_sent['store']);
         $ok2(['sent' => true, 'filename' => $fname]);
     }
 
@@ -985,17 +994,20 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
         $conv = $_convSvc->getConversation($convId);
         if (!$conv) $er2('Conversation not found.', 404);
 
-        $sender  = ($conv['channel'] ?? 'support') === 'accounts' ? 'accounts' : 'support';
+        // 5.18.86 (docs/65 §A): the conversation's own number on Uganda, or nothing; elsewhere the 5.18.85 rule.
+        $_route  = InboxReplyRoute::decide((string)($conv['channel'] ?? ''), (array)$config, $dataDir, $store->getPdo());
+        if ($_route['mode'] === 'refused') $er2($_route['reason'], 409);
         $staffNm = $retailer['name'] ?? 'Staff';
 
-        svc('notify')->sendImage($sender, $conv['phone'], $imgUrl, $caption, 'wa_image_send');
+        $_sent   = InboxReplyRoute::send($_route, svc('notify'), 'image', $conv['phone'], $caption, 'wa_image_send', $imgUrl);
+        if (!$_sent['ok']) $er2($_sent['error'], 502);
         $_convSvc->storeMessage($convId, [
             'direction'  => 'out', 'role' => 'agent',
             'body'       => $caption ?: '[Image]',
             'media_type' => 'image', 'media_url' => $imgUrl,
             'agent_name' => $staffNm, 'event_key' => 'wa_image_send',
             'sent_at'    => date('Y-m-d H:i:s'),
-        ]);
+        ] + $_sent['store']);
         try {
             $store->getPdo()->prepare(
                 "UPDATE wa_conversations SET state = 'human_active', last_human_reply_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
@@ -1015,14 +1027,14 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
         $conv = $_convSvc->getConversation($convId);
         if (!$conv) $er2('Conversation not found.', 404);
 
-        $sender  = ($conv['channel'] ?? 'support') === 'accounts' ? 'accounts' : 'support';
+        // 5.18.86 (docs/65 §A): the conversation's own number on Uganda, or nothing; elsewhere the 5.18.85 rule.
+        $_route  = InboxReplyRoute::decide((string)($conv['channel'] ?? ''), (array)$config, $dataDir, $store->getPdo());
+        if ($_route['mode'] === 'refused') $er2($_route['reason'], 409);
         $staffNm = $retailer['name'] ?? 'Staff';
 
-        if ($mediaType === 'image') {
-            svc('notify')->sendImage($sender, $conv['phone'], $mediaUrl, $caption, 'wa_media_send');
-        } else {
-            svc('notify')->sendDocument($sender, $conv['phone'], $mediaUrl, $filename, $caption, 'wa_media_send');
-        }
+        $_sent   = InboxReplyRoute::send($_route, svc('notify'), $mediaType === 'image' ? 'image' : 'document',
+                                         $conv['phone'], $caption, 'wa_media_send', $mediaUrl, $filename);
+        if (!$_sent['ok']) $er2($_sent['error'], 502);
 
         $bodyStr = $caption ?: ('[' . ucfirst($mediaType) . ': ' . $filename . ']');
         $_convSvc->storeMessage($convId, [
@@ -1031,7 +1043,7 @@ require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';   // dn_with_overrid
             'media_type' => $mediaType, 'media_url' => $mediaUrl,
             'agent_name' => $staffNm, 'event_key' => 'wa_media_send',
             'sent_at'    => date('Y-m-d H:i:s'),
-        ]);
+        ] + $_sent['store']);
         try {
             $store->getPdo()->prepare(
                 "UPDATE wa_conversations SET state = 'human_active', last_human_reply_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"

@@ -2133,6 +2133,128 @@ class NotificationService
         return ['success' => (bool)$this->_lastSendSuccess, 'http_code' => $this->_lastHttpCode, 'error' => $this->_lastError];
     }
 
+    /**
+     * 5.18.86 (docs/65 §A, multi-number Batch 1): a reply in a conversation, sent on that conversation's OWN number.
+     *
+     * sendVia() addresses a SENDER — support or accounts — which is right for what it was built for: a message this plugin
+     * decides to send. A reply in a conversation is different: it must leave from the number the customer wrote to. Until
+     * 5.18.86 the Inbox answered every sales conversation from the support number, so the answer arrived in another chat,
+     * from a number the customer had never written to.
+     *
+     * The steps of sendVia() that apply — the number in the form WhatsApp takes, the opt-out check (against this channel),
+     * dry run, the rate limit, the Message Log row, the echo claim — and three it deliberately does not take:
+     *  - no other number and no WASender: if this channel cannot send, NOTHING is sent and the caller is told why;
+     *  - no failure queue: its retry goes through sendVia() and would send from the support number;
+     *  - no conversation-store copy: the caller stores the message in the conversation it was written in.
+     *
+     * The channel resolves to its Evolution instance through EvolutionApiService::forStore(): the configured department
+     * number for sales and account, and, with the channel registry on, any channel id the registry routes. Nothing is
+     * guessed: a channel with no instance — unconfigured, unknown, or switched off — fails closed.
+     *
+     * @param string     $channel the conversation's channel, exactly as stored
+     * @param string     $text    the message, or a media caption
+     * @param array|null $media   ['type' => 'image'|'document', 'url' => public URL, 'filename' => string] or null for text
+     * @return array{ok:bool, dry_run:bool, suppressed:bool, maybe_sent:bool, error:?string, wa_message_id:string}
+     */
+    public function sendOnChannel(string $channel, string $toPhone, string $text, string $event,
+                                  ?array $media = null, string $class = ContactOptOut::CLASS_TRANSACTIONAL): array
+    {
+        $this->_lastSendSuccess = false; $this->_lastHttpCode = null; $this->_lastError = null;
+        $out = ['ok' => false, 'dry_run' => false, 'suppressed' => false, 'maybe_sent' => false, 'error' => null,
+                'wa_message_id' => ''];
+        $channel = trim($channel);
+        $kind    = $media === null ? 'text' : ((string)($media['type'] ?? '') === 'image' ? 'image' : 'document');
+        $url     = $media === null ? '' : trim((string)($media['url'] ?? ''));
+        $file    = $media === null ? '' : trim((string)($media['filename'] ?? ''));
+        $preview = $kind === 'text' ? mb_substr(self::storable($text), 0, 70)
+                 : '[' . strtoupper($kind) . '] ' . ($file !== '' ? $file : '') . ($text !== '' ? ': ' . mb_substr($text, 0, 40) : '');
+
+        if ($channel === '')                        { $out['error'] = 'the conversation has no channel'; return $out; }
+        if (trim($toPhone) === '')                  { $out['error'] = 'the conversation has no number'; return $out; }
+        if ($kind !== 'text' && $url === '')        { $out['error'] = 'no file to send'; return $out; }
+        if ($kind === 'text' && trim($text) === '') { $out['error'] = 'nothing to send'; return $out; }
+
+        [$to, $asGiven] = $this->recipient($toPhone);
+        if ($to === '' && $asGiven !== '') {
+            $this->unusableNumber($channel, $event, $asGiven, $preview);
+            $out['error'] = 'not a number WhatsApp can use';
+            return $out;
+        }
+        if ($this->optedOut($to, $channel, $class, $event)
+            || ($asGiven !== $to && $asGiven !== '' && $this->optedOut($asGiven, $channel, $class, $event))) {
+            $out['suppressed'] = true;
+            $out['error'] = 'the customer has opted out of messages of this kind';
+            return $out;
+        }
+        if ($kind === 'document' && !$this->pdfEnabled) {
+            $this->writeLog(['sender' => $channel, 'event' => $event ?: 'document_skipped', 'to' => $to,
+                             'preview' => $preview, 'success' => false, 'error' => 'wa_send_pdf=false']);
+            $out['error'] = 'sending documents on WhatsApp is switched off (wa_send_pdf)';
+            return $out;
+        }
+
+        if ($this->dryRunMode) {
+            $this->logDryRunNotification($to, $kind === 'text' ? self::storable($text) : $preview, $event,
+                                         ['channel' => $channel] + ($url !== '' ? ['url' => $url] : []));
+            $out['ok'] = true; $out['dry_run'] = true;
+            return $out;
+        }
+
+        $evo = null;
+        try {
+            require_once __DIR__ . '/EvolutionApiService.php';
+            $dir = method_exists($this->store, 'getDataDir') ? $this->store->getDataDir() : null;
+            $evo = EvolutionApiService::forStore($this->evoConfig, $this->store->getPdo(), $dir);
+        } catch (\Throwable $e) {
+            $evo = null;
+        }
+        if ($evo === null || !$evo->canReachApi()) {
+            $out['error'] = 'WhatsApp (Evolution) is not configured here';
+            $this->writeLog(['sender' => $channel, 'event' => $event ?: null, 'to' => $to, 'preview' => $preview,
+                             'success' => false, 'error' => $out['error']]);
+            return $out;
+        }
+        $instance = $evo->instanceFor($channel);
+        if ($instance === '') {
+            $out['error'] = "no WhatsApp number is connected for the '{$channel}' channel";
+            $this->writeLog(['sender' => $channel, 'event' => $event ?: null, 'to' => $to, 'preview' => $preview,
+                             'success' => false, 'error' => $out['error']]);
+            return $out;
+        }
+
+        $this->rateLimitWait();
+        // CLASS_STAFF at Evolution: the opt-out that matters ran above against the caller's class, as sendVia() does.
+        $res = $kind === 'text'
+             ? $evo->sendText($channel, $to, $text, ContactOptOut::CLASS_STAFF)
+             : $evo->sendMedia($channel, $to, $kind, $url, $text, $kind === 'document' ? $file : '', ContactOptOut::CLASS_STAFF);
+
+        // Claim our own echo, on the instance it left from: unclaimed, it would read as a colleague typing on the handset.
+        $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
+        if ($waId !== '') {
+            try {
+                require_once __DIR__ . '/EvoWebhookGuard.php';
+                (new EvoWebhookGuard($this->store->getPdo(), $this->evoConfig))->claim($waId, $instance, 'notify.channel');
+            } catch (\Throwable $ex) { /* dedupe is a backstop */ }
+        }
+
+        $ok   = empty($res['suppressed']) && !empty($res['ok']) && empty($res['error']);
+        $http = isset($res['http']) ? (int)$res['http'] : null;
+        $err  = $ok ? null : (string)($res['error'] ?? 'the send failed');
+        $this->_lastSendSuccess = $ok;
+        $this->_lastHttpCode    = $http;
+        $this->_lastError       = $err;
+        $this->writeLog(['sender' => $channel, 'event' => $event ?: null, 'to' => $to, 'preview' => $preview,
+                         'success' => $ok, 'http_code' => $http, 'error' => $err !== null ? mb_substr($err, 0, 200) : null,
+                         'sent_at' => date('Y-m-d H:i:s')]);
+
+        $out['ok']            = $ok;
+        $out['suppressed']    = !empty($res['suppressed']);
+        $out['maybe_sent']    = !$ok && EvolutionApiService::mayHaveBeenSent($res);
+        $out['error']         = $err;
+        $out['wa_message_id'] = $waId;
+        return $out;
+    }
+
     public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [], string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
     {
         // Phase 2: a caller reading lastSendResult() after an early return must
