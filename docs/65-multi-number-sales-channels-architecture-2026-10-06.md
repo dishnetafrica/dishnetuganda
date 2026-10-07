@@ -1005,3 +1005,109 @@ South Sudan control scenarios beside the Uganda ones, and by a weakened copy tha
 Nothing is deployed, so nothing in production needs rolling back. Before deployment, the registry is undone by leaving
 the flag off; its tables are inert. The two always-on changes (Z.1) are code: undoing them means deploying 5.18.85
 again. Migration 087 is additive and its tables may stay.
+
+---
+
+## AA. Batch 2 — a salesperson's own number (design, 07 Oct; to be built dark)
+
+**Where it starts.** Batch 1 is in production since 5.18.88 (07 Oct, 09:52 UTC), dark: migration 087's three department
+rows, the routing by channel behind `multi_number_channels_enabled` (OFF), and Uganda's event processor leaving the
+workers' events alone. The registry's writers exist (`ChannelRegistry::create`, `setStatus`, `setAiEnabled`,
+`setInstance`, each one row change and one trail row in one transaction) but nothing calls them. The first salesperson's
+Evolution instance exists, not connected. Batch 2 makes that number work end to end, behind the same switch.
+
+**Decisions in force** (§W):
+- **D3** — on the salesperson's number the assistant is *that salesperson's assistant at DishNet*. It names them by first
+  name and never claims to be them.
+- **D4** — a hand-over alerts the salesperson. **Decided 07 Oct, with the build:** a copy goes to the central alert
+  number as well (*"[the salesperson] + copy to central (Recommended)"*), so nothing is missed while the salesperson is busy or off.
+  Alerts are sent from the DishNet sales number, never from the salesperson's own (§L).
+- **D5** — a lead from the number belongs to the salesperson and is never moved by the automatic distribution.
+- **D7** — a salesperson sees only their own leads; admins and managers see everything. **Decided 07 Oct, with the
+  build:**
+  - **who is a manager** — admins, plus anyone granted the existing **All Leads** permission (*"Admins + 'All Leads'
+    grant (Recommended)"*). There is no manager role to add.
+  - **chats** — on the salesperson's phone only (*"On [the salesperson]'s phone only (Recommended)"*). Their WhatsApp shows every
+    message, the assistant's replies included. In the plugin, chats stay admin-only as today, so no new chat view is
+    built.
+
+### AA.1 What is built
+
+1. **Salesperson numbers, on the WhatsApp AI screen** (`tabs/engage/wa_ai_setup.php`, admin only, the screen's own CSRF
+   check). One new card lists every registry channel (the business number masked, `ChannelRegistry::mask`) with its
+   owner, status, the assistant's switch and the last trail rows. Its actions, each written through `ChannelRegistry`
+   with the admin's name and a reason:
+   - **add** — an Evolution instance that is no department's and no channel's, a salesperson (an active staff row with a
+     sales role), a display name. The channel id is generated (`sales-<n>`), the role is `sales`, the owner `staff`,
+     `handover_to = owner`, `portfolio_scope = own`. The status is **`disabled`**: a number is switched on deliberately,
+     never by being added.
+   - **pair** — Evolution's QR code (or pairing code) for that channel's instance. Today the screen can show a QR only for
+     a department's instance.
+   - **verify** — reads the number from Evolution's own report for that instance (`fetchInstances`, the paired account),
+     **never a typed value**. It writes `business_number`, `verified_at` and `verified_by` (new: `verifyNumber()`), and is
+     refused while the instance is not connected.
+   - **webhook** — registers the plugin's webhook on that instance (the screen's existing call, now for a channel).
+   - **assistant on/off, activate / pause / disable / retire** — `setAiEnabled`, `setStatus`.
+   - **new owner** — for a salesperson who leaves (new: `setOwner()`, staff owners only; the trail keeps the previous one).
+2. **The assistant on the number (D3).** For a staff-owned channel the worker passes the owner's first name (from their
+   staff record, letters only, at most 30 characters) to the brain as `line_owner`. It is a new `BrainContext` key; the
+   external brain's payload carries it too. `DishNetAiBrain::identityHeader` then says the assistant is that person's
+   assistant at DishNet, is not them, never signs as them, and that they will follow up personally. Rule 4 ("never
+   reveal staff names") gains one exception: the line owner's first name, on their own line. Without an owner, the
+   prompt is byte-identical to today's.
+3. **The hand-over (D4).** On a channel whose `handover_to` is `owner`, the hand-over alert goes to the owner's phone (their
+   staff record), sent from the DishNet sales number, with its own 30-minute cooldown per conversation. The copy to the
+   central alert number keeps today's key and wording, plus the line's name. Config `wa_handover_copy_central`, default
+   ON, records the decision. An owner with no phone on record: central only, and a log line says why. The assistant's
+   pause is unchanged: it stands down for `wa_human_cooldown_minutes` once a person replies, from the handset or the
+   Inbox.
+4. **Owned leads (D5).** A new AI lead captured on a staff-owned channel is assigned to the owner at capture
+   (`assigned_to`, `assigned_name`, `assigned_at`, `assigned_by = channel:<id>`, a history row). Then:
+   - `cron_leads.php`'s drip and its 72 h reassignment, and the admin's smart distribution, leave such a lead alone;
+   - an admin's explicit assignment of one lead still works, and is recorded in its history;
+   - the existing lead alerts (`cron_lead_alerts.php`) notify the assigned owner, as for any assigned lead;
+   - an existing lead found for the customer keeps its owner (D2 is open: nothing is taken from anyone).
+5. **Own leads only (D7)** — behind its own switch, `sales_own_leads_only`, **default OFF**, because it changes what
+   every salesperson sees. ON: for a viewer who is not a manager (admin, or holder of `all_leads`), Sales → Leads lists,
+   opens and acts only on leads assigned to them, created by them, or on their call rota for today. The same rule binds
+   the status change (`update_lead_status`) and the call log (`log_call`). A refused lead is answered as not found.
+6. **Follow-ups on an owned number** — `cron/followup_send.php` holds automatic follow-ups on a staff-owned channel
+   unless `wa_followups_on_owned_numbers` is set (default OFF). The assistant has told the customer the salesperson will
+   follow up personally, and every automated send from a person's number adds to its ban risk (§L).
+7. **The webhook guard** — with the registry on, `cron/wa_webhook_guard.php` keeps the plugin's webhook registered on
+   every active channel's instance, not only the three departments', and alerts when one is disconnected.
+
+### AA.2 Defaults recorded, not asked
+
+- **D8** — a STOP still applies on every number (today's rule).
+- **D10** — invoices, receipts, quotes and job messages stay on the business numbers (§V).
+- **D11** — the operator pairs the salesperson's existing instance on the screen after the deploy; the plugin creates no
+  instance.
+- **D12** — one webhook secret serves every number for the pilot. The risk (§O.2) is recorded and per-channel secrets are
+  left for later.
+- **D2** — open. A customer's existing lead keeps its owner.
+- **D6** — no territory on the pilot number.
+
+### AA.3 Dark, and how it goes live
+
+- Everything in AA.1 acts only with `multi_number_channels_enabled` ON on a Uganda install. Two exceptions:
+  - the screen may prepare a channel row while the switch is off — the row is `disabled` and nothing routes to it;
+  - own leads only has its own switch (item 5).
+- South Sudan and Domain B are untouched.
+- **Going live** — each step the operator's, after the deploy:
+  1. add the salesperson's number on the screen, then pair it, verify it and register its webhook, with the row still
+     disabled;
+  2. switch the registry ON with the three department numbers alone, and compare their traffic (§Q phases 3–4);
+  3. activate the salesperson's channel, with staff-only test contacts first;
+  4. the pilot (§Q phases 5–6).
+
+  The rollback for the number is `disable`; for the registry, the switch OFF.
+
+### AA.4 Not in Batch 2
+
+- retailers' and partners' numbers;
+- territory;
+- per-channel webhook secrets;
+- an in-plugin chat view for salespeople;
+- owner notifications beyond the hand-over and the existing lead alerts;
+- the media layer.
