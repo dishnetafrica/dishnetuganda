@@ -7245,3 +7245,378 @@ next entry.
 undone by deploying 5.18.88 again; there is no migration.
 
 **Git:** a local commit on `claude/study-this-jhe2eg`; not pushed. `docs/59` stays untracked by the operator's decision.
+
+## 07 Oct — 5.18.89: salesperson numbers (multi-number Batch 2), dark — the WhatsApp AI screen gains a "Salesperson numbers" card for admins; the assistant as the salesperson's assistant, the owner's hand-over, owned leads, own leads only and the follow-up hold all wait behind switches that stay OFF; no migration; South Sudan unchanged. `release/5.18.89` = `53d5c4d`, cut on live 5.18.88 (`6464204`); `scripts/deploy-5.18.89.sh` pinned to it and rehearsed — NOT pushed, NOT deployed
+
+**This is Batch 2's release** (`2c2771b` on the branch, `docs/65` §AA–§AB, the entry above). The operator asked, after
+5.18.88's deploy, to connect another salesperson's own WhatsApp number with the assistant replying in that salesperson's
+name, and answered: *"Yes, start Batch 2 (Recommended)"* — built and rehearsed like 5.18.88, **the push and the deploy
+approved separately**, and the salesperson's number connected only after that, as the first salesperson number. Nothing
+here connects a number, creates or pairs an Evolution instance, switches anything on or sends a message.
+
+### The five-part form
+
+1. **What is configured now (5.18.88, `6464204`).**
+   - 087 is applied: the three department rows, no instance stored; `multi_number_channels_enabled` OFF in both copies.
+   - Lead capture ON, the uCRM write OFF (07 Oct); the authorisation and the booking WhatsApp ON.
+   - The Inbox's row names Evolution and the three numbers; support and account share one instance.
+   - Uganda's event processor leaves `ai.reply` and `crm.lead.sync` to their workers; South Sudan's loop is unchanged.
+2. **Why.** A salesperson's own number needs four things production does not have: the assistant answering as that
+   salesperson's assistant (D3), the hand-over reaching them (D4), the leads it brings staying theirs (D5), and — when the
+   operator chooses — salespeople seeing only their own leads (D7). The screen to add the number comes with them. All of
+   it must be in production, dark, before the number is connected.
+3. **Exactly what changes.** The 34 files below. **No migration**: 5.18.88's 087 holds the numbers.
+   - **With the switches as they are, one thing changes:** on Uganda, admins see the *Salesperson numbers* card on the
+     WhatsApp AI screen (`?page=dashboard&tab=wa_ai_setup`). It lists the three department numbers, read-only, and offers
+     to add a salesperson's number — added switched off, and it cannot be switched on while the registry is off.
+   - **Everything else returns at its first line.** With the registry off no conversation has an owner, so the
+     assistant's prompt is 5.18.88's byte for byte (A10, R16, on the server's own configuration), the hand-over sends
+     the alert it always sent, no lead is assigned by its number, no follow-up is held, and the guard watches the three
+     departments. `sales_own_leads_only` is absent, so every salesperson sees every lead (A5b, V3h, R2b).
+4. **Effect on UISP/uCRM.** UISP: none. uCRM: none — no uCRM call is added; the uCRM write stays OFF. The plugin's own
+   SQLite: nothing written by the deploy. Evolution: nothing called by the deploy. **The card's buttons do call Evolution**
+   (*Show QR code*, *Verify number*, *Register webhook*): only when an admin presses them, after the deploy, as the
+   connection's own step.
+5. **Rollback.** `scripts/deploy-5.18.89.sh --rollback`, typed `ROLLBACK`, puts 5.18.88 (`6464204`) back through
+   `deploy-hybrid.sh` and checks it. The card goes; a number added through it stays in 087's tables, switched off and
+   unread. The runbook is its own section below, never beside the deploy command.
+
+### Release notes — what each change does
+
+- **The card** — `lib/SalesNumbersAdmin.php` (new) and `tabs/engage/wa_ai_setup.php` (+132 −1). *Salesperson numbers* on
+  the WhatsApp AI screen: Uganda, admin only, every action checked again and carrying the screen's own CSRF check; shown
+  wherever 087 has run, with the registry switch on or off. It lists every registry number (the departments first,
+  read-only), the business number masked, the owner, the status, the assistant's switch, Evolution's state and the last
+  three trail rows. Actions, each through `ChannelRegistry` with the admin's name: add (an instance Evolution reports
+  and nobody uses, an active salesperson; switched off), pair, verify, register the webhook, switch on (refused until
+  the registry is on, the number verified and its owner active), pause, switch off, retire (ticked), the assistant on or
+  off, a new owner. *Found in Evolution* marks an instance a salesperson's number uses as in use.
+- **`lib/ChannelRegistry.php`** (+54). Two writers: `verifyNumber()` stores the number Evolution reports for an
+  instance, never a typed one, masked in the trail; `setOwner()` gives a salesperson's number to another salesperson.
+  Neither touches a department's row.
+- **The assistant (D3)** — `lib/LineOwner.php` (new): the owner of a staff-owned, active number whose owner is active,
+  by first name. `workers/AiReplyWorker.php` (+38 −6) asks only with the registry on, once per turn; `lib/BrainContext.php`
+  and `lib/ShopBotPayload.php` carry `line_owner` (one word of letters); `lib/DishNetAiBrain.php` (+34 −4) writes the
+  identity line and rule 4a from one answer, WhatsApp only. **No owner: the prompt is 5.18.88's byte for byte** (the
+  test's golden prompts, and A10 and R16 on the server's own configuration).
+- **The hand-over (D4)** — `lib/AlertService.php` (+52): `handover()`. No owner: exactly the old alert, key and text. An
+  owner: their phone, and the central copy unless `wa_handover_copy_central` is set off; no phone on record: the central
+  number. Sent from the DishNet sales number, never a person's line. The AI worker's inline escalation calls it.
+- **Owned leads (D5)** — `lib/AiLeadService.php` (+28 −1) assigns a NEW lead from a salesperson's number to them, with
+  the reason in its history, only when the origin names that same person. `lib/OwnedLead.php` (new) keeps it with them:
+  `cron_leads.php` (+6) skips it in the 72 h reassignment and says how many; `includes/post/post_leads.php` (+33 −1)
+  leaves it out of smart distribution and writes a history note when an admin's `assign_leads` moves it;
+  `tabs/sales/leads.php` (+15 −2) keeps it off the daily rota.
+- **Own leads only (D7)** — `lib/LeadVisibility.php` (new), behind `sales_own_leads_only` (absent: OFF; Uganda only). A
+  manager is an admin or anyone with All Leads by the page's own rule. Checked on the Leads page (after the rota saves),
+  the quote picker (`tabs/sales/send_quote.php` +4), the More menu's count (`tabs/sales/more_menu.php`), `save_lead`,
+  `send_lead_quote`, `update_lead_status`, `convert_lead`, and the call log (`includes/api/api_leads.php` +3). A refused
+  lead is answered as not found.
+- **Follow-ups** — `lib/OwnedNumberHold.php` (new): with the registry on, `cron/followup_scan.php` leaves a
+  salesperson's number out of its query, `cron/followup_run.php` closes an open one before any model call, and
+  `cron/followup_send.php` closes an approved one before any send — unless `wa_followups_on_owned_numbers` is set. The
+  departments are never held; an unreadable registry holds every number but theirs.
+- **The webhook guard** — `cron/wa_webhook_guard.php` (+31 −3): with the registry on it also watches every ACTIVE
+  salesperson's number. Off, or unreadable: the three departments, exactly as before.
+- **`tools/set_config.php`** (+7): the three keys. Nothing in this release sets them.
+- **Tests:** `test_sales_numbers.php` (new; its golden prompts against `6464204`); `test_multi_number_routing.php` (two
+  assertions rewritten to the new truth); `test_brain_context.php` (the new key; fictitious names);
+  `tests/fixtures/fake_evo_server.php` (instances and pairing for the card); the five distributor tests read `5.18.89`.
+- **`manifest.json`** 5.18.89.
+
+### Files — 34 against `6464204`: 6 added, 28 changed, none removed
+
+- **Added:** `lib/LeadVisibility.php`, `lib/LineOwner.php`, `lib/OwnedLead.php`, `lib/OwnedNumberHold.php`,
+  `lib/SalesNumbersAdmin.php`, `tests/test_sales_numbers.php`.
+- **Changed:** `cron/followup_run.php`, `cron/followup_scan.php`, `cron/followup_send.php`, `cron/wa_webhook_guard.php`,
+  `cron_leads.php`, `includes/api/api_leads.php`, `includes/post/post_leads.php`, `lib/AiLeadService.php`,
+  `lib/AlertService.php`, `lib/BrainContext.php`, `lib/ChannelRegistry.php`, `lib/DishNetAiBrain.php`,
+  `lib/ShopBotPayload.php`, `manifest.json`, `tabs/engage/wa_ai_setup.php`, `tabs/sales/leads.php`,
+  `tabs/sales/more_menu.php`, `tabs/sales/send_quote.php`, `tools/set_config.php`, `workers/AiReplyWorker.php`,
+  `tests/fixtures/fake_evo_server.php`, `tests/test_brain_context.php`, `tests/test_multi_number_routing.php`, and the
+  five distributor tests (the version pin only).
+- **Not in it:** the AI media layer (migration 085, the media worker, the voice, image and document paths, and the
+  media layer's shared hand-over `lib/Handover.php`), the partner portal, the CSRF guard, any migration, any Evolution
+  instance or number. A0's allow-list refuses each of these, and R4 checks none is installed.
+
+### Ancestry
+
+`53d5c4d` (5.18.89, release) ← `6464204` (5.18.88, live) ← `9cc81af` (5.18.87) ← `c2c96e1` (5.18.86). The source is Batch
+2, `2c2771b`, on the branch:
+- **26 files byte for byte** from `2c2771b`: the 15 changed ones whose copies on live and on the branch before Batch 2
+  were the same; the manifest and the five distributor tests, which differed there only by the version (5.18.88
+  against 5.18.86) and now both read 5.18.89; and the five new libraries;
+- **8 ported** onto live's copies, which carry no AI media layer: `lib/BrainContext.php` (live's fourteen top-level keys
+  plus `line_owner`), `lib/DishNetAiBrain.php` (Batch 2's patch applied cleanly), `workers/AiReplyWorker.php` (the owner
+  resolved after `replyRoleOrRefuse()`, the lead given to them, the hand-over through `AlertService::handover()` in
+  live's inline escalation — the branch's goes through the media layer's `Handover::escalate()`), `tools/set_config.php`
+  (the three keys; no media keys), `tests/fixtures/fake_evo_server.php`, `tests/test_brain_context.php` (live's key
+  count), `tests/test_multi_number_routing.php` (Batch 2's two rewritten assertions on live's copy) and
+  `tests/test_sales_numbers.php` (its golden prompts against `6464204`, the brain live in 5.18.88).
+
+*Corrected here, not in Git:* the release commit's own message says each of the 26 was identical on `6464204` and on
+the branch before Batch 2. Six were not: the manifest and the five distributor tests differed there by the version
+alone. The files themselves are as listed; rewording the commit would change the pinned hash, so the message stands
+and this line corrects it.
+
+`release/5.18.89` is local, not pushed.
+
+### Tests
+
+- **The release tree's own suite: 274 files, 12,948 passed, 0 failed, 0 skipped — twice** (A 14:25–15:03, B 15:03–15:40 UTC),
+  each pass with nothing else running. Every file's tally is identical in both passes.
+  - **Against 5.18.88's release suite** (273 files, 12,814 passed): exactly `test_sales_numbers` is added (+128);
+    `test_brain_context` (123 → 128) and `test_multi_number_routing` (83 → 84) moved, by their own added and rewritten
+    assertions. No other file's tally moved.
+  - PHP warnings: 5 per pass, all from `test_dpo_endpoints` (an undefined variable in the test itself, line 91), as in 5.18.88's.
+  - The checker refuses its own three planted faults: a tally moved in one pass only, a warning in one pass only, and an
+    unnamed file whose tally moved against the base.
+  - The tree was unchanged by both passes: still `53d5c4d`, clean.
+  - **Against 5.18.87's release suite** too (270 files, 12,586 passed), as asked: the four files added since — 5.18.88's
+    three (`test_channel_registry` 104, `test_event_processor_protected` 41, `test_multi_number_routing` 84) and
+    `test_sales_numbers` 128 — and `test_brain_context` 123 → 128; nothing else moved (+362 in all).
+- **A first attempt was set aside.** It ran beside the baseline pass and both counted rehearsals — four heavy jobs on
+  four cores — and two files failed, once each:
+  - `test_notify_kyc_race`, here: one weakened-copy check. The race happened and the copy wrote no mark, but the welcome
+    it should then have produced was not in the dry-run log the test reads;
+  - `test_notify_staff_controls`, in the baseline tree `7195253`, which holds no Batch 2 code: one South Sudan check
+    (the invoice scan's send was not counted).
+
+  Neither file is touched by this release, nor is the code the two checks exercise: `NotificationService.php` (the
+  dry-run log), `webhook.php`, `KycService.php`, `includes/api/api_notifications.php` (the invoice scan) and the tests'
+  sandbox are the same files at `6464204` and `53d5c4d`.
+  **Neither failure could be reproduced**: alone (3 and 6 runs), under artificial CPU load (3 and 3), and three copies
+  of the race test at once (18 runs) — every run passed. Two weaknesses in the test harness were found while looking
+  (Known limitations). One is proved by reproducing it: the dry-run evidence log loses entries when two processes write
+  it at once. **The cause of the two failures is NOT ESTABLISHED.** Both counted passes were then run again from
+  scratch, with nothing beside them.
+- **Focused:** the 79 test files whose source names one of the 34 changed files. Each passes and reads the same in both
+  passes; 76 read as in 5.18.88's suite, `test_brain_context` and `test_multi_number_routing` moved as above, and
+  `test_sales_numbers` is new. Beside them, as in 5.18.88's suite: the channel registry 104/0, the event processor 41/0,
+  the Inbox route 23/0, migration integrity 28/0, and the South Sudan and tenant files (`test_staff_jobs_south_sudan`
+  51/0, `test_staff_jobs_gate` 41/0, `test_tenant_profile` 108/0, `test_portal_tenant` 112/0, `test_email_no_sudan`
+  62/0, `test_sales_support_tenant` 37/0, `test_notify_tenant_text` 30/0, `test_cashbook_tenant` 26/0,
+  `test_phone_country` 26/0, `test_ai_country_facts` 21/0).
+- **Lint:** `php -l` on all 33 PHP files of the diff, read from the commit: 0 errors. The sandbox has PHP 8.4. A scan of
+  the 2,317 added PHP lines finds nothing newer than PHP 7.4 (four pattern hits, each a ternary's `: null` or `: false`,
+  not a type); the server's own 8.1 lints at A2.
+- `git diff --check 6464204 53d5c4d`: clean.
+- **Secret scans** of the release diff and of the script and its rehearsal: clean. No key-, token- or credential-shaped
+  value and no banned value. The phone-shaped values in the tests are fictitious fixtures; the only address in the
+  rehearsal is its loopback fake (`127.0.0.1:9`, never contacted); the one long hex string is 087's sha256.
+
+### South Sudan — unchanged, and proved four ways
+
+1. **Statically:** every Batch 2 rule is behind `StaffJobsGate::applies` (Uganda) — the card, own leads only, and the
+   registry, which gates the persona, the hand-over, owned leads, the hold and the guard. The event processor is not in
+   the release.
+2. **At A6 on the server, before anything changes:** the pin's Batch 2 rules run with **every switch on** as a South
+   Sudan install, on a throwaway database: no card, no own-leads filter, no registry, nothing held — and on Uganda, with
+   the switches absent as production has them, the card alone. The event processor (unchanged) is run as South Sudan and
+   as Uganda beside the live one, and must read the known signatures. Refusal 6 otherwise.
+3. **After the deploy (R13, R15) and after a rollback (RB),** the same runs on the installed code.
+4. **In the suite:** `test_sales_numbers`'s South Sudan part (every switch set), and `test_staff_jobs_south_sudan`, which
+   compares South Sudan's pages with 5.18.49's byte for byte — and found, in development, one newline the card's skipped
+   block left on the WhatsApp AI setup page. Fixed before the release; the page is identical again (51/0).
+
+The rehearsal shows each South Sudan refusal firing: own leads only, the card and the registry each made to forget the
+country (1r, 1s, 1t).
+
+### Domain B — untouched
+
+- `dishnet-mikrotik-control-plane/` and the plugin's `docs/` are the same trees at `6464204` and `53d5c4d`.
+- The whole repository's delta is the plugin's 34 files alone.
+- **A7** refuses any pin that touches either tree or anything outside the plugin; **R14** after the deploy and **RB**
+  after a rollback compare all 363 installed files byte for byte.
+
+### `scripts/deploy-5.18.89.sh` — 1,978 lines, sha256 `6296407b3f23e048…`
+
+Made from 5.18.88's script by a derivation with every replacement asserted. Every check added for 5.18.89 was first run
+against the release's files and against 5.18.88's: each passes on the release and fails on 5.18.88's code, and the
+rollback's checks the other way round. **It refuses before anything changes:**
+1. live is not 5.18.88 at `6464204` (commit and manifest version);
+2. `multi_number_channels_enabled` reads ON in either copy (A5);
+3. 087 is not recorded, or recorded under a checksum that is not the installed file's (A8);
+4. 087 is not as 5.18.88 left it — an object missing, a department row changed, or any other number in it (A8): nothing
+   before 5.18.89 can add one, so it was written by hand;
+5. the delta is not exactly the 34 files, carries a migration, or 087 at the pin is not the reviewed one (A0);
+6. South Sudan's protection fails (A6): the event processor, run as South Sudan and as Uganda, reads otherwise than the
+   live one's known signatures, or the pin's Batch 2 rules apply anything as South Sudan with every switch on;
+7. Domain B's protection fails (A7);
+8. the backup, or the event-queue snapshot, is not confirmed;
+9. `sales_own_leads_only` reads ON in either copy (A5b) — the deploy itself would change what the team sees;
+10. the pin's assistant prompt is not 5.18.88's for every conversation with no salesperson's number, on the server's own
+    configuration (A10).
+
+A9 compares how the live code and the pin's code route the three numbers, as in 5.18.88. A6, A9 and A10 run both
+releases' code in throwaway directories inside the container (`docker cp` to `/tmp`, removed at exit); A10 builds the
+assistant's prompt with `DishNetAiBrain::promptPreview()` — the path `reply()` takes, with no call to a model — and
+compares HMACs under the run's key, never the prompts.
+
+**After the deploy, besides every check carried over (R1, R3–R14, V1–V10, V3–V3g, V4):**
+- **V11** — the call log refuses an anonymous caller before any lead is read;
+- **V12** — the WhatsApp AI screen sends a visitor with no session to the sign-in page, and no part of the card is in
+  the answer (a GET; nothing is posted to the screen);
+- **V3h** — the three new switches are unchanged by the run, own leads only OFF in both copies;
+- **R2b** — the installed rules on the server's own configuration: own leads only off, the follow-up hold holding nothing
+  (the registry is off), the card shown — the one thing this release shows;
+- **R3, R11** — 087 still complete; a number the card added since the deploy is reported (it is added switched off), and
+  one switched on while the registry is off fails;
+- **R6** — 5.18.89's pieces, 33 of them;
+- **R10** — the owner is asked for only with the registry on, and a lead is given to a salesperson only when it came in
+  on their own number;
+- **R15** — the installed Batch 2 rules on throwaway databases: in full on Uganda with every switch on, the card alone
+  with the switches absent, nothing at all as South Sudan;
+- **R16** — the installed assistant's prompt against 5.18.88's, as A10.
+
+**The rollback (RB):** 5.18.89's pieces gone; 5.18.88's Batch 1 and 5.18.87's Batch 0 in place; 087 as it was, with any
+number the card added (switched off), never read with the switch off; the event processor 5.18.88's; the assistant's
+prompt 5.18.88's again — an owner named changes nothing; the routing, the queue and Domain B as before.
+
+The script contains no command that changes a switch.
+
+### The rehearsal — `scripts/harness/deploy-5.18.89/rehearse.sh` (953 lines, sha256 `dc252a7c12cfdc95…`)
+
+The base is installed as production runs it after 5.18.88's deploy on 07 Oct:
+- 5.18.88 with 086 and 087 applied by its own runner — 087's three department rows, no instance;
+- the authorisation and the booking WhatsApp on;
+- the lead switches as decided on 07 Oct (capture ON, the uCRM write OFF);
+- the Inbox's row naming three fictitious numbers, with support and account sharing one instance;
+- the registry's switch and the three new switches unset;
+- an event queue with 6 events, 3 of them not done; two photos; a salesperson (fictitious) among the staff.
+
+It covers:
+- **the pin (section 0):** cut on `6464204`; 34 files, 6 added, none removed; no migration and 087 the reviewed file;
+  the twenty-six files taken whole are Batch 2's (`2c2771b`) byte for byte, the eight ported ones differ; no media-layer,
+  portal or CSRF file; Domain B and the plugin's docs the same trees;
+- **every refusal (1a–1z2):** 5.18.87 still live; the right commit with the wrong manifest; a placeholder pin; the
+  branch tip; a media-layer file; a migration; 087 one comment different; the follow-up hold missing; Domain B, the
+  plugin's docs, or a file outside the plugin; the registry's switch ON, or own leads only ON, in either copy or both;
+  087 not recorded, recorded under another checksum, a number in it, or a trigger missing; a pin whose own-leads rule,
+  card or registry forgets the country (South Sudan); a pin whose assistant introduces itself differently to everyone,
+  or whose persona reaches e-mail; the code copy failing; the backup failing. A4, A5b's other two switches and A3 are
+  evidence, not stops;
+- **weakened copies of stage A (2a–2m):** A5, A5b, A8, A6, A7 and A10 each blinded and caught; A9 shown to stop, on its
+  own, a pin that would land the shared number's inbound in account; with the allow-list blinded, a migration is
+  stopped by the count and an altered 087 by its sha256;
+- **the deploy (section 3):** the rehearsed deploy reads **62 ok / 0 failed / 0 notes**. No data is written at all, and no Evolution
+  address, key or instance name appears in the log;
+- **the teeth (4a–4v):** 5.18.88's WhatsApp AI screen back; the persona reaching e-mail (R16 names the one conversation);
+  the own-leads rule without its country gate (R15 shows South Sudan hiding a colleague's lead); R16, R15, R13, R11 and
+  V12 each blinded and caught; a trigger dropped; a number the card added, switched off — reported, and `--after-only`
+  still PASSES; one switched on with the registry off — a failure; a department row given an instance; the registry's
+  switch ON; own leads only ON; a Domain B file changed; an event deleted; the card leaked to a visitor with no
+  session; and 087's log line: OK counting 13 of 14, a PARTIAL, no line at all;
+- **5.18.88's two fixes (5a–5f):** R7 and V4, each with its control on the control;
+- **the switches after the deploy (section 6):** the uCRM write on (R10 says leads reach uCRM), then off
+  again, byte for byte; the registry's switch set with the installed tool — the checks say at once that the registry is
+  not dark — and put back; the hand-over copy off and owned follow-ups on — reported, never a failure, as they act only
+  with the registry on; own leads only on — the checks say so at once, it being its own later step — and put back;
+  qualification off; the Inbox's account number taken away, or moved during a run (V3g names the key, never its
+  values);
+- **the rollback (section 7):** typed `ROLLBACK`. RB reads:
+  - 5.18.88's files and manifest; the salesperson numbers' code gone; Batch 1, Batch 0 and every earlier feature whole;
+  - **087's tables stay, and 5.18.88 does not read them with the switch off.** A recording handle counts 0 statements.
+    7b is the control on the control: with the switch ON in the Inbox's row, the same check sees the reads;
+  - the assistant's prompt 5.18.88's again on the server's own configuration — an owner named changes nothing;
+  - the event processor 5.18.88's on both countries; the routing as before; the queue, which lost nothing; Domain B
+    as `6464204` has it; no data changed.
+  - 7d deploys again over the rolled-back 5.18.88 (PASSES); a salesperson's number is then added as the card adds it,
+    and 7e rolls back with it in the registry: PASSES, the number reported, kept switched off, read by nothing, its
+    instance name printed nowhere;
+- **what is left behind (section 8):** the checkout as found, no weakened copy, nothing in `/tmp`, and no PHP fatal from
+  the stand-in.
+
+**Results.** A first run on the working copy read 302 passed and 1 failed. That one failure was a mis-written
+expectation in a new control of the rehearsal itself: the persona's line occurs twice at the pin (the identity line and
+rule 4a, one answer), so the count reads `12111`, not `11111`. Fixed before the commit; the script did not change. Then
+two runs on the committed script (`b7848d9`):
+- **run 1: 303 passed, 0 failed**, 91 runs of the script, no FAIL line, the checkout left as found (13:51–14:01 UTC);
+- **run 2: 303 passed, 0 failed**, 91 runs of the script, the same check lines as run 1, time stamps aside (14:01–14:12
+  UTC). Both runs' rehearsed deploy reads 62 ok / 0 failed / 0 notes.
+
+### Deployment runbook — each step is the operator's, and each needs the operator's approval first
+
+1. **Push — NOT DONE; needs the operator's word.** It pushes the branch `claude/study-this-jhe2eg` (Batch 2, the script,
+   its rehearsal and these records) and `release/5.18.89` (the release commit). The server pulls both from GitHub.
+2. **Deploy, as root on the server — NOT DONE; needs the operator's word.** It asks for `DEPLOY`. Send back the **log
+   file**, not a copy of the terminal:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.89 && mkdir -p /root/dnb-5.18.89 && bash scripts/deploy-5.18.89.sh 2>&1 | tee /root/dnb-5.18.89/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   - **Expect 62 ok / 0 failed / 0 notes**, the rehearsal's own figure.
+   - A note would say that a lead switch is not as decided on 07 Oct (A4), that `ai_qualification` is off, or that the
+     Inbox's row lacks a number.
+   - **If a refusal stops it, nothing has changed.** The log names the refusal: send it back.
+3. **After the deploy: nothing to switch on.** Admins see the *Salesperson numbers* card on the WhatsApp AI screen;
+   nothing else a person sees changes.
+4. **Connecting the salesperson's number is its own step, with its own approval — no command here.** The card's order is
+   add (switched off) → *Show QR code* and pair the phone → *Verify number* (the number Evolution reports) → *Register
+   webhook* → and only then, with `multi_number_channels_enabled` switched on as its own decision, *Switch on*
+   (`docs/65` §AA.3). Switching the registry on is a production change of its own: from then on WhatsApp routes through
+   the registry for every number — the three departments' rows store no instance, so they keep routing as configured.
+5. **Later, each its own decision:** `sales_own_leads_only` (salespeople see only their own leads); the uCRM lead write;
+   `wa_handover_copy_central` off (the salesperson alone), or `wa_followups_on_owned_numbers` on.
+
+### Rollback runbook — its own command, never pasted with the deploy (root `docs/44` §16.9)
+
+Only if it is ever needed. The deploy's log prints the same at its end. It asks for `ROLLBACK` before it changes anything,
+puts back 5.18.88 (`6464204`) through `deploy-hybrid.sh`, then checks it (RB):
+
+`cd /opt/dishnet && bash scripts/deploy-5.18.89.sh --rollback`
+
+If the script cannot run, by hand:
+
+`cd /opt/dishnet && git checkout 6464204 && bash scripts/deploy-hybrid.sh && git checkout -`
+
+What stays as it is:
+- 087's tables, with any number the card added — switched off, read by nothing while the switch is off. RB proves it.
+- Every switch stays as it is. A history note an admin's reassignment wrote stays on its lead.
+- Leads, conversations and events stay. The queue loses nothing; RB checks it.
+- **Switch the registry off before a rollback** if it was ever switched on: 5.18.88 routes by the registry too, but
+  knows nothing of a salesperson's number's persona, hand-over or leads.
+
+### Known limitations
+
+- **The card, as an admin sees it, is proved by the suite, not on the server.** `test_sales_numbers` drives it through
+  its forms on the real plugin; the deploy signs nobody in, so on the server V12 checks the anonymous answer and R2b,
+  R6 and R15 check the code behind the card.
+- **A10 and R16 compare twelve conversations**, built with no products and no history, on the server's own
+  configuration. The suite's golden test compares 24.
+- **`--after-only` is meaningful while the switches are still off.** Once the registry is switched on to connect the
+  number, V3f and R11 say so, by design.
+- **Pre-existing, observed, not changed** (`docs/65` §AB.2): the Leads page's add/edit form posts actions no handler
+  answers; a staff row with no `is_active` field is active to `cron_leads.php` but not to `OwnedLead`; counts outside the
+  Leads area (the staff API's LTE dashboard) count every lead when own leads only is on; the call-recording upload is not
+  checked by own leads only; the salesperson is not told when their number disconnects (the central number is).
+- **PHP 8.1 lint runs only on the server, at A2.** The sandbox lints with 8.4; a scan of the added lines finds nothing
+  newer than PHP 7.4.
+- **Two test-harness weaknesses, recorded, not fixed** — found while chasing the two failures of the set-aside suite
+  attempt (Tests, above); neither file is touched by this release, and neither weakness is in production code paths
+  that send anything:
+  - `NotificationService`'s dry-run log, which the race test reads as its evidence, is written read-modify-write with
+    no lock. Two processes writing it at once kept 79, 19 and 18 of 300 entries; one writer keeps 300 of 300. A lock
+    is its own change.
+  - The staff-jobs sandbox proves its plugin server by a nonce of its own, but its fake uCRM and fake Evolution by a
+    marker every copy shares, so its "this sandbox's own marker" holds for them only through the still-running check.
+    Two suites side by side could in principle adopt each other's fake. A reading of the code, not reproduced; the
+    counted passes ran one at a time.
+- **The media layer's hand-overs** (on the branch only) alert the central number alone; production has no media layer.
+- **Not in this release:** the AI media layer, the partner portal, the CSRF guard. The registry stays dark; connecting a
+  number is the operator's own later step.
+
+### Remaining blockers, and the call
+
+- **Technical blockers: none found.** Every check, test and rehearsal above passed.
+- **Two approvals are needed, each its own:** the push (both branches), then the deploy. Neither is given yet.
+- **The call: GO once both are given.** The release is dark. With the switches as they are, the only change a person
+  sees is the *Salesperson numbers* card for admins on Uganda's WhatsApp AI screen; every conversation stays a
+  department's, so the prompt, the hand-over, the leads and the follow-ups are 5.18.88's — A10 and R16 prove the prompt
+  on the server's own configuration before and after.
+- **Connecting the salesperson's number comes after the deploy**, as its own step with its own approval: add it through
+  the card (switched off), pair, verify, register the webhook — and switching the registry on, a production change of
+  its own.
+
+**Git:** local commits only — the branch (`2c2771b`, the script and rehearsal, this entry) and `release/5.18.89`
+(`53d5c4d`). **Nothing is pushed and nothing is deployed.** No configuration changed, no switch set, no Evolution
+instance created, nothing sent. `docs/59` stays untracked by the operator's decision.
