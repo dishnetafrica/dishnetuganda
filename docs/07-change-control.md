@@ -6470,7 +6470,7 @@ from `89047e0` to `988135d` (04:20:16 UTC), `release/5.18.86` new at `c2c96e1` (
 deployed, no configuration had changed and nothing had been sent to anyone. `docs/59` stays untracked by the operator's
 decision.
 
-## 07 Oct — 5.18.87: the AI's WhatsApp leads recorded at last — Batch 0's lead fixes (Uganda); `release/5.18.87` = `9cc81af`, cut on live 5.18.86 (`c2c96e1`); `scripts/deploy-5.18.87.sh` pinned to it and rehearsed — PUSHED 07 Oct 06:33 UTC; DEPLOYED 06:35 UTC (39/1/0 — the one FAIL, R7's photo count, is three photos taken during the run)
+## 07 Oct — 5.18.87: the AI's WhatsApp leads recorded at last — Batch 0's lead fixes (Uganda); `release/5.18.87` = `9cc81af`, cut on live 5.18.86 (`c2c96e1`); `scripts/deploy-5.18.87.sh` pinned to it and rehearsed — PUSHED 07 Oct 06:33 UTC; DEPLOYED 06:35 UTC (39/1/0 — the one FAIL, R7's photo count, is three photos taken during the run); `--after-only` 06:52 UTC PASSED 33/0/0
 
 **Why.** The AI's lead path has never worked in production (`docs/55` §3). Three defects were found on 04 Oct:
 - **Every capture fails.** `AiReplyWorker` hands `latestPin()` the variable `$ctx`, which does not exist there. The call
@@ -6668,9 +6668,18 @@ word — done, 07 Oct 06:33 UTC: the server pulls both branches from GitHub, `cl
     on the support/account number, `AiLeadService` records it in Sales → Leads, and nothing reaches uCRM.**
   - **Not seen yet:** a lead from a real conversation. It waits for the next customer who tells the assistant what they
     need and where (step 2).
-  - **Optional:** `cd /opt/dishnet && bash scripts/deploy-5.18.87.sh --after-only` runs every check again, read-only,
-    in under a minute. With no photo taken meanwhile it reads 33 ok / 0 failed / 0 notes, the rehearsal's figure for
-    that mode.
+  - **`--after-only` at 06:52:28 UTC, run by the operator: PASSED, 33 ok / 0 failed / 0 notes**, the rehearsal's figure
+    for that mode. The photos read `present:16:3` and 16 files at both ends of the run, so R7 passes; 086 complete, its
+    tables `2:9:1:1:2`; every switch as at the deploy; R10 as above.
+  - **Found in that run's log: an `--after-only` run's V4 proves nothing, and has not since 5.18.60.** V4 reads the
+    container log from the time the state file records. Since 5.18.60 that file holds the run's compact stamp
+    (`20261007T063502Z`), and V4's filter keeps a log line only when its time sorts at or after that stamp:
+    `2026-10-07T06:…` sorts before `20261007T…` (a dash sorts before a digit), so no line passes, whatever the log holds.
+    The deploy run's own V4 used the copy's time (`2026-10-07T06:35:47Z`) and read 60 s of log: a real check. An
+    `--after-only` V4 never was, so the V4 lines recorded above for 5.18.83's `--after-only` (06 Oct, 11:51 UTC) and
+    5.18.84's (06 Oct, 15:25 UTC) prove nothing either. 5.18.50 to 5.18.59 recorded the copy's own time, so 5.18.50's
+    run stands. The next script records the time in the form V4 compares, and its rehearsal plants an error after the
+    deploy and requires `--after-only` to fail on it.
 
 **Git:** `ad5371b` (the test), `70eff0c` (the script and its rehearsal), `release/5.18.87` (`9cc81af`), and this entry
 with `docs/65` §W's three decisions (`6569047`) — **pushed 07 Oct, 06:33 UTC**, on the operator's instruction (*"yes push
