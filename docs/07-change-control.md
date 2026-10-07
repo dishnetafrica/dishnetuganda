@@ -7113,7 +7113,8 @@ same 54, one for one** (the rehearsed deploy's full output, captured afterwards,
 
   `docker exec ucrm sh -c 'ls -d /tmp/dnb-5.18.88-* 2>/dev/null | wc -l'; ls -d /root/dnb-5.18.88/code-* /root/dnb-5.18.88/domainb-* 2>/dev/null | wc -l`
 
-  It should print `0` twice.
+  It should print `0` twice. **Run by the operator after the deploy: `0` and `0`.** No copy of the code and no
+  throwaway database was left in the container or on the host.
 
 ### Rollback runbook — its own command, never pasted with the deploy (root `docs/44` §16.9)
 
@@ -7143,8 +7144,8 @@ What stays as it is:
 - **PHP 8.1 lint ran only on the server, at A2:** PHP 8.1.34 accepted all 8 changed server files and the 8 test files
   (the RESULT). The sandbox lints with 8.4, and the scan above found nothing newer than 8.1.
 - **`docker cp` into the container's `/tmp` was new in these scripts** (A6, A9, R12, R13, RB). Its first use on the
-  server worked: A6, A9, R12 and R13 read both releases' code there. Its removal at exit is silent; the RESULT gives an
-  optional read-only check. A failed copy is a refusal (1r).
+  server worked: A6, A9, R12 and R13 read both releases' code there. Its removal at exit is silent, so the operator
+  checked it afterwards, read-only: nothing was left (`0`, `0`; the RESULT). A failed copy is a refusal (1r).
 - **The runner tolerates some failing statements silently** (above). That is unchanged, and it applies to every
   migration; R3 does not depend on it. A statement that waits more than 5 s for a lock is logged PARTIAL, and R3 fails.
   The runner still records the file as applied, so it never retries it: re-applying 087's idempotent statements is then a
