@@ -560,7 +560,8 @@ relationship. The brain knows uCRM's prices only; retailer-specific prices or ma
 - **SEC-1. An admin page carries the Evolution key in its HTML.** `tabs/accounts/wallet_admin.php:64-75` writes
   `evo_api_key` and the WASender keys into hidden form fields. The tab is admin-only, but RBAC has a grantable
   `wallet_admin` permission (`lib/RbacService.php:428`). Whether the database settings row the page reads still holds the
-  key is [SERVER?].
+  key is [SERVER?]. **Answered 07 Oct, 04:25 UTC, by 5.18.86's deploy (A3, yes/no only): it does** — the key is in the
+  page's HTML in production. Still open, not fixed (docs/07, 07 Oct, 5.18.86 RESULT).
 - **SEC-2. A credential sits in source.** `cron_wa_sync.php:45-54` carries a literal fallback feed secret and session ids;
   the job runs every 60 s and is on by default. Whether the legacy feed is still alive is [SERVER?].
 - **SEC-3. The legacy receiver can run unauthenticated.** `wa_webhook.php:84-100` skips authentication when
@@ -805,9 +806,9 @@ Also outstanding from docs/49: WS-B's onboarding, messaging policy, cost and rol
 
 - **Evolution mapping:** the production values of `evo_instance_sales`, `evo_instance_support`, `evo_instance_account`,
   `evo_instance_name` and `evo_accounts_instance_name`; whether support and account share an instance (§X.1).
-- **Switches and destinations:** whether the SQLite settings row holds the Evolution key (SEC-1); `wa_sync_enabled`,
-  `wa_webhook_secret` set or not, `wa_bot_enabled` / `wa_auto_reply_enabled`; `ai_lead_capture`, `ai_crm_lead_sync`,
-  `alert_whatsapp`, `distributors_enabled`.
+- **Switches and destinations:** whether the SQLite settings row holds the Evolution key (SEC-1 — answered 07 Oct: it
+  does, §O.3); `wa_sync_enabled`, `wa_webhook_secret` set or not, `wa_bot_enabled` / `wa_auto_reply_enabled`;
+  `ai_lead_capture`, `ai_crm_lead_sync`, `alert_whatsapp`, `distributors_enabled`.
 - **Data:** lead counts by source and assignee; staff rows by role; distributor rows.
 - **The Evolution server:** version, per-instance tokens, capacity, and whether it is shared with the South Sudan tenant.
 - **Business rules:** D1–D12.
@@ -973,7 +974,10 @@ South Sudan control scenarios beside the Uganda ones, and by a weakened copy tha
   row (`public.php`), not the settings files the webhook and workers read. If that row lacks the Evolution URL or key,
   a support reply has been reported *sent* while nothing left (`sendVia()` finds no transport and returns quietly);
   with 5.18.86 a sales or account reply says *"WhatsApp (Evolution) is not configured here"* instead. The same
-  question as SEC-1; to be read on the server before any deployment (§X.2).
+  question as SEC-1; to be read on the server before any deployment (§X.2). **Answered 07 Oct, 04:25 UTC, before
+  5.18.86 was installed, by its deploy script (A3, yes/no only): `evo=yes sales=yes support=yes account=yes
+  registry=absent`.** The row reaches Evolution, names all three instances, and leaves the registry switch unset.
+  Whether each instance is connected on Evolution is not read (§X.1).
 
 ### Z.7 Rollback
 

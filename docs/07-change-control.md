@@ -6283,7 +6283,7 @@ pass was interrupted (A 22:20–22:59, B 22:59–23:38 UTC).
 instruction (*"yes push branch"*): `claude/study-this-jhe2eg` from `cae0689` to `b1865ea`. Nothing deployed, no
 configuration changed, nothing sent to anyone. `docs/59` stays untracked by the operator's decision.
 
-## 07 Oct — 5.18.86: the WhatsApp Inbox answers from the conversation's own number (Uganda); `release/5.18.86` = `c2c96e1`, cut on live 5.18.85 (`4790019`); `scripts/deploy-5.18.86.sh` pinned to it and rehearsed — PUSHED 07 Oct 04:20 UTC; NOT deployed
+## 07 Oct — 5.18.86: the WhatsApp Inbox answers from the conversation's own number (Uganda); `release/5.18.86` = `c2c96e1`, cut on live 5.18.85 (`4790019`); `scripts/deploy-5.18.86.sh` pinned to it and rehearsed — PUSHED 07 Oct 04:20 UTC; DEPLOYED 04:26 UTC (PASSED 37/0/0)
 
 **Why.** Batch 1 (above) fixed a live defect: every reply typed in the WhatsApp Inbox chose its sender with
 `channel === 'accounts' ? 'accounts' : 'support'`, so a customer who wrote to the **sales** number was answered from the
@@ -6411,10 +6411,11 @@ sha256 `57c4053090def6d0…`): **run 1 184/0**, 32 runs of the script, no FAIL l
 now `d818f6d`. The rehearsed deploy reads **38 ok / 0 failed / 0 notes**: 5.18.85's 34 with A3, V3d, V10 and R9. **On
 the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.18.85's deploy.
 
-**Handover — each step is the operator's; the push is done, the deploy is not.**
+**Handover — each step is the operator's; the push and the deploy are done.**
 0. **Push both branches — done, 07 Oct 04:20 UTC.** The server pulls them from GitHub: `claude/study-this-jhe2eg` carries
    the script, and `release/5.18.86` the release commit.
-1. **Deploy, as root on the server.** It asks for `DEPLOY`; send back the **log file**:
+1. **Deploy, as root on the server — DONE 04:26 UTC, PASSED 37/0/0** (the RESULT below). It asks for `DEPLOY`; send
+   back the **log file**:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.86 && mkdir -p /root/dnb-5.18.86 && bash scripts/deploy-5.18.86.sh 2>&1 | tee /root/dnb-5.18.86/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
@@ -6427,6 +6428,41 @@ the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.1
    docs/44 §16.9).
 2. **Nothing to switch on.** In Engage → WhatsApp → Inbox, reply to a customer who wrote to the sales number: the reply
    arrives in their chat with the sales number.
+
+- **RESULT — DEPLOYED to production 2026-10-07, 04:26 UTC: PASSED, 37 ok / 0 failed / 0 notes** — the 37 expected. The
+  rehearsal reads 38 because the sandbox holds a `dishnet.sqlite` to back up; the server holds none (*"nothing to
+  copy"*). The run began at 04:25:28 UTC; `DEPLOY` was typed and `deploy-hybrid.sh` answered *"✓ container now serves
+  c2c96e1"*; the 13 files were stamped at 04:26:06 UTC. Recorded from the terminal the operator pasted (the script prints
+  no secret); the log file stays on the server under `/root/dnb-5.18.86/`.
+  - **A.** The checkout fast-forwarded `3274b1b` → `17b8e8d`; branch tip `d818f6d` (not installed); release commit
+    `c2c96e1` cut on `4790019`; 13 files (9 changed, 4 added, 0 removed), no migration; **A0** clean. Live `4790019` /
+    5.18.85. PHP **8.1.34** accepted the 6 changed server files and the 6 test files. Pilot `on`; the authorisation
+    `ia=on/on` and the booking WhatsApp `wa=on/on`, as the operator left them. **A3 — the Inbox's own settings row:
+    `evo=yes sales=yes support=yes account=yes registry=absent`.** It reaches Evolution and names all three numbers, and
+    the registry switch is not set: `docs/65` §Z.6's question, answered (and SEC-1's, below). 086 complete, its tables
+    `1:7:1:1:3`, as at 5.18.85's deploy; the webhook log's last 300 entries hold **2** `job.add`, the last at 18:26:22 by
+    the plugin's clock (UTC+3), 15:26:22 UTC on 06 Oct, as at 5.18.85's deploy; photo tables `present:11:3`, 11 files.
+  - **Backup** `/root/dnb-5.18.86/backup-20261007T042528Z`: `plugin.sqlite3` 29 MB, one consistent copy, integrity ok,
+    248 tables; the data directory 146 MB; the installed 5.18.85 11 MB; the vault. `GO`.
+  - **V.** Sign-in 200 with zero redirects; the portal 302; no South Sudan contact; **V6** zoom allowed; **V5** 302 / 401;
+    **V7** the customer authorisation page 404 *"This link is not valid"* to a request without a link; **V8**
+    `install_auth_request`, **V9** `install_auth_prefill` and **V10** `wa_send_reply` 401 without a login; **V3** the
+    pilot unchanged (`on` → `on`); **V3b** and **V3c** both switches unchanged (`on/on` → `on/on`); **V3d** the Inbox's
+    settings row unchanged; **V4** no fatal or parse error in the 60 s after the copy.
+  - **R.** R1 all 13 files as `c2c96e1` has them, manifest 5.18.86; R2 `pilot=on`, and the installed `InstallAuth` and
+    `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
+    before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
+    CSRF or AI-layer file, none of the rest of Batch 1; R5 all 221 files from Release A through 5.18.85 intact; R6 every
+    earlier marker and 5.18.86's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.85's
+    deploy read; the photo tables and files read exactly as before; R8 the quotation reader as at 5.18.85; **R9** the
+    installed Inbox route on the server's own Inbox row: sales → the sales number, account → the account number,
+    support, accounts and web → `sendVia()` as before, the registry dark.
+  - **Not seen yet:** a real Inbox reply to a sales chat arriving from the sales number. It waits for the next one
+    (step 2).
+  - **Found by A3, not fixed: SEC-1 is live.** The Wallet Top-up & Admin tab (`tabs/accounts/wallet_admin.php:71`)
+    writes `evo_api_key` from this same settings row into a hidden form field, and A3 shows that row's key is set. So
+    the Evolution key is in that page's HTML for anyone who can open the tab (role `admin`, and the grantable
+    `wallet_admin` permission). The file is unchanged by 5.18.86. Its fix needs its own approval (`docs/65` §O.3).
 
 **Git:** `d818f6d` (the test), `22e6c59` (the script and its rehearsal), `release/5.18.86` (`c2c96e1`) and this
 entry (`988135d`) — **pushed 07 Oct, 04:20 UTC**, on the operator's instruction (*"yes push both branches"*): the branch
