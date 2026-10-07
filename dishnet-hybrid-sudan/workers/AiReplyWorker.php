@@ -122,8 +122,33 @@ class AiReplyWorker extends WorkerBase
         }
     }
 
+    /**
+     * Batch 0 (docs/55 defect c): the ids the guard's log lines and audit rows carry for the turn in hand.
+     *
+     * The sales channel's context is built by BrainContext, which deliberately strips conversation_id and
+     * the customer id — they are our database keys, not something the model needs (BrainContext::NEVER_PRESENT).
+     * Reading them off that context recorded conversation 0 and customer 0 for every sales turn. They are kept
+     * here instead: set by buildContext() once identity is resolved, cleared at the start of every event, and
+     * never part of the brain's input. The legacy channels still carry them in the context; the helpers below
+     * fall back to that, so support and account record exactly what they recorded before.
+     *
+     * @var array{conversation_id?:int,customer_id?:int}
+     */
+    private array $turnIds = [];
+
+    private function turnConversationId(array $ctx): int
+    {
+        return (int)($this->turnIds['conversation_id'] ?? ($ctx['conversation_id'] ?? 0));
+    }
+
+    private function turnCustomerId(array $ctx): int
+    {
+        return (int)($this->turnIds['customer_id'] ?? ($ctx['customer']['id'] ?? 0));
+    }
+
     protected function handle(array $event): void
     {
+        $this->turnIds = [];
         $p       = $event['_payload'] ?? [];
         $channel = (string)($p['channel'] ?? '');
         $phone   = (string)($p['customer_phone'] ?? '');
@@ -254,8 +279,12 @@ class AiReplyWorker extends WorkerBase
                         // will produce one; it will be the middle of the
                         // country it has heard of, and an installer would
                         // drive to it.
+                        // Batch 0 (docs/55 defect a): this read `$ctx`, a variable that does not exist in
+                        // handle() — the context is `$context` — so PHP passed null to an array parameter,
+                        // the TypeError landed in the catch below as "lead capture failed", and no WhatsApp
+                        // lead was ever written or synced.
                         $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai',
-                                             $this->latestPin($convId, $ctx));
+                                             $this->latestPin($convId, $context));
                         $this->log($r['ok'] ? 'info' : 'info', sprintf(
                             'conv %d: lead %s%s', $convId, $r['action'],
                             $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
@@ -369,6 +398,9 @@ class AiReplyWorker extends WorkerBase
         // on trailing nine digits with no country check — the same defect
         // fixed in DishNetTools — and put a South Sudan visitor's typed name
         // into a Ugandan caller's prompt. It bought a greeting.
+
+        // Batch 0 (docs/55 defect c): remembered for the guard's audit, outside the brain's context.
+        $this->turnIds = ['conversation_id' => $convId, 'customer_id' => $clientId];
 
         switch ($channel) {
             case EvolutionApiService::CHANNEL_SALES:
@@ -504,6 +536,10 @@ class AiReplyWorker extends WorkerBase
                     'products'  => $products,
                     'message'   => $message,
                     'history'   => $ctx['history'] ?? [],
+                    // Batch 0 (docs/55 defect c): the pin this turn carried. Until now the sales number — where
+                    // customers send their location — never showed the assistant the pin block, because the
+                    // contract had no key for it; support and account did.
+                    'location'  => $ctx['location'] ?? null,
                 ]);
         }
 
@@ -721,7 +757,7 @@ class AiReplyWorker extends WorkerBase
             if ($fence['appended']) {
                 $ai['reply'] = $fence['reply'];
                 $this->log('info', sprintf('conv %d: plan fence appended — %s',
-                    (int)($ctx['conversation_id'] ?? 0), $fence['reason']));
+                    $this->turnConversationId($ctx), $fence['reason']));
             }
             // 5.18.48 (docs/42): the operator's taxes line under a Starlink kit price, where the hardware module
             // is on. Also the operator's text, appended after the check for the same reason as the fence.
@@ -733,18 +769,18 @@ class AiReplyWorker extends WorkerBase
             if ($kit['appended']) {
                 $ai['reply'] = $kit['reply'];
                 $this->log('info', sprintf('conv %d: kit tax note appended — %s',
-                    (int)($ctx['conversation_id'] ?? 0), $kit['reason']));
+                    $this->turnConversationId($ctx), $kit['reason']));
             }
             return $ai;
         }
 
-        $convId = (int)($ctx['conversation_id'] ?? 0);
+        $convId = $this->turnConversationId($ctx);
         $cats   = implode(',', (array)($res['categories'] ?? []));
         $this->log('warn', sprintf('conv %d: reply BLOCKED by guard — %s (len=%d)', $convId, $cats, mb_strlen($reply)));
         try {
             $this->store->append('ai_security_events.json', \ReplyPrivacyGuard::auditEvent($res, [
                 'conversation_id' => $convId,
-                'customer_id'     => (int)($ctx['customer']['id'] ?? 0),
+                'customer_id'     => $this->turnCustomerId($ctx),
                 'channel'         => (string)($ctx['channel'] ?? ''),
                 'provider'        => 'ai_reply_worker',
                 'blocked_length'  => strlen($reply),
