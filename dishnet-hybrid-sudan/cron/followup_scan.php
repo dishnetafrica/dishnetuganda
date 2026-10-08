@@ -47,6 +47,17 @@ require_once $pluginRoot . '/lib/OwnedNumberHold.php';
 $ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
 [$holdSql, $holdArgs] = $ownedHold->sqlExclusion('c.channel');
 
+// 5.18.90 (docs/65 §AD): with the channel registry on, a conversation on a number that may send nothing automated — its
+// assistant off, the number paused or switched off, a salesperson's number not verified or the department numbers not
+// all recorded — is never opened, and takes none of this scan's places; nor is a conversation filed 'staff'. Per row, a
+// conversation with one of DishNet's own numbers is never opened either. Registry off: nothing is added.
+require_once $pluginRoot . '/lib/AutomationPolicy.php';
+$autoPolicy = AutomationPolicy::forInstall($config, $dataDir, $pdo, $store);
+[$autoSql, $autoArgs] = $autoPolicy->sqlExclusion('c.channel');
+if ($autoPolicy->active()) $autoSql .= " AND COALESCE(c.category, '') <> 'staff'";
+$holdSql .= $autoSql;
+$holdArgs = array_merge($holdArgs, $autoArgs);
+
 $maxAge  = (float)($config['followup_max_age_hours'] ?? 336);   // two weeks
 $perScan = (int)($config['followup_scan_limit'] ?? 25);
 
@@ -100,6 +111,12 @@ foreach ($rows as $conv) {
     if ($ownedHold->holds((string)$conv['channel'])) { $skipped++; continue; }   // the query already left these out
     if ($colleagues !== null && $colleagues->isColleague((string)$conv['phone'])) {
         $svc->log(null, (int)$conv['id'], 'skipped', "a colleague's number", 'scan');
+        $skipped++;
+        continue;
+    }
+    $own = $autoPolicy->senderClass((string)$conv['channel'], (string)$conv['phone']);   // 5.18.90 (docs/65 §AD)
+    if ($own !== '') {
+        $svc->log(null, (int)$conv['id'], 'skipped', 'a DishNet number (' . $own . ')', 'scan');
         $skipped++;
         continue;
     }

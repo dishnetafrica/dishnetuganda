@@ -645,7 +645,7 @@ $sc = (string)file_get_contents($root . '/tools/set_config.php');
 is_(strpos($sc, "'ai_media_enabled' => ['bool',") !== false && strpos($sc, "'ai_media_max_bytes' => ['number',") !== false && strpos($sc, "'ai_media_timeout_s' => ['number',") !== false, 'set_config.php manages the three media settings');
 $scOut = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . ' --key ai_media_timeout_s --value 2 2>&1; echo "rc=$?"');
 is_(strpos((string)$scOut, 'between 3 and 60') !== false && strpos((string)$scOut, 'rc=1') !== false, 'a limit outside its range is refused by the tool, naming the range', (string)$scOut);
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.89', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.90', 'manifest version is 5.18.81');
 is_(is_file($root . '/migrations/085_wa_media.sql') && strpos((string)file_get_contents($root . '/migrations/085_wa_media.sql'), 'CREATE TABLE IF NOT EXISTS wa_media') !== false, 'migration 085 creates wa_media additively');
 
 echo "\nI. Weakened copies — each caught by the scenario that guards it\n";

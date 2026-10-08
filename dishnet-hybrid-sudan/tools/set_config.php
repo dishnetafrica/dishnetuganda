@@ -638,6 +638,36 @@ if (!$clear) {
     }
 }
 
+// 5.18.90 (docs/65 §AD): the channel registry goes on only once the department numbers are verified on the WhatsApp AI
+// screen (Salesperson numbers → Verify number on each department), each for the instance it is configured with. Without
+// them a salesperson's number could not recognise a department's message and would answer it. Refused, never warned;
+// and refused too when it cannot be checked. Only where the registry would take effect (Uganda, migration 087).
+if (!$clear && $key === 'multi_number_channels_enabled' && filter_var($new, FILTER_VALIDATE_BOOLEAN)) {
+    $mnCur = PluginConfig::load($root, $dataDir);
+    require_once $root . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies($mnCur, $dataDir) && is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) {
+        try {
+            require_once $root . '/lib/StoreInterface.php'; require_once $root . '/lib/JsonStore.php'; require_once $root . '/lib/SqliteStore.php';
+            require_once $root . '/lib/ChannelRegistry.php'; require_once $root . '/lib/InternalNumbers.php';
+            require_once $root . '/lib/EvolutionApiService.php';
+            $mnStore = SqliteStore::create($dataDir);
+            $mnReg   = new ChannelRegistry($mnStore->getPdo());
+            $mnGaps  = $mnReg->available()
+                ? InternalNumbers::gapsWithReported($mnReg->rows(), EvolutionApiService::configInstanceMap($mnCur),
+                                                    $mnReg->verifiedInstances(), $mnStore)
+                : [];
+        } catch (\Throwable $e) {
+            echo "\n  The department numbers could not be checked (" . $e->getMessage() . "), so nothing was saved.\n\n";
+            exit(1);
+        }
+        if ($mnGaps !== []) {
+            echo "\n  Not yet: the department numbers are not all verified (" . implode(', ', $mnGaps) . "). Nothing was saved.\n\n";
+            echo "  On the WhatsApp AI screen, Salesperson numbers: press Verify number on each department listed, then run this again.\n\n";
+            exit(1);
+        }
+    }
+}
+
 // 5.18.83 (docs/64 §A.4): switching Customer Installation Authorisation ON is its activation (D3, explicit). uCRM is read
 // FIRST and the Starlink installation jobs in progress at this moment are recorded as exempt — those, and only those, may
 // be completed without the customer's acceptance. If uCRM cannot be read, or the plugin's database does not exist yet,

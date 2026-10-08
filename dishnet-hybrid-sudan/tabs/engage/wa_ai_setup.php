@@ -60,6 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
         $_wMsg = ['ok' => $ok, 'text' => $ok ? 'WhatsApp numbers saved.' : $err];
         $_wCfg = PluginConfig::load($_wRoot, $_wData);
         $_wEvo = new EvolutionApiService($_wCfg);
+        if ($ok && $_wSN !== null) {   // 5.18.90 (docs/65 §AD): a department moved needs its number verified again
+            $_wSN = new SalesNumbersAdmin($_wPdo, $store, $_wCfg, $_wData, $_wEvo);
+            $_wMsg['text'] .= $_wSN->departmentGapNote();
+        }
 
     } elseif ($act === 'upload_media') {
         require_once $_wRoot . '/lib/MediaLibrary.php';
@@ -258,6 +262,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['wa_action'] ?? '') !== '')
                 : $err];
             $_wCfg = PluginConfig::load($_wRoot, $_wData);
             $_wEvo = new EvolutionApiService($_wCfg);
+            if ($ok && $_wSN !== null) {   // 5.18.90 (docs/65 §AD): a department moved needs its number verified again
+                $_wSN = new SalesNumbersAdmin($_wPdo, $store, $_wCfg, $_wData, $_wEvo);
+                $_wMsg['text'] .= $_wSN->departmentGapNote();
+            }
         }
 
     } elseif ($act === 'save_public_url') {
@@ -949,7 +957,8 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
       $_snRows   = $_wSN->view($_wDetected);
       $_snFree   = $_wLive !== null ? $_wSN->freeInstances() : [];
       $_snPeople = $_wSN->salespeople();
-      $_snOn     = $_wSN->registryOn(); ?>
+      $_snOn     = $_wSN->registryOn();
+      $_snGaps   = $_wSN->departmentGaps(); ?>
 <div class="wa-card" id="sales-numbers">
   <h3>Salesperson numbers</h3>
   <div class="wa-note" style="padding:10px 15px">
@@ -959,6 +968,11 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
     <?php if (!$_snOn): ?>
       <br><b>The channel registry is off</b> (multi_number_channels_enabled), so nothing is received or answered on these
       numbers yet. A number can be prepared here, but not switched on.
+    <?php endif; ?>
+    <?php if ($_snGaps): ?>
+      <br><b>Verify the department numbers first</b> (<?= h(implode(', ', $_snGaps)) ?>): until every one is verified for
+      the instance it is configured with, no salesperson number is switched on, answers or sends anything automated —
+      it could not tell a department's message from a customer's. The registry cannot be switched on before then either.
     <?php endif; ?>
   </div>
   <?php foreach ($_snRows as $_sn): ?>
@@ -973,8 +987,26 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
       <span class="wa-pill <?= $_sn['ai'] ? 'wa-ok' : 'wa-w' ?>" style="margin-left:0">assistant <?= $_sn['ai'] ? 'on' : 'off' ?></span>
       <span class="wa-pill <?= $_sn['connected'] ? 'wa-ok' : 'wa-w' ?>" style="margin-left:0"><?= h($_sn['connected'] ? 'connected' : $_sn['state']) ?></span>
     </div>
+    <?php if ($_sn['live_differs'] && ($_sn['live_reason'] ?? '') === 'no_phone'): ?>
+      <div class="wa-note" style="padding:6px 0 0"><b>Evolution now reports this instance's owner with no phone number</b>
+        (a WhatsApp @lid), so the number recorded can no longer be confirmed — pair the phone again with Show QR code, then
+        verify.</div>
+    <?php elseif ($_sn['live_differs']): ?>
+      <div class="wa-note" style="padding:6px 0 0"><b>Evolution now reports another number for this instance</b> — verify
+        the number again.</div>
+    <?php endif; ?>
     <?php if ($_sn['department']): ?>
-      <div class="wa-note" style="padding:6px 0 0">A department number: its instance is set under Numbers, not here.</div>
+      <div class="wa-note" style="padding:6px 0 0">A department number: its instance is set under Numbers, not here.<?php
+        if ($_sn['covered_by'] !== '' && $_sn['covered_by'] !== $_sn['id']): ?> It shares the <?= h($_sn['covered_by']) ?>
+        number's instance, so that number covers it.<?php endif; ?></div>
+      <?php if ($_sn['instance'] !== '' && $_sn['covered_by'] === $_sn['id']): ?>
+      <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><?= $_csrf ?>
+        <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">
+        <input type="hidden" name="wa_action" value="sn_verify_department">
+        <button class="wa-btn" type="submit">Verify number</button>
+        <?php if ($_sn['needs_verify']): ?><span class="wa-pill wa-w" style="margin-left:0">not verified for this instance</span><?php endif; ?>
+      </form>
+      <?php endif; ?>
     <?php elseif ($_sn['status'] !== 'retired'): ?>
       <form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><?= $_csrf ?>
         <input type="hidden" name="channel_id" value="<?= h($_sn['id']) ?>">

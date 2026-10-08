@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => []];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => [], 'presence_calls' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -34,7 +34,7 @@ if ($path === '/__test/state') {
 }
 // Phase 2 test controls: start from nothing, and make the next N text sends fail.
 if ($path === '/__test/reset') {
-    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => []];
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => [], 'presence_calls' => []];
     fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
 }
 // 5.18.53: hold the next text send until the test releases it — a WhatsApp as slow to answer as the test needs, so that
@@ -198,5 +198,10 @@ if (preg_match('#^/chat/getBase64FromMediaMessage/(.+)$#', $path, $m)) {
         'base64'    => $b64,
         'buffer'    => null,
     ]);
+}
+// 5.18.90 (docs/65 §AD): the typing indicator is recorded — a test can see that none went to one of DishNet's own
+// numbers — and answered exactly as before (this fake never simulated it).
+if (preg_match('#^/chat/sendPresence/(.+)$#', $path, $m)) {
+    $state['presence_calls'][] = ['instance' => $m[1], 'number' => (string)($body['number'] ?? '')];
 }
 fe2_out(['error' => 'FAKE-EVO-TEST: path not simulated: ' . $path], 404);

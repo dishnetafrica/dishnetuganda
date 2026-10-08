@@ -376,7 +376,7 @@ $de = vd_codeOf($root . '/lib/DocumentExtraction.php');
 is_(strpos($de, "self::requireCapabilities(['gzuncompress', 'inflate_init']);") !== false && strpos($de, "return self::fail('pdf_no_text'") !== false && strpos($de, 'pdf_not_read') === false,
     'the extractor guards the PDF path with the zlib capability, refuses an empty text layer as pdf_no_text, and pdf_not_read is gone');
 is_(strpos((string)file_get_contents($root . '/tools/set_config.php'), 'PDF text') !== false && strpos((string)file_get_contents($root . '/tools/set_config.php'), 'PDF facts only') === false, 'set_config describes PDF text, not facts only');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.89', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.90', 'manifest version is 5.18.81');
 is_(count(glob($root . '/migrations/08[8-9]_*.sql') ?: []) === 0 && is_file($root . '/migrations/086_install_authorisation.sql') && is_file($root . '/migrations/087_wa_channels.sql'), 'no migration — 086 is Customer Installation Authorisation (5.18.82) and 087 the WhatsApp channel registry (5.18.86), not this feature\'s');
 
 echo "\nE. Weakened copies — each caught, and the control\n";

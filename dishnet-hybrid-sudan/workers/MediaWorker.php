@@ -72,6 +72,10 @@ final class MediaWorker extends WorkerBase
     public const REASON_CHANNEL_REFUSED = 'channel_refused';
     /** 5.18.86 (docs/65 §D): the assistant is off on that number — nothing fetched; the team has the message. */
     public const REASON_CHANNEL_AI_OFF = 'channel_ai_off';
+    /** 5.18.90 (docs/65 §AD): the file came from one of DishNet's own numbers; kept for the team, nothing fetched. */
+    public const REASON_DISHNET_NUMBER = 'dishnet_number';
+    /** 5.18.90: the file's conversation has no phone on record — nothing could be said to anyone, so nothing is fetched. */
+    public const REASON_NO_PHONE = 'no_phone';
 
     /** @var MediaFetcher|null a fetcher injected by a test; otherwise built per event from the configuration */
     private $fetcher = null;
@@ -159,9 +163,26 @@ final class MediaWorker extends WorkerBase
         // be the customer's; or, with the assistant off on that number, the team simply has the message. Registry off:
         // nothing here runs.
         if (!in_array((string)$row['status'], self::SETTLED, true) && $this->evoClient()->registryOn()) {
+            // 5.18.90 (docs/65 §AD): from one of DishNet's own numbers — kept for the team; nothing fetched, nothing said,
+            // nobody handed anything. The event carries no phone, so the conversation's is read: a read that fails throws
+            // (EventBus retries; nothing is settled), and a conversation with no phone on record is settled with its own
+            // reason — never filed as a DishNet number.
+            $own = $this->ownSender($row);
+            if ($own === self::REASON_NO_PHONE) {
+                $this->update($mediaId, ['status' => 'skipped', 'failure_reason' => self::REASON_NO_PHONE]);
+                $this->log('warn', sprintf('media #%d: no phone on record for its conversation on channel %s — nothing fetched; kept for the team',
+                    $mediaId, (string)($row['channel'] ?? '')));
+                return;
+            }
+            if ($own !== '') {
+                $this->update($mediaId, ['status' => 'skipped', 'failure_reason' => self::REASON_DISHNET_NUMBER]);
+                $this->log('info', sprintf('media #%d: a DishNet number (%s) on channel %s — nothing fetched; kept for the team',
+                    $mediaId, $own, (string)($row['channel'] ?? '')));
+                return;
+            }
             $route = $this->evoClient()->replyRoute((string)($row['channel'] ?? ''), (string)($row['instance'] ?? ''));
             if (!$route['ok']) {
-                $aiOff = $route['reason'] === 'ai_disabled';
+                $aiOff = $route['reason'] === 'ai_disabled' || $route['reason'] === 'internal_numbers_incomplete';
                 $this->update($mediaId, ['status' => 'skipped',
                                          'failure_reason' => $aiOff ? self::REASON_CHANNEL_AI_OFF : self::REASON_CHANNEL_REFUSED]);
                 if ($aiOff) {
@@ -476,6 +497,9 @@ final class MediaWorker extends WorkerBase
             $dataDir = dirname((string)($this->pdo->query('PRAGMA database_list')->fetch()['file'] ?? sys_get_temp_dir()));
             $this->evoClient = EvolutionApiService::forStore($this->config, $this->pdo, $dataDir,
                                                              MediaPolicy::timeoutSeconds($this->config));
+            // 5.18.90 (docs/65 §AD): the policy reads the numbers Evolution reports, and the owners, from the store — on
+            // every path, not only ownSender's: a hand-over holding line on a re-paired number must be refused too.
+            $this->evoClient->useStaffStore($this->store);
         }
         return $this->evoClient;
     }
@@ -534,6 +558,25 @@ final class MediaWorker extends WorkerBase
         }
         $this->log('error', sprintf('media #%d (conversation %d) could not be fetched after every attempt — handed to a person: %s',
             $mediaId, $convId, $why));
+    }
+
+    /**
+     * 5.18.90: the kind of DishNet number this file's conversation is with ('' for a customer), or REASON_NO_PHONE when the
+     * conversation has none on record. A read that fails is not an answer: it throws, and the event is retried.
+     */
+    private function ownSender(array $row): string
+    {
+        $convId = (int)($row['conversation_id'] ?? 0);
+        $phone  = '';
+        if ($convId > 0) {
+            $q = $this->pdo->prepare('SELECT phone FROM wa_conversations WHERE id = ?');   // a failure propagates: retried
+            $q->execute([$convId]);
+            $phone = (string)($q->fetchColumn() ?: '');
+        }
+        if ($phone === '') return self::REASON_NO_PHONE;
+        $evo = $this->evoClient();
+        $evo->useStaffStore($this->store);
+        return $evo->automationPolicy()->senderClass((string)($row['channel'] ?? ''), $phone);
     }
 
     private function row(int $id): ?array

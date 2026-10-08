@@ -22,6 +22,7 @@ require_once $root . '/lib/bootstrap_data.php';
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/EvolutionApiService.php';
 require_once $root . '/lib/ChannelRegistry.php';
+require_once $root . '/lib/InternalNumbers.php';
 
 $args = array_slice($argv, 1);
 $opt = function (string $f) use ($args): ?string {
@@ -85,4 +86,14 @@ foreach ($reg->rows() as $id => $r) {
     printf("    %-14s owner %s, territory %s, portfolio %s, number %s\n\n", '', $owner,
         $r['territory_region_id'] !== null ? '#' . $r['territory_region_id'] : 'none', $r['portfolio_scope'],
         ChannelRegistry::mask($r['business_number']));
+}
+
+// 5.18.90 (docs/65 §AD): the department numbers, each verified for the instance it is configured with — until they are,
+// no salesperson number answers or sends anything automated, and the registry cannot be switched on. Only where the card
+// is (Uganda): elsewhere the registry never takes effect and there is nothing to verify.
+require_once $root . '/lib/StaffJobsGate.php';
+if (StaffJobsGate::applies($config, $dataDir)) {
+    $gaps = InternalNumbers::gapsWithReported($reg->rows(), $cmap, $reg->verifiedInstances(), InternalNumbers::reader($pdo));
+    echo $gaps === [] ? "    department numbers: all verified for their instances\n\n"
+                      : "    department numbers: NOT all verified — " . implode(', ', $gaps) . " (WhatsApp AI screen → Salesperson numbers → Verify number)\n\n";
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/ChannelRegistry.php';
 require_once __DIR__ . '/StaffDirectory.php';
 require_once __DIR__ . '/EvolutionApiService.php';
+require_once __DIR__ . '/InternalNumbers.php';
 
 /**
  * SalesNumbersAdmin — the "Salesperson numbers" card on the WhatsApp AI screen (5.18.89, docs/65 §AA.1 item 1).
@@ -21,6 +22,10 @@ require_once __DIR__ . '/EvolutionApiService.php';
  *     this number after;
  *   - a RETIRED number takes no further change, and retiring needs a ticked confirmation;
  *   - the three department numbers are listed here, never changed here: their instance is configuration ("Numbers").
+ *     5.18.90 (docs/65 §AD): their NUMBER is verified here — read from Evolution's report for the instance the
+ *     configuration gives them, beside that instance — so a salesperson's number can recognise a department's message
+ *     and never answer it. No salesperson's number is switched on, and none answers or sends anything automated, until
+ *     every department instance's number is verified for the instance it is configured with.
  *
  * The card shows on Uganda wherever migration 087 has run, with the registry switch on or off: a number may be prepared
  * while nothing routes to it. On every other install it is not shown and nothing here runs.
@@ -36,7 +41,7 @@ final class SalesNumbersAdmin
     const ID_PREFIX = 'sales-';
 
     /** The wa_action values this card answers. */
-    const ACTIONS = ['sn_add', 'sn_pair', 'sn_verify', 'sn_webhook', 'sn_ai', 'sn_status', 'sn_owner'];
+    const ACTIONS = ['sn_add', 'sn_pair', 'sn_verify', 'sn_webhook', 'sn_ai', 'sn_status', 'sn_owner', 'sn_verify_department'];
 
     private \PDO $pdo;
     /** @var mixed the plugin store (retailers.json) */
@@ -101,6 +106,7 @@ final class SalesNumbersAdmin
                 case 'sn_ai':      return $this->ai($this->channel($post), $post, $actor, $reason);
                 case 'sn_status':  return $this->status($this->channel($post), $post, $actor, $reason);
                 case 'sn_owner':   return $this->owner($this->channel($post), $post, $actor, $reason);
+                case 'sn_verify_department': return $this->verifyDepartment($this->department($post), $actor, $reason);
             }
         } catch (\InvalidArgumentException $e) {
             return self::no($e->getMessage());
@@ -162,12 +168,83 @@ final class SalesNumbersAdmin
         $live = $this->live()[$inst] ?? null;
         if ($live === null) return self::no('Evolution does not report the instance ' . $inst . ' — reload the page.');
         if (empty($live['connected'])) return self::no('Not connected yet: pair the phone first (Show QR code), then verify.');
-        $digits = (string)preg_replace('/\D+/', '', (string)($live['phone'] ?? ''));
-        if ($digits === '') return self::no('Evolution reports no number for this instance yet — try again in a minute.');
+        $digits = self::phoneOf($live);
+        if ($digits === '') return self::no(self::noPhone($live));
         $this->reg->verifyNumber((string)$row['channel_id'], '+' . $digits, $actor,
             $reason !== '' ? $reason : 'read from Evolution\'s report for instance ' . $inst);
+        $this->refreshReported();
         return self::yes('Verified: ' . (string)$row['display_name'] . ' is the number ending '
                        . \ChannelRegistry::mask('+' . $digits) . ', as Evolution reports it.');
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): a department's number, read from Evolution's report for the instance the configuration gives
+     * that department — never typed — and recorded beside that instance. Works with the registry off: the departments are
+     * verified first, then the registry is switched on. A department sharing an earlier department's instance (support
+     * and account, in production) is covered by that department's number.
+     */
+    private function verifyDepartment(string $id, string $actor, string $reason): array
+    {
+        $cfg  = \EvolutionApiService::configInstanceMap($this->config);
+        $inst = trim((string)($cfg[$id] ?? ''));
+        if ($inst === '') return self::no('No Evolution instance is configured for the ' . $id . ' number, so there is nothing to verify.');
+        foreach (\ChannelRegistry::DEPARTMENT as $d) {
+            if ($d === $id) break;
+            if (mb_strtolower(trim((string)($cfg[$d] ?? ''))) === mb_strtolower($inst)) {
+                return self::no('The ' . $id . ' number uses the ' . $d . ' number\'s instance: verify ' . $d . '; its number covers both.');
+            }
+        }
+        $live = $this->live()[$inst] ?? null;
+        if ($live === null) return self::no('Evolution does not report the instance ' . $inst . ' — reload the page.');
+        if (empty($live['connected'])) return self::no('The ' . $id . ' number is not connected in Evolution, so its number cannot be read.');
+        $digits = self::phoneOf($live);
+        if ($digits === '') return self::no(self::noPhone($live));
+        // A department that takes no instance's inbound under its recorded number any more — covered by an earlier
+        // department on the same instance, or moved since its number was verified — gives that number up if it is this one.
+        $verified   = $this->reg->verifiedInstances();
+        $releasable = [];
+        foreach (\ChannelRegistry::DEPARTMENT as $d) {
+            if ($d === $id) continue;
+            $di = mb_strtolower(trim((string)($cfg[$d] ?? '')));
+            $covered = false;
+            foreach (\ChannelRegistry::DEPARTMENT as $e) {
+                if ($e === $d) break;
+                if ($di !== '' && mb_strtolower(trim((string)($cfg[$e] ?? ''))) === $di) $covered = true;
+            }
+            if ($di === '' || $covered || mb_strtolower(trim((string)($verified[$d] ?? ''))) !== $di) $releasable[] = $d;
+        }
+        $this->reg->verifyDepartmentNumber($id, '+' . $digits, $actor,
+            $reason !== '' ? $reason : 'read from Evolution\'s report for instance ' . $inst, $inst, $releasable);
+        $this->refreshReported();
+        return self::yes('Verified: the ' . $id . ' number is the one ending ' . \ChannelRegistry::mask('+' . $digits)
+                       . ', as Evolution reports it for instance ' . $inst . '.');
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): what an admin is told after changing a department's instance — '' when every department
+     * number is still verified for its instance, otherwise the sentence that sends them back to Verify number.
+     */
+    public function departmentGapNote(): string
+    {
+        $g = $this->departmentGaps();
+        return $g === [] ? '' : ' Verify the department number on the Salesperson numbers card (' . implode(', ', $g)
+            . ') for the instance it now has: until it is, no salesperson number answers or sends anything automated.';
+    }
+
+    /**
+     * 5.18.90: the departments whose number is not yet verified for the instance they are configured with ([] = all
+     * verified). Read here from the registry and the configuration, never through a service that may not have read them.
+     *
+     * @return string[]
+     */
+    public function departmentGaps(): array
+    {
+        try {
+            return \InternalNumbers::gapsWithReported($this->reg->rows(), \EvolutionApiService::configInstanceMap($this->config),
+                                                      $this->reg->verifiedInstances(), $this->store);
+        } catch (\Throwable $e) {
+            return ['unreadable'];
+        }
     }
 
     private function webhook(array $row, callable $webhookUrl): array
@@ -204,8 +281,21 @@ final class SalesNumbersAdmin
             if (trim((string)($row['business_number'] ?? '')) === '' || trim((string)($row['verified_at'] ?? '')) === '') {
                 return self::no('Verify the number first: pair the phone, then press Verify number.');
             }
+            // 5.18.90 (docs/65 §AD.9): what Evolution last reported for this number's own instance, as the policy reads it
+            // — a re-paired phone, or an owner with no phone number, is refused here as the policy would refuse it.
+            $now = $this->reportedFor((string)($row['evo_instance'] ?? ''));
+            if ($now !== '' && $now !== (string)preg_replace('/\D+/', '', (string)$row['business_number'])) {
+                return self::no($now === \InternalNumbers::NO_PHONE
+                    ? 'Evolution reports this instance\'s owner with no phone number (a WhatsApp @lid), so its number cannot be confirmed. Pair the phone again with Show QR code, then verify.'
+                    : 'Evolution now reports another number for this instance: verify the number again first.');
+            }
             if (!$this->ownerActive($row)) {
                 return self::no('Its owner is not an active staff member: give the number a new owner first.');
+            }
+            $gaps = $this->departmentGaps();   // 5.18.90 (docs/65 §AD)
+            if ($gaps !== []) {
+                return self::no('Not yet: verify the department numbers first (' . implode(', ', $gaps) . ') — Verify number on '
+                              . 'each department below — so this number can never answer one of them.');
             }
         }
         if ($to === 'retired' && (string)($post['confirm'] ?? '') !== 'yes') {
@@ -240,6 +330,14 @@ final class SalesNumbersAdmin
         foreach ($detected as $d) if (is_array($d)) $live[(string)($d['name'] ?? '')] = $d;
         $staff = $this->staffById();
         $cfg   = \EvolutionApiService::configInstanceMap($this->config);
+        // 5.18.90 (docs/65 §AD): which department takes each configured instance's inbound (its number covers the
+        // others on that instance), and which department numbers still need verifying.
+        $firstOf = [];
+        foreach (\ChannelRegistry::DEPARTMENT as $d) {
+            $k = mb_strtolower(trim((string)($cfg[$d] ?? '')));
+            if ($k !== '' && !isset($firstOf[$k])) $firstOf[$k] = $d;
+        }
+        $gaps = $this->departmentGaps();
         $out = [];
         foreach ($this->reg->rows() as $id => $r) {
             $id   = (string)$id;
@@ -266,9 +364,36 @@ final class SalesNumbersAdmin
                 'handover_to'  => (string)($r['handover_to'] ?? ''),
                 'owner'        => $owner,
                 'trail'        => array_slice($this->reg->trail($id), -3),
+                // 5.18.90: a department number's own verification, and a number Evolution now reports differently.
+                'covered_by'   => $dept && $inst !== '' ? (string)($firstOf[mb_strtolower($inst)] ?? $id) : '',
+                'needs_verify' => $dept && in_array($id, $gaps, true),
+                'live_differs' => self::liveReason($live[$inst] ?? null, isset($r['business_number']) ? (string)$r['business_number'] : '') !== '',
+                'live_reason'  => self::liveReason($live[$inst] ?? null, isset($r['business_number']) ? (string)$r['business_number'] : ''),
             ];
         }
         return $out;
+    }
+
+    /**
+     * 5.18.90: why the number recorded can no longer be confirmed from Evolution's live report — 'number': the instance is
+     * paired with another number; 'no_phone': with an owner that has no phone number (an @lid); '' when it can.
+     */
+    private static function liveReason(?array $live, string $recorded): string
+    {
+        $rec = (string)preg_replace('/\D+/', '', $recorded);
+        if ($rec === '' || $live === null) return '';
+        $now = self::phoneOf($live);
+        if ($now !== '') return $rec !== $now ? 'number' : '';
+        return self::lidOwner($live) ? 'no_phone' : '';
+    }
+
+    /** 5.18.90: what the record says Evolution last reported for $instance — InternalNumbers::reportedFor, from the store. */
+    private function reportedFor(string $instance): string
+    {
+        if ($this->store === null || trim($instance) === '') return '';
+        $n = \InternalNumbers::fromRows([], [], [], [], null);
+        $n->useStore($this->store);
+        return $n->reportedFor($instance);
     }
 
     /** The instances a new number may use: reported by Evolution, and nobody's yet. @return string[] */
@@ -329,6 +454,52 @@ final class SalesNumbersAdmin
             throw new \InvalidArgumentException((string)$row['display_name'] . ' is retired and takes no further change.');
         }
         return $row;
+    }
+
+    /** 5.18.90: a department id from the form, or a refusal. */
+    private function department(array $post): string
+    {
+        $id = trim((string)($post['channel_id'] ?? ''));
+        if (!in_array($id, \ChannelRegistry::DEPARTMENT, true)) throw new \InvalidArgumentException('Unknown department number.');
+        return $id;
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): the phone number an instance's report names — digits, or '' when the owner is an @lid (no
+     * phone number at all: nothing to verify, and a gap stays open). A report without 'jid_phone' is read as before.
+     */
+    private static function phoneOf(array $live): string
+    {
+        $raw = array_key_exists('jid_phone', $live) ? (string)$live['jid_phone'] : (string)($live['phone'] ?? '');
+        return (string)preg_replace('/\D+/', '', $raw);
+    }
+
+    /** An owner Evolution reports with digits but no phone JID: an @lid, which has no phone number at all. */
+    private static function lidOwner(array $live): bool
+    {
+        return array_key_exists('jid_phone', $live) && (string)$live['jid_phone'] === ''
+            && (string)preg_replace('/\D+/', '', (string)($live['phone'] ?? '')) !== '';
+    }
+
+    /** Why there is nothing to verify: an @lid owner never has a phone number; an owner not reported yet may soon. */
+    private static function noPhone(array $live): string
+    {
+        return self::lidOwner($live)
+            ? 'Evolution reports this instance\'s owner with no phone number (a WhatsApp @lid), so it cannot be verified. Pair the phone again with Show QR code, then verify.'
+            : 'Evolution reports no phone number for this instance yet — try again in a minute.';
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): a number just verified from Evolution's live report is never contradicted by an older one —
+     * what Evolution reports now is recorded, as the webhook guard records it every run. A failure leaves the guard's last.
+     */
+    private function refreshReported(): void
+    {
+        try {
+            if ($this->store !== null && $this->live() !== []) \InternalNumbers::recordReported($this->store, array_values($this->live()));
+        } catch (\Throwable $e) {
+            error_log('[channels] the numbers Evolution reports could not be recorded after a verification: ' . $e->getMessage());
+        }
     }
 
     /** An active staff row with a sales role, or a refusal. */

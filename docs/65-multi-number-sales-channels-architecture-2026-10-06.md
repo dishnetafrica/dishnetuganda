@@ -1426,3 +1426,327 @@ Every production step:
 
 No push and no deploy are needed for the pilot. This section, the runbook and the test wait on the branch for the
 operator's approval to push.
+
+## AD. The pre-pilot safety fix (5.18.90, development, 08 Oct) — the pilot stopped before step 5; NOT pushed, NOT deployed
+
+**Where it starts.** The operator stopped the salesperson pilot before docs/66 step 5 (the assistant on): two defects
+were reported in 5.18.89, and both were confirmed by reading the code before anything was changed. Production was not
+touched: no setting, no number, no message, no deploy. The fix is built on the development branch only.
+
+### AD.1 Root causes, measured
+
+**Defect 1 — one DishNet number's assistant could answer another's.**
+- Nothing on the inbound path knew DishNet's own WhatsApp numbers. The J8 colleague rule (`evo_webhook.php`,
+  `AiReplyWorker::isStaffNumber`) knows **staff** — `retailers.json` rows with `StaffDirectory::STAFF_ROLES` or
+  `is_admin` — and deliberately not salespeople, who may be dealers. A line is not a staff member, so a message from
+  one DishNet line to another was a customer's message.
+- The only thing holding one assistant back was the human pause: a fromMe echo marks the chat as handled by a person
+  for `wa_human_cooldown_minutes` (5 in production), while a parked message survives 120 minutes. When the pause ran
+  out, the parked message was answered — by an assistant, to an assistant.
+- Seeds that need no customer: a person typing from one line's phone to another line; a staff alert
+  (`AlertService::sendTo`, from the sales department) to an alert number or an owner's phone of record that is itself a
+  line with the assistant on. The central alert's text asks for a human, so the receiving brain escalated again.
+- The message-id dedupe (`EvoWebhookGuard`) keys on the WhatsApp message id alone. Whether two instances of one
+  install see the same id for one message is **not measured**; the fix relies on it neither way, and the tests run both.
+
+**Defect 2 — follow-ups ignored the number's assistant switch.**
+- `FollowUpPolicy::mayAutoSend` takes no channel; `followup_scan`, `_run` and `_send` never read
+  `wa_channels.ai_enabled`; `EvolutionApiService::sendText` checked only the opt-out and the instance; and routing gives
+  an instance to every **active** channel whatever its assistant switch says.
+- The only per-channel barrier was `OwnedNumberHold` (salesperson numbers), which `wa_followups_on_owned_numbers`
+  lifts — and the pilot turns that on (§AC.1). From then on, **Assistant off** stopped replies and not follow-ups:
+  docs/66 R-1's *"nothing is sent automatically"* was wrong.
+
+### AD.2 What was built — dark: everything new acts only with the channel registry on
+
+With the registry off — production today, every South Sudan install — every path is 5.18.89's, byte for byte in
+behaviour (the registry-off parts of `test_pilot_safety` and the unchanged suites prove it).
+
+- **`lib/InternalNumbers.php` (new)** — the one definition of DishNet's own numbers, built from records the plugin
+  already keeps; nothing new is typed in:
+  - **lines**, refused on every number, the departments included:
+    - `wa_channels.business_number` of every row that is not retired;
+    - the numbers the configuration already names (`wa_support_number`, `wa_accounts_number`, `web_chat_whatsapp`,
+      `evo_number_sales`) — read from the configuration files **and** from the plugin store's `kyc_config`, where the
+      Settings form saves them on an SQLite install (as `cron/wa_watchdog.php` reads them);
+    - the number Evolution reports for **every** instance, as `cron/wa_webhook_guard.php` last read it (it reads them
+      every run anyway). One record **per instance**: one phone may be linked to two instances, and each instance is
+      compared with its own row. An instance whose owner Evolution reports with no phone number (an `@lid`) is recorded
+      as such — never its digits — and matches no recorded number, so a row verified on it counts as unverified again.
+      Membership only — it never counts as a verification;
+  - **people on DishNet's side**, refused on a salesperson's number only — a channel the registry routes that is not a
+    department; never on a department (J8 stands exactly), a notification thread or a website chat: the phone of
+    record of each active owner of a salesperson number, and the alert numbers `alert_whatsapp` and
+    `whatsapp_admin_phone`;
+  - matching: the whole number, digits only, at least 8 — never the text, a name, a prefix, the time, STOP or the pause;
+  - the lines come from the same `wa_channels` read the routing is built from, so they are never "unreadable" while
+    anything is routed; the people are read lazily and **fail soft** — a failure adds nobody and is logged once; it
+    never refuses or re-files a customer;
+  - **completeness** (`gaps()`): each configured department instance has its number recorded on the department that
+    takes its inbound, verified **for that instance**. A department moved to another instance is a gap again; so is one
+    whose instance Evolution now reports with **another** number (re-paired to another phone).
+- **The department numbers are recorded** — `ChannelRegistry::verifyDepartmentNumber`, the card's **Verify number** on
+  the sales and support rows (account shares support's instance; one number covers both). The number is the phone
+  number Evolution reports for the configured instance, never typed; an instance whose owner is an `@lid` has none, so
+  it cannot be verified (on a salesperson's row either) and the gap stays open. The trail gains a `verified_instance` row. Works with
+  the registry off, so it is done before the switch. A row that can no longer own the number gives it up, on the
+  record, rather than leaving the department unverifiable: a department now covered by another on the same instance, or
+  moved since; a retired line. Any other holder still refuses. Every verification on the card also records what
+  Evolution reports at that moment, so a number just verified is never contradicted by the guard's older read.
+- **Nothing switches on before them:**
+  - `SalesNumbersAdmin::status → active` refuses a salesperson number while any gap remains;
+  - `tools/set_config.php` refuses `multi_number_channels_enabled` truthy while any gap remains, or when it cannot tell
+    (exit 1, nothing saved);
+  - `tools/channels.php` prints whether the department numbers are all verified (Uganda only: elsewhere there is no
+    card and the registry never takes effect);
+  - the card, `set_config` and `tools/channels.php` count the gaps exactly as the policy does, a re-pair the guard has
+    recorded included (`InternalNumbers::gapsWithReported`); `tools/channels.php` reads the record without opening the
+    store, so it still writes nothing;
+  - moving a department to another instance on the WhatsApp AI screen tells the admin to verify its number again, and
+    every process with the registry on and a gap logs it once, loudly.
+- **`lib/AutomationPolicy.php` (new)** — may anything automated leave on this channel, to this number? No transport, so
+  `followup_run`, which must never name `EvolutionApiService`, can ask it. Reasons:
+
+| reason | when | AI worker | follow-up run / send |
+|---|---|---|---|
+| `unknown_channel` | the registry does not know the channel | escalate | close |
+| `channel_paused` | the number is paused | escalate | wait (defer 1 h / stay approved) |
+| `channel_disabled`, `channel_retired` | switched off, retired | escalate | close |
+| `channel_assistant_disabled` | **the number's assistant is off** | silent | close |
+| `channel_unverified` | a salesperson number with no verified number, or one Evolution now reports with another | escalate | wait |
+| `instance_changed` | moved to another instance since the routing was read, or a salesperson number switched on since | escalate | wait |
+| `internal_numbers_incomplete` | a salesperson number while the department numbers are not all verified | silent | wait |
+| `no_instance` | a department with no instance configured | escalate | close (as the sender has since 5.18.86) |
+| `registry_unreadable` | the fresh read failed (salesperson numbers only) | retry (throw) | wait |
+| `internal_recipient` | the recipient is a DishNet number | silent | close |
+
+  Every check re-reads the channel's row, so a number switched off a moment ago is refused at once. **Nothing ever falls
+  back to another number.**
+- **The central guard, `EvolutionApiService`** — every reply-class and proactive-class send (text, photo, document) and
+  the typing indicator asks the policy first, after the opt-out check. A refusal is `{ok: false, policy_refused: true,
+  policy_reason}`, logged with the channel and the reason, never a number. **Staff-class sends are not asked**: a
+  person's Inbox reply leaves on its conversation's own number with the assistant on or off, and staff alerts are as
+  before.
+- **Inbound** — `evo_webhook.php` (after J8) and `AiReplyWorker` (after its J8 check): a message from a DishNet number
+  is stored, the chat filed `staff`, nothing queued, nothing answered — no reply, no typing, no lead, no follow-up, no
+  escalation. The worker asks the policy again before the model and treats a refusal at the send by the table, never as
+  a transport failure. `MediaWorker` (development only) refuses the same; a phone it cannot read is retried, never
+  taken for a DishNet number.
+- **Follow-ups** — the scan opens follow-ups only on a channel the registry routes and may send on (an allow-list: never
+  a website chat, a notification thread or a refused number, which the run would only close and the next scan reopen),
+  never for a DishNet number, and never for a `staff` chat — none of them takes a scan place. The run closes or defers
+  before any model call and asks again before it approves on its own. The sender leaves drafts held on a number that
+  may not send now out of its batch, so they take none of its ten places; it checks before the send and handles a
+  refusal at the send itself. Ownership is unchanged (Part 5): a follow-up keeps its conversation, its channel and its
+  lead's owner; D5 stands.
+- **The watchdog** leaves a DishNet number's chat out of the unanswered-chat alerts, which would otherwise page every
+  15 minutes about a chat nobody is meant to answer.
+- **Leads** — `source_number` stays null for a department, as before; a salesperson number's lead records it.
+
+### AD.3 Decisions taken in the build (none reopens an earlier one)
+
+- The 5-minute pause, the 120-minute park limit, the message-id dedupe, J8, STOP and `mayAutoSend` are **unchanged**:
+  the fix does not lean on any of them. Raising the pause and turning `followup_auto_send` off globally were both
+  rejected by the operator's instruction.
+- A salesperson's own phone of record is a DishNet number **on the salesperson numbers only**: a department keeps
+  answering it as J8 always has, and a sales colleague who owns no number is still answered like a customer.
+- No migration: the instance a department number was verified for is a trail row; Evolution's reported numbers are a
+  store file the webhook guard rewrites each run.
+- The assistant switch stops follow-ups on a department row too, should one ever be switched off (only the database can
+  do it; the card refuses department ids).
+
+### AD.4 The tests — `tests/test_pilot_safety.php` (new)
+
+The instruction's tests 1–25 on the real plugin, with a fake Evolution and follow-ups behind a dead proxy, so no model
+call and no message can leave. Among them:
+- the loop both ways with the **same** message id and with **fresh** ones;
+- the pause run out;
+- the alert seed;
+- an event queued before the fix;
+- a switched-off line;
+- the assistant off stopping every follow-up step;
+- refusals that never fall back;
+- the Inbox reply still leaving from its number with the assistant off;
+- registry-off, South Sudan and Domain B controls.
+
+The weakened copies are each caught — 66 on the development tree, 63 on the release's code (the media worker's three
+are development-only). Copies 43–55 were added after the second review (AD.7), 56–63 after the third (AD.8), 64–66
+after the fourth check (AD.9):
+
+| | weakened copy |
+|---|---|
+| 1 | the webhook queues a DishNet number's message |
+| 2 | the worker answers a DishNet number |
+| 3 | nobody is ever DishNet's own (every layer at once) |
+| 4 | a switched-off line's number is forgotten |
+| 5 | the department numbers are forgotten |
+| 6 | the owners are forgotten |
+| 7 | the department numbers need not be complete |
+| 8 | a department number verified for another instance still counts |
+| 9 | the central guard lets a proactive send through |
+| 10 | the central guard reads the registry once |
+| 11 | the central guard blocks a person's Inbox reply too |
+| 12 | nothing is refused for its recipient |
+| 13 | the assistant switch is ignored |
+| 14 | the follow-up run drafts on any number |
+| 15 | the sender asks nothing before it sends |
+| 16 | a paused number's follow-up is closed instead of waiting |
+| 17 | the scan opens follow-ups on any number |
+| 18 | the scan opens follow-ups for a DishNet number |
+| 19 | the worker asks nothing before the model |
+| 20 | the worker retries a refused send |
+| 21 | the watchdog pages about a DishNet number's chat |
+| 22 | a salesperson number is switched on before the department numbers |
+| 23 | the registry is switched on before the department numbers |
+| 24 | a department's lead records its number |
+| 25 | numbers saved through Settings are not known |
+| 26 | the alert number counts as a person on every channel that is not a department |
+| 27 | the scan opens follow-ups on channels the registry does not route |
+| 28 | a staff chat takes the scan's places |
+| 29 | held drafts take the sender's places |
+| 30 | the sender closes a draft that is only held |
+| 31 | the sender retries what the policy refused at the send |
+| 32 | the run approves on its own without asking again |
+| 33 | the worker pages a person when the registry cannot be read |
+| 34 | a registry that cannot be read counts as off in the crons |
+| 35 | verifying a department never takes a number from a row that cannot own it |
+| 36 | the guard records nothing Evolution reports |
+| 37 | the numbers Evolution reports are never consulted |
+| 38 | a department re-paired to another phone still counts as verified |
+| 39 | a salesperson number re-paired to another phone still counts as verified |
+| 40 | the channels tool speaks of department numbers in South Sudan |
+| 41 | a department with no instance waits for ever |
+| 42 | the media worker fetches a DishNet number's file (development tree) |
+| 43 | the numbers Evolution reports are kept one per number, not one per instance |
+| 44 | a salesperson verification leaves the guard's older read in place |
+| 45 | a department verification leaves the guard's older read in place |
+| 46 | an `@lid` owner's digits are verified as a phone number |
+| 47 | verifying a department takes a number from any holder |
+| 48 | every other department may give its number up |
+| 49 | a department moved since its verification keeps its number |
+| 50 | saving the numbers form says nothing of the department numbers |
+| 51 | incomplete department numbers are never said in the log |
+| 52 | a salesperson number switched on under an older read is closed as having no instance |
+| 53 | a department with no instance waits as if it might get one |
+| 54 | the guard records what Evolution reports with the registry off |
+| 55 | a conversation read that fails settles the media worker's file (development tree) |
+| 56 | a department's follow-up waits while the registry cannot be read |
+| 57 | the card counts only the verification, never a re-pair |
+| 58 | P3 (`tools/channels.php`) counts only the verification, never a re-pair |
+| 59 | `set_config` counts only the verification, never a re-pair |
+| 60 | an `@lid` owner is not recorded at all |
+| 61 | an instance reported with no phone number counts as nothing reported |
+| 62 | the card never flags a verified number re-paired onto an `@lid` owner |
+| 63 | the media worker's client asks the policy without the store (development tree) |
+| 64 | **Switch on** ignores what Evolution reports for the number's own instance |
+| 65 | the card calls an `@lid` owner "another number" |
+| 66 | a gap only the store shows is never logged by the webhook and the workers |
+
+Copies 30–32 reach a check that the one before it normally decides first. They run a variant of the cron in the test's
+own sandbox copy: the held-channel query, or the pre-check, set aside; or a model stub saying SEND while the assistant
+goes off. The weakening is applied to the cron itself, so it reaches the variant too.
+
+**The sending window.** Follow-ups send 08:00–20:00, Monday to Saturday, in the install's time zone. On Sundays from
+07:00 to 19:00 UTC no time zone is inside it. Then the follow-up sends cannot run at all, and the test **fails**, saying
+so, instead of skipping — and so does any weakened copy whose run falls in that window.
+
+**Amended deliberately, never deleted.** Four existing tests built active salesperson numbers with no verified number,
+or no department numbers. They now verify them, as the card requires:
+- `test_channel_registry`;
+- `test_multi_number_routing`;
+- `test_sales_numbers`;
+- `test_sales_pilot`.
+
+In `test_sales_pilot`, *"a sales colleague is answered"* used a colleague who **owns** sales-002. It now asserts that an
+owner is not answered, and a new assertion keeps the original intent with a colleague who owns no number.
+
+After the review, `test_sales_numbers` was amended twice more, for the same reason: its fake Evolution reported numbers
+for verified instances that were never the verified ones — in the guard part and in the screen part. Since 5.18.90
+that is a re-pair, and the salesperson numbers stop. Each now reports the number it was verified with.
+
+### AD.5 What it does not cover — the risk register
+
+- **DishNet numbers on no Evolution instance and in no record** — a personal phone that is no owner's record, another
+  provider's line. Not recognised; the runbook's loop test is the check. A number on any instance of DishNet's
+  Evolution *is* recognised, through the guard's report — including another system's line on the same Evolution.
+- **The first ten minutes after a re-pair.** A number re-paired to another phone, or a department moved to an instance
+  with a new number, is recognised once `cron/wa_webhook_guard.php` next reads Evolution (every 600 s). Until then
+  the new number is a stranger. After it, the department counts as unverified (no salesperson number sends) and a
+  salesperson's re-paired number is unverified, until **Verify number** is pressed again. The guard records nothing
+  while the registry is off: a re-pair made then is recognised only at the first guard run after switch-on (at most
+  600 s after it), however long ago it happened — so the runbook's **Back on** verifies the department numbers first,
+  which records what Evolution reports for every instance (docs/66 §R).
+- **An `@lid` owner** — whether Evolution ever reports an instance's owner that way is not established. If it does,
+  that instance has no phone number: it can never be verified, and a number verified on it stops (unverified; a
+  department, a gap) until the phone is paired again and verified.
+- **A department moved to another instance** silences every salesperson number at once (a gap). The departments go on
+  and recognise each other only by the numbers recorded or reported.
+- **Legacy WASender paths** (`wa_webhook.php`) are outside the guard. They send only from the department lines, which
+  every salesperson number refuses.
+- **With the registry off**, one department answering another is as it was before this fix: there are no salesperson
+  numbers then.
+- **A test limit, not a product one:** the fake Evolution's servers in different sandboxes share a marker and a port
+  range. Two test suites run **at once** can borrow each other's server; run each counted pass alone. (Measured 08 Oct:
+  38 false failures on the release copy while the development suite ran; 91/0 alone.)
+
+### AD.6 The independent review (08 Oct), and what changed after it
+
+A review in four parts (safety, regression, robustness, the tests), each finding checked by a separate skeptic, read the
+built diff. One finding was refuted (the department assistant switch — a documented, unreachable state, recorded above
+in AD.3). Every other one was confirmed or partly confirmed, and each was fixed in code, in a test or in this record:
+
+| finding | change |
+|---|---|
+| re-pairing a verified instance is never detected; the runbook said otherwise (MAJOR) | Evolution's reported numbers: membership for every instance; a mismatch makes the department a gap and a salesperson number unverified; the runbook corrected |
+| a department moved after the switch-on: nothing warns (MAJOR → MINOR) | the screen says verify again; a loud log line while a gap remains |
+| the scan reopens what the run closes, every cycle, on channels the registry does not route (MAJOR) | the scan's channel condition is an allow-list |
+| numbers saved through Settings live in the store, which the policy did not read (MAJOR) | the store's `kyc_config` fills what the files lack |
+| a department number held by a covered department or a retired line could never be verified (MAJOR) | that row gives the number up, on the record |
+| `no_instance` deferred a department's follow-up for ever | final, as the sender always treated it |
+| held drafts filled the sender's batch of ten | left out of the sender's query |
+| owners and alert numbers refused on notification threads and website chats | salesperson numbers only |
+| `tools/channels.php` spoke of department numbers in South Sudan | Uganda only |
+| the media worker took an unreadable phone for a DishNet number | retried; no phone on record has its own reason |
+| eleven test gaps: the Sunday skip, three unreached branches, a log-only weakened copy, the shared-id order, an assertion that could not fail, no department-lead check, no planted unreadable registry, no media control, the scan's staff places, set_config's "nothing saved" | each covered by a test above, with its weakened copy where one applies |
+
+### AD.7 The second review (08 Oct), of the changes after AD.6
+
+A second review, run the same way, read only what changed after the first. Its one MAJOR finding and two partial ones
+were real; one finding was refuted. Each confirmed finding was fixed, and each fix is pinned by a test, and by a
+weakened copy where one applies (AD.4, copies 43–55):
+
+| finding | change |
+|---|---|
+| **re-pair detection depended on the order of instance names** (MAJOR). One phone can be linked to two instances. A salesperson's instance paired with the sales desk's phone, both reporting one number, was recorded once, under the instance whose name sorted last. If the salesperson's name sorted first, its re-pair went unseen and it answered the desk's customers from the desk's number; the mirror case left a department re-paired onto a salesperson's phone counted as verified | one record **per instance**; each instance is compared with its own row. Tested both ways round in process, with the re-paired instance's name sorting first; through the real guard, the salesperson direction (Alpha's instance on the sales desk's phone) — the sandbox has no salesperson instance that sorts after a department's |
+| Verify number accepted an `@lid` owner's digits as a phone number, closing a department's gap (partly: the read predates 5.18.90, and Evolution reporting an `@lid` owner is not established) | Verify number — a department's and a salesperson's — and the card's "now reports another number" flag read only the phone number Evolution reports. An `@lid` owner has none: refused, and the gap stays open |
+| a salesperson number switched on while a follow-up run was going closed its due follow-ups as `no_instance` (partly: the next scan reopens them; the reason was wrong) | `no_instance` is a department's only, and final; a salesperson number missing from an older read is `instance_changed`, which waits |
+| (refuted) the "verify again" note on the WhatsApp AI screen with the registry off | intended — the departments are verified before the switch. Only its word "again" was wrong for a number never verified; reworded |
+| seven test gaps: the verification's own refresh unpinned; only the releasing half of a department verification tested, never the refusing half or the "moved" clause; an assertion element that could not fail; weakened copies skipped quietly in the Sunday window; the guard's registry gate never run off; the media worker's read failure untested; the form's note and the log line unpinned | each tested, with its weakened copy where one applies (the unreadable-run department check got its copy only after the third review, AD.8; the Sunday window is a harness rule, not a copy); a weakened copy that cannot run in the Sunday window is a failure now, never a skip |
+
+### AD.8 The third review (08 Oct), of the round-two changes
+
+A third review, run the same way, read what changed after AD.7. It found no MAJOR. Five MINOR findings were each
+confirmed by a skeptic; each was fixed, and each fix is pinned by a test, and by a weakened copy where one applies
+(AD.4, copies 56–63):
+
+| finding | change |
+|---|---|
+| the card's gate and note, P3 (`tools/channels.php`) and `set_config` counted only the verification, so a re-pair the policy already enforced showed as "all verified" — failing closed, but the status the runbook reads was wrong | all three count the gaps as the policy does (`InternalNumbers::gapsWithReported`), a recorded re-pair included |
+| a verified number whose instance was re-paired onto an `@lid` owner was flagged nowhere: the instance was not recorded at all, and the card's flag read only phone numbers — failing open, if Evolution ever reports an `@lid` owner (not established) | an `@lid` owner is recorded as reporting no phone number, which matches no recorded number: the row counts as unverified, a department as a gap, and the card flags both rows. Its Verify number says plainly that such an instance cannot be verified |
+| the media worker (development tree) asked the policy without the store when a retried file skipped the sender check, so a hand-over line could leave on a re-paired number | the worker gives its client the store when it builds it |
+| the test that the guard alone clears a re-pair had stopped proving it: a verification before it had already rewritten the record | a new assertion after the one-phone-two-instances case, where nothing but the guard can clear it — an assertion only: no weakened copy reaches it alone, because the guard replaces its whole record each run and a copy that kept old records would still be overwritten per instance |
+| §AD.7 claimed more coverage than exists (a copy for every fix; both directions through the real guard) | reworded; the unreadable-run department check now has its copy |
+
+### AD.9 The fourth check (08 Oct), of the round-three changes
+
+A smaller check — two readers, each finding challenged by a skeptic — read what changed after AD.8. It found no MAJOR
+and nothing that lets an automated message out; six MINOR findings, all of them failing closed or in the record:
+
+| finding | change |
+|---|---|
+| **Switch on** read only the verification, so a number whose own phone the guard had recorded as re-paired (or as an `@lid` owner) was reported "switched on" while the policy refused it | **Switch on** refuses it, saying why, exactly as the policy reads it; verified again, it switches on (copy 64) |
+| for an `@lid` owner the card still said "Evolution now reports another number" | the card says the owner has no phone number, and to pair the phone again (copy 65) |
+| a gap only the store shows (a recorded re-pair) was enforced but never logged by the processes built as the webhook, the AI worker, the media worker and the follow-up sender | the line is logged when the store is given, once a process (copy 66) |
+| a re-pair made while the registry is off is recognised only after switch-on — AD.5 dated the window from the re-pair | AD.5 and the runbook say so; **Back on** after R-3 now verifies the department numbers first, which records what Evolution reports for every instance |
+| AD.8 claimed a weakened copy for every fix | reworded: the guard-alone assertion has none, and why |
+| the `reported_back` assertion's message credited the guard with what a verification had done | relabelled |

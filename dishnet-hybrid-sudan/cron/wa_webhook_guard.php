@@ -91,6 +91,20 @@ try {
         return;
     }
 
+    // 5.18.90 (docs/65 §AD): with the channel registry on, the number Evolution reports for every instance is recorded,
+    // so the assistants recognise each as one of DishNet's own — a re-paired phone or a department moved to a new
+    // instance within one run of this guard, before anyone verifies it again. Membership only; never a verification.
+    require_once $_wg_root . '/lib/ChannelRegistry.php';
+    $_wg_regOn = ChannelRegistry::enabled($_wg_config, $_wg_data);
+    if ($_wg_regOn) {
+        try {
+            require_once $_wg_root . '/lib/InternalNumbers.php';
+            InternalNumbers::recordReported($_wg_store, array_values($_wg_live));
+        } catch (\Throwable $_wg_ne) {
+            $_wg_log('the numbers Evolution reports could not be recorded: ' . $_wg_ne->getMessage());
+        }
+    }
+
     // The three department numbers, from the configuration, exactly as before. 5.18.89 (docs/65 §AA item 7): with the
     // channel registry on, every other ACTIVE channel's instance as well — a salesperson's number can lose its webhook
     // the way the sales number once did. Registry off, or unreadable: the three departments alone.

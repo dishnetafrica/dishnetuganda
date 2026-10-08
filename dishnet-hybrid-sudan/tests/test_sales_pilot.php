@@ -230,7 +230,8 @@ function sp_uganda(string $root, array $parts): array
     $s->staff('admin', ['name' => 'Sandbox Admin', 'email' => 'admin@example.test', 'role' => 'admin', 'is_admin' => true]);
     $A = $s->staff('alpha', ['name' => 'Alpha Seller', 'email' => 'alpha@example.test', 'role' => 'sales', 'phone' => '0700000201']);
     $B = $s->staff('bravo', ['name' => 'Bravo Seller', 'email' => 'bravo@example.test', 'role' => 'sales', 'phone' => '0700000202']);
-    $M = $s->staff('mgr', ['name' => 'Mike Manager', 'email' => 'mgr@example.test', 'role' => 'sales', 'modules' => ['leads', 'all_leads', 'send_quote']]);
+    // 5.18.90: Mike has a phone on record — a sales colleague who owns no number, for the standing rule below.
+    $M = $s->staff('mgr', ['name' => 'Mike Manager', 'email' => 'mgr@example.test', 'role' => 'sales', 'phone' => '0700000204', 'modules' => ['leads', 'all_leads', 'send_quote']]);
     $s->staff('desk', ['name' => 'Sierra Support', 'email' => 'desk@example.test', 'role' => 'support', 'phone' => '0700000203']);
     foreach (['admin' => 'admin@example.test', 'alpha' => 'alpha@example.test', 'bravo' => 'bravo@example.test', 'mgr' => 'mgr@example.test'] as $who => $em) {
         $s->login($who, $em, 'sj-password-1');
@@ -322,6 +323,11 @@ function sp_uganda(string $root, array $parts): array
         $setup['webhook'][$id] = [$post(['wa_action' => 'sn_webhook', 'channel_id' => $id]),
             strpos((string)($evoState()['webhooks'][$inst]['url'] ?? ''), 'https://plugin.example.test/public.php?page=evo_webhook&token=') === 0];
     }
+    // 5.18.90 (docs/65 §AD, docs/66 step 1.5): the department numbers verified on the card, the registry still off — sales,
+    // and support (whose number covers account: they share an instance).
+    $setup['verify_departments'] = [$post(['wa_action' => 'sn_verify_department', 'channel_id' => 'sales']),
+                                    $post(['wa_action' => 'sn_verify_department', 'channel_id' => 'support']),
+                                    $post(['wa_action' => 'sn_verify_department', 'channel_id' => 'account'])];
     $setup['on_registry_off'] = [$post(['wa_action' => 'sn_status', 'channel_id' => 'sales-001', 'status' => 'active']), $chan('sales-001')['status'] ?? null];
     $setup['in_registry_off'] = $in('256771900000', 'Hello, is this Alpha?', 'sp-alpha');
     $setup['in_registry_off_wrote'] = $conv('256771900000', 'sales-001') === [];
@@ -439,7 +445,10 @@ function sp_uganda(string $root, array $parts): array
         $f['j8'] = ['in' => $in('256700000203', 'Testing the line', 'sp-alpha'), 'queued' => $nEvents('ai.reply') - $e0,
                     'category' => $conv('256700000203', 'sales-001')['category'] ?? null];
         $e0 = $nEvents('ai.reply');
-        $f['j8_sales'] = ['in' => $in('256700000202', 'Testing the line too', 'sp-alpha'), 'queued' => $nEvents('ai.reply') - $e0];
+        $f['j8_sales'] = ['in' => $in('256700000202', 'Testing the line too', 'sp-alpha'), 'queued' => $nEvents('ai.reply') - $e0,
+                          'category' => $conv('256700000202', 'sales-001')['category'] ?? null];
+        $e0 = $nEvents('ai.reply');
+        $f['j8_colleague'] = ['in' => $in('256700000204', 'Testing the line as a colleague', 'sp-alpha'), 'queued' => $nEvents('ai.reply') - $e0];
         $settle();
         // The salesperson answers on their own phone: recorded as the team's, and the AI stands down on that chat.
         $hs = $handset('256771900001', 'Alpha here, I will call you this afternoon. SP-HANDSET', 'sp-alpha');
@@ -559,7 +568,9 @@ function sp_uganda(string $root, array $parts): array
         $t  = $textsSince($n0);
         $f['i_queued'] = ['customer' => sp_to($t, '256771900502'), 'others' => array_map(function ($c) { return [$c['instance'], (string)$c['number']]; }, $t),
                           'brain' => count($ki['brain']->contexts), 'state' => $conv('256771900502', 'sales-002')['state'] ?? null,
-                          'escalations' => $nEvents('wa.escalation') - $x0, 'log' => strpos($ki['log'], 'channel_disabled') !== false];
+                          'escalations' => $nEvents('wa.escalation') - $x0, 'log' => strpos($ki['log'], 'channel_disabled') !== false,
+                          // 5.18.90: the reply route refuses it first; the automated-send policy behind it would too.
+                          'by_route' => strpos($ki['log'], 'reply NOT sent on channel sales-002 — channel_disabled; handed to a person') !== false];
         $n0 = $nText();
         $ri = $reply('admin', $cb, 'SP-I Inbox reply on a switched-off number');
         $f['i_inbox'] = [$ri['http'], strpos($ri['message'], 'Nothing was sent from any other number') !== false, count($textsSince($n0)),
@@ -628,7 +639,8 @@ function sp_uganda(string $root, array $parts): array
         $t = $textsSince($n0);
         $f['k_channel'] = ['customer' => sp_to($t, '256771900702'), 'central' => array_column(sp_to($t, '256700000999'), 0),
                            'brain' => count($kk['brain']->contexts), 'state' => $conv('256771900702', 'sales-099')['state'] ?? null,
-                           'escalations' => $nEvents('wa.escalation') - $x0, 'log' => strpos($kk['log'], 'unknown_channel') !== false];
+                           'escalations' => $nEvents('wa.escalation') - $x0, 'log' => strpos($kk['log'], 'unknown_channel') !== false,
+                           'by_route' => strpos($kk['log'], 'reply NOT sent on channel sales-099 — unknown_channel; handed to a person') !== false];
         $cm = EvolutionApiService::configInstanceMap($cfgNow);
         $in('256771900703', 'Hello, moved?', 'sp-alpha');
         $reg()->setInstance('sales-001', 'sp-alpha-new', 'pilot test', 'the SIM moved to a new instance', $cm);
@@ -847,6 +859,11 @@ is_(strpos($st['verify']['sales-001'][0], 'ok: Verified') === 0 && $st['verify']
     'verify reads each business number from Evolution, and records who verified it', $j($st['verify']));
 is_(strpos($st['webhook']['sales-001'][0], 'ok: ') === 0 && $st['webhook']['sales-001'][1] && $st['webhook']['sales-002'][1],
     'each webhook registered on its own instance', $j($st['webhook']));
+is_(strpos($st['verify_departments'][0] ?? '', 'ok: Verified: the sales number') === 0
+    && strpos($st['verify_departments'][1] ?? '', 'ok: Verified: the support number') === 0
+    && strpos($st['verify_departments'][2] ?? '', "no: The account number uses the support number's instance") === 0,
+    '5.18.90: the department numbers are verified on the card with the registry off — support\'s covers account, which shares its instance',
+    $j($st['verify_departments'] ?? null));
 is_(strpos($st['on_registry_off'][0], 'no: Not yet: switch the channel registry on first') === 0 && $st['on_registry_off'][1] === 'disabled',
     'switching a number on is refused while the registry is off', $j($st['on_registry_off']));
 is_($st['in_registry_off'][1] === 'unknown_instance' && $st['in_registry_off_wrote'],
@@ -892,8 +909,12 @@ is_($f['m']['leaks'] === array_fill(0, 8, false), 'Phase 5: the brain is never t
 echo "\nThe two standing rules a live test meets\n";
 is_($f['j8']['in'][1] === 'accepted' && $f['j8']['queued'] === 0 && $f['j8']['category'] === 'staff',
     'a support colleague\'s phone is kept for the team and never answered (5.18.50) — a live test must not come from an admin, support or accounts phone', $j($f['j8']));
-is_($f['j8_sales']['in'][1] === 'accepted' && $f['j8_sales']['queued'] === 1,
-    'a sales colleague\'s phone is answered like a customer\'s — so a colleague in sales can test the line from their own phone', $j($f['j8_sales']));
+// 5.18.90 (docs/65 §AD): rewritten, not deleted. Bravo owns sales-002, so Bravo's phone is a DishNet line owner's: kept for
+// the team on Alpha's number and never answered — a salesperson's assistant never answers another salesperson.
+is_($f['j8_sales']['in'][1] === 'accepted' && $f['j8_sales']['queued'] === 0 && $f['j8_sales']['category'] === 'staff',
+    'a salesperson who owns a number is never answered by another salesperson\'s assistant (5.18.90) — kept for the team', $j($f['j8_sales']));
+is_($f['j8_colleague']['in'][1] === 'accepted' && $f['j8_colleague']['queued'] === 1,
+    'a sales colleague who owns no number is answered like a customer\'s — so they can test the line from their own phone', $j($f['j8_colleague']));
 is_($f['handset']['webhook'][1] === 'accepted' && $f['handset']['state'] === 'human_active' && array_column($f['handset']['stored'], 'agent_name') === ['Team'],
     'the salesperson answering on their own phone is recorded as the team\'s, and the chat is theirs', $j($f['handset']));
 is_($f['handset']['brain'] === 0 && $f['handset']['sends'] === 0, 'and the AI stands down on it: the next message is not answered', $j($f['handset']));
@@ -940,6 +961,7 @@ is_($f['i_queued']['customer'] === [] && $f['i_queued']['brain'] === 0 && $f['i_
     && $f['i_queued']['escalations'] === 1 && $f['i_queued']['log'],
     'a message queued before: nothing sent to the customer from ANY number, the brain never asked, a person told, the failure logged', $j($f['i_queued']));
 is_(count($f['i_queued']['others']) === 1 && $f['i_queued']['others'][0] === ['sp-sales', '256700000999'], 'the only message is the alert to the central number', $j($f['i_queued']['others']));
+is_(!empty($f['i_queued']['by_route']) && !empty($f['k_channel']['by_route']), '5.18.90: the reply route refuses these first (the automated-send policy behind it is the second line)', $j([$f['i_queued']['by_route'] ?? null, $f['k_channel']['by_route'] ?? null]));
 is_($f['i_inbox'] === [502, true, 0, 0, true], 'the Inbox refuses it and says so; nothing sent, nothing stored, no instance named', $j($f['i_inbox']));
 is_(strpos($f['i_back'][0], 'ok: ') === 0 && $f['i_back'][1] === 'active', 'switched back on', $j($f['i_back']));
 
@@ -1063,7 +1085,10 @@ $mutants = [
     ['the worker answers whatever the route says', 'workers/AiReplyWorker.php',
      "        if (\$route['ok']) return \$route['context']->role();",
      "        return \$route['context'] !== null ? \$route['context']->role() : 'sales';", 'refusals',
-     function (array $x) { return ($x['i_queued']['escalations'] ?? 0) !== 1 || ($x['k_channel']['escalations'] ?? 0) !== 1; }],
+     // 5.18.90: amended, not deleted — the automated-send policy now refuses the same send behind the route, so the copy is
+     // caught by WHICH layer refused it (the route must be first), as well as by the escalation count.
+     function (array $x) { return ($x['i_queued']['escalations'] ?? 0) !== 1 || ($x['k_channel']['escalations'] ?? 0) !== 1
+                               || empty($x['i_queued']['by_route']) || empty($x['k_channel']['by_route']); }],
     ['the Inbox answers a salesperson\'s chat from support', 'lib/InboxReplyRoute.php',
      "            return ['mode' => 'channel', 'sender' => '', 'channel' => \$ch, 'reason' => ''];",
      "            return ['mode' => 'sender', 'sender' => 'support', 'channel' => \$ch, 'reason' => ''];", 'inbox',

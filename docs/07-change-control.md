@@ -7768,3 +7768,91 @@ screen, three settings and read-only checks (docs/66).
 
 **Git:** this commit, local, on `claude/study-this-jhe2eg`, on top of `8be69ec` (the 5.18.89 result). **NOT pushed:** both
 wait for the operator's approval. `docs/59` stays untracked by the operator's decision.
+
+## 08 Oct — The pre-pilot safety fix (5.18.90): DishNet's own numbers are never answered by an assistant, and a number's assistant switch stops its follow-ups too — dark; BUILT in development, reviewed; its push approved 08 Oct with the release preparation; NOT deployed; the pilot is stopped before docs/66 step 5
+
+**1. What is currently configured.** Production runs 5.18.89 (`release/5.18.89` = `53d5c4d`) since 07 Oct, 19:02 UTC.
+`multi_number_channels_enabled` is not set, so the channel registry is off and everything below is inactive there. The
+operator stopped the pilot (docs/66) before step 5. This entry is recorded from the repository; production was not read
+or changed for it.
+
+**2. Why the change is necessary.** Two defects were reported, and both were confirmed in the code (docs/65 §AD.1):
+- **an AI-to-AI loop**: nothing on the inbound path knew DishNet's own WhatsApp numbers. Once the human pause (5 minutes
+  in production) ran out, one DishNet number's assistant could answer another's;
+- **follow-ups bypassed the assistant switch**: with a salesperson number's assistant off, `followup_auto_send` could
+  still send from it.
+
+**3. Exactly what changes** (docs/65 §AD.2; every new path acts only with the channel registry on):
+- **new** `lib/InternalNumbers.php` — DishNet's own numbers, from records the plugin already keeps:
+  - the registry's numbers;
+  - the configured lines, from the files and the store;
+  - the number Evolution reports for each instance;
+  - salesperson numbers' owners and the alert numbers, on salesperson numbers only.
+- **new** `lib/AutomationPolicy.php` — one rule for every automated send, with no transport;
+- `lib/EvolutionApiService.php` — the central guard for reply-class and proactive-class sends and the typing indicator.
+  Staff-class sends (Inbox replies, staff alerts) are not asked. `listInstances()` gains `jid_phone`;
+- `evo_webhook.php`, `workers/AiReplyWorker.php`, `workers/MediaWorker.php` — DishNet's numbers are kept for the team
+  and never answered;
+- `cron/followup_scan.php`, `cron/followup_run.php`, `cron/followup_send.php`, `lib/FollowUpService.php` — follow-ups
+  respect the policy. The scan's channel list is an allow-list; held drafts take none of the sender's places;
+- `cron/wa_watchdog.php` — no paging about DishNet numbers' chats;
+- `cron/wa_webhook_guard.php` — records the number Evolution reports for each instance;
+- `lib/ChannelRegistry.php`, `lib/SalesNumbersAdmin.php`, `tabs/engage/wa_ai_setup.php` — the department numbers,
+  verified on the card from the phone number Evolution reports (never an `@lid` owner's digits);
+- `tools/set_config.php` — refuses the registry switch until the department numbers are verified, a recorded re-pair
+  counted as the policy counts it;
+- `tools/channels.php` — prints whether the department numbers are all verified (Uganda), likewise, still writing
+  nothing;
+- `manifest.json` — 5.18.90;
+- tests:
+  - the new `tests/test_pilot_safety.php`;
+  - `test_channel_registry`, `test_multi_number_routing`, `test_sales_numbers` and `test_sales_pilot`, amended to
+    verify their fixtures' numbers;
+  - the two fixtures;
+  - 15 version pins;
+- docs:
+  - docs/66 corrected — R-1, a new step 1.5, the STOP conditions and the loop test;
+  - docs/65 §AD, including three independent reviews and a fourth check (§AD.6–§AD.9).
+
+No migration. No setting is changed.
+
+**4. Effect on UISP/uCRM.** None. Nothing here calls uCRM or changes what is sent to it. Leads keep their fields:
+`source_number` stays null for a department, as before.
+
+**5. Rollback.** Nothing is deployed, so there is nothing to roll back. When 5.18.90 is deployed, its own pinned deploy
+script will carry its rollback, in a separate block from the deploy.
+
+**Proofs:**
+- **`tests/test_pilot_safety.php`** (new) — the instruction's tests 1–25 and the reviews' cases, on the real plugin with a
+  fake Evolution and follow-ups behind a dead proxy:
+  - development tree: 185 passed, 0 failed, with **66 weakened copies, each caught**;
+  - the release's code (5.18.89 plus this change): 177 passed, 0 failed, with 63 copies caught (the media worker's three
+    are development-only);
+  - a static check confirms every copy's anchor is unique and every weakened file still parses.
+- **Full suite, development tree, twice**, alone (09:44–10:25 and 10:25–11:07 UTC):
+  - 288 files, 14,176 passed, 0 failed, 0 skipped, every file's tally identical in both passes;
+  - against the pilot entry's counted passes (287 files, 13,984): exactly `test_pilot_safety` added (+185);
+    `test_channel_registry` 104 → 105, `test_sales_numbers` 128 → 131 and `test_sales_pilot` 122 → 125 move by their
+    amended assertions; nothing else moved, nothing gone;
+  - PHP warnings: 5 per pass, all `test_dpo_endpoints`, as before; the checker refuses its three planted faults.
+- **Full suite, the release's code (5.18.89 = `53d5c4d` plus this change), twice**, alone (11:47–12:26 and 12:26–13:06 UTC):
+  - 276 files, 13,256 passed, 0 failed, 0 skipped, every file's tally identical in both passes;
+  - against 5.18.89's own counted passes (274 files, 12,948): `test_pilot_safety` (+177) and `test_sales_pilot` (+125)
+    added; `test_channel_registry` 104 → 105 and `test_sales_numbers` 128 → 131 move as above; `test_quote_tax_line`
+    29 → 31 reads differently for the reason recorded on 07 Oct — its two comparisons with an old commit run only where
+    `.git` is a directory, and 5.18.89's passes ran in a worktree; nothing else moved;
+  - a first attempt from the session's private scratch directory failed `test_cli_data_dir` (9): that test drops to the
+    `nobody` user, who cannot read that directory. From a copy every user can read — identical by `diff -r` — it passed
+    19/0, and the two counted passes above ran there.
+- **Reviews:** three independent reviews and a fourth check, each finding challenged by a separate skeptic (docs/65
+  §AD.6–§AD.9). One MAJOR was found, by the second review, and fixed; every later finding was MINOR and fixed.
+- **Domain B:** `dishnet-mikrotik-control-plane/` and `dishnet-hybrid-sudan/docs/` are untouched.
+- **South Sudan:** the registry and the policy never take effect there (asserted, with every switch set); its webhook
+  guard records nothing; `tools/channels.php` says nothing of department numbers.
+- **Checks:** `php -l` clean on every changed PHP file of both trees; `git diff --check` clean; the banned-value and
+  secret scan of every new and changed line clean — every person, number and instance in the tests is fictitious.
+
+**Git:** this commit, on `claude/study-this-jhe2eg`, on top of `1961429` (the pilot) and `8be69ec` (the 5.18.89 result),
+both unchanged. The operator approved, on 08 Oct, this commit, the branch's push and the release preparation — **not the
+deploy**: production stays on 5.18.89 with the registry OFF until the deploy is approved on its own. `docs/59` stays
+untracked by the operator's decision.
