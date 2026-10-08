@@ -7858,7 +7858,7 @@ deploy**. **Pushed 08 Oct 13:16:59 UTC** (`1541208..a694161`), the branch alone.
 5.18.89 with the registry OFF until the deploy is approved on its own. `docs/59` stays untracked by the operator's
 decision.
 
-## 08 Oct — 5.18.90: the pre-pilot safety fix, dark — no DishNet number's assistant answers another DishNet number, and a number's assistant switch stops its automated follow-ups too, all behind `multi_number_channels_enabled` (OFF); no migration; South Sudan and Domain B unchanged. `release/5.18.90` = `3d9cb5f`, cut on live 5.18.89 (`53d5c4d`); `scripts/deploy-5.18.90.sh` pinned to it and rehearsed — PREPARED 08 Oct; `release/5.18.90` NOT pushed; NOT deployed
+## 08 Oct — 5.18.90: the pre-pilot safety fix, dark — no DishNet number's assistant answers another DishNet number, and a number's assistant switch stops its automated follow-ups too, all behind `multi_number_channels_enabled` (OFF); no migration; South Sudan and Domain B unchanged. `release/5.18.90` = `3d9cb5f`, cut on live 5.18.89 (`53d5c4d`); `scripts/deploy-5.18.90.sh` pinned to it and rehearsed — PUSHED 08 Oct 15:46 UTC; DEPLOYED 15:52 UTC (PASSED 65/0/1); the registry stays OFF
 
 **This is the safety fix's release** (`a694161` on the branch, `docs/65` §AD, `docs/66`, the entry above). The operator
 approved, on 08 Oct: *"APPROVED: PROCEED WITH THE 5.18.90 RELEASE PREPARATION ONLY"* — commit the fix, push the
@@ -7868,6 +7868,11 @@ the rollback, run the release checks, and report. **Not approved, and not done:*
 switch on; pairing or switching on a salesperson's number; creating an Evolution instance; sending a message. Production
 stays on 5.18.89 with the registry OFF. Only after 5.18.90 is live and verified does the pilot resume (docs/66 step 1.5,
 then the AI-to-AI loop test, then salesperson #1).
+
+**Then, the same day:** *"APPROVED: DEPLOY RELEASE 5.18.90 TO PRODUCTION"* — push `release/5.18.90`, deploy `3d9cb5f`
+through the rehearsed pinned script, run every post-deployment check, and stop. **Done** (the RESULT below): pushed
+15:46 UTC, deployed 15:52 UTC, PASSED. Still not approved, and not done: the registry or any other switch; verifying,
+pairing or switching on any number; the salesperson's assistant; any Evolution change; any message; the pilot.
 
 ### The five-part form
 
@@ -7960,8 +7965,8 @@ safety fix, `a694161`, on the branch (pushed 08 Oct 13:16:59 UTC, `1541208..a694
   `tests/test_multi_number_routing.php`, `tests/test_sales_numbers.php` and `tests/fixtures/fake_evo_server.php` (the
   pilot's `fail_instance` control and 5.18.90's presence calls; the media layer's state keys are not on live).
 
-`release/5.18.90` is local, not pushed. **It must be pushed — with the deploy's approval — before the deploy:** the
-server fetches it (`git fetch origin release/5.18.90`), and stage A stops if the checkout does not hold `3d9cb5f`.
+`release/5.18.90` was local until the deploy's approval; **pushed 08 Oct 15:46:17 UTC** (a new branch at `3d9cb5f`),
+and the server fetched it at deploy time (`git fetch origin release/5.18.90`).
 
 **Corrected here, not in Git — the release commit's message says less than the commit does.** It names, for an
 admin on Uganda, *Verify number* on the sales and support rows, the note after a department's instance is changed, and
@@ -8172,15 +8177,15 @@ It covers:
 
 ### Deployment runbook — each step is the operator's, and each needs the operator's approval first
 
-1. **Push `release/5.18.90` — NOT DONE; it needs the operator's approval, given with the deploy's.** The server fetches
-   it at deploy time. The branch `claude/study-this-jhe2eg` (the fix, the script, its rehearsal and these records) is
-   pushed already.
-2. **Deploy, as root on the server — NOT DONE; it needs the operator's approval.** It asks for `DEPLOY`. Send back the
-   **log file**, not a copy of the terminal:
+1. **Push `release/5.18.90` — DONE 08 Oct, 15:46:17 UTC**, on the operator's word (*"APPROVED: DEPLOY RELEASE 5.18.90
+   TO PRODUCTION"*): a new branch at `3d9cb5f`. The branch `claude/study-this-jhe2eg` (the fix, the script, its
+   rehearsal and these records) was pushed already, at `733ae01`.
+2. **Deploy, as root on the server — DONE 15:52 UTC**, on the same word: **PASSED, 65 ok / 0 failed / 1 note** (the
+   RESULT below). It asks for `DEPLOY`. Send back the **log file**, not a copy of the terminal:
 
    `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.90 && mkdir -p /root/dnb-5.18.90 && bash scripts/deploy-5.18.90.sh 2>&1 | tee /root/dnb-5.18.90/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
 
-   - **Expect 65 ok / 0 failed / 1 note.** The rehearsal's deploy reads 65 ok / 0 / 0; on the
+   - **Expect 65 ok / 0 failed / 1 note** — *as it read.* The rehearsal's deploy reads 65 ok / 0 / 0; on the
      server R3 adds the note 5.18.89's deploy had: `migration.log` holds no line for 087 (rotated away since 07 Oct
      09:52), and R3 reads every one of 087's statements' effects from the store instead (rehearsed: 4t).
    - Other notes would say: the salesperson number's assistant is ON (A8 — production's record says off); a lead switch
@@ -8192,6 +8197,124 @@ It covers:
 4. **Then, and only then, docs/66 resumes — each step with its own approval, none of it here:** step 1.5 (the department
    numbers verified on the card), the AI-to-AI loop test, and the first salesperson's number (`sales-001`, already added
    on 07 Oct: never added again).
+
+### RESULT — DEPLOYED to production 2026-10-08, 15:52 UTC: PASSED, 65 ok / 0 failed / 1 note
+
+Recorded from the terminal the operator pasted, which carries the run up to its verdict; the script prints no secret.
+The log file stays on the server under `/root/dnb-5.18.90/`.
+
+**Approval and push.** The operator approved, on 08 Oct: *"APPROVED: DEPLOY RELEASE 5.18.90 TO PRODUCTION"* — push
+`release/5.18.90`, deploy `3d9cb5f` with the rehearsed pinned procedure, run every post-deployment check, then stop;
+nothing switched on, no number verified, paired or switched on, no Evolution change, no message, no pilot.
+`release/5.18.90` was pushed at 15:46:17 UTC, a new branch at `3d9cb5f`.
+
+**The run** began at 15:51:00 UTC (`20261008T155100Z`). `DEPLOY` was typed, `deploy-hybrid.sh` answered *"✓ container
+now serves 3d9cb5f"*, and the 29 files were stamped at 15:52:02 UTC.
+- **The rehearsal's 65 ok lines and the server's are the same 65, by check and in the same order.** The server adds one
+  note, R3's — the one the runbook predicted.
+- Every value that differs from the rehearsed deploy is the server's own data or environment: paths, PHP 8.1.34, row
+  counts, the queue's size, R7's figures, the 25 lines V4 read. **087's state, every switch, the routing, and the send
+  policy's, Batch 2's and the event processor's signatures read as the rehearsal's, character for character.**
+
+- **The pull.**
+  - The checkout fast-forwarded `1541208` → `733ae01`, and `release/5.18.90` was fetched as new.
+  - Branch tip `a694161` (not installed); release commit `3d9cb5f`, cut on `53d5c4d`.
+  - 29 files (25 changed, 4 added, 0 removed); no tracked edits.
+- **A — no refusal fired, and every check passed:**
+  - A7: Domain B untouched (`cf0b0e3`, `969d873`). A0: exactly the 29 files, no migration, 087 the reviewed one.
+  - Live was `53d5c4d` / 5.18.89. **A2: PHP 8.1.34 accepted all 16 changed server files and 12 test files.**
+  - The switches as the operator left them:
+    - pilot `on`, `ia=on/on`, `wa=on/on`;
+    - the lead switches `lc=on/on`, `ls=off/off`, `qu=on/on`, `sa=on/on`;
+    - the registry's switch `mn=absent/absent` (A5); `ol`, `hc`, `fh` `absent/absent` (A5b);
+    - the Inbox's row `evo=yes sales=yes support=yes account=yes registry=absent` (A3).
+  - 086 complete, `2:20:1:1:1`.
+  - **087 applied and complete (A8):** `rows=4:5 seed=ok dnum=0 other=1 active=0 oai=0 trail=ok dtrail=0`. That is the
+    three department rows as 087 seeds them, with no instance and no number, and one salesperson number, switched off
+    with its assistant off — the state docs/66 records since 07 Oct.
+  - **The routing:** `sales:in=sales support:in=support account:in=support shared=support+account evo=yes registry=off`,
+    in the configuration files and in the Inbox's row. A9: the pin's code routes exactly as live's.
+  - **A10:** the pin's assistant builds 5.18.89's prompt for all twelve conversations, on the server's own
+    configuration.
+  - **A11:** the pin's send policy is inert there: `policy=off/off refusal=-/- sql=-/- evo=off,-/off,- statements=0
+    registry-reads=0`.
+  - **A6, South Sudan:** live's and the pin's event processor read the same signatures on both countries. The pin's
+    Batch 2 rules and send policy, every switch on, apply nothing as a South Sudan install. The send-policy signature
+    is the reviewed one exactly.
+  - The webhook log's last 300 entries hold 1 `job.add`, the last at 2026-10-07 09:26:31 by the plugin's clock.
+    Photos `present:19:4`, 19 files.
+- **Backup**, in `/root/dnb-5.18.90/backup-20261008T155100Z`:
+  - `plugin.sqlite3`, 31 MB: one consistent copy, integrity ok, 250 tables, SQLite 3.48.0;
+  - the data directory, 155 MB; the installed 5.18.89, 11 MB; the vault;
+  - the event queue's snapshot: **0 events not done** (8,463 in all, every one done).
+
+  Then `GO`.
+- **V.**
+  - The sign-in page answers 200 with zero redirects, and carries no South Sudan contact; the portal answers 302;
+    pinch-zoom is allowed.
+  - The photo viewer answers 302 and its upload 401. The authorisation page answers 404 *"This link is not valid"* to a
+    request without a link.
+  - `install_auth_request`, `install_auth_prefill`, `wa_send_reply` and `log_call` answer 401 without a login.
+  - **V12:** the WhatsApp AI screen sends a visitor with no session to the sign-in page (302), with no part of the card.
+  - Every switch, the Inbox's row and the AI settings (`files=25 store=24`) are unchanged by the run (V3–V3h).
+  - **V4: no fatal or parse error since the copy, with 25 log lines read** after the 60-second wait.
+- **R.**
+  - **R1:** all 29 files as `3d9cb5f` has them; manifest 5.18.90.
+  - **R2, R2b, R2c:**
+    - the pilot, the authorisation and the booking WhatsApp are as the operator left them;
+    - own leads only OFF; the follow-up hold holds nothing; the card is shown;
+    - **the installed send policy is inert on the server's own configuration, both copies.**
+  - **R3:** 086 complete (`2:20:1:1:1` before and after); 084 `19:4`, 19 files; **087 applied and complete**, as at A8.
+    **The one note:** *"migration.log holds no line for 087 (not written, or rotated away) — every statement's effect was
+    read from the store above, which is the verification"* — the case the rehearsal planted (4t), as on 07 Oct.
+  - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 253 files
+    from Release A through 5.18.89 intact. **R6:** every earlier surface, and 5.18.90's pieces.
+  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.89's deploy read. The photos as
+    before the run.
+  - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path, and the uCRM write OFF.
+  - **R11:** the registry is dark — its switch OFF in both copies, `enabled()` and `forStore()` off, 0 statements on its
+    tables; one salesperson number, switched off, assistant off. **`tools/channels.php` reads *"department numbers: NOT
+    all verified — sales, support"*.** Account shares support's instance, so support's number covers it.
+  - **R12:** the three numbers route exactly as on 5.18.89. **R13:** the event processor as designed on both countries;
+    the queue held 8,463 events, every one done, before and after. **R14:** Domain B, all 363 files, byte for byte.
+  - **R15:** 5.18.89's Batch 2 rules as before. **R16:** the installed assistant's prompt is 5.18.89's.
+  - **R17:** the installed send policy on throwaway databases:
+    - on Uganda with the registry on, it holds a salesperson's number until the department numbers are verified, then
+      keeps the two from answering each other, and stops a number whose assistant is off;
+    - with the switches absent, and as South Sudan with every switch on, it does nothing.
+- **What the run did not do:**
+  - It set no switch and changed no configuration value it reads (V3–V3h).
+  - It created, paired or called no Evolution instance, and added, verified or switched on no number. 087 reads as at
+    A8, and the script has no code path that calls Evolution; the rehearsal proved that with a recording stand-in.
+  - It sent nothing. Its requests over the public address were anonymous; the POSTs among them carried no data and
+    were refused with 401 before any handler. The event queue held 8,463 events, every one done, before and after.
+  - The log cannot speak for anything else on the server in that window.
+- `--check` read *"NOT up to date"* before and after, as expected: it compares the container with the branch tip,
+  `a694161`, which this script does not install.
+
+**Independent verification of the log** (read-only, 08 Oct). Three verifiers read the log, the script and the record,
+and a separate skeptic challenged each item they flagged. Proved: the version before and after, the registry OFF, no
+salesperson number active, South Sudan and Domain B. What the log does not prove, and stays recorded:
+- **The pasted text is a copy of the terminal, not the `tee`'d log file.** It holds the typed `DEPLOY`, which `tee`
+  never sees, and it ends at the verdict, without the rollback block the file holds. The checks are all there and agree
+  with the script's own tally. The file on the server settles it.
+- **R13's "kept=0/0" compared an empty set:** no event was pending. The evidence that nothing was lost is the queue's
+  totals, 8,463 done before and after.
+- **R3 and R11 re-read 087's counts, not its rows.** The script has no statement that writes them — it only reads the
+  store — but no before-and-after hash of the two tables was taken.
+- **`set_config.php`'s refusal of the registry is checked on the server as installed code** (R1's bytes, R6's marker),
+  not run. It was run in the rehearsal (6c, 6c2) and in `test_pilot_safety`.
+- **`deploy-hybrid.sh` copies the checkout's working tree** under the plugin, not only the files git tracks, and every
+  check reads the tracked files. A file git does not track there would be copied unseen. This is the copy every release
+  since 5.18.66 has used. Listing the untracked files settles it.
+- **Two helpers carried over since 5.18.66** (`photo_tables_state`, `dist_tables_state`) open `plugin.sqlite3` as the
+  container's default user, read-write, not as the database's owner read-only, as every other read does. No incident
+  has been seen in any deploy since. The owners of the files beside the database settle whether one was left; the next
+  deploy script should read them as the others do.
+- **Before the deploy, the AI settings counted one key more in each copy than on 07 Oct** (`files=25 store=24`, against
+  `24/23` in 5.18.89's log). This run changed nothing there (V3g). Only an admin's save — the WhatsApp AI screen or one
+  of the setting tools — adds a key; neither the card nor any deploy does. Which key it is was not established, because
+  the log names none.
 
 ### Rollback — its own command, never pasted with the deploy
 
