@@ -7769,7 +7769,7 @@ screen, three settings and read-only checks (docs/66).
 **Git:** this commit, local, on `claude/study-this-jhe2eg`, on top of `8be69ec` (the 5.18.89 result). **NOT pushed:** both
 wait for the operator's approval. `docs/59` stays untracked by the operator's decision.
 
-## 08 Oct — The pre-pilot safety fix (5.18.90): DishNet's own numbers are never answered by an assistant, and a number's assistant switch stops its follow-ups too — dark; BUILT in development, reviewed; its push approved 08 Oct with the release preparation; NOT deployed; the pilot is stopped before docs/66 step 5
+## 08 Oct — The pre-pilot safety fix (5.18.90): DishNet's own numbers are never answered by an assistant, and a number's assistant switch stops its follow-ups too — dark; BUILT in development, reviewed; PUSHED 08 Oct 13:16:59 UTC (`a694161`); released as 5.18.90 (`release/5.18.90` = `3d9cb5f`, the entry below) — NOT deployed; the pilot is stopped before docs/66 step 5
 
 **1. What is currently configured.** Production runs 5.18.89 (`release/5.18.89` = `53d5c4d`) since 07 Oct, 19:02 UTC.
 `multi_number_channels_enabled` is not set, so the channel registry is off and everything below is inactive there. The
@@ -7854,5 +7854,354 @@ script will carry its rollback, in a separate block from the deploy.
 
 **Git:** this commit, on `claude/study-this-jhe2eg`, on top of `1961429` (the pilot) and `8be69ec` (the 5.18.89 result),
 both unchanged. The operator approved, on 08 Oct, this commit, the branch's push and the release preparation — **not the
-deploy**: production stays on 5.18.89 with the registry OFF until the deploy is approved on its own. `docs/59` stays
-untracked by the operator's decision.
+deploy**. **Pushed 08 Oct 13:16:59 UTC** (`1541208..a694161`), the branch alone. The deploy waits: production stays on
+5.18.89 with the registry OFF until the deploy is approved on its own. `docs/59` stays untracked by the operator's
+decision.
+
+## 08 Oct — 5.18.90: the pre-pilot safety fix, dark — no DishNet number's assistant answers another DishNet number, and a number's assistant switch stops its automated follow-ups too, all behind `multi_number_channels_enabled` (OFF); no migration; South Sudan and Domain B unchanged. `release/5.18.90` = `3d9cb5f`, cut on live 5.18.89 (`53d5c4d`); `scripts/deploy-5.18.90.sh` pinned to it and rehearsed — PREPARED 08 Oct; `release/5.18.90` NOT pushed; NOT deployed
+
+**This is the safety fix's release** (`a694161` on the branch, `docs/65` §AD, `docs/66`, the entry above). The operator
+approved, on 08 Oct: *"APPROVED: PROCEED WITH THE 5.18.90 RELEASE PREPARATION ONLY"* — commit the fix, push the
+development branch, cut `release/5.18.90` from the live 5.18.89, build the pinned deploy script, rehearse the deploy and
+the rollback, run the release checks, and report. **Not approved, and not done:** the deploy; pushing `release/5.18.90`
+(the server fetches it at deploy time, so it is pushed with the deploy's approval); switching the registry or any other
+switch on; pairing or switching on a salesperson's number; creating an Evolution instance; sending a message. Production
+stays on 5.18.89 with the registry OFF. Only after 5.18.90 is live and verified does the pilot resume (docs/66 step 1.5,
+then the AI-to-AI loop test, then salesperson #1).
+
+### The five-part form
+
+1. **What is configured now (5.18.89, `53d5c4d`)** — as recorded on 07 Oct, 21:38–21:47 UTC, not read again since:
+   - `multi_number_channels_enabled`, `sales_own_leads_only`, `wa_handover_copy_central` and
+     `wa_followups_on_owned_numbers` absent in both copies;
+   - 087's three department rows, no instance and no number; one salesperson's number, `sales-001`, added through the
+     card on 07 Oct — switched off, its assistant switched off at 21:40, no number, its webhook not set;
+   - the department instances: sales its own, support and account one shared;
+   - lead capture ON, the uCRM write OFF; the authorisation and the booking WhatsApp ON.
+2. **Why.** The two defects the pilot found before step 5 (docs/65 §AD.1): one DishNet number's assistant could answer
+   another's once the human pause ran out, and a number's assistant switch did not stop its follow-ups. Both must be
+   fixed in production, dark, before any salesperson's number is switched on.
+3. **Exactly what changes.** The 29 files below. **No migration.**
+   - **With the switches as they are, one thing changes:** on Uganda, the *Salesperson numbers* card shows *Verify
+     number* on each department number that takes an instance's inbound, and says which are not verified yet;
+     `tools/channels.php` says the same. Verifying is an admin's act, after the deploy, as docs/66's own step.
+   - **Everything else returns at its first line.** With the registry off, `AutomationPolicy` is inert
+     (`AutomationPolicy::inert()`): nothing is refused, nothing classified, no SQL added, and every send, follow-up and
+     page is 5.18.89's (A11, R2c on the server's own configuration; R17 on a throwaway database). The assistant's prompt
+     is 5.18.89's byte for byte (A10, R16): 5.18.90 does not change the brain.
+4. **Effect on UISP/uCRM.** UISP: none. uCRM: none. Evolution: nothing called by the deploy or by any 5.18.90 path while
+   the registry is off. **The card's *Verify number* does call Evolution** — it reads the instance's report — only when
+   an admin presses it. The plugin's SQLite: nothing written by the deploy. *Recorded:* any *Verify number* on the card —
+   a department's or a salesperson's — also records the number Evolution reports for each instance in the store's
+   `wa_evo_numbers`, a table the store creates on its first write (SqliteStore's own lazy creation, as for every other
+   file it keeps; no migration); while the registry is off nothing else is written there.
+5. **Rollback.** `scripts/deploy-5.18.90.sh --rollback`, typed `ROLLBACK`, puts 5.18.89 (`53d5c4d`) back through
+   `deploy-hybrid.sh` and checks it. The department numbers' *Verify number* goes; a number verified through it stays in
+   087's tables, unread while the registry is off. The runbook is its own section below, never beside the deploy command.
+
+### Release notes — what each change does
+
+- **`lib/InternalNumbers.php`** (new, 426 lines) — DishNet's own WhatsApp numbers, from records the plugin already keeps:
+  the registry's numbers (salespeople's and, verified on the card, the departments'), the configured lines, and the
+  number Evolution reports for each instance, as the webhook guard last read it; on a salesperson's number only, also
+  the numbers' owners and the alert numbers. Whole numbers, digits only, exact; an `@lid` owner is never a number. Its
+  `gaps()` names the departments whose number is not verified for the instance they are configured with.
+- **`lib/AutomationPolicy.php`** (new, 302 lines) — one rule every automated send asks, with no transport: the channel
+  known and active, its assistant ON, a salesperson's number verified (and not re-paired since) with the department
+  numbers all verified, the recipient not DishNet's own. **Registry off: `inert()` — nothing refused, nothing
+  classified, no SQL added.**
+- **`lib/EvolutionApiService.php`** (+106 −5) — every reply-class and proactive-class send and the typing indicator ask
+  the policy first, only with the registry on; a refusal is returned, never sent from another number, and marked so no
+  caller retries it. Staff-class sends (Inbox replies, staff alerts) are not asked. `listInstances()` gains `jid_phone`.
+- **`evo_webhook.php`** (+28 −1) — with the registry on, a message from one of DishNet's own numbers is stored, filed
+  `staff` and never queued for the assistant (no reply, lead or hand-over). `workers/AiReplyWorker.php` (+50 −3): the same
+  for one already queued; the policy before the model is asked and again at the send.
+- **Follow-ups** — `cron/followup_scan.php` (+17), `cron/followup_run.php` (+25), `cron/followup_send.php` (+27 −1),
+  `lib/FollowUpService.php` (+8 −3): a number whose assistant is off, or that may not send now, gets no follow-up;
+  a held draft takes none of the sender's places. **The fix for the second defect.**
+- **`cron/wa_watchdog.php`** (+11) — no paging about a chat with one of DishNet's own numbers (registry on).
+- **`cron/wa_webhook_guard.php`** (+14) — with the registry on, records the number Evolution reports for each instance.
+- **The card** — `lib/ChannelRegistry.php` (+73 −3: `verifyDepartmentNumber()`, `verifiedInstances()`),
+  `lib/SalesNumbersAdmin.php` (+174 −3), `tabs/engage/wa_ai_setup.php` (+34 −2): *Verify number* on the department
+  numbers, read from Evolution's report for the configured instance, never typed; a salesperson's number cannot be
+  switched on until they are verified; a re-paired phone or an `@lid` owner is shown and refused.
+- **`tools/set_config.php`** (+30) — refuses to switch `multi_number_channels_enabled` on (Uganda, 087 present) until the
+  department numbers are verified; nothing is saved. **`tools/channels.php`** (+11) — says whether they are.
+- **Tests:** `test_pilot_safety.php` (new; 177 checks with 63 weakened copies on the release tree); `test_sales_pilot.php`
+  (new here: the pilot's acceptance test, `1961429` as amended); `test_channel_registry.php`,
+  `test_multi_number_routing.php`, `test_sales_numbers.php`, the sandbox and the fake Evolution, adjusted; the five
+  distributor tests read `5.18.90`.
+- **`manifest.json`** 5.18.90.
+
+### Files — 29 against `53d5c4d`: 4 added, 25 changed, none removed
+
+- **Added (4):** `lib/AutomationPolicy.php`, `lib/InternalNumbers.php`, `tests/test_pilot_safety.php`,
+  `tests/test_sales_pilot.php`.
+- **Changed (25):** `cron/followup_run.php`, `cron/followup_scan.php`, `cron/followup_send.php`, `cron/wa_watchdog.php`,
+  `cron/wa_webhook_guard.php`, `evo_webhook.php`, `lib/ChannelRegistry.php`, `lib/EvolutionApiService.php`,
+  `lib/FollowUpService.php`, `lib/SalesNumbersAdmin.php`, `manifest.json`, `tabs/engage/wa_ai_setup.php`,
+  `tools/channels.php`, `tools/set_config.php`, `workers/AiReplyWorker.php`, `tests/fixtures/fake_evo_server.php`,
+  `tests/fixtures/staff_jobs_sandbox.php`, `tests/test_channel_registry.php`, `tests/test_multi_number_routing.php`,
+  `tests/test_sales_numbers.php`, and the five distributor tests (the version pin only).
+- **+4,321 −32 lines.**
+- **Not in it:** `workers/MediaWorker.php` (its 5.18.90 change is development-only: the AI media layer is not in
+  production), the media layer itself, the partner portal, the CSRF guard, any migration. A0's allow-list refuses each,
+  and R4 checks none is installed.
+
+### Ancestry
+
+`3d9cb5f` (5.18.90, release) ← `53d5c4d` (5.18.89, live) ← `6464204` (5.18.88) ← `9cc81af` (5.18.87). The source is the
+safety fix, `a694161`, on the branch (pushed 08 Oct 13:16:59 UTC, `1541208..a694161`):
+- **22 files byte for byte** from `a694161`: the two libraries and the two tests it adds, the five crons, the registry,
+  `FollowUpService`, the card and its screen, `tools/channels.php`, the manifest, the sandbox, `test_channel_registry.php`
+  and the five distributor pins;
+- **7 ported** onto live's copies, which carry no AI media layer, each carrying the branch's 5.18.90 change line for line:
+  `evo_webhook.php`, `lib/EvolutionApiService.php`, `workers/AiReplyWorker.php`, `tools/set_config.php`,
+  `tests/test_multi_number_routing.php`, `tests/test_sales_numbers.php` and `tests/fixtures/fake_evo_server.php` (the
+  pilot's `fail_instance` control and 5.18.90's presence calls; the media layer's state keys are not on live).
+
+`release/5.18.90` is local, not pushed. **It must be pushed — with the deploy's approval — before the deploy:** the
+server fetches it (`git fetch origin release/5.18.90`), and stage A stops if the checkout does not hold `3d9cb5f`.
+
+**Corrected here, not in Git — the release commit's message says less than the commit does.** It names, for an
+admin on Uganda, *Verify number* on the sales and support rows, the note after a department's instance is changed, and
+`tools/channels.php`'s line. The commit also:
+- records, on **any** *Verify number* — a department's or a salesperson's — the number Evolution reports for each
+  instance in the store's `wa_evo_numbers` (a table the store creates on its first write; no migration);
+- refuses a salesperson's *Verify number* when Evolution reports the owner with no phone number (a WhatsApp `@lid`), and
+  a salesperson's *Switch on* until the department numbers are verified;
+- adds notes to the card's rows: *not verified for this instance* on a department number; that a department number's
+  instance is set under Numbers; and, on a salesperson's number, that Evolution now reports another number, or an owner
+  with no phone number.
+
+And its *"276 files, 13,256 passed"* is the plain copy's reading; in the release's worktree the same code reads 13,254
+(Tests, below). The message stays as it is: amending it would change the pin. The release notes above and the script's
+header say it in full.
+
+### Tests
+
+- **The release tree's own suite: 276 files, 13,254 passed, 0 failed, 0 skipped — twice** (A 13:18:33–13:58:47,
+  B 13:58:47–14:38:18 UTC), in the release's git worktree, each pass with nothing else running. Every file's tally is
+  identical in both passes.
+  - **Against 5.18.89's release suite** (274 files, 12,948 passed, also in a worktree): `test_pilot_safety` (+177) and
+    `test_sales_pilot` (+125) are added; `test_channel_registry` (104 → 105) and `test_sales_numbers` (128 → 131) move
+    by their own amended assertions. No other file's tally moved (+306 in all).
+  - **The same tree read 13,256 in the safety fix's own record** (the entry above, and the release commit's message). The
+    2 are `test_quote_tax_line`'s two comparisons with an old commit, which run only where `.git` is a directory: that
+    run was a plain copy, these two passes a git worktree, where `.git` is a file — the reason recorded on 07 Oct. The
+    code is the same.
+  - PHP warnings: 5 per pass, all from `test_dpo_endpoints` (an undefined variable in the test itself), as in 5.18.89's.
+  - The checker refuses its own planted faults: a tally moved in one pass only, a warning in one pass only, and an
+    unnamed file whose tally moved against the base.
+  - The tree was unchanged by both passes: still `3d9cb5f`, clean.
+- **`test_pilot_safety.php` on the release tree: 177 passed, 0 failed, with 63 weakened copies, each caught** (the
+  development tree reads 185 and 66: the media worker's checks and its three copies are development-only).
+- **Focused, in both passes:** `test_sales_pilot` 125/0, the channel registry 105/0, the salesperson numbers 131/0, the
+  routing 84/0, the event processor 41/0, migration integrity 28/0; the South Sudan and tenant files read as in
+  5.18.89's suite — `test_staff_jobs_south_sudan` 51/0, `test_staff_jobs_gate` 41/0, `test_tenant_profile` 108/0,
+  `test_portal_tenant` 112/0, `test_email_no_sudan` 62/0, `test_sales_support_tenant` 37/0, `test_notify_tenant_text`
+  30/0, `test_cashbook_tenant` 26/0, `test_phone_country` 26/0, `test_ai_country_facts` 21/0.
+- **Lint:** `php -l` on all 28 PHP files of the diff, read from the commit: 0 errors. The sandbox has PHP 8.4; the
+  server's own 8.1 lints at A2 (rehearsed: 16 server files and 12 test files accepted).
+- `git diff --check 53d5c4d 3d9cb5f`: clean.
+- **Secret scans** of the release diff and of the script and its rehearsal: clean. No key-, token- or credential-shaped
+  value and no banned value. The phone-shaped values in the tests are fictitious fixtures; the only address in the
+  rehearsal is its loopback stand-in for Evolution; the one long hex string is 087's sha256.
+- **Reviews:** the safety fix had three independent reviews and a fourth check (docs/65 §AD.6–§AD.9). The deploy script
+  and its rehearsal had their own: 16 agents, each finding put to a separate skeptic — **nine confirmed and fixed, three
+  refuted**. Two were MAJOR, both in the rehearsal's own expectations, not in the script: the persona's line occurs twice
+  in 5.18.89 (the expectations now read `11111200` and `|12114`), and with the registry ON, A11 — not only A5 — stops a
+  copy blinded at A5 (2a rewritten; 2a2 added, blinded at both, to show the two layers are independent). The seven MINOR
+  ones: a stricter proof of a department number (the latest trail row must record the number now held), the count of
+  numbers whose assistant is on (A8 says so in a note), the wording on `wa_evo_numbers`, the `@lid` refusal and the
+  Numbers screen's note, the summary's *what did not change*, and docs/66's assumptions about `sales-001`.
+
+### South Sudan — unchanged, and proved four ways
+
+1. **Statically:** every new rule is behind the channel registry, and the registry behind `StaffJobsGate::applies`
+   (Uganda): `AutomationPolicy::forInstall` returns `inert()` unless `ChannelRegistry::enabled()`; `EvolutionApiService`
+   asks the policy only with a registry; the webhook's step, the AI worker's, the watchdog's filter and the guard's
+   recording each sit behind `registryOn()` / `enabled()`; `set_config.php`'s refusal and `tools/channels.php`'s line
+   only where `StaffJobsGate::applies`. The event processor is not in the release.
+2. **At A6 on the server, before anything changes:** the pin's automated-send policy runs on a throwaway database with
+   **every switch on as a South Sudan install** — inert: nothing refused, nothing classified, no SQL added, the assistant
+   never stopped — beside the same database as Uganda, where with the registry on it holds a salesperson's number until
+   the department numbers are verified and keeps the two from answering each other (the signature's Uganda half shows
+   the check can see the policy act). The pin's Batch 2 rules (5.18.89's, unchanged) and the event processor run as
+   before. Refusal 6 otherwise.
+3. **After the deploy (R13, R15, R17)** the same runs on the installed code; **after a rollback (RB)** the event processor
+   and the Batch 2 rules.
+4. **In the suite:** `test_pilot_safety.php`'s South Sudan part runs a South Sudan install with **every switch set**
+   (the registry, the follow-up hold, automatic follow-ups) through the real webhook, cron and tool: the alert number's
+   message is answered exactly as before — not kept as DishNet's own; the registry and the policy are never on, nor is
+   any SQL added; `tools/channels.php` says nothing about department numbers; and the webhook guard records nothing
+   Evolution reports. `test_staff_jobs_south_sudan` compares South Sudan's pages with 5.18.49's byte for byte. Both pass,
+   twice, on the release tree.
+
+The rehearsal shows each South Sudan refusal firing: the policy, the registry and the card each made to forget the
+country (1r, 1s, 1t).
+
+### Domain B — untouched
+
+- `dishnet-mikrotik-control-plane/` and the plugin's `docs/` are the same trees at `53d5c4d` and `3d9cb5f`.
+- The whole repository's delta between them is the plugin's 29 files alone.
+- **A7** refuses any pin that touches either tree or anything outside the plugin (rehearsed: 1i, 1j, 1k; blinded: 2h);
+  **R14** after the deploy and **RB** after a rollback compare every installed file of both trees byte for byte.
+
+### `scripts/deploy-5.18.90.sh` — 2,196 lines, sha256 `c8d6e00e216bf00b…`
+
+Made from 5.18.89's script by a derivation with every replacement asserted. Each check added for 5.18.90 is shown to
+fail on its fault in the rehearsal (below); the rollback's markers were probed both ways — each of the 13 files that
+carry the fix fails RB on 5.18.90's code, and none on 5.18.89's. **It refuses before anything changes:**
+1. live is not 5.18.89 at `53d5c4d` (commit and manifest version);
+2. `multi_number_channels_enabled` reads ON in either copy (A5);
+3. 087 is not recorded, or recorded under a checksum that is not the installed file's (A8);
+4. 087 is not as 5.18.89 left it (A8) — an object missing, a department row changed, a salesperson's number switched
+   on, or a department number with no verification on the record (or not the number its latest verification
+   recorded): nothing before 5.18.90 can verify one, so it was written by hand. The department is named, never the
+   number;
+5. the delta is not exactly the 29 files, carries a migration, or 087 at the pin is not the reviewed one (A0);
+6. South Sudan's protection fails (A6): the event processor, run as South Sudan and as Uganda, reads otherwise than the
+   live one's known signatures; the pin's Batch 2 rules apply anything as South Sudan with every switch on; or **the
+   pin's automated-send policy refuses or classifies anything as South Sudan with every switch on** — beside the same
+   database as Uganda, where with the registry on it holds a salesperson's number until the department numbers are
+   verified and keeps DishNet's numbers from answering each other (the signature's Uganda half);
+7. Domain B's protection fails (A7);
+8. the backup, or the event-queue snapshot, is not confirmed;
+9. `sales_own_leads_only` reads ON in either copy (A5b);
+10. the pin's assistant prompt is not 5.18.89's for every conversation, on the server's own configuration (A10);
+11. **the pin's automated-send policy is not inert on the server's own configuration with the registry off (A11)** —
+    nothing refused, nothing classified, no SQL added, the Evolution sender's own policy off, and not one statement
+    reaching the database (a recording handle counts them: 0, so no registry read).
+
+The two releases' code must also copy into the container's `/tmp`, or A6, A9, A10 and A11 could not run: a NO-GO. A9
+compares how the live code and the pin's route the three numbers, as in 5.18.89. A6, A9, A10 and A11 run both releases'
+code in throwaway directories inside the container, removed at exit.
+
+**Evidence, never a stop:** A4 (the lead switches), A5b's other two switches, A3 (the Inbox's row), and **A8's count of
+salesperson numbers whose assistant is on** — production's record says none, and with the registry off nothing answers
+on one; A8 then says so in a note.
+
+**After the deploy, besides every check carried over (R1, R3–R16, V1–V12, V3–V3h, V4):**
+- **R2c** — the installed automated-send policy on the server's own configuration: inert, both copies;
+- **R3, R11** — 087 still complete; the department numbers counted, each only with its verification on the record and
+  the latest trail row recording the number held; a salesperson's number switched on with the registry off fails;
+  an assistant on is reported;
+- **R6** — 5.18.90's pieces (21 markers) beside every earlier one;
+- **R11** — `tools/channels.php`'s department-number line (*NOT all verified — sales, support*, as production will read
+  until step 1.5, or *all verified*);
+- **R17** — the installed automated-send policy on throwaway databases: on Uganda with the registry on, a salesperson's
+  number held until the department numbers are verified, then the two kept from answering each other, and nothing sent
+  with its assistant off; on Uganda with the registry off, and as South Sudan with every switch on, nothing at all.
+
+**The rollback (RB):** 5.18.90's pieces gone from every file that reached them (13 files; the two new libraries stay
+on disk, named by nothing — `deploy-hybrid.sh` copies, it never deletes); 5.18.89's Batch 2, 5.18.88's Batch 1 and
+5.18.87's Batch 0 in place; 087 as it was, with any department number verified through the card, never read with the
+switch off; the event processor 5.18.89's; the assistant's prompt 5.18.89's; the routing, the queue and Domain B as
+before.
+
+The script contains no command that changes a switch, and none that verifies, creates or switches a number on the
+plugin's data: every registry write it names is P90's, on its throwaway database.
+
+### The rehearsal — `scripts/harness/deploy-5.18.90/rehearse.sh` (1,083 lines, sha256 `74c2c6126ff2b145…`)
+
+The base is installed as production runs it after the 07 Oct pilot:
+- 5.18.89 with 086 and 087 applied by the plugin's own runner — 087's three department rows, no instance, no number;
+- the pilot's salesperson number as production has it: added through the card, switched off, its assistant off, its
+  trail as recorded (a fictitious seller and instance);
+- the authorisation and the booking WhatsApp on; the lead switches as decided on 07 Oct (capture ON, the uCRM write OFF);
+- the Inbox's row naming three fictitious numbers, with support and account sharing one instance, and naming as Evolution
+  **a recording stand-in that answers anything and logs every request**;
+- the registry's switch and 5.18.89's three switches unset;
+- an event queue with 6 events, 3 of them not done; two photos.
+
+It covers:
+- **the pin (section 0):** cut on `53d5c4d`; 29 files, 4 added, none removed; no migration and 087 the reviewed file;
+  the twenty-two files taken whole are the safety fix's (`a694161`) byte for byte, the seven ported ones differ; no
+  media-layer, portal or CSRF file; Domain B and the plugin's docs the same trees; the header's deploy command alone in
+  its block; no switch command and no number written on the plugin's data anywhere in the script;
+- **every refusal (1a–1z3):** 5.18.88 still live; the right commit with the wrong manifest; a placeholder pin; the
+  branch tip; a media-layer file; a migration; 087 one comment different; the follow-up scan without its policy; Domain
+  B, the plugin's docs, or a file outside the plugin; the registry's switch ON; own leads only ON; 087 not recorded,
+  recorded under another checksum, a salesperson's number switched on, a department number with no verification, or a
+  trigger missing; a pin whose send policy, registry or card forgets the country (South Sudan); a pin whose send policy
+  reads the registry with its switch off (A11); the code copy failing; the backup failing. A4, A5b's other two
+  switches, A3 and the pilot's assistant switched on (A8's note) are evidence, not stops;
+- **weakened copies of stage A (2a–2p):** A5, A5b, A8, A6, A7, A9, A10 and A11 each blinded and caught; A5 and A11 shown
+  to be independent layers (2a, 2a2); with the allow-list blinded, a migration is stopped by the count and an altered
+  087 by its sha256;
+- **the deploy (section 3):** the rehearsed deploy reads **65 ok / 0 failed / 0 notes**. No data is written at all —
+  every table, 087's two included, the vault, the configuration files, the photos and the queue as before — and no
+  Evolution address, key, instance name or number appears in the log;
+- **the teeth (4a–4v):** 5.18.89's WhatsApp AI screen back; the installed policy reading the registry with its switch
+  off (R1, R6, R2c, R17); the policy no longer recognising DishNet's own numbers (R17); R2c, R17, R13, R11 and V12 each
+  blinded and caught; 5.18.89's CLI back (R11); department numbers verified through the card — reported, and
+  `--after-only` still PASSES; a department trail with anything but 5.18.90's verification, or a number changed by
+  hand after it — failures; a salesperson's assistant on — reported, never a failure; a number switched on with the
+  registry off — a failure; a trigger dropped; a department row given an instance; the registry's switch ON; own leads
+  only ON; a Domain B file changed; an event deleted; the card leaked to a visitor with no session; and 087's log line:
+  OK counting 13 of 14, a PARTIAL, no line at all;
+- **5.18.88's two fixes (5a–5g):** R7 and V4, each with its control on the control;
+- **the switches after the deploy (section 6):** the uCRM write on and off again, byte for byte; **the registry's switch
+  set with the installed tool: 5.18.90 refuses it while the department numbers are not verified — nothing saved, either
+  copy (6c); once they are verified the tool accepts it, and the checks say at once that the registry is not dark
+  (6c2)** — then put back; the hand-over copy off and owned follow-ups on — reported; own leads only on — the checks say
+  so — and put back; qualification off; the Inbox's account number taken away, or moved during a run;
+- **the rollback (section 7):** typed `ROLLBACK`. RB reads 5.18.89's files and manifest, the safety fix gone, Batch 2,
+  Batch 1, Batch 0 and 5.18.86's Inbox route kept, 087's tables as they were and not read with the switch off (7b is
+  the control on the control: with the switch ON, the same check sees 5.18.89 read them), the queue and Domain B as
+  before, no data changed. 7d deploys again (PASSES); 7e rolls back with the department numbers verified (PASSES, the
+  numbers kept, read by nothing); 7f deploys over them (A8 reports them with their verification; PASSES); 7g rolls back
+  once more (PASSES). No number and no instance name is printed;
+- **what is left behind, and what was never reached (section 8):** **Evolution was never called in any of the script's
+  runs** — no instance read, created or paired, no message sent — and the control on the control: the stand-in records
+  the one request the rehearsal makes itself; the checkout as found; no weakened copy; nothing in `/tmp`; no PHP fatal
+  from the stand-in.
+
+**Results.** One run on the working copy before the commit read **334 passed, 0 failed**, 106 runs of the script
+(14:38:43–14:49:41 UTC). Then two runs on the committed script (`afd375f`), each with nothing else running:
+- **run 1: 334 passed, 0 failed**, 106 runs of the script, no FAIL line, the checkout left as found (14:52–15:03
+  UTC); its check lines are the working-copy run's, one for one, time stamps aside. Its log also holds 106 lines *No such
+  file or directory*: it was started with `REHEARSE_KEEP` naming a directory that did not exist, and the harness writes
+  each run's full output there without creating it. Only those kept copies were lost; no check reads them.
+- **run 2: 334 passed, 0 failed**, 106 runs, the same check lines as run 1, time stamps aside (15:04–15:15 UTC). Its
+  keep directory was created during section 1, so the outputs from run 12 on are kept (11 lines as above). The kept
+  deploy reads **65 ok / 0 failed / 0 notes**, *5.18.90 (deploy): PASSED*; the kept rollbacks read **41 ok / 0 failed /
+  2 notes**, *PASSED* — the notes say what the rollback takes away, and that the two new libraries stay on disk, named
+  by nothing — and 7b's control on the control fails as it must (V3f and RB, with the switch set ON).
+
+### Deployment runbook — each step is the operator's, and each needs the operator's approval first
+
+1. **Push `release/5.18.90` — NOT DONE; it needs the operator's approval, given with the deploy's.** The server fetches
+   it at deploy time. The branch `claude/study-this-jhe2eg` (the fix, the script, its rehearsal and these records) is
+   pushed already.
+2. **Deploy, as root on the server — NOT DONE; it needs the operator's approval.** It asks for `DEPLOY`. Send back the
+   **log file**, not a copy of the terminal:
+
+   `cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.90 && mkdir -p /root/dnb-5.18.90 && bash scripts/deploy-5.18.90.sh 2>&1 | tee /root/dnb-5.18.90/deploy-$(date -u +%Y%m%dT%H%M%SZ).log`
+
+   - **Expect 65 ok / 0 failed / 1 note.** The rehearsal's deploy reads 65 ok / 0 / 0; on the
+     server R3 adds the note 5.18.89's deploy had: `migration.log` holds no line for 087 (rotated away since 07 Oct
+     09:52), and R3 reads every one of 087's statements' effects from the store instead (rehearsed: 4t).
+   - Other notes would say: the salesperson number's assistant is ON (A8 — production's record says off); a lead switch
+     is not as decided on 07 Oct (A4); `ai_qualification` is off; the Inbox's row lacks a number (A3).
+   - **If a refusal stops it, nothing has changed.** The log names the refusal: send it back.
+3. **After the deploy: nothing to switch on.** Admins see *Verify number* on the department rows of the *Salesperson
+   numbers* card, and the card says they are not verified yet; nothing else a person sees changes. Run `tools/channels.php`
+   (docs/66 P3): it reads `department numbers: NOT all verified — sales, support`.
+4. **Then, and only then, docs/66 resumes — each step with its own approval, none of it here:** step 1.5 (the department
+   numbers verified on the card), the AI-to-AI loop test, and the first salesperson's number (`sales-001`, already added
+   on 07 Oct: never added again).
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.90.sh --rollback` asks for `ROLLBACK`, puts 5.18.89 (`53d5c4d`) back through `deploy-hybrid.sh`,
+and checks it (RB). The department numbers' *Verify number* goes; a department number verified through it stays in 087's
+tables, and the store's `wa_evo_numbers` stays if a verification made it — 5.18.89 reads neither while the registry is
+off. Every switch stays as it is. The rehearsed rollback reads 41 ok / 0 failed / 2 notes: both notes say what it takes
+away, and that `lib/AutomationPolicy.php` and `lib/InternalNumbers.php` stay on disk, named by nothing
+(`deploy-hybrid.sh` never deletes).
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.90.sh --rollback
+
+By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 53d5c4d && bash scripts/deploy-hybrid.sh && git checkout -`.
