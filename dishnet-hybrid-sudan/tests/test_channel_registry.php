@@ -150,6 +150,13 @@ function cr_scenario(string $root): array
     $evo = EvolutionApiService::forStore($ON, $pdo, $dir);
     $f['d_created_state'] = [$evo->channelFor('ug-sales-2'), $evo->instanceState('ug-sales-2'), $evo->instanceFor('sales-002')];
     $reg->setStatus('sales-002', 'active', 'registry test', 'switched on for the test');
+    // 5.18.90 (docs/65 §AD): until the department numbers are verified, each for its instance, a salesperson's number does
+    // not answer at all — it could not tell a department's message from a customer's. Then the route is as it was.
+    $f['d_route_gap'] = EvolutionApiService::forStore($ON, $pdo, $dir)->replyRoute('sales-002', 'ug-sales-2')['reason'];
+    foreach (['sales' => ['+256700100001', 'ug-sales'], 'support' => ['+256700100002', 'ug-support'],
+              'account' => ['+256700100003', 'ug-account']] as $dn => [$dnum, $dinst]) {
+        $reg->verifyDepartmentNumber($dn, $dnum, 'registry test', 'the test\'s department numbers', $dinst);
+    }
     $evo = EvolutionApiService::forStore($ON, $pdo, $dir);
     $ctx = $evo->channelContext('sales-002');
     $f['d6_channel_instance'] = [$evo->channelFor('ug-sales-2'), $evo->instanceFor('sales-002'), $ctx ? $ctx->role() : null,
@@ -323,6 +330,9 @@ is_($f['d6_channel_instance'] === ['sales-002', 'ug-sales-2', 'sales', 'staff', 
 is_($f['d_reply_route'] === ['match' => '', 'ok' => true, 'mismatch' => 'instance_mismatch', 'no_inbound' => 'no_inbound_instance',
                              'unknown' => 'unknown_channel', 'dept_ok' => true],
     'a reply route is confirmed only for the instance the message arrived on', $j($f['d_reply_route']));
+is_($f['d_route_gap'] === 'internal_numbers_incomplete',
+    '5.18.90: before the department numbers are verified, a salesperson\'s number does not answer (internal_numbers_incomplete)',
+    $j($f['d_route_gap']));
 foreach (['paused', 'disabled', 'retired'] as $st) {
     is_($f['d5_' . $st] === ['', 'refused', '', 'channel_' . $st, 'sales'], "5. a {$st} channel is refused in and out — and sales is untouched", $j($f['d5_' . $st]));
 }

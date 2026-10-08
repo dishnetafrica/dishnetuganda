@@ -98,6 +98,9 @@ if (!$guard->isAllowedEvent($event)) {
 // multi_number_channels_enabled). With it on, the instance resolves to a channel id through wa_channels, and a number
 // the registry knows but has switched off is refused exactly as an unknown one is — never routed to another channel.
 $evo     = EvolutionApiService::forStore($config, $pdo, $dataDir);
+// 5.18.90 (docs/65 §AD): DishNet's own numbers that live in the store — the salesperson numbers' owners, numbers saved
+// through Settings, the numbers Evolution reports — before anything below asks the policy. Registry off: nothing.
+$evo->useStaffStore($store);
 $channel = $evo->channelFor($instance);
 if ($channel === '') {
     if ($evo->instanceState($instance) === 'refused') {
@@ -308,6 +311,28 @@ foreach ($messages as $msg) {
         continue;
     }
 
+    // ── 8a2. 5.18.90 (docs/65 §AD): one of DishNet's own numbers ─────────
+    // A message from a DishNet line — a department's or a salesperson's number — or, on a salesperson's number, from a
+    // salesperson line's owner or an internal alert number, is kept for the team like a colleague's: stored above, filed
+    // 'staff', never read as an opt-out, never queued for the assistant, so no lead, no reply and no hand-over comes of
+    // it. Two DishNet assistants can therefore never answer each other, whatever the human pause says. Only with the
+    // channel registry on; registry off, nothing here runs. The log names the channel and the kind, never a number.
+    if ($evo->registryOn()) {
+        $_evoWhy = $evo->automationPolicy()->senderClass($channel, $phone);
+        if ($_evoWhy !== '') {
+            if ($convId) {
+                try {
+                    $convSvc->categorise((int)$convId, 'staff');
+                } catch (\Throwable $e) {
+                    error_log('[evo_webhook] staff category failed: ' . $e->getMessage());
+                }
+            }
+            error_log('[evo_webhook] a DishNet number (' . $_evoWhy . ') — kept for the team, nothing queued (' . $channel . ')');
+            $skipped++;
+            continue;
+        }
+    }
+
     // ── 8b. "STOP" ───────────────────────────────────────────────────────
     //
     // Recorded here, before the AI is queued, because the point of an opt-out
@@ -341,7 +366,9 @@ foreach ($messages as $msg) {
     // ── 8b2. 5.18.86 (docs/65 §D): the assistant is switched off on this number. The message is stored above and its
     // STOP read; nothing is queued for the assistant. Never true with the registry off.
     if (!$aiOnChannel) {
-        error_log('[evo_webhook] the assistant is off on this number — kept for the team, nothing queued (' . $channel . ')');
+        error_log('[evo_webhook] ' . ($evo->aiRefusal($channel) === 'internal_numbers_incomplete'
+                ? 'the department numbers are not all verified, so this number does not answer yet'
+                : 'the assistant is off on this number') . ' — kept for the team, nothing queued (' . $channel . ')');
         $skipped++;
         continue;
     }

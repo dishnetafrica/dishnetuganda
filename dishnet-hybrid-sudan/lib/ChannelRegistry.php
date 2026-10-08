@@ -279,22 +279,92 @@ final class ChannelRegistry
         if (in_array($id, self::DEPARTMENT, true)) {
             throw new \InvalidArgumentException("{$id} is a department number: its instance is configuration, not the registry's");
         }
+        $this->recordNumber($id, $number, $actor, $reason, null);
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): record a DEPARTMENT's number — sales, support or account — as Evolution reports it for the
+     * instance the configuration gives that department, so the salesperson numbers recognise it and never answer it.
+     *
+     * Only the number is recorded, beside the instance it was read from (a 'verified_instance' trail row): the instance
+     * itself stays configuration, exactly as before, and routing never reads either. A department moved to another
+     * instance afterwards counts as unverified again (InternalNumbers::gapsOf). Same rules as verifyNumber otherwise:
+     * Evolution's report, never a typed value; one number, one channel; the trail masks the number.
+     *
+     * One number, one channel — but a row that can no longer own this number gives it up, in the same transaction and
+     * with its own trail row, rather than leaving the department unverifiable for good: a RETIRED channel, or one of
+     * $releasable (the caller's departments that no longer take any instance's inbound under that number — one now
+     * covered by another department on the same instance, or moved to another instance since). Any other holder still
+     * refuses.
+     *
+     * @param string[] $releasable department ids whose hold on this number may be released
+     */
+    public function verifyDepartmentNumber(string $id, string $number, string $actor, string $reason, string $instance,
+                                           array $releasable = []): void
+    {
+        $actor = $this->actor($actor);
+        if (!in_array($id, self::DEPARTMENT, true)) throw new \InvalidArgumentException("{$id} is not a department number");
+        $inst = trim($instance);
+        if ($inst === '' || !preg_match(self::INSTANCE_PATTERN, $inst)) {
+            throw new \InvalidArgumentException("{$id} has no Evolution instance configured — nothing to verify");
+        }
+        $this->recordNumber($id, $number, $actor, $reason, $inst, array_values(array_intersect($releasable, self::DEPARTMENT)));
+    }
+
+    /**
+     * 5.18.90: the instance each department's number was verified for, from the trail (append-only, so the latest row
+     * is the current one). A department with no such row has never been verified.
+     *
+     * @return array<string,string> department id => instance
+     */
+    public function verifiedInstances(): array
+    {
+        $out = [];
+        $s = $this->pdo->query(
+            "SELECT channel_id, new_value FROM wa_channel_log WHERE action = 'verified_instance' ORDER BY id");
+        foreach ($s->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            if (in_array((string)$r['channel_id'], self::DEPARTMENT, true)) $out[(string)$r['channel_id']] = (string)$r['new_value'];
+        }
+        return $out;
+    }
+
+    /**
+     * The number, verified_at/by and the trail, in one transaction; with $instance, the instance it was read from too.
+     * $releasable (a department's verification only): rows that give the number up first — those ids, and any retired row.
+     */
+    private function recordNumber(string $id, string $number, string $actor, string $reason, ?string $instance,
+                                  array $releasable = []): void
+    {
         $row = $this->row($id);
         if ($row === null) throw new \InvalidArgumentException("no channel {$id}");
         $raw = trim($number);
         if (!preg_match('/^\+?[0-9]{8,15}$/', $raw)) throw new \InvalidArgumentException('business number: international form, 8 to 15 digits');
         $n = '+' . ltrim($raw, '+');
-        $s = $this->pdo->prepare('SELECT channel_id FROM wa_channels WHERE business_number = ? AND channel_id <> ?');
+        $s = $this->pdo->prepare('SELECT channel_id, status FROM wa_channels WHERE business_number = ? AND channel_id <> ?');
         $s->execute([$n, $id]);
-        $other = $s->fetchColumn();
-        if ($other !== false) throw new \InvalidArgumentException("that number is already channel {$other}'s");
+        $holder  = $s->fetch(\PDO::FETCH_ASSOC);
+        $release = null;
+        if (is_array($holder)) {
+            $other = (string)$holder['channel_id'];
+            if ($instance !== null && (in_array($other, $releasable, true) || (string)$holder['status'] === 'retired')) {
+                $release = $other;
+            } else {
+                throw new \InvalidArgumentException("that number is already channel {$other}'s");
+            }
+        }
         $old = $row['business_number'] ?? null;
         $this->pdo->beginTransaction();
         try {
+            if ($release !== null) {   // 5.18.90: it gives the number up first, on the record
+                $this->pdo->prepare("UPDATE wa_channels SET business_number = NULL, verified_at = NULL, verified_by = NULL,
+                                            updated_at = datetime('now') WHERE channel_id = ?")->execute([$release]);
+                $this->trailRow($release, 'number', self::mask($n), null, $actor, 'released: now the ' . $id . ' number');
+            }
             $this->pdo->prepare("UPDATE wa_channels SET business_number = ?, verified_at = datetime('now'), verified_by = ?,
                                         updated_at = datetime('now') WHERE channel_id = ?")
                       ->execute([$n, $actor, $id]);
             $this->trailRow($id, 'number', $old === null ? null : self::mask((string)$old), self::mask($n), $actor, $reason);
+            if ($instance !== null) $this->trailRow($id, 'verified_instance', null, $instance, $actor, $reason);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();

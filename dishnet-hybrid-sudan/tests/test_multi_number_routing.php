@@ -172,6 +172,10 @@ function mn_uganda(string $root, array $parts, int $ucrmPort): array
                 'role' => 'sales', 'status' => 'active', 'ai_enabled' => false], 'routing test', 'assistant off', $cm);
     $r->create(['channel_id' => 'sales-004', 'evo_instance' => 'sj-sales-4', 'display_name' => 'Sales four (switched off)',
                 'role' => 'sales', 'status' => 'disabled'], 'routing test', 'switched off', $cm);
+    // 5.18.90 (docs/65 §AD): verified as the card verifies them — sales-002's own number, and every department's for its
+    // instance. Without them no salesperson number answers at all (tests/test_pilot_safety.php proves that refusal).
+    $r->verifyNumber('sales-002', '+256700555666', 'routing test', 'verified for the test');
+    sj_verify_department_numbers($r, $cm);
 
     // ── W. Inbound ────────────────────────────────────────────────────────────────────────────────────
     if ($want('webhook')) {

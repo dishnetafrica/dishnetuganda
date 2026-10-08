@@ -69,6 +69,14 @@ $colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
 require_once $pluginRoot . '/lib/OwnedNumberHold.php';
 $ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
 
+// 5.18.90 (docs/65 §AD): with the channel registry on, nothing automated is drafted for a number that may send nothing
+// automated, or for one of DishNet's own numbers — decided before any model call, and again before an automatic
+// approval. A reason that may clear by itself (a paused number, a verification still to be done) puts the follow-up off
+// for an hour; a final one (the assistant off, the number switched off, a DishNet number) closes it, with the reason.
+// The policy reads the registry only: this file still has no way to send anything. Registry off: nothing is refused.
+require_once $pluginRoot . '/lib/AutomationPolicy.php';
+$autoPolicy = AutomationPolicy::forInstall($config, $dataDir, $pdo, $store);
+
 $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money
 $drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0; $autoSent = 0;
@@ -94,6 +102,19 @@ foreach ($svc->due($now, $perRun) as $fu) {
 
     // One pending draft at a time: a person has not read the last one yet.
     if ($svc->pendingDraft((int)$fu['id']) !== null) { $skipped++; continue; }
+
+    $why = $autoPolicy->refusal((string)$fu['channel'], (string)$fu['phone']);
+    if ($why !== '') {
+        if (AutomationPolicy::transient($why)) {
+            $svc->defer((int)$fu['id'], gmdate('Y-m-d H:i:s', strtotime($now . ' UTC') + 3600),
+                        'nothing automated on channel ' . (string)$fu['channel'] . ' now (' . $why . ')', 'policy');
+            $deferred++;
+        } else {
+            $svc->close((int)$fu['id'], $why, 'nothing automated may go to this chat on channel ' . (string)$fu['channel'], 'policy');
+            $closed++;
+        }
+        continue;
+    }
 
     $thread = $convSvc->getMessages((int)$fu['conversation_id'], 60);
     $text   = implode("\n", array_map(static fn($m) => (string)($m['body'] ?? ''), $thread));
@@ -187,6 +208,10 @@ foreach ($svc->due($now, $perRun) as $fu) {
     // what keeps those checks on the automatic path too, and leaves
     // decided_by = 'auto' in the trail so the two are told apart afterwards.
     $auto = FollowUpPolicy::mayAutoSend($verdict, $level, $config, $conv);
+    // 5.18.90 (docs/65 §AD): the model took a while; the channel is asked again before approving on nobody's say-so.
+    if ($auto['auto'] && $autoPolicy->refusal((string)$fu['channel'], (string)$fu['phone']) !== '') {
+        $auto = ['auto' => false, 'reason' => 'the channel may not send automated messages now'];
+    }
     if ($auto['auto']) {
         $ok = $svc->approve((int)$r['id'], 'auto', '', $auto['reason']);
         if (empty($ok['ok'])) {

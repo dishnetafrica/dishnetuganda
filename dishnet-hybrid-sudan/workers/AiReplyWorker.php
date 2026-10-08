@@ -50,6 +50,7 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/DishNetTools.php';
         require_once $root . '/lib/ConversationService.php';
         require_once $root . '/lib/LineOwner.php';
+        require_once $root . '/lib/AutomationPolicy.php';
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
         require_once $root . '/lib/FlyerAsset.php';
@@ -62,6 +63,7 @@ class AiReplyWorker extends WorkerBase
         // 5.18.86 (docs/65 §I): forStore() is the constructor's service unless the channel registry is on (Uganda, behind
         // multi_number_channels_enabled); then a channel id resolves through wa_channels.
         $this->evo   = EvolutionApiService::forStore($config, $this->pdo, $dataDir);
+        $this->evo->useStaffStore($store);   // 5.18.90 (docs/65 §AD): the salesperson numbers' owners, for the policy
         $this->tools = new DishNetTools($store, $config, $root);
         // One brain, one knowledge base: the same approved answers the website
         // chat uses ride into the shared system prompt. Empty (legacy) when
@@ -181,6 +183,18 @@ class AiReplyWorker extends WorkerBase
             return;
         }
 
+        // 5.18.90 (docs/65 §AD): one of DishNet's own numbers — a department's or a salesperson's line, or on a
+        // salesperson's number a line owner or an internal alert number — is never answered by the assistant: no reply,
+        // no typing, no lead, no hand-over, and no retry. The webhook stops these before they are queued; this catches one
+        // queued before the deploy, by the media worker, or by any other route. Registry off: never true. No number logged.
+        if ($this->evo->registryOn()) {
+            $own = $this->evo->automationPolicy()->senderClass($channel, $phone);
+            if ($own !== '') {
+                $this->log('info', "conv {$convId}: a DishNet number ({$own}) on channel {$channel} — kept for the team, not answered by the AI");
+                return;
+            }
+        }
+
         // 5.18.86 (docs/65 §I, §J): which number this is, and whether a reply may leave on it. With the channel registry
         // off — the default, and every install but Uganda — the channel IS the role, exactly as before, and nothing here
         // runs. With it on, the channel id resolves through wa_channels to the role the brain plays and to the instance a
@@ -192,6 +206,8 @@ class AiReplyWorker extends WorkerBase
         if ($this->evo->registryOn()) {
             $this->lineOwner = \LineOwner::of($this->evo->channelContext($channel), $this->store, $this->config,
                                               $this->dataDir !== '' ? $this->dataDir : null);
+            // 5.18.90 (docs/65 §AD): the automated-send policy, read fresh, before the model is asked or anything shown.
+            if ($this->refusedByPolicy($this->evo->automationPolicy()->refusal($channel, $phone), $convId, $channel, $phone)) return;
         }
 
         // A colleague has this conversation. The question is not dropped —
@@ -236,6 +252,11 @@ class AiReplyWorker extends WorkerBase
 
         // ── Point of no return ───────────────────────────────────────────
         $send = $this->evo->sendText($channel, $phone, $reply, ContactOptOut::CLASS_REPLY);
+        if (\EvolutionApiService::policyRefused($send)) {
+            // 5.18.90 (docs/65 §AD): refused at the send itself — nothing left, from any number. Never a retry.
+            $this->refusedByPolicy(\EvolutionApiService::policyReason($send), $convId, $channel, $phone);
+            return;
+        }
         if (!$send['ok']) {
             // 5.18.54 (docs/46 row 31, N-1), Uganda: throwing hands the event back to EventBus, which asks the AI again
             // and sends again. When the reply may already have reached the customer, that is a second answer: a person
@@ -1482,14 +1503,39 @@ class AiReplyWorker extends WorkerBase
         if (!$this->evo->registryOn()) return $channel;
         $route = $this->evo->replyRoute($channel, $inboundInstance);
         if ($route['ok']) return $route['context']->role();
-        if ($route['reason'] === 'ai_disabled') {
-            $this->log('info', "conv {$convId}: the assistant is off on channel {$channel} — kept for the team, not answered");
+        if ($route['reason'] === 'ai_disabled' || $route['reason'] === 'internal_numbers_incomplete') {
+            $this->log('info', "conv {$convId}: " . ($route['reason'] === 'ai_disabled' ? 'the assistant is off'
+                : 'the department numbers are not all verified') . " on channel {$channel} — kept for the team, not answered");
             return null;
         }
         $this->log('warn', "conv {$convId}: reply NOT sent on channel {$channel} — {$route['reason']}; handed to a person");
         $this->escalate($convId, $channel, $phone,
             'no reply sent: the number for this chat could not be confirmed (' . $route['reason'] . ')', true);
         return null;
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): what a refusal by the automated-send policy means for this turn. '' → false, go on.
+     * Silent reasons (the recipient is DishNet's own, the assistant is off, the department numbers are not recorded) →
+     * true, and the team has the message. A registry that could not be read → throw: EventBus retries, nothing having been
+     * sent. Anything else — the number paused, switched off, moved or not verified since this process read the registry —
+     * → true, and a person is told, exactly as a refused reply route is; the customer gets no holding line from a number
+     * that may not be the one they wrote to. Never sent from another number.
+     */
+    private function refusedByPolicy(string $why, int $convId, string $channel, string $phone): bool
+    {
+        if ($why === '') return false;
+        if (\AutomationPolicy::silent($why)) {
+            $this->log('info', "conv {$convId}: nothing automated on channel {$channel} ({$why}) — kept for the team, not answered");
+            return true;
+        }
+        if ($why === 'registry_unreadable') {
+            throw new \RuntimeException('the channel registry could not be read; nothing was sent');
+        }
+        $this->log('warn', "conv {$convId}: reply NOT sent on channel {$channel} — refused by the automated-send policy ({$why}); handed to a person");
+        $this->escalate($convId, $channel, $phone,
+            'no reply sent: this chat\'s number may not send the assistant\'s reply now (' . $why . ')', true);
+        return true;
     }
 
     /**
@@ -1504,7 +1550,8 @@ class AiReplyWorker extends WorkerBase
         return [
             'channel_id'          => $ctx->id(),
             'channel_role'        => $ctx->role(),
-            'source_number'       => $ctx->businessNumber(),
+            // 5.18.90: a department's number is recorded now (docs/65 §AD) but its leads stay as they were — no number.
+            'source_number'       => $ctx->isDepartment() ? null : $ctx->businessNumber(),
             'channel_owner_type'  => $ctx->ownerType(),
             'channel_owner_id'    => $ctx->ownerId(),
             'territory_region_id' => $ctx->territoryRegionId(),

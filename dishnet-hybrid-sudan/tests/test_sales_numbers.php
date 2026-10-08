@@ -344,6 +344,9 @@ function sn_unit(string $root): array
     $evo = new SnEvo($UG);
     $evo->instances = [
         ['name' => 'ug-sales', 'state' => 'open', 'connected' => true, 'phone' => '256700000901', 'profile' => ''],
+        // 5.18.90 (docs/65 §AD): the other two department instances, so their numbers can be verified on the screen.
+        ['name' => 'ug-support', 'state' => 'open', 'connected' => true, 'phone' => '256700000903', 'profile' => ''],
+        ['name' => 'ug-account', 'state' => 'open', 'connected' => true, 'phone' => '256700000904', 'profile' => ''],
         ['name' => 'sn-sales-1', 'state' => 'open', 'connected' => true, 'phone' => '256700000201', 'profile' => ''],
         ['name' => 'sn-new', 'state' => 'open', 'connected' => true, 'phone' => '256700000601', 'profile' => ''],
         ['name' => 'sn-off', 'state' => 'close', 'connected' => false, 'phone' => '', 'profile' => ''],
@@ -390,6 +393,10 @@ function sn_unit(string $root): array
     $setActive($seller, false);
     $f['u9_on_owner_gone']   = [$act($ON, 'sn_status', ['channel_id' => 'sales-006', 'status' => 'active'])['ok'], $row('sales-006')['status'] ?? null];
     $setActive($seller, true);
+    // 5.18.90 (docs/65 §AD): switch-on also waits for the department numbers, verified on the screen for their instances.
+    $f['u9_on_no_departments'] = [$act($ON, 'sn_status', ['channel_id' => 'sales-006', 'status' => 'active'])['ok'], $row('sales-006')['status'] ?? null];
+    $f['u9_verify_departments'] = array_map(function ($d) use ($act, $UG) { return $act($UG, 'sn_verify_department', ['channel_id' => $d])['ok']; },
+                                            ['sales', 'support', 'account']);
     $f['u9_on'] = [$act($ON, 'sn_status', ['channel_id' => 'sales-006', 'status' => 'active', 'reason' => 'the pilot'])['ok'], $row('sales-006')['status'] ?? null,
                    (sn_last($trail('sales-006'))['reason'] ?? null)];
     $f['u9_ai'] = [$act($ON, 'sn_ai', ['channel_id' => 'sales-006', 'value' => '0'])['ok'], (int)($row('sales-006')['ai_enabled'] ?? 9),
@@ -503,6 +510,11 @@ function sn_uganda(string $root, array $parts): array
                    'sales numbers test', 'a salesperson with no phone on record', $cm);
     $reg()->create(['channel_id' => 'sales-004', 'evo_instance' => 'sn-sales-4', 'display_name' => 'Sales — paused', 'role' => 'sales',
                     'owner_type' => 'staff', 'owner_staff_id' => $A, 'status' => 'paused'], 'sales numbers test', 'paused', $cm);
+    // 5.18.90 (docs/65 §AD): verified as the card verifies them — each salesperson number's own, and every department's for
+    // its instance. Without them no salesperson number answers (tests/test_pilot_safety.php proves the refusal).
+    $reg()->verifyNumber('sales-001', '+256700588021', 'sales numbers test', 'verified for the test');
+    $reg()->verifyNumber('sales-002', '+256700588022', 'sales numbers test', 'verified for the test');
+    sj_verify_department_numbers($reg(), $cm);
 
     $now = date('Y-m-d H:i:s'); $today = date('Y-m-d'); $yesterday = date('Y-m-d', time() - 86400);
     $old = date('Y-m-d H:i:s', time() - 80 * 3600);
@@ -663,11 +675,14 @@ function sn_uganda(string $root, array $parts): array
 
     // ── H. The webhook guard ───────────────────────────────────────────────────────────────────────────────────────
     if ($want('guard')) {
+        // 5.18.90 (docs/65 §AD): Evolution reports the numbers that were verified — the guard records what it reports,
+        // and another number for a verified instance would be a re-pair, which stops the salesperson numbers.
         $live = function (string $state) {
             $rows = [];
-            foreach (['sj-sales', 'sj-support', 'sj-account', 'sn-sales-1', 'sn-sales-4'] as $i => $n) {
+            foreach (['sj-sales' => '256700588011', 'sj-support' => '256700588012', 'sj-account' => '256700588013',
+                      'sn-sales-1' => '256700588021', 'sn-sales-4' => '256700000704'] as $n => $num) {
                 $rows[] = ['name' => $n, 'connectionStatus' => ($n === 'sn-sales-1' ? $state : 'open'),
-                           'ownerJid' => sprintf('2567000007%02d@s.whatsapp.net', $i), 'profileName' => 'SN'];
+                           'ownerJid' => $num . '@s.whatsapp.net', 'profileName' => 'SN'];
             }
             return $rows;
         };
@@ -698,7 +713,10 @@ function sn_uganda(string $root, array $parts): array
         $flag(false);
         $instances([
             ['name' => 'sj-sales', 'connectionStatus' => 'open', 'ownerJid' => '256700000901@s.whatsapp.net', 'profileName' => 'SN'],
-            ['name' => 'sn-sales-1', 'connectionStatus' => 'open', 'ownerJid' => '256700000902@s.whatsapp.net', 'profileName' => 'SN'],
+            ['name' => 'sj-support', 'connectionStatus' => 'open', 'ownerJid' => '256700000903@s.whatsapp.net', 'profileName' => 'SN'],
+            ['name' => 'sj-account', 'connectionStatus' => 'open', 'ownerJid' => '256700000904@s.whatsapp.net', 'profileName' => 'SN'],
+            // 5.18.90: sales-001's instance reports the number it was verified with — another would be a re-pair (docs/65 §AD).
+            ['name' => 'sn-sales-1', 'connectionStatus' => 'open', 'ownerJid' => '256700588021@s.whatsapp.net', 'profileName' => 'SN'],
             ['name' => 'sn-new', 'connectionStatus' => 'open', 'ownerJid' => '256700000701@s.whatsapp.net', 'profileName' => 'SN'],
             ['name' => 'sn-off', 'connectionStatus' => 'close', 'ownerJid' => '', 'profileName' => 'SN'],
         ]);
@@ -738,6 +756,9 @@ function sn_uganda(string $root, array $parts): array
         $f['s_webhook'] = [$post(['wa_action' => 'sn_webhook', 'channel_id' => 'sales-005']),
                            strpos((string)($evoState()['webhooks']['sn-new']['url'] ?? ''), 'https://plugin.example.test/public.php?page=evo_webhook&token=') === 0,
                            strpos($s->page('admin', $qs), $s->evoKey) === false];
+        // 5.18.90 (docs/65 §AD): the department numbers verified on the card, the registry still off.
+        $f['s_verify_departments'] = array_map(function ($d) use ($post) { return $post(['wa_action' => 'sn_verify_department', 'channel_id' => $d]); },
+                                               ['sales', 'support', 'account']);
         $f['s_on_registry_off'] = [$post(['wa_action' => 'sn_status', 'channel_id' => 'sales-005', 'status' => 'active']), $chan('sales-005')['status'] ?? null];
         $flag(true);
         $f['s_on_unverified'] = [$post(['wa_action' => 'sn_status', 'channel_id' => 'sales-006', 'status' => 'active']), $chan('sales-006')['status'] ?? null];
@@ -991,6 +1012,8 @@ is_($u['u9_webhook'][0] && strpos((string)$u['u9_webhook'][1], 'SN-HOOK-SECRET')
 is_($u['u9_on_registry_off'] === [false, 'disabled'], 'not switched on while the registry is off', $j($u['u9_on_registry_off']));
 is_($u['u9_on_unverified'] === [false, 'disabled'], 'not switched on before its number is verified', $j($u['u9_on_unverified']));
 is_($u['u9_on_owner_gone'] === [false, 'disabled'], 'not switched on while its owner is not active', $j($u['u9_on_owner_gone']));
+is_($u['u9_on_no_departments'] === [false, 'disabled'], '5.18.90: not switched on before the department numbers are verified', $j($u['u9_on_no_departments']));
+is_($u['u9_verify_departments'] === [true, true, true], '5.18.90: the three department numbers verified on the screen, the registry off', $j($u['u9_verify_departments']));
 is_($u['u9_on'] === [true, 'active', 'the pilot'], 'switched on, with the reason in the trail', $j($u['u9_on']));
 is_($u['u9_ai'] === [true, 0, true, 1], 'the assistant off and on', $j($u['u9_ai']));
 is_($u['u9_owner'] === [false, true, true], 'a new owner: a salesperson only', $j($u['u9_owner']));
@@ -1076,6 +1099,8 @@ is_(strpos($g['s_verify_off'][0], 'no: Not connected yet') === 0 && $g['s_verify
 is_($g['s_verify'][0] && $g['s_verify'][1] === '+256700000701' && strpos((string)$g['s_verify'][2], 'Sandbox Admin (#') === 0 && $g['s_verify'][3],
     'verify: Evolution\'s number written, the page showing it masked', $j($g['s_verify']));
 is_(strpos($g['s_webhook'][0], 'ok: ') === 0 && $g['s_webhook'][1] && $g['s_webhook'][2], 'the webhook registered, the secret on no page', $j($g['s_webhook']));
+is_(count(array_filter((array)($g['s_verify_departments'] ?? []), function ($m) { return strpos((string)$m, 'ok: Verified: the ') === 0; })) === 3,
+    '5.18.90: the department numbers are verified on the card, each for its own instance', $j($g['s_verify_departments'] ?? null));
 is_(strpos($g['s_on_registry_off'][0], 'no: Not yet') === 0 && $g['s_on_registry_off'][1] === 'disabled', 'not switched on while the registry is off', $j($g['s_on_registry_off']));
 is_(strpos($g['s_on_unverified'][0], 'no: Verify the number first') === 0 && $g['s_on_unverified'][1] === 'disabled', 'not before its number is verified', $j($g['s_on_unverified']));
 is_(strpos($g['s_on'][0], 'ok: ') === 0 && $g['s_on'][1] === 'active', 'switched on', $j($g['s_on']));
