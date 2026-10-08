@@ -1,7 +1,8 @@
 # 66 — The salesperson pilot: one number, on its own, end to end (runbook, 07 Oct 2026)
 
-**What this is.** The operator's procedure for the first salesperson's own WhatsApp number on production. **Nothing in
-it has been run.** Every step is the operator's, in this order, and each one is verified before the next.
+**What this is.** The operator's procedure for the first salesperson's own WhatsApp number on production. **Only step
+1.1 (Add) and the card's Assistant off have been run, on 07 Oct** (the second correction below). Every step is the
+operator's, in this order, and each one is verified before the next.
 
 **Corrected 08 Oct (5.18.90, docs/65 §AD) — the pilot was stopped before step 5.** Two defects were found in 5.18.89,
 the release this runbook was first written for:
@@ -9,6 +10,12 @@ the release this runbook was first written for:
   the plugin did not know DishNet's own numbers;
 - **follow-ups ignored the number's assistant switch** — with the assistant off, an automatic follow-up could still leave
   from the salesperson's number.
+
+**Corrected 08 Oct (5.18.90's release preparation) — what production already holds.** As recorded on 07 Oct, 21:38–21:47
+UTC, and not read again since: step 1.1 was done at 20:54 UTC — `sales-001` exists, instance [PILOT_INSTANCE], owner [the
+salesperson] — and at 21:40 its assistant was switched off on the card. Nothing else was done: no QR code, no
+verification, no webhook, the registry not switched on. **`sales-001` is never added again:** step 1 continues at 1.2,
+and the checks below expect it.
 
 **5.18.90 must be live before step 1.** It is its own release, push and deploy, each approved separately; none of that is
 in this runbook. Everything below is then a setting, a card on the WhatsApp AI screen, or a read-only check.
@@ -21,7 +28,7 @@ The design is docs/65 §AA (and §AB, as built); the decisions taken on 07 Oct e
 |---|---|
 | **[the salesperson]** | the pilot salesperson the operator chose on 07 Oct |
 | **[PILOT_INSTANCE]** | the Evolution instance that will carry their number |
-| **sales-001** | the channel id the card will give the number. The card assigns the next free `sales-NNN`; production's registry holds only the three department rows, so it will be `sales-001`. Step 1's message confirms it. |
+| **sales-001** | the channel id the card gave the number on 07 Oct (step 1.1, done). P3 confirms it. |
 | **••••NN** | the last two digits of the number, as the card and `tools/channels.php` show it |
 | **the test phone** | a phone used to play the customer. WhatsApp from these is kept for the team and never answered, so the test phone must be **none** of them: an active admin, support or accounts staff member's number on record (5.18.50); any DishNet WhatsApp number — sales, support, account, or a salesperson's number; the phone on record of a salesperson who owns a number; the alert numbers (`alert_whatsapp`, `whatsapp_admin_phone`) (5.18.90). A sales colleague who owns no number works. |
 
@@ -79,19 +86,21 @@ Expect, before step 1:
 docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/channels.php
 ```
 
-Expect: the switch OFF, not in effect, installed; exactly three rows — `sales`, `support`, `account` — each routed as
-configured, with support and account sharing their instance as today. No `sales-NNN` row. The last line reads
+Expect: the switch OFF, not in effect, installed; the three department rows — `sales`, `support`, `account` — each
+routed as configured, with support and account sharing their instance as today; and `sales-001` (step 1.1, 07 Oct):
+status `disabled`, `ai=off`, instance [PILOT_INSTANCE], no number. No other `sales-NNN` row. The last line reads
 `department numbers: NOT all verified — sales, support` until step 1.5, and `department numbers: all verified for their
 instances` after it.
 
-**P4. The instance.** On the WhatsApp AI screen, *Found in Evolution* lists [PILOT_INSTANCE], marked as no number's.
+**P4. The instance.** On the WhatsApp AI screen, *Found in Evolution* lists [PILOT_INSTANCE], marked as in use by
+`sales-001`.
 Then:
 
 ```
 docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/channels.php --resolve [PILOT_INSTANCE]
 ```
 
-Expect `UNKNOWN`: today the plugin stores nothing that arrives on it.
+Expect `UNKNOWN`: with the registry off the plugin stores nothing that arrives on it.
 
 ---
 
@@ -99,9 +108,9 @@ Expect `UNKNOWN`: today the plugin stores nothing that arrives on it.
 
 WhatsApp AI screen → **Salesperson numbers**. Every action asks for a reason; give one.
 
-1. **Add** — instance [PILOT_INSTANCE], owner [the salesperson], display name as offered (*"Sales — [their name]"*).
-   Expect *"Added sales-001 for … It is switched off: pair it, verify its number and register its webhook, then switch
-   it on."*
+1. **Add** — **done on 07 Oct; never again.** It was: instance [PILOT_INSTANCE], owner [the salesperson], display name
+   as offered, and the card answered *"Added sales-001 for … It is switched off: pair it, verify its number and register
+   its webhook, then switch it on."* A second Add would make another channel. Continue at 2, for `sales-001`.
 2. **Show QR code** — [the salesperson] scans it on their phone: WhatsApp → Linked devices → Link a device.
 3. **Verify number** — expect *"Verified: … the number ending ••••NN, as Evolution reports it."* **The two digits must be
    the confirmed number's.** If they are not, the wrong phone was paired: STOP, and unlink that device in WhatsApp. The
@@ -139,7 +148,8 @@ The trail:
 docker exec ucrm php /data/ucrm/data/plugins/dishnet-hybrid-sudan/tools/channels.php --trail sales-001
 ```
 
-Expect two rows: `created`, then `number`, each with the admin's name. `--trail sales` and `--trail support` each show a
+Expect three rows: `created` and `ai_enabled` (off) from 07 Oct, then `number`, each with the admin's name.
+`--trail sales` and `--trail support` each show a
 `number` row and a `verified_instance` row.
 
 **What customers see:** nothing new. Messages reach [the salesperson]'s phone as always. The plugin answers
@@ -193,7 +203,8 @@ Check with P2: both `"1"`.
 ## 4. The pilot number ON — the assistant OFF first
 
 On the card, for sales-001:
-1. **Assistant off** — expect *"The assistant no longer answers on … messages are kept."*
+1. **Assistant off** — already off since 07 Oct: P3 must read `ai=off`. Only if it does not, press it, and expect *"The
+   assistant no longer answers on … messages are kept."*
 2. **Switch on** — refused unless the registry is on, the number verified, its owner active and the department numbers
    verified (step 1.5). Expect *"… is switched on."*
 
@@ -242,7 +253,7 @@ On the card, for sales-001: **Assistant on**.
 | hand-over | [the salesperson]'s phone; the central number; the Inbox | an alert from the DishNet sales number to both; the chat waiting for a person |
 | follow-up | the follow-up queue, once a chat on the number has gone quiet for the policy's period | an approved one sent from the pilot number. It cannot be tested at once. |
 | lead creation, ownership | Sales → Leads | [the salesperson]'s, channel `sales-001` |
-| channel audit | `channels.php --trail sales-001` | created, number, ai_enabled (off), status (active), ai_enabled (on) — each with the admin's name |
+| channel audit | `channels.php --trail sales-001` | created, ai_enabled (off — 07 Oct), number, status (active), ai_enabled (on) — each with the admin's name |
 | DishNet numbers | step 5's loop test; the Inbox | a message from any DishNet number — a department's, a salesperson's, an owner's phone, the alert number — kept for the team, filed `staff`, never answered |
 | assistant off | the card's **Assistant off**; the follow-up queue | no assistant reply, no typing indicator, no follow-up opened, drafted, approved or sent — an approved one is closed `channel_assistant_disabled`; a person's Inbox reply still leaves from the pilot number |
 | no cross-visibility | Sales → Leads as another salesperson | none of [the salesperson]'s leads |
