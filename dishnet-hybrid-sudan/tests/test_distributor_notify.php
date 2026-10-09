@@ -215,7 +215,7 @@ is_(($nullSend['sent'] ?? null) === false, 'the Null channel sends nothing');
 
 echo "\nK. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.90', 'manifest version is 5.18.71');
+is_(($mani['information']['version'] ?? '') === '5.18.91', 'manifest version is 5.18.71');
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";
