@@ -8297,7 +8297,8 @@ and a separate skeptic challenged each item they flagged. Proved: the version be
 salesperson number active, South Sudan and Domain B. What the log does not prove, and stays recorded:
 - **The pasted text is a copy of the terminal, not the `tee`'d log file.** It holds the typed `DEPLOY`, which `tee`
   never sees, and it ends at the verdict, without the rollback block the file holds. The checks are all there and agree
-  with the script's own tally. The file on the server settles it.
+  with the script's own tally. The file on the server settles it. **Settled 09 Oct:**
+  `/root/dnb-5.18.90/deploy-20261008T155100Z.log` holds 172 lines, the whole run, rollback block included.
 - **R13's "kept=0/0" compared an empty set:** no event was pending. The evidence that nothing was lost is the queue's
   totals, 8,463 done before and after.
 - **R3 and R11 re-read 087's counts, not its rows.** The script has no statement that writes them — it only reads the
@@ -8306,15 +8307,29 @@ salesperson number active, South Sudan and Domain B. What the log does not prove
   not run. It was run in the rehearsal (6c, 6c2) and in `test_pilot_safety`.
 - **`deploy-hybrid.sh` copies the checkout's working tree** under the plugin, not only the files git tracks, and every
   check reads the tracked files. A file git does not track there would be copied unseen. This is the copy every release
-  since 5.18.66 has used. Listing the untracked files settles it.
+  since 5.18.66 has used. Listing the untracked files settles it. **Settled 09 Oct:** `git ls-files --others` under the
+  plugin, leaving out `data/`, lists nothing — the copy was exactly `3d9cb5f`'s tracked files.
 - **Two helpers carried over since 5.18.66** (`photo_tables_state`, `dist_tables_state`) open `plugin.sqlite3` as the
   container's default user, read-write, not as the database's owner read-only, as every other read does. No incident
   has been seen in any deploy since. The owners of the files beside the database settle whether one was left; the next
-  deploy script should read them as the others do.
+  deploy script should read them as the others do. **Settled 09 Oct:** no `-wal` or `-shm` file beside the live
+  `plugin.sqlite3`, and every file listed is owned by `1000:1000`, as the database is. Nothing was left.
 - **Before the deploy, the AI settings counted one key more in each copy than on 07 Oct** (`files=25 store=24`, against
   `24/23` in 5.18.89's log). This run changed nothing there (V3g). Only an admin's save — the WhatsApp AI screen or one
   of the setting tools — adds a key; neither the card nor any deploy does. Which key it is was not established, because
   the log names none.
+- **Found by the same 09 Oct listing, older than this release: a second `plugin.sqlite3`** inside the plugin's own
+  `data/` folder — 2.4 MB, owned `1000:1000`, last written 07 Oct 09:55 UTC, three minutes after 5.18.88's deploy. The
+  live store is `.dishnet-hybrid-sudan-data/plugin.sqlite3` (33.6 MB, written at 05:40 on 09 Oct), named by
+  `ucrm.json`'s `pluginDataDir`. Every reader that can read `ucrm.json` uses it: the deploy's checks did, since R11 saw
+  the salesperson number added on 07 Oct evening, which the stray file predates.
+  - What wrote the stray file is NOT ESTABLISHED. `getDataDir()` falls back to the plugin's own `data/` only when
+    `ucrm.json` gives no `pluginDataDir` to the process reading it.
+  - **It disarms the command-line guard.** `cliDataDir()` refuses that fallback (*"THIS IS NOT WHERE THE DATA LIVES"*)
+    only while no `plugin.sqlite3` exists there. A tool that took the fallback now would read the stray file in
+    silence.
+  - Left in place, unread and untouched: removing it is a production change of its own, and it is the only evidence of
+    what created it.
 
 ### Rollback — its own command, never pasted with the deploy
 
