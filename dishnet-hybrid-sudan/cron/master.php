@@ -65,17 +65,22 @@ $_m_config  = $_m_store->load('kyc_config.json') ?? [];
 // server restart). register_shutdown_function does not fire on SIGKILL.
 // In that case delete the stale file and re-acquire instead of skipping.
 // 30 min is safe — even slow runs (LTE sync) finish under 5 min.
-$lockFile      = $dataDir . '/cron_master.lock';
+// 5.18.92: the lock is $_m_lockFp and $_m_lockFile, prefixed as the store and the config above are, because every job
+// below runs in this scope. Twelve of them assign $lockFp and $lockFile — this lock's names until now — for their own
+// locks, and close them on their way out. The release at the end then unlocked that job's closed handle: a TypeError
+// on PHP 8, fatal under the admin pages' piggyback run, which includes this file from a shutdown function with nothing
+// to catch it — "cron/master.php:405" on the server, under 5.18.89, 5.18.90 and 5.18.91 alike (docs/07, 5.18.92).
+$_m_lockFile   = $dataDir . '/cron_master.lock';
 $LOCK_MAX_SECS = 1800;
 
-if (file_exists($lockFile) && (time() - filemtime($lockFile)) > $LOCK_MAX_SECS) {
+if (file_exists($_m_lockFile) && (time() - filemtime($_m_lockFile)) > $LOCK_MAX_SECS) {
     error_log('[cron_master] Stale cron_master.lock detected (>30min) — auto-clearing');
-    @unlink($lockFile);
+    @unlink($_m_lockFile);
 }
 
-$lockFp = fopen($lockFile, 'w+');
-if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
-    fclose($lockFp);
+$_m_lockFp = fopen($_m_lockFile, 'w+');
+if (!flock($_m_lockFp, LOCK_EX | LOCK_NB)) {
+    fclose($_m_lockFp);
     return; // another instance running — normal, skip
 }
 
@@ -83,12 +88,12 @@ if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
 // 5.18.51: the normal end below releases and closes the lock itself, and unlocking a closed handle is a TypeError on
 // PHP 8 that @ does not silence. It was fatal after every completed run (4–9 an hour on the server) and stopped every
 // shutdown function registered after this one (docs/44 §16.11). is_resource() is false for a closed handle.
-register_shutdown_function(function() use ($lockFp, $lockFile) {
-    if (is_resource($lockFp)) {
-        @flock($lockFp, LOCK_UN);
-        @fclose($lockFp);
+register_shutdown_function(function() use ($_m_lockFp, $_m_lockFile) {
+    if (is_resource($_m_lockFp)) {
+        @flock($_m_lockFp, LOCK_UN);
+        @fclose($_m_lockFp);
     }
-    @touch($lockFile); // reset mtime
+    @touch($_m_lockFile); // reset mtime
 });
 
 // ── Load schedule state ───────────────────────────────────────────────────────
@@ -402,8 +407,12 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
 }
 
 // ── Release lock ──────────────────────────────────────────────────────────────
-flock($lockFp, LOCK_UN);
-fclose($lockFp);
+// 5.18.92: master's own handle, by its own name (see the lock above). Only if it is still open: should anything ever
+// close it, the shutdown handler has nothing left to do, and a closed handle here must not be a fatal again.
+if (is_resource($_m_lockFp)) {
+    flock($_m_lockFp, LOCK_UN);
+    fclose($_m_lockFp);
+}
 
 if (!empty($_m_ran)) {
     $_m_total_sec = round(time() - $_m_now);
