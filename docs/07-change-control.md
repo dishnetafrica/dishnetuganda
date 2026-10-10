@@ -8364,7 +8364,7 @@ away, and that `lib/AutomationPolicy.php` and `lib/InternalNumbers.php` stay on 
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 53d5c4d && bash scripts/deploy-hybrid.sh && git checkout -`.
 
-## 09 Oct — 5.18.91: the database safety fix, Uganda only — the Starlink retry job no longer opens the stray `plugin.sqlite3` inside the plugin folder; it is NOT pointed at the live store; no migration; South Sudan and Domain B unchanged. `release/5.18.91` = `dfad4d9`, cut on live 5.18.90 (`3d9cb5f`); `scripts/deploy-5.18.91.sh` pinned to it and rehearsed — PUSHED 10 Oct 02:50 UTC; DEPLOYED, copy stamped 02:53 UTC (the deploy run's log not yet received); `--after-only` 03:14 UTC: R19 PASSED, V4 FAILED on a fatal that the code places outside this release (not yet confirmed on the server)
+## 09 Oct — 5.18.91: the database safety fix, Uganda only — the Starlink retry job no longer opens the stray `plugin.sqlite3` inside the plugin folder; it is NOT pointed at the live store; no migration; South Sudan and Domain B unchanged. `release/5.18.91` = `dfad4d9`, cut on live 5.18.90 (`3d9cb5f`); `scripts/deploy-5.18.91.sh` pinned to it and rehearsed — PUSHED 10 Oct 02:50 UTC; DEPLOYED, copy stamped 02:53 UTC (the deploy run's log not yet received); `--after-only` 03:14 UTC: R19 PASSED, V4 FAILED on `cron/master.php:405`, a fatal older than this release (confirmed on the server: 7 lines since 08 Oct, 4 of them before 5.18.91)
 
 **Approval.** The operator approved, on 09 Oct: *"APPROVED: IMPLEMENT THE UGANDA-ONLY 5.18.91 DATABASE SAFETY FIX AND
 PREPARE THE RELEASE."* — the fix, its regression tests, commits, and the development branch's push where needed to
@@ -9262,7 +9262,7 @@ is printed in the deploy's log, on its own line).
   - This is one completed run of the fixed job, about 17 minutes after the copy.
 
 **V4 — what it is.** This is by the code, read in the repository on 10 Oct by a read-only workflow of three
-investigators and two skeptics. **The server's file and line have not been read.**
+investigators and two skeptics. The server's file and line were read afterwards: see *Confirmed on the server* below.
 - **The candidate: `cron/master.php:405`.** Master opens its lock into `$lockFp` and includes every job in its own
   scope with a bare `include`. Twelve of its jobs assign `$lockFp` at their top level and close it on every normal exit,
   among them the 60-second `wa_sync` (`cron_wa_sync.php:33`) and `crm_sync` (`cron_sync.php:46`). After the job loop,
@@ -9284,11 +9284,23 @@ investigators and two skeptics. **The server's file and line have not been read.
   - Why it is seen only now: the 5.18.88–5.18.90 deploy-run V4 windows were 60 s, and before 5.18.88 an
     `--after-only` V4 read nothing. This is the first post-deploy window that is long enough and includes admin page
     loads.
-- **Not established.** It has not been observed that these lines are `master.php:405`, that they come from the
-  piggyback, or that the same lines appeared under 5.18.90. One skeptic held that open. It noted that every line
-  docs/44 read on 5.18.50 was at the shutdown handler (`:83`), never at the final release, so whether a run ends on a
-  closed handle depends on the server's state. **The read-only check is to count the message per hour, by file and line,
-  since 08 Oct.**
+- **Confirmed on the server, 10 Oct.** The operator ran the read-only count, by hour and by file and line, since
+  08 Oct. Its output carries no message text:
+
+  | Hour (UTC) | Lines | Where | Live then |
+  |---|---|---|---|
+  | 08 Oct 01 | 1 | `cron/master.php:405` | 5.18.89 |
+  | 08 Oct 06 | 1 | `cron/master.php:405` | 5.18.89 |
+  | 08 Oct 19 | 1 | `cron/master.php:405` | 5.18.90 (deployed 15:52) |
+  | 09 Oct 19 | 1 | `cron/master.php:405` | 5.18.90 |
+  | 10 Oct 02 | 1 | `cron/master.php:405` | 5.18.91 (02:59:14, after the copy at 02:53:29) |
+  | 10 Oct 03 | 1 | `cron/master.php:405` | 5.18.91 |
+  | 10 Oct 04 | 1 | `cron/master.php:405` | 5.18.91, after the `--after-only` run |
+
+  **Every line is `master.php:405`, and four came before 5.18.91 was installed.** The fatal is older than 5.18.91, as
+  the code said. About one every few hours is far fewer than master's runs, consistent with the piggyback path being
+  the one that does not catch it: an admin page load, at most once per 5 minutes. **That path is still inferred**: the
+  stack frames were not printed. The fix is 5.18.92 (the entry below).
 - **The effect, by the code.** No job's work is lost: the schedule is saved after each job, and the admin page has
   already been sent. The rest of that piggyback closure and the shutdown functions registered after it are skipped,
   among them master's own lock handler and SQLite's passive checkpoints. PHP releases the lock when the request ends.
