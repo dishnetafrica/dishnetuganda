@@ -8364,7 +8364,7 @@ away, and that `lib/AutomationPolicy.php` and `lib/InternalNumbers.php` stay on 
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 53d5c4d && bash scripts/deploy-hybrid.sh && git checkout -`.
 
-## 09 Oct — 5.18.91: the database safety fix, Uganda only — the Starlink retry job no longer opens the stray `plugin.sqlite3` inside the plugin folder; it is NOT pointed at the live store; no migration; South Sudan and Domain B unchanged. `release/5.18.91` = `dfad4d9`, cut on live 5.18.90 (`3d9cb5f`); `scripts/deploy-5.18.91.sh` pinned to it and rehearsed — PREPARED; `release/5.18.91` NOT pushed; NOT deployed
+## 09 Oct — 5.18.91: the database safety fix, Uganda only — the Starlink retry job no longer opens the stray `plugin.sqlite3` inside the plugin folder; it is NOT pointed at the live store; no migration; South Sudan and Domain B unchanged. `release/5.18.91` = `dfad4d9`, cut on live 5.18.90 (`3d9cb5f`); `scripts/deploy-5.18.91.sh` pinned to it and rehearsed — PUSHED 10 Oct 02:50 UTC; DEPLOYED, copy stamped 02:53 UTC (the deploy run's log not yet received); `--after-only` 03:14 UTC: R19 PASSED, V4 FAILED on a fatal that the code places outside this release (not yet confirmed on the server)
 
 **Approval.** The operator approved, on 09 Oct: *"APPROVED: IMPLEMENT THE UGANDA-ONLY 5.18.91 DATABASE SAFETY FIX AND
 PREPARE THE RELEASE."* — the fix, its regression tests, commits, and the development branch's push where needed to
@@ -9218,6 +9218,86 @@ The log can carry neither:
 Either way the lines cannot be counted as opens. The third review of 5.18.91 found this; R19 and A14 watch the stray
 FOLDER instead (above). How often the stray store is actually opened is NOT ESTABLISHED: by the code, once per run of
 the retry job, at most every 600 s.
+
+### RESULT — DEPLOYED 10 Oct (copy 02:53:29 UTC); `--after-only` 03:14:16 UTC: 53 ok / 1 failed / 1 note — R19 PASSED, V4 FAILED
+
+Recorded from the `--after-only` terminal the operator pasted; the script prints no secret. **The deploy run's own log
+has not been received**, so its verdict is NOT RECORDED here; what the deploy did is read below from the
+`--after-only` run alone. The log files stay on the server under `/root/dnb-5.18.91/`.
+
+**Push.** On the operator's *"please release 5.18.91 and give deploy commanda"*, `release/5.18.91` was pushed at
+02:50:41 UTC on 10 Oct, a new branch at `dfad4d9`. The deploy command was given in the chat; the rollback was not (it
+is printed in the deploy's log, on its own line).
+
+**What the `--after-only` run (`20261010T031416Z`) observed:**
+- **A.**
+  - The checkout is at `c3554a9`, the branch tip `2613fc2`, the release `dfad4d9`, cut on `3d9cb5f`.
+  - There are no tracked edits, and **0 files git does not track** under the plugin folder outside `data/`.
+  - A7 and A0 are ok. The live commit is `dfad4d9`, the manifest says 5.18.91, and the container runs PHP 8.1.34.
+  - Every switch is as the operator left it: pilot `on`, `ia` and `wa` `on/on`, `lc=on/on`, `ls=off/off`, `qu=on/on`,
+    `sa=on/on`. `ol`, `hc`, `fh` and the registry's `mn` read `absent/absent`.
+  - 086 is complete (`4:26:1:1:1`). 087 is complete (`rows=4:5`): one salesperson number, none switched on, 0 with its
+    assistant on.
+  - The routing and the Inbox's row are as on 5.18.90.
+- **V.** V1–V12 and V3–V3h are ok. **V4 FAILED:** *"2 fatal line(s) of dishnet-hybrid-sudan since
+  2026-10-10T02:53:22Z"*, at 02:59:14 and 03:13:41 UTC. Each line reads *"NOTICE: PHP message: PHP Fatal error:
+  Uncaught TypeError: flock(): supplied resource is not a valid stream resource in
+  /data/ucrm/data/plugins/dishnet-hybrid-sudan/cron"*. The script cuts each line at 200 characters, so **the file and
+  line are not in the log.**
+- **R.**
+  - R1–R18 are ok.
+  - R3 gives its one note, the one 5.18.89 and 5.18.90 gave: migration.log holds no line for 087.
+  - R5: all 258 earlier files are intact. R14: Domain B's 363 files are byte for byte.
+  - R7: UGX CASH IN HAND 41,071.00 · USD 0.00. R13: the event queue holds 8,655 events, every one done.
+  - R18: on the server's own configuration the gate decides *skip* (`by-store=uganda by-files+vault=uganda`).
+- **R19, both ok.**
+  - The stray database is `dc85ae6ddafaae19:2379776:1791366907` before the deploy, at the copy and now, with no side
+    files and 0 locks each time.
+  - *"the retry job ran at 2026-10-10T03:10:04Z with the fix installed (at 2026-10-10T02:53:29Z), and the stray folder
+    has not changed since the copy (the folder's time then: 2026-10-10T02:45:47Z; side files then: -) — nothing held the
+    store at the copy, and before the deploy its last change fell within one dispatch of the job's (A14): nothing has
+    opened the stray store since the copy."*
+  - The stray folder's `migration.log` grew from 150,955 to 151,318 bytes, last written at 03:10:51 UTC. That is
+    reported, not judged: other jobs write it too (the runbook above, step 4).
+  - This is one completed run of the fixed job, about 17 minutes after the copy.
+
+**V4 — what it is.** This is by the code, read in the repository on 10 Oct by a read-only workflow of three
+investigators and two skeptics. **The server's file and line have not been read.**
+- **The candidate: `cron/master.php:405`.** Master opens its lock into `$lockFp` and includes every job in its own
+  scope with a bare `include`. Twelve of its jobs assign `$lockFp` at their top level and close it on every normal exit,
+  among them the 60-second `wa_sync` (`cron_wa_sync.php:33`) and `crm_sync` (`cron_sync.php:46`). After the job loop,
+  master releases its lock with an unguarded `flock($lockFp, LOCK_UN)` (line 405), outside its `try`. When the last of
+  those jobs closed the handle, that is a `TypeError` on PHP 8.
+  - `main.php` and the `cron_trigger` route catch it.
+  - The admin pages' piggyback (`public.php:2207-2228`, a shutdown closure running `@include` with no `try`, after
+    `fastcgi_finish_request`) does not. That fits the `NOTICE: PHP message:` (php-fpm) form of both lines.
+  - 5.18.51 guarded only the shutdown handler, at line 88 (docs/44 §16.11). The final release was left unguarded.
+  - Every other `flock()` reachable from a master run acts on a handle its caller opened a moment before. None is in a
+    file 5.18.91 changed.
+- **Outside 5.18.91, by the code.**
+  - `cron/master.php`, `public.php`, `main.php` and every job that touches `$lockFp` have the same blob in `3d9cb5f`
+    and `dfad4d9`.
+  - The retry job holds no lock in either version.
+  - Every `$lockFp` job runs before it in master's list. The two after it (`customer_reminders`, `notify_retry`) touch
+    no lock.
+  - A rollback would keep the same mechanism.
+  - Why it is seen only now: the 5.18.88–5.18.90 deploy-run V4 windows were 60 s, and before 5.18.88 an
+    `--after-only` V4 read nothing. This is the first post-deploy window that is long enough and includes admin page
+    loads.
+- **Not established.** It has not been observed that these lines are `master.php:405`, that they come from the
+  piggyback, or that the same lines appeared under 5.18.90. One skeptic held that open. It noted that every line
+  docs/44 read on 5.18.50 was at the shutdown handler (`:83`), never at the final release, so whether a run ends on a
+  closed handle depends on the server's state. **The read-only check is to count the message per hour, by file and line,
+  since 08 Oct.**
+- **The effect, by the code.** No job's work is lost: the schedule is saved after each job, and the admin page has
+  already been sent. The rest of that piggyback closure and the shutdown functions registered after it are skipped,
+  among them master's own lock handler and SQLite's passive checkpoints. PHP releases the lock when the request ends.
+
+**What this means for the quarantine (runbook step 3).** Its evidence is R19's two lines *"in a run with 0 failed"*.
+V4 reads from the copy, so every later `--after-only` of this deploy will repeat these two lines. **That condition can
+no longer be met from this deploy.** Whether R19's lines are accepted beside this V4 failure, once the server confirms
+what it is, or a later release that guards `master.php:405` comes first, is the operator's decision. Nothing was
+quarantined, switched or resumed. The salesperson pilot is the operator's to resume.
 
 ### Rollback — its own command, never pasted with the deploy
 
