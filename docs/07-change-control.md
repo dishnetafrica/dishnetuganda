@@ -8323,8 +8323,28 @@ salesperson number active, South Sudan and Domain B. What the log does not prove
   live store is `.dishnet-hybrid-sudan-data/plugin.sqlite3` (33.6 MB, written at 05:40 on 09 Oct), named by
   `ucrm.json`'s `pluginDataDir`. Every reader that can read `ucrm.json` uses it: the deploy's checks did, since R11 saw
   the salesperson number added on 07 Oct evening, which the stray file predates.
+  **Corrected 09 Oct (5.18.91's entry, below) — not by `pluginDataDir`.** The server's `ucrm.json` has no such key
+  (observed: the key names listed by the read-only `stray-db-evidence.sh`, run on the server at 06:29:30 UTC, its
+  output in `/root/dnb-stray-db-evidence-<UTC time>.txt`; the script is not in this repository — 5.18.91's entry
+  gives its checksum). `getDataDir()` chose the folder beside the plugin by its second rule, because the plugins
+  root is writable (`lib/bootstrap_data.php`). The deploy's checks read the live store all the same: when
+  `ucrm.json` names no folder they take the one beside the plugin if it holds a `plugin.sqlite3`
+  (`deploy-5.18.90.sh`, where it sets `PDD_IN`), and R11's evidence above stands.
   - What wrote the stray file is NOT ESTABLISHED. `getDataDir()` falls back to the plugin's own `data/` only when
     `ucrm.json` gives no `pluginDataDir` to the process reading it.
+    **Corrected 09 Oct (5.18.91's entry, below) — identified by the code and the ledger's timing, and the fallback
+    misstated.** The only scheduled opener of that file found in the code is `cron_starlink_block_retry.php`, which
+    names `<plugin>/data` itself; `cron/master.php` runs it at most every ten minutes, and by the code every run opens
+    the file there and applies any migration it lacks (two manual tools open it too; 5.18.91's entry names them). The
+    stray's own `_migrations` ledger shows 087 applied at 09:55:07 on 07 Oct, about three minutes after the live
+    store's at 09:52:18 (5.18.88's deploy) — consistent with the job's next dispatch; master's record of that cycle
+    was not read. Observed by the 09 Oct evidence scripts: the file's ledger begins on 26 Aug at 09:17:20, the live
+    folder beside the plugin was born at 09:27:55 that day, and the file itself on 19 Sep at 07:08:01, when the plugin
+    folder was re-created. By the code and that timing, not observed: the live folder was made by `getDataDir()`'s
+    one-time rescue copy, so the file's content began as the plugin's database from before the move, and something
+    carried it through the re-creation, by a means not established. And `getDataDir()` takes the plugin's own
+    `data/` only when `ucrm.json` names no folder **and** the plugins root is not writable; with no `pluginDataDir`
+    and a writable root it takes the folder beside the plugin, as on this server.
   - **It disarms the command-line guard.** `cliDataDir()` refuses that fallback (*"THIS IS NOT WHERE THE DATA LIVES"*)
     only while no `plugin.sqlite3` exists there. A tool that took the fallback now would read the stray file in
     silence.
@@ -8343,3 +8363,877 @@ away, and that `lib/AutomationPolicy.php` and `lib/InternalNumbers.php` stay on 
     cd /opt/dishnet && bash scripts/deploy-5.18.90.sh --rollback
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 53d5c4d && bash scripts/deploy-hybrid.sh && git checkout -`.
+
+## 09 Oct — 5.18.91: the database safety fix, Uganda only — the Starlink retry job no longer opens the stray `plugin.sqlite3` inside the plugin folder; it is NOT pointed at the live store; no migration; South Sudan and Domain B unchanged. `release/5.18.91` = `dfad4d9`, cut on live 5.18.90 (`3d9cb5f`); `scripts/deploy-5.18.91.sh` pinned to it and rehearsed — PREPARED; `release/5.18.91` NOT pushed; NOT deployed
+
+**Approval.** The operator approved, on 09 Oct: *"APPROVED: IMPLEMENT THE UGANDA-ONLY 5.18.91 DATABASE SAFETY FIX AND
+PREPARE THE RELEASE."* — the fix, its regression tests, commits, and the development branch's push where needed to
+prepare and review the release. **Not approved, and not done:** the deploy; pushing `release/5.18.91` (the server
+fetches it at deploy time, so it is pushed with the deploy's approval); quarantining, moving, renaming or deleting the
+stray database; `cliDataDir()` or `getDataDir()`'s rescue copy; any configuration value, switch, Evolution setting or
+WhatsApp number; resuming the salesperson pilot; anything in South Sudan's behaviour or in Domain B. The operator's
+order: fix the wrong-database access first; once it is deployed and verified, quarantine the old database as its own
+approved step. **The 19 Sep re-creation of the plugin folder is not explained by this release** (Known limits 1).
+
+### The five-part form
+
+1. **What is configured now (5.18.90, `3d9cb5f`)** — as read on 09 Oct by the operator's two read-only evidence scripts
+   on the server: `stray-db-evidence.sh` (its first line `now 2026-10-09T06:29:30Z`) and `stray-db-evidence-2.sh`
+   (`now 2026-10-09T06:36:55Z`), each output written by `tee` to `/root/dnb-stray-db-evidence-<UTC time>.txt` and
+   `/root/dnb-stray-db-evidence-2-<UTC time>.txt`. The scripts are not in this repository; their sha256, printed on the
+   server before each run, begin `b806a37a6a85dd23` and `2e353daf90ae1426`. They read files, and the databases only
+   immutably, and print no value, key, number or record.
+   - **Observed:** `ucrm.json` names **no** `pluginDataDir`; `getDataDir()` chooses `.dishnet-hybrid-sudan-data` beside
+     the plugin folder by its second rule, because the plugins root is writable. That is the live store.
+   - **Observed:** a second, stray `plugin.sqlite3` inside the plugin's own `data/` folder, 83 migrations recorded, the
+     last (087) applied at 09:55:07 on 07 Oct and the file last written then. Its ledger begins on 26 Aug at 09:17:20; the
+     live folder beside the plugin was born at 09:27:55 that day. The file itself was born on 19 Sep at 07:08:01, when
+     the plugin folder was re-created (Known limits 1).
+   - **By the code and that timing, not observed:** the live folder was made by `getDataDir()`'s one-time rescue copy,
+     so the stray's content began as the plugin's database from before the move, and something carried it through the
+     19 Sep re-creation, by a means not established.
+   - **Observed:** the `migration.log` beside it gains about 319 lines a day of 071's checksum warning. **That growth
+     cannot be counted as opens of the stray store** (corrected below): the file is also `MigrationRunner`'s default
+     log, which `cron/dpo_reconcile.php` (every 5 minutes) and the DPO pages write while migrating the LIVE store.
+   - `cron_starlink_block_retry.php`, scheduled by `cron/master.php` at most every 600 s, ungated.
+2. **Why.** The retry job names `<plugin>/data` itself. By the code, every run opens the stray database, applies any
+   migration it lacks, and holds it open until the process ends. It also leaves `$dataDir`, `$config`, `$store` and
+   `$pdo` pointing there in `cron/master.php`'s shared scope. It is the only SCHEDULED opener of that store found in
+   the code (two manual ones exist, Known limits 3):
+   - the two jobs after it, `customer_reminders` and `notify_retry`, set `$dataDir` and `$store` to the live store
+     before they use them;
+   - `main.php`'s tail opens no store there (its one `SqliteStore::create` names a class that does not exist).
+
+   What the leaked `$dataDir` does reach:
+   - master's dispatch gate for those two jobs (`cron/master.php` line 319);
+   - `main.php`'s tail, in a cycle where neither job runs after the retry job — there it writes plain files into the
+     stray folder (two wallet-sync files on 07 Oct).
+
+   The stray file's existence also disarms `cliDataDir()`'s guard, and would feed `getDataDir()`'s rescue copy if the
+   live store ever went missing. Fix the wrong-database access before the WhatsApp pilot resumes.
+3. **Exactly what changes.** On Uganda the retry job stops at its first statement — before it names, opens or migrates
+   anything — and leaves nothing behind in master's scope. **It is not pointed at the live store:** that would start a
+   Starlink retry and restore process that has not run against the live store since the 26 Aug move (its queue there
+   was empty at the 08 Oct backup), a business change nobody approved. South Sudan, and anything the gate cannot
+   decide, run 5.18.90's job exactly: below the gate the file is 5.18.90's byte for byte. **No migration; no
+   configuration value set.**
+4. **Effect on UISP/uCRM.**
+   - UISP: none. uCRM: none. Evolution and WhatsApp: nothing called or sent.
+   - The plugin's SQLite: the deploy writes no record. The live store is read — as its owner, read-only, through SQLite
+     only — by the deploy's checks and by the gate, except R7: as every deploy since 5.18.71, it runs the cash-in-hand
+     tool as the container's default user, and that tool opens the live store read-write through the plugin's own
+     store (Known limits 17).
+   - The stray store: the deploy reads it as files and copies it into the backup. It never opens, moves or changes it.
+5. **Rollback.** `scripts/deploy-5.18.91.sh --rollback`, typed `ROLLBACK`, puts 5.18.90 (`3d9cb5f`) back through
+   `deploy-hybrid.sh` and checks it (RB). From then on the retry job opens the stray store again, at most every 10
+   minutes, as before. If the stray store has been quarantined by then, put it back first: 5.18.90's job would otherwise
+   create a new one there. The runbook is its own section below, never beside the deploy command.
+
+### Release notes
+
+- **`cron_starlink_block_retry.php`** (+20). Its first statement asks `StarlinkRetryScope::skip(__DIR__)` in a
+  static closure of its own, so nothing is assigned at master's scope.
+  - On `true` the job returns (SAFETY.md RULE 11b: a scheduled cron never calls `exit`).
+  - If the library is missing (a partial install), it logs one line and runs the job as before.
+- **`lib/StarlinkRetryScope.php`** (new, 144 lines). `skip()` is true only for a Uganda install whose data
+  directory is not `<plugin>/data`.
+  - **How it decides.** It uses the composition the plugin's own Uganda-gated jobs use (`cron/notify_retry.php`,
+    `cron/customer_reminders.php`): the live store's `kyc_config` row first, then the configuration files and the vault,
+    through `StaffJobsGate::applies()`. Unlike those jobs' `PluginConfig::load()`, it reads with `PluginConfig::read()`,
+    which never refreshes the vault.
+  - **It changes nothing on disk.** It does not call `getDataDir()`, which creates the folder it chooses and may run the
+    rescue copy. Instead `liveDataDir()` mirrors getDataDir()'s three rules read-only; the test holds the two equal in
+    five layouts and pins `getDataDir()`'s source by sha256.
+  - **The live database is never opened except by SQLite.** Inside `cron/master.php` this process already holds it open
+    with POSIX locks. Closing any other descriptor of that file — or of its `-shm` — releases them (sqlite.org, *How To
+    Corrupt*, 2.2).
+  - **The store is read read-only**, and only when its `-wal` and `-shm` already exist (decided by `is_file()`).
+    Otherwise a read-only reader would create them, possibly owned by the wrong user.
+  - **Anything unclear is `false`**, which is 5.18.90's behaviour: no answer, an unreadable file, any throwable.
+- **`tests/test_sl_block_retry_scope.php`** (new, 86 checks) — below.
+- **`manifest.json`** 5.18.91. The release also changes the five distributor tests' version pins; the branch changes
+  fifteen.
+
+**Where this differs from the investigation's proposal** (the report of 09 Oct, §6):
+- *"resolve the live folder with `getDataDir()`"* — not called: it creates the folder it chooses and may copy the
+  legacy database into it. `liveDataDir()` makes the same choice by reading only.
+- *"return at once with one log line"* — no line: the job logs only when it does work, and a line at every run would be
+  permanent noise. The evidence that it stops is R19's pass on the stray FOLDER after a completed run of the fixed job
+  (runbook step 3), not the database file alone.
+- the test is named `test_sl_block_retry_scope.php`, and covers the proposal's list (below).
+
+### Files — 9 against `3d9cb5f`: 2 added, 7 changed, none removed
+
+- **Added (2):** `lib/StarlinkRetryScope.php`, `tests/test_sl_block_retry_scope.php`.
+- **Changed (7):** `cron_starlink_block_retry.php`, `manifest.json`, `tests/test_distributor_apply.php`,
+  `tests/test_distributor_link_ucrm.php`, `tests/test_distributor_notify.php`, `tests/test_distributor_registry.php`,
+  `tests/test_distributor_territory.php` (the version pin only).
+- **9 files changed, 786 insertions(+), 6 deletions(-).** No migration; nothing outside the plugin.
+
+### Ancestry
+
+`dfad4d9` (5.18.91, release) ← `3d9cb5f` (5.18.90, live) ← `53d5c4d` (5.18.89) ← `6464204` (5.18.88).
+- All nine files are the development branch's, byte for byte (`2613fc2`).
+- The branch also carries undeployed work — the partner portal (081–083), the PD-8 CSRF guard and the AI media layer
+  (085). None of it is here.
+- `release/5.18.91` stays local until the deploy is approved.
+
+### Tests
+
+- **`tests/test_sl_block_retry_scope.php`: 86 passed, 0 failed, with 13 weakened copies, each caught by the check
+  it names.** The weakened copies run without the source checks, so each is caught by what the code does, and a copy
+  counts as caught only where that check passes unweakened. It builds the server's layout: `ucrm.json` with no
+  `pluginDataDir`, the live store beside the plugin, and a stray store inside it, one migration behind so that an open
+  that migrates it, as the job's does, shows in its ledger; any other open shows in its folder. It also builds a level
+  stray store, at every migration as the server's is; built here with every recorded checksum matching, an open of it
+  changes only the folder. Each property below is proved against the 5.18.90
+  job as its control:
+  - **Uganda, through `cron/master.php`'s shared scope:** the stray store's checksum, size, time and ledger are
+    unchanged, and its folder gains, loses and changes nothing. `$dataDir` is still the live directory afterwards, and
+    no variable is left behind.
+  - **Uganda with no stray store:** none is created.
+  - **Uganda selected by the vault alone:** nothing in either folder changes, the live store's `-wal` and `-shm`
+    included.
+  - **South Sudan:** exactly the 5.18.90 job's outcome.
+  - **Uganda where `<plugin>/data` IS the data directory:** the job runs as before.
+  - **Every unclear case** gives South Sudan's answer.
+  - **Master's POSIX locks:** the locks on the live database and on its `-shm` are read from `/proc/locks` before and
+    after the job, and none is lost.
+  - **`liveDataDir()` equals `getDataDir()`** in five layouts and with an unwritable plugins root, and deciding creates
+    nothing.
+
+  Round 7 reworded the docblock and one label that said any open of the one-behind store shows in its ledger: only an
+  open that migrates it does (a read-only open shows in the folder, which the same checks watch); no check changed.
+  Round 5 reworded the labels that had stated the server's log behaviour as fact, and the headline, which now says where
+  the gate applies; no check changed. Round 4 added a positive control to the server-shaped template: its
+  `migration.log` must exist and hold lines before it is compared. **The control on the control:** with the log
+  deleted after seeding, the test reads 83 passed, 3 failed — the template check and both 3b checks. With the new
+  clause also removed, the template check passes on a log that is not there (84 passed, 2 failed, the 2 being 3b's own
+  checks): the vacuous pass the review described. Both copies were
+  scratch files, removed afterwards.
+- **Full suite, development, twice** — on the development tree, `2613fc2` — the same tree as `ba3181a`, on which both passes ran; amending the commit changed its message only. Pass A 19:02–19:53 UTC and pass B 21:07–21:57 UTC on 09 Oct, each alone: 289 files, 14,262 passed, 0 failed, 0 skipped, identical file by file to each other and to the pass on `259a841`, which differs only in the test's docblock and one label. The only PHP warnings are `test_dpo_endpoints`' five, in every pass. Two earlier starts of pass B were ended part-way by container restarts; their logs are void and kept aside.
+- **The release tree's own suite, twice** — in the release's own worktree, `dfad4d9` — the same tree as `03ebb30`, on which both passes ran; amending the commit changed its message only. Pass A 21:57–22:41 UTC and pass B 23:02–23:46 UTC on 09 Oct, each alone: 277 files, 13,340 passed, 0 failed, 0 skipped, identical file by file to each other and to 5.18.90's release suite (276 files, 13,254 passed) but for the one test this release adds, 86 checks. The only PHP warnings are `test_dpo_endpoints`' five, as in 5.18.90's.
+- **Recorded, not changed:** the five distributor tests label their version pin `manifest version is 5.18.71`, whatever
+  version they pin — the convention since 5.18.71, kept by every release since, 5.18.90's included; 5.18.91 changes the
+  pin only.
+- **Lint:** `php -l` on all eight PHP files of the release diff, read from the commit: 0 errors (PHP 8.4.19 in this environment). The server's
+  own PHP lints them at A2.
+- `git diff --check 3d9cb5f dfad4d9`: clean.
+- **Secret scans** of the release diff and of the script and its rehearsal: clean. No key-, token- or credential-shaped
+  value and no banned value. The long hex strings are, in the release diff, 5.18.90's retry job's sha256 and
+  `getDataDir()`'s source sha256 (pinned by the test); in the script and the rehearsal, 087's and the retry job's
+  sha256. The only phone-number-shaped values are the throwaway-database fixtures of the automated-send policy check,
+  carried unchanged from 5.18.90's script: placeholders made of a country code and zeros, reviewed by hand.
+
+### South Sudan — unchanged, proved
+
+- **By construction:** below the gate the retry job is 5.18.90's byte for byte. The test strips the 5.18.91 block and
+  compares the rest with 5.18.90's sha256. The gate answers South Sudan's `false` without touching anything.
+- **By the test**, through `cron/master.php`'s shared scope on throwaway layouts. With the live store naming South
+  Sudan, and with nothing naming anything (the default), the job:
+  - leaves exactly the variables 5.18.90's job leaves;
+  - points `$dataDir` and `$store` at the same database;
+  - changes the same files in `<plugin>/data`;
+  - migrates the stray store as 5.18.90's does, and still creates one where none exists.
+
+  Master keeps its locks on the live database and its `-shm` throughout. An unreadable store or vault, a
+  `pluginDataDir` that is no path, and the library missing each give South Sudan's answer.
+- **Before the deploy (A13)**, on the server's own PHP, as a South Sudan install on a throwaway layout: the pin's job
+  and the live 5.18.90 job must give the same signature, and the expected one (`SLR_OPENS`), or nothing is deployed.
+- **After it (R18)**: the INSTALLED job, run the same way, must still give that signature, or R18 fails. That is a
+  failure in the log, not a refusal: the files are already copied.
+- `cliDataDir()`, `getDataDir()`'s rescue copy and every other file are untouched. The South Sudan server itself was not
+  examined, and its folder layout is not known (Known limits 7).
+
+### Domain B — untouched
+
+- `dishnet-mikrotik-control-plane/` and the plugin's `docs/` are the same trees at `3d9cb5f` and `dfad4d9`. The whole
+  repository's delta is the plugin's nine files.
+- **A7** refuses any pin that touches either tree, or anything outside the plugin. **R14** after the deploy, and **RB**
+  after a rollback, compare every installed file of both trees byte for byte.
+
+### `scripts/deploy-5.18.91.sh` — 2821 lines, sha256 `3393736f5cd911ec…`
+
+Made from 5.18.90's script by a derivation in which every replacement is asserted. It has a guard that refuses a PHP
+variable named bare in a bash string: the second review found one, which under `set -u` ended every run before its
+verdict. Everything 5.18.90's script checks is kept.
+
+**It refuses before anything changes** when, besides 5.18.90's refusals:
+- **A0** — the pin is not cut on `3d9cb5f`, its delta is not exactly the nine files, or it carries a migration.
+- **The checkout** — it holds a file git does not track under the plugin folder, outside `data/`, untracked or ignored.
+  `scripts/deploy-hybrid.sh` copies the checkout's working tree, so such a file would be installed unseen. 5.18.90's
+  record found none on the server on 09 Oct; the script now checks at every deploy. A rollback names such files and
+  goes on.
+- **The data directory** — the directory every read would use is `<plugin>/data`, because `ucrm.json` names it or
+  because the live store beside the plugin is found neither on the host nor in the container. That is the stray store.
+  Nothing is read from it, in any mode: `--after-only` and `--rollback` stop too.
+- **A copy that stopped part-way** — the container's record says `3d9cb5f`, but a file this release changes is not
+  5.18.90's byte for byte: the manifest, or any other of the seven. The deploy refuses and prints the by-hand put-back;
+  so does `--rollback`, which rolls back only a deploy the record shows. The two files the release adds are not asked
+  about: a rollback leaves them on disk too, reached by nothing.
+- **A12** — on the server's own configuration, the pin's `StarlinkRetryScope::explain()` does not read `live=same
+  inside=no store=read tenant=uganda skip=yes`. It runs as the database's owner, with the live store held open
+  read-only as master holds it.
+- **A13** — on throwaway layouts in the container's `/tmp`, shaped like the server (no `pluginDataDir`, the live store
+  beside the plugin, a stray store inside it), inside master's shared scope, under the server's PHP, any of these:
+  - on Uganda, the pin's job does not leave `$dataDir` on the live directory, no variable behind and the stray folder
+    untouched;
+  - on South Sudan, the pin's job differs from the live 5.18.90 job;
+  - the live job does not open the stray store — the control: the instrument must see a change;
+  - master loses a POSIX lock on the live database or its `-shm` in any of the four runs.
+
+**Evidence, never a stop:**
+- **A12's note** when the configuration files and the vault alone do not name Uganda. They may decide alone after the
+  02:00 maintenance copy (Known limits 4).
+- **A14** — the stray folder's last change is held against master's record of 5.18.90's retry job's last dispatch,
+  within one dispatch either side. That is one coincidence, consistent with the job opening the store; it does not prove
+  every run. The result is recorded as `seen` or `not-seen` in the state file, with the folder's entries.
+
+**After the deploy:**
+- **R6** carries 5.18.91's gate.
+- **R18** repeats A12 on the INSTALLED code, and runs the installed job as A13 runs the pin's, against the same expected
+  signatures (`SLR_STOPS` on Uganda, `SLR_OPENS` on South Sudan) — a failure in the log, not a refusal.
+- **RB**, after a rollback: the job is 5.18.90's byte for byte, the gate is gone, the library is left on disk reached by
+  nothing, and 5.18.90's safety fix is in place. The throwaway runs show the job opening `<plugin>/data` again.
+- **R19** — the stray database must be exactly as before (checksum, size, time). Without the record from before the
+  deploy, R19 judges nothing. Then the stray FOLDER:
+  - **What an open leaves.** It makes the `-wal` and `-shm` there and holds POSIX locks on the store while it is open;
+    the kernel lists those locks in `/proc/locks`. The side files go when the last read-write connection closes, at the
+    end of the process that opened it. A read-only open that had to make them leaves them behind, held by none
+    (measured in the review with the development machine's SQLite, through PHP's PDO and Python, and rehearsed; not
+    observed on the server).
+  - **The locks are trusted only after a positive control.** A throwaway SQLite store in a temporary folder on the
+    host, held open by `python3`, must show locks, and none once closed.
+  - **The record at the copy.** Right after the copy the script records the folder, its side files and the locks on
+    them (`STRAY_COPY`, `STRAY_COPY_LOCKS`), and the copy's own time — the time it gave the retry job
+    (`STRAY_COPY_AT`). R19 judges from that recorded time, never from the job file's time later, which a rollback
+    attempt would move even when it copied nothing. It reads locks, files, locks and files again, so a process closing in
+    between is never mistaken for one that left its files behind.
+  - **The reference.** R19 judges from a reference: a moment, and what the folder held then.
+    - It is the copy itself, when the copy found no side files, or side files held by no process.
+    - When a process held the store at the copy, or whether one did could not be told (the locks unread then), R19
+      records a moment in the state file the first time it can (`STRAY_QUIET_FROM`, `STRAY_QUIET_SIDE`), and every
+      later run judges from that same moment:
+      - the side files the copy saw still there, the folder unchanged since the copy, held by no process — that
+        process was stopped before it closed the store: the moment R19 finds them so;
+      - those side files gone, with the folder's last change at most 30 minutes after the copy and no later than the
+        start of master's last completed run: that last change, the close of what held them.
+    - 30 minutes is master's own stale-lock limit (`cron/master.php`, `LOCK_MAX_SECS`), and its runs end in minutes. It
+      is a heuristic, not a limit anything enforces: `main.php`'s tail has no deadline once started (Known limits 12).
+    - Without a usable record of the copy, R19 judges nothing.
+  - **What can be told is an open after the fix,** and R19 fails on it: side files there again after the folder changed
+    since the copy — an opener stopped before it closed, one still holding the store, or a read-only open; a process
+    holding the store more than 30 minutes after the copy; a last change more than 30 minutes after the copy.
+  - **What cannot yet be told is a note:** a change after master's last completed run began but within 30 minutes of
+    the copy may be that process's own late close (`main.php`'s tail outlives master's lock), so R19 waits for the next
+    completed run, which records it.
+  - **A failure is never forgotten.** Every R19 failure is recorded in the state file (`STRAY_R19_FAILED`) and fails
+    every later run: what showed it — side files, a holder — may be gone from the folder by then. Only the engineer
+    removes that line, after reading every log file; a new deploy writes a new state file. Every R19 failure is
+    evidence of an open or a write; what is no evidence either way — an unreadable record or time — is a note.
+
+  In the table, *held at the copy* means side files there at the copy with a process holding them, or whether one did
+  could not be told (the locks unread then).
+
+  | What R19 sees | Verdict |
+  |---|---|
+  | An earlier run's failure recorded in the state file | FAIL |
+  | The stray database changed since before the deploy | FAIL |
+  | No record from before the deploy; no usable record of the copy or of its time | note — R19 judges nothing |
+  | The stray folder's time unreadable, or the store changing while R19 reads it | note — run again |
+  | Held at the copy; the folder changed since the copy, or a different set of side files, and side files there now — held, left by an opener that was stopped, or by a read-only open | FAIL with every other entry as before; a note otherwise |
+  | Held at the copy; the folder unchanged since, and a process holds the store now, within 30 minutes of the copy | note — while it does, an open leaves no trace |
+  | Held at the copy; the folder unchanged since, and a process holds the store now, more than 30 minutes after the copy | FAIL — not the process that held it then |
+  | Held at the copy; the folder unchanged since, its side files there, and whether a process holds them cannot be read | note |
+  | Held at the copy; the folder unchanged since, its side files held by no process now | note — the moment is recorded; from then on they must stay, held by none, until a completed run after it |
+  | Held at the copy; no side files now, the folder's last change more than 30 minutes after the copy | FAIL with the same entries; a note otherwise |
+  | Held at the copy; no side files now, no completed run since | note |
+  | Held at the copy; no side files now, the folder's last change within 30 minutes of the copy and no later than the start of master's last completed run | that change is recorded as the moment, and judged as below |
+  | Held at the copy; no side files now, the folder's last change after the last completed run began but within 30 minutes of the copy | note — the next completed run records it |
+  | After the reference: side files there that were not, or different ones | FAIL |
+  | After the reference: side files that were there gone, every other entry as before | FAIL — the close of a read-write open removes them |
+  | After the reference: side files that were there gone, entries changed | note |
+  | After the reference: a process holding the store | FAIL |
+  | After the reference: the side files left behind as they were, but the locks cannot be read | note |
+  | After the reference: the folder changed, every entry as before | FAIL — an entry made and removed: an open |
+  | After the reference: the folder changed, entries added, removed or replaced | note naming them, never a pass |
+  | Quiet since the reference, but no completed run after it (a run under way does not count) | note, with the time to run `--after-only` again |
+  | Quiet since the reference and a completed run after it, but A14 not `seen` | note — never a pass from this deploy's record |
+  | Quiet since the reference, a completed run after it, and A14 `seen` | pass |
+
+  Its `migration.log` is reported, not judged: other jobs write it too. The summary reports what R19 established, not
+  more: a changed database or any failure reads `R19 FAILED`, and with a held copy it says that between the copy and the
+  recorded moment an open cannot be told apart. Besides that moment, or its failure, in its state file, `--after-only`
+  writes nothing to the plugin's data but the one line R7 may add to the live `migration.log` (Known limits 11, 17): it
+  writes its log, and throwaway copies of both releases' code, throwaway
+  layouts and databases and the locks' control's store, in temporary folders in the container's `/tmp` and on the
+  host, and removes them. Its switch read may refresh the vault, as the earlier releases' scripts' have (Known
+  limits 9).
+- **The live data directory is found on the host first.** When `ucrm.json` names no folder, the folder beside the plugin is
+  taken if the host holds a `plugin.sqlite3` there, whether or not the container answers that moment. With no store
+  there, it stops (the tenth review): it never falls back to `<plugin>/data`. A container that does not answer during a
+  restart can therefore no longer send every read to the stray store.
+- **A rollback writes its own record** (`rollback-state-<time>.env`), never the deploy's. A rollback that is declined at
+  its question, or stops before it changes anything, leaves this release live and the deploy's state file — R19's
+  references and V4's start — as the deploy wrote it.
+
+**A copy that fails part-way.** `scripts/deploy-hybrid.sh` writes the container's record only after the whole copy, and
+exits 2 both when its copy fails and when the container does not answer in time. The script tells the two apart by
+that record on the host: if it does not name the pin, the copy did not complete. It says so at once — without the
+two minutes' wait for a restarting container — and prints the by-hand put-back instead of `--rollback`, which refuses
+over such a tree. The put-back, as every message prints it, goes back to the branch whether or not its copy step
+succeeds: `cd /opt/dishnet && git checkout 3d9cb5f && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
+
+**A deploy run again** — after a rollback, or one declined at its question — keeps the earlier state file beside the new
+one (`state-5.18.91.env.prev-<time>`) before it writes anything, or stops. Every deploy run says, in a note, an R19
+failure that any kept state file holds. `--after-only` judges from the current deploy's record only.
+
+**The stray store is never opened, moved, renamed, quarantined or written by the script.** It is read as files, its
+folder is copied into the backup (`stray-data.tar.gz`), and its state is recorded in the state file.
+
+### The rehearsal — `scripts/harness/deploy-5.18.91/rehearse.sh` (1472 lines, sha256 `740dd22599ce8450…`)
+
+Built from 5.18.90's harness by an asserted derivation (the container, the stand-ins, the seed and the runners are
+5.18.90's); the parts that rehearse 5.18.91 are new.
+
+**The base**, installed as production runs it since 08 Oct:
+- 5.18.90 with 086 and 087 applied by the plugin's own runner;
+- the pilot's salesperson number added, switched off, with its assistant off (a fictitious seller and instance);
+- the lead switches as decided on 07 Oct;
+- **`ucrm.json` with no `pluginDataDir`, the live store beside the plugin folder, and a stray store inside it**, built
+  by the installed plugin's own store. It is at every migration, as the live one is, with its own log and settings file,
+  all two hours old;
+- master's record of a completed run of the retry job, five seconds before the stray folder's last change;
+- Evolution replaced by a recording stand-in.
+
+**It covers:**
+- **The pin (section 0):** cut on `3d9cb5f`; exactly the nine files; no migration; no media-layer, portal, CSRF or
+  `bootstrap_data.php` file; Domain B and the plugin's docs the same trees.
+- **Every refusal (1a–1x):**
+  - a server not on 5.18.90 (1a), or with the wrong manifest (1b); a placeholder pin (1c); the branch tip (1d);
+  - a media-layer file, a migration, or a change to `bootstrap_data.php` in the pin (1e–1g); the release without its
+    gate (1h); Domain B, or a file outside the plugin (1i, 1k);
+  - the registry's switch ON (1l); own leads only ON (1m); 087 not recorded (1n); a salesperson's number switched on
+    (1p);
+  - A12 and A13 on pins that would not work here: an inverted gate (1r); a library that never says skip (1s); a server
+    whose live store names South Sudan (1t); a gate that stops South Sudan too (1u); a library that never reads the live
+    store (1v); a library that reads the live database's header with `fopen()` and costs master its lock (1v2); A13's
+    own control, the live job no longer opening the stray store (1v3b), reached with the installed-file check skipped,
+    which refuses that edited job first (1v3);
+  - the code copy failing (1w); the backup failing (1x);
+  - **the tenth review's:**
+    - `ucrm.json` naming `<plugin>/data` as the data directory (1aa);
+    - a file git does not track under the checkout's plugin folder, untracked (1ab) or ignored (1ab2), while one
+      under `data/` is not counted (1ab3);
+    - a copy that stopped part-way, with the manifest already 5.18.91's: the deploy refusing over it and `--rollback`
+      refusing too, each naming the by-hand put-back (1ac, 1ac2); with the manifest still 5.18.90's and another file
+      the release changes already replaced, each refusing as well, naming the file (1ac3, 1ac4);
+    - a real one, a folder standing where the release adds its library. The deploy says at once that the copy did not
+      complete, with no wait on the container, and names the put-back, not `--rollback` (1ad). The put-back is taken
+      from the log and run exactly as printed. It serves 5.18.90 again, with every file 5.18.90 has as it has it and
+      the checkout back on its branch; a file the release adds, if the copy reached it, stays on disk, reached by
+      nothing, as after a rollback (1ad2). With its copy step failing, it still returns the checkout to its branch
+      (1ad3).
+- **A12's and A14's evidence (1y–1z3):**
+  - the files and the vault alone naming no Uganda: A12's note;
+  - A14 with no schedule;
+  - A14 with the folder's change outside the window;
+  - A14 with a run still under way, its line on one line.
+- **Weakened copies of stage A (2a–2f, 2x–2z):** A12 and A13 each blinded and caught, and shown to be independent
+  layers; A5 and A7 blinded; the data-directory guard removed, and the stray store opened by the reads (2x); the
+  untracked-file refusal removed (2y), and the installed-file check removed (2z): each copy gets as far as its prompt.
+- **The deploy (section 3):** **72 ok, 0 failed, 1 note**, the one note R19's (too soon). No FAIL line; the A0–A14 and A5b lines,
+  and R1, R2c, R3, R5, R6 (in part), R11–R14 and R16–R19, by their text — some by their opening words — the stray
+  store's three records (before, at the copy, now) and both info lines with their times among them; the other R lines
+  by the absence of a FAIL. The state file holds the copy's time, equal to the time the copy gave the retry job. No
+  data is written, the stray folder is byte for byte, inode for inode and time for time as before, and its copy is in
+  the backup. No Evolution address, key, instance name or number appears in the log.
+- **R19 over time (4a–4z4):**
+  - **Notes:**
+    - the store changing while R19 reads it (4c3), or its folder's time unreadable (4c4), each made by an instrumented
+      copy whose answer is the script's own branch;
+    - no completed run yet (4a, 4b); a run still under way, its line on one line (4c2); a file from another
+    writer (4o); A14 not `seen` or not recorded (4j, 4l); no record from before the deploy (4h), of the copy's time
+    (4h2) or of the store at the copy (4h3), after which R19 judges nothing — never a pass, never a failure.
+  - **Passes:** a completed run with the folder quiet since the copy (4c); the stray `migration.log` written after the
+    copy by another job — reported with its new time, never judged (4d).
+  - **Failures:** a REAL reopen by 5.18.90's own job (4m); the stray database changed (4f). After every failing case
+    the rehearsal checks that the failure was recorded in the state file, once, and removes it before the next.
+  - **Weakened copies, each caught:** blind to the folder (4e), to the database (4g), to A14 (4k), to the store's
+    steadiness (4c3m), to the folder's time (4c4m).
+  - **The summary's words:** what R19 established is asserted where it fails (4f, 4m), passes (4c, 4s) or cannot
+    compare (4h).
+  - **R19's reference, driven by real processes** that open the store as 5.18.90's job does — holding it, closing it,
+    or killed before they close it — with the state file saying what the copy found:
+    - **Nothing held at the copy.** An open and close after it, then master's next completed run: FAILS (4p). The copy
+      that judges from master's latest run passes it: caught (4q).
+    - **Held at the copy, that process gone, no completed run since:** a note, nothing recorded (4r). The copy that
+      judges from the copy fails on that process's own close: caught (4t).
+    - **Held at the copy, that process gone, before any moment is recorded:**
+      - the folder changed after master's last completed run began, within 30 minutes of the copy: a note, nothing
+        recorded (4r2) — that process's own close may come after a run has begun; master's next completed run lets R19
+        record that change and PASS (4r3);
+      - the folder's last change more than 30 minutes after the copy: FAILS (4r4); the copy without that bound passes
+        it: caught (4r5); the same with a file of another writer's in the folder: a note, nothing recorded, never a
+        failure (4r6), and the copy that fails on it instead: caught (4r6m).
+    - **That process's close within 30 minutes, then master's next completed run:** R19 PASSES and records the close
+      as its moment (4s).
+    - **After that moment.** An open and close, within 30 minutes of the copy, then a later run: FAILS (4u). The copy
+      that forgets the moment passes it: caught (4v). A new holder: FAILS (4v2).
+    - **A process holding the store as one did at the copy:** within 30 minutes of the copy, a note, nothing recorded
+      (4w);
+      - a file of another writer's added beside it: a note, nothing recorded, never a failure (4w6), and the copy
+        that fails on it: caught (4w6m);
+      - the locks unreadable now: a note, nothing recorded (4w7), and the copy that takes them for none and records a
+        moment: caught (4w7m);
+      - more than 30 minutes after it, not the process from the copy: FAILS (4w1), and the copy without that bound
+      only notes it: caught (4w1m); the same where the copy could not read the locks: FAILS, saying the copy could not
+      tell (4w1q). After R19 has recorded side files left behind, a holder FAILS (4x2). The copy
+      blind to the locks passes it: caught (4x).
+    - **Held at the copy, then killed before it closed the store:**
+      - R19 records its side files as left behind: a note (4y);
+      - run again before master's next completed run: a note (4y1), and the copy that counts a run begun before the
+        recorded moment passes: caught (4y1m);
+      - a completed run later, still there and held by none: PASSES (4y2);
+      - then an open and close removes them: FAILS (4y3);
+      - the copy that forgets what it recorded passes that: caught (4y4);
+      - the same, with a file of another writer's in the folder: a note, never a failure (4y5), and the copy that fails
+        on it: caught (4y5m).
+    - **Held at the copy, that process gone, then side files there again** — the folder changed since the copy:
+      - left by an opener stopped before it closed: FAILS (4w2); the copy that does not compare them with the copy's
+        takes them for that process's own: caught (4w3);
+      - an open and close then removes them within 30 minutes of the copy, and master's next run begins after it:
+        judged afresh the folder would pass, and R19 FAILS on its own record of the failure (4w2b); the copy that
+        forgets that record passes: caught (4w2c);
+      - a new process holding the store: FAILS (4w4);
+      - left by a read-only open, its control first (no side files before, made by it): FAILS (4w5).
+    - **Side files left at the copy, held by none:**
+      - still there and the folder unchanged: PASSES (4z);
+      - with the locks' control failing, a note, never a pass (4z1);
+      - a holder now (4z2), or the side files gone (4z3): FAILS.
+    - **Side files left behind now, where the copy found none:** FAILS (4z4).
+  - Every fault removed: PASSES with no note (4i).
+- **The other checks' teeth (5a–5l):**
+  - 5.18.90's job back on the server (R1, R6, R18);
+  - the library never saying skip (R1, R18 on both layers), and R18 blinded;
+  - the library reading the `-shm` with `file()` — R18 fails on the lost lock — and R18's lock check blinded;
+  - R18's note on the files and the vault;
+  - 087's trigger; the registry's switch; a Domain B file; an event deleted; a photo lost; a fatal planted in the log.
+- **The rollback (section 6):**
+  - Typed `ROLLBACK`: **43 ok, 0 failed, 3 notes — each saying what a rollback brings back: the retry job opening the stray store again on Uganda, at most every 10 minutes, and the files 5.18.91 added left on disk, reached by nothing**. The job is 5.18.90's byte for byte, the library is left on disk reached by
+    nothing, 5.18.90's safety fix is kept, the stray store is untouched and no data is changed.
+  - **A deploy declined at its question, over an earlier state file that recorded an R19 failure (6a):** the new
+    state file is written, the earlier one kept beside it byte for byte, and its failure said. Declined once more,
+    both earlier files are kept and the failure is still said, from the first (6a3). The copy that does not keep it
+    loses that failure silently: caught (6a2).
+  - Deployed again, with A14's note (6b), and rolled back once more (6c). A rollback over a file git does not track in
+    the checkout's plugin folder names it and goes on (6c2).
+  - **Deployed once more with a real process holding the stray store across the copy (6d):** PASSES; the state file
+    records the hold and its locks; R19 says not yet.
+  - **That process then ends.** The copy that judges from the copy FAILS on that close (6e). The script as it is waits
+    for master's next completed run, then PASSES and records that close as its moment (6e2).
+  - **A rollback declined at its question (6f):** this release stays live, and the deploy's state file is byte for byte
+    as it was — the rollback's own record goes to a file of its own; the next `--after-only` still PASSES (6f2).
+  - Only the folder's time is then put back, so section 7 still sees every file as the last deploy left it.
+- **What is left behind (section 7):**
+  - Evolution never called in any of the script's runs, with the control on the control;
+  - the stray folder exactly as seeded;
+  - the checkout as found; no weakened copy left;
+  - every weakened copy's anchor found exactly once, with its own control;
+  - nothing in `/tmp`; no PHP fatal from the stand-in.
+
+**Results.** On the committed script (`4f5ce3a`), each run alone: run 1, 10 Oct 00:06–00:26 UTC, and run 2, 00:26–00:45 UTC, each **340 passed, 0 failed**, 138 runs of the script. Their check lines are identical but for each sandbox's own stray-store checksum and times. Evolution was never called; nothing was left in `/tmp` or in the clone. Before them, a scratch trial of each round's script. The last, of round 11's, read 338 passed, 1 failed: the old 1v3, whose edited installed job the new installed-file check now refuses first. It became 1v3 (that refusal) and 1v3b (A13's control, with the check skipped), and both pass in the two runs above.
+
+### Reviews
+
+Eleven independent adversarial reviews: workflows of 4–45 agents, each finding checked by skeptics. After each came fixes,
+a full re-test and the suites.
+1. **Round 1 — a blocker.** The first helper read the live database's header with `fopen()` inside master's process,
+   which drops every POSIX lock master holds on that file (sqlite.org, *How To Corrupt*, 2.2). It was removed: the
+   helper decides from `is_file()` of the side files and reads only through SQLite. Also fixed:
+   - `liveDataDir()` diverged from `getDataDir()` for a `pluginDataDir` of `/` or `0/`;
+   - the test's weakened copies were caught only by text; they now run without the source checks.
+2. **Round 2 — a blocker in the deploy script.** A bare `$dataDir` under `set -u` would have ended every deploy and
+   `--after-only` before its verdict and its rollback command. Also:
+   - R19 had no positive control (A14 added);
+   - the lock measurement counted the database but not its `-shm` (both now, with a weakened copy for each);
+   - the nightly maintenance copy is recorded (Known limits 4);
+   - the rehearsal's R19 checks depended on the clock, and two of its weakened copies were never built.
+3. **Round 3 — R19 watched the wrong instrument.** The stray folder's `migration.log` is `MigrationRunner`'s default log
+   for every caller that gives none — among them `cron/dpo_reconcile.php`, every 5 minutes, on the live store — so it
+   keeps growing whatever opens the stray store. R19 and A14 now watch the folder itself. Also:
+   - R19 reads master's record first and counts only completed runs;
+   - the test keeps `ucrm.json` out of its hard-linked templates, and counts a weakened copy as caught only where the
+     named check passes unweakened;
+   - the rehearsal gained the A12 note, A14 with no schedule and at the window's upper bound, a real reopen by 5.18.90's
+     own job, another job writing the log, and a file from another writer in the folder.
+4. **Round 4 — R19 could fail on the old job's own close.** 5.18.90's store holds its connection until the process ends.
+   A run dispatched just before the copy therefore changes the folder whenever its master process exits, possibly well
+   after the copy, and R19 would have called that an open. A holder killed before it closed would have left `-wal` and
+   `-shm` behind, under which a later open leaves no trace. Fixed:
+   - the script records the folder right after the copy;
+   - R19 judges side files present now, and a store held at the copy, as the table above says;
+   - the rehearsal drives both with a real holder process, and deploys once with the store held across the copy;
+   - "(still running)" now prints on its line, not on a line of its own.
+
+   Also corrected in this record and in the shipped comments:
+   - "never run" is replaced by "not run against the live store since the 26 Aug move";
+   - the reach of the leak (above);
+   - how R18 differs from A13;
+   - the rule number for `exit` (11b);
+   - the stray file's provenance;
+   - the evidence scripts' names;
+   - a stale comment in the test. The test's server-shaped template also gained a control that its log exists.
+5. **Round 5 — the reference moved.** 8 agents, 21 findings, 20 upheld.
+   - With the store held at the copy, R19 judged from master's LATEST run, so the window moved with every run and an
+     open before it went unseen. It now records the first such moment and judges from it.
+   - With nothing held at the copy, a 2-minute grace forgave an early open. It now judges from the copy itself.
+   - Side files a stopped process leaves were taken for a live holder, so R19 could never pass after uCRM's restart.
+     It now reads the locks on the store from `/proc/locks`: held files mean a process has it open, unheld ones were
+     left behind.
+   - Also fixed:
+     - the deploy no longer falls back to `<plugin>/data` for its reads while the folder beside the plugin holds a
+       `plugin.sqlite3`;
+     - the summary reports what R19 established, not more;
+     - entry names may hold any character;
+     - the time to look again is never already past.
+   - In the rehearsal:
+     - a holder's process number leaves the cleanup list once it is reaped;
+     - the last deploy's effect on the stray folder is no longer undone before section 7 checks it;
+     - new cases and weakened copies cover each reference.
+   - In the test, labels that stated the server's log behaviour as fact now say "as built here", and the headline says
+     where the gate applies.
+   - In this record, the doc findings: the scheduled opener, observed against inferred, 071's timing, the R19 table.
+6. **Round 6 — once seen, never forgotten.** 6 agents, 18 findings, all upheld.
+   - R19 saw a copy-time holder's side files left behind, then forgot it. A later open that removed them, followed by a
+     completed run, then passed.
+   - After the holder was known to be gone, a new holder was only a note.
+
+   Both came from R19 re-deriving its reference on every run. It now judges from one reference — the copy, or a moment
+   it records once — against which side files, locks and the folder are all compared. Also fixed:
+   - the lock reader has a positive control (a store held open on the host by `python3`);
+   - the store is read locks, files, locks, files, so a closing process is never mistaken for one that left;
+   - the live data directory is found on the host first, so a container that does not answer can no longer send the
+     reads to the stray store; a rollback tried with the container down stops with "roll back by hand", not "run this
+     again";
+   - the rehearsal's 6e was re-timed so that its weakened copy now fails;
+   - the doc wording.
+7. **Round 7 — an open after the fix could be taken for the copy-time holder's.** 8 agents; 20 findings, 18 upheld.
+   - With a process holding the store at the copy, side files found later held by no process were taken for that
+     process's own, left behind — even when the folder had changed since the copy, which proves those were removed and
+     new ones made: by a read-only open, or an opener stopped before it closed. R19 recorded that moment and passed.
+     It now compares them with the copy's, and fails.
+   - With those side files gone, the reference was master's latest run, however long after the copy; an open hours
+     later, before that run, went unseen. The copy-time process's close must now fall within 30 minutes of the copy —
+     master's own stale-lock limit — and the reference is that close.
+   - A failure whose evidence the folder does not keep — a change after a run had begun — could pass on the next run.
+     Every R19 failure is now recorded in the state file and fails every later run.
+   - A rollback declined at its question rewrote the deploy's state file first, so R19 could never pass again while
+     5.18.91 stayed live. A rollback now writes its own record.
+   - Also fixed: R19 judges nothing without the record from before the deploy; a changed database reads `R19 FAILED` in
+     the summary; the pass text no longer says no process holds the store when the locks could not be read.
+   - In the rehearsal: the late branch, the 30-minute bound, the recorded failure and the side files made again (an
+     opener stopped, a new holder, a read-only open), each with a weakened copy where it has a branch of its own; a
+     declined rollback, checked byte for byte (6f); 4h now checks that R19 judges nothing; 4z2 checks the reference its
+     failure names.
+   - In this record: the quarantine's evidence is named exactly (runbook step 3); the read-only behaviour; the host's
+     `python3`; the lines on the fallback and the rollback with the container down.
+8. **Round 8 — the round-7 changes, checked.** 6 agents; 17 findings, 16 upheld; none a blocker or major.
+   - R19 took the copy's time from the retry job's file, which a rollback attempt that copied nothing would still
+     re-stamp. The copy's own time is now recorded at the copy (`STRAY_COPY_AT`) and R19 judges from it.
+   - A process seen holding the store more than 30 minutes after the copy was only a note, and passed if it was later
+     killed (a close would have failed). It now fails, whatever ends it.
+   - A change after master's last completed run began was a failure, now permanent, though the copy-time process's own
+     late close can cause it (`main.php`'s tail outlives master's lock). Within 30 minutes of the copy it is now a note,
+     and the next completed run records it.
+   - An unreadable job time failed permanently; no record of the copy's time is now a note, and every R19 failure is
+     evidence of an open or a write.
+   - Recorded, not changed: an open of side files left behind changes the `-shm`'s own time, which R19 does not read
+     (Known limits 12).
+   - In the rehearsal: a held-at-copy fixture no longer back-dates the folder before the moment it had recorded; the
+     cases with no record of the copy or of its time; the read-only open's control checks the side files were absent
+     before; a holder within and past the 30 minutes (4w, 4w1); the late change a note, then recorded (4r2, 4r3); the
+     recorded failure rehearsed on a failure whose evidence the folder does lose (4w2b).
+   - In this record: the table's rows, Known limits 8 and 12, the option text, the read-only measurement's place.
+9. **Round 9 — the round-8 changes, checked.** 4 agents; 10 findings, all upheld; none a blocker or major.
+   - The 30 minutes are a heuristic, not a limit `main.php`'s tail obeys: the failure texts and Known limits 12 now
+     say so, and name the one case where R19 fails on the copy-time process itself.
+   - The summary's "check it" time now comes from the recorded copy time; the info line no longer shows 1970 when the
+     job file cannot be read; the failure texts no longer assert a holder at the copy that the copy could not see.
+   - The trial ran a script derived before the last header edit; the script is derived afresh from its sources before
+     it is pinned and committed, and only that file is rehearsed.
+   - In the rehearsal: the copy that could not read the locks, with a holder past the 30 minutes (4w1q); a late change
+     past them beside a file of another writer's — a note, never a failure (4r6), with a weakened copy (4r6m).
+   - In this record: the `-shm` measurement as measured, the write list, stale wording.
+
+10. **Round 10 — the round-9 changes, the whole script for production safety, and the rehearsal for coverage.**
+    8 agents.
+    - **14 findings:** 5 verified (4 upheld, 1 found to be documented behaviour), 4 beyond the cap on verification and
+      5 nits. Each was read and is settled here. None was a blocker. Three were rated major by their finders and minor
+      by their verifiers.
+    - **The data directory could still be `<plugin>/data`.** That happened when the live store was found neither on the
+      host nor in the container, and would happen if `ucrm.json` named that folder. Every read would then have opened the
+      stray store. Now refused before anything is read.
+    - **`scripts/deploy-hybrid.sh` copies the checkout's working tree.** A file git does not track under the plugin folder
+      would be installed unseen. This is carried from earlier releases' scripts, and was found absent on the server on
+      09 Oct. It is now refused at a deploy and named at a rollback.
+    - **A copy that failed part-way had no recovery.** The container's record stayed on 5.18.90 with some files already
+      5.18.91's, and the deploy said "roll back with `--rollback`", which then found nothing to roll back. Carried from
+      earlier releases' scripts. The deploy now says the copy did not complete and prints the by-hand put-back.
+      `--rollback`, and a second deploy over such a tree, refuse and print the same.
+    - **A deploy run again rewrote the state file**, and an earlier R19 failure with it. That is written down as intended,
+      as a verifier noted. The earlier file is now kept beside the new one all the same, and its failure is said.
+    - **The wording on R7 was wrong.** R7's comment and the `--after-only` description said nothing is written. The
+      cash-in-hand tool opens the live store as the plugin does, so its `MigrationRunner` may add its 071 warning to the
+      live `migration.log`. The words are corrected; the tool and how it is run are unchanged since 5.18.71.
+    - **In the rehearsal:**
+      - each refusal above (1aa–1ad2, 6a), with the part-way copy made real and its put-back run as printed; the guard,
+        the untracked-file refusal and the kept state file each weakened and caught (2x, 2y, 6a2);
+      - R19's branches that had no case, each with a weakened copy: no completed run since the recorded moment (4y1); the
+        store changing while read (4c3); its folder's time unreadable (4c4); another writer's file beside a held store
+        (4w6) or where recorded side files went (4y5); unreadable locks on a held store (4w7);
+      - the summary's words where R19 fails, passes or cannot compare (4c, 4f, 4h, 4m, 4s).
+    - **Recorded, not changed** (Known limits 13–16): an unsteady read at the copy; the list of entries R19 compares
+      with; the switch read and the webhook key; the pin by its seven-character name.
+11. **Round 11 — the round-10 changes, checked.** 8 agents.
+    - **20 findings:** 5 verified, all upheld, all minor; 3 beyond the cap on verification and 12 nits. Each was read
+      and is settled here. None was a blocker.
+    - **The put-back could strand the checkout.** It returned to the branch only if `deploy-hybrid.sh` succeeded. When
+      the container does not answer in time it exits 2, and the checkout stayed on 5.18.90, which holds no copy of this
+      script to run again. The put-back now returns to the branch either way. That includes the inherited by-hand lines
+      in the summary and the rollback's.
+    - **A part-way copy was recognised by the manifest alone.** A copy that stopped before `manifest.json` went
+      unrecognised. Now every file the release changes is compared with 5.18.90's, in the deploy and in `--rollback`.
+    - **A failed copy was taken for a restarting container**, two minutes' wait included. The record on the host now
+      tells the two apart.
+    - **A failed keep of the earlier state file was a failure noted after the file had been overwritten.** It now stops
+      before anything is written. An R19 failure in any kept state file is said at every deploy run, not only the next.
+    - **Files with non-ASCII names in the checkout's `data/` could be counted.** git now leaves `data/` out itself.
+    - **R7 runs as the container's default user**, not as the database's owner, and opens the live store read-write.
+      Round 10 had recorded only its `migration.log` line. The record, the header and the comment now say so (Known
+      limits 17).
+    - **In the rehearsal:**
+      - a copy that stopped before the manifest, refused by the deploy and the rollback (1ac3, 1ac4), and that check
+        weakened (2z);
+      - the failed copy said at once (1ad), its put-back taken from the log and run exactly as printed (1ad2), and back
+        on the branch when its copy step fails (1ad3);
+      - the failure still said at the second re-run (6a3);
+      - a rollback over an untracked file (6c2).
+    - **In this record:** the counts of round 10; which items are carried from where; what "each weakened" covered;
+      the data directory refused in every mode; the description of 1ad2.
+
+**Not changed, recorded:** the deploy's switch read (`tools/set_distributors.php --show`, carried from earlier releases' scripts) loads the
+configuration through `PluginConfig::load()`, which refreshes the vault when it is out of step with the files (Known
+limits 9).
+
+### Deployment runbook — each step is the operator's, and each needs the operator's approval first
+
+1. **Push `release/5.18.91`** — only on the operator's approval of the deploy; it is local until then (the server
+   fetches it at deploy time).
+2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.91 && mkdir -p /root/dnb-5.18.91 && bash scripts/deploy-5.18.91.sh 2>&1 | tee /root/dnb-5.18.91/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   It refuses before anything changes on any NO-GO, asks for `DEPLOY`, and prints the rollback at the end of its log,
+   on its own. Expected, not yet observed:
+   - A14 `ok`, if the stray folder's last change falls within one dispatch of master's last run of 5.18.90's job;
+     otherwise A14's note, and R19 can then never pass from this deploy's record;
+   - PASSED;
+   - R19's note: master has not yet completed a run of the fixed job, or a process still held the stray store at the
+     copy;
+   - a note from the locks' control, if the host has no `python3` or no readable `/proc/locks` (Known limits 8).
+3. **At least 20 minutes after the copy** (the summary prints the time). Read-only; nothing is deployed:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.91.sh --after-only 2>&1 | tee /root/dnb-5.18.91/after-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   **The evidence the quarantine waits for is exactly this, in a run with 0 failed:** the R19 line that begins
+   `ok    R19 the retry job ran at` and says `nothing has opened the stray store since`, and the summary's
+   `whether anything has opened it since the fix: nothing has opened it since … (R19)`. The other R19 `ok` — `the
+   stray store under the plugin folder is exactly as before the deploy` — says only that the database file is unchanged,
+   and is not that evidence. Any R19 note, or any failure in this run or an earlier one, means: not yet, or never from
+   this deploy. The R19 `ok` needs all of these:
+   - from R19's reference — the copy, or, if a process still held the store then, the moment R19 recorded — the stray
+     folder unchanged, its side files as they were and nothing holding the store;
+   - a completed run of the fixed job after that reference;
+   - A14 `seen`.
+
+   In the second case one more `--after-only`, after master's next run, may be needed.
+
+   A FAIL or a note says what it saw. Send the log file either way. **Until the quarantine is done, do not run
+   `diagnose-sales-pipeline.sh`:** it opens the stray store read-write as root, and R19 would then rightly fail.
+4. **The quarantine of the stray store is NOT part of this release.** It needs its own approval, after step 3. Its
+   proof is R19, not the stray folder's `migration.log`, which other jobs keep writing — the investigation's proposed
+   *"log has stopped growing"* test would never pass.
+5. **The salesperson pilot stays off** until the operator resumes it.
+
+### Known limits and open risks
+
+Observed facts are marked **observed**; everything else is reasoning from the code, or not known.
+1. **The 19 Sep re-creation of the served plugin folder is NOT EXPLAINED.**
+   - **Observed:** the plugin folder was born at 07:08:00.95 that day, and so were (07:08:00–01) the 15 oldest-born
+     entries listed directly under it, `data/` among them, and the stray `plugin.sqlite3` inside it (07:08:01.45).
+     Nothing listed is older. Files written since were born later: `manifest.json` and `main.php` by 5.18.90's deploy on
+     08 Oct, and `ucrm.json`, which uCRM writes, on 01 Oct. The stray database's ledger reaches back to 26 Aug, so its content came through the
+     re-creation, by a means not established.
+   - Hypothesis only: a uCRM ZIP install.
+   - 5.18.91 neither depends on it nor resolves it. A second event of that kind could recreate the folder again.
+2. **How often the stray store is opened today is NOT ESTABLISHED.** By the code, it is opened once per run of the
+   retry job, at most every 600 s. The jobs after it and `main.php`'s tail open none there (*Why*, above). The ~319 log
+   lines a day cannot be counted as opens (Corrections). A14 will show, on the server, whether the folder's last change
+   falls within one dispatch of the job's.
+3. **Other writers of `<plugin>/data` exist in 5.18.90's code** — hard-coded fallbacks that SAFETY.md calls bugs:
+   `CashbookService` on the cash-declaration page, `NotificationService`'s `LifecycleService`, `KycService`,
+   `FiberFinanceEngine`, `MagmaApiClient`, `api_cron_debug.php`.
+   - Some create files there: `FiberFinanceEngine`'s `fiber_events.log`, `CashbookService`'s meta file and error log.
+     The gates they call only read files and the vault.
+   - None of them opens a SQLite database there, but the read was not exhaustive.
+   - **Two manual tools do open the stray store,** both unscheduled: `diagnose-sales-pipeline.sh` (repository root, "run
+     on the server as root") opens it read-write twice, and `migrations/migrate_tickets_data.php` opens and migrates it.
+     Either run before the quarantine makes R19 fail, rightly.
+   - Any file one of them adds after the copy makes R19 note instead of pass.
+   - Not changed here (out of scope).
+4. **The nightly maintenance job copies the live database and its `-wal` and `-shm` with PHP `copy()` inside master's
+   process** (`cron_maintenance.php` lines 474–478, unchanged since before 5.18.88).
+   - That releases master's POSIX locks on the live database — the same hazard as round 1's blocker. A later close by
+     another process could then remove the `-wal` and `-shm` under master.
+   - **A pre-existing data-integrity risk to the live store, NOT introduced or fixed by 5.18.91.** It needs its own
+     release: SQLite's own copy (`VACUUM INTO` or the backup API), and never copying `-wal`/`-shm`.
+   - For 5.18.91 it means one thing: if that happens, the gate cannot read the store and decides from the configuration
+     files and the vault (the A12/R18 note says if those do not name Uganda).
+5. **The configuration files and the vault on the server** are expected to name Uganda (UGX in the vault, by earlier
+   records); A12 prints what they name. A run of the job on its own (`php cron_starlink_block_retry.php`, which nothing
+   schedules) decides the same way.
+6. **The leak's past effects cannot be observed afterwards:** master's gate for the two later jobs evaluated with the
+   stray `$dataDir`, and `main.php`'s tail writing files into the stray folder. One is known: two wallet-sync files on
+   07 Oct.
+7. **The South Sudan server was not examined.** Its behaviour is unchanged by design. If its layout is Uganda's, the
+   stray access continues there — the approved scope.
+8. **The lock checks need `/proc/locks`.**
+   - A13's needs it in the container. If it shows nothing, A13 says so in a note, and the proof rests on the test and
+     the rehearsal.
+   - R19's runs on the host and is trusted only after its control, which needs `python3` on the host. Without either,
+     every run carries the control's note, and side files keep R19 from passing: the side files the copy saw, still
+     there, give a note; side files that were not there at the copy, or appear again after the folder changed, fail as
+     at any time.
+9. **The deploy's switch read refreshes the vault** when it is out of step with the files (`tools/set_distributors.php
+   --show` loads through `PluginConfig::load()`; carried from earlier releases' scripts). On a running server other jobs keep it in step,
+   so in practice nothing is rewritten — not proved on the server.
+10. **`cliDataDir()`'s blind spot and `getDataDir()`'s rescue copy stay armed** while the stray file exists. That is what
+    the separate quarantine is for; their own hardening is a separate, cross-country decision.
+11. **Found along the way, untouched:**
+    - 071's checksum warning floods the live store's migration log, and the stray folder's (the live ledger does not
+      match the shipped file). R7's run of the cash-in-hand tool, at each deploy and `--after-only`, adds one more line to
+      the live log, as the plugin's own runs do;
+    - `main.php` line 509 names `\DishNet\SqliteStore`, a class that does not exist;
+    - **observed:** a stale `lte_auto_suspend_log.json` sits in the served plugin root, and nothing at `3d9cb5f` writes
+      that file in the plugin root (its writers go through the store, or write it in the data directory);
+    - **observed:** `tests/test_job_notifications_off.php` is served but not in the release.
+12. **What R19 cannot see, or may get wrong.**
+    - When a process held the store at the copy, an open between the copy and R19's reference moment cannot be told
+      apart from that process's own close: at most 30 minutes after the copy once its side files are gone; until R19
+      finds them left behind otherwise. That includes a read-write open that closes while the holder still lives, which
+      leaves the side files in place.
+    - Where side files were left behind, a **read-only** open leaves them as they were, and so does an open by
+      something that is itself stopped before it closes. Neither changes the folder or the side files' names. With
+      nothing else holding the store, each does change the `-shm`'s own time; an open made while another connection
+      holds it does not (measured in the review with the development machine's SQLite, 3.45.1, through PDO and
+      Python; not observed on the server). R19 does not read that time. While such an open lasts, its locks show.
+      Where no side files were there, a read-only open leaves its own, and R19 fails on them.
+    - The folder's time is read in whole seconds: an entry made and removed within the second the copy was recorded
+      cannot be seen.
+    - The 30 minutes are a heuristic. Master takes a lock older than that for stale and its runs end in minutes, but
+      `main.php`'s tail has no deadline once started: its 260-second check only decides whether the wallet sync and
+      the auto-pull start, and a slow one can run longer. A process that held the store at the copy and lived more than
+      30 minutes after it makes R19 fail, when it is seen holding or when it finally closes — the one case where R19
+      fails on that process itself. The failure says so ("unless a process that held it then has run that long"), and
+      like every R19 failure it is never forgotten: the quarantine then waits for the engineer's reading of the logs.
+
+13. **At the copy, a read that changed while it was taken records the first of its two reads**, with its locks as `?`.
+    If a process began opening the stray store in that instant, the copy records no side files, and that process's own
+    close later fails R19 for good. The window is the moment between two reads of a few files. A process opening the
+    store just then is either 5.18.90's job, dispatched in that very instant, or an open after the fix. Found in the
+    tenth review; not changed.
+14. **R19 compares the folder's entries with the list from before the deploy**, not with a list taken at its reference
+    moment. An entry another writer adds or replaces in between makes every later change a note where R19 could have
+    decided. It is never a false pass. Not changed.
+15. **The switch read runs without `-u`**, as the container's default user: root, by the script's own comments, not
+    observed. It is `tools/set_distributors.php --show`, through `PluginConfig::load()`. If the live `webhook_secret` file
+    were missing while the vault holds it, the vault would write the file back as that user, mode 0600. "The webhook key"
+    in the never-touched list holds only while the file is there. Carried from earlier releases' scripts; not changed.
+16. **The pin is a seven-character commit name**, as for every release since 5.18.66.
+    - Two objects in the server's checkout sharing the name stop the script, because git calls the name ambiguous.
+    - Another commit pushed under the same seven characters, with the reviewed one absent, would pass the name checks.
+      It would meet only the behavioural ones (A6, A9–A13).
+    - Not changed.
+
+17. **R7 runs 5.18.71's cash-in-hand tool without `-u`**, as the container's default user. That is root, by the
+    script's own comments; not observed. The tool opens the live store read-write through `SqliteStore::create()`:
+    - it writes no record and applies no migration, since none is due;
+    - its `MigrationRunner` may add the 071 warning line to the live `migration.log` (Known limits 11).
+
+    The rule the other reads keep is to open the database only as its owner, read-only, so that SQLite never leaves a
+    root-owned file beside it. R7 does not keep that rule. It has run so at every deploy since 5.18.71 on this server.
+    Recorded in the tenth and eleventh reviews; not changed in this release.
+
+### Corrections to the 5.18.90 entry (09 Oct), with their evidence
+
+Two statements in the 5.18.90 RESULT bullet about the stray file were wrong: the two the operator approved correcting.
+Each is corrected beside the original, which stays as written.
+1. *"…the live store … named by `ucrm.json`'s `pluginDataDir`"*
+   - **Observed:** the server's `ucrm.json` has no `pluginDataDir` — the key names listed by `stray-db-evidence.sh`.
+     `getDataDir()` chose the folder beside the plugin by its second rule.
+   - The deploy's checks did read the live store: with no `pluginDataDir`, they take the folder beside the plugin when
+     it holds a `plugin.sqlite3`.
+2. *"What wrote the stray file is NOT ESTABLISHED. `getDataDir()` falls back to the plugin's own `data/` only when
+   `ucrm.json` gives no `pluginDataDir`…"*
+   - **Identified by the code and the ledger's timing, not observed in the act.** `cron_starlink_block_retry.php` names
+     `<plugin>/data` itself, and by the code every run opens the store there and applies any migration it lacks. It is
+     the only scheduled opener found in the code; two manual tools open it too (Known limits 3).
+   - The stray's own `_migrations` ledger shows 087 applied at 09:55:07 on 07 Oct, about three minutes after the live
+     store's at 09:52:18 — consistent with the job's next dispatch. Master's record of that cycle was not read.
+   - The fallback was misstated: with no `pluginDataDir`, `getDataDir()` takes the plugin's own `data/` only when the
+     plugins root is not writable.
+
+**Not corrected inline — recorded here, outside the two statements approved for correction:**
+- The same misattribution appears earlier in this file, in the 04 Oct 5.18.74 entry: *"…its data directory is
+  `<plugins>/.dishnet-hybrid-sudan-data/` (uCRM's `pluginDataDir`; `docs/27`, the 4 Oct listing)"*. That folder comes from
+  `getDataDir()`'s second rule, not from a `pluginDataDir`.
+- The 5.18.90 bullet's *"Left in place, unread and untouched"* says what that record did. The file itself was opened by
+  5.18.90's retry job on every run (by the code). With no migration due, nothing was written to it: it is unchanged
+  since 07 Oct 09:55:07 (observed). It was also read — as files, immutably — by the 09 Oct evidence scripts.
+
+**A third correction**, to the investigation report of 09 Oct (delivered in the session, not in this repository). It
+read the stray folder's `migration.log` — about 320 lines a day — as *"still opened about 320 times a day"*. It proposed
+*"the stray folder's `migration.log` has stopped growing for at least 30 minutes"* as the proof before the quarantine.
+The log can carry neither:
+- `MigrationRunner`'s default log is `<plugin>/data/migration.log` (`lib/MigrationRunner.php` line 51).
+- `cron/dpo_reconcile.php` (every 300 s), `dpo_push.php`, `dpo_return.php`, `tabs/admin/dpo_payments.php` and
+  `includes/api/api_lte_admin.php` construct it without a log path while migrating the live store. The live store's 071
+  checksum does not match the shipped file, so that log grows whatever opens the stray store.
+- Whether each open of the stray store adds a line too depends on the stray ledger's own 071 checksum. That was not read,
+  and must not be read by opening the store. The stray applied 071 on 13 Sep at 11:55:19; the live store's time for 071
+  was not printed. If both applied the same installed file, as both did for 072–087 minutes apart, it probably
+  mismatches too.
+
+Either way the lines cannot be counted as opens. The third review of 5.18.91 found this; R19 and A14 watch the stray
+FOLDER instead (above). How often the stray store is actually opened is NOT ESTABLISHED: by the code, once per run of
+the retry job, at most every 600 s.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.91.sh --rollback` asks for `ROLLBACK`, puts 5.18.90 (`3d9cb5f`) back through `deploy-hybrid.sh`,
+and checks it (RB).
+- The retry job is 5.18.90's again: on Uganda it opens the stray store at most every 10 minutes (applying any migration
+  it lacks — none is due) and leaves `$dataDir` pointing there, as before.
+- `lib/StarlinkRetryScope.php` stays on disk, reached by nothing (`deploy-hybrid.sh` never deletes).
+- Every switch stays as it is.
+- **If the stray store has been quarantined by then, put it back first.** 5.18.90's job would otherwise create a new,
+  empty store there and import any `*.json` it finds in that folder.
+
+The command, as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.91.sh --rollback
+
+By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 3d9cb5f && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
+It returns the checkout to its branch whether or not its copy step succeeds. The same put-back is the one to use if a
+deploy's copy stopped part-way: the deploy, and `--rollback` too, then say so and print it.
