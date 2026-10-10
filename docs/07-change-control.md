@@ -9329,3 +9329,292 @@ The command, as root on the server, on its own:
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 3d9cb5f && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 It returns the checkout to its branch whether or not its copy step succeeds. The same put-back is the one to use if a
 deploy's copy stopped part-way: the deploy, and `--rollback` too, then say so and print it.
+
+## 10 Oct — 5.18.92: the scheduler's own lock — cron/master.php keeps its lock under its own names, so the jobs it includes can no longer make its final release a TypeError (the fatal "cron/master.php:405" on the server since at least 08 Oct); no migration; South Sudan and Domain B unchanged. `release/5.18.92` = `247a480`, cut on live 5.18.91 (`dfad4d9`); `scripts/deploy-5.18.92.sh` pinned to it and rehearsed — PUSHED 10 Oct 08:15 UTC; NOT yet deployed
+
+**Request.** On 10 Oct the operator asked: *"5.18.92 build and do necessary to work sales-0001 to start answering
+customers"*, then *"give me deploy command when its ready"*. Asked which should come first, the operator chose
+**"5.18.92 first (Recommended)"**. So 5.18.92 is deployed with the registry still off, and the salesperson pilot (docs/66
+from step 2 onward) is switched on after it. The card's step 1 (*Verify number*, *Register webhook*, and *Verify number*
+on the department numbers) may be done before; this script accepts that (rehearsal 1o). **sales-001 needs nothing from
+5.18.92.** Its steps are the operator's, on the card and with `set_config.php`, as docs/66 sets them out.
+
+### Release notes
+
+- **The defect** (see 5.18.91's RESULT above). `cron/master.php` includes every job with a bare `include`, in its own
+  scope. Twelve of the jobs it dispatches assign `$lockFp` and `$lockFile` at their top level — the names master's own
+  lock used — and close them on their way out:
+  - `cron_wa_sync.php`, `cron_sync.php`, `cron/photo_retry.php`, `cron_invoice_notify.php`;
+  - `cron_lte_sync.php`, `cron_lte_usage.php`, `cron_lte.php`, `cron/cash_carry_reminder.php`;
+  - `cron_maintenance.php`, `cron_fiber_sync.php`, `cron_wallet_sync.php`, `cron_leads.php`.
+
+  At its normal end master then unlocked the last such job's closed handle, which is a TypeError on PHP 8. `main.php`
+  catches it. The admin pages' piggyback run does not: public.php runs master from a shutdown function, with nothing to
+  catch the throw. php-fpm logs *"Uncaught TypeError: flock(): supplied resource is not a valid stream resource in
+  …/cron/master.php:405"*, and every shutdown function after it is skipped (master's own lock handler, SQLite's passive
+  checkpoints). No job's work is lost: the schedule is saved after each job, and the page has already been sent. The
+  server shows 7 such lines since 08 Oct, all at `:405`, under 5.18.89, 5.18.90 and 5.18.91 alike.
+- **The fix.** Master's lock becomes `$_m_lockFp` and `$_m_lockFile`, prefixed as its store and its config already are,
+  and its normal-end release is guarded with `is_resource()`. No other line of master.php changes; the base→pin diff is
+  that rename, that guard and their comments (22 insertions, 13 deletions). A job's `$lockFp` can no longer reach
+  master's lock. 5.18.51's guard on the shutdown handler stays.
+- **Not changed:** every job, the scheduler's list and order, the retry job and its gate (5.18.91), every switch.
+
+### Files — 8 against `dfad4d9`: none added, 8 changed, none removed
+
+- **Changed (8):** `cron/master.php`, `tests/test_master_lock_release.php`, `manifest.json` (5.18.92), and the version pin
+  only in `tests/test_distributor_apply.php`, `tests/test_distributor_link_ucrm.php`, `tests/test_distributor_notify.php`,
+  `tests/test_distributor_registry.php` and `tests/test_distributor_territory.php`.
+- **8 files changed, 219 insertions(+), 98 deletions(-).** No migration; nothing outside the plugin.
+- sha256: `cron/master.php` `5400be20c678d5ec…`, `tests/test_master_lock_release.php` `6fe15211f91123bc…` — both pinned by
+  the deploy script (A0).
+
+### Ancestry
+
+`247a480` (5.18.92, release) ← `dfad4d9` (5.18.91, live) ← `3d9cb5f` (5.18.90) ← `53d5c4d` (5.18.89).
+- **The development commit is `2a499a8`.** Its `tests/test_master_lock_release.php` is the release's byte for byte. Its
+  `cron/master.php` makes the same lock change, hunk for hunk with line numbers set aside, but it also carries the
+  undeployed AI media job. So the release's master.php is 5.18.91's plus exactly that change, which is proved three
+  ways:
+  - the derivation undoes it and gets 5.18.91's file back byte for byte;
+  - the rehearsal redoes it independently, with two controls;
+  - A0 pins the result by sha256.
+- The development branch also carries undeployed work: the partner portal (081–083), the PD-8 CSRF guard and the AI
+  media layer (085). None of it is here.
+
+### Tests
+
+- **`tests/test_master_lock_release.php`, rewritten: 78 passed, 0 failed** (it had 27). It reads master's lock section
+  and its normal-end release from `cron/master.php`, and a job's own lock from `cron_wa_sync.php`. Each must be found
+  exactly once, or the test stops. It runs them in child processes, directly and as the admin pages' piggyback runs
+  master (a shutdown function that includes it, with nothing to catch a throw), with each kind of job:
+  - **a job that takes no lock**;
+  - **a job that takes and closes its own** (cron_wa_sync.php's);
+  - **one that leaves its own handle open**;
+  - **one that dies on an uncatchable fatal**;
+  - and **a run that finds the lock held**, which must return at once.
+
+  Every clean run must:
+  - print nothing on stderr;
+  - release master's lock at its normal end;
+  - run every later shutdown function.
+
+  **Controls:**
+  - 5.18.91's lock, rebuilt from the same code by its old names, ends in the server's message under the piggyback. Its
+    control on the control, the same lock with a job that takes none, runs clean.
+  - 5.18.50's handler fails as docs/44 recorded.
+  - Six weakened copies of the fix are each caught.
+
+  A scope scan reads all 50 job scripts: master names no bare `$lockFp` or `$lockFile` outside its comments, no job
+  names `$_m_lockFp`, and 12 jobs assign `$lockFp` (the control).
+- **Full suite, development, twice**, on `2a499a8`: 289 files, **14,313 passed, 0 failed, 0 skipped** in each pass,
+  identical file by file to each other. Against 5.18.91's development passes (14,262) the only change is this test,
+  27 → 78. Pass A ran 04:25–05:12 UTC on the tree just before the commit; pass B 05:12–06:00 UTC on `2a499a8`. The only
+  PHP warnings are `test_dpo_endpoints`' five, in every pass.
+- **The release tree's own suite, twice**, in its own worktree on `247a480`, clean: pass A 06:13–06:58 UTC, pass B
+  06:58–07:43 UTC. Each read 277 files, **13,391 passed, 0 failed, 0 skipped**, identical file by file to each other and
+  to 5.18.91's release suite (13,340) but for this test, 27 → 78. The warnings are the same five.
+- **Lint:** `php -l` on the seven PHP files of the release diff, read from the commit: 0 errors (PHP 8.4.19 here). The
+  server's own PHP lints them at A2, and runs the test itself at A15 and R20.
+- `git diff --check dfad4d9 247a480`: clean.
+- **Secret scans** of the release diff, the script and the rehearsal: clean. The only phone-shaped values are the
+  automated-send policy check's throwaway fixtures, carried unchanged from 5.18.91's script (a country code and zeros).
+
+### South Sudan and Domain B
+
+master.php runs the same jobs in the same order on both installs; only its own lock's variable names change. As for
+5.18.91, the deploy's and the rehearsal's A6/A13/R13/R15/R17/R18 run South Sudan's paths, and A7/R14 hold Domain B and
+the plugin's docs byte for byte.
+
+### `scripts/deploy-5.18.92.sh` — 2961 lines, sha256 `2f1920f9692147bf…`
+
+It is derived from `deploy-5.18.91.sh`. Every anchor and every replacement is asserted, and none of 5.18.91's wording is
+left where it no longer holds. **It keeps 5.18.91's state requirements — the registry dark, own leads only off, no
+salesperson number switched on — because the operator chose to deploy before the pilot.** What changes:
+
+- **The pin and its base:** `247a480` on `release/5.18.92`, cut on `dfad4d9`. The delta is exactly the 8 files.
+- **A0** also requires the pin's master.php to be the reviewed release file byte for byte (`5400be20…`), and its lock
+  test the reviewed one (`6fe15211…`).
+- **A13:** the live job is already 5.18.91's gated one, so on Uganda both the live job and the pin's must stop. The pin's
+  must be 5.18.91's byte for byte, and South Sudan's open of the throwaway stray store is the control that shows the
+  observation sees a change.
+- **A14** is carried from 5.18.91's deploy record (`/root/dnb-5.18.91/state-5.18.91.env`; `DNB_PREV_STATE` overrides it).
+  Since that copy the live job opens nothing, so the folder's quiet can no longer be held against its dispatches. To
+  answer "seen", that record must say "seen" and hold no R19 failure, and the stray store must be exactly as it was at
+  that copy: the same database file, no side file then or now, and the same folder time.
+- **A15 (new, refusal 15):** the pin's `tests/test_master_lock_release.php`, run under the server's own PHP, from the code
+  copied into the container's /tmp, as the database's owner, with a TMPDIR of its own that the run removes. It must read
+  `78 passed, 0 failed`. **If it does not, the log shows what the test printed** — its failed assertions and its last
+  lines — before the NO-GO.
+- **The copy's time** is master.php's, the file the deploy stamps; 5.18.91 read it off the retry job.
+- **V4** names each fatal by its time and file:line. It reads both `<file>:<line>`, as an uncaught exception writes it,
+  and `<file> on line <line>`, as every other fatal and every parse error does. It never quotes more of the text.
+  `cron/master.php:405` with the flock message, within 30 minutes of the copy, is a note (a master run begun on
+  5.18.91's code). After that it is a FAIL, and after a rollback a note. Any other fatal fails, as before.
+- **R20 (new):** the installed lock test under the server's PHP, as for A15. It also prints what the test printed on a
+  failure.
+- **RB:** back to 5.18.91 — master.php and the gated retry job byte for byte. The old fatal can return, and a note says
+  so.
+- **The code copy** splits its parts into words without the shell's pathname expansion. git therefore matches
+  `cron_*.php` inside each commit, never the shell against the checkout's working tree, which a later push may change.
+- **F** says what changed, and asks for a second `--after-only` a day later, when V4 has read enough admin page loads.
+
+**Its derivation checks, before writing a byte:**
+- the release delta is exactly the 8 files;
+- the pin's master.php, with the lock change undone, is 5.18.91's byte for byte;
+- the pin's master.php has no media job;
+- the pin's lock test is the development branch's;
+- the retry job is 5.18.91's at both commits;
+- no real name or number is in the script.
+
+`bash -n` is clean. The script was committed on the development branch as `dc6f70f`, and that is the file the final
+rehearsals ran.
+
+### The rehearsal — `scripts/harness/deploy-5.18.92/rehearse.sh` (945 lines, sha256 `740adc9fc1037f45…`)
+
+It is built from 5.18.91's: the sandbox is 5.18.91's, each edit asserted, and the scenarios are new. The base is
+5.18.91 installed as production runs it, with the stray store untouched since 5.18.91's copy and 5.18.91's deploy record
+as that script writes it. **R19's judgement is 5.18.91's line for line** (asserted), so its full matrix, rehearsed for
+5.18.91, is not repeated here; its pass, its note, and a real open's failure are.
+
+- **§0 controls.** These include the base→pin master.php check (5.18.91's file, release guarded and lock renamed, is the
+  pin's; the rename alone, or one other line changed, is not) and the pin's lock test passing from an A15-shaped copy.
+- **§1 refusals, nothing changed by any:**
+  - **1a–1g:** the version, the pin, master.php, the lock test, a planted file;
+  - **1h/1i:** the registry or own leads only switched on;
+  - **1j:** the pilot's number switched on;
+  - **1k:** `ucrm.json` naming the stray folder;
+  - **1l:** an untracked file in the checkout;
+  - **1m:** A15 refusing a pin whose master releases `$lockFp` again, with the test's own output in the log;
+  - **1n:** A13 naming exactly `pin-job-not-5.18.91's uganda-not-stopped`;
+  - **1p:** the installed job's gate taken out → `live-uganda-not-stopped`;
+  - **1q:** A13's control, the installed job opening nothing → `live-south-sudan-not-measured south-sudan-differs`;
+  - **1w:** the code copy failing.
+
+  **1o** accepts the department numbers verified on the card.
+- **§2 weakened copies.** A15 and A0 are each shown to be the layer that refuses. Each of A14's conditions is shown
+  alone, as a note, with a copy blind to that one condition saying "seen" (caught):
+  - the folder's time;
+  - the record's own A14;
+  - the database file, its folder's time kept;
+  - a side file now;
+  - a side file in the record.
+
+  **2d:** no record, or one holding an R19 failure. **2f:** the stray `migration.log` grown since the copy, as
+  dpo_reconcile grows it, and A14 still "seen".
+- **§3 the deploy:** PASSED, 0 FAIL, two notes (R19's, and V4's for the old fatal planted during the run). The ok lines
+  and the log's hygiene are checked, and so is the state file.
+- **§4 `--after-only`:**
+  - **4a:** R19's note before master has run the job.
+  - **4c:** PASSED with 0 failed and 0 notes — the evidence the quarantine waits for.
+  - **4d:** the old fatal 10 minutes after the copy is a note.
+  - **4e:** 40 minutes after, a FAIL; its weakened copy, with no time bound, passes.
+  - **4f:** another fatal fails.
+  - **4h:** the old message at another line of master.php fails; its weakened copy, blind to the line, passes.
+  - **4i:** another fatal at `:405` fails; its weakened copy, blind to the message, passes.
+  - **4j:** a fatal and a parse error written "on line N" fail, each named by file:line.
+  - **4k:** a `cron_*.php` in the checkout that neither commit holds, run from the checkout, still copies the code; the
+    shell-expanded copy fails.
+  - **4g:** a real open of the stray store fails R19, and the failure is recorded.
+- **§5:** an installed master.php with the old release fails R20 and R1.
+- **§6:** the rollback PASSES, with RB's checks; deploying again over it PASSES.
+- **§7:** Evolution is never called. The stray folder ends as seeded, the checkout is as found, and nothing is left in
+  /tmp. Every run of the script took the options it was given: a run that answers "unknown option" is recorded, and
+  none was; the control on the control shows such a run is recorded.
+
+**Results.** Two final runs on the committed script (`dc6f70f`, sha256 `2f1920f9…`), 08:00–08:07 and 08:07–08:15
+UTC on 10 Oct, each read **178 passed, 0 failed**, over 53 runs of the script; the deploy's own tally was 74 ok,
+0 failed, 2 notes. Before them, five trials:
+- trials 1–3 on the first draft, the third reading 150/0;
+- trial 4 on the reviewed script, 175/1 — it found the misordered options (Reviews);
+- trial 5, 178/0.
+
+### Reviews
+
+One independent read-only review workflow ran: four dimensions, each finding adversarially verified (7 agents).
+- **The fix itself — no finding.** Since 5.18.92, master touches its handle only under `$_m_lockFp`, before any job
+  runs and at its guarded normal end. The shutdown closure captures it by value, and no job names `$_m_`. Every
+  variable master reads after the first include is `$_m_`-prefixed except `$dataDir`. That one is reassigned by 41 jobs:
+  all to the same directory, and by `cron_starlink_block_retry.php:50` to `<plugin>/data`. That reassignment never
+  changes master's behaviour: on Uganda the gate returns first, and on South Sudan it is the live directory. It is older
+  than this release (Known limits 3). The development commit's lock change is the release's, hunk for hunk.
+- **Fixed after the review, then re-rehearsed:**
+  - **A15/R20 kept none of the test's output** (should-fix). A NO-GO there would have given no reason, and this is the
+    first child-process test run in the server's container. The log now carries the test's failed assertions and last
+    lines (rehearsal 1m shows them).
+  - **V4 could not name the file and line of non-exception fatals or parse errors** (should-fix), which PHP writes as
+    "in <file> on line <N>". It now reads both forms (rehearsal 4j).
+  - **The code copy's `cron_*.php` was expanded by the shell against the checkout's working tree** (should-fix). It is
+    now matched by git inside each commit (rehearsal 4k, with its weakened copy).
+  - **The rehearsal lacked refusing cases** for A14's record, database and side-file conditions, for V4's line and
+    message tests, for A13's live side and its control, and for a failed code copy. It also lacked an independent proof
+    of the pin's master.php. All were added; each new condition is shown alone, with a weakened copy where it guards
+    something.
+  - **Wording:** the header's "byte for byte the development branch's" for master.php (it is the same lock change, not
+    the same file), and A15's and R20's "the server's own line", which only the piggyback's message matches; `:405` is
+    V4's to name.
+- **Found while rehearsing the fixes:** in four weakened-copy cases (4e', and the new 4h', 4i' and 4k') the rehearsal
+  passed its own `--script` option after the script's `--after-only`. The script then answered *"unknown option"* and
+  stopped, and "no FAIL line" read as the weakened copy passing. 4e' had been vacuous since the first draft of this
+  rehearsal; 4k', which expects a failure, exposed it. All four now pass the options in order and require the run's
+  own verdict line, and the runner records any run that answers "unknown option" (§7). 5.18.91's rehearsal passes them
+  in order throughout.
+- **Left, with reasons:** Known limits 4–6.
+
+### Deployment runbook — each step is the operator's
+
+1. **Push `release/5.18.92`** on the operator's word (*"give me deploy command when its ready"*), so the server can fetch
+   it. **Pushed 10 Oct 08:15 UTC** (`247a480`).
+2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.92 && mkdir -p /root/dnb-5.18.92 && bash scripts/deploy-5.18.92.sh 2>&1 | tee /root/dnb-5.18.92/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED with R19's note (no run of the retry job since the copy yet), and possibly a V4 note for the old
+   fatal from a master run begun before the copy. **Press no card button while it runs.**
+3. **At least 20 minutes after the copy**, read-only:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.92.sh --after-only 2>&1 | tee /root/dnb-5.18.92/after-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, 0 failed, including R19's `ok    R19 the retry job ran at … nothing has opened the stray store
+   since 5.18.91's copy`. That is the evidence the stray store's quarantine waits for: R19 in a run with 0 failed.
+4. **Then the salesperson pilot**, docs/66 from step 1 (or step 2 if the card's step 1 is done). The pilot needs nothing
+   further from this release.
+5. **A day later**, run `--after-only` once more. V4 then shows whether the old fatal has stopped.
+6. **The quarantine of the stray store is NOT part of this release.** It needs its own approval, after step 3.
+
+### Known limits and open risks
+
+1. **This script refuses once the pilot is on** — the registry, own leads only, or a salesperson number switched on (A5,
+   A5b, A8). That is the operator's order: 5.18.92 first. The next release's script must instead accept the pilot's
+   switches as the operator leaves them. 33 checks are mapped for that rework (A5, A5b, A8, A11, R2b, R2c, R11, R12,
+   V3f, V3h among them).
+2. **A15 and R20 are the first child-process test run in the server's container.** They need `proc_open` and a clean
+   stderr there, and nothing has yet shown either on the server. If either is missing, A15 refuses before anything
+   changes, and the log now says why.
+3. **`$dataDir` in master's shared scope** (the review): `cron_starlink_block_retry.php:50` leaves it on `<plugin>/data`
+   for the jobs after it. On South Sudan that is the live directory; on Uganda the gate returns first. This is older
+   than 5.18.92 and not changed. Prefixing it (`$_m_dataDir`) would close it in a later release.
+4. **The test's "lock is free afterwards" checks after a child has exited cannot fail**, since the exit drops the lock.
+   So in the crash case the shutdown handler's own release is not observed separately (the review's LT-2). This carries
+   no deploy risk: A0 pins master.php, and the process end frees the lock. The docblock's *"exactly as the server did,
+   directly and under the piggyback"* also says more than it tests: only the piggyback is the server's path (LT-3).
+   Changing the test now would change the release commit and re-run every suite. Both wait for the next change to the
+   test.
+5. **RB's own report of a partial rollback copy is not rehearsed** (the review's F8). The rollback's effect is checked
+   independently (§6: master.php and the retry job, by sha256).
+6. **V4's evidence that the old fatal has stopped needs admin page loads.** Before a day has passed, its absence is not
+   evidence (F says so).
+7. **Seen during the work, not changed:** `cron_wa_sync.php` carries a hard-coded fallback value for its feed secret. Its
+   value is not repeated here; it is for a separate look.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.92.sh --rollback` asks for `ROLLBACK`, puts 5.18.91 (`dfad4d9`) back through `deploy-hybrid.sh`,
+and checks it (RB). master.php is then 5.18.91's again, so the piggyback fatal at `:405` can return. The retry job keeps
+5.18.91's gate, and every switch stays as it is.
+
+The command, as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.92.sh --rollback
+
+By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
