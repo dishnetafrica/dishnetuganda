@@ -9677,6 +9677,14 @@ PASSED.**
   **sales-001 switched on with its assistant off** (*"sales-001 is switched on."*, now `active · assistant off`), each
   through the same console script. Next: the Inbox and department tests (docs/66 steps 2 and 4), then the assistant on and
   step 5's tests, the AI-to-AI loop test among them.
+- **A test message to sales-001 from the alert number got no AI reply** — correct twice over: the assistant was still off,
+  and since 5.18.90 a salesperson's number never answers DishNet's own side (its lines, the alert numbers
+  `alert_whatsapp` / `whatsapp_admin_phone`, the owner's phone of record): the message is kept for the team, silently
+  (`internal_recipient`). The assistant tests therefore need a phone that is none of those.
+- **sales-001's assistant switched on, at the operator's word** (*"make it on so we can answer custoemrs"*): *"The
+  assistant answers on sales-001 while the number is on."*, now `active · assistant on`. The department and Inbox tests
+  were not reported first; the first customer-like reply from sales-001's own number is the check that stands in for
+  them. Still to report: docs/66 step 5's tests, the AI-to-AI loop test among them.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
