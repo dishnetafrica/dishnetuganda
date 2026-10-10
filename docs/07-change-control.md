@@ -9668,6 +9668,11 @@ PASSED.**
   ran in the browser's console (no names, instance names or numbers printed beyond two digits).
 - **`multi_number_channels_enabled = 1` then accepted** (step 2): the registry is ON. Next, per docs/66: the department
   test, then sales-001's Verify number, Register webhook, Switch on with the assistant off, and the assistant on.
+- **sales-001 verified 22:00:32 UTC (••••57)**, read from Evolution's report for its instance; still `disabled`,
+  assistant off. The card's buttons seemed to do nothing in the browser — uCRM keeps the outer page scrolled while the
+  plugin's page reloads, so the answer box at its top stays out of view — so the operator pressed it from the console with
+  a script that sends exactly that button's request once, refuses a step out of order, and prints the plugin's answer
+  with no name, instance name or number beyond two digits.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
