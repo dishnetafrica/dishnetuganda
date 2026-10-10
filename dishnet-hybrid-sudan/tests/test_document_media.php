@@ -870,7 +870,7 @@ $scOut2 = shell_exec('php ' . escapeshellarg($root . '/tools/set_config.php') . 
 is_(strpos((string)$scOut2, 'between 1 and 200') !== false && strpos((string)$scOut2, 'rc=1') !== false, 'the tool refuses a page cap outside its range rather than clamping it', (string)$scOut2);
 $ve = (string)file_get_contents($root . '/tests/validate_environment.php');
 is_(strpos($ve, "'zlib' => 'gzinflate', 'xmlreader' => 'XMLReader', 'iconv' => 'iconv'") !== false, 'validate_environment reports the three optional extensions the readers need');
-is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.91', 'manifest version is 5.18.81');
+is_(json_decode((string)file_get_contents($root . '/manifest.json'), true)['information']['version'] === '5.18.92', 'manifest version is 5.18.81');
 
 echo "\n19. Weakened copies — each caught by the scenario that guards it\n";
 $mutants = [
