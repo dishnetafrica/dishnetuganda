@@ -9330,7 +9330,7 @@ By hand, only if the script cannot run: `cd /opt/dishnet && git checkout 3d9cb5f
 It returns the checkout to its branch whether or not its copy step succeeds. The same put-back is the one to use if a
 deploy's copy stopped part-way: the deploy, and `--rollback` too, then say so and print it.
 
-## 10 Oct — 5.18.92: the scheduler's own lock — cron/master.php keeps its lock under its own names, so the jobs it includes can no longer make its final release a TypeError (the fatal "cron/master.php:405" on the server since at least 08 Oct); no migration; South Sudan and Domain B unchanged. `release/5.18.92` = `247a480`, cut on live 5.18.91 (`dfad4d9`); `scripts/deploy-5.18.92.sh` pinned to it and rehearsed — PUSHED 10 Oct 08:15 UTC; NOT yet deployed
+## 10 Oct — 5.18.92: the scheduler's own lock — cron/master.php keeps its lock under its own names, so the jobs it includes can no longer make its final release a TypeError (the fatal "cron/master.php:405" on the server since at least 08 Oct); no migration; South Sudan and Domain B unchanged. `release/5.18.92` = `247a480`, cut on live 5.18.91 (`dfad4d9`); `scripts/deploy-5.18.92.sh` pinned to it and rehearsed — PUSHED 10 Oct 08:15 UTC; DEPLOYED 21:32:52 UTC (PASSED 74/0/2); `--after-only` 21:43:34 UTC PASSED 55/0/1, R19 conclusive
 
 **Request.** On 10 Oct the operator asked: *"5.18.92 build and do necessary to work sales-0001 to start answering
 customers"*, then *"give me deploy command when its ready"*. Asked which should come first, the operator chose
@@ -9606,6 +9606,72 @@ One independent read-only review workflow ran: four dimensions, each finding adv
    evidence (F says so).
 7. **Seen during the work, not changed:** `cron_wa_sync.php` carries a hard-coded fallback value for its feed secret. Its
    value is not repeated here; it is for a separate look.
+
+### RESULT — DEPLOYED 10 Oct (copy 21:32:52 UTC): PASSED 74 ok / 0 failed / 2 notes; `--after-only` 21:43:34 UTC: PASSED 55 / 0 / 1 — R19 conclusive
+
+Recorded from the two terminals the operator pasted (the script prints no secret). The log files stay on the server
+under `/root/dnb-5.18.92/`. No money figure, number or name from either run is repeated here.
+
+**Push.** `release/5.18.92` was pushed at 08:15 UTC on 10 Oct, a new branch at `247a480`. The deploy command was given
+in the chat; the rollback was not (it is printed at the end of the deploy's log, on its own).
+
+**The deploy run (`20261010T213203Z`):**
+- **Stage A, all ok.**
+  - The checkout was at `2bd2916`, the release `247a480`, cut on `dfad4d9`. There were no tracked edits and no
+    untracked files under the plugin folder. The live commit was `dfad4d9` (5.18.91), on PHP 8.1.34.
+  - A0, A7, A2 and A3–A5b held. Every switch read as the operator had left it, the registry `mn=absent/absent`.
+  - A8 held: 087 complete, one salesperson number, none switched on, `dnum=0`.
+  - A9–A11 and A6 held.
+  - **A14 "seen":** the stray store was exactly as 5.18.91's deploy recorded it at its copy — the same database file,
+    no side file then or now, its folder unchanged since 02:45:47 UTC. Its `migration.log` had grown since that copy,
+    as `dpo_reconcile` grows it; A14 does not compare the log (rehearsal 2f).
+  - A12 held. **A13:** both the live job and the pin's stop on Uganda, and both open on South Sudan (the control).
+  - **A15: 78 passed, 0 failed under the server's PHP 8.1.34** — the first child-process test run in the container.
+    `proc_open` is there and stderr was clean (Known limits 2: resolved).
+- **Backup** in `/root/dnb-5.18.92/backup-20261010T213203Z`:
+  - the live `plugin.sqlite3` (integrity ok);
+  - the data folder;
+  - the installed 5.18.91 plugin;
+  - the stray folder, copied as files;
+  - the vault;
+  - the event queue's snapshot (one `wa.escalation` not yet done).
+- **The copy** at 21:32:52 UTC; the container serves `247a480`.
+- **V:** every check ok, V3–V3h unchanged. V4 read 19 lines over 60 s: no fatal.
+- **R:** R1–R20 ok. Two notes, both expected:
+  - **R3:** `migration.log` holds no line for 087 — the note 5.18.89, 5.18.90 and 5.18.91 gave.
+  - **R19:** no completed run of the retry job yet since the copy.
+- **74 ok, 0 failed, 2 notes; PASSED** — the rehearsal's own tally. In the rehearsal the second note was V4's, for the
+  old fatal it planted; on the server it was R3's.
+
+**The `--after-only` run (`20261010T214334Z`), 10 minutes 42 seconds after the copy: 55 ok, 0 failed, 1 note (R3's);
+PASSED.**
+- **R19 ok.** Master ran the retry job at 21:40:07 UTC, after the copy. The stray folder has not changed since
+  02:45:47 UTC, and nothing held the store at the copy. With A14 "seen" before it, the run concludes *"nothing has opened
+  the stray store since 5.18.91's copy"*.
+  - **This is the evidence the stray store's quarantine waits for: R19 in a run with 0 failed.**
+  - The quarantine itself is NOT done. It needs its own approval.
+  - The run came earlier than the 20 minutes the runbook suggests. R19 needs only a completed run of the job after the
+    copy, and master's record shows one, so its conclusion stands.
+- **V4:** no new fatal of the plugin since 21:32:42 UTC, 378 lines read. Whether the old `cron/master.php:405` has
+  stopped is shown only after a day of admin page loads (below).
+- **R13:** the `wa.escalation` that was pending at the snapshot was done by then (total 9007, all done).
+
+**After the check, the pilot (docs/66) began** — the operator's steps, recorded as they were pasted:
+- `sales_own_leads_only = 1` (step 3): in effect at once. Each salesperson sees only their own leads; admins and holders
+  of *All Leads* see every lead.
+- `wa_followups_on_owned_numbers = 1` (step 3): inert until the registry is on, and then only on a salesperson's number
+  with its assistant on.
+- `multi_number_channels_enabled = 1` (step 2) was **refused, twice**: *"Not yet: the department numbers are not all
+  verified (sales, support). Nothing was saved."* The card's **Verify number** on the Sales and Support rows (docs/66 step
+  1.5) comes first.
+- The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
+
+**The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
+script would report the checks that expect them off (Known limits 1). So the evidence that the old fatal has stopped is
+taken with a command that prints only file:line counts — never a message — and should print nothing, run any time after
+21:33 UTC on 11 Oct:
+
+    docker logs --since 2026-10-10T21:33:00Z ucrm 2>&1 | grep -F dishnet-hybrid-sudan | grep -E 'PHP Fatal|PHP Parse error|UNCAUGHT' | grep -oE 'dishnet-hybrid-sudan/[A-Za-z0-9_./-]+(:[0-9]+| on line [0-9]+)' | sort | uniq -c
 
 ### Rollback — its own command, never pasted with the deploy
 
