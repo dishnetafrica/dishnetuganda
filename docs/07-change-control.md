@@ -9673,6 +9673,10 @@ PASSED.**
   plugin's page reloads, so the answer box at its top stays out of view — so the operator pressed it from the console with
   a script that sends exactly that button's request once, refuses a step out of order, and prints the plugin's answer
   with no name, instance name or number beyond two digits.
+- **sales-001's webhook registered** (*"Evolution will now send the messages of sales-001 to this plugin."*), then
+  **sales-001 switched on with its assistant off** (*"sales-001 is switched on."*, now `active · assistant off`), each
+  through the same console script. Next: the Inbox and department tests (docs/66 steps 2 and 4), then the assistant on and
+  step 5's tests, the AI-to-AI loop test among them.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
