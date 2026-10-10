@@ -9663,7 +9663,11 @@ PASSED.**
   with its assistant on.
 - `multi_number_channels_enabled = 1` (step 2) was **refused, twice**: *"Not yet: the department numbers are not all
   verified (sales, support). Nothing was saved."* The card's **Verify number** on the Sales and Support rows (docs/66 step
-  1.5) comes first.
+  1.5) came first: **sales verified 21:50:04 UTC (••••15), support 21:50:30 UTC (••••48)**, each read from Evolution's
+  report for its instance; accounts is covered by the support number. Read back with a read-only page check the operator
+  ran in the browser's console (no names, instance names or numbers printed beyond two digits).
+- **`multi_number_channels_enabled = 1` then accepted** (step 2): the registry is ON. Next, per docs/66: the department
+  test, then sales-001's Verify number, Register webhook, Switch on with the assistant off, and the assistant on.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
