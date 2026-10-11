@@ -290,7 +290,7 @@ if (file_exists($masterCronPath)) {
 
 $_mainElapsed = microtime(true) - $_mainStartTime;
 if ($_mainElapsed > 260) {
-    mainLog("⏱ main.php already ran " . round($_mainElapsed) . "s — skipping inline wallet sync + auto-pull (handled by master.php crons).");
+    mainLog("⏱ main.php already ran " . round($_mainElapsed) . "s — skipping inline wallet sync (handled by master.php crons).");
 } else {
 
 $kycConfig       = loadJSON($dataDir . '/kyc_config.json');
@@ -429,223 +429,23 @@ if ($syncIntervalMin > 0 && $elapsedMin < $syncIntervalMin) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AUTO-PULL UCRM CLIENTS CACHE  (daily — default 03:00 server time)
-// Fetches all clients from UCRM org 2 and refreshes ucrm_clients_cache.json
-// Also rebuilds sales_person_index.json — maps each retailer name → client IDs
-// Runs automatically via UCRM's main.php scheduler. No crontab needed.
-// Control: kyc_config.json → ucrm_auto_pull_hour (0-23, default 3)
-//          ucrm_auto_pull_enabled (true/false, default true)
+// AUTO-PULL UCRM CLIENTS CACHE — RETIRED (5.18.93)
+// The nightly full pull that stood here (ucrm_auto_pull_hour, default 03:00) never completed in this code (the
+// repository's, from 26 Sep). It used $crmGet, $crmBase and $crmToken, which only the inline wallet sync above defines,
+// and only on a run whose interval has passed.
+// On every other run in the pull hour it called null: "Uncaught Error: Value of type null is not callable" at
+// main.php:484 — 12 lines in the server's log on the night of 10–11 Oct, one per five-minute tick of the pull hour
+// (docs/07, 5.18.92 and 5.18.93). On a run where the wallet sync had defined them, it fetched every client from
+// uCRM and then died creating \DishNet\SqliteStore, a class that does not exist, before it wrote anything. So
+// it never wrote a cache, and retiring it changes no data.
+// What keeps the client cache instead — as it did all along, since this block never completed: cron_sync.php's delta
+// client sync (master's crm_sync, on each master run — about every five minutes — and at most every two minutes) merges
+// the first 100 clients of uCRM's own order (clients?direction=DESC&limit=100) and rebuilds client_search_index.json —
+// "without a daily 3am full pull", in its own words; the webhook and ClientInvoiceCacheRefresher refresh the clients
+// they touch; a full pull (ucrm_pull_sync) and the sales index (ucrm_sync_done: sp_client_index.json, sp_summary.json)
+// are the CRM screens' own actions, in includes/api/api_crm_misc.php. ucrm_auto_pull_enabled and ucrm_auto_pull_hour
+// stay in the configuration and on the Settings screen; nothing here reads them.
 // ══════════════════════════════════════════════════════════════════════════════
-
-$autoPullEnabled = ($kycConfig['ucrm_auto_pull_enabled'] ?? true) !== false;
-$autoPullHour    = (int)($kycConfig['ucrm_auto_pull_hour'] ?? 3);
-$pullLastFile    = $dataDir . '/ucrm_pull_last_run.json';
-$pullMeta        = file_exists($pullLastFile) ? (json_decode(file_get_contents($pullLastFile), true) ?? []) : [];
-$pullLastDay     = $pullMeta['day'] ?? '';
-$pullLastHour    = (int)($pullMeta['hour'] ?? -1);
-$currentHour     = (int)date('H');
-$currentDay      = date('Y-m-d');
-
-$shouldAutoPull  = $autoPullEnabled
-    && $currentHour === $autoPullHour
-    && ($pullLastDay !== $currentDay || $pullLastHour !== $currentHour);
-
-if (!$autoPullEnabled) {
-    mainLog('UCRM auto-pull: disabled in config.');
-} elseif (!$shouldAutoPull) {
-    $nextPull = date('Y-m-d') . ' ' . str_pad((string)$autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
-    if ($currentHour >= $autoPullHour) $nextPull = date('Y-m-d', strtotime('+1 day')) . ' ' . str_pad((string)$autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';
-    mainLog("UCRM auto-pull: scheduled for {$nextPull}.");
-} elseif ($crmBase === '' || $crmToken === '') {
-    mainLog('UCRM auto-pull: CRM not configured — skipping.');
-} else {
-    mainLog('UCRM auto-pull: starting full clients pull from UCRM Org 2...');
-
-    $limit      = 100;
-    $offset     = 0;
-    $totalPulled = 0;
-    $existingCache = [];
-    $cacheFile  = $dataDir . '/ucrm_clients_cache.json';
-
-    // Load existing cache as map
-    if (file_exists($cacheFile)) {
-        $existing = json_decode(file_get_contents($cacheFile), true) ?? [];
-        foreach ($existing as $ec) {
-            if (!empty($ec['id'])) $existingCache[(int)$ec['id']] = $ec;
-        }
-    }
-
-    $newMap = $existingCache; // start with existing, overwrite with fresh data
-    $pages  = 0;
-    $errors = 0;
-    $maxPages = 200; // safety cap ~20,000 clients
-
-    while ($pages < $maxPages) {
-        $data = $crmGet("clients?limit={$limit}&offset={$offset}");
-        if ($data === null) {
-            $errors++;
-            mainLog("  ⚠ Page " . ($pages+1) . " fetch failed.");
-            break;
-        }
-        $items = is_array($data) ? array_filter($data, 'is_array') : [];
-        $count = count($items);
-        if ($count === 0) break;
-
-        foreach ($items as $c) {
-            if (!empty($c['id'])) $newMap[(int)$c['id']] = $c;
-        }
-        $totalPulled += $count;
-        $pages++;
-        $offset += $limit;
-
-        if ($count < $limit) break; // last page
-    }
-
-    // Save updated clients cache via SqliteStore — MUST use $dataDir (persistent),
-    // NOT __DIR__/data which is the installation folder and gets wiped on every update.
-    if (file_exists(__DIR__ . '/lib/SqliteStore.php')) {
-        require_once __DIR__ . '/lib/SqliteStore.php';
-        require_once __DIR__ . '/lib/StoreInterface.php';
-        $mainStore = \DishNet\SqliteStore::create($dataDir);
-        $mainStore->save('ucrm_clients_cache.json', array_values($newMap));
-    } else {
-        file_put_contents($cacheFile, json_encode(array_values($newMap), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
-    mainLog("UCRM auto-pull: done — {$totalPulled} clients pulled ({$pages} pages), {$errors} errors. Total cached: " . count($newMap));
-
-    // ── REBUILD GLOBAL CLIENT SEARCH INDEX ──────────────────────────────
-    // Full shape: id, name, phone, email, bal, plans, username, status, search
-    // All plugin consumers load from this — no per-tab rebuilds needed.
-    $planNames2 = []; $svcByClient2 = [];
-    $mainPlans    = $mainStore->load('ucrm_plans_cache.json')    ?? [];
-    $mainServices = $mainStore->load('ucrm_services_cache.json') ?? [];
-    foreach ($mainPlans as $p) { if (!empty($p['id'])) $planNames2[(int)$p['id']] = $p['name'] ?? ''; }
-    foreach ($mainServices as $s) { $scid=(int)($s['clientId']??$s['_clientId']??0); if($scid) $svcByClient2[$scid][]=($planNames2[(int)($s['servicePlanId']??0)]??''); }
-    $searchIdx = [];
-    foreach (array_values($newMap) as $c) {
-        $cid = (int)($c['id'] ?? 0); if (!$cid) continue;
-        $fn = trim($c['firstName'] ?? ''); $ln = trim($c['lastName'] ?? '');
-        $nm = trim("$fn $ln"); if (!$nm) $nm = trim($c['companyName'] ?? $c['username'] ?? '');
-        $ph = ''; $em = ''; $xn = [];
-        foreach ($c['contacts'] ?? [] as $ct) { if (!$ph){if(!empty($ct['phone']))$ph=$ct['phone'];elseif(!empty($ct['phones'][0]['number']))$ph=$ct['phones'][0]['number'];} if(!$em&&!empty($ct['email']))$em=$ct['email']; if(!empty($ct['name']))$xn[]=$ct['name']; }
-        if (!$ph) $ph = trim($c['phone'] ?? $c['mobile'] ?? ''); if (!$em) $em = trim($c['email'] ?? '');
-        $pl = implode(' ', array_filter($svcByClient2[$cid] ?? [])); $un = trim($c['username'] ?? ''); $co = trim($c['companyName'] ?? '');
-        $searchIdx[] = ['id'=>$cid,'name'=>$nm,'phone'=>$ph,'email'=>$em,'bal'=>(float)($c['accountBalance']??0),'plans'=>$pl,'username'=>$un,'status'=>($c['status']??''),'search'=>strtolower("$nm $ph $em $cid $pl ".implode(' ',$xn)." $un $co")];
-    }
-    $mainStore->save('client_search_index.json', $searchIdx);
-    mainLog('Search index rebuilt: ' . count($searchIdx) . ' entries.');
-    // Extract customAttribute[1] (Sales Person) from each client
-    // Produces: { "Mecklyine": [crmId1, crmId2, ...], "Justus": [...] }
-    // Also produces: ucrm_sales_summary.json — per-salesperson stats
-    // ATTR IDs: 1=Sales Person, 36=Priority, 41=Package, 43=Ref
-    $ATTR_SALES_PERSON = 1;
-    $ATTR_PRIORITY     = 36;
-    $ATTR_PACKAGE      = 41;
-    $ATTR_REF          = 43;
-
-    $spIndex   = []; // salesPerson => [clientId => mini client record]
-    $spSummary = []; // salesPerson => {count, active, leads, revenue, packages}
-
-    foreach ($newMap as $c) {
-        $cId     = (int)$c['id'];
-        $isLead  = (bool)($c['isLead'] ?? false);
-        $fname   = trim($c['firstName'] ?? '');
-        $lname   = trim($c['lastName']  ?? '');
-        $name    = trim("$fname $lname") ?: trim($c['companyName'] ?? $c['username'] ?? '');
-        $balance = (float)($c['accountBalance'] ?? 0);
-        $regDate = substr($c['registrationDate'] ?? $c['createdAt'] ?? '', 0, 10);
-        $username = trim($c['username'] ?? '');
-
-        // Extract custom attributes. A tax field is never a sales attribution:
-        // on the Uganda uCRM field 1 is "EFRIS TIN", and indexing it would list
-        // customers' tax numbers as sales people.
-        require_once __DIR__ . '/lib/EfrisClientField.php';
-        $attrs   = [];
-        foreach ($c['attributes'] ?? ($c['customAttributes'] ?? []) as $attr) {
-            if (EfrisClientField::of((string)($attr['key'] ?? $attr['name'] ?? '')) !== null) continue;
-            $attrs[(int)($attr['customAttributeId'] ?? 0)] = trim($attr['value'] ?? '');
-        }
-        $salesPerson = $attrs[$ATTR_SALES_PERSON] ?? '';
-        $package     = $attrs[$ATTR_PACKAGE]      ?? '';
-        $priority    = $attrs[$ATTR_PRIORITY]     ?? '';
-        $ref         = $attrs[$ATTR_REF]          ?? '';
-
-        if (!$salesPerson) continue; // no sales attribution
-
-        // Phone
-        $phone = '';
-        foreach ($c['contacts'] ?? [] as $ct) {
-            if (!$phone && !empty($ct['phone'])) { $phone = $ct['phone']; break; }
-        }
-        if (!$phone) $phone = trim($c['phone'] ?? '');
-
-        // Build index entry
-        if (!isset($spIndex[$salesPerson])) $spIndex[$salesPerson] = [];
-        $spIndex[$salesPerson][$cId] = [
-            'id'       => $cId,
-            'name'     => $name,
-            'username' => $username,
-            'phone'    => $phone,
-            'is_lead'  => $isLead,
-            'balance'  => $balance,
-            'package'  => $package,
-            'priority' => $priority,
-            'ref'      => $ref,
-            'reg_date' => $regDate,
-        ];
-
-        // Summary stats
-        if (!isset($spSummary[$salesPerson])) {
-            $spSummary[$salesPerson] = ['count'=>0,'active'=>0,'leads'=>0,'packages'=>[],'months'=>[]];
-        }
-        $spSummary[$salesPerson]['count']++;
-        if ($isLead) $spSummary[$salesPerson]['leads']++;
-        else $spSummary[$salesPerson]['active']++;
-        if ($package) $spSummary[$salesPerson]['packages'][$package] = ($spSummary[$salesPerson]['packages'][$package] ?? 0) + 1;
-        $mo5 = substr($regDate, 0, 7);
-        if ($mo5) $spSummary[$salesPerson]['months'][$mo5] = ($spSummary[$salesPerson]['months'][$mo5] ?? 0) + 1;
-    }
-
-    // Convert index maps to arrays, sort by reg_date desc
-    $spIndexFlat = [];
-    foreach ($spIndex as $sp => $clients) {
-        $arr = array_values($clients);
-        usort($arr, fn($a,$b) => strcmp($b['reg_date']??'', $a['reg_date']??''));
-        $spIndexFlat[$sp] = $arr;
-    }
-
-    // Sort summary by count desc
-    arsort($spSummary);
-
-    // Save via SQLite store if available, fallback to JSON files
-    if (isset($mainStore)) {
-        $mainStore->save('sp_client_index.json', $spIndexFlat);
-        $mainStore->save('sp_summary.json',      $spSummary);
-    } else {
-        file_put_contents($dataDir . '/sp_client_index.json',
-            json_encode($spIndexFlat, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        file_put_contents($dataDir . '/sp_summary.json',
-            json_encode($spSummary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
-
-    $totalAttrib = array_sum(array_map('count', $spIndex));
-    mainLog("Sales index built: " . count($spIndex) . " sales persons, {$totalAttrib} attributed clients.");
-
-    // Save pull meta
-    $pullMetaData = [
-        'day'     => $currentDay,
-        'hour'    => $currentHour,
-        'ran_at'  => date('Y-m-d H:i:s'),
-        'pulled'  => $totalPulled,
-        'cached'  => count($newMap),
-        'sp_count'=> count($spIndex),
-        'errors'  => $errors,
-    ];
-    if (isset($mainStore)) {
-        $mainStore->save('ucrm_pull_last_run.json', $pullMetaData);
-    }
-    file_put_contents($pullLastFile, json_encode($pullMetaData));
-}
 
 } // end time-guard else block
 

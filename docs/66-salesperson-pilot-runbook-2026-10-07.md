@@ -19,8 +19,9 @@ and the checks below expect it.
 
 **5.18.90 or later must be live before step 1.** It is its own release, push and deploy, each approved separately; none
 of that is in this runbook. Everything below is then a setting, a card on the WhatsApp AI screen, or a read-only check.
-*(Corrected 10 Oct: 5.18.91 is live since 10 Oct 02:53 UTC — the database safety fix, which changes nothing in this
-runbook — and 5.18.92, the scheduler's lock fix, is being prepared; neither changes a step below.)*
+*(Corrected 11 Oct: 5.18.91 has been live since 10 Oct 02:53 UTC and 5.18.92 since 10 Oct 21:32 UTC — the database
+safety fix and the scheduler's lock fix — and 5.18.93, which retires the five-minute tick's broken nightly uCRM refresh,
+is being prepared; none of them changes a step below.)*
 
 The design is docs/65 §AA (and §AB, as built); the decisions taken on 07 Oct evening and the acceptance test are §AC.
 
@@ -61,8 +62,8 @@ Nothing is paired until all six are confirmed, and written down by the operator 
 
 ## P. Read-only checks (before step 1; repeat after each step)
 
-**P1. The release.** Expect the release that is live: `5.18.91` since 10 Oct (`5.18.90` when this was written), or
-`5.18.92` once it is deployed.
+**P1. The release.** Expect the release that is live: `5.18.92` since 10 Oct 21:32 UTC (`5.18.90` when this was
+written), or `5.18.93` once it is deployed.
 
 ```
 docker exec ucrm php -r 'echo json_decode((string)file_get_contents("/data/ucrm/data/plugins/dishnet-hybrid-sudan/manifest.json"), true)["information"]["version"] ?? "?", "\n";'
