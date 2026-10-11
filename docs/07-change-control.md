@@ -9685,6 +9685,19 @@ PASSED.**
   assistant answers on sales-001 while the number is on."*, now `active · assistant on`. The department and Inbox tests
   were not reported first; the first customer-like reply from sales-001's own number is the check that stands in for
   them. Still to report: docs/66 step 5's tests, the AI-to-AI loop test among them.
+- **docs/66 step 5's five tests — all passed, the operator reports (11 Oct): "1-5 all are working well no error"**:
+  - a product question answered from sales-001's own number, as the salesperson's assistant;
+  - a quotation request made a lead owned by the salesperson, channel `sales-001`;
+  - "can I talk to a person" marked the chat and alerted the salesperson;
+  - the salesperson's own reply stood the assistant down;
+  - **the AI-to-AI loop test: no DishNet number got an AI reply.**
+
+  **sales-001 is live, its assistant answering customers.** What remains is docs/66 §6's watch:
+  - a follow-up from the pilot number, once a chat has gone quiet;
+  - no cross-visibility of leads between salespeople;
+  - the webhook guard's disconnection alert.
+
+  Separately: the day-later V4 log count (above), and the stray store's quarantine, which waits for its own approval.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
