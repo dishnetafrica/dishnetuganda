@@ -9738,7 +9738,7 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — PUSHED 11 Oct 13:01 UTC; DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` not yet run
+## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — PUSHED 11 Oct 13:01 UTC; DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; the day-later run still to come
 
 **Request.** On 11 Oct, after the day-later log count (5.18.92's RESULT above) found the fatal at `main.php:484`, the
 operator said *"yes buuild 5.18.93"*. Asked whether to repair the nightly refresh or retire it, the operator chose
@@ -10352,7 +10352,7 @@ and the script, which also corrected the entry itself):
 - *"The fix is a release of its own (define the CRM credentials and `$crmGet` once, before both sections)"* —
   superseded. Asked to choose, the operator retired the block instead (this release).
 
-### RESULT — DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` not yet run
+### RESULT — DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; the day-later run still to come
 
 Recorded from the terminal the operator pasted (the script prints no secret). The log file stays on the server under
 `/root/dnb-5.18.93/`. No money figure, number or name from the run is repeated here.
@@ -10437,11 +10437,29 @@ checkout pulled `2bd2916..4c5b77c` and fetched `release/5.18.93`, a new branch o
     time. The log does not say what added the two.
   - The log cannot speak for anything else on the server in that window.
 
-**Still to run, read-only — press nothing on the Salesperson numbers card and run no `tools/set_config.php` while
-either runs (runbook step 2):**
-- **`--after-only` at least 20 minutes after the copy (after 13:26:21 UTC):** R19 then reads the stray store after
-  master's next run of the retry job. Expected, per the runbook (step 3): PASSED, 0 failed, R19 conclusive, with R3's
-  note (`migration.log` holds no line for 087), as 5.18.92's `--after-only` gave.
+**The `--after-only` runs (`20261011T153003Z` and `20261011T153105Z`), about 2 h 24 min after the copy, one after the
+other: each 57 ok, 0 failed, 1 note (R3's); PASSED.** Recorded from the pasted terminal, R7's figures left out; the two
+printed the same lines but for the times and counts below.
+- **R19 ok, conclusive.** Master ran the retry job after the copy: at 15:15:06 UTC by the first run's reading, at
+  15:30:07 UTC by the second's. The stray store's database file is unchanged, with no side file, the folder's own time
+  is still 02:45:47 UTC on 10 Oct, and nothing held the store at the copy. With A14 "seen" before the deploy, both runs
+  conclude *"nothing has opened the stray store since 5.18.92's copy"*.
+  - **This is again the evidence the stray store's quarantine waits for: R19 in a run with 0 failed**, as 5.18.92's
+    `--after-only` gave on 10 Oct. The quarantine itself is NOT done. It needs its own approval.
+  - Its `migration.log` kept growing, to 189,312 and then 189,433 bytes, last written at 15:25:42 and 15:30:51 UTC;
+    other jobs write it, and R19 does not judge the log.
+- **V4:** no new fatal or parse error of the plugin since 13:06:15 UTC — the time the deploy recorded at the end of its
+  stage A, which an `--after-only` reads from — 5,418 and 5,492 lines read. Whether the fatal at `main.php:484` has
+  stopped is shown only by a run after the pull hour (below).
+- **The pilot, unchanged:** V3–V3i, R2b, R2c, R3, R11 and R12 read every switch, the AI settings, 087's rows and trail
+  (every column), the registry, 5.18.89's rules, the routing and the automated-send policy as before each run. The
+  *"pilot record"* line found the 8 readings the deploy took in its stage A, recorded at 13:06:15 UTC, the same in
+  every state and count.
+- R13: the event queue lost nothing, 9,019 events, all done. R14: Domain B and the plugin's docs, all 363 files, byte
+  for byte the release's. R20 and R21 passed again under PHP 8.1.34 (78 passed, 0 failed; 47 passed, 0 failed).
+
+**Still to run, read-only — press nothing on the Salesperson numbers card and run no `tools/set_config.php` while it
+runs (runbook step 2):**
 - **`--after-only` once more a day after the copy, at or after 13:06:21 UTC on 12 Oct** (the script's summary, and
   runbook step 4: a day after the copy is always enough): V4 then shows whether the fatal at `main.php:484` has
   stopped, which is the evidence this release is for. The script says its absence is not evidence before then. The
