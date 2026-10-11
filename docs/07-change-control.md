@@ -10506,3 +10506,363 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
+
+## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design and its code each reviewed adversarially, rehearsed twice; NOT RUN. It may run only after 5.18.93's day-later `--after-only` (at or after 13:06:21 UTC on 12 Oct) has PASSED and its log has been read, and only on the operator's word
+
+The operator's order (the 5.18.91 entry): fix the wrong-database access first; once that is deployed and verified,
+quarantine the old database as its own step. 5.18.91 stopped the retry job from opening it, and 5.18.92 and 5.18.93
+kept that gate. On 11 Oct the operator chose **"Prepare now, run after (Recommended)"**: the script is written,
+reviewed and rehearsed now. Nothing touches the server until 5.18.93's day-later check has run, and the command is
+handed over on its own, after that log has been read.
+
+### Why — two pieces of the plugin's own code can still reach the old store
+
+`<plugin>/data/plugin.sqlite3` is the plugin's database from before 26 Aug. Since then the live one has been
+`.dishnet-hybrid-sudan-data/plugin.sqlite3`, beside the plugin folder. The old file was last written on 07 Oct at
+09:55 UTC, by the Starlink retry job. 5.18.91's gate stopped that job from opening it, and R19 has found it unopened at
+every check since: 5.18.91's, 5.18.92's and 5.18.93's. While it is there, two paths still lead to it:
+
+- **`getDataDir()`'s one-time rescue copy** (`lib/bootstrap_data.php:86-96`). If the live database is ever missing,
+  it copies every file of `<plugin>/data` into the live folder.
+- **`cliDataDir()`'s guard** (`:146-148`). It hands `<plugin>/data` to a command-line tool run by a user who cannot
+  write the plugins root.
+
+With the file gone, the rescue copies nothing, and `cliDataDir()` refuses and names the real folder (exit 2). The
+rehearsal measures both, before and after the move (4q). Hardening those two functions is a separate decision; this
+script does not touch them.
+
+### What it does — one file, by hard link; nothing else in the plugin folder changes
+
+**One name moves.** `ln -T -- <plugin>/data/plugin.sqlite3 /root/dnb-stray-quarantine/stray-plugin.sqlite3.kept`,
+then the kept name is verified to be the same file (same `dev:inode`, 2 names), then `rm -f` of the old name. The kept
+file **is** the stray store: its inode, bytes, owner, mode, times and birth time stay its own. The quarantine folder
+must be on the same filesystem: a copy is never made, and a destination elsewhere (another filesystem, or a bind
+mount, where `link(2)` gives `EXDEV`) moves nothing. Every other entry of `<plugin>/data` stays where it is:
+- its `migration.log`, which jobs migrating the live store still write;
+- its `config.json`, an input of the retry job's gate;
+- everything else.
+
+**No SQLite open, ever.** Neither file is ever opened with SQLite. Every check is a file read: checksum, size, times,
+owner, links, side files. The holders come from the kernel's own lists: `/proc/locks`, and every process's open
+descriptors resolved by `stat -L` to `dev:inode`. The script's only SQLite opens are three:
+- the live store, read-only as its owner, for the gate's question;
+- the live store, read-only as its owner, for master's record of the retry job;
+- the holders control's own throwaway store.
+
+A test counts them.
+
+**Stage A — before-evidence. It changes nothing outside its own folder and ends in GO or NO-GO.** It refuses unless all
+of these hold:
+- **A0.** The container serves `69c87a6` (5.18.93); the installed manifest says 5.18.93; and the retry job and the four
+  files its gate reads are that release's, by sha256.
+- **A1.** The live database is found, and it is another file than the stray store.
+- **A2.** 5.18.93's state file holds a usable `STRAY_COPY`, `STRAY_COPY_AT`, `STRAY_CTRL=seen` and `STRAY_ENTS`, and no
+  deploy record from 5.18.91 on holds `STRAY_R19_FAILED`.
+- **A3, the ordering guard.** The latest log of `deploy-5.18.93.sh` in `/root/dnb-5.18.93`, begun at or after the copy
+  + 24 h (the stamp in its header, read as UTC), PASSED with `0 failed`, no `FAIL` line, and R19's conclusive line
+  naming the copy's time. Once the file has moved, every later run of that script fails R19 for good, so this is the
+  last check that can read the store where it is.
+- **A4.** The stray file is exactly as every deploy since 5.18.91 recorded it:
+  - its checksum, size and time;
+  - no side file;
+  - one name;
+  - no `i` or `a` attribute;
+  - its folder's time and entries as 5.18.93's copy recorded them.
+
+  Each is compared with the script's literals and with the state file, each on its own.
+- **A5.** No process holds the store: no lock and no open descriptor, steady over two reads. A count is believed only
+  beside two controls, run first in every mode. On the host, a throwaway WAL store held open by `python3` must show
+  locks and a descriptor, and none once closed. In the container, a process holding `manifest.json` open as the
+  database's owner must be seen, and seen gone.
+- **A6.** The **installed** retry job's gate reads exactly `live=same inside=no store=read tenant=uganda skip=yes`, with
+  `by-files+vault=uganda`, on this server's own configuration, asked as the database's owner. With the gate open, the
+  job's next run would make a new database where this one was.
+- **A7.** The quarantine folder is a real directory, root's, mode 700, on the same filesystem, and inside no mount,
+  plugin or data folder. It is out of the sight of every container: `docker ps -aq`, each inspected, `ucrm`'s `/data`
+  found as the control. Nothing is kept there yet.
+- **A8.** Master's record of the retry job must be readable. It is printed.
+- **A9.** The newest backup's copy of the stray folder is hashed as a stream, nothing written, and printed.
+
+**Stage B — the move, after `QUARANTINE` is typed.** From the word on, the run ignores INT, TERM, HUP and PIPE: a lost
+terminal or a dead `tee` does not stop it. Every line also goes to its own log in the quarantine folder (`*.own.log`).
+
+Before anything moves, it reads everything again, the holders last:
+- the live commit, the manifest and the gate's files;
+- the gate's answer;
+- master's record (it waits up to 90 s for a running job; a record over 15 minutes old is noted as a dead run's);
+- the stray file's checksum, key, links, side files and change time;
+- the folder's time, change time and entries;
+- the kept names.
+
+Then it writes the record (`prepared`), makes the link, verifies it (`linked`), removes the old name and records
+the time (`moved`). If the link fails, nothing was made and the record says `abandoned`. If the old name cannot be
+removed, the kept name is taken back and the record says `abandoned`.
+
+**Stage C — straight after, from the record, so that a resumed run checks the same:**
+- C1–C2: the old name and its side files are gone.
+- C3: the folder's entries are exactly as before, less the one.
+- C4–C5: the kept file is the stray store as recorded, with no side file.
+- C6: no holder on it. In a resumed run whose holder controls do not pass, *not measured* (`--check`'s K10 measures it
+  again), never a FAIL: only a resumed run can reach it, since A5 refuses a failed control.
+- C7: the live database and the gate's files are as before, and the live commit too. The commit is read through the
+  container, 24 times 5 s apart; an unread commit is *not measured*, never *changed*.
+- C8: the gate still stops the job: the **installed** job must call it (the deploy scripts' needle), and the probe must
+  read as required. A job without the gate FAILs. A parsed reading that would let the job run FAILs. A skip on which
+  every source agrees, with the live store not read a second time, is *not measured*; so is no answer. A time to run
+  `--check` again is never before the move + 20 minutes, so a log names one such time.
+- C9: the container's start time, as a note.
+
+A stage-C FAIL is recorded (`Q_CHECK_FAILED`) and fails every later `--check`. Either way the record says `done`. After a
+FAIL the log gives one next step: send the logs and wait for a decision. It prints no `--check` time and no put-back
+command.
+
+**`--check` — at least 20 minutes after the move. It changes nothing but its own log, and on a failure one line of the
+record:**
+- K1: the record and the files decide the state first.
+- K3: `<plugin>/data` is the same folder (`dev:inode:birth`); if it was replaced, there is no conclusion.
+- K4: no database or side file at the old name.
+- K5: `sqlite_migration.log` as at the move.
+- K6: no new `*.json.migrated`.
+- K7: other entries are named, not judged.
+- K8–K9: the kept file is unchanged, with no side file.
+- K10: no holder.
+- K11: the gate, as C8. After a rollback to 5.18.90 without the put-back first, the gate's library is still on disk
+  (`deploy-hybrid.sh` deletes nothing) and would still answer the probe; K11 FAILs on the installed job and names the
+  put-back.
+- K12: a later `STRAY_R19_FAILED` is named as the known consequence of a forbidden run, never as an opener.
+- K13: conclusive only when master's record of the job is a completed run strictly later than the move + 120 s and
+  not later than now. Before the move + 20 minutes it names that time. After it, with no run in twice the job's
+  interval, it says master is not running the job as before and asks for the log; it never names a time already past.
+
+**`--put-back` — only if ever needed. It is its own command (below) and asks for `PUTBACK`.** It gives the kept file its
+old name back by the same two steps, then removes the kept name. It refuses:
+- over any file at the old name other than the stray store itself (the key recorded as `Q_KEY_BEFORE`);
+- over a kept file that changed, has a side file, is held, or carries an `i`/`a` attribute;
+- when it would give the file its old name back while a release with the gate (5.18.91 on) is live and the gate is not
+  read as it must be: a job without the gate, a reading that would let the job run, one not read as required, or no
+  answer. It reads the gate before the word and again after it, before the link.
+
+With 5.18.90 or earlier live there is no gate, and it says so and goes ahead (rule 2). It also closes a quarantine that
+stopped between its two steps: the stray store already holds its old name, so it removes only the kept name.
+`<plugin>/data` does not change, the record says `abandoned`, it prints the rule that binds until the move, and the
+quarantine may then run again.
+
+**One run at a time.** Every mode locks the quarantine folder itself (`flock` on the folder) before it reads anything and
+before it opens its own log. A quarantine whose terminal was lost goes on to its end. A second run beside it stops at
+once, says so, and adds nothing to the folder, so the newest `*.own.log` is the running one's.
+
+**Verdicts.** `PASSED` only when nothing FAILED **and** something was concluded. `NOT CONCLUSIVE — <the one next
+step>` when nothing failed but nothing was concluded either: a check before the job has run, an unmeasured gate or
+commit, a half-done state. `N FAILED` otherwise. After a FAIL, no put-back command is printed: *"Do not run the put-back:
+a check above FAILED. Send these logs and wait for a decision."*
+
+**Every state a run can leave has one command**, decided from the record **and** the files:
+
+| record | old name | kept name | the quarantine command | `--check` | `--put-back` |
+|---|---|---|---|---|---|
+| none (no `quarantine.env`; the folder may be absent too) | the store, 1 name | absent | runs | stops: *nothing has been quarantined* (no verdict line) | stops: *nothing to put back* |
+| `abandoned` | the store, 1 name | absent | runs (the record is set aside as `quarantine.env.void-<TS>`) | NOT CONCLUSIVE — not quarantined | *nothing is kept* |
+| `prepared` | the store, 1 name | absent | sets the record aside and runs | NOT CONCLUSIVE — not quarantined | *nothing is kept* |
+| `prepared` / `linked` | the store | the same file (2 names) | stops: run `--put-back` | NOT CONCLUSIVE — HALF-DONE: run `--put-back` | removes only the kept name → `abandoned` |
+| `linked` / `moved` | absent | the store, 1 name | **resumes**: stage C only, then `done` | NOT CONCLUSIVE — HALF-DONE: run the quarantine command again | puts back |
+| `done` | absent | the store | stops: run `--check` (or: its own checks FAILED) | judges K0–K13 | puts back |
+| a put-back begun (last `PUTBACK_STAGE` non-empty, no `PUTBACK_AT`) | — | — | stops: run `--put-back` again | NOT CONCLUSIVE | finishes it |
+| put back | the store | absent | stops: a second quarantine needs its own reviewed script | reports it; side files said, not judged | nothing to do |
+| anything else | | | stops, naming what it found | **FAIL** (K1) | stops |
+
+### The record — `/root/dnb-stray-quarantine/quarantine.env`, which the next deploy script must read
+
+`KEY=value` lines, appended. The last value of a key wins: read a key's LAST line and use its value. A key whose last
+value is empty is unset; never test only that a key is present. Keys:
+- **The file:** `Q_TS`, `Q_STAGE` (`prepared` · `linked` · `moved` · `done` · `abandoned`), `Q_SRC`, `Q_KEPT`,
+  `Q_SHA256`, `Q_DB` (sha256-16:size:time, the deploy scripts' form), `Q_OWNER`, `Q_MODE`, `Q_KEY_BEFORE`,
+  `Q_BIRTH`.
+- **The folder:** `Q_DIR_T_BEFORE`, `Q_ENTS_BEFORE`, `Q_DATA_KEY`, `Q_SML`, `Q_MIGRATED`.
+- **The server:** `Q_LIVE_COMMIT`, `Q_LIVE_KEY`, `Q_PDD_IN`, `Q_GATE`, `Q_CTR`.
+- **The move and after:** `Q_AT` (the move), `Q_DIR_T_AFTER`, `Q_ENTS_AFTER`, `Q_KEPT_CTIME`.
+- **Failures:** `Q_CHECK_FAILED` (sticky).
+- **A put-back:** `PUTBACK_STAGE` (`prepared`: written just before the link · `linked`: the old name is made, the kept
+  name not yet removed · empty: the put-back's link failed, nothing was put back, and none is in progress), then
+  `PUTBACK_DIR_T`, `PUTBACK_ENTS` and `PUTBACK_STRAY` (the folder as the put-back left it: the next script's
+  reference), then `PUTBACK_AT`. A put-back has begun exactly when the last `PUTBACK_STAGE` is non-empty and
+  `PUTBACK_AT` is empty; it is finished when `PUTBACK_AT` is set.
+
+### The rules — printed at the end of every mode
+
+**Until the quarantine has moved the file**, printed on every stop before the move (as root: only root can read the
+record), after a half-done quarantine is closed, and in the script's header:
+- deploy or roll back nothing (a new live commit voids the script at A0);
+- do not save the plugin's settings in uCRM (it may rewrite a file in `<plugin>/data`, which A4 then refuses for good);
+- run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
+
+**From the move on, and after a put-back too:**
+1. `deploy-5.18.91.sh`, `deploy-5.18.92.sh` and `deploy-5.18.93.sh`: only ever with `--rollback`, whichever release is
+   live. Any other mode becomes an after-check while its own release is live. It fails R19 on the moved file, and
+   writes `STRAY_R19_FAILED` into its state file for good. The rehearsal measures this for all three (5c).
+2. Before `deploy-5.18.91.sh --rollback`, or the by-hand put-back of 5.18.90: `--put-back` first. 5.18.90's retry job
+   has no gate and would make a new database in `<plugin>/data`.
+3. Never run `migrations/migrate_tickets_data.php`: it makes a new database in `<plugin>/data`.
+4. While the file is quarantined (not after a put-back), `diagnose-sales-pipeline.sh` reports *"plugin.sqlite3 missing —
+   open the plugin page once"*. That is expected, and the advice does not apply. `scripts/phase*-*.sh` stop with *"no database"* where they fall back to
+   `<plugin>/data`.
+5. Never follow the in-app DATA-zip restore instructions on this server. After any upload of the plugin through uCRM,
+   a rollback or a restore: run `--check`.
+6. The next release's deploy script must read the record.
+
+### Reviews
+
+**The design.** An adversarial review (four lenses: the code's truth, operations, invariants, the rehearsal) found 38
+items. 37 were upheld, 14 of them major, and none was a blocker. Design v2 resolved all of them:
+- LINK only: COPY was removed.
+- Signals ignored from the word on, with the run's own log.
+- A record of stages, with one command for every state.
+- The gate pinned to the installed files and to the deploy's exact signature.
+- The ordering guard A3.
+- The holder instruments with their controls.
+- The destination out of every container's sight.
+- Runbook rule 1 generalised to all three deploy scripts.
+
+**The code.** An adversarial review of the script and its rehearsal found 19 items, three of them major. All 19 are
+applied:
+- **No trial made stage C fail (major).** Now 3e: a holder opens the store between stage B's last read and the unlink.
+  Stage C FAILS C6 and records it, and a copy blind to C6 PASSES (caught).
+- **A container recycling after the move would have FAILED C7 for good (major, two findings).** The old commit read kept
+  the hex letters of a runtime's error text. The commit is now read only as a wholly hex line, waited for 120 s, and
+  *not measured* if unread. The gate's answer is believed only in the probe's own shapes, and C8 FAILs only on a parsed
+  reading. Now 3f, 3f', 3f'', and the control 3f''': the old reading FAILS C7 (caught).
+- **The verdict.** `--check` and stage C said PASSED when nothing was concluded, and `--check`'s K1 read the record's
+  stage alone: now the NOT CONCLUSIVE verdict, and K1 decided from the files (Q8, 4a, 4a', 4s).
+- **No lock.** A re-run after a lost terminal could run beside the first: now the folder lock (1ab, and 1ab' caught).
+- **The put-back.** It went ahead under an open gate, and the put-back command was printed after a FAIL: now 3g, 3g' and
+  3g'' (caught), and 3h.
+- **The rule before the move was printed nowhere:** now 1h, and 2 pre-rule caught.
+- **After a put-back nothing recorded the folder's new reference:** now 6f and 6g.
+- **Q8 covered two of the states it claimed:** now every one, made by the real script killed before, between and after
+  its two steps and in the put-back (8a–8f).
+- **Stage B's "master is running" read had no trial and failed open on `?`:** now B7, B9, B10, and two blind copies
+  caught.
+- **4o/4o' could not fail:** they now also assert that nothing else FAILs.
+- **The script's TMPDIR was not measured:** now Q9 and 1ac.
+- **A put-back whose link failed left its marker:** now reset (8e, and 8e' caught).
+- **An empty move time read as zero:** now 4r, and 4r' caught.
+- **Wording:** "nothing is kept" (8a, 8a'). A `?` gate no longer reads "WILL open it": while 5.18.91 or later is live
+  the put-back refuses it before the word (3h); it is only printed where the old name is not restored (half, finish),
+  or where 5.18.90 or earlier has no gate.
+
+**The fixes.** A second adversarial review, of those fixes (three lenses: whether each finding is fixed, defects the new
+code adds, what the operator is told and what this entry says), found 20 items. A separate skeptic tried to refute
+each one; 19 were upheld, one of them major, and all 19 are applied:
+- **The gate was judged by its library alone (major).** A rollback to 5.18.90 copies 5.18.90's tree over the plugin
+  folder and deletes nothing, so `lib/StarlinkRetryScope.php` stays and still answers the probe while 5.18.90's retry
+  job calls no gate. After such a rollback without the put-back first, `--check` would have called the gate holding and
+  the quarantine PASSED, minutes before that job made a new database. Now the installed job must call the gate, as the
+  deploy scripts check it (C8, K11, the put-back): 6h, 6i, and 6i2 caught.
+- **The put-back read the gate only before the word:** now again after it, before the link (6j, and 6j2 caught).
+- **A skip on which every source agrees, with the live store not read a second time, FAILED for good:** now *not
+  measured*; a reading naming another tenant still FAILs (4t, 4u, and 4v caught; the put-back refuses it, 4w).
+- **A resumed run whose holder controls failed FAILED C6 for good:** now *not measured* (8f, and 8f2 caught).
+- **The lock came after the run's own log,** so a refused run pointed the operator at its own empty log: now before
+  it (1ab, and 1ab'' caught).
+- **Closing a half-done quarantine printed the runbook for after the move:** now the rule before it (8a, and 8b2
+  caught). `pre_rule` judges only as root, and reads the old name from the record when it is not yet known (8b', 1ad).
+- **`--check` named a time already past:** now it says master is not running the job (4b, and 4b2 caught).
+- **After a FAIL the log gave several next steps:** now one (3e). **One log named two `--check` times:** now one (3h).
+- **The verdict asked for this run's own log only:** now every own log and the record (8b).
+- **This entry:** the state table, the record's empty `PUTBACK_STAGE`, the put-back's half close and rule 4.
+
+### The rehearsal — `scripts/harness/quarantine-stray-store/rehearse.sh` (1705 lines, sha256 `d886242635f0e0fa…`)
+
+**How it is built.** It is generated from 5.18.93's rehearsal: its sandbox, its every edit asserted. That means
+5.18.92 installed as production runs it since 10 Oct, the salesperson pilot as the operator left it, the stray store
+untouched since 5.18.91's copy, and 5.18.92's deploy record. Then it runs:
+- the REAL deploy of 5.18.93;
+- its copy moved a day and a quarter back;
+- master's record of a run of the retry job since;
+- the REAL day-later `--after-only`, its log written where the operator's `tee` writes it.
+
+The plugin's files are then given to the server's owner (1000:1000), and the fake docker honours `-u` from there on.
+The fake docker is strict: an option or a format the scripts do not use fails it.
+
+**How the script runs in it.** As the operator runs it: `bash … 2>&1 | tee …` in a pseudo-terminal, the word typed at the
+prompt. It is a copy pinned to the sandbox's stray store, with its two literals replaced, each exactly once.
+
+**Results.** Two consecutive runs, trials 8 and 9: **341 passed, 0 failed** each, with 233 runs of the quarantine script and
+8 of the deploy scripts. Script: `scripts/quarantine-stray-store.sh`, 963 lines, sha256 `8753d9f05f7a6a76…`.
+
+Earlier trials found four errors in the rehearsal's own checks and none in the script:
+- a needle that the new pre-move rule's wording matched (1ab);
+- a reference digest taken before trials that legitimately write master's record (3a);
+- a weakened copy that the new after-the-word gate read now stops one layer later (split into 3g' and 3g'');
+- a South Sudan configuration left in place between two trials (6j, 6j2).
+
+Each was fixed, and the trials were re-run.
+
+What it proves, section by section:
+- **Q1–Q2:** each stage-A clause refuses on its own, and a copy blind to it reaches GO (caught).
+- **QB:** stage B's reads refuse a change made while the prompt waits, and blind copies reach the link (caught).
+- **Q8:** every half-done state.
+- **Q7:** a bind-mounted destination moves nothing.
+- **Q3:** INT and HUP in the move; stage C's failures, recycles and the gate (above); strace: no php or python process
+  opens either name.
+- **Q4:** `--check`'s margin, its record checks, and planted openers.
+- **Q5:** after the move, every non-rollback run of the three deploy scripts fails R19 and records it, and the rollback
+  to 5.18.92 PASSES with the store still absent.
+- **Q6:** the put-back.
+- **Q9:** nothing left behind; Evolution never called.
+
+### Runbook — each step is the operator's, and each needs the operator's word
+
+1. **5.18.93's day-later `--after-only`, at or after 13:06:21 UTC on 12 Oct** (5.18.93's runbook, step 4). Send its
+   LOG FILE. It must read PASSED, 0 failed, with R19's conclusive line naming the copy at 13:06:21 UTC. Until the
+   quarantine has run, the rule above holds: deploy or roll back nothing, save no plugin settings, run neither tool.
+2. **The quarantine**, only after that log has been read and on the operator's word. As root, then send back THE LOG
+   FILE, every `*.own.log` in `/root/dnb-stray-quarantine` and `quarantine.env`:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-stray-quarantine && bash scripts/quarantine-stray-store.sh 2>&1 | tee /root/dnb-stray-quarantine/quarantine-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: GO, then after `QUARANTINE`, stage C PASSED. If the terminal is lost, reconnect, wait two minutes and
+   run the same command again: it finishes its own checks, or names the one command to run.
+3. **At least 20 minutes after the move** (the summary prints the time), read-only:
+
+       cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED once master has run the retry job after the move. Before that it reads NOT CONCLUSIVE and names
+   the time to run it again.
+
+### Known limits and open risks
+
+1. **The milliseconds between stage B's last holder read and the unlink.** A process that opens the file inside them is
+   caught afterwards by stage C, measured (3e): the kept file is the same inode, so its locks, descriptors and side
+   files are still read.
+2. **Manual openers are governed by the rules, not by code.** `--check` is presence-based, at the moments it runs.
+3. **The ordering guard trusts the log's own lines** (its header stamp and its summary).
+4. **Two reads go through the container: the live commit and the gate's answer.** A container that recycles makes them
+   *not measured* (C7, C8), never *changed*. Whether uCRM recycles on a change under `data/` is not known (C9 notes it).
+5. **The rehearsal's container is a fake `docker`.** Its formats and options are strict, and the real ones are those
+   5.18.91–5.18.93's deploys used on this server. The holder controls run against the real `/proc`.
+6. **`flock` (util-linux) and `python3` are required on the host.** Without the first, the script stops before reading
+   anything. Without the second, the holders control does not pass and stage A refuses.
+7. **SELinux is printed (A8), not tested.**
+8. **The put-back is refused under an open gate while a gated release is live.** If one is ever needed under those
+   conditions, the gate must first be closed or understood. With 5.18.90 or earlier live it goes ahead, as rule 2
+   requires. A job without the gate under a gated release's manifest is refused as code that is not one release.
+9. **The gate is read from the installed job's text** (the deploy scripts' needle) **and the probe's answer.** Code
+   changed by hand in another file the job includes, with the needle kept, is caught by A0's and C7's sha256 pins only
+   during the quarantine, not by `--check` afterwards.
+
+### The put-back — its own command, never pasted with the quarantine
+
+Only if it is ever needed: before any rollback to 5.18.90 (rule 2), or to close a quarantine that stopped between its
+two steps. It asks for `PUTBACK`. It refuses over a file at the old name that is not the stray store itself, over a
+changed or held kept file, and, when it would give the file its old name back, under an open gate while a gated release
+is live (read before the word and again after it).
+
+- **Closing a half-done quarantine:** the stray store already holds its old name, so it removes only the kept name.
+  `<plugin>/data` does not change, the record says `abandoned`, and the quarantine may then run again.
+- **Giving the kept file its old name back** (or finishing an interrupted put-back): the same file, unchanged, at its
+  old name, and the kept name removed. After it, R19 of the three deploy scripts can never pass again, and a second
+  quarantine needs its own reviewed script.
+
+As root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --put-back 2>&1 | tee /root/dnb-stray-quarantine/putback-$(date -u +%Y%m%dT%H%M%SZ).log
