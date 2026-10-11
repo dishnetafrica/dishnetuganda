@@ -9919,6 +9919,24 @@ pilot's switches as the operator left them — 5.18.92's refused them by design 
   None of these four files is in the release's delta (`git diff --name-only 247a480 69c87a6`), and every other file's
   tally is 5.18.92's. The four files are run again on their own, in both trees, after 19:00 UTC today, when a window is
   open again; the result is added to this entry when it has run.
+
+  **Run 11 Oct, 19:21–19:35 UTC, each file alone, as `tests/run.sh` runs it (its own vault, from `tests/`),
+  nothing else heavy running** — the development tree first (`7bccd43`, whose plugin files are `1fb7415`'s: no change
+  under the plugin folder since), then the release worktree (`69c87a6`), each clean:
+
+  | File | Development | Release | 5.18.92's passes (development / release) |
+  |---|---|---|---|
+  | `test_sales_pilot` | 125 / 0 | 125 / 0 | 125 / 125 |
+  | `test_multi_number_routing` | 90 / 0 | 84 / 0 | 90 / 84 |
+  | `test_pilot_safety` | 185 / 0 | 177 / 0 | 185 / 177 |
+  | `test_notify_evo_retry` | 23 / 0 | 23 / 0 | 23 / 23 |
+
+  Passed / failed, nothing skipped, no skip line and no Sunday line in any of the eight runs: each file whole, and each
+  equal to its 5.18.92 tally (`rel92/devA.log`, `relA.log`). So the Sunday drops above were the hour, not 5.18.93.
+  With them whole, the passes total what 5.18.92's plus the new test give: 14,313 + 47 = 14,360 in development and
+  13,391 + 47 = 13,438 in the release tree. Compared with `cmp_local.py`, passes C and D differ from 5.18.92's only by
+  the new test's 47 and these four files, and from each other only by release pass D's one `test_pdf_link_token` line
+  (above).
 - **PHP warnings:** `test_dpo_endpoints`' five, in every pass, as before.
 - **Lint:** `php -l` on the nine PHP files of the release diff, read from the commit: 0 errors (PHP 8.4.19 here). The
   server's own PHP lints them at A2, and runs the new test itself at A16 and R21.
@@ -10467,10 +10485,10 @@ runs (runbook step 2):**
   lines have been seen. An `--after-only` V4 reads the log from the deploy's own recorded time, so waiting loses
   nothing.
 
-**Still open, not on the server:** the four time-gated test files (`test_sales_pilot`, `test_multi_number_routing`,
-`test_pilot_safety`, `test_notify_evo_retry`) are to be run on their own, in both trees, after 19:00 UTC on 11 Oct
-(Tests); their result is added to this entry when it has run. The deploy did not wait for them: none of the four is in
-the release's delta.
+**Not on the server — done 11 Oct, 19:21–19:35 UTC:** the four time-gated test files (`test_sales_pilot`,
+`test_multi_number_routing`, `test_pilot_safety`, `test_notify_evo_retry`), run on their own in both trees, are whole
+and equal to 5.18.92's: 125, 90 (84 in the release tree), 185 (177), 23 — 0 failed, nothing skipped (Tests). The
+deploy did not wait for them: none of the four is in the release's delta.
 
 ### Rollback — its own command, never pasted with the deploy
 
