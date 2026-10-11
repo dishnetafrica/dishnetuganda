@@ -9738,7 +9738,7 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — both branches pushed (`release/5.18.93` on 11 Oct, at the operator's word); NOT deployed
+## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — PUSHED 11 Oct 13:01 UTC; DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` not yet run
 
 **Request.** On 11 Oct, after the day-later log count (5.18.92's RESULT above) found the fatal at `main.php:484`, the
 operator said *"yes buuild 5.18.93"*. Asked whether to repair the nightly refresh or retire it, the operator chose
@@ -9854,7 +9854,7 @@ pilot's switches as the operator left them — 5.18.92's refused them by design 
     - But A15's child was given no `-d` setting, and A15 never polled a child (`proc_get_status`,
       `stream_set_blocking`) or loaded a stream wrapper (`-d auto_prepend_file`, `stream_wrapper_register`). Those are
       first exercised in the container by A16 itself, which refuses before anything changes if they do not work, and
-      the log shows what the test printed.
+      the log shows what the test printed. (On 11 Oct they worked: RESULT.)
     - Proved both ways here: with `exec`, `shell_exec`, `system`, `passthru` and `popen` disabled it passes 47/0 and
       leaves nothing, where the first version died on *"Call to undefined function exec()"* (rc 255) and left its vault
       file; with a php.ini sending `error_log` to a file it passes 47/0, where the first version failed 3. It asserts it
@@ -10204,7 +10204,8 @@ and the script, which also corrected the entry itself):
 - **Rehearsal RC-8: the sandbox's container is not the server's.** It runs PHP 8.4 as root and passes its environment
   on. A16's test was therefore also run as an unprivileged user, with an empty environment and a TMPDIR of its own,
   from an A16-shaped copy of the pin: 47 passed, 0 failed, nothing left. The server's PHP 8.1 first runs it at A16, and
-  again at R21, on the deploy and on every `--after-only`.
+  again at R21, on the deploy and on every `--after-only`. **Resolved on the server, 11 Oct:** A16 and R21 ran it under
+  PHP 8.1.34, 47 passed, 0 failed (RESULT).
 - **Rehearsal RC-10 (a note):** the "checkout as found" check reads only the commit and tracked files. It runs
   `git status` without `GIT_OPTIONAL_LOCKS=0`, so it can rewrite the checkout's index, and it cannot see a change to the
   untracked deploy script or harness. The "nothing left in /tmp" check does not watch the script's own `/tmp/dnb_*.$$`
@@ -10214,7 +10215,8 @@ and the script, which also corrected the entry itself):
   (`lib/error_handler.php`), and is asserted at `tests/test_main_auto_pull_retired.php:298`. PHP 8.1 could not be
   measured here: the session's network refuses php.net and the PHP 8.1 package archive, and running a downloaded PHP
   binary was refused. If PHP 8.1.34 ends that process otherwise, line 298 fails and A16 refuses, before anything
-  changes (Known limits 6).
+  changes (Known limits 6). **Resolved on the server, 11 Oct:** line 298 is one of the 47 that passed under PHP
+  8.1.34 in A16 and R21 (RESULT).
 - **F4 (verified, minor):** the admin screens still promise a nightly pull (Known limits 1).
 - **The reviews' notes, not verified:**
   - three comments elsewhere describe the retired block as live (F5);
@@ -10304,6 +10306,12 @@ and the script, which also corrected the entry itself):
    PHP's own *"PHP Fatal error: Uncaught …"* line, had it also been logged, would have doubled the count. Whether the
    container logs PHP's own errors at all is not established, so the exit status under 8.1 is **NOT MEASURED**. If PHP
    8.1.34 ends that process otherwise, A16 refuses, before anything changes, and the log names the assertion.
+   **Resolved on the server, 11 Oct:** A16 and R21 ran the test under PHP 8.1.34: 47 passed, 0 failed, and the test
+   process exited 0. So the copy of `main.php`, `lib/` and `cron/` and the polled child processes run in the
+   container, and so do the `-d` settings and the stream wrapper they load: A16's positive control saw the wallet
+   sync's read through it. The crashing control's exit 0 (line 298) is one of the 47 that passed, and the control
+   ran: had it been skipped, an assertion before it would have failed. AP-4 is answered (RESULT below). Whether the
+   container logs PHP's own errors is still not established.
 7. **P1's new refusals are rehearsed on one way of reaching that state**: a registry switched on where neither copy of
    the configuration names Uganda (1v, 1v', 1v''). The other ways the deploy review named are not built in the sandbox:
    a registry or policy read that throws on the live data, and the two copies resolving to different tenant profiles.
@@ -10343,6 +10351,108 @@ and the script, which also corrected the entry itself):
   rebuild.
 - *"The fix is a release of its own (define the CRM credentials and `$crmGet` once, before both sections)"* —
   superseded. Asked to choose, the operator retired the block instead (this release).
+
+### RESULT — DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` not yet run
+
+Recorded from the terminal the operator pasted (the script prints no secret). The log file stays on the server under
+`/root/dnb-5.18.93/`. No money figure, number or name from the run is repeated here.
+
+**Push.** `release/5.18.93` was pushed at 13:01:51 UTC on 11 Oct, at the operator's word, a new branch at `69c87a6`.
+The development branch followed at 13:02:09 UTC, standing at `4c5b77c`. The deploy command was given in the chat on its
+own; the rollback was not (it is printed at the end of the deploy's log, on its own).
+
+**Before the script** (the command's own `git pull` and `git fetch`, shown in the terminal but not in the log file): the
+checkout pulled `2bd2916..4c5b77c` and fetched `release/5.18.93`, a new branch on the server.
+
+**The deploy run (`20261011T130531Z`):**
+- **Stage A, all ok.**
+  - The checkout at `4c5b77c`; the release `69c87a6`, cut on `247a480`. In the checkout there were no tracked edits, and
+    no file git does not track (untracked or ignored) under its plugin folder outside `data/`. The live commit was
+    `247a480` (5.18.92), on PHP 8.1.34.
+  - `--check` read *"NOT up to date"* before the copy, as expected, and will read the same after it: it compares the
+    container with the branch tip, `1fb7415`, which this script does not install. The checkout is left on
+    `claude/study-this-jhe2eg`, so a bare `deploy-hybrid.sh` there would install `1fb7415`'s undeployed work (the
+    partner portal with its migrations 081–083, the AI media layer with migration 085, the CSRF guard, master.php's
+    media job), not 5.18.93 — the standing hazard 5.18.66 recorded: deploy only through a pinned
+    `scripts/deploy-5.18.NN.sh`.
+  - A7, A0 and A2 held. A7: Domain B untouched — the repository differs between `247a480` and the pin by the plugin's
+    10 files alone, none under Domain B, and its trees are the live release's (`cf0b0e3`, `969d873`). A0 and A2: the
+    delta exactly the 10 files, `main.php` the reviewed `7be2a3ad…`, master.php 5.18.92's, and PHP 8.1.34 accepting
+    the one changed PHP file that runs on the server and the eight test files.
+  - **The pilot, as the operator left it:** the registry `mn=on/on`, own leads only `ol=on/on`, the owned follow-ups
+    `fh=on/on`, the hand-over copy `hc=absent/absent` (absent: ON). A3, A4, A5 and A5b held.
+  - A8 held: 087 complete; the three department rows active with their assistants on, sales and support verified, the
+    account row with no number of its own; one salesperson number, switched on, its assistant on, verified; the trail
+    12 rows.
+  - A9, A9b, A9c, A10 and A11 held with the registry on: the pin's code reads the routing, the registry, 5.18.89's
+    rules, the assistant's prompt and the automated-send policy exactly as the live code does on this server's own
+    configuration.
+  - A6 held, on throwaway databases, nothing sent and nothing of this server read:
+    - the pin's event processor leaves the five events as the live one does, as a South Sudan install and as a
+      Uganda one;
+    - with every switch on, the pin's Batch 2 rules apply nothing as a South Sudan install — no card, no own-leads
+      filter, no registry, nothing held — and its automated-send policy refuses and classifies nothing there;
+    - on Uganda with the switches absent, the rules show the card alone and the policy refuses nothing; on Uganda with
+      the registry on, the policy keeps a salesperson's number from answering a department's.
+  - A14 held: the stray store's database file exactly as 5.18.92's deploy recorded it at its copy (its A14 "seen"), no
+    side file then or now, the folder's own time unchanged since 02:45:47 UTC on 10 Oct. Its `migration.log` has grown
+    since that copy, from 170,315 to 187,013 bytes, last written at 13:00:52 UTC, before this deploy's copy; other jobs
+    write it too (`dpo_reconcile`, as 5.18.92's RESULT records), and A14 does not compare the log. A12 and A13 held.
+  - **A15: 78 passed, 0 failed, and A16: 47 passed, 0 failed — under the server's PHP 8.1.34, each test process exiting
+    0.** A16's controls saw 5.18.92's block, put back in a copy and run under the server's PHP, die at `main.php:484`
+    with the handler's line the test asserts (*"Value of type null is not callable"*), and at `:509` with the wallet
+    sync due. That is the message the server's PHP produces in the test. The 12 lines in the server's own log are still
+    known by file:line only, from the day-later count (Known limits 9), and this run's V4, reading the log from 13:06:20
+    UTC, found no fatal line among the 24 it read. **Known limits 6 and AP-4 are resolved:** the copy, the `-d`
+    settings, the stream wrapper and the polled child processes all work in the container, and the crashing control's
+    exit 0 (line 298, one of the 47) holds on PHP 8.1.34.
+- **Backup** in `/root/dnb-5.18.93/backup-20261011T130531Z`:
+  - the live `plugin.sqlite3` (integrity ok);
+  - the data folder;
+  - the installed 5.18.92 plugin;
+  - the stray folder, copied as files;
+  - the vault;
+  - the event queue's snapshot (every event done).
+- **The copy** at 13:06:21 UTC; the container serves `69c87a6`.
+- **V:** every check ok. V3–V3i found every switch, the AI settings, and 087's rows and trail, every column, unchanged
+  by the run. V4 waited 60 s, then read the 24 lines of the container log since 13:06:20 UTC (when DEPLOY was typed and
+  stage B, the documented deploy, began; the run itself started at 13:05:31): no new fatal or parse error.
+- **R:** R1–R21 ok — **R14:** Domain B and the plugin's docs, all 363 files, byte for byte as `69c87a6` has them; R21
+  47 passed, 0 failed under PHP 8.1.34; R7 read the landing page's cash in hand, read-only (the figures are not
+  repeated here). Two notes, both expected:
+  - **R3:** `migration.log` holds no line for 087 — the note every deploy since 5.18.89 has given.
+  - **R19:** no completed run of the retry job yet since the copy (its last at 13:00:06 UTC). The stray store was
+    unchanged at the copy and after it, and nothing held it.
+- **79 ok, 0 failed, 2 notes; PASSED** — the rehearsal's own tally. In the rehearsal the second note was V4's, for the
+  old fatal it planted; on the server it was R3's, as the runbook expected. The copy, at 13:06 UTC, fell outside the
+  default pull hour; V4 noted no old fatal.
+- **What the run did not do**, from the log's own summary:
+  - It called and sent nothing to Evolution, WhatsApp or uCRM, and verified, switched or messaged no number. That is
+    the script's own statement: it has no path that calls Evolution, and the rehearsal's §7 recorded no Evolution call
+    in 93 runs. Its requests over the public address were anonymous, nothing signed in and nothing written (V1–V12).
+  - It changed no switch or AI setting (V3–V3i), and none of 087's rows or trail (A8, R3).
+  - Domain B and the plugin's docs are byte for byte the release's (A7, R14). South Sudan's paths are unchanged
+    (A6, A13, R13, R15, R17, R18).
+  - The event queue lost nothing (R13): 8,986 events at the backup's snapshot and 8,988 at R13, every one done each
+    time. The log does not say what added the two.
+  - The log cannot speak for anything else on the server in that window.
+
+**Still to run, read-only — press nothing on the Salesperson numbers card and run no `tools/set_config.php` while
+either runs (runbook step 2):**
+- **`--after-only` at least 20 minutes after the copy (after 13:26:21 UTC):** R19 then reads the stray store after
+  master's next run of the retry job. Expected, per the runbook (step 3): PASSED, 0 failed, R19 conclusive, with R3's
+  note (`migration.log` holds no line for 087), as 5.18.92's `--after-only` gave.
+- **`--after-only` once more a day after the copy, at or after 13:06:21 UTC on 12 Oct** (the script's summary, and
+  runbook step 4: a day after the copy is always enough): V4 then shows whether the fatal at `main.php:484` has
+  stopped, which is the evidence this release is for. The script says its absence is not evidence before then. The
+  pull hour is 00:00–01:00 UTC only by default; neither this server's `ucrm_auto_pull_hour` nor the times of the 12
+  lines have been seen. An `--after-only` V4 reads the log from the deploy's own recorded time, so waiting loses
+  nothing.
+
+**Still open, not on the server:** the four time-gated test files (`test_sales_pilot`, `test_multi_number_routing`,
+`test_pilot_safety`, `test_notify_evo_retry`) are to be run on their own, in both trees, after 19:00 UTC on 11 Oct
+(Tests); their result is added to this entry when it has run. The deploy did not wait for them: none of the four is in
+the release's delta.
 
 ### Rollback — its own command, never pasted with the deploy
 
