@@ -21,7 +21,11 @@ and the checks below expect it.
 of that is in this runbook. Everything below is then a setting, a card on the WhatsApp AI screen, or a read-only check.
 *(Corrected 11 Oct: 5.18.91 has been live since 10 Oct 02:53 UTC and 5.18.92 since 10 Oct 21:32 UTC — the database
 safety fix and the scheduler's lock fix — and 5.18.93, which retires the five-minute tick's broken nightly uCRM refresh,
-is being prepared; none of them changes a step below.)*
+is being prepared; none of them changes a step below.)* *(Added 11 Oct: from 5.18.93 a deploy script accepts the pilot
+as you left it — on or off — and checks that its run changes none of it. So while a deploy script runs — the deploy, its
+`--after-only`, or its rollback — do not press anything on the Salesperson numbers card and do not run
+`tools/set_config.php`: a change made then fails the script's before-and-after checks, though the script itself changed
+nothing.)*
 
 The design is docs/65 §AA (and §AB, as built); the decisions taken on 07 Oct evening and the acceptance test are §AC.
 

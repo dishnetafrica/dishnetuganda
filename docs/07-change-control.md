@@ -9737,3 +9737,626 @@ The command, as root on the server, on its own:
     cd /opt/dishnet && bash scripts/deploy-5.18.92.sh --rollback
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
+
+## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — the development branch pushed with this entry; `release/5.18.93` NOT pushed; NOT deployed
+
+**Request.** On 11 Oct, after the day-later log count (5.18.92's RESULT above) found the fatal at `main.php:484`, the
+operator said *"yes buuild 5.18.93"*. Asked whether to repair the nightly refresh or retire it, the operator chose
+**"Retire it (Recommended)"**, accepting that the Settings screen's auto-pull setting (03:00 by default) then does
+nothing. The salesperson pilot (docs/66) is live since 10–11 Oct, so this release's deploy script must accept the
+pilot's switches as the operator left them — 5.18.92's refused them by design (its Known limits 1).
+
+### Release notes
+
+- **The defect.** `main.php`, the five-minute run uCRM makes, carried a nightly pull of every uCRM client
+  (`ucrm_auto_pull_enabled`, `ucrm_auto_pull_hour`, default 3 in the plugin's time zone: 00:00 UTC in Kampala). It never
+  completed, in any run, in the repository's code since 26 Sep at the latest:
+  - It called `$crmGet`, which only the inline wallet sync defines, and only on a run whose interval has passed. On
+    every other run of the pull hour it called `null`.
+    - By the code, that is PHP's *"Value of type null is not callable"*. The plugin's handler logs it as
+      `[DishNet UNCAUGHT] Value of type null is not callable in …/main.php:484` (`lib/error_handler.php:26`), and the
+      new test asserts that form.
+    - Its last-run file was written only after the pull, so every run of that hour failed the same way.
+    - **The operator's read-only count on 11 Oct found 12 lines at `main.php:484`** in the log since 21:33 UTC on 10
+      Oct. The default pull hour, 00:00 UTC, falls in that window, and 12 matches one line per five-minute run.
+    - That count prints file and line only, so neither the message nor the times were seen on the server. The per-night
+      timestamp count docs/07 proposed was not run.
+  - **On a run where the wallet sync HAD run**, it fetched every client from uCRM and then died at `main.php:509`,
+    creating `\DishNet\SqliteStore` — a class that does not exist (the store is the global `SqliteStore`). It died
+    before it wrote any file of its own. All it had written was its heartbeat-log line, *"UCRM auto-pull: starting full
+    clients pull from UCRM Org 2..."*, and, on a failed page, *"⚠ Page N fetch failed."*. The test's control asserts
+    that the line was written, and that *"…done"* never was.
+  - **So it never wrote a cache, an index or its last-run file, and retiring it changes no data.** Only `heartbeat.log`
+    reads differently:
+    - its *"UCRM auto-pull: …"* lines stop: *"scheduled for …"* on runs outside the pull hour, *"starting full clients
+      pull…"* inside it;
+    - the time guard's line no longer names the auto-pull;
+    - every run of the pull hour now reaches *"main.php total execution:"*, as the new test asserts in cases A and B.
+  - `cron/master.php` is included earlier in `main.php` (line 273, before the pull block at 431–648), so the fatal
+    stopped none of the background jobs that were due in those runs. Master runs each job only when its own interval,
+    hour or gate says so. What died in each of those runs was the pull itself and the one line after it, *"main.php
+    total execution: …"* (`main.php:653`).
+- **The change.** The block — from the rule line before *"AUTO-PULL UCRM CLIENTS CACHE"* to the end of the time-guarded
+  section — becomes a comment saying what stood there, why it never worked, and what keeps the client cache instead, as
+  it did all along:
+  - `cron_sync.php`'s delta client sync (master's `crm_sync`, on each master run — about every five minutes — and at
+    most every two minutes) merges the first 100 clients of uCRM's own order (`clients?direction=DESC&limit=100`) and
+    rebuilds `client_search_index.json`;
+  - the webhook and `ClientInvoiceCacheRefresher` refresh the clients they touch;
+  - a full pull (`ucrm_pull_sync`) and the sales index (`ucrm_sync_done`: `sp_client_index.json`, `sp_summary.json`)
+    are the CRM screens' own actions, in `includes/api/api_crm_misc.php`.
+
+  The only other line that changes is the time guard's log message, which no longer names the auto-pull.
+  `ucrm_auto_pull_enabled` and `ucrm_auto_pull_hour` stay in the configuration and on the Settings screen; **nothing
+  acts on them now.**
+- **Not changed:** `cron/master.php` (5.18.92's byte for byte), every job, the wallet sync, the retry job and its gate
+  (5.18.91), every switch, every setting's stored value, the pilot.
+
+### Files — 10 against `247a480`: 1 added, 9 changed, none removed
+
+- **Added (1):** `tests/test_main_auto_pull_retired.php`.
+- **Changed (9):** `main.php`, `manifest.json` (5.18.93), `tests/test_tick_auto_pull_log.php`,
+  `tests/test_kyc_crm_create.php`, and the version pin only in `tests/test_distributor_apply.php`,
+  `tests/test_distributor_link_ucrm.php`, `tests/test_distributor_notify.php`, `tests/test_distributor_registry.php` and
+  `tests/test_distributor_territory.php`.
+- **10 files changed, 397 insertions(+), 252 deletions(-)** — `main.php` 17 in, 217 out. No migration; nothing outside
+  the plugin.
+- sha256: `main.php` `7be2a3ad3eeed9e9…` (5.18.92's: `9d770a9076aec7ce…`), `tests/test_main_auto_pull_retired.php`
+  `281cbfc5ea0c5639…` — both pinned by the deploy script (A0); `cron/master.php` `5400be20c678d5ec…`, 5.18.92's, pinned
+  as unchanged.
+
+### Ancestry
+
+`69c87a6` (5.18.93, release) ← `247a480` (5.18.92, live) ← `dfad4d9` (5.18.91) ← `3d9cb5f` (5.18.90).
+- **The development commit is `1fb7415`.** Its `main.php`, `tests/test_main_auto_pull_retired.php`,
+  `tests/test_tick_auto_pull_log.php` and `tests/test_kyc_crm_create.php` are the release's byte for byte (the
+  rehearsal's §0 control). `main.php` is the same file at 5.18.92 and on the branch before this change, so the release
+  takes the branch's file whole.
+- `1fb7415` and `69c87a6` are amendments of `c1989ea` and `8d33594` (same parents: `064c613` and `247a480`). Neither
+  earlier commit was pushed.
+  - The review's amendment changed three files: `main.php`'s comment, the new test and the tick test (47 insertions, 20
+    deletions). The release's delta went from 370 to 397 insertions.
+  - Everything the script pins belongs to the amended commit: `69c87a6`, `main.php` `7be2a3ad…` and the test
+    `281cbfc5…`.
+- The development commit also carries a docs/66 runbook correction (5 lines in, 4 out: 5.18.92 live, 5.18.93 being
+  prepared) that the release does not carry.
+- The development branch's version pins also cover tests the release does not carry (the partner portal and the AI media
+  layer's: 15 pins on the branch, 5 in the release). Its `cron/master.php` still carries the undeployed media job; the
+  release's is 5.18.92's.
+
+### Tests
+
+- **`tests/test_main_auto_pull_retired.php`, new: 47 passed, 0 failed.** It runs the REAL `main.php` in a throwaway copy
+  of the plugin, at 03:xx in the plugin's time zone, with `cron/master.php` removed so only the tick itself runs. uCRM
+  is a stream wrapper that records every path it is opened with — no network, no socket — and serves one client and the
+  list. Two cases:
+  - **A — the wallet sync skipped**, as on most runs of the pull hour;
+  - **B — the wallet sync run**, so `$crmGet` exists.
+
+  In each, the tick reaches its last line, asks uCRM for no list of clients, writes none of the files the pull would
+  have written (the client cache, the search and sales indexes, its last-run file, a store), and prints no fatal.
+  - **The control** puts 5.18.92's block back where it stood, in place of the RETIRED comment. It is verbatim from the
+    block's header to its "done" line: lines 431–514 of 5.18.92's `main.php`, embedded in the test with that excerpt's
+    sha256 pinned. It is then closed with a placeholder comment and a `}`. The rest of the block (lines 515–648: the
+    search and sales index rebuilds and the last-run write) is left out, because no run ever got past line 509. The
+    control watches the block die as the server's log does: at `main.php:484`, twice in the hour, and at `:509`.
+  - **Repository pins:** `main.php` carries the RETIRED marker exactly once, and none of seven strings from the block
+    remains in it: the list call (`$crmGet("clients?limit`), the store creation (`SqliteStore::create`), the settings
+    variables (`$autoPullEnabled`, `$autoPullHour`), the last-run file (`$pullLastFile`, `ucrm_pull_last_run`) and the
+    `UCRM auto-pull:` log lines. The block's other lines, `$mainStore->save`/`->load` and the "Search index rebuilt" and
+    "Sales index built" log lines, are gone from `main.php` today, but this test does not pin their absence.
+  - **It needs no `exec()` and no shell** (the review's AP-1 and AP-2, fixed): it copies and removes its tree with PHP's
+    own functions, lints through `proc_open`, runs its children with `PHP_BINARY` and its own time limit, and gives each
+    tick an empty `error_log`, so the plugin's handler writes to the child's stderr whatever the container's php.ini
+    names.
+    - `proc_open` with `PHP_BINARY` is what 5.18.92's A15 ran on the server (78 passed, 0 failed, 10 Oct). `php -d` and
+      `php -l` run in the container in every deploy.
+    - But A15's child was given no `-d` setting, and A15 never polled a child (`proc_get_status`,
+      `stream_set_blocking`) or loaded a stream wrapper (`-d auto_prepend_file`, `stream_wrapper_register`). Those are
+      first exercised in the container by A16 itself, which refuses before anything changes if they do not work, and
+      the log shows what the test printed.
+    - Proved both ways here: with `exec`, `shell_exec`, `system`, `passthru` and `popen` disabled it passes 47/0 and
+      leaves nothing, where the first version died on *"Call to undefined function exec()"* (rc 255) and left its vault
+      file; with a php.ini sending `error_log` to a file it passes 47/0, where the first version failed 3. It asserts it
+      leaves nothing behind.
+- **`tests/test_tick_auto_pull_log.php`, rewritten: 18 passed, 0 failed.** Its subject, the auto-pull's schedule line,
+  is gone; it still runs the tick at 04:xx to its last line, now with no auto-pull line. Its control plants 5.18.38's
+  own lines 441 and 456 (5.18.92's, without 5.18.39's cast), then the schedule line, right after the RETIRED header. It
+  expects line 456's production TypeError (`str_pad(): Argument #1 ($string) must be of type string, int given`) at the
+  planted line's own place in the copy, `main.php:434` and not `:456`. It also expects exit 0 and neither the schedule
+  line nor the last line written.
+- **`tests/test_kyc_crm_create.php`, section J:** `main.php` no longer builds a sales-person index, so the section now
+  checks that it carries neither `EfrisClientField` nor `$ATTR_SALES_PERSON`, and that `api_crm_misc.php`'s index still
+  skips tax fields. 147 passed, 0 failed.
+- **Ten weakened copies, each caught** (a scratch tree each; the named test must fail), run again on the final files:
+  - **W1** 5.18.92's block put back — both tests (17 and 4 failed);
+  - **W2** the rejected repair, the pull run whenever `$crmGet` exists with the store fixed to the global class (14);
+  - **W3** the schedule line kept (3 and 1); **W4** the RETIRED marker removed (2 and 2);
+  - **W5** a leftover unguarded list call (5 and 2); **W6** a leftover guarded one (3);
+  - **T1** the fake uCRM not loaded (3); **T2** the fake uCRM recording nothing (2); **T3** the tick test's control
+    planting nothing (4); **T4** the test leaving its tree behind (1).
+- **Full suite, development, twice, on the final commit `1fb7415`** (290 files), one pass after the other:
+  - pass C 08:32–09:24 UTC and pass D 09:24–10:15 UTC: **14,326 passed, 8 failed, 3 skipped in each**, identical file by
+    file to each other;
+  - against 5.18.92's development passes (14,313, 0 failed) the only changes are this test's 47 and the four time-gated
+    files below: 14,313 + 47 − 5 − 3 − 20 − 6 = 14,326. Every other file's tally is 5.18.92's;
+  - the 8 failures are all `test_pilot_safety`'s, and the 3 skips all `test_notify_evo_retry`'s (below).
+
+  Before the review's amendments, the first pair ran on `c1989ea`, when the new test counted 45 (14,313 + 45 = 14,358).
+  The amendments added 2: *"the copy carries main.php and no data/ folder"* and *"the test leaves nothing behind in the
+  temporary directory"*. Pass A ran 04:34–05:25 UTC, 14,358/0; pass B ran 05:25–06:16 UTC, 14,352/0,
+  `test_sales_pilot` 125 → 119.
+- **The release tree's own suite, twice, on the final commit `69c87a6`** (278 files), one pass after the other:
+  - pass C 10:15–11:02 UTC: **13,404 passed, 8 failed, 3 skipped**;
+  - pass D 11:02–11:52 UTC: **13,403 passed, 9 failed, 3 skipped**;
+  - against 5.18.92's release passes (13,391, 0 failed, 277 files): 13,391 + 47 − 5 − 3 − 20 − 6 = 13,404. Every other
+    file's tally is 5.18.92's, `test_tick_auto_pull_log` (18) and `test_kyc_crm_create` (147) included. The 8 failures
+    are `test_pilot_safety`'s, as in the development passes;
+  - **pass D's ninth failure** is `test_pdf_link_token`'s *"…and with its own .meta token: 200, then gone"*: the
+    temporary PDF was still there when the test looked. The server sends the file and only then removes it, so a client
+    that has read the whole body can look before the removal. Seen once in the eight passes of this release; the file
+    passed 69/0 in each of the other seven and 5 runs out of 5 on its own afterwards. Neither the test nor the code it
+    tests is in the release's delta, and it does not run on the server.
+
+  Before the amendments, the first pair ran on `8d33594`, when the new test counted 45: pass A 06:17–07:04 UTC,
+  13,425/0; pass B 07:04–07:51 UTC, 13,405 passed and 8 failed, all `test_pilot_safety`'s.
+- **The time-gated cases — a Sunday, not 5.18.93.** Three test files exercise the follow-up sender only when some time
+  zone in its own list is between 09:00 and 18:59 on a day that is not Sunday: `test_sales_pilot`,
+  `test_multi_number_routing` and `test_pilot_safety`. Their lists run from UTC−11 to UTC+14, and `test_pilot_safety`'s
+  also holds UTC−12. So on a Sunday no zone qualifies from 06:00 to 19:00 UTC, or, for `test_pilot_safety`, from 07:00
+  to 19:00 UTC.
+  - The first two leave those cases out, and their tallies drop: `test_sales_pilot` 125 → 119 and
+    `test_multi_number_routing` 90 → 85 (84 → 79 in the release tree). They do not count them as skips, so the totals
+    show none. `test_multi_number_routing` says so in one line (*"no sending window is open anywhere at this moment (a
+    Sunday hour)"*). `test_sales_pilot` prints two "skip" lines covering four of its six cases; the R1 and R2
+    follow-up checks (`tests/test_sales_pilot.php:1035`, `:1041`) drop silently.
+  - `test_pilot_safety` FAILS them instead, as eight lines: *"the follow-up sends can be run now"*, the follow-up run's
+    *"registry unreadable"* case, and six *"mutant not run"* lines. Release pass A ran it just before 07:00 (177
+    passed); every later pass ran inside the window.
+  - A fourth, `test_notify_evo_retry`, counts its three follow-up cases as skips on a Sunday from about 08:00 to 18:00
+    UTC (FollowUpPolicy's own hours) and says so in its skip lines; these are the 3 skips in the totals.
+
+  None of these four files is in the release's delta (`git diff --name-only 247a480 69c87a6`), and every other file's
+  tally is 5.18.92's. The four files are run again on their own, in both trees, after 19:00 UTC today, when a window is
+  open again; the result is added to this entry when it has run.
+- **PHP warnings:** `test_dpo_endpoints`' five, in every pass, as before.
+- **Lint:** `php -l` on the nine PHP files of the release diff, read from the commit: 0 errors (PHP 8.4.19 here). The
+  server's own PHP lints them at A2, and runs the new test itself at A16 and R21.
+- `git diff --check 247a480 69c87a6`: clean (as it was on the amended-away `8d33594`).
+- **Secret scans** of the release diff, the script and the rehearsal: **clean.** Eight pattern classes (private keys,
+  provider key shapes, bearer tokens, credential assignments, URLs with credentials, phone numbers, e-mail addresses,
+  and the names and numbers never to be written), counted by line number, never printed. The release diff matches none.
+  The script's and the rehearsal's only matches are fictitious seeds — `+256700000…` numbers and `@example.test`
+  addresses on throwaway databases — and the quotation number `000181` named as a shape in R8, as since 5.18.85. The
+  control plants one line per class, and each is caught.
+
+### South Sudan and Domain B
+
+`main.php` is the same file on both installs and has no tenant branch, and the retired block ran on both. So a South
+Sudan install's tick loses the same broken pull once that install receives this code. This script cannot give it that:
+A12 refuses unless this server's own configuration resolves Uganda, and nothing is deployed. Its wallet sync and
+everything before it are unchanged, except the time guard's log line (`main.php:293`), which no longer says "+
+auto-pull". A16 and R21 run the tick with `cron/master.php` removed, at 03:xx, from a configuration that holds only the
+two auto-pull keys. Nothing in that run reads a tenant, so the one run stands for both installs. As for 5.18.92, A6,
+A13, R13, R15, R17 and R18 re-check the earlier releases' South Sudan paths: the event processor, the Batch 2 rules, the
+automated-send policy, and the retry job and its gate. None of them runs `main.php`. A7 and R14 hold Domain B and the
+plugin's docs byte for byte.
+
+### `scripts/deploy-5.18.93.sh` — 3428 lines, sha256 `e02c1799844722d0…`
+
+It is derived from `deploy-5.18.92.sh` by `derive_deploy93.py`. Every anchor and every replacement is asserted. The
+derivation also refuses if any of a fixed list of seventeen strings is left: eleven of 5.18.92's own lines, any `@@`
+placeholder, and five wordings the entry's draft check found (the log quoted as *"Uncaught Error: …"*, and four comments
+that named 5.18.91 or 5.18.90 where 5.18.93 or 5.18.92 is meant). That list is the whole check. Two kinds of change:
+
+**1 — It accepts the salesperson pilot as the operator left it, and requires the run to leave it so.** 5.18.92's checks,
+carried over unchanged, would refuse a deploy on today's server at A5, A5b, A8 and A11. Its `--after-only` and
+`--rollback` runs would fail V3f, V3h, R2b, R2c, R3, R11, R12 and RB. The rework was designed in six slices with a
+critic (72 items in the script, 23 in the rehearsal), and decided as follows:
+- **Each pilot switch — the registry (A5), own leads only, the hand-over copy and the owned follow-ups (A5b) — is read
+  in both its copies and accepted on or off.** Stage A refuses a switch that cannot be read or whose two copies
+  disagree, judged per key (an absent hand-over copy reads ON, as the code reads it). It also refuses the registry
+  switched on in both copies but not in effect — A9, A9b and A11, deploy mode only — since R12, R11 and R2c would fail
+  on exactly that after the copy (the review's P1). V3f and V3h require each switch unchanged by the run; R2b and R2c
+  read them through the installed code and compare.
+- **087's rows and trail (A8 → R3).** `wa87_state` gains `sig=`, an HMAC under the run's own salt over every column of
+  every `wa_channels` row and every `wa_channel_log` row, so the comparison sees any change and the log names no number.
+  Within a run the whole line must be unchanged: V3i, R3 and R11 compare it, and RB after a rollback. Structural defects
+  in 087 still refuse; a department row or trail that differs from the seed is a note, because the operator's card
+  writes them. Only the card (through `ChannelRegistry`) writes either table — measured: no cron or worker does, and the
+  webhook guard only reads.
+- **The automated-send policy (A11 → R2c; RB after a rollback).** It is read with the live code (`POL_A`, in every mode)
+  and with the pin's (`POL_P`) on this server's own configuration, and A11 requires them equal. After the copy, R2c
+  requires the installed code's reading to equal 5.18.92's code's reading on the same configuration and stage A's
+  `POL_A`; after a rollback, RB requires `POL_A` again. 5.18.92's fixed `POL_SIGNATURE` (the policy off) is gone. A6
+  (the pin's code) and R17 (the installed code) still run the policy on a throwaway database against its fixed
+  signature, `P90_SIGNATURE`.
+- **The routing, the registry and 5.18.89's rules (A9, A9b, A9c → R12, R11, R2b; RB after a rollback).** The routing
+  (A9) reads every number, the departments' and any salesperson's. The registry's reads (A9b) record every statement the
+  registry is asked. 5.18.89's rules (A9c) read own leads only, the follow-up hold on sales-001 and whether the card is
+  shown. Before the copy, each compares the pin's code with the live code. After it, each compares the installed code
+  with 5.18.92's code and with stage A's reading. R15, like A6, runs 5.18.89's rules on throwaway databases against the
+  fixed `B2_SIGNATURE` and reads nothing of this server.
+- **The readers keep their lines out of the live log.** The readers of the routing, the registry, the policy and
+  5.18.89's rules (`map_state`, `reg_state`, `pol_state`, `b2_code`) set `error_log` to /dev/null inside their own PHP
+  before loading any plugin code; 087's reader (`wa87_state`) uses PDO only and calls no plugin code. All of them
+  discard their stderr. (`b2_code` gained its setting after the entry's draft check; it had none.)
+- `--after-only` compares within its own run and prints a note when a shape differs from the deploy's recorded one. With
+  the registry on, nothing in the log says the registry is dark or off; the rehearsal asserts this in §3 and §6. With it
+  off in both copies, which the script accepts (1o, 6c), the log reports it as found: A5 and V3f say the registry is
+  dark, and A9b, R2c and RB that its switch is off.
+
+**2 — The release's own checks:**
+- **The pin and its base:** `69c87a6` on `release/5.18.93`, cut on `247a480`. The delta is exactly the 10 files.
+- **A0** requires the pin's `main.php` to be the reviewed file (`7be2a3ad…`) and its new test the reviewed one
+  (`281cbfc5…`, the development branch's byte for byte). It also requires the pin's master.php to be 5.18.92's
+  (`5400be20…`), its lock test 5.18.92's (`6fe15211…`), and its 087 the reviewed one production applied (`3feda1b4…`).
+- **A15** is now a regression check: 5.18.92's lock test, unchanged, under the server's PHP.
+- **A2** now refuses if the server's PHP rejects the test A16 runs, and names the tests the script runs on the server.
+- **A16 (new, refusal 16):** the pin's `tests/test_main_auto_pull_retired.php` under the server's own PHP, from the code
+  copied into the container's /tmp, as the database's owner, with a TMPDIR of its own. The script makes that folder
+  fresh before the test, inside this run's code copy, and removes it afterwards with whatever it holds; it does not
+  check that the folder is empty. The test itself asserts, as one of its own counted assertions, that its copy folder
+  and any vault file it created are gone. Only the rehearsal's §0 checks, on this machine, that the TMPDIR ends empty.
+  The test must read `47 passed, 0 failed` and exit 0; if it does not, the log shows the test's failed assertions and
+  its last lines before the NO-GO. A16 also confirms the live `main.php` still carries the list call it retires.
+- **V4:** `main.php:484` (*"Value of type null is not callable"*) or `:509` (*"DishNet\SqliteStore"*) within 30 minutes
+  of the copy is a note — a run begun on 5.18.92's code; 5.18.93's `main.php` has no line 484 or 509. Later it fails,
+  and after a rollback it is a note. Each line is known by its file:line and its own message. 5.18.91's
+  `cron/master.php:405` is no longer old, so it now fails.
+- **R21 (new):** the installed test under the server's PHP, as for A16. **R6** adds 5.18.92's master checks.
+- **RB:** back to 5.18.92 — `main.php` by sha256, its list call back, master.php its own lock. The old fatal can return.
+- **The code-copy refusal** now names its nine checks: A6, A9, A9c, A10, A11, A12, A13, A15 and A16.
+- **F** asks for `--after-only` at least 20 minutes after the copy, and once more a day later — after a whole day's pull
+  hour (03:00 in the plugin's time by default, 00:00–01:00 UTC), when V4 can show the old fatal gone.
+
+`bash -n` is clean. It is committed on the development branch with this entry, beside its rehearsal.
+
+### The rehearsal — `scripts/harness/deploy-5.18.93/rehearse.sh` (1420 lines, sha256 `0c39b27bf29a4f17…`)
+
+It is built from 5.18.92's by `build_rehearse93.py`: 5.18.92's sandbox, each edit asserted, plus the 23 pilot items and,
+in a second pass, the deploy review's additions. **The base is 5.18.92 installed as production runs it since 10 Oct,
+with the salesperson pilot as the operator left it.** Each step goes through the installed `tools/set_config.php` or the
+installed card (`SalesNumbersAdmin`, with Evolution's report given to it in memory), in the operator's order:
+- own leads only and the owned follow-ups ON in both copies;
+- the registry refused until the sales and support numbers were verified on the card, then ON in both copies;
+- sales-001 — added on 07 Oct, switched off, its assistant off — verified, its webhook registered, switched on, its
+  assistant on, each card action with its trail row;
+- the hand-over copy never set (absent: ON).
+
+The stray store is untouched since 5.18.91's copy, and 5.18.92's deploy record is as that script writes it. Every name
+and number seeded is fictitious (`rh-…`, "Rehearsal Seller").
+
+- **§0 controls.** The pin is the release: cut on 5.18.92, the 10 files, no migration. Its `main.php` is 5.18.92's with
+  exactly the block replaced and the time guard's line shortened, shown independently of the derivation, with three
+  controls: the log line alone, one other line changed, or a statement put inside the comment block, each fails to
+  match. Its master.php and lock test are 5.18.92's byte for byte, and its two tests pass from copies shaped as A15's
+  and A16's, the new one leaving its TMPDIR empty. The seeded pilot reads as production's: the installed policy ON,
+  sales-001 may answer a customer but never the sales number, and the sales number never answers sales-001 (docs/66 step
+  5's AI-to-AI test).
+- **§1 refusals, nothing changed by any** (1z apart, which pins the one write stage A can make, to the vault):
+  - **1a–1g:** the version, the pin, `main.php`, master.php (and A0 blinded: still not 5.18.92's), the new test, the
+    lock test, a planted file;
+  - **1h, 1i, 1j:** a pilot switch whose two copies disagree — the registry's, own leads only's, the owned follow-ups';
+  - **1r:** 087 with a trigger missing;
+  - **1z:** a deploy started before the plugin's next run after a configuration change: stage A's
+    `set_distributors.php --show` boots through `PluginConfig::load` and brings the vault up to date, the vault only,
+    nothing deployed; the control shows the plugin's own boot path makes the same refresh (Known limits 10);
+  - **1v, 1v', 1v'':** the registry ON in both copies where neither copy names Uganda, so the code does not take it —
+    refused at A9, then with A9 blinded at A9b, then with both blinded at A11 (P1), measured after the plugin has booted
+    once on that configuration, as it would on the server;
+  - **1x, 1y:** the hand-over copy OFF in the file and absent from the store row — its copies disagree, refused (A5b);
+    ON in the file and absent from the row — absent reads ON, accepted and printed as found;
+  - **1k:** `ucrm.json` naming the stray folder; **1l:** an untracked file in the checkout;
+  - **1m:** A16 refusing a pin whose `main.php` is 5.18.92's, A0 blinded, the test's own output in the log; **1m':** A15
+    refusing a pin whose master releases the jobs' lock; **1n, 1p, 1q:** A13 as for 5.18.92;
+  - **1s, 1t, 1u:** a pin whose automated-send policy acts differently with the registry on — refused by A11 on this
+    server's configuration, by A6 with A11 blinded, and, the pilot off, by A6 alone;
+  - **1w:** the code copy failing.
+
+  **1o** accepts the pilot OFF, as 5.18.92's deploy found it.
+- **§2 weakened copies.** A16 and A0's two `main.php` checks are each shown to be the layer that refuses (2a'', 2b'',
+  2b'''); A15 and A0 likewise (2a, 2b); A14's conditions each alone, as for 5.18.92 (2c–2f); A11 and A6 with A0 blinded
+  (2g).
+- **§3 the deploy:** two notes — R19's, and V4's for 5.18.92's own fatal at `main.php:484` planted during the run (on
+  the server R3's note is expected as well: the sandbox's `migration.log` has 087's lines, the server's has none). With
+  the pilot ON: A5 and A5b print each switch as found; A8 accepts 087's rows as found; A9 and A11 find the pin's code
+  equal to the live code's; V3f, V3h and V3i find everything unchanged; R2b, R2c, R3, R11 and R12 read the installed
+  code as before the copy. The summary names the registry's switch as found, and nothing in the log says the registry is
+  dark or off. The log carries no Evolution address, key or instance name, and no number.
+- **§4 `--after-only`:**
+  - **4a:** R19's note before master has run the job; **4c:** PASSED with 0 failed, 0 notes, R20 and R21 included;
+  - **4d, 4d'':** 5.18.92's fatal at `main.php:484`, and at `:509`, 10 minutes after the copy: a note, still PASSED;
+  - **4e:** the same line 40 minutes after: FAIL (its copy with no time bound passes: caught);
+  - **4h, 4i, 4i'':** the old message at another line, another message at `:484`, another message at `:509`: FAIL
+    (copies blind to the line or the message pass: caught — 4n for `:509`);
+  - **4l:** 5.18.91's `cron/master.php:405` — no longer old: FAIL;
+  - **4f, 4j:** any other fatal or parse error: FAIL, named by file:line;
+  - **4k, 4k':** the code copy matched inside each commit; **4g:** a real open of the stray store fails R19;
+  - **4m:** own leads only switched off between the deploy and an `--after-only`: the later run reads the pilot as it
+    finds it — a note, never a failure.
+- **§5 the checks have teeth:**
+  - **5a:** an installed `main.php` put back to 5.18.92's fails R21 and R1; **5a':** an installed master.php with the
+    jobs' lock fails R20 and R6, not R1.
+  - **5b–5e, the pilot changed during a run:** the registry's switch cleared fails V3f, and R2c, R11 and R12; own leads
+    only cleared fails V3h and R2b; sales-001's assistant switched off in its row fails R3, V3i, R11 and R12; a trail
+    row added fails R3, V3i and R11. A copy of the script blind to V3f, V3h or R3 passes it (5b'–5e': caught). The pilot
+    is put back exactly after each.
+  - **5f, 5f':** sales-001's display name changed during a run, no count with it, fails V3i, R3 and R11 — every column
+    is compared under the run's key; a copy whose key covers only the counts says ok over it at V3i and R3 (caught).
+- **§6 the rollback** PASSES with RB: `main.php`, master.php and the retry job byte for byte 5.18.92's, the auto-pull
+  back, 5.18.92's fatal a note, the file 5.18.93 added left on disk and named, no data changed, the pilot exactly as
+  left. **6c:** the pilot OFF, as 5.18.92's deploy found it, deploys, is checked again and rolls back as cleanly; the
+  pilot is then put back ON. **6b:** deploying again over the rollback PASSES, 5.18.92's fatal at `:509` just after its
+  copy a note. **6d, 6d':** after a redeploy, sales-001's assistant switched off in its row during the rollback fails
+  RB — 087's rows not as its stage A read them; an RB that does not compare them says ok (caught), while V3i still sees
+  it.
+- **§7:** Evolution never called in 93 runs of the script (the control: the stand-in records the rehearsal's own
+  request). The stray folder ends as seeded, the checkout's commit and tracked files as found, none of the watched /tmp
+  names left, no anchor of a weakened copy missed, and no run answered "unknown option" (the control on the control
+  makes the last run).
+
+**Results.** Two final runs on the final script (`e02c1799…`) and rehearsal (`0c39b27b…`), each file's sha256 recorded
+at the start of each run, one after the other: trial 5, 12:26–12:42 UTC, and trial 6, 12:42–12:58 UTC — **265 passed, 0
+failed, 94 runs of the script, in each.** In both: the deploy 79 ok, 0 failed, 2 notes (R19's and V4's); `--after-only`
+(4c) 57 ok, 0 failed, 0 notes; the rollback 46 ok, 0 failed, 4 notes. Earlier trials are not the final evidence: trials
+1 and 2 (242 passed, 0 failed) rehearsed superseded scripts on the amended-away pin `8d33594`; trial 3, on `69c87a6`, is
+void — its rehearsal was rebuilt while it ran, and its §0 control had a stale anchor; trial 4, on the final script with
+the previous rehearsal, gave 259 passed and 4 failed and found the vault (Reviews, Known limits 10).
+
+### Reviews
+
+Two independent read-only review workflows ran on 11 Oct: one on the code change (three dimensions, 14 agents) and one
+on the deploy script and its rehearsal (three dimensions, 14 agents). Each finding was adversarially verified; the
+reviewers' notes were recorded but not verified. Neither review found a blocker. Every verified finding was fixed, then
+proved, before the final rehearsals, except the parts listed under "Left, with reasons". The deploy review numbered each
+dimension's findings on its own: pilot P1–P2, release RC-1–RC-2, rehearsal RC-1–RC-10. Below, each RC is named release
+or rehearsal; the rehearsal's own comments ("the deploy review's RC-n") always mean the rehearsal's.
+
+**The code review confirmed the change itself.**
+- The defect is as stated:
+  - `:484` calls `null` on every run of the pull hour where the wallet sync skipped. `cron_wallet_sync.php`, master's
+    job, stamps the same last-run file earlier in the same run, so the inline sync normally skips.
+  - `:509` names a class that cannot resolve. There is no namespace `DishNet`, no alias, and no autoloader for it.
+  - In the repository's code — `main.php` is the same file from 26 Sep (`5f33b8a`) to 5.18.92 — the block has no tenant
+    gate and writes no file of its own on either install, so every reader of its files shows the same before and
+    after. Uganda runs that code (5.18.92). The South Sudan server was not examined (5.18.91's Known limits 7), so
+    whether it runs that code is not established; if it runs code from 26 Sep or later, the same holds there.
+- The diff is exactly the block and the log line, braces balanced.
+
+**Fixed after the code review.** Both commits were amended; neither had been pushed:
+- **AP-1 — the new test needed `exec()`.** It used `exec()` to copy, remove and lint its tree, and nothing had shown
+  `exec()` works in the uCRM container; docs/59 lists it as unknown. If it does not, A16 would refuse the deploy.
+  - The test now uses PHP's own file functions and `proc_open`. 5.18.92's A15 proved `proc_open` on the server; the
+    rest of what it needs is first shown there by A16, before anything changes.
+  - Proved both ways with `exec`, `shell_exec`, `system`, `passthru` and `popen` disabled: the new test passes 47/0 and
+    leaves nothing; the first version died on *"Call to undefined function exec()"* and left its vault file.
+- **AP-2 (hardening; judged not a defect) — `error_log` from php.ini.** Each tick now runs with an empty `error_log`, so
+  the plugin handler's lines reach the child's stderr whatever php.ini names. With a php.ini sending `error_log` to a
+  file, the first version failed 3; this one passes.
+- **F1–F3 — `main.php`'s comment overstated its replacements.** It now says what the code does:
+  - the delta sync merges the first 100 clients of uCRM's own order — it does not select recent changes;
+  - master runs about every five minutes, not every minute;
+  - the full pull and the sales index are both in `api_crm_misc.php`.
+- **TK-1 — the tick test's control was a paraphrase.** It now plants 5.18.38's own lines 441 and 456, and the schedule
+  line after them.
+- **AP-3 — a wrong line number.** A test comment said the embedded block stops at 509; it stops at 514.
+
+**Fixed after the deploy review:**
+- **P1 — stage A noted what stage R then failed.** A registry switched on in both copies but not in effect drew only a
+  note at A9, A9b and A11, while R12, R11 and R2c fail on that very state after the copy.
+  - Stage A now refuses it, before anything changes. Deploy mode only: a rollback and `--after-only` are never stopped
+    by it, and RB still reports it as found.
+  - It is not the server's state: the rehearsal's pilot, like production's, has the registry in effect.
+- **P2 — V3i compared only counts and states.** It now also compares every column of every row and trail entry under
+  the run's key, and stage A's line names the checks that do (V3i, R3, R11, RB).
+- **Release RC-1 — V4's note was wrong.** It said "those lines are a comment"; 5.18.93's `main.php` has no line 484 or
+  509.
+- **Release RC-2 — A2's note was wrong.** It called every test file "never run on the server". A2 now refuses if the
+  server's PHP rejects the test A16 runs, and names the tests the script does run.
+- **The summary's day-later reason was 5.18.92's** (admin page loads). For 5.18.93 the evidence is the next pull hour.
+- **The rehearsal gained what the review found it lacked:**
+  - 1v, 1v', 1v'' — P1's refusals, each layer with the others blinded;
+  - 1x, 1y — the hand-over copy's "absent means ON", both ways (rehearsal RC-5);
+  - 4i'', 4n — another fatal at `:509`, and V4 blind to its message (rehearsal RC-6);
+  - 4m — the pilot changed between the deploy and an `--after-only`: a note, never a failure (rehearsal RC-7);
+  - 5b–5e — R2b, R2c, R11, R12 and V3i asserted to fail (rehearsal RC-2);
+  - 5f, 5f' — a column no count shows changed during a run, and a key over the counts alone, caught (rehearsal RC-1);
+  - 6d, 6d' — RB failing on a row changed during a rollback, and RB blind to it, caught (rehearsal RC-3).
+- **The rehearsal's own builder:** its message *"the main.php control's sed anchor once"* was printed but never checked.
+  After the comment's rewording, trial 3 showed that control planting nothing. The builder now checks the anchor, and
+  is shown to refuse the stale one.
+
+**Fixed after the entry's own draft check** (an adversarially verified check of this entry against the code, the logs
+and the script, which also corrected the entry itself):
+- `b2_code`, 5.18.89's rules reader, loaded five plugin libraries with no `error_log` setting of its own; it now sets
+  /dev/null like the other readers (the entry had claimed all of them did).
+- Five comments carried from earlier scripts named 5.18.91 or 5.18.90 (one called 5.18.90 the rollback target); they now
+  name this release and 5.18.92. Comments only: none is printed, none changes a check.
+- The script's and the rehearsal's headers quoted the log as *"Uncaught Error: Value of type null is not callable"*. The
+  plugin's handler logs `[DishNet UNCAUGHT] …`, and the day-later count printed file:line only. Both headers now say
+  so. The same misquote stays in the release's `main.php` comment (line 436) and the new test's header (line 10): see
+  Known limits 9.
+
+**Fixed after rehearsal trial 4** (11 Oct, 12:02–12:18 UTC, on the final script; 259 passed, 4 failed in 93 runs):
+- 1v, 1v', 1v'' and 1x failed their "nothing changed" check. A diagnostic copy that recorded the vault's checksum after
+  every command the script ran found the one change: the vault's `tenant_profile`, refreshed by
+  `tools/set_distributors.php --show` through `PluginConfig::load()` (Known limits 10). 1v had edited the tenant by hand
+  and measured at once, before the plugin's boot path had run; `cfg_back` restored the configuration but not the vault,
+  so 1x began from 1v's vault.
+- The rehearsal now runs the plugin's own boot path after each hand edit, keeps and restores the vault with the
+  configuration, and pins the behaviour as 1z with a control. The script is unchanged.
+
+**Left, with reasons:**
+- **Rehearsal RC-4: no rehearsal case makes A9, A9b or A9c refuse a pin whose own code routes or reads differently.**
+  - A9 is the routing comparison 5.18.88–5.18.92 carried, extended here. It now also covers the numbers the registry
+    holds (`others=<n>:<routed>`), and it runs with the registry's switch as the operator left it, not only off.
+  - A9b (the registry's reads, pin against live) and A9c (5.18.89's rules, pin against live) are new in this release.
+  - To show A9 refusing needs a release variant of `lib/EvolutionApiService.php` with A0 blinded, as the 5.18.88–5.18.90
+    rehearsals did. To show A9b or A9c refusing needs variants of the registry's or the rules' files. This rehearsal
+    carries none of these.
+  - A0 refuses any pin that changes those files: 5.18.93 ships only `main.php`, the manifest and tests.
+- **Rehearsal RC-2, in part:** V3i, R2b, R2c, R11 and R12 are now asserted to fail (5b–5e), but none has a blinded copy
+  of its own, as V3f, V3h and R3 have (5b'–5e').
+- **Rehearsal RC-3, in part:** of RB's comparisons with stage A, only 087's rows and trail are shown to fail (6d, 6d').
+  Its registry, policy, 5.18.89-rules and routing comparisons are shown only to pass.
+- **Rehearsal RC-5, in part:** no case makes a pilot switch unreadable ('?'), which is the other refusal of A5 and A5b.
+- **Rehearsal RC-8: the sandbox's container is not the server's.** It runs PHP 8.4 as root and passes its environment
+  on. A16's test was therefore also run as an unprivileged user, with an empty environment and a TMPDIR of its own,
+  from an A16-shaped copy of the pin: 47 passed, 0 failed, nothing left. The server's PHP 8.1 first runs it at A16, and
+  again at R21, on the deploy and on every `--after-only`.
+- **Rehearsal RC-10 (a note):** the "checkout as found" check reads only the commit and tracked files. It runs
+  `git status` without `GIT_OPTIONAL_LOCKS=0`, so it can rewrite the checkout's index, and it cannot see a change to the
+  untracked deploy script or harness. The "nothing left in /tmp" check does not watch the script's own `/tmp/dnb_*.$$`
+  files.
+- **AP-4 (the code review's note, not older than this release): the crashing control's exit status 0 has been
+  measured only on PHP 8.4.19.** It comes from the plugin's exception handler returning normally
+  (`lib/error_handler.php`), and is asserted at `tests/test_main_auto_pull_retired.php:298`. PHP 8.1 could not be
+  measured here: the session's network refuses php.net and the PHP 8.1 package archive, and running a downloaded PHP
+  binary was refused. If PHP 8.1.34 ends that process otherwise, line 298 fails and A16 refuses, before anything
+  changes (Known limits 6).
+- **F4 (verified, minor):** the admin screens still promise a nightly pull (Known limits 1).
+- **The reviews' notes, not verified:**
+  - three comments elsewhere describe the retired block as live (F5);
+  - five version-pin assertions still carry the label "5.18.71" (RI-7);
+  - the tick test leaves its vault temp file in the development suite (TK-2).
+
+  All three are older than this release. F5 is outside its files. RI-7's five labels sit on the five version-pin lines
+  this release bumps, where it changed only the version and left the label. TK-2's temp file is created at line 36 of
+  `tests/test_tick_auto_pull_log.php`, a file this release changes, though that line is not in the diff; the test runs
+  in the development and release suites, never on the server. All are left unchanged.
+
+### Deployment runbook — each step is the operator's
+
+1. **Both branches must be on GitHub first.** Step 2 takes the script from `claude/study-this-jhe2eg` (its `git pull`)
+   and the release from `release/5.18.93` (its `git fetch`). **`claude/study-this-jhe2eg` is pushed with this entry:**
+   it carries `1fb7415`, the script, its rehearsal and the docs/66 note. `release/5.18.93` (`69c87a6`) is NOT pushed
+   yet: it waits on the operator's word, and step 2 cannot run before it is.
+2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.93 && mkdir -p /root/dnb-5.18.93 && bash scripts/deploy-5.18.93.sh 2>&1 | tee /root/dnb-5.18.93/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED with two notes, as at 5.18.92's deploy:
+   - R3's (`migration.log` holds no line for 087), which every deploy on this server has given since 5.18.89. The
+     rehearsal does not show it, because its sandbox's `migration.log` has 087's lines.
+   - R19's (no run of the retry job since the copy yet).
+
+   A V4 note for 5.18.92's fatal at `main.php:484` or `:509` is possible only if the copy falls within 30 minutes of a
+   pull-hour run (00:00–01:00 UTC). **The pilot stays as it is: press nothing on the Salesperson numbers card and run no
+   `tools/set_config.php` while it runs** (docs/66, the note added for 5.18.93) — a change made then fails the checks
+   that compare before and after (V3f, V3h, V3i, R2b, R2c, R3, R11, R12), though the script changed nothing. The same
+   holds while steps 3 and 4 run (`--after-only` compares within its own run) and during a rollback.
+3. **At least 20 minutes after the copy**, read-only:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.93.sh --after-only 2>&1 | tee /root/dnb-5.18.93/after-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, 0 failed, R19 conclusive, with R3's note (`migration.log` holds no line for 087), as 5.18.92's
+   `--after-only` gave: 55 ok, 0 failed, 1 note (R3's).
+4. **After the next pull hour** (a day after the copy is always enough), the same `--after-only` command once more.
+   V4 then shows whether `main.php:484` has stopped: the evidence this release is for. Unlike 5.18.92's, this script
+   accepts the pilot's switches as it finds them, so this later run needs no separate log-count command.
+5. **The quarantine of the stray store is NOT part of this release.** It needs its own approval.
+
+### Known limits and open risks
+
+1. **The Settings screen still offers the auto-pull** (`ucrm_auto_pull_enabled`, `ucrm_auto_pull_hour`; the option still
+   reads *"Nightly automatic"*), and nothing acts on either now. The operator accepted this when choosing to retire it.
+   Three lines on two other screens still promise it too: on the uCRM data screen, *"after that, nightly auto-pull takes
+   over at 3:00 AM"* and *"Auto-pull builds this nightly"*; on the Accounts ledger, *"After that, nightly auto-pull
+   keeps it updated automatically"*. Nothing writes `ucrm_pull_last_run.json` any more; the retired block was its only
+   writer. So the uCRM data screen's status line reads *"Auto-pull has not run yet"*, or shows whatever older row
+   survives in the store, for good, and the Accounts ledger and Collect Payment screens read the same file. In the
+   repository's code since 26 Sep all of this was untrue before this release as well: that writer sat after the fatal at
+   `main.php:509` and was never reached. Taking all of it off the screens is a later, separate change.
+2. **No automatic full pull of uCRM clients remains, and none ever completed.** This holds for the repository's code
+   since 26 Sep. The repository is shallow, so nothing earlier can be checked, and `main.php` is the same file from
+   `5f33b8a` to `247a480`. Every run that entered the pull died in one of two ways:
+   - at `main.php:484`, before fetching anything;
+   - on a run that had also run the wallet sync, at `:509`, after fetching every client. The server's log of 10–11 Oct
+     shows only `:484`.
+
+   The cache is kept by:
+   - the delta sync — `clients?direction=DESC&limit=100`, the first 100 clients in uCRM's default order. Which 100 that
+     is depends on uCRM's default sort, which nothing in the repository establishes. The review read the request; it
+     observed nothing from uCRM;
+   - the webhook and the refresher, for the clients they touch;
+   - the CRM screens' own full pull.
+
+   A client edited outside those paths waits for a manual "Pull All Data", as it always has.
+3. **`test_pilot_safety` FAILS, rather than skips, when no zone in its list is between 09:00 and 18:59 on a day that is
+   not Sunday** — on a Sunday from 07:00 to 19:00 UTC. Every suite pass of this release that ran in that window hit it:
+   release pass B on `8d33594` (07:04–07:51 UTC), development passes C and D on the final `1fb7415` (08:32–10:15 UTC),
+   and release passes C and D on the final `69c87a6` (10:15–11:52 UTC). Each had the same 8 failures, all
+   `test_pilot_safety`'s. The test is older than this release and unchanged by it. Release pass A, which ran it just
+   before 07:00 UTC, had it whole: 177 passed, 0 failed.
+4. **The before-and-after comparisons of the pilot are within one run.** A card action or `set_config.php` between the
+   deploy and a later `--after-only` is not this script's to judge: the later run reads the pilot as it then finds it,
+   and prints a note when its shape differs from the deploy's recorded one.
+5. **Carried from 5.18.92, unchanged:** `$dataDir` in master's shared scope (its Known limits 3); the lock test's LT-2
+   and LT-3 (4); RB's own report of a partial rollback copy not rehearsed (5); `cron_wa_sync.php`'s hard-coded fallback
+   for its feed secret (7), for a separate look.
+6. **A15 and R20 ran on the server on 10 Oct** (5.18.92's RESULT: PASSED), so child processes and a clean stderr in the
+   uCRM container are no longer unknown. A16 and R21 use the same mechanism, plus a stream wrapper and a copy of
+   `main.php`, `lib/` and `cron/` — rehearsed here, not yet run there. One of the new test's assertions, that a tick
+   whose Error the plugin's exception handler swallowed still exits 0 (line 298), has been measured only on PHP 8.4.19.
+   A15's crash case is a fatal error with no handler and does not cover it. The server's log is consistent with the
+   handler's path on 8.1: the day-later count found 12 lines at `main.php:484`, one per run of the pull hour, where
+   PHP's own *"PHP Fatal error: Uncaught …"* line, had it also been logged, would have doubled the count. Whether the
+   container logs PHP's own errors at all is not established, so the exit status under 8.1 is **NOT MEASURED**. If PHP
+   8.1.34 ends that process otherwise, A16 refuses, before anything changes, and the log names the assertion.
+7. **P1's new refusals are rehearsed on one way of reaching that state**: a registry switched on where neither copy of
+   the configuration names Uganda (1v, 1v', 1v''). The other ways the deploy review named are not built in the sandbox:
+   a registry or policy read that throws on the live data, and the two copies resolving to different tenant profiles.
+   The refusals judge the reading, not its cause: A9b refuses anything but `enabled=on/on forStore=on/on` with the
+   registry read, and A11 refuses anything but `policy=on/on`. So they apply to those ways too. Each refusal is a stop
+   before anything changes, in deploy mode only.
+8. **Older comments that describe the retired block as live** (`api_crm_misc.php`, `accounts_ledger.php`, `webhook.php`)
+   are outside this release's files. Separately, five version-pin assertions are labelled "manifest version is
+   5.18.71": `tests/test_distributor_{apply,link_ucrm,notify,registry,territory}.php`. They are in this release's files,
+   on the very lines it bumps to `5.18.93`. Only the label is old; the 5.18.91 entry recorded it as the convention since
+   5.18.71. Both are left for a later change.
+9. **The release quotes the log in PHP's words, not the handler's.** `main.php`'s new comment (line 436) and the new
+   test's header (line 10) say the server's log showed *"Uncaught Error: Value of type null is not callable"*. The
+   plugin's handler logs `[DishNet UNCAUGHT] Value of type null is not callable in …`, which the test itself asserts,
+   and the day-later count printed file:line only. Comments only, in reviewed files whose sha256 the script pins; they
+   are corrected the next time those files change, not by amending this release again. V4 greps only the message, so
+   it is unaffected.
+10. **Stage A writes one thing, as every deploy script since 5.18.60 has: the configuration vault, when it is behind the
+    configuration.**
+    Stage A and R2 run the installed `tools/set_distributors.php --show`, which boots through `PluginConfig::load()`.
+    `ConfigVault::apply()` on that path refreshes the vault — the copy of the configuration a re-install restores,
+    `.dishnet-sudan.vault.json` beside the plugin folder (or `config_vault.json` in the data directory where that folder
+    is not writable) — whenever it differs from the configuration, and writes nothing when they agree. The
+    crons master runs and the webhook all boot the same way, so on the server the vault follows the configuration within
+    minutes of any change, and the script's refresh writes only what the plugin's next run would. Only a deploy started
+    in those minutes can write it. Found by rehearsal trial 4, whose cases 1v and 1x had changed the configuration by
+    hand and measured at once; the rehearsal now lets the plugin boot first, keeps and restores the vault with the
+    configuration, and pins the behaviour (1z). The script was not changed: R2 is the check that the installed tool
+    still works.
+
+### Corrections to the 5.18.92 record (11 Oct, its day-later log count)
+
+- *"No data is written wrongly; the nightly refresh simply does not happen when no run in that hour also ran the wallet
+  sync"* — **wrong.** A run in that hour that had the wallet sync did not complete the refresh either: it fetched every
+  client and died at `main.php:509`, creating `\DishNet\SqliteStore`. In the repository's code since 26 Sep the nightly
+  refresh never completed at all, and so never wrote the client cache or the search and sales indexes it was meant to
+  rebuild.
+- *"The fix is a release of its own (define the CRM credentials and `$crmGet` once, before both sections)"* —
+  superseded. Asked to choose, the operator retired the block instead (this release).
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.93.sh --rollback` asks for `ROLLBACK`, puts 5.18.92 (`247a480`) back through `deploy-hybrid.sh`,
+and checks it (RB). `main.php` is then 5.18.92's again, so its runs of the pull hour can again end on the fatal at
+`main.php:484`. master.php keeps 5.18.92's lock and the retry job 5.18.91's gate; every switch and the pilot stay as
+they are. The rollback restores code only: `tests/test_main_auto_pull_retired.php`, the file 5.18.93 added, stays on
+disk, reached by nothing (`deploy-hybrid.sh` never deletes), and RB names it. As for the deploy, press nothing on the
+Salesperson numbers card and run no `tools/set_config.php` while the rollback runs: V3f, V3h, V3i and RB compare the
+pilot before and after.
+
+The command, as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.93.sh --rollback
+
+By hand, only if the script cannot run:
+`cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
