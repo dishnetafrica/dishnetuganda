@@ -474,11 +474,14 @@ is_(strpos($html, 'kyc_crm_retry') === false && strpos($html, 'Not in the CRM ye
     'an agent sees the state and the reason, not the button');
 
 // ── J. the sales-person index never reads a tax field ──────────────────────
+// main.php built a second index in its nightly auto-pull; 5.18.93 retired that block
+// (tests/test_main_auto_pull_retired.php), so the CRM screen's index is the only one.
 echo "\nJ. The sales-person index skips tax fields\n";
-foreach (['main.php', 'includes/api/api_crm_misc.php'] as $f) {
-    $src = (string)file_get_contents($root . '/' . $f);
-    is_(preg_match('/EfrisClientField::of\([^;]*\) !== null\) continue;/', $src) === 1, "{$f} skips a tax field when indexing sales people");
-}
+$src = (string)file_get_contents($root . '/includes/api/api_crm_misc.php');
+is_(preg_match('/EfrisClientField::of\([^;]*\) !== null\) continue;/', $src) === 1, "includes/api/api_crm_misc.php skips a tax field when indexing sales people");
+$src = (string)file_get_contents($root . '/main.php');
+is_(strpos($src, 'EfrisClientField') === false && strpos($src, '$ATTR_SALES_PERSON') === false,
+    'main.php indexes no sales people at all: its nightly index is retired (5.18.93)');
 
 // ── K. the staff app's two POST handlers, run for real ─────────────────────
 echo "\nK. includes/post/post_kyc.php — the flash colour and the admin Retry\n";
