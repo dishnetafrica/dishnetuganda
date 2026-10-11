@@ -9698,6 +9698,25 @@ PASSED.**
   - the webhook guard's disconnection alert.
 
   Separately: the day-later V4 log count (above), and the stray store's quarantine, which waits for its own approval.
+
+**The day-later log count (11 Oct), the read-only command above, run by the operator over the log since 21:33 UTC on
+10 Oct: `cron/master.php:405` — 0 lines. 5.18.92's fix holds on the server.** The command found one other location:
+**12 lines at `main.php:484`** — a different defect, older than this release, and not caused by it:
+- **The code.** `main.php` is the same file in 5.18.91 and 5.18.92 (no diff), and this code is in the repository at
+  `5f33b8a` (26 Sep) at the latest. Line 484 is `$crmGet("clients?…")` in the nightly **UCRM auto-pull** (`ucrm_auto_pull_hour`,
+  default 3, the plugin's local time: 00:00 UTC in Kampala). `$crmGet`, `$crmBase` and `$crmToken` are defined only
+  inside the **wallet sync's** branch, which runs only when its interval has passed. On a run where the wallet sync
+  skips, the auto-pull reads undefined variables, passes its "CRM not configured" check (`null === ''` is false), and
+  calls `null` — PHP 8's *"Uncaught Error: Value of type null is not callable"*. It writes its last-run file only after
+  the pull, so every `main.php` run in that hour fails the same way: about 12 an hour at a 5-minute tick.
+- **What it costs.** `cron/master.php` runs earlier in `main.php` (lines 264–277), so every background job ran — the
+  AI replies, sales-001 among them. What fails is the auto-pull and what follows it in that run: the client cache's
+  nightly refresh and the search and sales indexes it rebuilds. No data is written wrongly; the nightly refresh simply
+  does not happen when no run in that hour also ran the wallet sync.
+- **Why it surfaced now.** 5.18.91's server check looked for the flock fatal only, and no deploy check before this one
+  ran during that hour. The count by night (`docker logs --timestamps … | grep -F 'main.php:484' | cut -c1-13 | uniq -c`)
+  will show whether it happens every night. **The fix is a release of its own** (define the CRM credentials and
+  `$crmGet` once, before both sections), at the operator's word.
 - The `[ConfigVault] restored after re-install` line those commands print is the usual in-memory fill.
 
 **The day-later check is a read-only log count.** With the pilot's switches now set, a later `--after-only` of this
