@@ -9738,7 +9738,7 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — the development branch pushed with this entry; `release/5.18.93` NOT pushed; NOT deployed
+## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — both branches pushed (`release/5.18.93` on 11 Oct, at the operator's word); NOT deployed
 
 **Request.** On 11 Oct, after the day-later log count (5.18.92's RESULT above) found the fatal at `main.php:484`, the
 operator said *"yes buuild 5.18.93"*. Asked whether to repair the nightly refresh or retire it, the operator chose
@@ -10230,8 +10230,8 @@ and the script, which also corrected the entry itself):
 
 1. **Both branches must be on GitHub first.** Step 2 takes the script from `claude/study-this-jhe2eg` (its `git pull`)
    and the release from `release/5.18.93` (its `git fetch`). **`claude/study-this-jhe2eg` is pushed with this entry:**
-   it carries `1fb7415`, the script, its rehearsal and the docs/66 note. `release/5.18.93` (`69c87a6`) is NOT pushed
-   yet: it waits on the operator's word, and step 2 cannot run before it is.
+   it carries `1fb7415`, the script, its rehearsal and the docs/66 note. `release/5.18.93` (`69c87a6`) was pushed on
+   11 Oct at the operator's word (*"Push it (Recommended)"*); both are on GitHub.
 2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.93 && mkdir -p /root/dnb-5.18.93 && bash scripts/deploy-5.18.93.sh 2>&1 | tee /root/dnb-5.18.93/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
