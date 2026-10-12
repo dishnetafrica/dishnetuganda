@@ -27,8 +27,9 @@ $config  = PluginConfig::load($root, $dataDir);
 $argvAll = $argv;
 
 // Facts from the company documents already in this project: certificate of
-// incorporation, URA registration, the UCC-authorised-installer wording used
-// on the flyer and the quotation terms, and the Ecobank account details.
+// incorporation, URA registration, the installer wording used on the flyer
+// and the quotation terms (5.18.94: no UCC authorisation is claimed — the UCC
+// letter of 4 Sep 2026 is a conditional no-objection), and the Ecobank account details.
 $UGANDA = [
     'email_company_name'     => 'DishNet Africa Limited',
     'email_locality'         => 'Kampala, Uganda',
@@ -37,7 +38,7 @@ $UGANDA = [
     'email_support_wa'       => '256705993348',
     'email_reply_to'         => 'accounts@dishnetuganda.com',
     'email_legal_line'       => 'TIN 1059140632 · Reg. No. 80046255496181',
-    'email_badge_line'       => 'UCC Authorised Starlink Installer',
+    'email_badge_line'       => 'Starlink Installation',
     'email_currency'         => 'UGX',
     'email_bank_beneficiary' => 'DISHNET AFRICA LIMITED',
     'email_bank_name'        => 'Ecobank Uganda Limited — Head Office',

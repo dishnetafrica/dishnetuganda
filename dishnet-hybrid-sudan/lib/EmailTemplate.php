@@ -25,7 +25,7 @@ declare(strict_types=1);
  *   email_support_wa      '211921443009'          digits for the wa.me link
  *   email_reply_to        'info@dishnetafrica.com'
  *   email_legal_line      ''    e.g. 'TIN 1059140632 · Reg. No. 80046255496181'
- *   email_badge_line      ''    e.g. 'UCC Authorised Starlink Installer'
+ *   email_badge_line      ''    e.g. 'Starlink Installation'
  *   email_accent          '#D41C1C'
  *
  * PHP 7.4 compatible. No external assets: no remote fonts, no tracking pixels,

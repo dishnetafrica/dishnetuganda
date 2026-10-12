@@ -41,6 +41,33 @@ function dnLegalVersion(TenantProfile $tp): array {
     ];
 }
 
+/**
+ * 5.18.94: one key per section of each document, in order. A tenant may replace a section's BODY with its own
+ * wording under `legal.terms_text.<key>` / `legal.privacy_text.<key>` in its profile (the headings never change);
+ * `{wa}` and `{email}` in that text become the tenant's contacts. A tenant with no override renders exactly what
+ * it rendered before, so a document changes only where its own profile says so.
+ */
+function dnLegalSectionKeys(): array {
+    return [
+        'terms'   => ['about', 'service', 'billing', 'acceptable_use', 'equipment', 'transfers', 'termination',
+                      'liability', 'changes', 'jurisdiction', 'contact'],
+        'privacy' => ['applies', 'collect', 'use', 'sign_in', 'share', 'retention', 'rights', 'security',
+                      'children', 'changes', 'contact'],
+    ];
+}
+
+/** The sections with each overridden body put in place. @internal */
+function dnLegalOverride(TenantProfile $tp, string $doc, array $sections, string $wa, string $email): array {
+    $keys = dnLegalSectionKeys()[$doc];
+    foreach ($keys as $i => $key) {
+        $o = $tp->get("legal.{$doc}_text.{$key}");
+        if (isset($sections[$i]) && is_string($o) && trim($o) !== '') {
+            $sections[$i]['body'] = strtr($o, ['{wa}' => $wa, '{email}' => $email]);
+        }
+    }
+    return $sections;
+}
+
 /** The profile's `legal` facts, each with its neutral fallback. @internal */
 function dnLegalFacts(TenantProfile $tp): array {
     $country = $tp->countryName() !== '' ? $tp->countryName() : 'the country of registration';
@@ -100,7 +127,7 @@ function dnTermsContent(TenantProfile $tp): array {
           "request. Any minimum service period, transfer fee and processing time are confirmed " .
           "to you in writing before a transfer. Transfer terms are governed by SpaceX/Starlink " .
           "policy and may change without notice.";
-    return [
+    return dnLegalOverride($tp, 'terms', [
         [
             'heading' => 'About these Terms',
             'body'    =>
@@ -182,7 +209,7 @@ function dnTermsContent(TenantProfile $tp): array {
                 "Questions about these Terms? Reach us on WhatsApp at {$wa} or email " .
                 "{$email}. We reply fastest on WhatsApp.",
         ],
-    ];
+    ], $wa, $email);
 }
 
 /**
@@ -193,7 +220,7 @@ function dnPrivacyContent(TenantProfile $tp): array {
     $email = $tp->email() ?: 'info@dishnetafrica.com';
     $f     = dnLegalFacts($tp);
     $partners = $f['partners'] !== '' ? rtrim($f['partners']) . ' ' : '';
-    return [
+    return dnLegalOverride($tp, 'privacy', [
         [
             'heading' => 'Who this applies to',
             'body'    =>
@@ -279,5 +306,5 @@ function dnPrivacyContent(TenantProfile $tp): array {
                 "Questions about your privacy? WhatsApp {$wa} or email " .
                 "{$email} — we'll respond within a few business days.",
         ],
-    ];
+    ], $wa, $email);
 }

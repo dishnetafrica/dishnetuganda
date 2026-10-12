@@ -546,13 +546,18 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
     <div class="wa-row" style="display:block">
       <span class="n" style="display:block;margin-bottom:6px">Marketing &mdash; who we are &amp; the plans flyer</span>
 
+<?php
+        // 5.18.94 (root docs/67 §K): on Uganda the examples make no UCC claim — the UCC letter is a conditional
+        // no-objection, not a licence. South Sudan's page stays byte for byte as it was.
+        require_once dirname(__DIR__, 2) . '/lib/NotifyGate.php';
+        $_mkUg = NotifyGate::uganda(is_array($_wCfg ?? null) ? $_wCfg : [], $_wData ?? null);
+?>
       <input type="text" name="ai_identity_line" style="width:100%"
              placeholder="DishNet is an internet service provider."
              value="<?= h((string)($_wCfg['ai_identity_line'] ?? '')) ?>">
       <div style="color:#5a6b60;font-size:12px;margin:4px 0 10px;max-width:75ch">
         One sentence the AI uses to describe the company, on WhatsApp and website chat alike
-        (e.g. <em>&ldquo;DishNet Africa Ltd is an IT solutions company and UCC Authorised
-        Starlink Installer in Uganda.&rdquo;</em>). Blank keeps the original wording. Only put
+        (e.g. <em>&ldquo;DishNet Africa Ltd is an IT solutions company and <?= $_mkUg ? "Starlink\n        installer" : "UCC Authorised\n        Starlink Installer" ?> in Uganda.&rdquo;</em>). Blank keeps the original wording. Only put
         a claim here you can back with paper &mdash; it goes out in writing to every customer.
       </div>
 
@@ -572,7 +577,7 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
              placeholder="https://… public image address (optional — the file above wins)"
              value="<?= h((string)($_wCfg['wa_flyer_url'] ?? '')) ?>">
       <input type="text" name="wa_flyer_caption" style="width:100%;margin-top:6px"
-             placeholder="Caption sent under the image, e.g. DishNet Uganda — Starlink Plans ✅ UCC Authorised Installer"
+             placeholder="Caption sent under the image, e.g. DishNet Uganda — Starlink Plans ✅ <?= $_mkUg ? 'Professional installation' : 'UCC Authorised Installer' ?>"
              value="<?= h((string)($_wCfg['wa_flyer_caption'] ?? '')) ?>">
       <div style="margin-top:8px"><button class="wa-btn p" type="submit">Save marketing</button></div>
     </div>
