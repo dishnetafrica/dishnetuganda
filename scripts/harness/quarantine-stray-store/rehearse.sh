@@ -1199,7 +1199,7 @@ holder_py fd "$SRC"; q2 a5-unresolved "xargs -0 -r stat -L -c '%d:%i' 2>/dev/nul
 check "$(has "$Q2O" "NO-GO: the holder instruments' controls did not pass")$(has "$Q2O" 'GO — evidence recorded')$(unchanged)" "yesnosnapnokeptnorec" \
   "2 a5-unresolved: a copy whose descriptor scan does not resolve each descriptor to its file is stopped by the scan's own control (the control has teeth), before any holder count is believed"
 QPATH="$SB/nopy:$SB/bin:$PATH" q2 a5-control '[ "$HOLDERS_OK" = "yes" ] || stop "NO-GO: the holder instruments'"'"' controls did not pass ($HOLDERS_CTL) — that' ': || stop "NO-GO: the holder instruments'"'"' controls did not pass ($HOLDERS_CTL) — that' \
-  'if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; STEADY="no"; return 0; fi' ':' --; q2ok
+  'if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; STEADY="no"; HOLD_ANY="unread"; return 0; fi' ':' --; q2ok
 ns_holder "$SRC"; m="$(mutant q2-a5-readlink "$QP" "xargs -0 -r stat -L -c '%d:%i' 2>/dev/null \\" "xargs -0 -r readlink 2>/dev/null | while read -r l; do stat -c '%d:%i' -- \"\$l\" 2>/dev/null; done \\")"
 o="$(qrun --answer NO --script "$m")"; ns_stop; holder_py fd "$SRC"; o2="$(qrun --answer NO --script "$m")"; holder_stop; rm -f "$m"
 check "$(went_go "$o")$(has "$o2" 'NO-GO: the stray store is held')$(unchanged)" "yesyesyesyessnapnokeptnorec" "2 a5-readlink: a copy that matches descriptors by their path, not by device and inode, misses the namespaced holder through the bind mount (caught) — and still sees one on the host path"
@@ -1432,7 +1432,11 @@ M="$(mutant q8-ho "$QP" '  say "  --check           at or after $(check_at):' ' 
 check "$( [ -n "$VT" ] && [ -n "$HT" ] && [ "$VT" != "$HT" ] && echo differ)" "differ" "8j' a copy whose hand-over keeps the move + 20 minutes names two times in one log, one already past (caught)"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 # 8k–8p: the record's writes refused as on a full disk — strace's fault injection on that one file: ENOSPC from the Nth write on.
+# bash writes a printf's output a line at a time, so the Nth write is the record's Nth line: the prepared block's lines are
+# counted from the script itself (asserted), then linked, Q_AT, moved, and stage C's first.
 nospace() { printf 'strace -f -qq -o /dev/null -P %s -e trace=write -e inject=write:error=ENOSPC%s' "$QREC" "${1:+:when=$1}"; }
+PREP="$(sed -n '/printf .Q_TS=%s/,/>> "\$RECORD"/p' "$QP" | grep -o '\\n' | wc -l)"
+check "$PREP" "20" "control: the prepared record is 20 lines, each its own write — so the marker 'linked' is write 21, Q_AT 22, moved 23, stage C's first 24"
 OUT="$(qrun --answer QUARANTINE --wrap "$(nospace)")"
 check "$(has "$OUT" 'nothing moved: the record could not be written (is the disk full?)')$( [ -e "$QREC" ] && echo rec || echo norec)$(unchanged)$(has "$OUT" 'Until the quarantine has moved the file')$(has "$OUT" 'quarantine.env')" "yesnorecsnapnokeptnorecyesno" \
   "8k the record's first write refused (the file made, nothing in it): nothing moved, the empty record removed — it holds no stage — and the stop asks for no record"
@@ -1440,10 +1444,14 @@ OUT="$(qrun --answer NO)"; check "$(went_go "$OUT")" "yesyesyes" "…the next ru
 M="$(mutant q8-emptyrec "$QP" '|| { [ -n "$(rec_get Q_STAGE)" ] || rm -f -- "$RECORD"; stop' '|| { stop')"; OUT="$(qrun --answer QUARANTINE --script "$M" --wrap "$(nospace)")"; rm -f "$M"
 OUT="$(qrun --answer NO)"; check "$(stat -c %s "$QREC" 2>/dev/null)$(has "$OUT" 'exists with no stage in it')" "0yes" "8k' a copy that leaves the empty record blocks every later run (caught)"; rm -f "$QREC"
 OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 3+)")"
+check "$(has "$OUT" 'nothing moved: the record could not be written (is the disk full?)')$(rec_last Q_STAGE)$(wc -l < "$QREC")$(unchanged)$(has "$OUT" 'and its quarantine.env')" "yesprepared2snapnokeptrec:preparedyes" \
+  "8k2 the record cut off after its second line (Q_TS, Q_STAGE=prepared): nothing moved, that record kept — it holds a stage — and asked for"
+OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'an earlier run stopped before it moved anything (its record: prepared)')$(went_go "$OUT")" "yesyesyesyes" "…the next run sets it aside and starts again, to GO"; q_clean
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace $(( PREP + 1 ))+)")"
 check "$(has "$OUT" 'nothing removed: the record could not be written (is the disk full?)')$(rec_last Q_STAGE)$(stat -c %h "$SRC")$(has "$OUT" 'Until the quarantine has moved the file')" "yesprepared2yes" \
   "8l the marker before the unlink refused: nothing removed — two names, the record prepared — and --put-back named"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")$(rec_last Q_STAGE)$(stat -c %h "$SRC")" "0abandoned1" "…which --put-back closes"; q_reset
-OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 4+)")"
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace $(( PREP + 2 ))+)")"
 check "$(has "$OUT" 'the file is moved, but the record could not be written')$(rec_last Q_STAGE)$( [ -e "$SRC" ] && echo src || echo nosrc)$(has "$OUT" '(quarantine): PASSED')" "yeslinkednosrcno" \
   "8m the move's own record refused after the unlink: it stops saying so — the record linked, the old name gone — never PASSED"
 OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'this run does them, and changes nothing')$(rec_last Q_STAGE)$(fails "$OUT")" "yesdone0" "…the quarantine command resumes it: done"
@@ -1455,7 +1463,7 @@ OUT="$(qrun --answer PUTBACK --script "$M" --wrap "$(nospace)" -- --put-back)"; 
 check "$(okline "$OUT" PB1)$(rec_last PUTBACK_STAGE | grep -c .)$(stat -c %h "$SRC")$( [ -e "$KEPT" ] && echo kept || echo nokept)" "yes01nokept" \
   "8n' a copy without that precondition puts the file back while the record says nothing of it (caught)"
 printf 'PUTBACK_STAGE=linked\n' >> "$QREC"; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(has "$OUT" 'only the record is written')$(fails "$OUT")" "yes0" "…its record written by hand to what it left, then --put-back writes the rest"; q_reset
-OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 6+)")"
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace $(( PREP + 4 ))+)")"
 check "$(has "$OUT" '(quarantine): NOT CONCLUSIVE — the record could not be written (is the disk full?)')$(rec_last Q_STAGE)$(fails "$OUT")" "yesmoved0" "8o stage C's record refused: NOT CONCLUSIVE, the record left at moved — never done over a record it could not finish"
 OUT="$(qrun --answer NO)"; check "$(rec_last Q_STAGE)$(fails "$OUT")$(has "$OUT" '(quarantine): PASSED')" "done0yes" "…the quarantine command finishes it: done, PASSED"
 OUT="$(qrun --answer PUTBACK --wrap "$(nospace 2+)" -- --put-back)"
@@ -1580,9 +1588,9 @@ check "$(has "$OUT" "nothing changed: the gate's question could not be asked now
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 # A job migrating the LIVE store appends to <plugin>/data/migration.log while a holder count is read — as
 # cron/dpo_reconcile.php does every five minutes: no reading of the stray store or of the kept file may count that as a holder.
-ML_Y="$(stat -c %y "$PD/data/migration.log")"; cp -p "$PD/data/migration.log" "$SB/ml.kept"; ML0="$(wc -l < "$PD/data/migration.log")"
-dpo_writer >/dev/null
-check "$( [ "$(wc -l < "$PD/data/migration.log")" -gt "$ML0" ] && echo grew)$(stat -c %u:%g "$PD/data/migration.log")" "grew1000:1000" \
+ML_Y="$(stat -c %y "$PD/data/migration.log")"; cp -p "$PD/data/migration.log" "$SB/ml.kept"; ML0="$(stat -c %s "$PD/data/migration.log")"
+DW="$(dpo_writer)"
+check "$DW$( [ "$(stat -c %s "$PD/data/migration.log")" -gt "$ML0" ] && echo grew)$(stat -c %u:%g "$PD/data/migration.log")" "donegrew1000:1000" \
   "3i control: the real writer — MigrationRunner with its default log, as cron/dpo_reconcile.php runs it — appends to <plugin>/data/migration.log"
 mkdir -p "$SB/logshim"; cat > "$SB/logshim/xargs" <<SH
 #!/usr/bin/env bash
