@@ -1202,7 +1202,7 @@ holder_py fd "$SRC"; q2 a5-unresolved "xargs -0 -r stat -L -c '%d:%i' 2>/dev/nul
 check "$(has "$Q2O" "NO-GO: the holder instruments' controls did not pass")$(has "$Q2O" 'GO — evidence recorded')$(unchanged)" "yesnosnapnokeptnorec" \
   "2 a5-unresolved: a copy whose descriptor scan does not resolve each descriptor to its file is stopped by the scan's own control (the control has teeth), before any holder count is believed"
 QPATH="$SB/nopy:$SB/bin:$PATH" q2 a5-control '[ "$HOLDERS_OK" = "yes" ] || stop "NO-GO: the holder instruments'"'"' controls did not pass ($HOLDERS_CTL) — that' ': || stop "NO-GO: the holder instruments'"'"' controls did not pass ($HOLDERS_CTL) — that' \
-  'if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; STEADY="no"; HOLD_ANY="unread"; return 0; fi' ':' --; q2ok
+  'if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; HOLD_BOTH="? ?"; STEADY="no"; HOLD_ANY="unread"; return 0; fi' ':' --; q2ok
 ns_holder "$SRC"; m="$(mutant q2-a5-readlink "$QP" "xargs -0 -r stat -L -c '%d:%i' 2>/dev/null \\" "xargs -0 -r readlink 2>/dev/null | while read -r l; do stat -c '%d:%i' -- \"\$l\" 2>/dev/null; done \\")"
 o="$(qrun --answer NO --script "$m")"; ns_stop; holder_py fd "$SRC"; o2="$(qrun --answer NO --script "$m")"; holder_stop; rm -f "$m"
 check "$(went_go "$o")$(has "$o2" 'NO-GO: the stray store is held')$(unchanged)" "yesyesyesyessnapnokeptnorec" "2 a5-readlink: a copy that matches descriptors by their path, not by device and inode, misses the namespaced holder through the bind mount (caught) — and still sees one on the host path"
