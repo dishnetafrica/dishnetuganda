@@ -1248,6 +1248,15 @@ if ! git -C "$REPO" cat-file -e "$EXPECTED_PLUGIN_COMMIT^{commit}" 2>/dev/null; 
 fi
 git -C "$REPO" cat-file -e "$EXPECTED_PLUGIN_COMMIT^{commit}" 2>/dev/null \
   || stop "the checkout does not hold $EXPECTED_PLUGIN_COMMIT — run: cd $REPO && git fetch origin $RELEASE_BRANCH, then this script again"
+# 5.18.94: scripts/deploy-hybrid.sh records the commit it copies in Git's short form (%h, the last commit that touched the
+# plugin), and every check of the live commit compares that record with the 7-character commits named here. Git writes
+# a longer short form once a checkout holds about 16,000 objects (a rehearsal clone wrote 69c87a6f, 12 Oct): the record
+# would then never match — after the copy. So the short forms deploy-hybrid.sh would write, for the pin and for the
+# rollback commit, must be these, before anything changes.
+ABBREV_PIN="$(git -C "$REPO" log -1 --format=%h "$EXPECTED_PLUGIN_COMMIT" -- "$PLUGIN" 2>/dev/null || true)"
+ABBREV_BASE="$(git -C "$REPO" log -1 --format=%h "$BASELINE_COMMIT" -- "$PLUGIN" 2>/dev/null || true)"
+[ "$ABBREV_PIN|$ABBREV_BASE" = "$EXPECTED_PLUGIN_COMMIT|$BASELINE_COMMIT" ] \
+  || stop "this checkout writes commits in a short form of ${#ABBREV_PIN} characters ($ABBREV_PIN for $EXPECTED_PLUGIN_COMMIT, ${ABBREV_BASE:-?} for $BASELINE_COMMIT) — scripts/deploy-hybrid.sh would record the copy that way, and no check of the live commit would match it. Run: git -C $REPO config core.abbrev 7 — then this script again. Nothing was changed"
 PIN_PARENT="$(git -C "$REPO" rev-parse --short "$EXPECTED_PLUGIN_COMMIT^" 2>/dev/null || echo '?')"
 [ "$PIN_PARENT" = "$BASELINE_COMMIT" ] || stop "$EXPECTED_PLUGIN_COMMIT is not cut on $BASELINE_COMMIT ($BASELINE_VERSION): its parent is $PIN_PARENT — this script is for another build"
 PIN_CHECKOUT=1

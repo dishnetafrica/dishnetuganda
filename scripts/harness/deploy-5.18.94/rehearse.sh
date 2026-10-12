@@ -57,6 +57,12 @@ at = [i for i, l in enumerate(lines) if l == anchor]
 assert len(at) == 1, len(at)
 assert at[0] > 800, at[0]                  # the sandbox, the 5.18.93 deploy and the quarantine's pinned copy come before it
 pre = '\n'.join(lines[:at[0]]) + '\n'
+# The clone in one pack, as a fresh clone of the remote is: Git's short form follows the object count (8 characters from
+# about 16,000), and a local clone keeps this checkout's duplicate packs and loose objects (12 Oct: 21,920 counted, 13,064
+# once repacked). The server's checkout recorded 69c87a6 on 11 Oct — the 7-character form.
+clone = 'git clone -q --no-hardlinks "$R" "$SB/repo" || { echo "cannot clone $R"; exit 1; }\n'
+assert pre.count(clone) == 1, pre.count(clone)
+pre = pre.replace(clone, clone + 'git -C "$SB/repo" repack -a -d -q && git -C "$SB/repo" prune-packed || { echo "cannot repack the clone"; exit 1; }\n')
 for need in ('own_server\n', 'QP="$(qpin qpin)"', 'qrun() {', 'set_sched() {', 'echo "== Q0. the real 5.18.93 deploy'):
     assert pre.count(need) >= 1, need
 open(dst, 'w', encoding='utf-8').write(pre)
@@ -136,6 +142,8 @@ check "$(grep -c 'deploy-5.18.94.sh 2>&1 | tee' <<<"$HDR94")$(grep -cE -- '--rol
 check "$(grep -cE -- '--key +(ai_identity_line|wa_flyer_caption|email_badge_line|recording_retention_days)|--set +email_badge_line [^<]' "$DEPLOY94")$(grep -cE 'quarantine\.env[^"]*>>|>> *"\$Q_RECORD"|rm [^|;]*\$Q_KEPT|mv [^|;]*\$Q_KEPT' "$DEPLOY94")" "00" \
   "the script sets none of the three settings or the retention, and never writes the quarantine's record or moves its kept file"
 check "$(bash -n "$DEPLOY94" && echo parses)" "parses" "the script parses"
+check "$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)|$(git -C "$REPO" log -1 --format=%h "$B93" -- $P)" "$P94|$B93" \
+  "control: the clone, in one pack as a fresh clone is, writes the 7-character short form scripts/deploy-hybrid.sh records — as the server's checkout recorded 69c87a6 on 11 Oct"
 
 # ── The stand-in public.php serves the two documents and the version endpoint, as public.php and api_customer_app.php do ─
 python3 - "$SB/web/public.php" <<'PY' || echo "standin:legal" >> "$SB/anchor-missing"
@@ -227,6 +235,17 @@ check "$(sq "SELECT group_concat(job_id || ':' || status || ':' || substr(terms_
 D94="$(data_digest)"
 
 echo; echo "== 94-1. A14: nothing before the quarantine has moved the file and its --check has passed =="
+# A0's short-form guard: a checkout writing 8-character commits (as a clone with duplicate packs did, 12 Oct) is refused
+# with its remedy, before anything changes; a copy without the guard is refused only by the parent check, naming the
+# longer form — the message the guard replaces.
+git -C "$REPO" config core.abbrev 8; fresh94; OUT="$(run94 --answer NO)"
+M="$(mutant abbrev "$DEPLOY94" '[ "$ABBREV_PIN|$ABBREV_BASE" = "$EXPECTED_PLUGIN_COMMIT|$BASELINE_COMMIT" ] \' 'true \')"; fresh94; OUTM="$(run94 --answer NO --script "$M")"; rm -f "$M"
+git -C "$REPO" config --unset core.abbrev
+check "$(has "$OUT" "STOP: this checkout writes commits in a short form of 8 characters (${P94}")$(has "$OUT" "Run: git -C $REPO config core.abbrev 7")$(went94 "$OUT")|$(live)|$(backups94)|$(data_digest)" "yesyesnono|$B93|0|$D94" \
+  "1z a checkout writing 8-character commits is refused before anything changes, with the remedy (git config core.abbrev 7)"
+check "$(has "$OUTM" "is not cut on $B93 (5.18.93): its parent is ${B93}")$(went94 "$OUTM")" "yesnono" \
+  "1z' a copy without the guard is refused only by the parent check, naming the longer form (the message the guard replaces)"
+check "$(git -C "$REPO" config core.abbrev || echo unset)$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)" "unset$P94" "…the setting taken out again: the clone writes the 7-character form"
 fresh94; OUT="$(run94 --answer NO)"
 check "$(has "$OUT" 'NO-GO (A14): the stray store'"'"'s quarantine is not done, or does not hold — no record at')$(went94 "$OUT")|$(live)|$(backups94)|$(data_digest)" "yesnono|$B93|0|$D94" \
   "1a no quarantine yet (no record): NO-GO at A14, nothing deployed, backed up or changed"
