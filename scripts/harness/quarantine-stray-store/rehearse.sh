@@ -483,7 +483,12 @@ fi
 # killer would), by their command line, which starts "bash <script>" (never the pseudo-terminal's runner or its shell).
 # FAKE_GATE_SLEEP=N: the gate's probe answers N seconds late (a slow container), wherever it is asked.
 if [ -n "\${FAKE_GATE_SLEEP:-}" ]; then case " \$* " in *" display_errors=stderr "*) sleep "\$FAKE_GATE_SLEEP" ;; esac; fi
+# FAKE_SLR_SLEEP=N: master's record of the retry job read N seconds late, wherever it is asked.
+if [ -n "\${FAKE_SLR_SLEEP:-}" ]; then case " \$* " in *master_schedule*) sleep "\$FAKE_SLR_SLEEP" ;; esac; fi
 if [ ! -e "$PD/data/plugin.sqlite3" ] && [ ! -L "$PD/data/plugin.sqlite3" ]; then
+  # FAKE_KILL_ON_GATE=<script>: at the gate's first probe after the move, once, the script killed as FAKE_KILL_ON_MOVE
+  if [ -n "\${FAKE_KILL_ON_GATE:-}" ] && [ ! -f "$SB/killed-on-move" ]; then case " \$* " in *" display_errors=stderr "*)
+    : > "$SB/killed-on-move"; pkill -KILL -f "^bash \$FAKE_KILL_ON_GATE( |\$)"; exit 1 ;; esac; fi
   if [ -n "\${FAKE_KILL_ON_MOVE:-}" ] && [ ! -f "$SB/killed-on-move" ]; then : > "$SB/killed-on-move"; pkill -KILL -f "^bash \$FAKE_KILL_ON_MOVE( |\$)"; exit 1; fi
   if [ -n "\${FAKE_GATE_FAIL_ON_MOVE:-}" ] || [ -f "$SB/gate-fail" ]; then case " \$* " in *" display_errors=stderr "*) echo "fake docker: the gate's probe refused (rehearsal control)" >&2; exit 1 ;; esac; fi
   if [ -f "$SB/gate-line" ]; then case " \$* " in *" display_errors=stderr "*) cat "$SB/gate-line"; echo; exit 0 ;; esac; fi
@@ -968,6 +973,8 @@ while args and args[0].startswith('--'):
     opt[k] = args.pop(0)
 pid, fd = pty.fork()
 if pid == 0:
+    # Python ignores SIGPIPE (and SIGXFSZ), and a child would inherit that: restored, as an SSH login shell has them
+    for s in (signal.SIGPIPE, signal.SIGXFSZ): signal.signal(s, signal.SIG_DFL)
     os.execvp('bash', ['bash', '-c', args[0]])
 buf = b''; answered = False; fired = False; t0 = time.time(); prompt = re.compile(rb'Type (QUARANTINE|PUTBACK) ')
 while True:
@@ -1545,9 +1552,9 @@ OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…pu
 M="$(mutant q8-early2 "$QP" '  fail_record
   # The commit is read through the container' '  # The commit is read through the container' '  gate_after C8; fail_record
 ' '  gate_after C8
-')"
+' '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"
 OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_HOLD=$SRC" --env SHIM_HOLD_SECS=40 --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; shim_stop; rm -f "$M"
-check "$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "moved0yes" "8u' a copy that records the failure only in the closing chain loses that one write for good (caught)"
+check "$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "moved0yes" "8u' a copy that records the failure only in the closing chain (not as it is said, not after C6 or C8) loses that one write for good (caught)"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 # 8v: the same holder, the run killed (SIGKILL) at stage C's first container call — C7's commit read, after C6: the
 # record already holds the failure, and the resumed run stops over it.
@@ -1558,9 +1565,9 @@ rm -f "$SB/killed-on-move"
 OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'and its own checks FAILED at')$(has "$OUT" '(quarantine): PASSED')$(has "$OUT" '--put-back 2>&1 | tee')" "yesnono" "…the resumed run stops over it — never PASSED"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 M="$(mutant q8-early "$QP" '  fail_record
-  # The commit is read through the container' '  # The commit is read through the container')"
+  # The commit is read through the container' '  # The commit is read through the container' '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"
 OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_HOLD=$SRC" --env "FAKE_KILL_ON_MOVE=$M")"; shim_stop; rm -f "$M"
-check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedmoved0" "8v' a copy without the record line straight after C6 loses the failure to the kill (caught)"
+check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedmoved0" "8v' a copy that records C6's failure neither as it says it nor straight after C6 loses it to the kill (caught)"
 rm -f "$SB/killed-on-move"
 OUT="$(qrun --answer NO)"; check "$(has "$OUT" '(quarantine): PASSED')" "yes" "…and the resumed run — the real script, which cannot know — says PASSED over it"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
@@ -1670,14 +1677,14 @@ cfg_back; vault_back; q_reset
 cfg_keep; vault_keep
 OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; cfg_back; vault_back
 check "$(failline "$OWNLOG" C8 'skip=no')$(okline "$OWNLOG" C6)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "yesyesdone1no" \
-  "3g2 a C8 FAIL whose own record line (write $(( PREP + 4 ))) is refused: the closing chain writes it again — the record ends done, holding it"
+  "3g2 a C8 FAIL whose own record line (write $(( PREP + 4 ))) is refused: it is written again — the record ends done, holding it"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 cfg_keep; vault_keep
 M="$(mutant q3-postc8 "$QP" '  gate_after C8; fail_record
 ' '  gate_after C8
-')"
+' '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"
 OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; rm -f "$M"; cfg_back; vault_back
-check "$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "moved0yes" "3g2' a copy without the line after C8 records a C7 or C8 failure only in the closing chain — here never (caught)"
+check "$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "moved0yes" "3g2' a copy that records a C8 failure neither as it says it nor after C8 records it only in the closing chain — here never (caught)"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 cfg_keep; vault_keep; rm -f "$SB/killed-on-move"
 OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --env "FAKE_KILL_ON_INSPECT=$QP")"; OWNLOG="$(qlast)"; cfg_back; vault_back
@@ -1689,10 +1696,22 @@ M="$(mutant q3-c9order "$QP" '  gate_after C8; fail_record
   local c2; c2="$(ctr_state)"
 ' '  gate_after C8
   local c2; c2="$(ctr_state)"; fail_record
-')"
+' '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"
 OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --env "FAKE_KILL_ON_INSPECT=$M")"; rm -f "$M"; cfg_back; vault_back
-check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedmoved0" "3g3' a copy that writes the line after C9's container call loses the failure to that kill (caught)"
+check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedmoved0" "3g3' a copy that records the failure neither as it says it nor before C9's container call loses it to that kill (caught)"
 rm -f "$SB/killed-on-move"; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+# 3g4: a gate file changed straight after the unlink — C7 FAILS — and the run killed at C8's gate probe, its next container
+# call: the failure was recorded as it was said. A copy whose bad() records nothing loses it (caught).
+cp -p "$PD/lib/PluginConfig.php" "$SB/pc.kept"; echo "echo >> '$PD/lib/PluginConfig.php'" > "$SB/c7.sh"; rm -f "$SB/killed-on-move"
+OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/c7.sh" --env "FAKE_KILL_ON_GATE=$QP")"; OWNLOG="$(qlast)"; cp -p "$SB/pc.kept" "$PD/lib/PluginConfig.php"
+check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(failline "$OWNLOG" C7)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedyesmoved1" \
+  "3g4 a C7 FAIL, the run killed (SIGKILL) at C8's gate probe: the record already holds the failure — recorded as it was said"
+rm -f "$SB/killed-on-move"; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+M="$(mutant q3-c7hook "$QP" '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"
+OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/c7.sh" --env "FAKE_KILL_ON_GATE=$M")"; rm -f "$M"; cp -p "$SB/pc.kept" "$PD/lib/PluginConfig.php"
+check "$( [ -f "$SB/killed-on-move" ] && echo killed)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)" "killedmoved0" "3g4' a copy whose bad() does not record loses C7's failure to that kill (caught)"
+check "$(sha256sum < "$PD/lib/PluginConfig.php")" "$(sha256sum < "$SB/pc.kept")" "…the gate's file back, byte for byte"
+rm -f "$SB/killed-on-move" "$SB/c7.sh"; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset; rm -f "$SB/pc.kept"
 # The gate's probe refused once the old name is gone: not measured — NOT CONCLUSIVE in stage C and in --check; the
 # put-back refuses while a release with the gate is live.
 OUT="$(qrun --answer QUARANTINE --env FAKE_GATE_FAIL_ON_MOVE=1)"; OWNLOG="$(qlast)"
@@ -1830,10 +1849,12 @@ check "$(has "$OUT" '(check): PASSED')" "yes" "4a' a copy whose verdict keys on 
 qat_back() { sed -i "s/^Q_AT=.*/Q_AT=$1/" "$QREC"; }   # the move N seconds ago, as a later --check finds it (the record's line, as copy_back moves the deploy's)
 NOW="$(date -u +%s)"; qat_back $(( NOW - 1200 )); QAT=$(( NOW - 1200 ))
 set_sched $(( QAT + 120 )); OUT="$(qrun -- --check)"
-check "$(notes "$OUT")$(has "$OUT" 'note  K13 master has not begun the retry job more than two minutes after the move, in the 20 minutes since it')$(has "$OUT" '(check): NOT CONCLUSIVE — master has not begun the retry job more than two minutes after the move, 20 minutes ago')" "1yesyes" \
+check "$(notes "$OUT")$(has "$OUT" 'note  K13 master has not begun the retry job more than two minutes after the move, in the 20 minutes since it')$(has "$OUT" '(check): NOT CONCLUSIVE — master has not begun the retry job more than two minutes after the move, 20 minutes ago')$(grep -c 'note  K13 .*Send this log now; run --check again after .* only if asked' <<<"$OUT")" "1yesyes1" \
   "4b a run that began 120 s after the move, read 20 minutes after it: not conclusive (the margin is strict) — and, with no run since in twice the job's interval, said so instead of a time already past"
 M="$(mutant q4-past "$QP" 'elif [ "$now" -lt $(( q_at + 1200 )) ]; then note "K13 master has not begun' 'elif true; then note "K13 master has not begun')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
 check "$(has "$OUT" 'minutes since it (its last')" "no" "4b2 a copy that always names the move + 20 minutes sends the operator to a time already past (caught)"
+M="$(mutant q4-k13else "$QP" '$( if [ -n "$UNSETTLED" ]; then printf' '$( if true; then printf')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(has "$OUT" 'only if asked')$(grep -c 'note  K13 .*Send this log now; run --check at or after' <<<"$OUT")" "no1" "4b4 a copy whose escalation always names a --check time puts it beside a verdict that names none (caught)"
 OUT="$(qrun --env FAKE_GATE_FAIL_ON_MOVE=1 -- --check)"
 check "$(has "$OUT" "note  K11 the gate's question could not be asked")$(grep -c 'note  K13 .*Send this log now; run --check at or after' <<<"$OUT")$(has "$OUT" 'only if asked')$(has "$OUT" '(check): NOT CONCLUSIVE — the gate was not measured: run --check at or after')" "yes1noyes" \
   "4b3 the same with the gate not measured: K13 names the verdict's step — run --check at its time — not 'only if asked'"
@@ -1891,8 +1912,27 @@ check "$ZQ$(has "$ZLOG" '(check): 1 FAILED')" "1no" "4z' a copy without the trap
 M="$(mutant q4-zboth "$QP" "  trap '' HUP PIPE   # a lost terminal or a dead tee does not cut --check short; a failure is recorded as soon as there is one
 " '' '  fail_record; gate_after K11; fail_record   # before and after the container'"'"'s two questions
 ' '  gate_after K11
-')"; zcheck --script "$M"; rm -f "$M"; ZQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
-check "$ZQ$(has "$O2" '(check): PASSED')" "0yes" "4z'' a copy without either loses the failure to the hang-up, and the next --check says PASSED over it (caught)"
+' '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"; zcheck --script "$M"; rm -f "$M"; ZQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$ZQ$(has "$O2" '(check): PASSED')" "0yes" "4z'' a copy without the trap and without recording the failure as it says it loses it to the hang-up, and the next --check says PASSED over it (caught)"
+M="$(mutant q4-zpipe "$QP" "  trap '' HUP PIPE   #" "  trap '' HUP   #")"; zcheck --script "$M"; rm -f "$M"; ZQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$ZQ$(has "$ZLOG" '(check): 1 FAILED')" "1no" "4z3 a copy that ignores the hang-up but not the dead pipe dies at its first line after the hang-up kills tee (caught)"
+mkdir -p "$SB/slowx"; cat > "$SB/slowx/xargs" <<SH
+#!/usr/bin/env bash
+# rehearsal shim: every descriptor scan 3 s slower (a host with many processes); then the real xargs
+sleep 3; real="\$(PATH="\$(printf '%s' "\$PATH" | sed 's#^$SB/slowx:##')" command -v xargs)"; exec "\$real" "\$@"
+SH
+chmod +x "$SB/slowx/xargs"
+xcheck() {   # xcheck [qrun options…] — --check with a side file beside the kept file and slow holder scans, interrupted
+             # (Ctrl-C) a second after its K9 FAIL, inside K10's scans; XLOG is its own log
+  touch "$KEPT-shm"; QPATH="$SB/slowx:$SB/bin:$PATH" qrun --at 'FAIL  K9' --delay 1 --intr INT "$@" -- --check >/dev/null
+  local i; for i in $(seq 1 60); do pgrep -f '\.sh --check$' >/dev/null || break; sleep 0.5; done
+  rm -f "$KEPT-shm"; XLOG="$(qlast)"
+}
+xcheck; XQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$XQ$(failline "$XLOG" K9)$(has "$XLOG" 'stray-store quarantine (check):')$(failline "$O2" K0)$(has "$O2" '(check): PASSED')" "1yesnoyesno" \
+  "4z2 a Ctrl-C inside K10's holder scans, a second after a K9 FAIL: the run stops, the failure already recorded — the next --check FAILs K0"
+M="$(mutant q4-xhook "$QP" '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }')"; xcheck --script "$M"; rm -f "$M"; XQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$XQ$(has "$O2" '(check): PASSED')" "0yes" "4z2' a copy whose bad() does not record loses the K9 failure to the Ctrl-C, and the next --check says PASSED (caught)"
 holder_py fd "$KEPT"; fail_trial "4l a process holds the kept file: K10 FAILS, naming both reads' counts" K10 'held — locks and open descriptors: 0 1 → 0 1 (two reads)'; holder_stop
 M="$(mutant q4-holdboth "$QP" '"$HOLD_BOTH" "$( [ "$STEADY"' '"$HOLD" "$( [ "$STEADY"')"; holder_py fd "$KEPT"; OUT="$(qrun --script "$M" -- --check)"; holder_stop; rm -f "$M"; cp -p "$SB/qrec.kept" "$QREC"
 check "$(failline "$OUT" K10 'held')$(has "$OUT" '0 1 → 0 1')" "yesno" "4l'' a copy that names only the second read's counts leaves a lasting FAIL resting on words that may not show its cause (caught)"
@@ -1907,6 +1947,18 @@ M="$(mutant q4-k14else "$QP" "; else printf '%s' \"send every log" "; else print
 check "$(has "$OUT" 'note  K14')$(has "$OUT" 'Free space, then send every log')" "yesno" "4m2'' a copy whose K14 loses its own step when no other step is set (caught)"
 cfg_keep; vault_keep; file_set tenant_profile south-sudan; file_set currency_code SSP; printf '{"config":{"currency_code":"SSP","tenant_profile":"south-sudan"}}' > "$VAULT"
 OUT="$(qrun -- --check)"; check "$(failline "$OUT" K11 'Do NOT put the kept file back')" "yes" "4n the gate no longer reads as it must: K11 FAILS, saying when the job runs next and not to put the file back"; cp -p "$SB/qrec.kept" "$QREC"; cfg_back; vault_back
+ncheck() {   # ncheck [qrun options…] — 4n's state; --check interrupted (Ctrl-C) a second after its K11 FAIL, while master's
+             # record is read (4 s late); NLOG is its own log; the configuration back afterwards
+  cfg_keep; vault_keep; file_set tenant_profile south-sudan; file_set currency_code SSP; printf '{"config":{"currency_code":"SSP","tenant_profile":"south-sudan"}}' > "$VAULT"
+  qrun --env FAKE_SLR_SLEEP=4 --at 'FAIL  K11' --delay 1 --intr INT "$@" -- --check >/dev/null
+  local i; for i in $(seq 1 60); do pgrep -f '\.sh --check$' >/dev/null || break; sleep 0.5; done
+  cfg_back; vault_back; NLOG="$(qlast)"
+}
+ncheck; NQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$NQ$(failline "$NLOG" K11)$(has "$NLOG" 'stray-store quarantine (check):')$(failline "$O2" K0)$(has "$O2" '(check): PASSED')" "1yesnoyesno" \
+  "4n2 a Ctrl-C while master's record is read, after a K11 FAIL: the failure already recorded — the next --check FAILs K0"
+M="$(mutant q4-k11rec "$QP" '; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }' '; return 0; }' '  fail_record; gate_after K11; fail_record   #' '  fail_record; gate_after K11   #')"; ncheck --script "$M"; rm -f "$M"; NQ="$(rec_last Q_CHECK_FAILED | grep -c .)"; O2="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$NQ$(has "$O2" '(check): PASSED')" "0yes" "4n2' a copy that records a K11 failure neither as it says it nor straight after K11 loses it to the Ctrl-C (caught)"
 for t in "K4|absent \"\$SRC\" && [ \"\$(side_of \"\$SRC\")\" = \"-\" ]; then ok \"K4|true; then ok \"K4|$SRC-wal|side" \
          "K5|if [ \"\$(sml_state)\" = \"\$(rec_get Q_SML)\" ]; then ok \"K5|if true; then ok \"K5|$PD/data/sqlite_migration.log|sml" \
          "K6|if [ \"\$(migrated_of)\" = \"\$(rec_get Q_MIGRATED)\" ]; then ok \"K6|if true; then ok \"K6|$PD/data/w.json.migrated|mig"; do

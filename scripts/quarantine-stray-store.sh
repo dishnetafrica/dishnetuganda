@@ -120,7 +120,7 @@ UNSETTLED=""   # set when a run with no failure still concluded nothing: its ver
 # this run's own log in the quarantine folder, once it is open.
 say()  { printf '%s\n' "$*" 2>/dev/null || true; if [ -n "$OWN" ]; then printf '%s\n' "$*" >&3 2>/dev/null || true; fi; return 0; }
 ok()   { PASS=$((PASS+1)); say "  ok    $*"; }
-bad()  { FAIL=$((FAIL+1)); say "  FAIL  $*"; }
+bad()  { FAIL=$((FAIL+1)); say "  FAIL  $*"; [ -z "${REC_FAILS:-}" ] || fail_record; return 0; }   # REC_FAILS: stage C and --check
 note() { NOTE=$((NOTE+1)); say "  note  $*"; }
 hdr()  { say ""; say "== $* =="; }
 unsettled() { [ -n "$UNSETTLED" ] || UNSETTLED="$*"; }   # the first reason a run concluded nothing
@@ -778,6 +778,7 @@ quarantine_mode() {
 stage_c() {
   hdr "C. After the move (read-only)"
   check_at_set
+  REC_FAILS=yes   # from here every FAIL is recorded the moment it is said
   local rk ino exp now dt kt q_at
   rk="$(rec_get Q_KEY_BEFORE)"; q_at="$(rec_get Q_AT)"
   if key_ok "$rk" && [ "$OLD_KEY" = "$rk" ]; then ok "C1 the moved file's key, read in stage A, is the record's ($rk)"; else bad "C1 the moved file's key ($OLD_KEY) is not the record's (${rk:-none})"; fi
@@ -835,8 +836,9 @@ stage_c() {
     fi
   fi
 }
-# A failure is recorded as soon as there is one (once), in stage C and in --check: a run killed later leaves it for the
-# next one — a resumed run stops over it, and a later --check FAILs K0.
+# A failure is recorded as soon as there is one (once), in stage C and in --check: bad() calls this the moment it says a
+# FAIL (REC_FAILS, set at stage C's start and after --check's K1), and the calls below try again a write a full disk
+# refused. A run killed later leaves it for the next one — a resumed run stops over it, and a later --check FAILs K0.
 fail_record() { [ "$FAIL" = "0" ] || [ -n "$(rec_get Q_CHECK_FAILED)" ] || rec_put Q_CHECK_FAILED "$(date -u +%s)"; }
 
 # ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -891,6 +893,7 @@ check_mode() {
     *) bad "K1 the record's stage is not one this script writes (${st:-none}) — send this log"; summary; return 1 ;;
   esac
   trap '' HUP PIPE   # a lost terminal or a dead tee does not cut --check short; a failure is recorded as soon as there is one
+  REC_FAILS=yes     # from here every FAIL is recorded the moment it is said (K1's are about the record itself: never)
   local fail0="$FAIL" indet="" lv f k earlier
   earlier="$(rec_get Q_CHECK_FAILED)"
   [ -z "$earlier" ] || bad "K0 an earlier run FAILED (at $(utc_of "$earlier"); recorded in $RECORD as Q_CHECK_FAILED) — what it saw may no longer be there, so no later check passes over it. Send every log file"
