@@ -69,7 +69,7 @@ rm -f "$H94_PREFIX"
 # 5.18.94's own rehearsal, on the sandbox built above: 5.18.93 (69c87a6) live, the stray store still in the plugin folder.
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 B93="$PIN"; F94=scripts/deploy-5.18.94.sh; REL94=release/5.18.94; DEPLOY94="$REPO/$F94"
-FIX94=__FIX94__                                                     # the change on the development branch (the commit holding it)
+FIX94=9f113568                                                      # the change on the development branch (the commit holding it)
 TV10=9308072840e784e49a0656987a3edfae33c6f3d081558cbf63625c23b071d2e1  # INSTALLATION-TERMS-v1.0, as every record made under it names it
 TV11=eee8644e8bb7ea509fa1977279f518d9f0f96ec0b5028431160a57fd833b1db0  # INSTALLATION-TERMS-v1.1, the reviewed text
 SS_GOLD=b2f4ff3b34bb1fcabc11bc87beb9f66cbafee22605c3a9e69d42ebcb1ead4637 # South Sudan's Terms and Privacy (test_portal_tenant's golden)

@@ -188,7 +188,7 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="__PIN__"   # 5.18.94 (release) — the portal's documents without the UCC claim, Installation Terms v1.1; cut on 5.18.93; branch release/5.18.94
+EXPECTED_PLUGIN_COMMIT="ade2969"   # 5.18.94 (release) — the portal's documents without the UCC claim, Installation Terms v1.1; cut on 5.18.93; branch release/5.18.94
 EXPECTED_VERSION="5.18.94"
 BASELINE_COMMIT="69c87a6"          # 5.18.93 (release) — what the server runs first, and the rollback
 BASELINE_VERSION="5.18.93"
