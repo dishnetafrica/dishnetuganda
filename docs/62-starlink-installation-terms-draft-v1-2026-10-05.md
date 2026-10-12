@@ -49,8 +49,10 @@ made under v1.0 stays reproducible after any later version.
 ## Questions for legal review (none of them answered here)
 
 1. Whether sections 12 and 13 (the transport charge after dispatch; the charges after work has commenced) are enforceable as
-   worded under the Consumer Protection and Competition Act and related Ugandan consumer law, and whether a cooling-off
-   period applies to an installation authorised electronically.
+   worded under Ugandan consumer law, and whether a cooling-off period applies to an installation authorised
+   electronically. *(Corrected 12 Oct 2026, docs/67 §D: this question first named a "Consumer Protection and Competition
+   Act", which does not exist. The statutes in point are the Sale of Goods and Supply of Services Act and the Electronic
+   Transactions Act. The terms text itself named no Act and is unchanged.)*
 2. Whether section 17 (damage) and section 25 (limitation) need to name the categories of liability that cannot be limited.
 3. Whether section 21 should name a specific regulator or complaint process for communications services in Uganda.
 4. Whether section 23 satisfies the Data Protection and Privacy Act, 2019 as a notice, or must point to a fuller policy.

@@ -35,7 +35,14 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 ```bash
 ./verify-site.sh        # needs nginx on PATH (run on the server or in CI)
 python3 verify-address.py   # no nginx needed, runs anywhere
+python3 policies/build.py --check   # the nine policy pages match their source
 ```
+
+The policy pages (`policies.html`, `terms.html`, `terms-of-sale.html`, `warranty.html`, `returns.html`,
+`installation.html`, `acceptable-use.html`, `privacy.html`, `complaints.html`) are built by `policies/build.py` from
+`policies/bodies/`. Edit the body or a number in its `PARAMS`, then run `python3 policies/build.py`; never edit those
+nine files in `site/` by hand. The build stops if the FAQ or the kits page repeats a policy number that no longer
+matches. They are not legally approved: see the repository's `docs/67` for the review they still need.
 
 `verify-address.py` is the one to run after any contact-detail edit: it
 asserts the whole site agrees on one address, one phone and one coverage
