@@ -125,7 +125,9 @@ note() { NOTE=$((NOTE+1)); say "  note  $*"; }
 hdr()  { say ""; say "== $* =="; }
 unsettled() { [ -n "$UNSETTLED" ] || UNSETTLED="$*"; }   # the first reason a run concluded nothing
 rec_get() { [ -f "$RECORD" ] || return 0; sed -n "s/^$1=//p" "$RECORD" 2>/dev/null | tail -n1; }
-rec_put() { printf '%s=%s\n' "$1" "$2" >> "$RECORD" || return 1; }
+# A failed append leaves the record exactly as it was: on a full disk a write can stop inside a line (at a block
+# boundary), and the half line would join the next write. Truncating back frees blocks, so it works on a full disk.
+rec_put() { local n; n="$(stat -c %s -- "$RECORD" 2>/dev/null)" || n=""; printf '%s=%s\n' "$1" "$2" >> "$RECORD" && return 0; [ -n "$n" ] && truncate -s "$n" -- "$RECORD" 2>/dev/null; return 1; }
 # The rule that binds until the quarantine has moved the file — printed on every stop while it has not: no record, or a
 # record of a run that moved nothing (prepared, abandoned, or linked with the old name still there), and no put-back.
 pre_rule() {
@@ -285,10 +287,10 @@ holders() {
   local l1 f1 l2 f2 c
   HOLD_WATCH=""; if [ "${1:-}" = "-f" ]; then HOLD_WATCH="$2"; shift 2; fi
   HOLD_ANY="no"; HOLD_S1=""; HOLD_S2=""
-  if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; STEADY="no"; HOLD_ANY="unread"; return 0; fi
+  if [ "${HOLDERS_OK:-}" != "yes" ]; then HOLD="? ?"; HOLD_BOTH="? ?"; STEADY="no"; HOLD_ANY="unread"; return 0; fi
   l1="$(locks_keys "$@")"; f1="$(fds_keys "$@")"; HOLD_S1="$(hold_state)"
   l2="$(locks_keys "$@")"; f2="$(fds_keys "$@")"; HOLD_S2="$(hold_state)"
-  HOLD="$l2 $f2"; STEADY="yes"
+  HOLD="$l2 $f2"; HOLD_BOTH="$l1 $f1 → $l2 $f2"; STEADY="yes"
   [ "$l1:$f1:$HOLD_S1" = "$l2:$f2:$HOLD_S2" ] || STEADY="no"
   for c in "$l1" "$f1" "$l2" "$f2"; do case "$c" in 0) ;; ''|*[!0-9]*) [ "$HOLD_ANY" = "yes" ] || HOLD_ANY="unread" ;; *) HOLD_ANY="yes" ;; esac; done
   return 0
@@ -296,8 +298,8 @@ holders() {
 held_by_none() { [ "$HOLD" = "0 0" ] && [ "$STEADY" = "yes" ]; }
 hold_text() {   # a reading that is not "none", in words: held (in either read), not counted, or no holder but the state moved
   case "$HOLD_ANY" in
-    yes) printf 'held — locks and open descriptors: %s%s' "$HOLD" "$( [ "$STEADY" = "yes" ] || printf ', changing while read')" ;;
-    unread) printf 'not counted — locks and open descriptors: %s (a count could not be read)' "$HOLD" ;;
+    yes) printf 'held — locks and open descriptors: %s (two reads)%s' "$HOLD_BOTH" "$( [ "$STEADY" = "yes" ] || printf ', changing while read')" ;;
+    unread) printf 'not counted — locks and open descriptors: %s (two reads; a count could not be read)' "$HOLD_BOTH" ;;
     *) printf 'not shown unheld — no lock and no descriptor in either read, but %s changed between them (%s → %s)' "${HOLD_WATCH:-the stray folder}" "$HOLD_S1" "$HOLD_S2" ;;
   esac
 }
@@ -464,11 +466,21 @@ next_run() {   # the retry job's next run at the earliest: master's last + 600 s
 # start of stage C and of --check (check_at_set, in the run's own shell), so that a log names one such time.
 check_at_set() { local qa; CHECK_AT_T=$(( $(date -u +%s) + 600 )); qa="$(rec_get Q_AT)"; case "$qa" in ''|*[!0-9]*) ;; *) [ $(( qa + 1200 )) -gt "$CHECK_AT_T" ] && CHECK_AT_T=$(( qa + 1200 )) ;; esac; return 0; }
 check_at() { [ -n "${CHECK_AT_T:-}" ] || check_at_set; utc_of "$CHECK_AT_T"; }
+# The put-back's lasting conditions for giving the kept file its old name back, as it checks them before its word: no
+# file or side file at the old name; the kept file the store as recorded (key, checksum, size, time, owner, mode), with
+# no side file; <plugin>/data a folder on the same filesystem; no immutable or append-only attribute. What a retry can
+# change (the holder controls, a holder, the gate) is the put-back's own to measure again.
+kept_restorable() {
+  absent "$SRC" && [ "$(side_of "$SRC")" = "-" ] && [ -f "$KEPT" ] && [ ! -L "$KEPT" ] \
+    && [ "$(key_of "$KEPT")" = "$(rec_get Q_KEY_BEFORE)" ] && [ "$(sha_of "$KEPT")" = "$(rec_get Q_SHA256)" ] && [ "$(triple_of "$KEPT")" = "$(rec_get Q_DB)" ] \
+    && [ "$(owner_of "$KEPT")" = "$(rec_get Q_OWNER)" ] && [ "$(mode_of "$KEPT")" = "$(rec_get Q_MODE)" ] && [ "$(side_of "$KEPT")" = "-" ] \
+    && [ -d "$DEST/data" ] && [ ! -L "$DEST/data" ] && [ "$(stat -c %d -- "$DEST/data" 2>/dev/null)" = "$(stat -c %d -- "$Q_DIR" 2>/dev/null)" ] \
+    && case "$(attrs_of "$KEPT")$(attrs_of "$DEST/data")$(attrs_of "$Q_DIR")" in *i*|*a*) false ;; *) true ;; esac
+}
 gate_after() {   # gate_after ID
   local g when=""
   if ! gate_installed; then
-    if [ "$MODE" = "check" ] && ungated_version "$LIVE_VERSION" && absent "$SRC" && [ "$(side_of "$SRC")" = "-" ] \
-       && [ -f "$KEPT" ] && [ ! -L "$KEPT" ] && [ "$(key_of "$KEPT")" = "$(rec_get Q_KEY_BEFORE)" ] && [ "$(triple_of "$KEPT")" = "$(rec_get Q_DB)" ]; then
+    if [ "$MODE" = "check" ] && ungated_version "$LIVE_VERSION" && kept_restorable && [ "${HOLD_ANY:-no}" != "yes" ]; then
       bad "$1 the INSTALLED retry job has no gate — $LIVE_VERSION's (cron_starlink_block_retry.php does not call StarlinkRetryScope::skip; the gate's library a rollback left on disk is reached by nothing): its next run (at the earliest $(next_run)) makes a new database in <plugin>/data. Run --put-back now (runbook rule 2), then send this log"
       FAIL_STEP="run --put-back now (runbook rule 2), before the retry job's next run; then send this log file, with every *.own.log in $Q_DIR and $RECORD."
     else
@@ -493,13 +505,13 @@ gate_after() {   # gate_after ID
 check_time() { utc_of $(( $1 + 1200 )); }
 # The --check time and command, only when nothing FAILED — the same line in a whole run and in a resumed one.
 handover() {
-  [ "$FAIL" = "0" ] || return 0
+  [ "$FAIL" = "0" ] && [ -z "${REC_UNWRITTEN:-}" ] || return 0
   say ""; say "  hand-over"
   say "  --check           at or after $(check_at): cd $REPO && bash $SELF --check 2>&1 | tee $Q_DIR/check-\$(date -u +%Y%m%dT%H%M%SZ).log"
 }
 # The put-back text, only when nothing FAILED: after a failure the kept file stays where it is until a decision.
 putback_or_hold() {
-  if [ "$FAIL" = "0" ]; then putback_text
+  if [ "$FAIL" = "0" ]; then [ -n "${REC_UNWRITTEN:-}" ] || putback_text   # an unwritten record: the verdict names the one step
   else say ""; say "  Do not run the put-back: a check above FAILED. Send these logs and wait for a decision."; fi
 }
 
@@ -516,6 +528,9 @@ quarantine_mode() {
       stop "already quarantined at $(utc_of "$(rec_get Q_AT)") — run --check at or after $(check_time "$(rec_get Q_AT)"); send every *.own.log in $Q_DIR and $RECORD with its log" ;;
     linked|moved)
       if absent "$SRC" && [ -f "$KEPT" ] && [ ! -L "$KEPT" ] && [ "$(links_of "$KEPT")" = "1" ] && [ "$(key_of "$KEPT")" = "$kq" ] && key_ok "$kq"; then
+        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          stop "the file is moved, and $LIVE_VERSION is live with a retry job that has no gate: run --put-back now (runbook rule 2), before the job's next run (at the earliest $(next_run)), then send this log"
+        fi
         [ -z "$(rec_get Q_CHECK_FAILED)" ] || stop "an earlier run moved the file, and its own checks FAILED at $(utc_of "$(rec_get Q_CHECK_FAILED)") before its record was finished — send every *.own.log in $Q_DIR and $RECORD now, and wait for a decision"
         say "  record          an earlier run moved the file ($st) and did not finish its checks: this run does them, and changes nothing"
         trap '' INT TERM HUP PIPE
@@ -725,7 +740,7 @@ quarantine_mode() {
       "$TS" "$SRC" "$KEPT" "$full" "$t" "$owner" "$mode" "$src_key" "$birth" "$dir_t"
     printf 'Q_ENTS_BEFORE=%s\nQ_DATA_KEY=%s\nQ_SML=%s\nQ_MIGRATED=%s\nQ_LIVE_COMMIT=%s\nQ_LIVE_KEY=%s\nQ_PDD_IN=%s\nQ_GATE=%s\nQ_CTR=%s\n' \
       "$ents" "$dkey" "$sml" "$mig" "$LIVE" "$LIVE_KEY" "$PDD_IN" "$g2" "$ctr"; } >> "$RECORD" \
-    || { [ -n "$(rec_get Q_STAGE)" ] || rm -f -- "$RECORD"; stop "nothing moved: the record could not be written (is the disk full?) — free space, then run this again"; }
+    || { rm -f -- "$RECORD"; stop "nothing moved: the record could not be written (is the disk full?) — free space, then run this again"; }   # a fresh record (none before, or set aside): removed whole
   OLD_KEY="$src_key"
   # One: a second name, in the quarantine folder.
   if ! ln -T -- "$SRC" "$KEPT" 2>/dev/null; then
@@ -784,6 +799,7 @@ stage_c() {
       unsettled "the holders were not measured after the move: run --check at or after $(check_at)"
     else bad "C6 the moved file is $(hold_text) — something opened it after stage B's last read"; fi
   fi
+  fail_record
   # The commit is read through the container (24 reads, 5 s apart: two minutes, as the deploy scripts wait): an unread
   # commit is not measured, never "changed" — the live database and the retry job's files are read on the host.
   local lc; lc="$(live_commit 24)"
@@ -793,16 +809,19 @@ stage_c() {
     note "C7 the live database (key $(rec_get Q_LIVE_KEY)) and the retry job's files are as before; the live commit could not be read through the container for two minutes (a restart — C9): not measured, --check reads it again (K2)"
     unsettled "the live commit was not read after the move: run --check at or after $(check_at)"
   else ok "C7 the live commit, the live database (key $(rec_get Q_LIVE_KEY)) and the retry job's files are as before"; fi
-  gate_after C8
+  gate_after C8; fail_record
   local c2; c2="$(ctr_state)"
   if [ "$c2" = "$(rec_get Q_CTR)" ]; then say "  container       as before (started ${c2% *}, restarts ${c2##* })"
   else note "C9 the container restarted or changed during the run (before: $(rec_get Q_CTR); now: $c2) — whether uCRM recycles on a change under data/ is not known. C7's commit read and C8's gate question go through the container; if either says not measured above, this is why — --check measures both again"; fi
   # The record: a write that fails leaves the stage at moved, which the quarantine command resumes — never "done" over
   # a record it could not finish.
-  if { rec_put Q_DIR_T_AFTER "${dt:-0}" && rec_put Q_ENTS_AFTER "$now" && rec_put Q_KEPT_CTIME "$(ctime_of "$KEPT")"; } \
-     && { [ "$FAIL" = "0" ] || rec_put Q_CHECK_FAILED "$(date -u +%s)"; } && rec_put Q_STAGE done; then :
-  else unsettled "the record could not be written (is the disk full?): free space, then run the quarantine command again — it does only its checks"; fi
+  if fail_record && rec_put Q_DIR_T_AFTER "${dt:-0}" && rec_put Q_ENTS_AFTER "$now" && rec_put Q_KEPT_CTIME "$(ctime_of "$KEPT")" && rec_put Q_STAGE done; then :
+  else REC_UNWRITTEN=yes
+    note "C10 the record could not be written (is the disk full?) — it still says $(rec_get Q_STAGE)$( [ "$FAIL" = "0" ] || printf '; the failure above may not be recorded in it'): free space, then run the quarantine command again — it does only its checks"
+    UNSETTLED="the record could not be written (is the disk full?): free space, then run the quarantine command again — it does only its checks"; fi
 }
+# A stage-C failure is recorded as soon as there is one (once): a run killed later in stage C leaves it for the resumed run.
+fail_record() { [ "$FAIL" = "0" ] || [ -n "$(rec_get Q_CHECK_FAILED)" ] || rec_put Q_CHECK_FAILED "$(date -u +%s)"; }
 
 # ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 check_mode() {
@@ -837,8 +856,15 @@ check_mode() {
         note "K1 an earlier quarantine stopped between its two steps (record: $st): the stray store has two names, $SRC and $KEPT — run --put-back (it removes only the kept name), then the quarantine again"
         unsettled "HALF-DONE: run --put-back"; pre_rule
       elif { [ "$st" = linked ] || [ "$st" = moved ]; } && key_ok "$rk" && absent "$SRC" && [ -f "$KEPT" ] && [ ! -L "$KEPT" ] && [ "$(links_of "$KEPT")" = "1" ] && [ "$(key_of "$KEPT")" = "$rk" ]; then
-        note "K1 the quarantine moved the file and did not finish its checks (record: $st) — run the quarantine command again (it does only its checks)"
-        unsettled "HALF-DONE: run the quarantine command again"; runbook
+        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          bad "K1 the quarantine moved the file and did not finish its checks (record: $st), and $LIVE_VERSION is live with a retry job that has no gate: its next run (at the earliest $(next_run)) makes a new database in <plugin>/data. Run --put-back now (runbook rule 2), then send this log"
+          FAIL_STEP="run --put-back now (runbook rule 2), before the retry job's next run; then send this log file, with every *.own.log in $Q_DIR and $RECORD."
+        elif [ -n "$(rec_get Q_CHECK_FAILED)" ]; then
+          bad "K1 the quarantine moved the file, and its own checks FAILED at $(utc_of "$(rec_get Q_CHECK_FAILED)") before its record was finished — send every *.own.log in $Q_DIR and $RECORD, and wait for a decision"
+        else
+          note "K1 the quarantine moved the file and did not finish its checks (record: $st) — run the quarantine command again (it does only its checks)"
+          unsettled "HALF-DONE: run the quarantine command again"; runbook
+        fi
       elif { [ "$st" = prepared ] || [ "$st" = abandoned ] || { [ "$st" = linked ] && key_ok "$rk" && [ "$(key_of "$SRC")" = "$rk" ]; }; } && [ -f "$SRC" ] && [ ! -L "$SRC" ] && [ "$(links_of "$SRC")" = "1" ] && absent "$KEPT"; then
         note "K1 not quarantined (record: $st): an earlier run moved nothing — nothing to check; run the quarantine again when it is due"
         unsettled "NOT QUARANTINED: nothing was checked"; pre_rule
@@ -987,7 +1013,7 @@ putback_mode() {
         || stop "nothing changed: $SRC and $KEPT are no longer the stray store's two names — the kept name is not removed. Send this log"
       rm -f -- "$KEPT" 2>/dev/null
       absent "$KEPT" && [ "$(key_of "$SRC")" = "$kq" ] && [ "$(links_of "$SRC")" = "1" ] || stop "the kept name could not be removed — send this log"
-      if [ -z "$pst" ]; then rec_put Q_STAGE abandoned || unsettled "the kept name is removed, but the record could not be written (is the disk full?): free space; the quarantine may then run again"
+      if [ -z "$pst" ]; then rec_put Q_STAGE abandoned || { note "PB the kept name is removed, but the record could not be written (is the disk full?): it still says $(rec_get Q_STAGE)"; unsettled "the kept name is removed, but the record could not be written (is the disk full?): free space; the quarantine may then run again"; }
       else { pb_ref && rec_put PUTBACK_AT "$(date -u +%s)"; } || unsettled "the put-back is done, but its record could not be written (is the disk full?): free space, then run --put-back again — it only writes the record"; fi ;;
     finish) { pb_ref && rec_put PUTBACK_AT "$(date -u +%s)"; } || unsettled "the put-back is done, but its record could not be written (is the disk full?): free space, then run --put-back again — it only writes the record" ;;
     back)
@@ -1018,7 +1044,8 @@ putback_mode() {
   else bad "PB1 $SRC is not the stray store as recorded ($(triple_of "$SRC"), key $(key_of "$SRC"), names $(links_of "$SRC"))"; fi
   say "  stray store     $(stray_state)"
   if [ "$case_" = "half" ] && [ -z "$pst" ]; then
-    say "  record          the quarantine's half-done run is closed (abandoned); <plugin>/data was not changed by it, and the quarantine may run again"
+    if [ "$(rec_get Q_STAGE)" = "abandoned" ]; then say "  record          the quarantine's half-done run is closed (abandoned); <plugin>/data was not changed by it, and the quarantine may run again"
+    else say "  record          the kept name is removed; the record still says $(rec_get Q_STAGE) — <plugin>/data was not changed, and the quarantine may run again once the record can be written"; fi
   else
     say "  what this means getDataDir()'s rescue copy and cliDataDir()'s blind spot reach it again, as before the quarantine; the R19 of"
     say "                  deploy-5.18.91.sh, 5.18.92.sh and 5.18.93.sh can never pass again (its folder changed); a second quarantine needs"
