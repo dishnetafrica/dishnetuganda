@@ -9248,7 +9248,8 @@ is printed in the deploy's log, on its own line).
   - R1–R18 are ok.
   - R3 gives its one note, the one 5.18.89 and 5.18.90 gave: migration.log holds no line for 087.
   - R5: all 258 earlier files are intact. R14: Domain B's 363 files are byte for byte.
-  - R7: UGX CASH IN HAND 41,071.00 · USD 0.00. R13: the event queue holds 8,655 events, every one done.
+  - R7: read the landing page's cash in hand, read-only (the figures are not repeated here). R13: the event queue holds
+    8,655 events, every one done.
   - R18: on the server's own configuration the gate decides *skip* (`by-store=uganda by-files+vault=uganda`).
 - **R19, both ok.**
   - The stray database is `dc85ae6ddafaae19:2379776:1791366907` before the deploy, at the copy and now, with no side
@@ -9738,7 +9739,7 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run: `cd /opt/dishnet && git checkout dfad4d9 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — PUSHED 11 Oct 13:01 UTC; DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; the day-later run still to come
+## 11 Oct — 5.18.93: main.php's nightly uCRM auto-pull is retired — it never completed, and on the server it was the fatal at main.php:484, 12 lines in the log on the night of 10–11 Oct (by the code, a call of null on each run of the pull hour); no migration; the same file on South Sudan; Domain B unchanged. `release/5.18.93` = `69c87a6`, cut on live 5.18.92 (`247a480`); `scripts/deploy-5.18.93.sh` pinned to it and rehearsed with the salesperson pilot ON, as the operator left it — PUSHED 11 Oct 13:01 UTC; DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; 12 Oct 06:05:25 UTC: PASSED 57 / 0 / 1, before the day-later bound; the day-later run still to come
 
 **Request.** On 11 Oct, after the day-later log count (5.18.92's RESULT above) found the fatal at `main.php:484`, the
 operator said *"yes buuild 5.18.93"*. Asked whether to repair the nightly refresh or retire it, the operator chose
@@ -10370,7 +10371,7 @@ and the script, which also corrected the entry itself):
 - *"The fix is a release of its own (define the CRM credentials and `$crmGet` once, before both sections)"* —
   superseded. Asked to choose, the operator retired the block instead (this release).
 
-### RESULT — DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; the day-later run still to come
+### RESULT — DEPLOYED 11 Oct (copy 13:06:21 UTC): PASSED 79 ok / 0 failed / 2 notes; `--after-only` 15:30:03 UTC: PASSED 57 / 0 / 1 — R19 conclusive; 12 Oct 06:05:25 UTC: PASSED 57 / 0 / 1, before the day-later bound; the day-later run still to come
 
 Recorded from the terminal the operator pasted (the script prints no secret). The log file stays on the server under
 `/root/dnb-5.18.93/`. No money figure, number or name from the run is repeated here.
@@ -10476,6 +10477,28 @@ printed the same lines but for the times and counts below.
 - R13: the event queue lost nothing, 9,019 events, all done. R14: Domain B and the plugin's docs, all 363 files, byte
   for byte the release's. R20 and R21 passed again under PHP 8.1.34 (78 passed, 0 failed; 47 passed, 0 failed).
 
+**A third `--after-only` (`20261012T060525Z`), 16 h 59 min after the copy: 57 ok, 0 failed, 1 note (R3's); PASSED.**
+Recorded from the pasted terminal, with R7's figures and R8's reading left out.
+- **R19 ok, conclusive.** Master ran the retry job at 06:00:06 UTC on 12 Oct, after the copy. The stray store's
+  database file is unchanged (`dc85ae6ddafaae19:2379776:1791366907`), with no side file, and the folder's own time is
+  still 02:45:47 UTC on 10 Oct. Its `migration.log` grew to 203,711 bytes, last written at 06:00:59 UTC; other jobs
+  write it, and R19 does not judge the log.
+  - These are the two values the stray-store quarantine's script pins (`EXPECTED_STRAY_DB` and
+    `EXPECTED_STRAY_DIR_T`, the last entry of this file): the server still reads as that script expects.
+- **V4:** no new fatal or parse error of the plugin since 13:06:15 UTC on 11 Oct, 42,646 lines read. That window
+  holds the default pull hour, 00:00–01:00 UTC on 12 Oct. This server's `ucrm_auto_pull_hour` has not been seen,
+  though, so the script's own rule stands: the evidence for 5.18.93 is the run a day after the copy.
+- **It is not the day-later check.** It began at 06:05:25 UTC, 7 h 1 min before the bound (13:06:21 UTC on 12 Oct).
+  The quarantine's A3 accepts only a log begun at or after the bound, and passes over this one; the log stays in
+  `/root/dnb-5.18.93/` and needs nothing done to it.
+- **As before:**
+  - the pilot (V3–V3i, R2b, R2c, R3, R11 and R12, and the pilot record's 8 readings);
+  - R13: the event queue lost nothing, 9,164 events, all done;
+  - R14: Domain B and the plugin's docs, all 363 files, byte for byte the release's;
+  - R18: on this server's configuration the gate stops the retry job (by the store and by the files and the vault,
+    Uganda);
+  - R20 and R21 under PHP 8.1.34: 78 passed, 0 failed; 47 passed, 0 failed.
+
 **Still to run, read-only — press nothing on the Salesperson numbers card and run no `tools/set_config.php` while it
 runs (runbook step 2):**
 - **`--after-only` once more a day after the copy, at or after 13:06:21 UTC on 12 Oct** (the script's summary, and
@@ -10483,7 +10506,7 @@ runs (runbook step 2):**
   stopped, which is the evidence this release is for. The script says its absence is not evidence before then. The
   pull hour is 00:00–01:00 UTC only by default; neither this server's `ucrm_auto_pull_hour` nor the times of the 12
   lines have been seen. An `--after-only` V4 reads the log from the deploy's own recorded time, so waiting loses
-  nothing.
+  nothing. The run of 06:05:25 UTC on 12 Oct (above) came before the bound and does not count as this run.
 
 **Not on the server — done 11 Oct, 19:21–19:35 UTC:** the four time-gated test files (`test_sales_pilot`,
 `test_multi_number_routing`, `test_pilot_safety`, `test_notify_evo_retry`), run on their own in both trees, are whole
