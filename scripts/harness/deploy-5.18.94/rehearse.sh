@@ -92,6 +92,8 @@ git -C "$REPO" fetch -q origin "refs/heads/$REL94:refs/remotes/origin/$REL94" 2>
 P94="$(sed -n 's/^EXPECTED_PLUGIN_COMMIT="\([^"]*\)".*/\1/p' "$DEPLOY94")"
 OUT94="$SB/out94"; mkdir -p "$OUT94"; ln -s "$OUT94" "$RECS/dnb-5.18.94"
 STATE94="$OUT94/state-5.18.94.env"
+data94() { data_dump | grep -v '^master_schedule:' | sha256sum | cut -c1-16; }   # the data as data_digest reads it, but master's record of the
+                                                                                 # retry job, which the rehearsal itself moves (set_sched) — never this script
 left_tmp94() { ls -d /tmp/dnb-5.18.94-* /tmp/dn-master-lock-* /tmp/dn_autopull_* 2>/dev/null | wc -l | tr -d ' '; }
 TMP94="$(left_tmp94)"
 host_code94() { ls -d "$OUT94"/code-* 2>/dev/null | wc -l | tr -d ' '; }
@@ -169,7 +171,8 @@ s = s.replace(old, new, 1); assert s.count("$page === 'terms'") == 1
 open(p, 'w').write(s)
 PY
 pubget() { curl -s --noproxy '*' "$PLUGIN_BASE?$1"; }
-check "$(pubget page=terms | grep -c 'v1.1')$(pubget page=terms | grep -c 'UCC')$(pubget 'page=api&action=app_legal_version' | grep -o '"dated":"[^"]*"')" "11\"dated\":\"26 September 2026\"" \
+for i in $(seq 1 60); do pubget 'page=api&action=app_legal_version' | grep -q '"tos_version"' && break; sleep 0.1; done   # PHP's cache re-reads the edited file within 2 s
+check "$(has "$(pubget page=terms)" 'v1.1')$(has "$(pubget page=terms)" 'UCC')$(pubget 'page=api&action=app_legal_version' | grep -o '"dated":"[^"]*"')" "yesyes\"dated\":\"26 September 2026\"" \
   "control: the stand-in serves 5.18.93's Terms (v1.1, the UCC claim in its first sentence) and its version endpoint, through the installed code"
 
 # ── The website, as dishnet-web-uganda/site has it at the clone's commit (the 12 Oct pages), and three variants ─────────
@@ -183,13 +186,13 @@ def edit(path, old, new):
 edit(os.path.join(r, 'old', 'terms.html'), 'independent Ugandan company: an IT solutions provider and Starlink installer',
      'independent Ugandan company: an IT solutions provider and UCC-authorised Starlink installer')
 edit(os.path.join(r, 'nopriv', 'privacy.html'), 'Call recordings, where a call is recorded', 'Recordings of calls')
-os.remove(os.path.join(r, 'nopol', 'policies.html'))
+open(os.path.join(r, 'nopol', 'policies.html'), 'w').write('<!DOCTYPE html><html><body><h1>Policies</h1><p>Coming soon.</p></body></html>')   # a hub without the two links
 PY
 WPORT94="$(free_port)"; "$PHPBIN" -S "127.0.0.1:$WPORT94" -t "$WROOT" >"$SB/website.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 50); do curl -s --noproxy '*' -o /dev/null "http://127.0.0.1:$WPORT94/ok/policies.html" && break; sleep 0.1; done
 WEB_OK="http://127.0.0.1:$WPORT94/ok"; WEB_DOWN="http://127.0.0.1:$(free_port)"
-check "$(curl -s --noproxy '*' "$WEB_OK/terms.html" | grep -c 'independent Ugandan company: an IT solutions provider and Starlink installer')$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://127.0.0.1:$WPORT94/nopol/policies.html")" "1404" \
-  "control: the stand-in website serves the 12 Oct Terms, and a variant without the policies hub answers 404"
+check "$(curl -s --noproxy '*' "$WEB_OK/terms.html" | grep -c 'independent Ugandan company: an IT solutions provider and Starlink installer')$(curl -s --noproxy '*' "http://127.0.0.1:$WPORT94/nopol/policies.html" | grep -c 'href="terms.html"')$(curl -s --noproxy '*' "$WEB_OK/policies.html" | grep -c 'href="terms.html"')" "102" \
+  "control: the stand-in website serves the 12 Oct Terms and its policies hub (both links), and the variant's hub carries no link"
 
 # ── Kampala's date, as the script reads it (TZ=Africa/Kampala date +%Y%m%d) — moved only where a scenario says so ─────
 mkdir -p "$SB/datebin"
@@ -208,7 +211,7 @@ run94() {   # [--answer WORD] [--script FILE] [--env K=V]… [--website URL] [--
     --website) web="$2"; shift 2 ;; --today) today="$2"; shift 2 ;; *) break ;; esac; done
   : > "$SB/docker.log"
   n=$(( $(cat "$SB/runs" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$SB/runs"
-  cmd="$(printf '%q ' env PATH="$SB/datebin:$SB/bin:$PATH" FAKE_TODAY="$today" DNB_OUT="$OUT94" DNB_RECORDS="$RECS" DNB_WEBSITE="$web" GUARD_SECONDS=0 DN_DATA_DIR="$DATA" ${extra[@]+"${extra[@]}"} bash "$script" --plugin-base "$PLUGIN_BASE" "$@")"
+  cmd="$(printf '%q ' env PATH="$SB/datebin:$SB/bin:$PATH" FAKE_TODAY="$today" DNB_OUT="$OUT94" DNB_RECORDS="$RECS" DNB_WEBSITE="$web" GUARD_SECONDS=3 DN_DATA_DIR="$DATA" ${extra[@]+"${extra[@]}"} bash "$script" --plugin-base "$PLUGIN_BASE" "$@")"
   o="$(printf '%s\n' "$answer" | SHELL=/bin/bash script -qec "$cmd" /dev/null 2>&1 | tr -d '\r')"
   case "$o" in *"unknown option:"*) echo "run94-$n" >> "$SB/bad-runs" ;; esac
   [ -n "${REHEARSE_KEEP:-}" ] && printf '%s\n' "$o" > "$REHEARSE_KEEP/run94-$(printf '%03d' "$n")-${answer:-none}-$(basename "$script" .sh)$(printf '%s' "$*" | tr -c 'A-Za-z0-9-' '_').txt"
@@ -221,7 +224,7 @@ qrec_back() { cat "$QREC_KEEP" > "$QREC"; touch -r "$QREC_KEEP" "$QREC"; }   # i
 kept_state() { echo "$(stat -c '%d:%i:%h:%u:%g:%a:%Y:%Z' "$KEPT" 2>/dev/null)/$(sha256sum "$KEPT" 2>/dev/null | cut -c1-16)/$(ls -A "$QD" | grep -v '\.own\.log$\|^run-[0-9]*\.log$' | sort | paste -sd, -)"; }
 oldname() { ls -A "$PD/data" | grep -cE '^plugin\.sqlite3'; }
 quiet94() {   # nothing deployed, backed up or changed: 5.18.93 live, no backup, the data as seeded, the quarantine as it was
-  echo "$(live)|$(backups94)|$(data_digest)|$(kept_state)|$(oldname)"
+  echo "$(live)|$(backups94)|$(data94)|$(kept_state)|$(oldname)"
 }
 
 # ── Two installation-authorisation records, as 5.18.93's request and acceptance leave them: one v1.0 request accepted,
@@ -232,7 +235,7 @@ sqx "INSERT INTO install_auth(job_id, crm_client_id, seq, acceptance_reference, 
      VALUES (32, 6, 2, 'ACC-20261011-000002', 'pending', 'INSTALLATION-TERMS-v1.0', '$TV10', '{}', '{}', 'Rehearsal Customer Two', 1, 'Rehearsal Tech', '2026-10-11 09:00:00', 'rh-token-hash-32', '2026-10-25 00:00:00')" >/dev/null
 check "$(sq "SELECT group_concat(job_id || ':' || status || ':' || substr(terms_hash, 1, 8), ',') FROM install_auth")" "31:accepted:${TV10:0:8},32:pending:${TV10:0:8}" \
   "control: two v1.0 records — one accepted, one pending — hashed as 5.18.93's InstallationTerms has v1.0"
-D94="$(data_digest)"
+D94="$(data94)"
 
 echo; echo "== 94-1. A14: nothing before the quarantine has moved the file and its --check has passed =="
 # A0's short-form guard: a checkout writing 8-character commits (as a clone with duplicate packs did, 12 Oct) is refused
@@ -241,13 +244,13 @@ echo; echo "== 94-1. A14: nothing before the quarantine has moved the file and i
 git -C "$REPO" config core.abbrev 8; fresh94; OUT="$(run94 --answer NO)"
 M="$(mutant abbrev "$DEPLOY94" '[ "$ABBREV_PIN|$ABBREV_BASE" = "$EXPECTED_PLUGIN_COMMIT|$BASELINE_COMMIT" ] \' 'true \')"; fresh94; OUTM="$(run94 --answer NO --script "$M")"; rm -f "$M"
 git -C "$REPO" config --unset core.abbrev
-check "$(has "$OUT" "STOP: this checkout writes commits in a short form of 8 characters (${P94}")$(has "$OUT" "Run: git -C $REPO config core.abbrev 7")$(went94 "$OUT")|$(live)|$(backups94)|$(data_digest)" "yesyesnono|$B93|0|$D94" \
+check "$(has "$OUT" "STOP: this checkout writes commits in a short form of 8 characters (${P94}")$(has "$OUT" "Run: git -C $REPO config core.abbrev 7")$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$D94" \
   "1z a checkout writing 8-character commits is refused before anything changes, with the remedy (git config core.abbrev 7)"
 check "$(has "$OUTM" "is not cut on $B93 (5.18.93): its parent is ${B93}")$(went94 "$OUTM")" "yesnono" \
   "1z' a copy without the guard is refused only by the parent check, naming the longer form (the message the guard replaces)"
 check "$(git -C "$REPO" config core.abbrev || echo unset)$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)" "unset$P94" "…the setting taken out again: the clone writes the 7-character form"
 fresh94; OUT="$(run94 --answer NO)"
-check "$(has "$OUT" 'NO-GO (A14): the stray store'"'"'s quarantine is not done, or does not hold — no record at')$(went94 "$OUT")|$(live)|$(backups94)|$(data_digest)" "yesnono|$B93|0|$D94" \
+check "$(has "$OUT" 'NO-GO (A14): the stray store'"'"'s quarantine is not done, or does not hold — no record at')$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesnono|$B93|0|$D94" \
   "1a no quarantine yet (no record): NO-GO at A14, nothing deployed, backed up or changed"
 check "$(has "$OUT" 'ok    A0 the release delta is exactly 5.18.94')$(okline "$OUT" A7 'Domain B untouched')$(has "$OUT" 'ok    A6 ')$(has "$OUT" 'ok    A8 ')$(has "$OUT" 'ok    A11 ')$(has "$OUT" 'ok    A12 ')" "yesyesyesyesyesno" \
   "…every check before it passed (A0, A7, A6, A8, A11) and none after it ran (A12): the refusal is A14's alone"
@@ -262,7 +265,7 @@ check "$(has "$OUT" 'NO-GO (A14): no --check of the quarantine that began at lea
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" '(check): NOT CONCLUSIVE')" "yes" "…its --check straight after the move: not conclusive (master has not run the retry job since)"
 fresh94; OUT="$(run94 --answer NO)"
-check "$(has "$OUT" 'NO-GO (A14): no --check of the quarantine that began at least 20 minutes after the move PASSED (there is none')$(went94 "$OUT")" "yesnono" \
+check "$(has "$OUT" 'NO-GO (A14): no --check of the quarantine that began at least 20 minutes after the move PASSED with "the quarantine holds" (there is none')$(went94 "$OUT")" "yesnono" \
   "1c a --check begun less than 20 minutes after the move does not count: NO-GO"
 qat_back94() { sed -i "s/^Q_AT=.*/Q_AT=$1/" "$QREC"; }   # the move N seconds ago, as a later --check and this deploy find it (every Q_AT line)
 NOW94="$(date -u +%s)"; qat_back94 $(( NOW94 - 1800 )); QAT94=$(( NOW94 - 1800 ))
@@ -270,7 +273,7 @@ set_sched $(( QAT94 - 60 ))   # master's last run of the job: before the move
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" '(check): NOT CONCLUSIVE')" "yes" "…the move 30 minutes back, master's record still from before it: the --check is not conclusive"
 fresh94; OUT="$(run94 --answer NO)"
-check "$(has "$OUT" 'NO-GO (A14): no --check of the quarantine that began at least 20 minutes after the move PASSED (the newest, check-')$(has "$OUT" ', is inconclusive)')$(went94 "$OUT")" "yesyesnono" \
+check "$(has "$OUT" 'NO-GO (A14): no --check of the quarantine that began at least 20 minutes after the move PASSED with "the quarantine holds" (the newest, check-')$(has "$OUT" ', is inconclusive)')$(went94 "$OUT")" "yesyesnono" \
   "1d the newest --check begun 20 minutes or more after the move is NOT CONCLUSIVE: NO-GO, and it names the log"
 T94="$(date -u +%s)"; set_sched $(( T94 - 300 ))   # master ran the job five minutes ago: after either move time below
 qrec_keep; qat_back94 $(( T94 - 600 )); OUT="$(qrun -- --check)"
@@ -290,7 +293,7 @@ check "$(sha256sum "$QREC" | cut -c1-16)" "$QREC0" "…the quarantine's record i
 # Each clause on its own: planted in the record (the last line of a key wins), or beside the files; put back after each.
 a14() {   # a14 LABEL EXPECTED-REASON — run, then: refused at A14 with that reason, never the question, nothing changed
   fresh94; local o; o="$(run94 --answer NO)"
-  check "$(has "$o" 'NO-GO (A14)')$(has "$o" "$2")$(went94 "$o")|$(live)|$(backups94)|$(data_digest)" "yesyesnono|$B93|0|$D94" "$1"
+  check "$(has "$o" 'NO-GO (A14)')$(has "$o" "$2")$(went94 "$o")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$D94" "$1"
 }
 qrec_keep
 printf 'Q_CHECK_FAILED=%s\n' "$(date -u +%s)" >> "$QREC"; a14 "1g the record holds a failure: NO-GO" "the record holds a failure (Q_CHECK_FAILED at"; qrec_back
@@ -313,7 +316,7 @@ flock "$QD" -c "touch '$SB/qlock.ready'; while [ ! -f '$SB/qlock.go' ]; do sleep
 for i in $(seq 1 50); do [ -f "$SB/qlock.ready" ] && break; sleep 0.1; done
 a14 "1t a run of the quarantine script holds its folder's lock: NO-GO" "a run of scripts/quarantine-stray-store.sh is going on this server"
 touch "$SB/qlock.go"; wait "$QL" 2>/dev/null; rm -f "$SB/qlock.ready" "$SB/qlock.go"
-check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data_digest)" "$KEPT0|0|$QREC0|$D94" "…every clause put back: the quarantine's folder, record and kept file, the old name and the data exactly as before"
+check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)" "$KEPT0|0|$QREC0|$D94" "…every clause put back: the quarantine's folder, record and kept file, the old name and the data exactly as before"
 # The weakened copies: each clause taken out reaches the question over the state it guards (caught).
 a14m() {   # a14m LABEL ANCHOR NEW — a copy without one clause, over the planted state the caller set up
   local m o; m="$(mutant "a14-$RANDOM" "$DEPLOY94" "$2" "$3")"; fresh94; o="$(run94 --answer NO --script "$m")"; rm -f "$m"
@@ -338,11 +341,11 @@ fresh94; OUT="$(run94 --answer NO)"
 check "$(has "$OUT" 'note  A14 a state file records an R19 failure after the move (dnb-5.18.93/state-5.18.93.env)')$(went94 "$OUT")" "yesyesyes" \
   "1u 5.18.93's state file records an R19 failure after the move (a run the runbook forbids): said, never a reason to stop"
 sed -i '/^STRAY_R19_FAILED=/d' "$SB/out/state-5.18.93.env"
-check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data_digest)|$(live)|$(backups94)" "$KEPT0|0|$QREC0|$D94|$B93|0" "…after section 1: the quarantine, the data and the live release exactly as before it"
+check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(backups94)" "$KEPT0|0|$QREC0|$D94|$B93|0" "…after section 1: the quarantine, the data and the live release exactly as before it"
 
 echo; echo "== 94-2. A17–A21: the documents, the records, the operator's settings, the website, the date =="
 nogo94() {   # nogo94 LABEL EXPECTED-TEXT OUTPUT [DATA-DIGEST] — refused with that text, never the question, nothing deployed or changed
-  check "$(has "$3" "$2")$(went94 "$3")|$(live)|$(backups94)|$(data_digest)|$(kept_state)" "yesnono|$B93|0|${4:-$D94}|$KEPT0" "$1"
+  check "$(has "$3" "$2")$(went94 "$3")|$(live)|$(backups94)|$(data94)|$(kept_state)" "yesnono|$B93|0|${4:-$D94}|$KEPT0" "$1"
 }
 release_variant94() {   # release_variant94 PATH OLD NEW — the release commit with one file edited (OLD exactly once), cut on 5.18.93
   local idx="$SB/variant94.idx" blob tree c
@@ -372,39 +375,39 @@ v94 "2d a pin whose v1.1 text changed refuses (A17): it is not the reviewed text
 db_keep
 sqx "INSERT INTO install_auth(job_id, crm_client_id, seq, acceptance_reference, status, terms_version, terms_hash, price_snapshot, scope_snapshot, requested_by, requested_at, token_hash, token_expires_at)
      VALUES (39, 7, 9, 'ACC-20261012-000009', 'pending', 'INSTALLATION-TERMS-v1.1', '$(printf '%064d' 1)', '{}', '{}', 1, '2026-10-12 09:00:00', 'rh-token-hash-39', '2026-10-25 00:00:00')" >/dev/null
-DX="$(data_digest)"; fresh94; OUT="$(run94 --answer NO)"
+DX="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
 nogo94 "2e a v1.1 record whose hash is not v1.1's refuses (A17): under the pin's code it could never be shown or accepted" "pin:records-unmatched(rows=3" "$OUT" "$DX"
 check "$(has "$OUT" 'unknown=1 unknown_pending=1 unmatched=0')$(has "$OUT" 'live:records-unmatched')" "yesno" "…5.18.93's code counts it as a version it does not hold — not a refusal of its own"
 M="$(mutant a17rec "$DEPLOY94" 'case "$IA_PIN" in "rows="*" unknown=0 unknown_pending=0 unmatched=0 unmatched_pending=0") ;;' 'case "$IA_PIN" in *) ;;')"
 fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2e' a copy that does not read the records through the pin's code reaches the question over it (caught)"
 db_back
-check "$(data_digest)" "$D94" "…the record taken away again (the database as kept): the data as seeded"
+check "$(data94)" "$D94" "…the record taken away again (the database as kept): the data as seeded"
 # The operator's three settings, in either copy; and the badge the pin would show over each.
 a18() {   # a18 LABEL KEY VALUE files|store|both EXPECTED — the setting planted, refused, never its value in the log; put back
   cfg_keep; vault_keep
   case "$4" in files) file_set "$2" "$3" ;; store) row_set "$2" "$3" ;; both) file_set "$2" "$3"; row_set "$2" "$3" ;; esac
-  local dx o; dx="$(data_digest)"; fresh94; o="$(run94 --answer NO)"
-  check "$(has "$o" 'NO-GO (A18): these still say UCC —')$(has "$o" "$5")$(went94 "$o")$(has "$o" "$3")|$(live)|$(backups94)|$(data_digest)" "yesyesnonono|$B93|0|$dx" "$1"
+  local dx o; dx="$(data94)"; fresh94; o="$(run94 --answer NO)"
+  check "$(has "$o" 'NO-GO (A18): these still say UCC —')$(has "$o" "$5")$(went94 "$o")$(has "$o" "$3")|$(live)|$(backups94)|$(data94)" "yesyesnonono|$B93|0|$dx" "$1"
   cfg_back; vault_back
 }
 a18 "2f ai_identity_line saying UCC in the store row refuses (A18), and the log never prints it" ai_identity_line "Rehearsal Seller, a UCC Authorised installer" store "ai_identity_line=unset:ok/set:UCC"
 a18 "2g wa_flyer_caption saying UCC in the configuration file refuses (A18)" wa_flyer_caption "Rehearsal flyer — UCC approved" files "wa_flyer_caption=set:UCC/unset:ok"
 a18 "2h email_badge_line saying UCC in both copies refuses (A18) — the badge the pin would show says it too" email_badge_line "UCC Authorised Starlink Installer" both "email_badge_line=set:UCC/set:UCC"
-check "$(data_digest)" "$D94" "…each put back: the data as seeded"
+check "$(data94)" "$D94" "…each put back: the data as seeded"
 cfg_keep; vault_keep; row_set email_badge_line "UCC Authorised Starlink Installer"
 M="$(mutant a18 "$DEPLOY94" '[ -z "$UCC_HIT" ] || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
 check "$(went94 "$OUT")$(has "$OUT" 'UCC Authorised Starlink Installer')" "yesyesno" "2h' a copy that does not refuse on UCC reaches the question with the badge saying it (caught) — the value still unprinted"
 cfg_back; vault_back
 cfg_keep; vault_keep; row_set email_badge_line "Starlink Installation"; file_set ai_identity_line "Rehearsal Seller, a Starlink installer"
-DX="$(data_digest)"; fresh94; OUT="$(run94 --answer NO)"
+DX="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
 check "$(okline "$OUT" A18 'none of ai_identity_line, wa_flyer_caption or email_badge_line says UCC' 'email_badge_line=unset:ok/set:ok' 'ai_identity_line=set:ok/unset:ok' 'badge-shown=ok/ok')$(went94 "$OUT")" "yesyesyes" \
   "2i the settings set without UCC: A18 ok, set or not set and ok per copy, the badge shown ok in both"
 cfg_back; vault_back
 # The recordings' retention, read from the store row as the maintenance job reads it.
 a21() {   # a21 LABEL VALUE EXPECTED
-  cfg_keep; vault_keep; row_set recording_retention_days "$2"; local dx o; dx="$(data_digest)"; fresh94; o="$(run94 --answer NO)"
-  check "$(has "$o" 'NO-GO (A21)')$(has "$o" "$3")$(went94 "$o")|$(live)|$(backups94)|$(data_digest)" "yesyesnono|$B93|0|$dx" "$1"; cfg_back; vault_back
+  cfg_keep; vault_keep; row_set recording_retention_days "$2"; local dx o; dx="$(data94)"; fresh94; o="$(run94 --answer NO)"
+  check "$(has "$o" 'NO-GO (A21)')$(has "$o" "$3")$(went94 "$o")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$dx" "$1"; cfg_back; vault_back
 }
 a21 "2j retention 0 (keep for ever) refuses (A21)" 0 "recording_retention_days is 0 in the store row"
 a21 "2k retention 400 days refuses (A21): longer than the 12 months the policy states" 400 "recording_retention_days is 400 in the store row"
@@ -413,7 +416,7 @@ cfg_keep; vault_keep; row_set recording_retention_days 400
 M="$(mutant a21 "$DEPLOY94" '{ [ "$RET_S" -ge 1 ] && [ "$RET_S" -le 365 ]; } || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2k' a copy without the bound reaches the question over 400 days (caught)"
 cfg_back; vault_back
-cfg_keep; vault_keep; row_set recording_retention_days 180; DX="$(data_digest)"; fresh94; OUT="$(run94 --answer NO)"
+cfg_keep; vault_keep; row_set recording_retention_days 180; DX="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
 check "$(okline "$OUT" A21 'call recordings are deleted after 180 day(s)' 'the files say 365')$(has "$OUT" 'note  A21 the configuration files say 365 for recording_retention_days, the store row 180')$(went94 "$OUT")" "yesyesyesyes" \
   "2m 180 days in the store row, none in the file: A21 ok on the row the maintenance job reads, the difference said"
 cfg_back; vault_back
@@ -423,7 +426,7 @@ fresh94; OUT="$(run94 --answer NO --website "http://127.0.0.1:$WPORT94/old")"
 nogo94 "2n the website's Terms still claiming UCC refuses (A19)" "NO-GO (A19): the website does not show the 12 Oct policies" "$OUT"
 check "$(has "$OUT" 'terms.html 200 (identity ×0, a UCC claim ×')" "yes" "…it says what it found: the identity sentence missing, the claim counted"
 fresh94; OUT="$(run94 --answer NO --website "http://127.0.0.1:$WPORT94/nopol")"
-nogo94 "2o the website without its policies hub refuses (A19)" "policies.html 404" "$OUT"
+nogo94 "2o the website's policies hub without its links refuses (A19)" "policies.html 200 (links no)" "$OUT"
 M="$(mutant a19 "$DEPLOY94" '{ [ "$W_POL" = "200" ] && [ "$W_POL_OK" = "yes" ] && [ "$W_TOS" = "200" ] && [ "$W_TOS_ID" != "0" ] && [ "${W_TOS_UCC:-1}" = "0" ]; }' 'true')"
 fresh94; OUT="$(run94 --answer NO --script "$M" --website "http://127.0.0.1:$WPORT94/old")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2n' a copy that does not read the website's Terms reaches the question over the old ones (caught)"
@@ -444,7 +447,7 @@ fresh94; OUT="$(run94 --answer NO --today 20261016)"
 check "$(okline "$OUT" A20 'the Uganda documents are dated 16 October 2026' 'today in Kampala')$(went94 "$OUT")" "yesyesyes" "2t on the day itself: A20 ok"
 check "$(has "$OUT94A" "note  A20 the Uganda documents are dated 16 October 2026, after today in Kampala ($(TZ=Africa/Kampala date +%Y%m%d))")" "yes" \
   "2u before the day (today, here): said — a customer signing in before then accepts them with that date shown as Effective"
-check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data_digest)|$(live)|$(backups94)|$(host_code94)|$(left_tmp94)" "$KEPT0|0|$QREC0|$D94|$B93|0|0|$TMP94" \
+check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(backups94)|$(host_code94)|$(left_tmp94)" "$KEPT0|0|$QREC0|$D94|$B93|0|0|$TMP94" \
   "…after section 2: nothing changed, no backup, no copy of the code left on the host or in /tmp"
 
 echo; echo "== 94-3. the deploy, as the operator runs it =="
@@ -486,14 +489,14 @@ check "$(okline "$OUT" A5 'mn=on/on')$(okline "$OUT" A9 "$SHAPE_ON")$(okline "$O
 check "$(has "$OUT" 'UCC Authorised')$(grep -cE -- "$LEAK_RX|$NUM_RX" <<<"$OUT")" "no0" "the log names no setting's value, no Evolution address, key or instance, and no number"
 check "$(installed94 "$P94")$(inst_ver)$(sha256sum "$PD/lib/InstallationTerms.php" | cut -c1-64)" "05.18.94$(git -C "$REPO" show "$P94:$P/lib/InstallationTerms.php" | sha256sum | cut -c1-64)" \
   "every file 5.18.93 → 5.18.94 changes is installed exactly as the pin has it; manifest 5.18.94"
-check "$(data_digest)$(kept_state)$(oldname)$(sha256sum "$QREC" | cut -c1-16)" "$D94${KEPT0}0$QREC0" \
+check "$(data94)$(kept_state)$(oldname)$(sha256sum "$QREC" | cut -c1-16)" "$D94${KEPT0}0$QREC0" \
   "the deploy wrote no record or setting, and left the quarantine as it was: the kept file, the old name, the record"
 check "$(grep -c "^COPY_AT=$(stat -c %Y "$PD/lib/LegalContent.php")\$" "$STATE94")$(grep -c '^Q_HOLDS_BEFORE=yes$' "$STATE94")$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "110" \
   "the state file records the copy's time (as stamp_copy gave lib/LegalContent.php) and that the quarantine held before; no failure"
 check "$(grep -c "cd $REPO && bash scripts/deploy-5.18.94.sh --rollback" <<<"$OUT")$(awk '/\(deploy\): PASSED/ {p=1} p && /deploy-5\.18\.94\.sh --rollback/ {print "after"; exit}' <<<"$OUT")" "1after" \
   "the rollback command is printed once, on its own line, after the verdict"
 check "$(host_code94)$(left_tmp94)$(evo_calls)" "0${TMP94}0" "the run left no copy of the code on the host or in /tmp, and never called Evolution"
-check "$(pubget page=terms | grep -c 'v1.2')$(pubget page=terms | grep -c 'UCC')$(pubget page=privacy | grep -c 'UCC')$(pubget 'page=api&action=app_legal_version' | grep -o '"dated":"[^"]*"')" "100\"dated\":\"16 October 2026\"" \
+check "$(has "$(pubget page=terms)" 'v1.2')$(has "$(pubget page=terms)" 'UCC')$(has "$(pubget page=privacy)" 'UCC')$(pubget 'page=api&action=app_legal_version' | grep -o '"dated":"[^"]*"')" "yesnono\"dated\":\"16 October 2026\"" \
   "control: the stand-in now serves 5.18.94's Terms (v1.2, no UCC), its Privacy (no UCC) and its date"
 
 echo; echo "== 94-4. --after-only: R19 conclusive once master has run the job; the quarantine's own --check =="
@@ -508,7 +511,7 @@ check "$(has "$OUT" 'note  R19 the quarantine holds')" "yes" "4b a run of the jo
 set_sched $(( COPY94 + 300 )); base_log; OUT="$(run94 --after-only)"
 check "$(fails "$OUT")$(okline "$OUT" R19 'the quarantine holds: master ran the retry job at' "after the copy (at $(utc "$COPY94"))")$(has "$OUT" '5.18.94 (after): PASSED')$(okline "$OUT" R22 "the installed documents are 5.18.94's")" "0yesyesyes" \
   "4c master's run of the job since the copy: R19 conclusive — the quarantine holds — and R22 again: PASSED"
-check "$(data_digest)$(kept_state)$(oldname)$(host_code94)$(left_tmp94)" "$D94${KEPT0}00$TMP94" "…the --after-only runs wrote nothing and left nothing behind"
+check "$(data94)$(kept_state)$(oldname)$(host_code94)$(left_tmp94)" "$D94${KEPT0}00$TMP94" "…the --after-only runs wrote nothing and left nothing behind"
 # V4: 5.18.93 has no known fatal, so any fatal of the plugin since the deploy fails — 5.18.92's old line at main.php:484
 # too, named by its time and file:line, never by more of its text.
 base_log; touch "$SB/web/.plant_old"; OUT="$(run94 --after-only)"
@@ -535,7 +538,7 @@ echo; echo "== 94-5. the rollback: --rollback, typed ROLLBACK — and deployed a
 # A request made under v1.1 since the deploy, still pending: 5.18.93's code cannot read its terms.
 sqx "INSERT INTO install_auth(job_id, crm_client_id, seq, acceptance_reference, status, terms_version, terms_hash, price_snapshot, scope_snapshot, requested_by, requested_at, token_hash, token_expires_at)
      VALUES (33, 8, 3, 'ACC-20261012-000003', 'pending', 'INSTALLATION-TERMS-v1.1', '$TV11', '{}', '{}', 1, '2026-10-12 12:00:00', 'rh-token-hash-33', '2026-10-26 00:00:00')" >/dev/null
-D95="$(data_digest)"
+D95="$(data94)"
 fresh94; OUT="$(run94 --answer ROLLBACK --rollback)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.94 (rollback): PASSED')$(live)" "0yes$B93" "the rollback PASSES: 5.18.93 serving again"
 for l in "ok    container serves $B93 (5.18.93)" \
@@ -550,7 +553,7 @@ for l in "ok    container serves $B93 (5.18.93)" \
   check "$(has "$OUT" "$l")" "yes" "5: ${l:0:110}"
 done
 check "$(installed94 "$B93")$(inst_ver)$( [ -f "$PD/$ADDED94" ] && echo kept)" "05.18.93kept" "every changed file as 5.18.93 has it, manifest 5.18.93; the added test stays on disk"
-check "$(data_digest)$(kept_state)$(oldname)$(sha256sum "$QREC" | cut -c1-16)$(host_code94)$(left_tmp94)" "$D95${KEPT1}0${QREC1}0$TMP94" "the rollback changed no data and not the quarantine, and left no copy of the code"
+check "$(data94)$(kept_state)$(oldname)$(sha256sum "$QREC" | cut -c1-16)$(host_code94)$(left_tmp94)" "$D95${KEPT1}0${QREC1}0$TMP94" "the rollback changed no data and not the quarantine, and left no copy of the code"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after the rollback, as RB asks: PASSED"
 # Deployed again over the rollback: the v1.1 record the live code cannot read is said, not refused — the pin reads it.

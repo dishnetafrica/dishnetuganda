@@ -1126,7 +1126,7 @@ try {
 PHP
 )"
 legal_state() { docker exec "$CONTAINER" php -d display_errors=stderr -r "$LEGAL_PHP" "$1" 2>/dev/null </dev/null || echo "?"; }   # legal_state CODE_ROOT
-lfield() { printf '%s' "$1" | sed -nE "s/(^| )$2=([^ |]*).*/\2/p" | head -1; }   # lfield LINE KEY — one field of a legal_state or ia_state line
+lfield() { printf '%s' "$1" | sed -nE "s/^(.* )?$2=([^ |]*).*\$/\2/p" | head -1; }   # lfield LINE KEY — one field of a legal_state or ia_state line (the whole line replaced by the value: rehearsal trial 1 found the first form kept every field before it)
 # Every installation-authorisation record, READ-ONLY as the database's owner, through a code root's InstallationTerms: by
 # version, the pending ones by version; how many name a version that code root's InstallationTerms does not hold (after a
 # rollback, the records made under v1.1); and how many name a version it holds but no longer match the text — a record
