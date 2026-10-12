@@ -28,7 +28,6 @@ PARAMS = {
     'OTHER_WARRANTY': '6 months',       # other equipment where no manufacturer period is shown
     'RETURN_DAYS':    '7 days',         # change of mind, from receipt
     'REFUND_DAYS':    '14 days',        # refund paid after the item comes back
-    'GRACE':          '7 days',         # unpaid bill, after the due date, before suspension
     'PRICE_NOTICE':   '30 days',        # notice of a change that is worse for the customer
     'OUTAGE':         '3 days',         # fault after which service credits start
     'ACK':            '1 working day',  # complaint and warranty-claim acknowledgement
@@ -37,7 +36,7 @@ PARAMS = {
 UPDATED = 'Last updated: 12 October 2026'
 
 PAGES = [
-    ('policies.html', 'Policies', 'Policies',
+    ('policies.html', 'Policies', 'Legal',
      'DishNet Uganda policies in plain words: warranty, returns and refunds, terms of service and sale, installation, acceptable use, privacy and complaints.'),
     ('terms.html', 'Terms of Service', 'Legal',
      'Terms of Service for DishNet Africa Limited internet plans in Uganda: billing, suspension, cancelling, equipment, fair use and our responsibility.'),
@@ -47,11 +46,11 @@ PAGES = [
      'DishNet Uganda warranty: Starlink kits, installation workmanship, accessories and CCTV, what is covered and how to claim.'),
     ('returns.html', 'Returns, Refunds and Cancellations', 'Legal',
      'How to return equipment, cancel an order, installation or monthly plan with DishNet Uganda, and how refunds are paid.'),
-    ('installation.html', 'Installation', 'Legal',
+    ('installation.html', 'Starlink Installation', 'Legal',
      'How DishNet Uganda installation jobs are approved, what a standard Starlink installation includes, and the cancellation rules.'),
     ('acceptable-use.html', 'Acceptable Use and Fair Use', 'Legal',
      'Acceptable Use and Fair Use Policy for DishNet Uganda internet services, including Starlink-based plans and fiber.'),
-    ('privacy.html', 'Privacy Notice', 'Legal',
+    ('privacy.html', 'Privacy Policy', 'Legal',
      'How DishNet Africa Limited collects, uses, shares and protects personal information in Uganda, and your rights.'),
     ('complaints.html', 'Complaints', 'Legal',
      'How to complain to DishNet Uganda, how fast we respond, and how to escalate to the Uganda Communications Commission.'),
@@ -67,7 +66,9 @@ def others():
         ('faq.html', 'Our installation work: %s.' % p['WORKMANSHIP'], 2),
         ('faq.html', 'return it within %s of receiving it' % p['RETURN_DAYS'], 2),
         ('faq.html', 'Refunds are paid within %s, back to the way you paid' % p['REFUND_DAYS'], 2),
+        ('faq.html', 'or %s where none is shown' % p['OTHER_WARRANTY'], 2),
         ('starlink-kits.html', '%s returns</a>' % p['RETURN_DAYS'].replace(' days', '-day'), 1),
+        ('terms-of-sale.html', '%s returns</a>' % p['RETURN_DAYS'].replace(' days', '-day'), 1),
     ]
 
 STYLE = '''<style>
@@ -89,7 +90,7 @@ STYLE = '''<style>
 .policy .meta{font-size:13px;}
 .policy .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:8px 0 18px;}
 .policy .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;}
-.policy .card h4{margin-top:0;}
+.policy .card h3{font-size:16px;margin:0 0 6px;}
 .policy .card p{font-size:14px;margin:0 0 8px;}
 @media (max-width:600px){.policy table{font-size:13px}.policy th,.policy td{padding:6px}}
 </style>
@@ -107,10 +108,11 @@ def template():
     t = io.open(os.path.join(SITE, 'terms.html'), encoding='utf-8').read()
     head_end = one(r'</head>', t, 'head').start()
     head = t[:head_end]
-    # terms.html is itself built by this script: take its own style block back out, so a rebuild adds it once.
-    n = head.count(STYLE)
-    if n > 1 or (n == 0 and '.policy{' in head): die('terms.html carries a policy style block this script did not write')
-    head = head.replace(STYLE, '')
+    # terms.html is itself built by this script: take its own style block back out, so a rebuild adds it once. Any
+    # earlier version of the block is taken out too, so that changing STYLE does not strand the old one.
+    old = re.findall(r'<style>\n\.policy\{.*?</style>\n', head, re.S)
+    if len(old) > 1 or (not old and '.policy{' in head): die('terms.html carries a policy style block this script did not write')
+    head = head.replace(old[0], '') if old else head
     hero = one(r'<section class="ug-hero".*?</section>\n<section class="section-sm".*?</section>\n', t, 'hero+body')
     return head, t[head_end:hero.start()], t[one(r'\n<footer class="footer">', t, 'footer').start():]
 
@@ -154,6 +156,19 @@ def build():
         out[slug] = page
     return out
 
+def faq_pairs():
+    """The FAQ's visible questions and answers, and its FAQPage structured data, as two lists of (question, answer)."""
+    import json
+    s = io.open(os.path.join(SITE, 'faq.html'), encoding='utf-8').read()
+    vis = [(H.unescape(q), re.sub(r'\s+', ' ', H.unescape(re.sub(r'<[^>]+>', '', a))).strip()) for q, a in re.findall(
+        r'<button class="faq-q" onclick="fq\(this\)">([^<]+)</button><div class="faq-a"><div class="faq-a-inner">(.*?)</div></div></div>', s)]
+    data = []
+    for m in re.findall(r'<script type="application/ld\+json">(.*?)</script>', s, re.S):
+        d = json.loads(m)
+        if isinstance(d, dict) and d.get('@type') == 'FAQPage':
+            data += [(q['name'], re.sub(r'\s+', ' ', q['acceptedAnswer']['text']).strip()) for q in d['mainEntity']]
+    return vis, data
+
 def main():
     check = '--check' in sys.argv[1:]
     pages = build()
@@ -166,6 +181,20 @@ def main():
             if not check: io.open(path, 'w', encoding='utf-8').write(page)
     gaps = [(f, s, n) for f, s, n in others() if io.open(os.path.join(SITE, f), encoding='utf-8').read().count(s) != n]
     for f, s, n in gaps: print('  out of step: %s should say %d time(s): %s' % (f, n, s))
+    import glob
+    for f in sorted(glob.glob(os.path.join(SITE, '**', '*.html'), recursive=True)):
+        t = io.open(f, encoding='utf-8').read()
+        if os.path.basename(f) == '404.html' or 'footer-links' not in t: continue
+        if 'policies.html">All Policies</a>' not in t or 'privacy.html">Privacy Policy</a>' not in t or '>Terms of Use</a>' in t:
+            gaps.append((os.path.relpath(f, SITE), 'footer', 0))
+            print('  out of step: %s — its footer lacks the policy links' % os.path.relpath(f, SITE))
+    vis, data = faq_pairs()
+    if not vis or vis != data:
+        gaps.append(('faq.html', 'the FAQPage structured data', 0))
+        print('  out of step: faq.html — its structured data does not carry the visible questions and answers word for word')
+        for i, (a, b) in enumerate(zip(vis, data)):
+            if a != b: print('    first difference at question %d: %r' % (i + 1, (a[0], b[0]) if a[0] != b[0] else a[0])); break
+        if len(vis) != len(data): print('    %d visible, %d in the structured data' % (len(vis), len(data)))
     if check:
         for s in stale: print('  differs from its body: site/%s' % s)
         print('policies: %s' % ('up to date' if not stale and not gaps else 'NOT up to date'))
