@@ -171,6 +171,8 @@ source. **None may be cited on the site, and none is cited there, by section num
    Starlink can suspend accounts it treats as resold, and the customer then turns to DishNet. **Get Starlink's written
    position, or an authorised-reseller agreement.** Advising customers and helping them order in their own name, then
    installing and supporting for a fee, is the low-risk model; it is not what the documents describe today.
+   The pages keep the operator's phrase "registered and managed by DishNet on your behalf" (§H). Ask Starlink
+   which it accepts: DishNet as its customers' agent, or DishNet as the account holder that supplies them.
 2. **The UCC authorisation's scope.** DishNet holds a UCC installer authorisation (the operator's records and quotation
    clause 9). Whether that also covers *providing and billing* internet service, which the UCC licenses separately, is
    NOT established. Read the certificate. If it covers service provision too, add its category and number to
@@ -197,6 +199,26 @@ source. **None may be cited on the site, and none is cited there, by section num
    release v1.1 without that line. Proposed for v1.1:
    - take property damage from negligence, and death or injury, out of the §25 cap;
    - add the installation photos and completion location to §23.
+
+9. **Quotation clause 2** still says "Any new or increased government tax, levy or regulatory fee introduced after
+   acceptance may be passed on at cost". The website says all taxes are included and nothing is added on top. Clause 1
+   makes the website prevail. Deleting the sentence is the operator's decision: clause 2 is the line approved on
+   27 Sep (docs/42 §9), and a test pins it.
+10. **The customer indemnity (quotation clause 16)** appears on no website page. It is now limited to the customer's
+    own use, content and breaches, and to Starlink's Acceptable Use and Fair Use Policies. Decide with the advocate
+    whether to keep it. If it stays, add it to the Terms of Service.
+11. **Flex agreed at the office.** Returns §6 gives the 7-day cancellation only when a Flex package is agreed by
+    WhatsApp, e-mail or online, while §1 gives the change-of-mind return for equipment to every customer. Decide
+    whether a Flex package agreed at the office gets the 7 days too, and write it in §6 and in the Flex agreement.
+12. **Upcountry delivery.** `why-dishnet.html` says upcountry is not extra, and the kits page says delivery anywhere in
+    Uganda is included. The policies allow a delivery charge "if there is one". Confirm that no upcountry charge is
+    ever made, or change the marketing.
+13. **"The DishNet app"** is promised on `contact.html`, `fiber.html`, `services.html` and `hotspot.html` ("live
+    dashboard in the DishNet app"), while `get-the-app.html` says it cannot be downloaded yet. Reword these until the
+    app is released.
+14. **"24/7"** appears on `index.html`, `contact.html`, `whatsapp.html` and `why-dishnet.html`. The automated
+    assistant answers at any hour and a person can be asked for; the policies promise only that WhatsApp is answered
+    every day. Keep "24/7" only if a person really can take over at night.
 
 ## F. New operational commitments the pages create
 
@@ -229,7 +251,8 @@ From the day the pages go live, the business must:
 - **`policies/build.py --check`: up to date.** It now also checks three things:
   - every page carries the footer policy links;
   - the FAQ's visible questions and answers equal its FAQPage structured data, word for word;
-  - the FAQ, kits and Terms of Sale pages repeat the policy numbers correctly.
+  - the FAQ, kits and Terms of Sale pages repeat the policy numbers correctly, including the faulty-on-arrival
+    window.
 
   A rebuild writes nothing (idempotent).
 - **`verify-address.py`:** *The site agrees with itself*.
@@ -244,7 +267,7 @@ From the day the pages go live, the business must:
 - **Cross-page anchors:** every `page.html#id` link from the policy pages resolves. The only broken ones on the site
   predate this change: the tutorials' `../index.html#products`.
 - **`stamp-assets.sh --check`:** unchanged; no stylesheet edited.
-- **The merchant ID** appears exactly as often as before (faq.html 4 lines, pay.html 9, get-the-app.html 1,
+- **The merchant ID** appears exactly as often as before (faq.html 4 times, pay.html 9, get-the-app.html 1,
   why-dishnet.html 1). None was added.
 - **Templates (§I):** `test_quote_tax_line.php` 31/0, `test_kit_tax_note.php` 68/0, `test_invoice_template_links.php`
   21/0.
@@ -252,7 +275,12 @@ From the day the pages go live, the business must:
   REHEARSAL 8 ok / 0 failed. Its controls:
   - a template with one extra, unlisted wording change fails (8 failed);
   - a template with a listed change only half made fails (16 failed);
-  - before the harness learned the changes, the edited template failed it (8 failed), so the guard bites.
+  - before the harness learned the changes, the edited template failed it (8 failed), so the guard bites;
+  - clause 14 put back in the second column, without the list knowing, fails (8 failed).
+- **Page 2 still fits.** Printed with Chromium at A4 (only an approximation of uCRM's PDF engine), every sample
+  quotation is two pages. Page 2's content measures 936 px against 951 px before this change, and its tallest
+  column 542 px against 558 px. Enlarged until it spills, it spills later than the old template does (at 110%
+  zoom; the old one at 108%).
 - **The invoice harness** passes 21/0, REHEARSAL 7 ok / 0 failed.
 
 ## H. The adversarial review (12 Oct)
@@ -289,6 +317,56 @@ findings and the decisions. A last reading by hand made a few small corrections:
 used consistently on the Privacy and Complaints pages, and the "certified" and "real 24/7" lines on `why-dishnet.html`
 that no finding named.
 
+### The last cross-page check (after commit 4f9dc973)
+
+One more reader compared every page with every other page and with the quotation. The pages agreed with each other on
+every number. It reported 22 findings. Fifteen were applied, in full or in part:
+
+- **The quotation, where clause 1 did not reach or the text still read against the pages:**
+  - pause only where Starlink allows it (clause 7);
+  - no pause over a disputed amount (clause 3);
+  - outages and liability "as DishNet's Terms of Service set out", instead of "not liable" and a 3-month cap
+    (clauses 8 and 15);
+  - the customer follows Starlink's Acceptable Use and Fair Use Policies, not "Starlink's applicable terms"
+    (clauses 8 and 16);
+  - warranty exclusions are the Warranty Policy's, and loaned equipment allows fair wear and tear (clause 12);
+  - unlawful use: suspension or ending as the Terms of Service set out, no longer "immediately and without refund"
+    (clause 13);
+  - data handled as the Privacy Policy describes (clause 20);
+  - complaints as the Complaints page sets out, including the UCC (clause 21).
+- **The Terms of Service (§16)** gain the case quotation clause 10 already covered. If Starlink's network, account or
+  policies make the service impossible or unlawful to continue, DishNet tells the customer as soon as it can, offers
+  an equivalent where it has one, and refunds what was paid in advance for service not provided.
+- **Faulty on arrival:** "within 7 days of delivery, or of installation if later", the same on the Warranty, Returns
+  and FAQ pages. The builder checks the FAQ.
+- **A billing mistake:** "we refund you, or credit your account if you prefer" (Terms §6, Complaints §3).
+- **The Returns summary** points Flex packages to section 6.
+- **"The Starlink app"** where that is meant (Starlink Installation §2, the kits page). `why-dishnet.html` no longer
+  offers "the app to manage it all": the DishNet app is not released.
+- **"Every kit package"**, not "every kit", includes installation (the kits and shop pages), because kit-only orders
+  exist.
+- **WiFi zones.** "Many zone owners recover their setup cost within months" is removed from the FAQ and its structured
+  data, from `hotspot.html` and from the WiFi-zone blog post: no zone operates yet (dishnet-hybrid-sudan/docs/109). The
+  FAQ now says a zone needs a written agreement, a Starlink plan that permits selling access, and any licence the UCC
+  requires.
+
+Not applied, with the reason:
+- **Clause 2's "new tax … passed on at cost":** the operator's approved line; clause 1 makes the website prevail
+  (§E item 9).
+- **"Registered and managed by DishNet on your behalf":** the reviewer read it as agency and proposed "to provide your
+  service". The phrase is the operator's own (portal terms), and it fits DishNet's position that it manages accounts
+  and guides customers. Which one DishNet is, its customers' agent or their supplier, is the question for Starlink's
+  written position (§E item 1).
+- **The Starlink Installation cap ("the charges paid for it"):** the page summarises Installation Terms v1.0 as
+  customers accept it. The fix belongs in v1.1 (§E item 8).
+- **Upcountry transport:** the policies allow a delivery charge "if there is one", so they do not contradict the
+  marketing. Confirm the practice (§E item 12).
+- **"Wherever you are on our coverage map":** rejected in the earlier review; the coverage map is all of Uganda.
+- **Flex agreed at the office:** a business decision (§E item 11).
+- **"24/7" and "the DishNet app" on other marketing pages** (index, contact, fiber, services, hotspot): outside the
+  policy set (§E items 13 and 14).
+- **Step 2's "paid in full before delivery":** it describes that quotation, which is the order.
+
 ## I. The quotation and invoice templates (repository copies)
 
 The quotation is the document a customer accepts. Before this change it contradicted the new pages. It called itself
@@ -299,15 +377,30 @@ customer's sole and entire remedy". The changes, text only, with no Twig constru
 - **Clause 1:** the quotation, its T&C and DishNet's published policies form the agreement. Where the quotation is less
   favourable, the policies apply.
 - **Step 5:** the 48-hour acceptance sentence is removed.
+- **Clause 3:** the service is not paused over an amount the customer disputes while DishNet checks it.
 - **Clause 6:** "Handover" — sign-off confirms receipt and takes away no warranty or legal right.
-- **Clause 7:** started months and begun installation are not refundable, except where the law gives a right that
-  cannot be excluded. Equipment can be returned within 7 days under the Returns policy, and faulty equipment is always
-  covered.
+- **Clause 7:** cancel with notice before the next billing date, or pause where Starlink allows it. Started months and
+  begun installation are not refundable, except where the law gives a right that cannot be excluded. Equipment can be
+  returned within 7 days under the Returns policy, and faulty equipment is always covered.
+- **Clause 8:** DishNet's responsibility for outages, degradation or changes on the Starlink network is as its Terms
+  of Service set out. The customer follows Starlink's Acceptable Use and Fair Use Policies (starlink.com/legal), no
+  longer "Starlink's applicable terms".
 - **Clause 10:** "a refund … is the customer's sole and entire remedy" becomes "and refunds any unused prepaid service
   fees".
 - **Clause 12:** equipment is covered by DishNet's Warranty Policy (12 months on Starlink kits from delivery) in
-  addition to the manufacturer's warranty, and Ugandan legal rights are not affected.
-- **Clause 15:** nothing limits liability the law does not allow to be limited.
+  addition to the manufacturer's warranty. The exclusions are the Warranty Policy's, replacing "cover is lost through
+  … lightning, power surges, water or weather damage". Loaned equipment is returned in working condition, fair wear
+  and tear excepted. Ugandan legal rights are not affected.
+- **Clause 13:** suspension or ending for unlawful use as the Terms of Service set out, no longer "immediately and
+  without refund".
+- **Clause 14** is unchanged, but moved to the top of the third column, so page 2 is no taller than before (§G).
+- **Clause 15:** DishNet's responsibility and its limits are as section 14 of the Terms of Service sets out, replacing
+  the 3-month cap and the exclusion of "downtime". Nothing limits liability the law does not allow to be limited.
+- **Clause 16:** the indemnity covers breach of Starlink's Acceptable Use or Fair Use Policy, no longer "applicable
+  network terms".
+- **Clause 20:** customer information is handled as the Privacy Policy describes.
+- **Clause 21:** complaints as the Complaints page sets out, including the UCC. The governing-law sentence is
+  unchanged.
 - **Invoice payment terms:** governed by the quotation's T&C and the policies at dishnetuganda.com/policies.html.
 
 **Loading them.** The template in use is `template-v4.zip`, which the operator sent on 6 Oct (docs/07). It is not in
@@ -321,8 +414,8 @@ uCRM's exports (`template.html.twig` then `template.css`, deflated, fixed timest
 
 | File | sha256 |
 |---|---|
-| `template-quotation-uganda-2026-10-12.zip` | `ae0197b976bbaa5129abb2d499df98b81c63c66c45c5a5502786659c6a690bfc` |
-| — its `template.html.twig` | `d127084dfad5281e8c7125f59b5e14e8a0ebae2d0ff217f416b6836319618d46` |
+| `template-quotation-uganda-2026-10-12.zip` | `36cee86b51c04e9e45dc1284a8ec90ff65241fd61fc2346b25f9a886fa8452d0` |
+| — its `template.html.twig` | `145de41efea3c3251bc3c76722762196ddb6f5f42a9d5c68a4bc0ad75d0608bb` |
 | — its `template.css` (unchanged) | `654e406a5ebccb0fe44b059bf45170890b69f3e8190e1fbb7aedf825748c846e` |
 | `template-invoice-uganda-2026-10-12.zip` | `bfdae8731de709b3994277084bef36b13f9652fbb19d34e5c0e517eb40012217` |
 | — its `template.html.twig` | `8801d7693be163df5ea960883e7dc47f39fc98b66c24e4e86824ca4b1ea5c65f` |
@@ -332,5 +425,6 @@ uCRM's exports (`template.html.twig` then `template.css`, deflated, fixed timest
 "manufacturer's warranty only" beside a website that promises more is the contradiction this change removes.
 
 The quotation harness required everything outside clause 2 to be byte-identical to its 27 Sep baseline. It now carries
-the seven changed lines as an exact list (`scripts/harness/quotation-template/tc_changes.php`). Each line is asserted
-to occur once, on both sides, and is set back before the byte comparison, so any other change still fails (§G).
+the thirteen changed lines and the clause-14 move as an exact list
+(`scripts/harness/quotation-template/tc_changes.php`). Each entry is asserted to occur once, on both sides, and is
+set back before the byte comparison, so any other change still fails (§G).

@@ -67,6 +67,7 @@ def others():
         ('faq.html', 'return it within %s of receiving it' % p['RETURN_DAYS'], 2),
         ('faq.html', 'Refunds are paid within %s, back to the way you paid' % p['REFUND_DAYS'], 2),
         ('faq.html', 'or %s where none is shown' % p['OTHER_WARRANTY'], 2),
+        ('faq.html', 'within 7 days of delivery, or of installation if later', 2),  # faulty on arrival, as the warranty says
         ('starlink-kits.html', '%s returns</a>' % p['RETURN_DAYS'].replace(' days', '-day'), 1),
         ('terms-of-sale.html', '%s returns</a>' % p['RETURN_DAYS'].replace(' days', '-day'), 1),
     ]
