@@ -941,7 +941,7 @@ check_mode() {
     unsettled "master has not begun the retry job more than two minutes after the move, $(( (now - q_at) / 60 )) minutes ago: send this log"; fi
   if [ "$FAIL" != "$fail0" ] && [ -z "$earlier" ]; then
     if rec_put Q_CHECK_FAILED "$now"; then say "  record          the failure is recorded in $RECORD (Q_CHECK_FAILED): every later --check fails too"
-    else note "K14 the failure could not be recorded in $RECORD (is the disk full?): a later --check cannot see it, and could pass over it. Free space, then send every log (this run's may be cut short on a full disk), say that this run FAILED, and wait for a decision — do not run --check again first"; fi
+    else note "K14 the failure could not be recorded in $RECORD (is the disk full?): a later --check cannot see it, and could pass over it. Free space, then $( if [ -n "$FAIL_STEP" ]; then printf '%s' "$FAIL_STEP"; else printf '%s' "send every log (this run's may be cut short on a full disk), say that this run FAILED, and wait for a decision — do not run --check again first"; fi)"; fi
   fi
   runbook; summary
   [ "$FAIL" = "0" ]
@@ -1049,6 +1049,7 @@ putback_mode() {
           *) stop "nothing changed: the gate's question could not be asked now (${g2:-?}) — run --put-back again in ten minutes" ;;
         esac
       fi
+      [ "$(links_of "$KEPT")" = "1" ] || stop "nothing changed: the kept file has $(links_of "$KEPT") names now — it is not given its old name back while it has another. Send this log"
       rec_put PUTBACK_STAGE prepared || stop "nothing changed: the record could not be written (is the disk full?) — free space, then run --put-back again"
       # A failed link(2) makes no name: the marker is taken back before either stop, so nothing reads a put-back as begun.
       ln -T -- "$KEPT" "$SRC" 2>/dev/null || { rec_put PUTBACK_STAGE ""; absent "$SRC" && stop "nothing changed: the link could not be made"; stop "the link failed and $SRC exists — nothing was put back; send this log"; }

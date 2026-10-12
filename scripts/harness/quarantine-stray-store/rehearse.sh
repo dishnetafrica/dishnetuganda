@@ -1535,7 +1535,7 @@ OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'and its own checks FAILED at')$(
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_HOLD=$SRC" --env SHIM_HOLD_SECS=40 --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; shim_stop
 check "$(failline "$OWNLOG" C6)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "yesdone1no" \
-  "8u only the failure's first write refused (write $(( PREP + 4 ))): it is written again after C8 — the record ends done, holding it"
+  "8u only the failure's first write refused (write $(( PREP + 4 ))): it is written again later (3g2 pins the line after C8) — the record ends done, holding it"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 M="$(mutant q8-early2 "$QP" '  fail_record
   # The commit is read through the container' '  # The commit is read through the container' '  gate_after C8; fail_record
@@ -1660,6 +1660,20 @@ M="$(mutant q3-pbgate2 "$QP" "    stop \"NO-GO: the INSTALLED retry job's gate n
 OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
 check "$(okline "$OUT" PB1)$(stat -c '%d:%i' "$SRC" 2>/dev/null)" "yes$KEY0" "3g'' a copy without either puts the file back under an open gate (caught)"
 cfg_back; vault_back; q_reset
+# 3g2: the same C8 FAIL with the record's first write after the move refused — with C1–C7 passing, the line written
+# straight after C8: the closing chain writes it again. A copy without that line loses the failure to that one write.
+cfg_keep; vault_keep
+OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; cfg_back; vault_back
+check "$(failline "$OWNLOG" C8 'skip=no')$(okline "$OWNLOG" C6)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "yesyesdone1no" \
+  "3g2 a C8 FAIL whose own record line (write $(( PREP + 4 ))) is refused: the closing chain writes it again — the record ends done, holding it"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+cfg_keep; vault_keep
+M="$(mutant q3-postc8 "$QP" '  gate_after C8; fail_record
+' '  gate_after C8
+')"
+OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_AFTER=$SRC" --env "SHIM_AFTER_CMD=$SB/ss_all.sh" --wrap "$(nospace $(( PREP + 4 )))")"; OWNLOG="$(qlast)"; rm -f "$M"; cfg_back; vault_back
+check "$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" 'note  C10')" "moved0yes" "3g2' a copy without the line after C8 records a C7 or C8 failure only in the closing chain — here never (caught)"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 # The gate's probe refused once the old name is gone: not measured — NOT CONCLUSIVE in stage C and in --check; the
 # put-back refuses while a release with the gate is live.
 OUT="$(qrun --answer QUARANTINE --env FAKE_GATE_FAIL_ON_MOVE=1)"; OWNLOG="$(qlast)"
@@ -1990,6 +2004,24 @@ check "$(has "$OUT" 'NO-GO: the INSTALLED retry job has no gate')$(has "$OUT" 't
 set_sched $(( $(date -u +%s) - 1 )); OUT="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
 check "$(failline "$OUT" K11 'has no gate' 'Send this log now and wait for a decision')$(has "$OUT" 'Run --put-back now')$(has "$OUT" '(check): 1 FAILED — send the log file')$(has "$OUT" 'Do nothing else first.')" "yesnoyesyes" \
   "6h2 --check in that state: K11 FAILS — send the log and wait — and names no put-back, which would refuse here (the installed code is not one release)"
+OUT="$(qrun --answer NO)"
+check "$(has "$OUT" 'STOP: already quarantined at')$(has "$OUT" 'run --put-back now')" "yesno" "6h3 …and the quarantine command run again: a --check time — not the put-back, which would refuse"
+M="$(mutant q6-doneungated "$QP" '      if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+        stop "the file is moved' '      if ! gate_installed && kept_restorable; then
+        stop "the file is moved')"; OUT="$(qrun --answer NO --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'STOP: the file is moved, and 5.18.92 is live')" "yes" "6h3' a copy whose done arm leaves the release out names a put-back that would refuse (caught)"
+printf 'Q_STAGE=moved\n' >> "$QREC"; O2="$(qrun -- --check)"
+check "$(has "$O2" 'run the quarantine command again')$(has "$O2" 'Run --put-back now')" "yesno" "6h4 a record left at moved in that state: --check names the quarantine command, not the put-back"
+M="$(mutant q6-k1ungated "$QP" '        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          bad "K1 the quarantine moved' '        if ! gate_installed && kept_restorable; then
+          bad "K1 the quarantine moved')"; O2="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(has "$O2" 'Run --put-back now')" "yes" "6h4' a copy whose K1 leaves the release out names a put-back that would refuse (caught)"
+M="$(mutant q6-resungated "$QP" '        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          stop "the file is moved' '        if ! gate_installed && kept_restorable; then
+          stop "the file is moved')"; OUT="$(qrun --answer NO --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'STOP: the file is moved, and 5.18.92 is live')" "yes" "6h4'' a copy whose resumed run leaves the release out does the same (caught)"
+OUT="$(qrun --answer NO)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(has "$OUT" 'this run does them')$(has "$OUT" 'run --put-back now')" "yesno" "…and the quarantine command resumes it (its checks then FAIL on the job) — never naming the put-back"
 sed -i 's/"version": "5.18.92"/"version": "5.18.90"/' "$PD/manifest.json"
 set_sched $(( $(date -u +%s) - 1 ))
 OUT="$(qrun -- --check)"
@@ -1998,6 +2030,11 @@ check "$(failline "$OUT" K11 'has no gate' 'Run --put-back now')$(has "$OUT" '(c
 cp -p "$SB/qrec.kept" "$QREC"
 M="$(mutant q6-failstep "$QP" '${FAIL_STEP:-send the log file' '${FAIL_STEP_IGNORED:-send the log file')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
 check "$(has "$OUT" 'Run --put-back now')$(has "$OUT" 'Do nothing else first')" "yesyes" "6i' a copy whose verdict ignores K11's step tells the operator both to put back now and to do nothing else first (caught)"; cp -p "$SB/qrec.kept" "$QREC"
+OUT="$(qrun --wrap "$(nospace)" -- --check)"; QCF="$(rec_last Q_CHECK_FAILED | grep -c .)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(failline "$OUT" K11 'Run --put-back now')$(grep -c 'note  K14 .*Free space, then run --put-back now (runbook rule 2)' <<<"$OUT")$(has "$OUT" 'wait for a decision')$(has "$OUT" '(check): 1 FAILED — run --put-back now (runbook rule 2)')$QCF" "yes1noyes0" \
+  "6i3 the same on a disk that refuses --check's one record line: K14 says so and names the run's own step — the put-back, now — not a wait"
+M="$(mutant q6-k14step "$QP" 'then $( if [ -n "$FAIL_STEP" ]; then' 'then $( if false; then')"; OUT="$(qrun --script "$M" --wrap "$(nospace)" -- --check)"; rm -f "$M"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(has "$OUT" 'note  K14')$(has "$OUT" 'wait for a decision')$(has "$OUT" '(check): 1 FAILED — run --put-back now')" "yesyesyes" "6i3' a copy whose K14 ignores that step gives two next steps in one log (caught)"
 # 6m–6n: the quarantine command after that rollback — on the finished record, and on one a run left at moved — and
 # --check on the latter: the put-back, now (rule 2), before anything else.
 OUT="$(qrun --answer NO)"
@@ -2023,6 +2060,18 @@ M="$(mutant q6-k1rule2 "$QP" '        if ! gate_installed && ungated_version "$L
           bad "K1 the quarantine moved' '        if false; then
           bad "K1 the quarantine moved')"; O2="$(qrun --script "$M" -- --check)"; rm -f "$M"
 check "$(has "$O2" 'run the quarantine command again')$(has "$O2" 'Run --put-back now')" "yesno" "6n'' a copy without K1's arm sends the operator to the quarantine command instead (caught)"
+printf 'Q_CHECK_FAILED=%s\n' "$(date -u +%s)" >> "$QREC"; OUT="$(qrun --answer NO)"; O2="$(qrun -- --check)"
+check "$(has "$OUT" 'STOP: the file is moved, and 5.18.90 is live')$(has "$OUT" 'its own checks FAILED')$(failline "$O2" K1 'Run --put-back now')$(has "$O2" 'its own checks FAILED')" "yesnoyesno" \
+  "6n3 a record left at moved that holds a failure, 5.18.90 live: rule 2 first — the put-back, now — in the quarantine command and in --check"
+M="$(mutant q6-resorder "$QP" '        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          stop "the file is moved' '        if [ -z "$(rec_get Q_CHECK_FAILED)" ] && ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          stop "the file is moved')"; OUT="$(qrun --answer NO --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'its own checks FAILED')$(has "$OUT" 'STOP: the file is moved')" "yesno" "6n3' a copy whose resumed run stops over the failure first sends the operator to wait (caught)"
+M="$(mutant q6-k1order "$QP" '        if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          bad "K1 the quarantine moved' '        if [ -z "$(rec_get Q_CHECK_FAILED)" ] && ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+          bad "K1 the quarantine moved')"; O2="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(failline "$O2" K1 'its own checks FAILED')$(has "$O2" 'Run --put-back now')" "yesno" "6n3'' a copy whose K1 does the same (caught)"
+cp -p "$SB/qrec.kept" "$QREC"; printf 'Q_STAGE=moved\n' >> "$QREC"
 touch "$KEPT-shm"; O2="$(qrun -- --check)"; OUT="$(qrun --answer NO)"; rm -f "$KEPT-shm"; cp -p "$SB/qrec.kept" "$QREC"
 check "$(has "$O2" 'Run --put-back now')$(has "$OUT" 'run --put-back now')" "nono" "…with a side file beside the kept file neither names the put-back, which would refuse over it"
 # 6o: a holder of the kept file during --check: K10 FAILS, and K11 still names the put-back — which reads the holders
@@ -2048,6 +2097,14 @@ check "$(has "$OUT" 'Run --put-back now')" "yes" "6p' a copy that leaves the nam
 M="$(mutant q6-pblinks "$QP" '    [ "$case_" != "back" ] || [ "$(links_of "$KEPT")" = "1" ] \' '    true \')"; OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
 check "$(has "$OUT" 'Type PUTBACK')$( [ -e "$SRC" ] && echo src || echo nosrc)$(stat -c %h "$KEPT")" "yessrc3" "6p'' a copy without the put-back's own refusal links the old name as a third and stops half-done (caught)"
 rm -f "$SRC"; rm -f "$QD/kept.second"; cp -p "$SB/qrec.kept" "$QREC"
+OUT="$(qrun --answer PUTBACK --hook "ln '$KEPT' '$QD/kept.second'" -- --put-back)"
+check "$(has "$OUT" 'nothing changed: the kept file has 2 names now')$(rec_last PUTBACK_STAGE | grep -c .)$( [ -e "$SRC" ] && echo src || echo nosrc)$(stat -c %h "$KEPT")" "yes0nosrc2" \
+  "6p3 a second name made while PUTBACK waits: read again after the word — nothing recorded, nothing linked"
+rm -f "$QD/kept.second"; cp -p "$SB/qrec.kept" "$QREC"
+M="$(mutant q6-pblinks2 "$QP" '      [ "$(links_of "$KEPT")" = "1" ] || stop "nothing changed: the kept file has' '      : || stop "nothing changed: the kept file has')"
+OUT="$(qrun --answer PUTBACK --script "$M" --hook "ln '$KEPT' '$QD/kept.second'" -- --put-back)"; rm -f "$M"
+check "$(rec_last PUTBACK_STAGE)$( [ -e "$SRC" ] && echo src || echo nosrc)$(stat -c %h "$KEPT")" "preparedsrc3" "6p3' a copy without that read links the old name as a third and leaves a put-back no command finishes (caught)"
+rm -f "$SRC" "$QD/kept.second"; cp -p "$SB/qrec.kept" "$QREC"
 # 6q: the kept file's mode changed: K8 FAILS; the put-back, which refuses over it, is not named.
 KMODE="$(stat -c %a "$KEPT")"; KMODE2="$( [ "$KMODE" = 640 ] && echo 600 || echo 640)"
 chmod "$KMODE2" "$KEPT"; OUT="$(qrun -- --check)"; chmod "$KMODE" "$KEPT"; cp -p "$SB/qrec.kept" "$QREC"
@@ -2060,6 +2117,12 @@ check "$(failline "$OUT" K9)$(failline "$OUT" K11 'Send this log now and wait fo
   "6l 5.18.90 live and a side file beside the kept file: K9 and K11 FAIL, and the put-back — which refuses over that side file — is not named: send the log and wait"
 M="$(mutant q6-restorable "$QP" ' && [ "$(side_of "$KEPT")" = "-" ] \' ' \')"; touch "$KEPT-shm"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$KEPT-shm" "$M"; cp -p "$SB/qrec.kept" "$QREC"
 check "$(has "$OUT" 'Run --put-back now')" "yes" "6l' a copy that leaves the side file out of that test names a put-back that would refuse (caught)"
+M="$(mutant q6-donerestorable "$QP" '      if ! gate_installed && ungated_version "$LIVE_VERSION" && kept_restorable; then
+        stop "the file is moved' '      if ! gate_installed && ungated_version "$LIVE_VERSION"; then
+        stop "the file is moved')"
+touch "$KEPT-shm"; OUT="$(qrun --answer NO)"; O2="$(qrun --answer NO --script "$M")"; rm -f "$KEPT-shm" "$M"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(has "$OUT" 'STOP: already quarantined at')$(has "$OUT" 'run --put-back now')$(has "$O2" 'run --put-back now')" "yesnoyes" \
+  "6l3 the quarantine command run again in that state names no put-back either; a copy whose done arm leaves the test out does (caught)"
 sml_keep; master_job "$PD/cron_starlink_block_retry.php" >/dev/null; OUT="$(qrun -- --check)"
 check "$( [ -e "$SRC" ] && echo store)$(failline "$OUT" K4)$(has "$OUT" 'Run --put-back now')" "storeyesno" "6l2 …and once 5.18.90's job has made a store at the old name: K4 FAILS, and the put-back (which never overwrites it) is not named"
 rm -f "$SRC" "$SRC-wal" "$SRC-shm"; sml_back; cp -p "$SB/qrec.kept" "$QREC"
