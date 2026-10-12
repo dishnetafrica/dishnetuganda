@@ -20,6 +20,26 @@ declare(strict_types=1);
  * downstream cron jobs in master.php still run even if this one finishes.
  */
 
+// ── 5.18.91: on Uganda, stop before <plugin>/data is touched ────────────────
+// Below, this job names <plugin>/data as its data directory, opens and migrates the plugin.sqlite3 there, and leaves
+// $dataDir, $config, $store and $pdo pointing at it in cron/master.php's scope, which includes this file. On the
+// Uganda server that folder is not where the plugin keeps its data, so every run kept a second, stray database alive
+// (docs/07, 5.18.91). On Uganda the job therefore stops here, before any of that, and is NOT pointed at the live store
+// instead: that would start a retry and restore process that has not run against that store since the data moved
+// there (26 Aug). South Sudan, and anything unclear, go on exactly as before. The decision runs in a closure of its
+// own, so it leaves no variable behind.
+if ((static function (): bool {
+    $scope = __DIR__ . '/lib/StarlinkRetryScope.php';
+    if (!is_file($scope)) {
+        error_log('[cron_starlink_block_retry] lib/StarlinkRetryScope.php missing — running as before 5.18.91');
+        return false;
+    }
+    require_once $scope;
+    return StarlinkRetryScope::skip(__DIR__);
+})()) {
+    return;
+}
+
 // ── Ensure we're in cron context ──────────────────────────────────────────
 $pluginDir = __DIR__;
 require_once $pluginDir . '/lib/SqliteStore.php';

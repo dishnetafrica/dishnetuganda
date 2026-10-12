@@ -28,6 +28,10 @@ $plansJson = json_encode(array_values(array_map(fn($p) => [
 
 // Load leads for lead picker
 $leads = $store->load('leads.json') ?? [];
+// 5.18.89 (docs/65 §AA, D7): own leads only, when sales_own_leads_only is ON — the picker offers only the leads this
+// viewer may see. Nothing on this page saves the list. Off, or for an admin or All Leads holder, unchanged.
+require_once dirname(__DIR__, 2) . '/lib/LeadVisibility.php';
+$leads = LeadVisibility::filter($leads, (array)($retailer ?? []), (array)($config ?? []), $dataDir ?? null, $rbac ?? null);
 $openLeads = array_values(array_filter($leads, fn($l) =>
     in_array($l['status'] ?? 'open', ['open','contacted','interested','qualified'], true) &&
     !empty($l['phone'])

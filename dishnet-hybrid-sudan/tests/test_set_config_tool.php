@@ -176,15 +176,16 @@ $store([
 ]);
 [$c, $out] = $run([]);
 
-// The name occupies a fixed 32-character field (printf "    %-32s %s"; widened from 27 in Phase 2 for portal_login_require_service), so
+// The name occupies a fixed 40-character field (printf "    %-40s %s"; widened from 27 in Phase 2 for portal_login_require_service,
+// and from 32 in 5.18.82 for customer_email_install_auth_confirmed, 37 characters), so
 // read that field rather than the first whitespace-delimited token — a stray
 // name of two words ("Partner Remuneration") slips straight through a \S+
 // pattern, which is exactly the value this bug printed.
 $named = [];
 foreach (explode("\n", $out) as $ln) {
-    if (strncmp($ln, '    ', 4) !== 0 || strlen($ln) < 31) continue;
+    if (strncmp($ln, '    ', 4) !== 0 || strlen($ln) < 39) continue;
     if (strncmp(ltrim($ln), 'php ', 4) === 0) continue;   // the usage examples
-    $field = rtrim(substr($ln, 4, 32));
+    $field = rtrim(substr($ln, 4, 40));
     if ($field === '' || $field !== ltrim($field)) continue;   // continuation lines
     $named[] = $field;
 }

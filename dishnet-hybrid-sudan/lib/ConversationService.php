@@ -1133,6 +1133,14 @@ class ConversationService
         if (is_string($message)) {
             $message = json_decode($message, true) ?? [];
         }
+        // Batch 4, D-11 (docs/58 §2.1): a wrapped message — documentWithCaptionMessage, ephemeralMessage, viewOnceMessage,
+        // viewOnceMessageV2 — carries the real message one level down. Until now a captioned document arriving that way read
+        // as empty below and was dropped before it reached the Inbox, and nothing was ever recorded for the media worker.
+        // Unwrapped the one way InboundMedia unwraps it, up to three levels. A message with no wrapper is untouched.
+        if (is_array($message) && $message !== []) {
+            if (!class_exists('InboundMedia')) require_once __DIR__ . '/InboundMedia.php';
+            $message = \InboundMedia::unwrap($message);
+        }
 
         $remoteJid = $key['remoteJid'] ?? '';
         if (empty($remoteJid) || strpos($remoteJid, '@g.us') !== false) {

@@ -328,14 +328,19 @@ final class FollowUpService
     }
 
     /** Approved drafts waiting for the sender. @return array<int,array<string,mixed>> */
-    public function approvedDrafts(int $limit = 20): array
+    /**
+     * @param string $andSql 5.18.90 (docs/65 §AD): an extra " AND …" on f.channel with ? placeholders, from
+     *                       AutomationPolicy::sqlHeld only — drafts held on a channel that may not send now take none of
+     *                       the sender's places. '' leaves the query exactly as it was.
+     */
+    public function approvedDrafts(int $limit = 20, string $andSql = '', array $args = []): array
     {
         $st = $this->db->prepare(
             "SELECT d.*, f.channel, f.phone, f.conversation_id, f.attempts
                FROM followup_drafts d JOIN followups f ON f.id = d.followup_id
-              WHERE d.status = 'approved' AND f.closed_at IS NULL
+              WHERE d.status = 'approved' AND f.closed_at IS NULL" . $andSql . "
               ORDER BY d.decided_at LIMIT ?");
-        $st->execute([$limit]);
+        $st->execute(array_merge($args, [$limit]));
         return $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
     }
 

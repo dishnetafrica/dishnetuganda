@@ -351,6 +351,70 @@ class CustomerEmailDispatcher
         }
     }
 
+    // ── Customer Installation Authorisation (5.18.82, docs/61 §3, docs/63) ──────
+    //
+    // Two e-mails off the catalogue, on the reminderDue pattern: the catalogue's
+    // tests iterate CATALOGUE, so a feature with its own switch sits beside it.
+    // The master switch still rules. Each has its own key —
+    // customer_email_install_auth_request / _confirmed.
+    //
+    // 5.18.83 (docs/64 §E): ABSENT MEANS OFF, like the catalogue keys. 5.18.82 had
+    // absent = on, so on an install whose customer e-mails were already switched
+    // on for receipts and invoices, turning the feature on sent these e-mails too
+    // without anyone having chosen to. Each channel is now a deliberate choice;
+    // a request no switched-on channel can carry is refused before any record is
+    // made (InstallAuth::noChannelReason), so "silently absent" cannot happen.
+    // 1 / on / true / yes turn one on.
+
+    /** Whether one of the two authorisation e-mails may send: the master switch, then its own key (absent = off). */
+    public static function installAuthEnabled(string $kind, array $config): bool
+    {
+        if (!self::masterEnabled($config)) return false;
+        $c = self::effectiveConfig($config);
+        $v = $c['customer_email_install_auth_' . $kind] ?? null;
+        if (is_bool($v)) return $v;
+        return in_array(strtolower(trim((string)$v)), ['1', 'on', 'true', 'yes'], true);
+    }
+
+    /**
+     * Send the authorisation request ('request') or the confirmation ('confirmed') to one address — the customer's
+     * uCRM contacts[0] e-mail (D10), already chosen by the caller. $dedupe identifies the send: the job and the token
+     * for a request (a resent link is a new send), the job and the acceptance reference for a confirmation.
+     *
+     * @return array{sent:bool, reason:string, to:string}
+     */
+    public function sendInstallAuth(string $kind, string $email, string $name, array $data, string $dedupe = ''): array
+    {
+        try {
+            if (!in_array($kind, ['request', 'confirmed'], true)) return $this->result(false, 'unknown kind', '');
+            if (!self::installAuthEnabled($kind, $this->config)) return $this->result(false, 'switched off', '');
+            $email = trim($email);
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $this->result(false, 'no usable email address', $email);
+            }
+            $mark = $dedupe !== '' ? "install_auth_{$kind}:{$dedupe}" : '';
+            if ($mark !== '' && $this->alreadySent($mark)) return $this->result(false, 'already sent', $email);
+
+            require_once __DIR__ . '/InstallAuthEmails.php';
+            $built = $kind === 'request'
+                ? InstallAuthEmails::request($this->config, $data)
+                : InstallAuthEmails::confirmed($this->config, $data);
+            $mail = new MailService($this->dataDir);
+            if (!$mail->getConfig()) return $this->result(false, 'plugin mail is not configured', $email);
+            $sender = MailService::bareAddress((string)($mail->getConfig()['from'] ?? ''));
+            if ($mark !== '') $this->claim($mark, 'install_auth_' . $kind, $email, $sender);
+
+            $headers = ['Reply-To' => EmailTemplate::replyTo($this->config)];
+            $res = $mail->send($email, $name, (string)$built['subject'], (string)$built['html'], (string)$built['text'], $headers);
+            $ok = !empty($res['ok']);
+            if ($mark !== '') $this->settle($mark, $ok, (string)($res['error'] ?? ''));
+            return $this->result($ok, $ok ? 'sent' : (string)($res['error'] ?? 'send failed'), $email);
+        } catch (\Throwable $e) {
+            error_log('[CustomerEmailDispatcher] install_auth_' . $kind . ': ' . $e->getMessage());
+            return $this->result(false, 'error: ' . $e->getMessage(), '');
+        }
+    }
+
     private function result(bool $sent, string $reason, string $to): array
     {
         return ['sent' => $sent, 'reason' => $reason, 'to' => $to];

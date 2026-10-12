@@ -256,6 +256,10 @@ final class SjSandbox
         }));
     }
     public function usersDown(bool $down): void { $this->http('POST', "{$this->crm}/__test/users_down", ['down' => $down]); }
+    /** 5.18.85: GET users/{id} answers 404 for every id, as the production uCRM does (docs/44 §13.1). */
+    public function usersV1Missing(bool $on): void { $this->http('POST', "{$this->crm}/__test/users_v1_404", ['on' => $on]); }
+    /** 5.18.85: GET billing/quotes answers 502. */
+    public function quotesDown(bool $down): void { $this->http('POST', "{$this->crm}/__test/quotes_down", ['down' => $down]); }
 
     // ── The fake Evolution ───────────────────────────────────────────────────
     public function texts(): array { return (array)($this->http('GET', "{$this->evo}/__test/state")[2]['text_calls'] ?? []); }
@@ -388,6 +392,26 @@ final class SjSandbox
         exec($cmd, $out, $rc);
         return [$rc, implode("\n", $out)];
     }
+}
+
+/**
+ * 5.18.90 (docs/65 §AD): record a fictitious number for each department instance, as the card's Verify number does — on
+ * the department that takes the instance's inbound (support covers account when they share one), for that instance.
+ * Without these no salesperson number answers or sends anything automated. Returns department => number.
+ */
+function sj_verify_department_numbers(\ChannelRegistry $reg, array $configMap, string $prefix = '+2567005880'): array
+{
+    $out = []; $seen = []; $i = 0;
+    foreach (['sales', 'support', 'account'] as $d) {
+        $i++;
+        $inst = trim((string)($configMap[$d] ?? ''));
+        if ($inst === '' || isset($seen[strtolower($inst)])) continue;
+        $seen[strtolower($inst)] = true;
+        $n = $prefix . (10 + $i);
+        $reg->verifyDepartmentNumber($d, $n, 'test fixture', 'the fixture\'s department numbers', $inst);
+        $out[$d] = $n;
+    }
+    return $out;
 }
 
 /** A copy of the plugin to weaken, for the weakened-copy checks: everything copied, then one file changed. */

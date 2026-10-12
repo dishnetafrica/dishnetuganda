@@ -67,6 +67,17 @@ if ($_wd_alerts->target() === '') {
             }
         } catch (\Throwable $e) { /* first run */ }
 
+        // 5.18.90 (docs/65 §AD): a chat with one of DishNet's own numbers is left unanswered on purpose — paging about
+        // it would send an alert into that chat and page again on the next run, two DishNet numbers keeping each other
+        // going. With the channel registry on those chats are not watched; registry off, every chat is, as before.
+        require_once $_wd_root . '/lib/AutomationPolicy.php';
+        $_wd_policy = AutomationPolicy::forInstall($_wd_config, $_wd_data, $_wd_store->getPdo(), $_wd_store);
+        if ($_wd_policy->active()) {
+            $_wd_rows = array_values(array_filter($_wd_rows, function ($c) use ($_wd_policy) {
+                return $_wd_policy->senderClass((string)($c['channel'] ?? ''), (string)($c['phone'] ?? '')) === '';
+            }));
+        }
+
         $_wd_waiting = AlertService::findUnanswered($_wd_rows, $_wd_seen, time(), $_wd_patience);
 
         foreach ($_wd_waiting as $c) {

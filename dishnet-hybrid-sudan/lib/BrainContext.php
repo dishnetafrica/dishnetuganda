@@ -15,8 +15,11 @@ require_once __DIR__ . '/ConversationService.php';
  * complete uCRM client record, internal ids, the Splynx id and service
  * address, the customer's phone number, our own WhatsApp instance.
  *
- * This is the allowlist that replaces it. Twelve keys, and every one earns
+ * This is the allowlist that replaces it. Sixteen keys, and every one earns
  * its place by deciding what the model DOES rather than by being available.
+ * (Twelve until Batch 0 of docs/55 added 'location'; thirteen until Batch 2
+ * added 'voice'; fourteen until Batch 3 added 'image'; fifteen until Batch 4
+ * added 'document', below.)
  *
  * ── CONSTRUCTED, NEVER FILTERED ─────────────────────────────────────────
  *
@@ -53,7 +56,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Twelve top-level keys, and the only twelve.
+     * The contract. Seventeen top-level keys, and the only seventeen.
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -74,12 +77,37 @@ final class BrainContext
         'attachments'    => ['*'],
         'signature'      => ['*'],
         'constraints'    => ['*'],
+        // Batch 0 (docs/55 defect c): the pin THIS turn carried, as evo_webhook recorded it. The customer's own
+        // message content, not account data; it decides what the model does — acknowledge the pin, never guess
+        // the place (DishNetAiBrain's LOCATION PIN block). Before this the sales number, where customers send
+        // their location, never showed the assistant the pin at all.
+        'location'       => ['lat', 'lng', 'name', 'in_bounds'],
+        // Batch 2 (docs/55 §9, docs/56): this turn's message is the transcript of a voice note the customer sent.
+        // Presence is the fact the prompt acts on (DishNetAiBrain's VOICE MESSAGE block: an automatic transcript,
+        // every name and figure unconfirmed, ask rather than guess); the one leaf is the announced duration.
+        'voice'          => ['seconds'],
+        // Batch 3 (docs/55 §9, docs/57): this turn's message is the automatic description of a picture the customer
+        // sent. Presence is the fact the prompt acts on (DishNetAiBrain's IMAGE block: a description, not the
+        // customer's words; every figure unconfirmed; never confirm a payment); the one leaf is the classification.
+        'image'          => ['classification'],
+        // Batch 4 (docs/55 §9, docs/58 §12): this turn's message is the automatic extract of a document the customer
+        // sent. Presence is the fact the prompt acts on (DishNetAiBrain's DOCUMENT block: an extraction, possibly cut,
+        // every figure and term unconfirmed; never accept, approve or confirm anything read there); the three leaves are
+        // the classification, the kind and whether the extract was cut. Never the file name (NEVER_PRESENT).
+        'document'       => ['classification', 'kind', 'truncated'],
+        // 5.18.89 (docs/65 §AA, decision D3): the first name of the salesperson whose own WhatsApp number this turn
+        // arrived on. Presence is the fact the prompt acts on (DishNetAiBrain's identity line: "<first name>'s
+        // assistant at DishNet", never the person). Only the first name — letters, apostrophe, hyphen, at most 30
+        // characters — never their number, id or full name; absent on every department number.
+        'line_owner'     => ['*'],
     ];
 
     /**
      * Named so a reviewer sees a decision rather than an omission.
      */
     public const NEVER_PRESENT = [
+        'file_name'      => 'a document\'s file name is often a person\'s name or an account number; a signal for the '
+                          . 'classifier, never for the model (docs/58 §12)',
         'account'        => 'balance, invoice and payment are answered by a tool, not injected',
         'invoice'        => 'likewise',
         'last_payment'   => 'likewise',
@@ -152,6 +180,40 @@ final class BrainContext
             }
         }
 
+        // Batch 0 (docs/55 defect c): the pin this turn carried. Only numeric coordinates travel, with the
+        // webhook's own in-area verdict and the label the customer attached, if any.
+        $loc = $in['location'] ?? null;
+        if (is_array($loc) && isset($loc['lat'], $loc['lng']) && is_numeric($loc['lat']) && is_numeric($loc['lng'])) {
+            $out['location'] = ['lat' => (float)$loc['lat'], 'lng' => (float)$loc['lng'], 'in_bounds' => !empty($loc['in_bounds'])];
+            $name = self::str($loc['name'] ?? '');
+            if ($name !== '') $out['location']['name'] = $name;
+        }
+
+        // Batch 2 (docs/55 §9): the voice note this turn's message was transcribed from. Only when the caller says so
+        // (an array), and only its duration travels — 0 when unknown.
+        $voice = $in['voice'] ?? null;
+        if (is_array($voice)) {
+            $out['voice'] = ['seconds' => max(0, (int)(self::int($voice['seconds'] ?? 0) ?? 0))];
+        }
+
+        // Batch 3 (docs/55 §9): the picture this turn's message describes. Only when the caller says so (an array),
+        // and only its classification travels — 'general' when the caller named none.
+        $image = $in['image'] ?? null;
+        if (is_array($image)) {
+            $cls = self::str($image['classification'] ?? '');
+            $out['image'] = ['classification' => $cls !== '' ? $cls : 'general'];
+        }
+
+        // Batch 4 (docs/55 §9, docs/58 §12): the document this turn's message was extracted from. Only when the caller
+        // says so (an array), and only the classification, the kind and the truncation flag travel — never the file name.
+        $doc = $in['document'] ?? null;
+        if (is_array($doc)) {
+            $cls  = self::str($doc['classification'] ?? '');
+            $kind = self::str($doc['kind'] ?? '');
+            $out['document'] = ['classification' => $cls !== '' ? $cls : 'general', 'kind' => $kind !== '' ? $kind : 'document',
+                                'truncated' => !empty($doc['truncated'])];
+        }
+
         // The public catalogue. Not customer data — identical for every
         // visitor, and the one thing a sales question cannot be answered
         // without. Present in EVERY identity state, deliberately.
@@ -216,6 +278,9 @@ final class BrainContext
         }
         $sig = self::str($in['signature'] ?? '');
         if ($sig !== '') $out['signature'] = $sig;
+        // 5.18.89 (D3): checked again here, whatever the caller did — a first name is one word of letters, or nothing.
+        $owner = self::str($in['line_owner'] ?? '');
+        if ($owner !== '' && preg_match("/^[\\p{L}][\\p{L}'\\-]{0,29}$/u", $owner)) $out['line_owner'] = $owner;
 
         return $out;
     }

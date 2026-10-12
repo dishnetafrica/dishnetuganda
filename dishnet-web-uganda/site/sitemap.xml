@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://dishnetuganda.com/about.html</loc></url>
+  <url><loc>https://dishnetuganda.com/acceptable-use.html</loc></url>
   <url><loc>https://dishnetuganda.com/become-a-distributor.html</loc></url>
   <url><loc>https://dishnetuganda.com/blog-starlink-installation-day-uganda.html</loc></url>
   <url><loc>https://dishnetuganda.com/blog-starlink-solar-uganda.html</loc></url>
@@ -8,6 +9,7 @@
   <url><loc>https://dishnetuganda.com/blog-wifi-hotspot-business-uganda.html</loc></url>
   <url><loc>https://dishnetuganda.com/blog.html</loc></url>
   <url><loc>https://dishnetuganda.com/careers.html</loc></url>
+  <url><loc>https://dishnetuganda.com/complaints.html</loc></url>
   <url><loc>https://dishnetuganda.com/contact.html</loc></url>
   <url><loc>https://dishnetuganda.com/coverage.html</loc></url>
   <url><loc>https://dishnetuganda.com/faq.html</loc></url>
@@ -16,11 +18,15 @@
   <url><loc>https://dishnetuganda.com/guides.html</loc></url>
   <url><loc>https://dishnetuganda.com/hotspot.html</loc></url>
   <url><loc>https://dishnetuganda.com/index.html</loc></url>
+  <url><loc>https://dishnetuganda.com/installation.html</loc></url>
   <url><loc>https://dishnetuganda.com/pay.html</loc></url>
+  <url><loc>https://dishnetuganda.com/policies.html</loc></url>
   <url><loc>https://dishnetuganda.com/privacy.html</loc></url>
   <url><loc>https://dishnetuganda.com/reseller.html</loc></url>
+  <url><loc>https://dishnetuganda.com/returns.html</loc></url>
   <url><loc>https://dishnetuganda.com/security.html</loc></url>
   <url><loc>https://dishnetuganda.com/services.html</loc></url>
+  <url><loc>https://dishnetuganda.com/shop.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-arua.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-entebbe.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-fort-portal.html</loc></url>
@@ -29,15 +35,13 @@
   <url><loc>https://dishnetuganda.com/starlink-jinja.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-kampala.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-kits.html</loc></url>
-  <url><loc>https://dishnetuganda.com/shop.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-lira.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-masaka.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-mbale.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-mbarara.html</loc></url>
   <url><loc>https://dishnetuganda.com/starlink-soroti.html</loc></url>
+  <url><loc>https://dishnetuganda.com/terms-of-sale.html</loc></url>
   <url><loc>https://dishnetuganda.com/terms.html</loc></url>
-  <url><loc>https://dishnetuganda.com/whatsapp.html</loc></url>
-  <url><loc>https://dishnetuganda.com/why-dishnet.html</loc></url>
   <url><loc>https://dishnetuganda.com/tutorials/activate-starlink-send-location.html</loc></url>
   <url><loc>https://dishnetuganda.com/tutorials/change-network-name.html</loc></url>
   <url><loc>https://dishnetuganda.com/tutorials/change-wifi-password.html</loc></url>
@@ -57,4 +61,7 @@
   <url><loc>https://dishnetuganda.com/tutorials/share-wifi-qr-code.html</loc></url>
   <url><loc>https://dishnetuganda.com/tutorials/switch-between-accounts.html</loc></url>
   <url><loc>https://dishnetuganda.com/tutorials/view-pay-invoice.html</loc></url>
+  <url><loc>https://dishnetuganda.com/warranty.html</loc></url>
+  <url><loc>https://dishnetuganda.com/whatsapp.html</loc></url>
+  <url><loc>https://dishnetuganda.com/why-dishnet.html</loc></url>
 </urlset>

@@ -3,6 +3,21 @@
 // SUPPORT TICKETS / LEADS / SQLITE TOOLS
 // ═══════════════════════════════════════════════════════════════
 
+// 5.18.89 (docs/65 §AA, D7): own leads only, for every handler below that acts on one existing lead by its id. A lead
+// the viewer may not see is answered exactly as a missing one, before anything is read or written. OFF
+// (sales_own_leads_only, Uganda only), or for an admin or All Leads holder, every lead passes, as before.
+$__dnLeadVisible = function (int $leadId, array $viewer) use ($store, $config, $dataDir, $rbac): bool {
+    if ($leadId <= 0) return true;
+    require_once dirname(__DIR__, 2) . '/lib/LeadVisibility.php';
+    if (!LeadVisibility::applies((array)$config, $dataDir ?? null)) return true;
+    foreach ($store->load('leads.json') ?? [] as $l) {
+        if (is_array($l) && (int)($l['id'] ?? 0) === $leadId) {
+            return LeadVisibility::allows($l, $viewer, (array)$config, $dataDir ?? null, $rbac ?? null);
+        }
+    }
+    return true;   // no such lead: the handler's own "not found" answers
+};
+
 
 
 // ── Support Tickets ─────────────────────────────────────────────────
@@ -55,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='save_lead')
     $rid = (int)$retailer['id'];
     $leads = $store->load('leads.json');
     $leadId = (int)($_POST['lead_id'] ?? 0);
+    if (!$__dnLeadVisible($leadId, (array)$retailer)) { flash('Lead not found.','danger'); redirect('?page=dashboard&tab=leads'); }
 
     $lead = [
         // ── Basic contact info ──────────────────────────────────────────
@@ -118,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='send_lead_q
     require_once dirname(__DIR__, 2) . '/lib/QuotationService.php';
 
     $leadId = (int)($_POST['lead_id'] ?? 0);
+    if (!$__dnLeadVisible($leadId, (array)$retailer)) { flash('Lead not found.','danger'); redirect('?page=dashboard&tab=leads'); }
     $leads  = $store->load('leads.json') ?? [];
     $lead   = null;
     foreach ($leads as $l) { if ((int)($l['id']??0)===$leadId) { $lead=$l; break; } }
@@ -228,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='send_manual
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='update_lead_status') {
     $retailer = $auth->requireLogin();
     $leadId = (int)($_POST['lead_id'] ?? 0);
+    if (!$__dnLeadVisible($leadId, (array)$retailer)) { flash('Lead not found.','danger'); redirect('?page=dashboard&tab=leads'); }
     $newStatus = trim($_POST['new_status'] ?? '');
     $valid = ['open','contacted','interested','quoted','qualified','won','lost'];
     if (!in_array($newStatus, $valid)) { flash('Invalid status.','danger'); redirect('?page=dashboard&tab=leads'); }
@@ -344,6 +362,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='unqualify_l
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='convert_lead') {
     $retailer = $auth->requireLogin();
     $leadId   = (int)($_POST['lead_id'] ?? 0);
+    if (!$__dnLeadVisible($leadId, (array)$retailer)) { flash('Lead not found.','danger'); redirect('?page=dashboard&tab=leads'); }
     $leads    = $store->load('leads.json');
     $lead     = null;
     foreach ($leads as &$l) { if ((int)($l['id']??0)===$leadId) { $lead = &$l; break; } }
@@ -423,8 +442,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='assign_lead
 
     $leads   = $store->load('leads.json');
     $changed = 0;
+    // 5.18.89 (docs/65 §AA, D5): a lead from a salesperson's own number leaves them only by a deliberate act like this
+    // one, and its history says so. Every other lead is assigned exactly as before.
+    require_once dirname(__DIR__, 2) . '/lib/OwnedLead.php';
+    $__ownedStaff = $store->load('retailers.json') ?? [];
     foreach ($leads as &$l) {
         if (in_array((int)($l['id']??0), $leadIds, true)) {
+            if (OwnedLead::isProtected($l, $__ownedStaff) && (int)($l['assigned_to'] ?? 0) !== $toId) {
+                if (!isset($l['history'])) $l['history'] = [];
+                $l['history'][] = ['status' => $l['status'] ?? 'open', 'by' => $admin['name'] ?? 'Admin', 'at' => date('Y-m-d H:i:s'),
+                                   'note' => 'Reassigned by an admin from ' . (string)($l['assigned_name'] ?? 'its owner')
+                                           . ' (it came in on their own WhatsApp number) to ' . $toName];
+            }
             $l['assigned_to']   = $toId;
             $l['assigned_name'] = $toName;
             $l['assigned_at']   = date('Y-m-d H:i:s');
@@ -510,8 +539,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='smart_distr
 
     // ── Pool: open leads eligible for distribution ─────────────────────
     $openStatuses = ['open','contacted','interested','quoted'];
-    $pool = array_values(array_filter($allLeads, function($l) use ($openStatuses, $onlyUnassigned, $filterService) {
+    require_once dirname(__DIR__, 2) . '/lib/OwnedLead.php';
+    $pool = array_values(array_filter($allLeads, function($l) use ($openStatuses, $onlyUnassigned, $filterService, $allRetailers) {
         if (!in_array($l['status']??'', $openStatuses)) return false;
+        // 5.18.89 (docs/65 §AA, D5): a lead from a salesperson's own number is never redistributed in bulk.
+        if (OwnedLead::isProtected($l, $allRetailers)) return false;
         if ($onlyUnassigned && !empty($l['assigned_to'])) return false;
         if ($filterService && strtolower($l['service_type']??'') !== strtolower($filterService)) return false;
         return true;

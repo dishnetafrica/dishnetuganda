@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 $stateFile = sys_get_temp_dir() . '/fake_evo_state_' . md5(__FILE__ . ($_SERVER['SERVER_PORT'] ?? '')) . '.json';
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
-$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => ''];
+$state += ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => [], 'presence_calls' => []];
 
 function fe2_out($data, int $http = 200): void
 {
@@ -34,7 +34,7 @@ if ($path === '/__test/state') {
 }
 // Phase 2 test controls: start from nothing, and make the next N text sends fail.
 if ($path === '/__test/reset') {
-    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => ''];
+    $state = ['webhooks' => [], 'set_calls' => 0, 'media_calls' => [], 'text_calls' => [], 'fail_next' => 0, 'fail_status' => 500, 'hold_dir' => '', 'media_fetch_calls' => [], 'media_next' => null, 'media_next_by_id' => [], 'instances' => null, 'connect_calls' => [], 'fail_instances' => [], 'failed_calls' => [], 'presence_calls' => []];
     fe2_out(['reset' => true, 'marker' => 'FAKE-EVO-TEST']);
 }
 // 5.18.53: hold the next text send until the test releases it — a WhatsApp as slow to answer as the test needs, so that
@@ -51,11 +51,41 @@ if ($path === '/__test/fail_next') {
     // that pass no code keep the original 500 behaviour exactly.
     $state['fail_status'] = (int)($_GET['code'] ?? 500) ?: 500;
     fe2_out(['fail_next' => $state['fail_next'], 'fail_status' => $state['fail_status'], 'marker' => 'FAKE-EVO-TEST']);
-}if ($path === '/instance/fetchInstances') {
+}
+// The salesperson pilot (docs/65 §AC): one instance that cannot send — a phone switched off, a number logged out — while
+// every other instance still can. ?name=X[&code=N] makes every text and media send on X fail with HTTP N (default 500)
+// until ?name=X&off=1, or ?clear=1, lifts it. A refused send is recorded in failed_calls (instance, kind, number), never
+// in text_calls or media_calls, so a test can tell "tried on the right number and refused" from "sent somewhere else".
+if ($path === '/__test/fail_instance') {
+    if (!empty($_GET['clear'])) {
+        $state['fail_instances'] = [];
+    } else {
+        $name = (string)($_GET['name'] ?? '');
+        if ($name !== '') {
+            if (!empty($_GET['off'])) unset($state['fail_instances'][$name]);
+            else                      $state['fail_instances'][$name] = (int)($_GET['code'] ?? 500) ?: 500;
+        }
+    }
+    fe2_out(['fail_instances' => $state['fail_instances'], 'marker' => 'FAKE-EVO-TEST']);
+}
+// 5.18.89 (salesperson numbers): the instance list a test needs — POST a JSON list of rows as fetchInstances answers them
+// (name, connectionStatus, ownerJid, profileName); an empty list is "no instances". ?default=1 goes back to the one
+// default instance below.
+if ($path === '/__test/instances') {
+    $state['instances'] = !empty($_GET['default']) ? null : array_values($body);
+    fe2_out(['instances' => $state['instances'], 'marker' => 'FAKE-EVO-TEST']);
+}
+if ($path === '/instance/fetchInstances') {
+    if (is_array($state['instances'] ?? null)) fe2_out($state['instances']);
     fe2_out([[
         'name' => 'dishnet_ug', 'connectionStatus' => 'open',
         'ownerJid' => '256705993348@s.whatsapp.net', 'profileName' => 'FAKE EVO TEST',
     ]]);
+}
+// 5.18.89: pairing — a QR (base64 of a fixed test string) and a pairing code, and the call recorded.
+if (preg_match('#^/instance/connect/(.+)$#', $path, $m)) {
+    $state['connect_calls'][] = rawurldecode($m[1]);
+    fe2_out(['base64' => base64_encode('FAKE-QR-' . rawurldecode($m[1])), 'pairingCode' => 'FAKECODE']);
 }
 if (preg_match('#^/webhook/find/(.+)$#', $path, $m)) {
     fe2_out($state['webhooks'][$m[1]] ?? new stdClass());
@@ -76,6 +106,10 @@ if (preg_match('#^/message/sendText/(.+)$#', $path, $m)) {
         for ($i = 0; $i < 600 && !is_file($dir . '/release'); $i++) usleep(100000);
         $state = json_decode((string)file_get_contents($stateFile), true) ?: $state;
     }
+    if (isset($state['fail_instances'][$m[1]])) {
+        $state['failed_calls'][] = ['instance' => $m[1], 'kind' => 'text', 'number' => (string)($body['number'] ?? '')];
+        fe2_out(['error' => 'FAKE-EVO-INSTANCE-DOWN (test control)'], (int)$state['fail_instances'][$m[1]]);
+    }
     if (($state['fail_next'] ?? 0) > 0) { $state['fail_next']--; fe2_out(['error' => 'FAKE-EVO-FAILURE (test control)'], (int)($state['fail_status'] ?? 500) ?: 500); }
     // Recorded, not just answered. A test could previously only see that a
     // send returned ok, which is the same thing production logs showed while
@@ -88,6 +122,10 @@ if (preg_match('#^/message/sendText/(.+)$#', $path, $m)) {
     fe2_out(['key' => ['id' => 'FAKE-EVO-MSG-' . count($state['text_calls'])], 'status' => 'PENDING']);
 }
 if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
+    if (isset($state['fail_instances'][$m[1]])) {
+        $state['failed_calls'][] = ['instance' => $m[1], 'kind' => 'media:' . (string)($body['mediatype'] ?? ''), 'number' => (string)($body['number'] ?? '')];
+        fe2_out(['error' => 'FAKE-EVO-INSTANCE-DOWN (test control)'], (int)$state['fail_instances'][$m[1]]);
+    }
     // Record enough to assert on without persisting a whole base64 image.
     $media = (string)($body['media'] ?? '');
     $state['media_calls'][] = [
@@ -101,5 +139,69 @@ if (preg_match('#^/message/sendMedia/(.+)$#', $path, $m)) {
     // Unique like the real thing: the worker now records this id on the row
     // and a constant would make every second media send dedupe to nothing.
     fe2_out(['key' => ['id' => 'FAKE-EVO-MEDIA-' . count($state['media_calls'])], 'status' => 'PENDING']);
+}
+// Batch 1 of the AI communication layer (docs/55 §9): what the next media fetch answers. Set once, it stands until
+// changed or reset. POST JSON (or GET params): base64 | bytes (a deterministic payload of that many bytes is built here,
+// so a test never ships a large body), mimetype, fileName, hold (seconds to wait before answering — a slow Evolution),
+// fail (an HTTP status to answer with instead), raw (a non-JSON body to answer with instead).
+if ($path === '/__test/media') {
+    $in = $body ?: $_GET;
+    if (isset($in['bytes']) && (int)$in['bytes'] > 0) {
+        $n = (int)$in['bytes'];
+        $in['base64'] = base64_encode(substr(str_repeat('DN-MEDIA-TEST-PAYLOAD/', (int)ceil($n / 22)), 0, $n));
+    }
+    $next = [
+        'base64'   => (string)($in['base64'] ?? ''),
+        'mimetype' => (string)($in['mimetype'] ?? 'audio/ogg; codecs=opus'),
+        'fileName' => (string)($in['fileName'] ?? ''),
+        'hold'     => (int)($in['hold'] ?? 0),
+        'fail'     => (int)($in['fail'] ?? 0),
+        'raw'      => (string)($in['raw'] ?? ''),
+    ];
+    // for_id: the answer for ONE message id (several media in one worker run, each with its own type); else the default.
+    if ((string)($in['for_id'] ?? '') !== '') $state['media_next_by_id'][(string)$in['for_id']] = $next;
+    else                                       $state['media_next'] = $next;
+    fe2_out(['media_next' => array_merge($next, ['base64' => strlen($next['base64']) . ' chars']), 'for_id' => (string)($in['for_id'] ?? ''), 'marker' => 'FAKE-EVO-TEST']);
+}
+if (preg_match('#^/chat/getBase64FromMediaMessage/(.+)$#', $path, $m)) {
+    // Recorded first — a test asserts how many fetches happened and with what key, whatever the answer.
+    $k = isset($body['message']['key']) && is_array($body['message']['key']) ? $body['message']['key'] : [];
+    $state['media_fetch_calls'][] = [
+        'instance'     => $m[1],
+        'id'           => (string)($k['id'] ?? ''),
+        'remoteJid'    => (string)($k['remoteJid'] ?? ''),
+        'fromMe'       => !empty($k['fromMe']),
+        'convertToMp4' => $body['convertToMp4'] ?? null,
+    ];
+    $mid  = (string)($k['id'] ?? '');
+    $next = is_array($state['media_next_by_id'][$mid] ?? null) ? $state['media_next_by_id'][$mid]
+          : (is_array($state['media_next'] ?? null) ? $state['media_next'] : []);
+    if (($next['hold'] ?? 0) > 0) {
+        file_put_contents($stateFile, json_encode($state));   // the call is on record before the wait
+        sleep((int)$next['hold']);
+    }
+    if (($next['fail'] ?? 0) > 0) fe2_out(['status' => (int)$next['fail'], 'error' => 'FAKE-EVO-MEDIA-FAILURE (test control)'], (int)$next['fail']);
+    if (($next['raw'] ?? '') !== '') {
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo $next['raw'];
+        file_put_contents($stateFile, json_encode($state));
+        exit;
+    }
+    $b64 = (string)($next['base64'] ?? '');
+    if ($b64 === '') fe2_out(['status' => 404, 'error' => 'FAKE-EVO-TEST: no media set for this fetch (/__test/media)'], 404);
+    fe2_out([
+        'mediaType' => explode('/', (string)$next['mimetype'])[0],
+        'fileName'  => (string)$next['fileName'],
+        'size'      => ['fileLength' => (string)strlen((string)base64_decode($b64, true))],
+        'mimetype'  => (string)$next['mimetype'],
+        'base64'    => $b64,
+        'buffer'    => null,
+    ]);
+}
+// 5.18.90 (docs/65 §AD): the typing indicator is recorded — a test can see that none went to one of DishNet's own
+// numbers — and answered exactly as before (this fake never simulated it).
+if (preg_match('#^/chat/sendPresence/(.+)$#', $path, $m)) {
+    $state['presence_calls'][] = ['instance' => $m[1], 'number' => (string)($body['number'] ?? '')];
 }
 fe2_out(['error' => 'FAKE-EVO-TEST: path not simulated: ' . $path], 404);

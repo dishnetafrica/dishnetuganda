@@ -209,8 +209,10 @@ $mutants = [
     'an opt-out in the typed form no longer blocks (D-10)' => ['lib/NotificationService.php', [
         ["        if (\$asGiven !== \$to && \$asGiven !== '' && \$this->optedOut(\$asGiven, \$sender, \$class, \$event)) return;\n", '']],
         'service', function (array $x) { return in_array('256772000918', array_column($x['all'], 'number'), true); }, 'the opted-out customer was sent it'],
+    // 5.18.83 (docs/64 §B): the unusable-number log keeps the storable text, so the anchor follows the line; the weakened
+    // copy — the number sent anyway — is unchanged.
     'an unreadable number sent anyway (D-10)' => ['lib/NotificationService.php', [
-        ["        if (\$to === '' && \$asGiven !== '') { \$this->unusableNumber(\$sender, \$event, \$asGiven, \$message); return; }",
+        ["        if (\$to === '' && \$asGiven !== '') { \$this->unusableNumber(\$sender, \$event, \$asGiven, self::storable(\$message)); return; }",
          "        if (\$to === '' && \$asGiven !== '') \$to = \$asGiven;"]],
         'service', function (array $x) { return in_array('12345', array_column($x['all'], 'number'), true); }, '12345 was sent to'],
     'a draft invoice suspends a mailbox again (D-6)' => ['webhook.php', [

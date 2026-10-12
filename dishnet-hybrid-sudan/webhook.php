@@ -194,6 +194,41 @@ function whCustomerEmail(string $key, int $clientId, string $name, array $data,
 }
 
 /**
+ * 5.18.84: the customer's WhatsApp beside the install_scheduled e-mail (lib/InstallScheduledWhatsApp.php) — Uganda only,
+ * off unless customer_wa_install_scheduled is on, once per job. One line in the webhook log says what happened, without
+ * the customer's number. Never throws: a failure here must not cost the job's other work.
+ */
+function whInstallScheduledWhatsApp(int $jobId, array $job, array $client, string $technician, array $config, string $dataDir,
+                                    $store, $notify, string $changeType = ''): void
+{
+    try {
+        require_once __DIR__ . '/lib/InstallScheduledWhatsApp.php';
+        if (!InstallScheduledWhatsApp::enabled($config, $dataDir)) return;   // off is not an error
+        $r = InstallScheduledWhatsApp::send($jobId, $job, $client, $technician, $config, $dataDir, $store, $notify);
+        whLog($changeType ?: 'job.add', "Job #{$jobId}: customer WhatsApp (installation scheduled) — " . $r['detail']);
+    } catch (\Throwable $e) {
+        error_log('[whInstallScheduledWhatsApp] job ' . $jobId . ': ' . $e->getMessage());
+    }
+}
+
+/**
+ * 5.18.85 (Uganda): the technician's first name for the customer's booking e-mail and WhatsApp
+ * (InstallScheduledWhatsApp::technicianName — the verified staff account, else uCRM's users/admins/{id}); '' when there
+ * is none. Never throws: a name it cannot find is a line left out, never a failed job.add.
+ */
+function whInstallTechName(int $assignedUserId, $store, $crm): string
+{
+    if ($assignedUserId <= 0) return '';
+    try {
+        require_once __DIR__ . '/lib/InstallScheduledWhatsApp.php';
+        return InstallScheduledWhatsApp::technicianName($assignedUserId, $store, $crm);
+    } catch (\Throwable $e) {
+        error_log('[whInstallTechName] user ' . $assignedUserId . ': ' . $e->getMessage());
+        return '';
+    }
+}
+
+/**
  * Send the branded quotation email for a quote created anywhere.
  *
  * QuotationService covers quotes created through the DishNet app. A quote
@@ -2642,13 +2677,23 @@ switch ($changeType) {
                 try { return $iso ? (new DateTime((string)$iso))->format('g:i A') : ''; } catch (\Throwable $e) { return ''; }
             };
             $window = $clock($timeFrom) . ($timeFrom && $timeTo ? ' - ' . $clock($timeTo) : '');
+            // 5.18.85 (Uganda): the technician's first name from the verified staff account, else uCRM's users/admins/{id}.
+            // The lookup above, users/{id}, answers 404 on this uCRM for every user (docs/44 §13.1), so $techName is the
+            // "Technician" placeholder there and the customer's e-mail printed it. South Sudan keeps $techName.
+            $_whTech = $_whJobNotifier ? whInstallTechName($assignedUserId, $store, $crm) : '';
             whCustomerEmail('install_scheduled', $clientId, $clientName === 'N/A' ? '' : $clientName, [
                 'first_name' => (string)(($client ?? [])['firstName'] ?? ''),
                 'date'       => $dateLong !== '' ? $dateLong : $dateFormatted,
                 'window'     => $window,
                 'address'    => (string)$address,
-                'technician' => (string)($techName ?? ''),
+                'technician' => $_whJobNotifier ? $_whTech : (string)($techName ?? ''),
             ], "JOB{$jobId}", $config, $dataDir, $crm, $store, $changeType);
+            // 5.18.84 (Uganda, customer_wa_install_scheduled): the same news by WhatsApp, to the client's uCRM number — a
+            // customer with no e-mail address heard nothing before. Off by default; once per job. Never the "Technician"
+            // placeholder: the name above, or no Technician line.
+            whInstallScheduledWhatsApp($jobId, is_array($job) ? $job : [], is_array($client ?? null) ? $client : [],
+                $_whTech,
+                is_array($config ?? null) ? $config : [], (string)$dataDir, $store, $notify, $changeType);
         } else {
             whLog($changeType, "Job #{$jobId}: no customer e-mail — "
                 . (!$clientId ? 'no client on the job' : (!$isInstall ? 'not an installation job' : 'no date yet')));
@@ -3765,6 +3810,30 @@ switch ($changeType) {
             whResp(200, "Event '{$changeType}' received and logged (no action configured).");
         }
         $jobId = $entityId ?: (int)($entity['id'] ?? 0);
+        // 5.18.82 (Uganda, install_auth_enabled): a job deleted in uCRM takes its PENDING customer-authorisation request
+        // with it — the link stops working at once (docs/61 §3). An accepted record is history and stays as it is. Done
+        // before the notifier's own observation, which is unchanged (and keeps its place beside the answer).
+        // 5.18.83 (docs/64 §F): the posted body is a doorbell, never evidence (R3, 5.18.37) — this endpoint carries no key,
+        // so anyone who can reach it could post a job.delete. The request is withdrawn only when uCRM itself answers 404
+        // for the job; a job uCRM still holds, or cannot be asked about, keeps its request.
+        if (in_array($changeType, ['job.delete', 'JOB_DELETE'], true)) {
+            require_once __DIR__ . '/lib/InstallAuth.php';
+            if ($jobId > 0 && InstallAuth::enabled(is_array($config ?? null) ? $config : [], $dataDir ?? null)) {
+                $_iaGone = false;
+                if ($crm && $crm->isConfigured()) {
+                    $_iaStill = $crm->get("scheduling/jobs/{$jobId}");
+                    $_iaGone  = !is_array($_iaStill) && (int)($crm->getLastError()['http_code'] ?? 0) === 404;
+                }
+                if ($_iaGone && InstallAuth::cancelForDeletedJob($store->getPdo(), $jobId)) {
+                    whLog($changeType, "Customer installation authorisation request for job #{$jobId} cancelled: the job was deleted in uCRM");
+                } elseif (!$_iaGone) {
+                    $_iaRow = InstallAuth::find($store->getPdo(), $jobId);
+                    if ($_iaRow !== null && $_iaRow['status'] === 'pending') {
+                        whLog($changeType, "Customer installation authorisation request for job #{$jobId} kept: uCRM did not confirm the job was deleted");
+                    }
+                }
+            }
+        }
         whJobNotify($jobId, null, is_array($config ?? null) ? $config : [], (string)$dataDir, $crm, $store, $notify, $changeType);
         whResp(200, "{$changeType} processed.");
     }

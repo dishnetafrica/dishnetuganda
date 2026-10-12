@@ -115,21 +115,7 @@ class EvolutionApiService
         $this->timeout = $timeout;
         $this->gateConfig = $config;
 
-        // Preferred, explicit per-channel config.
-        $map = [
-            self::CHANNEL_SALES   => trim((string)($config['evo_instance_sales']   ?? '')),
-            self::CHANNEL_SUPPORT => trim((string)($config['evo_instance_support'] ?? '')),
-            self::CHANNEL_ACCOUNT => trim((string)($config['evo_instance_account'] ?? '')),
-        ];
-
-        // Backward compatibility with the single-instance config that shipped
-        // before three numbers existed. Only fills gaps — never overrides.
-        if ($map[self::CHANNEL_SUPPORT] === '') {
-            $map[self::CHANNEL_SUPPORT] = trim((string)($config['evo_instance_name'] ?? ''));
-        }
-        if ($map[self::CHANNEL_ACCOUNT] === '') {
-            $map[self::CHANNEL_ACCOUNT] = trim((string)($config['evo_accounts_instance_name'] ?? ''));
-        }
+        $map = self::configInstanceMap($config);
 
         foreach ($map as $channel => $instance) {
             if ($instance === '') continue;
@@ -145,6 +131,235 @@ class EvolutionApiService
                 $this->instanceToChannel[$key] = $channel;
             }
         }
+    }
+
+    /**
+     * The instance the configuration binds to each of the three department numbers, in the order the inbound map is
+     * built (sales, support, account). Values may be ''. The constructor reads exactly this; 5.18.86 made it a function
+     * so the channel registry reads the same answer rather than a copy of the rule (docs/65 §E).
+     *
+     * @return array<string,string> channel => instance
+     */
+    public static function configInstanceMap(array $config): array
+    {
+        // Preferred, explicit per-channel config.
+        $map = [
+            self::CHANNEL_SALES   => trim((string)($config['evo_instance_sales']   ?? '')),
+            self::CHANNEL_SUPPORT => trim((string)($config['evo_instance_support'] ?? '')),
+            self::CHANNEL_ACCOUNT => trim((string)($config['evo_instance_account'] ?? '')),
+        ];
+
+        // Backward compatibility with the single-instance config that shipped
+        // before three numbers existed. Only fills gaps — never overrides.
+        if ($map[self::CHANNEL_SUPPORT] === '') {
+            $map[self::CHANNEL_SUPPORT] = trim((string)($config['evo_instance_name'] ?? ''));
+        }
+        if ($map[self::CHANNEL_ACCOUNT] === '') {
+            $map[self::CHANNEL_ACCOUNT] = trim((string)($config['evo_accounts_instance_name'] ?? ''));
+        }
+        return $map;
+    }
+
+    // ── The channel registry (5.18.86, docs/65 §F–§I) ────────────────────────
+    //
+    // Dark unless multi_number_channels_enabled is ON on a Uganda install. Then, and only then, this service routes by
+    // channel id through wa_channels: a channel that is not active has no instance (every send on it fails closed), an
+    // instance the registry has switched off is REFUSED rather than unknown, and a reply may leave only on the
+    // instance its message arrived on. OFF, forStore() returns exactly what `new EvolutionApiService($config)` returns.
+
+    /** @var array{refused: array<string,string>, contexts: array<string,ChannelContext>}|null null = registry off */
+    private ?array $registry = null;
+
+    /**
+     * The service every customer-facing path should build: the constructor's, plus the channel registry where it is on.
+     *
+     * A registry that cannot be read leaves the three department numbers exactly as configured and routes no other
+     * channel — the switch must never take the existing numbers down — and says so once in the log.
+     */
+    public static function forStore(array $config, ?\PDO $pdo, ?string $dataDir, int $timeout = 20): self
+    {
+        $evo = new self($config, $timeout);
+        if ($pdo === null) return $evo;
+        if (!class_exists('ChannelRegistry')) require_once __DIR__ . '/ChannelRegistry.php';
+        if (!\ChannelRegistry::enabled($config, $dataDir)) return $evo;
+        try {
+            $reg = new \ChannelRegistry($pdo);
+            if (!$reg->available()) {
+                self::sayOnce('[channels] ' . \ChannelRegistry::FLAG . ' is on but the channel registry is not installed '
+                            . '(migration 087) — the three department numbers route as configured; no other channel does');
+                return $evo;
+            }
+            // 5.18.90 (docs/65 §AD): the automated-send policy is built from the same read, so DishNet's own numbers can
+            // never be "unreadable" while this service routes anything; a failed read leaves the departments as configured.
+            $cm      = self::configInstanceMap($config);
+            $routing = $reg->routing($cm);
+            if (!class_exists('AutomationPolicy')) require_once __DIR__ . '/AutomationPolicy.php';
+            $policy  = \AutomationPolicy::fromRouting($routing, $reg->rows(), $reg->verifiedInstances(), $cm, $config, $dataDir, $pdo);
+            $evo->useRegistry($routing);
+            $evo->policy = $policy;
+            $policy->warnIfIncomplete();
+        } catch (\Throwable $e) {
+            self::sayOnce('[channels] the channel registry could not be read — the three department numbers route as '
+                        . 'configured; no other channel does: ' . $e->getMessage());
+        }
+        return $evo;
+    }
+
+    /** @param array $routing ChannelRegistry::routing() */
+    public function useRegistry(array $routing): void
+    {
+        $this->channelToInstance = (array)($routing['channel_to_instance'] ?? []);
+        $this->instanceToChannel = (array)($routing['instance_to_channel'] ?? []);
+        $this->registry = [
+            'refused'  => (array)($routing['refused'] ?? []),
+            'contexts' => (array)($routing['contexts'] ?? []),
+        ];
+        $this->policy = null;   // rebuilt from this routing when first asked (forStore sets the full one)
+    }
+
+    // ── The automated-send policy (5.18.90, docs/65 §AD) ─────────────────────
+    //
+    // Every reply-class and proactive-class send on a registry-on service — the AI's reply, its photos, documents and
+    // flyer, the hand-over's holding line, a follow-up — and the typing indicator are asked AutomationPolicy first: the
+    // channel known, active, its assistant on, a salesperson's number verified and the department numbers recorded, and
+    // the recipient not DishNet's own. A refusal is returned, never sent, never sent from another number, and carries
+    // policy_refused so no caller mistakes it for a transport failure and retries it. Staff and transactional sends
+    // (an Inbox reply, a staff alert) are not automated customer messages and are not asked. Registry off: nothing here
+    // runs.
+
+    /** The classes that are automated customer messages: ContactOptOut::CLASS_REPLY and ContactOptOut::CLASS_PROACTIVE. */
+    const AUTOMATED_CLASSES = ['reply', 'proactive'];
+
+    /** How a policy refusal's error begins. */
+    const POLICY_REFUSED = 'Not sent — refused by the automated-send policy: ';
+
+    /** @var \AutomationPolicy|null null until asked, or until forStore sets it */
+    private $policy = null;
+
+    /** The policy this service sends under: inert with the registry off. */
+    public function automationPolicy(): \AutomationPolicy
+    {
+        if ($this->policy === null) {
+            if (!class_exists('AutomationPolicy')) require_once __DIR__ . '/AutomationPolicy.php';
+            $this->policy = $this->registry === null ? \AutomationPolicy::inert()
+                : \AutomationPolicy::fromRouting(['channel_to_instance' => $this->channelToInstance,
+                                                  'contexts' => $this->registry['contexts']],
+                                                 null, [], self::configInstanceMap($this->gateConfig), $this->gateConfig, null, null);
+        }
+        return $this->policy;
+    }
+
+    /** The plugin store, so the policy knows the salesperson numbers' owners. Registry off: nothing. @param mixed $store */
+    public function useStaffStore($store): void
+    {
+        if ($this->registry === null) return;
+        $policy = $this->automationPolicy();
+        $policy->useStore($store);
+        // 5.18.90 (docs/65 §AD.9): a gap only the store shows — a re-pair the guard recorded — is said now; once a process.
+        $policy->warnIfIncomplete();
+    }
+
+    /** Why the assistant may not answer on this channel: '' | ai_disabled | internal_numbers_incomplete. */
+    public function aiRefusal(string $channel): string
+    {
+        if ($this->registry === null) return '';
+        $ctx = $this->registry['contexts'][$channel] ?? null;
+        if ($ctx === null) return '';
+        if (!$ctx->aiEnabled()) return 'ai_disabled';
+        if (!$ctx->isDepartment() && !$this->automationPolicy()->numbersComplete()) return 'internal_numbers_incomplete';
+        return '';
+    }
+
+    /** Was this send result a policy refusal (nothing left)? */
+    public static function policyRefused($result): bool
+    {
+        return is_array($result) && !empty($result['policy_refused']);
+    }
+
+    /** The policy's reason for a refusal, '' for any other result. */
+    public static function policyReason($result): string
+    {
+        return self::policyRefused($result) ? (string)($result['policy_reason'] ?? '') : '';
+    }
+
+    /** @return array|null the refusal to return instead of sending, or null to go on */
+    private function policyRefusal(string $channel, string $phone, string $class): ?array
+    {
+        if ($this->registry === null || !in_array($class, self::AUTOMATED_CLASSES, true)) return null;
+        $why = $this->automationPolicy()->refusal($channel, $phone);
+        if ($why === '') return null;
+        error_log('[evo] automated send refused on channel ' . $channel . ': ' . $why . ' — nothing sent, from any number');
+        $this->lastError = ['message' => self::POLICY_REFUSED . $why, 'http' => 0];
+        return ['ok' => false, 'http' => 0, 'data' => [], 'error' => self::POLICY_REFUSED . $why,
+                'policy_refused' => true, 'policy_reason' => $why];
+    }
+
+    /** Is this service routing through the channel registry? */
+    public function registryOn(): bool
+    {
+        return $this->registry !== null;
+    }
+
+    /** The registry's view of a channel, or null (registry off, or no such channel). */
+    public function channelContext(string $channel): ?ChannelContext
+    {
+        return $this->registry['contexts'][$channel] ?? null;
+    }
+
+    /** 'mapped' — routes to a channel; 'refused' — the registry knows it and has switched it off; 'unknown'. */
+    public function instanceState(string $instance): string
+    {
+        $key = mb_strtolower(trim($instance));
+        if (isset($this->instanceToChannel[$key])) return 'mapped';
+        if (isset($this->registry['refused'][$key])) return 'refused';
+        return 'unknown';
+    }
+
+    /** May the assistant answer on this channel? Always, unless the registry says its AI is off (or, 5.18.90, cannot be safe). */
+    public function channelAllowsAi(string $channel): bool
+    {
+        // 5.18.90 (docs/65 §AD): nor on a salesperson's number while a department number is not recorded.
+        return $this->aiRefusal($channel) === '';
+    }
+
+    /**
+     * May a reply to a message that arrived on $inboundInstance leave on $channel NOW? (docs/65 §I)
+     *
+     * Only meaningful with the registry on. The channel must be known and active, must resolve to an instance, and
+     * that instance must be the one the message came in on: if the channel was moved to another number in between, a
+     * reply from the new one would reach the customer from a number they never wrote to. Nothing is sent on a refusal.
+     *
+     * @return array{ok:bool, reason:string, context:?ChannelContext}
+     *   reason: '' | unknown_channel | channel_<status> | ai_disabled | no_instance | no_inbound_instance | instance_mismatch
+     *           | internal_numbers_incomplete (5.18.90)
+     */
+    public function replyRoute(string $channel, string $inboundInstance): array
+    {
+        $ctx = $this->channelContext($channel);
+        if ($ctx === null)       return ['ok' => false, 'reason' => 'unknown_channel', 'context' => null];
+        if (!$ctx->isActive())   return ['ok' => false, 'reason' => 'channel_' . $ctx->status(), 'context' => $ctx];
+        if (!$ctx->aiEnabled())  return ['ok' => false, 'reason' => 'ai_disabled', 'context' => $ctx];
+        $now = $this->instanceFor($channel);
+        if ($now === '')         return ['ok' => false, 'reason' => 'no_instance', 'context' => $ctx];
+        $in = trim($inboundInstance);
+        if ($in === '')          return ['ok' => false, 'reason' => 'no_inbound_instance', 'context' => $ctx];
+        if (strcasecmp($in, $now) !== 0) return ['ok' => false, 'reason' => 'instance_mismatch', 'context' => $ctx];
+        // 5.18.90 (docs/65 §AD): last, so every other reason keeps its precedence — a salesperson's number cannot yet tell a
+        // department's message from a customer's, so it does not answer (silently: the team has the message).
+        if (!$ctx->isDepartment() && !$this->automationPolicy()->numbersComplete()) {
+            return ['ok' => false, 'reason' => 'internal_numbers_incomplete', 'context' => $ctx];
+        }
+        return ['ok' => true, 'reason' => '', 'context' => $ctx];
+    }
+
+    /** @var array<string,bool> */
+    private static array $said = [];
+
+    private static function sayOnce(string $line): void
+    {
+        if (isset(self::$said[$line])) return;
+        self::$said[$line] = true;
+        error_log($line);
     }
 
     /**
@@ -265,6 +480,9 @@ class EvolutionApiService
                 'connected' => in_array(strtolower($state), ['open', 'connected'], true),
                 'phone'     => self::phoneFromJid($jid) ?: self::normalisePhone($jid),
                 'profile'   => (string)($i['profileName'] ?? ($i['profileStatus'] ?? '')),
+                // 5.18.90 (docs/65 §AD): the number only when the owner is a phone JID — '' for an @lid owner, whose
+                // digits are not a phone number. InternalNumbers::recordReported reads this, never 'phone'.
+                'jid_phone' => self::phoneFromJid($jid),
             ];
         }
         usort($out, function ($a, $b) { return strcmp($a['name'], $b['name']); });
@@ -417,6 +635,8 @@ class EvolutionApiService
     {
         $refusal = $this->optOutRefusal($phone, $channel, $class);
         if ($refusal !== null) return $refusal;
+        $refusal = $this->policyRefusal($channel, $phone, $class);   // 5.18.90 (docs/65 §AD)
+        if ($refusal !== null) return $refusal;
 
         $instance = $this->requireInstance($channel);
         if ($instance === '') {
@@ -442,6 +662,8 @@ class EvolutionApiService
         string $class = ContactOptOut::CLASS_PROACTIVE
     ): array {
         $refusal = $this->optOutRefusal($phone, $channel, $class);
+        if ($refusal !== null) return $refusal;
+        $refusal = $this->policyRefusal($channel, $phone, $class);   // 5.18.90 (docs/65 §AD)
         if ($refusal !== null) return $refusal;
 
         $instance = $this->requireInstance($channel);
@@ -487,11 +709,39 @@ class EvolutionApiService
     }
 
     /**
+     * The bytes of a media message a customer sent, from Evolution (v2: POST /chat/getBase64FromMediaMessage/{instance}).
+     *
+     * Batch 1 of the AI communication layer (docs/55 §9). The webhook stays registered with base64 OFF — a payload
+     * carrying the file would meet its 512 KB body cap — so the media worker asks for the file afterwards, by the
+     * message key the webhook recorded. The answer carries `base64`, `mimetype`, `fileName` and `size`; MediaFetcher
+     * validates it. convertToMp4 is always false: a voice note is wanted as sent. The timeout is the constructor's.
+     *
+     * @param array $key remoteJid, id, fromMe — the message key, exactly as Evolution delivered it
+     */
+    public function getBase64FromMediaMessage(string $channel, array $key): array
+    {
+        $instance = $this->requireInstance($channel);
+        if ($instance === '') return $this->fail("No instance for channel '{$channel}'");
+
+        return $this->request('POST', '/chat/getBase64FromMediaMessage/' . rawurlencode($instance), [
+            'message' => ['key' => [
+                'remoteJid' => (string)($key['remoteJid'] ?? ''),
+                'fromMe'    => !empty($key['fromMe']),
+                'id'        => (string)($key['id'] ?? ''),
+            ]],
+            'convertToMp4' => false,
+        ]);
+    }
+
+    /**
      * Typing indicator. Worth sending before an AI reply — the model takes a
      * few seconds and silence reads as being ignored.
      */
     public function sendTyping(string $channel, string $phone, int $durationMs = 3000): array
     {
+        // 5.18.90 (docs/65 §AD): the indicator is the assistant's, and goes only where its reply could.
+        $refusal = $this->policyRefusal($channel, $phone, self::AUTOMATED_CLASSES[0]);
+        if ($refusal !== null) return $refusal;
         $instance = $this->requireInstance($channel);
         if ($instance === '') return $this->fail("No instance for channel '{$channel}'");
 

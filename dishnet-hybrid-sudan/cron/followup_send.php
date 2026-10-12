@@ -30,6 +30,7 @@ require_once $pluginRoot . '/lib/PluginConfig.php';
 require_once $pluginRoot . '/lib/ConversationService.php';
 require_once $pluginRoot . '/lib/ContactOptOut.php';
 require_once $pluginRoot . '/lib/EvolutionApiService.php';
+require_once $pluginRoot . '/lib/AutomationPolicy.php';
 require_once $pluginRoot . '/lib/PlanFenceGuard.php';
 require_once $pluginRoot . '/lib/EvoWebhookGuard.php';
 require_once $pluginRoot . '/lib/FollowUpPolicy.php';
@@ -45,7 +46,10 @@ $pdo     = $store->getPdo();
 $svc     = new FollowUpService($pdo);
 $convSvc = new ConversationService($dataDir, $pdo);
 $oo      = ContactOptOut::fromStore($store);
-$evo     = new EvolutionApiService($config);
+// 5.18.86 (docs/65 §I): the constructor's service unless the channel registry is on (Uganda, behind
+// multi_number_channels_enabled); then a conversation's channel id resolves through wa_channels.
+$evo     = EvolutionApiService::forStore($config, $pdo, $dataDir);
+$evo->useStaffStore($store);   // 5.18.90 (docs/65 §AD): the salesperson numbers' owners, for the policy
 $guard   = new EvoWebhookGuard($pdo, $config);
 $now     = gmdate('Y-m-d H:i:s');
 
@@ -54,9 +58,19 @@ $now     = gmdate('Y-m-d H:i:s');
 require_once $pluginRoot . '/lib/ColleagueNumbers.php';
 $colleagues = ColleagueNumbers::forInstall($config, $dataDir, $store);
 
+// 5.18.89 (docs/65 §AA item 6): an approved follow-up on a salesperson's own number is closed, never sent — they follow
+// up personally, and every automated send from a person's number adds to its ban risk. wa_followups_on_owned_numbers
+// lifts the hold. Registry off: nothing is held and nothing here changes.
+require_once $pluginRoot . '/lib/OwnedNumberHold.php';
+$ownedHold = OwnedNumberHold::forInstall($config, $dataDir, $pdo);
+
 $sent = 0; $held = 0; $failed = 0;
 
-foreach ($svc->approvedDrafts(10) as $d) {
+// 5.18.90 (docs/65 §AD): a draft held on a number that may not send now (paused, not verified, the department numbers not
+// recorded, moved) stays approved and takes none of this run's places, so every other approved follow-up still goes.
+// Registry off: '' — the query exactly as before.
+[$heldSql, $heldArgs] = $evo->automationPolicy()->sqlHeld('f.channel');
+foreach ($svc->approvedDrafts(10, $heldSql, $heldArgs) as $d) {
     $fuId  = (int)$d['followup_id'];
     $phone = (string)$d['phone'];
     $chan  = (string)$d['channel'];
@@ -80,6 +94,11 @@ foreach ($svc->approvedDrafts(10) as $d) {
     }
     if ($colleagues !== null && ($colleagues->isColleague($phone) || $colleagues->isColleagueConversation($conv))) {
         $svc->close($fuId, 'staff', "a colleague's number", 'sender');
+        $held++;
+        continue;
+    }
+    if ($ownedHold->holds($chan)) {
+        $svc->close($fuId, 'cancelled', OwnedNumberHold::REASON, 'sender');
         $held++;
         continue;
     }
@@ -115,7 +134,38 @@ foreach ($svc->approvedDrafts(10) as $d) {
                   'priority-data fact appended before sending', 'system');
     }
 
+    // 5.18.86 (docs/65 §I): with the channel registry on, a follow-up leaves only on its own conversation's number. A
+    // paused number keeps it approved for later; a number switched off for good closes it. Never sent from another.
+    if ($evo->registryOn() && $evo->instanceFor($chan) === '') {
+        $cx = $evo->channelContext($chan);
+        if ($cx === null || $cx->status() !== 'paused') {
+            $svc->close($fuId, 'cancelled', 'the number this chat belongs to is not active (channel ' . $chan . ')', 'sender');
+        }
+        $held++;
+        continue;
+    }
+
+    // 5.18.90 (docs/65 §AD): the automated-send policy, read fresh: the number's assistant on, the number active and,
+    // for a salesperson's, verified with the department numbers recorded; the recipient not DishNet's own. A reason that
+    // may clear by itself keeps the draft approved for later; a final one closes it. Nothing is sent from another number.
+    $why = $evo->automationPolicy()->refusal($chan, $phone);
+    if ($why !== '') {
+        if (!AutomationPolicy::transient($why)) {
+            $svc->close($fuId, $why, 'nothing automated may go to this chat on channel ' . $chan, 'sender');
+        }
+        $held++;
+        continue;
+    }
+
     $res = $evo->sendText($chan, $phone, $body, ContactOptOut::CLASS_PROACTIVE);
+    if (EvolutionApiService::policyRefused($res)) {   // refused at the send itself: nothing left
+        $why = EvolutionApiService::policyReason($res);
+        if (!AutomationPolicy::transient($why)) {
+            $svc->close($fuId, $why, 'refused at the send itself (channel ' . $chan . ')', 'sender');
+        }
+        $held++;
+        continue;
+    }
 
     // Claim our own echo FIRST — before storing, before bookkeeping. The echo
     // is a separate HTTP request and could in principle arrive while we are
@@ -124,7 +174,8 @@ foreach ($svc->approvedDrafts(10) as $d) {
     $waId = (string)($res['data']['key']['id'] ?? $res['key']['id'] ?? '');
     if ($waId !== '') {
         try {
-            $guard->claim($waId, (string)($config['evo_instance_' . $chan] ?? ''), 'followup.send');
+            $guard->claim($waId, $evo->registryOn() ? $evo->instanceFor($chan)
+                                                     : (string)($config['evo_instance_' . $chan] ?? ''), 'followup.send');
         } catch (\Throwable $e) { /* dedupe is a backstop */ }
     }
 

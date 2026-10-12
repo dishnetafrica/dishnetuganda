@@ -10,14 +10,20 @@ declare(strict_types=1);
  * day (Phase 1 closure, --otp-history) and never wrote its final "total
  * execution" line. 5.18.39 casts the hour to a string on both lines.
  *
+ * 5.18.93 retires the auto-pull altogether (tests/test_main_auto_pull_retired.php),
+ * and the schedule line with it. What this test still guards is the 5.18.39 promise:
+ * on an hour outside the pull hour the tick reaches its last line.
+ *
  * This test runs the REAL main.php in a throwaway copy:
  *   - cron/master.php is removed from the copy — the dispatcher and its jobs
  *     have their own suites; here only the tail of the tick is under test;
- *   - the child's clock is set (php -d date.timezone) to an hour that takes the
- *     "scheduled for" branch: not 03, the default pull hour, and below 07, the
+ *   - the child's clock is set (php -d date.timezone) to 04:xx, the hour that took
+ *     the "scheduled for" branch: not 03, the default pull hour, and below 07, the
  *     daily report — so nothing in the run needs a network or a configuration.
- * It asserts the tick reaches its last line, then proves the assertion has teeth
- * by putting the old expression back and watching the tick die where it did.
+ * It asserts the tick reaches its last line and prints no auto-pull line, then
+ * proves the assertion has teeth by planting 5.18.38's own lines where the block
+ * stood — the hour read as an int (line 441) and the str_pad of it (line 456),
+ * then the schedule line — and watching the tick die on 456, as it did.
  */
 $pass = 0; $fail = 0;
 function is_(bool $ok, string $what, string $detail = ''): void {
@@ -41,7 +47,7 @@ is_(is_file($master), 'the copy carries the master cron dispatcher (removed belo
 @unlink($master);
 is_(!is_file($master), 'cron/master.php removed from the copy: the tail of the tick is what runs here');
 
-echo "\nA clock that takes the 'scheduled for' branch\n";
+echo "\nA clock at 04:xx, the hour that took the 'scheduled for' branch\n";
 // The default pull hour is 3 and the daily report fires from 7: run the child at 04:xx.
 $u = (int)gmdate('G'); $o = ((4 - $u) % 24 + 24) % 24; if ($o > 12) $o -= 24;
 $tz = $o === 0 ? 'UTC' : ($o > 0 ? "Etc/GMT-$o" : 'Etc/GMT+' . (-$o));     // Etc/GMT-N is UTC+N
@@ -62,31 +68,39 @@ is_($hb !== '', 'the tick wrote its heartbeat log at the sibling data directory'
 is_(strpos($err, 'UNCAUGHT') === false, 'nothing uncaught on stderr', trim(substr($err, 0, 300)));
 t('exit status 0', $code, 0);
 is_(strpos($hb, 'Heartbeat complete.') !== false, 'the heartbeat ran');
-is_(preg_match('/UCRM auto-pull: scheduled for \d{4}-\d{2}-\d{2} \d{2}:00\./', $hb) === 1,
-    "the 'scheduled for' branch ran and printed a two-digit hour", trim(substr($hb, -400)));
-is_(strpos($hb, ' 03:00.') !== false, 'the default pull hour 3 is padded to 03', trim(substr($hb, -200)));
-is_(strpos($hb, 'main.php total execution:') !== false, 'the tick reached its last line');
+t('no auto-pull line of any kind: the block is retired (5.18.93)', substr_count($hb, 'auto-pull'), 0);
+is_(strpos($hb, 'main.php total execution:') !== false, 'the tick reached its last line', trim(substr($hb, -300)));
 
-echo "\nThe control: the pre-5.18.39 expression put back\n";
+echo "\nThe control: 5.18.38's lines planted where the block stood\n";
 $main = $plugin . '/main.php'; $s = (string)file_get_contents($main);
-$fixed = "str_pad((string)\$autoPullHour, 2, '0', STR_PAD_LEFT)"; $bare = "str_pad(\$autoPullHour, 2, '0', STR_PAD_LEFT)";
-t('the fixed expression occurs twice in the copy', substr_count($s, $fixed), 2);
-file_put_contents($main, str_replace($fixed, $bare, $s));
-@unlink($hbFile);
-[$code2, $out2, $err2] = $run();
-$hb2 = is_file($hbFile) ? (string)file_get_contents($hbFile) : '';
-is_(strpos($err2, '[DishNet UNCAUGHT] str_pad(): Argument #1 ($string) must be of type string, int given') !== false,
-    'the old expression dies with the production error', trim(substr($err2, 0, 300)));
-is_(strpos($err2, 'main.php:456') !== false, '…at main.php:456, the line the production log names', trim(substr($err2, 0, 300)));
-t("…yet the exit status is 0: the plugin's handler swallows it, which is why only the container log ever showed the crash", $code2, 0);
-is_(strpos($hb2, 'Heartbeat complete.') !== false, 'the heartbeat still ran before the crash');
-is_(strpos($hb2, 'scheduled for') === false && strpos($hb2, 'total execution') === false,
-    'and neither the schedule line nor the last line is written — the tick died between them');
+$hdr  = "// AUTO-PULL UCRM CLIENTS CACHE — RETIRED (5.18.93)\n";
+t('the copy carries the retired marker once', substr_count($s, $hdr), 1);
+// 5.18.38's lines 441 and 456 — 5.18.92's, without the (string) cast 5.18.39 added on 456 and 457 (docs/07, 5.18.39) — and
+// the schedule line after them, as the tick ran them at 04:xx: the hour an int, under strict types, died on 456.
+$bare  = "\$autoPullHour    = (int)(\$kycConfig['ucrm_auto_pull_hour'] ?? 3);\n"
+       . "    \$nextPull = date('Y-m-d') . ' ' . str_pad(\$autoPullHour, 2, '0', STR_PAD_LEFT) . ':00';\n"
+       . "    mainLog(\"UCRM auto-pull: scheduled for {\$nextPull}.\");\n";
+$i = strpos($s, $hdr);
+if ($i !== false) {
+    file_put_contents($main, substr($s, 0, $i) . $hdr . $bare . substr($s, $i + strlen($hdr)));
+    $line = 0; foreach (file($main) as $n => $l) if (strpos($l, 'str_pad($autoPullHour') !== false) { $line = $n + 1; break; }
+    is_($line > 0, "the planted line is in the copy (line $line)");
+    @unlink($hbFile);
+    [$code2, $out2, $err2] = $run();
+    $hb2 = is_file($hbFile) ? (string)file_get_contents($hbFile) : '';
+    is_(strpos($err2, '[DishNet UNCAUGHT] str_pad(): Argument #1 ($string) must be of type string, int given') !== false,
+        'the 5.18.38 line dies with the production error', trim(substr($err2, 0, 300)));
+    is_($line > 0 && strpos($err2, "main.php:$line") !== false, '…at the planted line', trim(substr($err2, 0, 300)));
+    t("…yet the exit status is 0: the plugin's handler swallows it, which is why only the container log ever showed the crash", $code2, 0);
+    is_(strpos($hb2, 'Heartbeat complete.') !== false, 'the heartbeat still ran before the crash');
+    is_(strpos($hb2, 'scheduled for') === false && strpos($hb2, 'total execution') === false,
+        'and neither the schedule line nor the last line is written — the tick died between them');
+}
 
 echo "\nThe repository pin\n";
 $repo = (string)file_get_contents($src . '/main.php');
-t('main.php casts the hour on both lines', substr_count($repo, $fixed), 2);
-t('and no bare str_pad($autoPullHour remains', substr_count($repo, $bare), 0);
+t('main.php carries the retired marker once', substr_count($repo, $hdr), 1);
+t('and no str_pad($autoPullHour of either form remains', substr_count($repo, 'str_pad($autoPullHour') + substr_count($repo, 'str_pad((string)$autoPullHour'), 0);
 
 exec('rm -rf ' . escapeshellarg($root));
 echo "\n$pass passed, $fail failed\n";

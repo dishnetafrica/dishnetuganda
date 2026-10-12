@@ -1,6 +1,6 @@
 <!-- ═══ DishNet Branded Invoice — UGANDA EDITION v2 (derived from SS v3) ═══ -->
 {# v2, 26 Sep 2026: PAY NOW leads to dishnetuganda.com/pay; PAID is read from the digits of the amount due. #}
-<!-- IT solutions company & UCC Authorised Starlink Installer. Prices UGX.     -->
+<!-- IT solutions company & Starlink installer. Prices UGX.                    -->
 <!-- Title reads TAX INVOICE only when the document carries VAT lines, so it   -->
 <!-- stays correct before and after VAT registration.                          -->
 
@@ -25,7 +25,7 @@
     <td style="padding:14px 24px 10px;vertical-align:middle;">
       <div style="font-size:28px;font-weight:900;color:#D41C1C;font-family:Helvetica,Arial,sans-serif;letter-spacing:-0.5px;">DishNet</div>
       <div style="height:5px;width:120px;background:#D41C1C;margin-top:3px;"></div>
-      <div style="font-size:8px;color:#999;margin-top:3px;letter-spacing:0.3px;">IT Solutions Provider &middot; UCC Authorised Starlink Installer &middot; Kampala, Uganda</div>
+      <div style="font-size:8px;color:#999;margin-top:3px;letter-spacing:0.3px;">IT Solutions Provider &middot; Starlink Installation &middot; Kampala, Uganda</div>
     </td>
     <td style="padding:14px 24px 10px;text-align:right;vertical-align:middle;">
       <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#999;">{% if totals.taxes|length > 0 %}TAX INVOICE{% else %}INVOICE{% endif %}</div>
@@ -244,7 +244,7 @@
   <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
     <tr>
       <td style="border:1px solid #e0e0e0;border-left:3px solid #D41C1C;padding:7px 12px;font-size:8px;color:#444;line-height:1.6;">
-        <b style="color:#141414;">Payment Terms:</b> The amount due is payable on or before the due date shown. Service is prepaid — it pauses automatically at the end of an unpaid period and resumes on payment. This invoice is issued by <b>DISHNET AFRICA LIMITED</b> (TIN {{ org_tin }}) and is governed by the DishNet Service Process and Terms &amp; Conditions provided with your quotation.
+        <b style="color:#141414;">Payment Terms:</b> The amount due is payable on or before the due date shown. Service is prepaid — it pauses automatically at the end of an unpaid period and resumes on payment. This invoice is issued by <b>DISHNET AFRICA LIMITED</b> (TIN {{ org_tin }}) and is governed by the Terms &amp; Conditions on your quotation and DishNet's policies at dishnetuganda.com/policies.html.
       </td>
     </tr>
   </table>

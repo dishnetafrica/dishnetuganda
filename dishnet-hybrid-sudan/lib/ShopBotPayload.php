@@ -76,6 +76,9 @@ final class ShopBotPayload
         'attachments'        => ['*'],
         'signature'          => ['*'],
         'constraints'        => ['*'],
+        // 5.18.89 (docs/65 §AA, D3): the first name of the salesperson whose own line this is — the brain's identity
+        // line depends on it, so an interchangeable implementation needs it too. One word of letters, never more.
+        'line_owner'         => ['*'],
     ];
 
     /**
@@ -127,6 +130,8 @@ final class ShopBotPayload
             $v = self::str($ctx[$k] ?? null);
             if ($v !== '') $out[$k] = $v;
         }
+        $owner = self::str($ctx['line_owner'] ?? null);
+        if ($owner !== '' && preg_match("/^[\\p{L}][\\p{L}'\\-]{0,29}$/u", $owner)) $out['line_owner'] = $owner;
         if (!empty($ctx['identity_ambiguous'])) {
             $out['identity_ambiguous'] = true;
         }

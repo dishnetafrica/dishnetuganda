@@ -25,7 +25,10 @@ final class UcrmLeadWorker extends WorkerBase
 
     protected function handle(array $event): void
     {
-        $p      = is_array($event['payload'] ?? null) ? $event['payload'] : [];
+        // Batch 0 (docs/55 defect b): WorkerBase hands the decoded payload as '_payload' and leaves 'payload' the
+        // JSON string EventBus stored (WorkerBase::run, EventBus::emit). This read 'payload' as an array, found
+        // nothing, logged "no lead_id — dropped" and acknowledged the event — so no lead ever reached uCRM.
+        $p      = self::payloadOf($event);
         $leadId = (int)($p['lead_id'] ?? 0);
         if ($leadId <= 0) {
             $this->log('warn', 'crm.lead.sync with no lead_id — dropped');
@@ -66,13 +69,23 @@ final class UcrmLeadWorker extends WorkerBase
         throw new \RuntimeException('lead #' . $leadId . ' sync failed: ' . (string)$r['reason']);
     }
 
+    /** The event's payload however it arrived: decoded by WorkerBase, already an array, or the stored JSON string. */
+    private static function payloadOf(array $event): array
+    {
+        if (is_array($event['_payload'] ?? null) && $event['_payload'] !== []) return $event['_payload'];
+        $raw = $event['payload'] ?? null;
+        if (is_array($raw)) return $raw;
+        if (is_string($raw) && $raw !== '') { $d = json_decode($raw, true); return is_array($d) ? $d : []; }
+        return is_array($event['_payload'] ?? null) ? $event['_payload'] : [];
+    }
+
     /**
      * Five attempts spent. Said loudly, because a lead nobody knows about is
      * the failure this phase was built to end.
      */
     protected function onDead(array $event, \Throwable $e): void
     {
-        $p      = is_array($event['payload'] ?? null) ? $event['payload'] : [];
+        $p      = self::payloadOf($event);
         $leadId = (int)($p['lead_id'] ?? 0);
         $this->log('error', sprintf(
             'lead #%d NEVER reached uCRM after five attempts — it is in leads.json only: %s',

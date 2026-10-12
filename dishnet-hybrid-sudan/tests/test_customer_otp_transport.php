@@ -179,7 +179,11 @@ is_(strpos($app, 'phoneTransport(NotificationService::SUPPORT)') !== false, 'the
 is_(strpos($app, 'ReflectionObject') === false, '…and reads the result through the public getter, not reflection');
 is_(strpos($app, "wa_plugin_url']) && !empty(\$config['wa_app_key']) && !empty(\$config['wa_auth_key']);\n        if (!\$senderEnabled") === false, 'the WASender-only gate is gone');
 $ns = codeNC($root . '/lib/NotificationService.php');
-t("sendVia() keeps a login code out of the retry queue and the conversation store", substr_count($ns, "\$event !== 'app_otp'"), 2);
+// 5.18.83 (docs/64 §B): the retry queue's exclusion became the NEVER_QUEUED list, which names app_otp beside the
+// installation authorisation request; the conversation store's exclusion is unchanged. Both halves stay pinned.
+t("sendVia() keeps a login code out of the conversation store", substr_count($ns, "\$event !== 'app_otp'"), 1);
+is_(strpos($ns, "public const NEVER_QUEUED = ['app_otp', 'ops_install_auth_request'];") !== false && strpos($ns, "!in_array(\$event, self::NEVER_QUEUED, true)") !== false,
+    '…and out of the retry queue: NEVER_QUEUED names app_otp, and the queue honours it');
 is_(strpos($ns, 'public function phoneTransport(') !== false && strpos($ns, 'public function lastSendResult(') !== false, 'the notifier exposes phoneTransport() and lastSendResult()');
 
 printf("\n%d passed, %d failed\n", $pass, $fail);

@@ -49,6 +49,8 @@ class AiReplyWorker extends WorkerBase
         require_once $root . '/lib/EvolutionApiService.php';
         require_once $root . '/lib/DishNetTools.php';
         require_once $root . '/lib/ConversationService.php';
+        require_once $root . '/lib/LineOwner.php';
+        require_once $root . '/lib/AutomationPolicy.php';
         require_once $root . '/lib/DishNetAiBrain.php';
         require_once $root . '/lib/KnowledgeBase.php';
         require_once $root . '/lib/FlyerAsset.php';
@@ -58,7 +60,10 @@ class AiReplyWorker extends WorkerBase
         // point the worker at their own data directory.
         $dataDir = getenv('DN_DATA_DIR') ?: getDataDir($root);
 
-        $this->evo   = new EvolutionApiService($config);
+        // 5.18.86 (docs/65 §I): forStore() is the constructor's service unless the channel registry is on (Uganda, behind
+        // multi_number_channels_enabled); then a channel id resolves through wa_channels.
+        $this->evo   = EvolutionApiService::forStore($config, $this->pdo, $dataDir);
+        $this->evo->useStaffStore($store);   // 5.18.90 (docs/65 §AD): the salesperson numbers' owners, for the policy
         $this->tools = new DishNetTools($store, $config, $root);
         // One brain, one knowledge base: the same approved answers the website
         // chat uses ride into the shared system prompt. Empty (legacy) when
@@ -122,8 +127,44 @@ class AiReplyWorker extends WorkerBase
         }
     }
 
+    /**
+     * Batch 0 (docs/55 defect c): the ids the guard's log lines and audit rows carry for the turn in hand.
+     *
+     * The sales channel's context is built by BrainContext, which deliberately strips conversation_id and
+     * the customer id — they are our database keys, not something the model needs (BrainContext::NEVER_PRESENT).
+     * Reading them off that context recorded conversation 0 and customer 0 for every sales turn. They are kept
+     * here instead: set by buildContext() once identity is resolved, cleared at the start of every event, and
+     * never part of the brain's input. The legacy channels still carry them in the context; the helpers below
+     * fall back to that, so support and account record exactly what they recorded before.
+     *
+     * 5.18.86 (docs/65 §I): with the channel registry on, channel_id too — the guard's audit row names the number's
+     * channel, which for a second sales number is not the role the brain was told.
+     *
+     * @var array{conversation_id?:int,customer_id?:int,channel_id?:string}
+     */
+    private array $turnIds = [];
+
+    /**
+     * 5.18.89 (docs/65 §AA): the salesperson whose own number this turn arrived on, or null — always null with the
+     * registry off and on every department number. Resolved once per turn; the persona (D3), the hand-over (D4) and
+     * the lead (D5) all read it, so all three agree on who it is.
+     */
+    private ?\LineOwner $lineOwner = null;
+
+    private function turnConversationId(array $ctx): int
+    {
+        return (int)($this->turnIds['conversation_id'] ?? ($ctx['conversation_id'] ?? 0));
+    }
+
+    private function turnCustomerId(array $ctx): int
+    {
+        return (int)($this->turnIds['customer_id'] ?? ($ctx['customer']['id'] ?? 0));
+    }
+
     protected function handle(array $event): void
     {
+        $this->turnIds = [];
+        $this->lineOwner = null;
         $p       = $event['_payload'] ?? [];
         $channel = (string)($p['channel'] ?? '');
         $phone   = (string)($p['customer_phone'] ?? '');
@@ -142,6 +183,33 @@ class AiReplyWorker extends WorkerBase
             return;
         }
 
+        // 5.18.90 (docs/65 §AD): one of DishNet's own numbers — a department's or a salesperson's line, or on a
+        // salesperson's number a line owner or an internal alert number — is never answered by the assistant: no reply,
+        // no typing, no lead, no hand-over, and no retry. The webhook stops these before they are queued; this catches one
+        // queued before the deploy, by the media worker, or by any other route. Registry off: never true. No number logged.
+        if ($this->evo->registryOn()) {
+            $own = $this->evo->automationPolicy()->senderClass($channel, $phone);
+            if ($own !== '') {
+                $this->log('info', "conv {$convId}: a DishNet number ({$own}) on channel {$channel} — kept for the team, not answered by the AI");
+                return;
+            }
+        }
+
+        // 5.18.86 (docs/65 §I, §J): which number this is, and whether a reply may leave on it. With the channel registry
+        // off — the default, and every install but Uganda — the channel IS the role, exactly as before, and nothing here
+        // runs. With it on, the channel id resolves through wa_channels to the role the brain plays and to the instance a
+        // reply leaves on, and that instance must be the one this message arrived on. On any doubt nothing is sent: a
+        // person is told, and the customer gets no holding line from a number that may not be the one they wrote to.
+        $role = $this->replyRoleOrRefuse($channel, (string)($p['whatsapp_instance'] ?? ''), $convId, $phone);
+        if ($role === null) return;
+        // 5.18.89 (docs/65 §AA): a salesperson's own number? Only the registry can say, so off it is never asked.
+        if ($this->evo->registryOn()) {
+            $this->lineOwner = \LineOwner::of($this->evo->channelContext($channel), $this->store, $this->config,
+                                              $this->dataDir !== '' ? $this->dataDir : null);
+            // 5.18.90 (docs/65 §AD): the automated-send policy, read fresh, before the model is asked or anything shown.
+            if ($this->refusedByPolicy($this->evo->automationPolicy()->refusal($channel, $phone), $convId, $channel, $phone)) return;
+        }
+
         // A colleague has this conversation. The question is not dropped —
         // "human active, skipping AI" acked the event, and that is how a
         // customer's follow-up went unanswered by anyone. It is parked and
@@ -158,13 +226,16 @@ class AiReplyWorker extends WorkerBase
             }
         }
 
-        // One line per message: enough to trace the pipeline, no content.
-        $this->log('info', sprintf('conv %d: in channel=%s len=%d', $convId, $channel, mb_strlen($message)));
+        // One line per message: enough to trace the pipeline, no content. Batch 2: a transcript says so.
+        $this->log('info', sprintf('conv %d: in channel=%s len=%d%s', $convId, $channel, mb_strlen($message),
+            in_array((string)($p['origin'] ?? ''), ['voice', 'image', 'document'], true) ? ' origin=' . (string)$p['origin'] : ''));
 
         // Let the customer see something is happening while the model thinks.
         $this->evo->sendTyping($channel, $phone);
 
-        $context = $this->buildContext($channel, $phone, $message, $p, $convId);
+        // The brain is told the ROLE (5.18.86): for the three department numbers it is the channel itself, as always.
+        $context = $this->buildContext($role, $phone, $message, $p, $convId);
+        if ($this->evo->registryOn()) $this->turnIds['channel_id'] = $channel;   // for the guard's audit row, never the brain
 
         $ai = $this->askBrain($context);
         if ($ai === null) {
@@ -182,6 +253,11 @@ class AiReplyWorker extends WorkerBase
 
         // ── Point of no return ───────────────────────────────────────────
         $send = $this->evo->sendText($channel, $phone, $reply, ContactOptOut::CLASS_REPLY);
+        if (\EvolutionApiService::policyRefused($send)) {
+            // 5.18.90 (docs/65 §AD): refused at the send itself — nothing left, from any number. Never a retry.
+            $this->refusedByPolicy(\EvolutionApiService::policyReason($send), $convId, $channel, $phone);
+            return;
+        }
         if (!$send['ok']) {
             // 5.18.54 (docs/46 row 31, N-1), Uganda: throwing hands the event back to EventBus, which asks the AI again
             // and sends again. When the reply may already have reached the customer, that is a second answer: a person
@@ -254,8 +330,17 @@ class AiReplyWorker extends WorkerBase
                         // will produce one; it will be the middle of the
                         // country it has heard of, and an installer would
                         // drive to it.
+                        // Batch 0 (docs/55 defect a): this read `$ctx`, a variable that does not exist in
+                        // handle() — the context is `$context` — so PHP passed null to an array parameter,
+                        // the TypeError landed in the catch below as "lead capture failed", and no WhatsApp
+                        // lead was ever written or synced.
+                        // 5.18.86 (docs/65 §K): with the channel registry on, the lead also records the number it came
+                        // in on — channel, owner, territory. Off, null: the 5.18.85 lead, field for field.
+                        $svc->withOrigin($this->leadOrigin($channel, $convId));
+                        // 5.18.89 (docs/65 §AA, D5): a new lead from a salesperson's own number is theirs.
+                        $svc->withOwner($this->lineOwner);
                         $r   = $svc->capture($ai['lead'], $phone, $convId, 'whatsapp_ai',
-                                             $this->latestPin($convId, $ctx));
+                                             $this->latestPin($convId, $context));
                         $this->log($r['ok'] ? 'info' : 'info', sprintf(
                             'conv %d: lead %s%s', $convId, $r['action'],
                             $r['reason'] !== '' ? ' — ' . $r['reason'] : ' #' . (int)$r['lead_id']
@@ -267,8 +352,10 @@ class AiReplyWorker extends WorkerBase
                         // that gained a location or a quote request is a lead
                         // uCRM should hear about again.
                         if (!empty($r['ok']) && (int)$r['lead_id'] > 0) {
+                            $syncPayload = ['lead_id' => (int)$r['lead_id'], 'conversation_id' => $convId];
+                            if ($this->evo->registryOn()) $syncPayload['channel_id'] = $channel;   // 5.18.86, docs/65 §K
                             $this->bus->emit('crm.lead.sync', 'lead', (int)$r['lead_id'],
-                                ['lead_id' => (int)$r['lead_id'], 'conversation_id' => $convId],
+                                $syncPayload,
                                 5, 'ai_reply_worker');
                         }
                     }
@@ -313,6 +400,26 @@ class AiReplyWorker extends WorkerBase
             // prose: the description the model reads is in 'message', but what
             // gets written down comes from here.
             'location'          => is_array($p['location'] ?? null) ? $p['location'] : null,
+            // Batch 2 (docs/55 §9, docs/56): this turn's message is the transcript of a voice note, queued by
+            // VoiceTranscription with origin=voice. Presence is the fact; the one leaf is the announced duration.
+            // The model is told how to treat it in DishNetAiBrain's VOICE MESSAGE block — nothing else changes.
+            'voice'             => (($p['origin'] ?? '') === 'voice' && is_array($p['voice'] ?? null))
+                                   ? ['seconds' => max(0, (int)($p['voice']['seconds'] ?? 0))] : null,
+            // Batch 3 (docs/55 §9, docs/57): this turn's message is the automatic description of a picture, queued by
+            // ImageUnderstanding with origin=image. Presence is the fact; the one leaf is the classification. A payment
+            // screenshot never arrives here — it is handed to a person before any event is queued.
+            'image'             => (($p['origin'] ?? '') === 'image' && is_array($p['image'] ?? null))
+                                   ? ['classification' => (string)($p['image']['classification'] ?? 'general')] : null,
+            // Batch 4 (docs/55 §9, docs/58): this turn's message is the automatic extract of a document, queued by
+            // DocumentExtraction with origin=document. Presence is the fact; the three leaves are the classification, the
+            // kind and whether the extract was cut. A human-only document (payment, invoice, statement, contract, quotation,
+            // identity, credential) never arrives here — it is handed to a person before any event is queued.
+            'document'          => (($p['origin'] ?? '') === 'document' && is_array($p['document'] ?? null))
+                                   ? ['classification' => (string)($p['document']['classification'] ?? 'general'),
+                                      'kind' => (string)($p['document']['kind'] ?? 'document'),
+                                      'truncated' => !empty($p['document']['truncated'])] : null,
+            // 5.18.89 (docs/65 §AA, D3): the first name of the salesperson whose own line this is; absent otherwise.
+            'line_owner'        => $this->lineOwner !== null ? $this->lineOwner->firstName() : null,
         ];
 
         // Identity is shared across all three numbers.
@@ -369,6 +476,9 @@ class AiReplyWorker extends WorkerBase
         // on trailing nine digits with no country check — the same defect
         // fixed in DishNetTools — and put a South Sudan visitor's typed name
         // into a Ugandan caller's prompt. It bought a greeting.
+
+        // Batch 0 (docs/55 defect c): remembered for the guard's audit, outside the brain's context.
+        $this->turnIds = ['conversation_id' => $convId, 'customer_id' => $clientId];
 
         switch ($channel) {
             case EvolutionApiService::CHANNEL_SALES:
@@ -504,6 +614,18 @@ class AiReplyWorker extends WorkerBase
                     'products'  => $products,
                     'message'   => $message,
                     'history'   => $ctx['history'] ?? [],
+                    // Batch 0 (docs/55 defect c): the pin this turn carried. Until now the sales number — where
+                    // customers send their location — never showed the assistant the pin block, because the
+                    // contract had no key for it; support and account did.
+                    'location'  => $ctx['location'] ?? null,
+                    // Batch 2 (docs/55 §9): the voice note this message was transcribed from, if it was.
+                    'voice'     => $ctx['voice'] ?? null,
+                    // Batch 3 (docs/55 §9): the picture this message describes, if it does.
+                    'image'     => $ctx['image'] ?? null,
+                    // Batch 4 (docs/55 §9, docs/58): the document this message was extracted from, if it was.
+                    'document'  => $ctx['document'] ?? null,
+                    // 5.18.89 (docs/65 §AA, D3): whose own line this is, if a salesperson's.
+                    'line_owner' => $ctx['line_owner'] ?? null,
                 ]);
         }
 
@@ -699,6 +821,9 @@ class AiReplyWorker extends WorkerBase
                 // character; without this the guard refused the replies that
                 // obeyed it.
                 'public' => \DishNetAiBrain::operatorText((array)($this->config ?? [])),
+                // Batch 4 (docs/58 §6.6, §9): on a turn extracted from a DOCUMENT, a reply that commits — a payment
+                // received, a contract accepted, an identity verified — is refused as well. Off on every other turn.
+                'commitments' => is_array($ctx['document'] ?? null),
                 // 5.18.46: where the hardware module is on, amounts written without separators and unfilled
                 // template slots too (docs/41) — on 27 Sep two wrong totals and a "[Sum of setup costs]" passed.
             ] + \ReplyPrivacyGuard::optionsFor((array)($this->config ?? [])));
@@ -721,7 +846,7 @@ class AiReplyWorker extends WorkerBase
             if ($fence['appended']) {
                 $ai['reply'] = $fence['reply'];
                 $this->log('info', sprintf('conv %d: plan fence appended — %s',
-                    (int)($ctx['conversation_id'] ?? 0), $fence['reason']));
+                    $this->turnConversationId($ctx), $fence['reason']));
             }
             // 5.18.48 (docs/42): the operator's taxes line under a Starlink kit price, where the hardware module
             // is on. Also the operator's text, appended after the check for the same reason as the fence.
@@ -733,21 +858,28 @@ class AiReplyWorker extends WorkerBase
             if ($kit['appended']) {
                 $ai['reply'] = $kit['reply'];
                 $this->log('info', sprintf('conv %d: kit tax note appended — %s',
-                    (int)($ctx['conversation_id'] ?? 0), $kit['reason']));
+                    $this->turnConversationId($ctx), $kit['reason']));
             }
             return $ai;
         }
 
-        $convId = (int)($ctx['conversation_id'] ?? 0);
+        $convId = $this->turnConversationId($ctx);
         $cats   = implode(',', (array)($res['categories'] ?? []));
         $this->log('warn', sprintf('conv %d: reply BLOCKED by guard — %s (len=%d)', $convId, $cats, mb_strlen($reply)));
         try {
             $this->store->append('ai_security_events.json', \ReplyPrivacyGuard::auditEvent($res, [
                 'conversation_id' => $convId,
-                'customer_id'     => (int)($ctx['customer']['id'] ?? 0),
-                'channel'         => (string)($ctx['channel'] ?? ''),
+                'customer_id'     => $this->turnCustomerId($ctx),
+                // 5.18.86 (docs/65 §I): the channel id when the registry is on (a second sales number is not 'sales');
+                // otherwise the context's channel, as before. The same string for the three department numbers.
+                'channel'         => (string)($this->turnIds['channel_id'] ?? ($ctx['channel'] ?? '')),
                 'provider'        => 'ai_reply_worker',
                 'blocked_length'  => strlen($reply),
+                // Batch 2 (docs/55 §9): the audit event's own modality field — voice when the turn that produced the
+                // blocked reply was a transcript, text otherwise (its default).
+                'modality'        => is_array($ctx['voice'] ?? null) ? 'voice'
+                                   : (is_array($ctx['image'] ?? null) ? 'image'
+                                   : (is_array($ctx['document'] ?? null) ? 'document' : 'text')),
             ]));
         } catch (\Throwable $e) {
             $this->log('warn', 'guard event not stored: ' . $e->getMessage());
@@ -1381,8 +1513,83 @@ class AiReplyWorker extends WorkerBase
         $convId  = (int)($event['entity_id'] ?? 0);
         if ($channel === '' || $phone === '') return;
         $attempts = (int)($event['attempts'] ?? 0) + 1;
+        // 5.18.86 (docs/65 §I): the holding line is a send like any other. With the registry on it goes only where the
+        // reply could have gone — the number the message arrived on, still that channel's; otherwise the person is told
+        // and the customer is sent nothing from a number that may be the wrong one.
+        $mayHold = !$this->evo->registryOn()
+                || $this->evo->replyRoute($channel, (string)($p['whatsapp_instance'] ?? ''))['ok'];
         $this->escalate($convId, $channel, $phone,
-            "no reply after {$attempts} attempts (" . mb_substr($e->getMessage(), 0, 80) . ')');
+            "no reply after {$attempts} attempts (" . mb_substr($e->getMessage(), 0, 80) . ')', !$mayHold);
+    }
+
+    /**
+     * 5.18.86 (docs/65 §I, §J): the role the brain plays on this channel, or null when no reply may leave on it.
+     *
+     * Registry off: the channel itself, exactly as before — this returns at its first line. Registry on: the channel's
+     * registry role, if the channel is known and active, its assistant on, and its instance the one the message arrived
+     * on. A channel whose assistant is off is left for the team without a word. Any other refusal hands the conversation
+     * to a person and sends the customer nothing — no reply and no holding line — because the only number left to send
+     * from is one the customer may never have written to. Logs name the channel id and the reason, never a number.
+     */
+    private function replyRoleOrRefuse(string $channel, string $inboundInstance, int $convId, string $phone): ?string
+    {
+        if (!$this->evo->registryOn()) return $channel;
+        $route = $this->evo->replyRoute($channel, $inboundInstance);
+        if ($route['ok']) return $route['context']->role();
+        if ($route['reason'] === 'ai_disabled' || $route['reason'] === 'internal_numbers_incomplete') {
+            $this->log('info', "conv {$convId}: " . ($route['reason'] === 'ai_disabled' ? 'the assistant is off'
+                : 'the department numbers are not all verified') . " on channel {$channel} — kept for the team, not answered");
+            return null;
+        }
+        $this->log('warn', "conv {$convId}: reply NOT sent on channel {$channel} — {$route['reason']}; handed to a person");
+        $this->escalate($convId, $channel, $phone,
+            'no reply sent: the number for this chat could not be confirmed (' . $route['reason'] . ')', true);
+        return null;
+    }
+
+    /**
+     * 5.18.90 (docs/65 §AD): what a refusal by the automated-send policy means for this turn. '' → false, go on.
+     * Silent reasons (the recipient is DishNet's own, the assistant is off, the department numbers are not recorded) →
+     * true, and the team has the message. A registry that could not be read → throw: EventBus retries, nothing having been
+     * sent. Anything else — the number paused, switched off, moved or not verified since this process read the registry —
+     * → true, and a person is told, exactly as a refused reply route is; the customer gets no holding line from a number
+     * that may not be the one they wrote to. Never sent from another number.
+     */
+    private function refusedByPolicy(string $why, int $convId, string $channel, string $phone): bool
+    {
+        if ($why === '') return false;
+        if (\AutomationPolicy::silent($why)) {
+            $this->log('info', "conv {$convId}: nothing automated on channel {$channel} ({$why}) — kept for the team, not answered");
+            return true;
+        }
+        if ($why === 'registry_unreadable') {
+            throw new \RuntimeException('the channel registry could not be read; nothing was sent');
+        }
+        $this->log('warn', "conv {$convId}: reply NOT sent on channel {$channel} — refused by the automated-send policy ({$why}); handed to a person");
+        $this->escalate($convId, $channel, $phone,
+            'no reply sent: this chat\'s number may not send the assistant\'s reply now (' . $why . ')', true);
+        return true;
+    }
+
+    /**
+     * 5.18.86 (docs/65 §K): where a lead came from, for AiLeadService — null with the registry off, so the 5.18.85 lead
+     * is written field for field. The business number is the registry's own, null until a number is verified.
+     */
+    private function leadOrigin(string $channel, int $convId): ?array
+    {
+        if (!$this->evo->registryOn()) return null;
+        $ctx = $this->evo->channelContext($channel);
+        if ($ctx === null) return null;
+        return [
+            'channel_id'          => $ctx->id(),
+            'channel_role'        => $ctx->role(),
+            // 5.18.90: a department's number is recorded now (docs/65 §AD) but its leads stay as they were — no number.
+            'source_number'       => $ctx->isDepartment() ? null : $ctx->businessNumber(),
+            'channel_owner_type'  => $ctx->ownerType(),
+            'channel_owner_id'    => $ctx->ownerId(),
+            'territory_region_id' => $ctx->territoryRegionId(),
+            'conversation_id'     => $convId,
+        ];
     }
 
     /** 5.18.54 (docs/46 row 31): Uganda only. */
@@ -1404,90 +1611,25 @@ class AiReplyWorker extends WorkerBase
     private function escalate(int $convId, string $channel, string $phone, string $reason,
                               bool $alreadyAnswered = false): void
     {
-        $this->log('info', "conv {$convId}: HANDOFF to human — {$reason}");
-        try {
-            if ($convId > 0) {
-                $this->pdo->prepare(
-                    "UPDATE wa_conversations SET state = 'needs_human', updated_at = datetime('now') WHERE id = ?"
-                )->execute([$convId]);
-            }
-            $this->bus->emit('wa.escalation', 'conversation', $convId, [
-                'channel' => $channel,
-                'phone'   => $phone,
-                'reason'  => $reason,
-            ], 2, 'ai_reply_worker');
-
-            // Tell a person now. The Inbox tab turning red only works if
-            // someone is looking at it; the phone in their pocket always is.
-            // 30-minute cooldown per conversation, so a customer who trips
-            // escalation three times in a row is one buzz, not three.
-            require_once dirname(__DIR__) . '/lib/AlertService.php';
-            $alerts = new \AlertService($this->store, $this->config, $this->evo);
-            $alerts->notify(
-                'escalate:conv:' . $convId,
-                "🔴 DishNet: the AI needs a human for {$phone} ({$channel})"
-                . ($reason !== '' ? " — {$reason}" : '') . '. Open Engage → WhatsApp → Inbox.',
-                30
-            );
-
-            // ── And tell the customer ────────────────────────────────────
-            // A handoff sent them nothing at all. The team gets a buzz, the
-            // Inbox turns red, and the person who asked the question hears
-            // silence — indistinguishable from being ignored. Six
-            // conversations were sitting like that, one of them since nine
-            // that morning.
-            //
-            // Empty by default: an installation that has not set a line keeps
-            // the old behaviour exactly.
-            $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
-            if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
-                $send = $this->evo->sendText($channel, $phone, $holding, ContactOptOut::CLASS_REPLY);
-                if (!empty($send['ok'])) {
-                    if ($convId > 0) {
-                        $this->convSvc->storeMessage($convId, [
-                            'direction'     => 'out',
-                            'role'          => 'assistant',
-                            'body'          => $holding,
-                            'agent_name'    => 'DishNet AI',
-                            'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
-                            'metadata'      => json_encode(['channel' => $channel, 'handover' => true]),
-                        ]);
-                    }
-                } else {
-                    $this->log('warn', "conv {$convId}: handover line not sent: "
-                        . (string)($send['error'] ?? '?'));
-                }
-            }
-        } catch (\Throwable $e) {
-            $this->log('error', 'escalation failed: ' . $e->getMessage());
-        }
+        // Batch 2 (docs/55 §9, docs/56 §5): the hand-over itself lives in lib/Handover.php, so the media worker hands
+        // a voice note it could not transcribe to a person through EXACTLY this path — needs_human, the wa.escalation
+        // event, the staff alert, the holding line once. The statements are the ones that stood here, in their order.
+        if (!class_exists('Handover')) require_once dirname(__DIR__) . '/lib/Handover.php';
+        \Handover::escalate($this->pdo, $this->bus, $this->store, (array)$this->config, $this->evo, $this->convSvc,
+            $convId, $channel, $phone, $reason, $alreadyAnswered,
+            function (string $level, string $message): void { $this->log($level, $message); }, 'ai_reply_worker',
+            $this->handoverOwner($channel));
     }
 
     /**
-     * Have we said this already in the last few turns?
-     *
-     * A customer who trips the handoff three times running should hear it
-     * once. The team alert has a 30-minute cooldown for the same reason, and
-     * repeating a holding line at somebody already waiting reads worse than
-     * saying nothing.
-     *
-     * On any error it answers false: a duplicate is a smaller failure than
-     * another silence.
+     * 5.18.89 (docs/65 §AA, decision D4): the salesperson a hand-over on this channel alerts, or null for the central
+     * number alone. Only a channel that hands over to its owner, and only an owner this turn resolved.
      */
-    private function alreadySaid(int $convId, string $text): bool
+    private function handoverOwner(string $channel): ?\LineOwner
     {
-        if ($convId <= 0) return false;
-        try {
-            $stmt = $this->pdo->prepare(
-                "SELECT body FROM wa_messages
-                  WHERE conversation_id = ? AND direction = 'out'
-                  ORDER BY id DESC LIMIT 3"
-            );
-            $stmt->execute([$convId]);
-            foreach ((array)$stmt->fetchAll(\PDO::FETCH_COLUMN) as $b) {
-                if (trim((string)$b) === trim($text)) return true;
-            }
-        } catch (\Throwable $e) { /* fall through */ }
-        return false;
+        if ($this->lineOwner === null || !$this->evo->registryOn()) return null;
+        $ctx = $this->evo->channelContext($channel);
+        return ($ctx !== null && $ctx->handoverTo() === 'owner') ? $this->lineOwner : null;
     }
+
 }

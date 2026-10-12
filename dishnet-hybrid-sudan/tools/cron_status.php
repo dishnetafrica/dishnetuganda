@@ -72,6 +72,10 @@ foreach (explode("\n", $src) as $line) {
     if (strpos($t, '//') === 0 || strpos($t, '*') === 0) continue;
     if (preg_match("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $line, $one)) {
         if (preg_match("/'gate'\s*=>\s*'([a-z_]+)'/", $line, $g) && !NotifyGate::applies($g[1], $gateCfg, $dataDir)) continue;
+        // Batch 1 (docs/55 §9): a job registered with a 'flag' exists only while that setting is on — master.php does
+        // not dispatch it otherwise, so it is not listed, exactly as a gated job is not listed where its gate does not apply.
+        if (preg_match("/'flag'\s*=>\s*'([a-z0-9_]+)'/", $line, $fl)
+            && !in_array(strtolower(trim((string)($gateCfg[$fl[1]] ?? ''))), ['1', 'true', 'on', 'yes'], true)) continue;
         // Hour-gated jobs are not late when they have not run — master.php
         // skips them until their hour comes round. Listing them as NEVER RUN
         // put eight healthy daily jobs in a report about broken ones.

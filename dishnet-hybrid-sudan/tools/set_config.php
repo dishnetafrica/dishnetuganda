@@ -67,6 +67,63 @@ $FLAGS = [
     'ai_currency' => ['text',
         'Currency prices are stated in — shown to customers exactly as typed'],
 
+    // Batch 1 of the AI communication layer (docs/55 §9): the media foundation. OFF unless set. Off, a voice note,
+    // photo or document is stored exactly as before (a placeholder and its type) and nothing else happens. On, the
+    // message is also recorded for the media worker, which fetches the file into memory, checks its type and size,
+    // keeps a hash and the size on the record and forgets the bytes — nothing is kept on disk, and nothing is answered
+    // or understood yet (Batch 2+). The two limits are refused outside their range rather than clamped silently.
+    'ai_media_enabled' => ['bool',
+        'Record and fetch the media customers send (voice, image, document) for the media worker — nothing is answered yet'],
+    'ai_media_max_bytes' => ['number',
+        'Largest media file the worker fetches, in bytes (default 15728640 = 15 MiB; 65536 to 67108864)'],
+    'ai_media_timeout_s' => ['number',
+        'Seconds the worker waits for Evolution to hand a file over (default 20; 3 to 60)'],
+    // Batch 2 (docs/55 §9, docs/56): voice notes. OFF unless set, and ai_media_enabled must be on as well. On, a voice
+    // note is transcribed through the configured provider and the transcript is answered by the SAME assistant as a
+    // typed message, labelled as a transcript. No provider exists yet (docs/56): with none configured every voice
+    // note is handed to a person with the hand-over message instead — never an invented answer.
+    'ai_media_voice' => ['bool',
+        'Transcribe voice notes and answer them like typed text (needs ai_media_enabled and a transcription provider)'],
+    'ai_media_voice_max_seconds' => ['number',
+        'Longest voice note transcribed, in seconds (default 120; 10 to 600) — a longer one is handed to a person'],
+    'ai_media_voice_timeout_s' => ['number',
+        'Seconds to wait for the transcription provider (default 30; 5 to 120)'],
+    'ai_transcription_provider' => ['text',
+        'Speech-to-text provider: none is the only value today (docs/56); the test-only fake is refused here'],
+    // Batch 3 (docs/55 §9, docs/57): pictures. OFF unless set, and ai_media_enabled must be on as well. On, a photo is
+    // described through the configured vision provider and the description is answered by the SAME assistant as typed
+    // text, labelled as a description — EXCEPT a payment screenshot or receipt, which is evidence for a person: no AI
+    // answer, nothing marked paid, nothing recorded. No provider exists yet (docs/57): with none configured every
+    // photo is handed to a person with the hand-over message instead — never an invented answer.
+    'ai_media_image' => ['bool',
+        'Describe photos and answer them like typed text (needs ai_media_enabled and a vision provider); payment screenshots go to a person'],
+    'ai_media_image_timeout_s' => ['number',
+        'Seconds to wait for the vision provider (default 30; 5 to 120)'],
+    'ai_image_provider' => ['text',
+        'Vision provider: none is the only value today (docs/57); the test-only fake is refused here'],
+    // Batch 4 (docs/55 §9, docs/58, Slice 4a): documents. OFF unless set, and ai_media_enabled must be on as well. On, a
+    // Word, Excel, CSV or text file is read inside this process (no library, no provider, nothing leaves the server) and,
+    // only when it is harmless and was seen whole, answered by the SAME assistant as typed text, labelled as an extract. A
+    // payment receipt, statement, invoice, contract, quotation, identity document or credential — and anything the rules
+    // cannot classify with certainty — goes to a person instead; nothing is recorded, marked paid, accepted or verified. A
+    // PDF's text layer is read in this process since Slice 4b (docs/58 D-1 = P-1); a scanned document has no OCR (D-2).
+    // Batch 5 (docs/60): a LADDER. ai_media_document alone is the dry run; _handover adds the person; _reply adds the assistant.
+    // Each needs every flag below it, so a higher flag can never bypass a lower one. All OFF unless set.
+    'ai_media_document' => ['bool',
+        'Read the documents customers send (Word, Excel, CSV, text, PDF text) and RECORD what each is — alone, a DRY RUN: nobody is told and nothing is answered (needs ai_media_enabled; docs/60)'],
+    'ai_media_document_handover' => ['bool',
+        'Act on a document\'s classification for a PERSON: a payment proof, statement, invoice, contract, quotation, identity document, credential or an unreadable file hands the chat over (needs ai_media_document); still no AI answer'],
+    'ai_media_document_reply' => ['bool',
+        'Let the assistant answer a harmless document like typed text, and its caption once in that turn (needs ai_media_document_handover) — the only customer-facing document AI switch'],
+    'ai_media_document_max_bytes' => ['number',
+        'Largest document read, in bytes (default 10485760 = 10 MiB; 65536 to 67108864; never above ai_media_max_bytes)'],
+    'ai_media_document_max_pages' => ['number',
+        'PDF pages read (default 20; 1 to 200); a longer PDF is read up to the cap and goes to a person, never to the assistant'],
+    'ai_media_document_timeout_s' => ['number',
+        'Seconds a document extraction may take (default 20; 5 to 60)'],
+    'ai_document_provider' => ['text',
+        'OCR provider for scanned documents: none is the only value today (docs/58); the test-only fake is refused here'],
+
     // Phase 2 of the customer-login audit — the tenant profile and the
     // sign-in eligibility gates (plan §D.3, §E.6). The profile is the one
     // source of every country-dependent default; the gates are configurable
@@ -215,6 +272,46 @@ $FLAGS = [
     // uCRM's own notification settings are read; 0 is the switch for the day it is taken.
     'kyc_quote_send_via_crm' => ['bool',
         'A KYC quote asks uCRM to send it, so uCRM e-mails the quotation (unset = on, as always; 0 = it does not ask)'],
+    // ── Customer Installation Authorisation (5.18.82, hardened in 5.18.83; docs/61 §3, docs/63, docs/64) — Uganda only ──
+    // A Starlink installation job may not be started (Accept Job, GPS check-in) or completed (Complete Job, GPS check-out)
+    // until the customer has accepted the Installation Terms and the charges on the secure page the request sends them.
+    // Off by default: with it off the job workflow is byte for byte what it was. Switching it ON is its ACTIVATION: uCRM
+    // is read first and the Starlink installation jobs in progress at that moment are recorded as exempt (D3) — if uCRM
+    // cannot be read, nothing is saved. Every channel is off until set (5.18.83): install_auth_whatsapp for the WhatsApp
+    // messages, the two e-mail keys (under the customer e-mails master switch) for the e-mails; a request that no
+    // switched-on channel can carry is refused before anything is recorded.
+    'install_auth_enabled' => ['bool',
+        'Customer Installation Authorisation for Starlink installation jobs (Uganda): the customer must accept the terms and charges on a secure link before a technician can accept, check in to, check out of or complete the job (docs/63, docs/64). Turning it on first records the jobs already in progress (D3) and refuses if uCRM cannot be read. Off = the workflow as before'],
+    'install_auth_job_titles' => ['text',
+        'Which uCRM job titles are a Starlink installation: comma-separated, matched (case aside) on the title before " — <customer>" (default: Starlink Installation)'],
+    'install_auth_whatsapp' => ['bool',
+        'Send the authorisation messages by WhatsApp — the customer\'s request and confirmation, the technician\'s, the leaders\' alerts. Absent means OFF'],
+    'install_auth_link_days' => ['number',
+        'How many days the customer\'s authorisation link stays valid (default 14; 1 to 90), or until 3 days after the scheduled date if that is later'],
+    'customer_email_install_auth_request' => ['bool',
+        'The authorisation REQUEST e-mail to the customer (needs the customer e-mails master switch). Absent means OFF; set 1 to send it'],
+    'customer_email_install_auth_confirmed' => ['bool',
+        'The confirmation e-mail after the customer accepts (needs the master switch). Absent means OFF; set 1 to send it'],
+    // ── The customer's WhatsApp when an installation is booked (5.18.84) — Uganda only ──
+    // uCRM's job.add sent the customer the install_scheduled e-mail and nothing else, so a customer with no e-mail address
+    // heard nothing while the technician was told. With this on the customer also gets a WhatsApp, to the first number on
+    // their uCRM record: the e-mail's conditions (a client, an installation title, a date), once per job.
+    'customer_wa_install_scheduled' => ['bool',
+        'The customer\'s WhatsApp when an installation job is created with a date (Uganda): the date and time, the location, the technician, and for a Starlink installation under authorisation that the secure link follows. Sent whether or not the customer has an e-mail address. Absent means OFF'],
+    // ── The WhatsApp channel registry (5.18.86, docs/65; multi-number Batch 1) — Uganda only ──
+    // OFF, every number routes as it always has: three configuration keys, three departments. ON, the webhook, the
+    // assistant, the media worker, the follow-ups and the Inbox route by CHANNEL through wa_channels (migration 087):
+    // a number the registry has switched off is refused, never routed to another, and a reply leaves only on the
+    // number its message arrived on. The three department numbers stay configured where they are. Batch 1: dark.
+    'multi_number_channels_enabled' => ['bool',
+        'Route WhatsApp by channel through the channel registry (Uganda; docs/65): a switched-off number is refused, a reply leaves only on the number the customer wrote to. Absent means OFF — the three department numbers exactly as before'],
+    // ── A salesperson's own number (5.18.89, docs/65 §AA) — Uganda only. The first two act only with the registry on. ──
+    'wa_handover_copy_central' => ['bool',
+        'On a salesperson\'s own number, a hand-over alerts the salesperson and sends a copy to the central alert number (D4, decided 07 Oct). Absent means ON; 0 = the salesperson alone (the central number still gets it when they have no phone on record)'],
+    'wa_followups_on_owned_numbers' => ['bool',
+        'Allow follow-ups on a salesperson\'s own number (docs/65 §AA item 6). Absent means OFF: the salesperson follows up personally, and the follow-up scan, drafts and sends leave those conversations alone'],
+    'sales_own_leads_only' => ['bool',
+        'A salesperson sees only their own leads (assigned to them, created by them, or on their call list today) on Sales → Leads, in the quote picker, the status change and the call log (Uganda, D7). Admins and anyone granted All Leads see everything. Absent means OFF: every lead visible to every salesperson, as before'],
 ];
 
 $show = function () use ($root, $dataDir, $FLAGS) {
@@ -288,9 +385,10 @@ $show = function () use ($root, $dataDir, $FLAGS) {
             $shown = '"' . (string)$raw . '"';
         }
 
-        printf("    %-32s %s\n", $k, $shown);
-        if ($note !== '') printf("    %-32s %s\n", '', $note);
-        printf("    %-32s %s\n\n", '', $what);
+        // 5.18.82: the name field is 40 wide (was 32; 27 before Phase 2) — customer_email_install_auth_confirmed is 37 characters.
+        printf("    %-40s %s\n", $k, $shown);
+        if ($note !== '') printf("    %-40s %s\n", '', $note);
+        printf("    %-40s %s\n\n", '', $what);
     }
 };
 
@@ -406,6 +504,60 @@ if (!$clear && $key === 'portal_data_report_handoff') {
     }
     $new = strtolower(trim($new));
 }
+// Batch 1 (docs/55 §9): a media limit outside its range would be clamped silently by MediaPolicy. Refused here, naming
+// the range, so the listing never shows a number the worker is not using. Batch 2 adds the two voice limits.
+require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
+$mediaRanges = [
+    'ai_media_max_bytes'         => [MediaPolicy::MIN_MAX_BYTES,     MediaPolicy::CAP_MAX_BYTES],
+    'ai_media_timeout_s'         => [MediaPolicy::MIN_TIMEOUT_S,     MediaPolicy::CAP_TIMEOUT_S],
+    'ai_media_voice_max_seconds' => [MediaPolicy::VOICE_MIN_SECONDS, MediaPolicy::VOICE_CAP_SECONDS],
+    'ai_media_voice_timeout_s'   => [MediaPolicy::VOICE_MIN_TIMEOUT_S, MediaPolicy::VOICE_CAP_TIMEOUT_S],
+    'ai_media_image_timeout_s'   => [MediaPolicy::IMAGE_MIN_TIMEOUT_S, MediaPolicy::IMAGE_CAP_TIMEOUT_S],
+    'ai_media_document_max_bytes' => [MediaPolicy::MIN_MAX_BYTES,        MediaPolicy::CAP_MAX_BYTES],
+    'ai_media_document_max_pages' => [MediaPolicy::DOCUMENT_MIN_PAGES,   MediaPolicy::DOCUMENT_CAP_PAGES],
+    'ai_media_document_timeout_s' => [MediaPolicy::DOCUMENT_MIN_TIMEOUT_S, MediaPolicy::DOCUMENT_CAP_TIMEOUT_S],
+];
+if (!$clear && isset($mediaRanges[$key])) {
+    [$lo, $hi] = $mediaRanges[$key];
+    if (!preg_match('/^\d+$/', trim($new)) || (int)$new < $lo || (int)$new > $hi) {
+        echo "\n  \"" . $new . "\" is not a whole number between " . $lo . " and " . $hi . ", so nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = (string)(int)$new;
+}
+// 5.18.82 (docs/63): the customer authorisation link's life in days, 1 to 90 — refused outside the range, never clamped silently.
+require_once dirname(__DIR__) . '/lib/InstallAuth.php';
+if (!$clear && $key === InstallAuth::LINK_DAYS_KEY) {
+    if (!preg_match('/^\d+$/', trim($new)) || (int)$new < InstallAuth::LINK_DAYS_MIN || (int)$new > InstallAuth::LINK_DAYS_MAX) {
+        echo "\n  \"" . $new . "\" is not a whole number between " . InstallAuth::LINK_DAYS_MIN . " and " . InstallAuth::LINK_DAYS_MAX . " days, so nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = (string)(int)$new;
+}
+// 5.18.83 (docs/64 §A.3): the installation job titles — a list of real titles, each at most 80 characters.
+if (!$clear && $key === InstallAuth::TITLES_KEY) {
+    $items = array_values(array_filter(array_map(function ($t) { return trim((string)preg_replace('/\s+/u', ' ', $t)); }, preg_split('/[,\n]+/', $new) ?: []),
+        function ($t) { return $t !== ''; }));
+    $long  = array_filter($items, function ($t) { return mb_strlen($t) > 80; });
+    if ($items === [] || $long !== []) {
+        echo "\n  Give one or more job titles, separated by commas, each at most 80 characters — for example:\n";
+        echo "      --value \"Starlink Installation, Starlink Kit Installation\"\n  Nothing was saved.\n\n";
+        exit(1);
+    }
+    $new = implode(', ', $items);
+}
+// Batch 2 (docs/56), Batch 3 (docs/57) and Batch 4 (docs/58): no transcription, vision or document OCR provider is
+// integrated yet, so `none` is the only value of any provider key; the fakes are for tests and are refused here by name
+// like anything else.
+if (!$clear && in_array($key, ['ai_transcription_provider', 'ai_image_provider', 'ai_document_provider'], true)) {
+    if (strtolower(trim($new)) !== 'none') {
+        $doc = $key === 'ai_image_provider' ? 'docs/57' : ($key === 'ai_document_provider' ? 'docs/58' : 'docs/56');
+        echo "\n  \"" . $new . "\" is not a provider this plugin has — none is the only value today (" . $doc . "),\n";
+        echo "  so nothing was saved. Use --clear to leave it unset, which means the same.\n\n";
+        exit(1);
+    }
+    $new = 'none';
+}
 if (!$clear && $key === 'timezone' && trim($new) !== '' && !dn_tz_valid(trim($new))) {    echo "\n  \"" . trim($new) . "\" is not a timezone PHP recognises, so nothing was saved.\n\n";
     echo "  Had it saved, the box would have gone on running as " . dn_tz_label([]) . "\n";
     echo "  with no error anywhere.\n\n";
@@ -486,8 +638,85 @@ if (!$clear) {
     }
 }
 
+// 5.18.90 (docs/65 §AD): the channel registry goes on only once the department numbers are verified on the WhatsApp AI
+// screen (Salesperson numbers → Verify number on each department), each for the instance it is configured with. Without
+// them a salesperson's number could not recognise a department's message and would answer it. Refused, never warned;
+// and refused too when it cannot be checked. Only where the registry would take effect (Uganda, migration 087).
+if (!$clear && $key === 'multi_number_channels_enabled' && filter_var($new, FILTER_VALIDATE_BOOLEAN)) {
+    $mnCur = PluginConfig::load($root, $dataDir);
+    require_once $root . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies($mnCur, $dataDir) && is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) {
+        try {
+            require_once $root . '/lib/StoreInterface.php'; require_once $root . '/lib/JsonStore.php'; require_once $root . '/lib/SqliteStore.php';
+            require_once $root . '/lib/ChannelRegistry.php'; require_once $root . '/lib/InternalNumbers.php';
+            require_once $root . '/lib/EvolutionApiService.php';
+            $mnStore = SqliteStore::create($dataDir);
+            $mnReg   = new ChannelRegistry($mnStore->getPdo());
+            $mnGaps  = $mnReg->available()
+                ? InternalNumbers::gapsWithReported($mnReg->rows(), EvolutionApiService::configInstanceMap($mnCur),
+                                                    $mnReg->verifiedInstances(), $mnStore)
+                : [];
+        } catch (\Throwable $e) {
+            echo "\n  The department numbers could not be checked (" . $e->getMessage() . "), so nothing was saved.\n\n";
+            exit(1);
+        }
+        if ($mnGaps !== []) {
+            echo "\n  Not yet: the department numbers are not all verified (" . implode(', ', $mnGaps) . "). Nothing was saved.\n\n";
+            echo "  On the WhatsApp AI screen, Salesperson numbers: press Verify number on each department listed, then run this again.\n\n";
+            exit(1);
+        }
+    }
+}
+
+// 5.18.83 (docs/64 §A.4): switching Customer Installation Authorisation ON is its activation (D3, explicit). uCRM is read
+// FIRST and the Starlink installation jobs in progress at this moment are recorded as exempt — those, and only those, may
+// be completed without the customer's acceptance. If uCRM cannot be read, or the plugin's database does not exist yet,
+// nothing is saved. Already on and activated: nothing changes (switch it off and on again for a new snapshot).
+$iaActivation = null;
+if (!$clear && $key === InstallAuth::FLAG && InstallAuth::flagOn([InstallAuth::FLAG => $new])) {
+    $iaCur = PluginConfig::load($root, $dataDir);
+    require_once $root . '/lib/StaffJobsGate.php';
+    if (StaffJobsGate::applies([InstallAuth::FLAG => '1'] + $iaCur, $dataDir)) {
+        if (!is_file(rtrim($dataDir, '/') . '/plugin.sqlite3')) {
+            echo "\n  The plugin's database does not exist yet (open the plugin in uCRM once), so the jobs in progress\n";
+            echo "  cannot be recorded. Nothing was saved.\n\n";
+            exit(1);
+        }
+        require_once $root . '/lib/StoreInterface.php'; require_once $root . '/lib/JsonStore.php'; require_once $root . '/lib/SqliteStore.php';
+        require_once $root . '/lib/CrmApiClient.php';
+        $iaPdo  = SqliteStore::create($dataDir)->getPdo();
+        $iaLast = InstallAuth::lastActivation($iaPdo);
+        if (InstallAuth::flagOn($iaCur) && $iaLast !== null) {
+            echo "\n  " . $key . " is already on (activated " . $iaLast['activated_at'] . " UTC, #" . $iaLast['id'] . ") — nothing was changed.\n";
+            echo "  For a new snapshot of the jobs in progress, switch it off (--clear) and on again.\n\n";
+            exit(0);
+        }
+        $iaWho = 'tools/set_config.php';
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $iaPw = @posix_getpwuid(posix_geteuid());
+            if (is_array($iaPw) && !empty($iaPw['name'])) $iaWho .= ' as ' . $iaPw['name'];
+        }
+        $iaActivation = InstallAuth::activate($iaPdo, CrmApiClient::fromUcrm($root, $iaCur), [InstallAuth::FLAG => '1'] + $iaCur, $iaWho);
+        if (empty($iaActivation['ok'])) {
+            echo "\n  " . (string)($iaActivation['error'] ?? 'The activation failed.') . "\n\n";
+            exit(1);
+        }
+    }
+}
+
 list($ok, $err) = PluginConfig::saveOverrides($dataDir, [$key => $new]);
 if (!$ok) { echo "\n  Could not save: " . (string)$err . "\n\n"; exit(1); }
+if (is_array($iaActivation)) {
+    echo "\n  Activation #" . (int)$iaActivation['activation_id'] . ": uCRM had " . (int)$iaActivation['jobs_read'] . " job(s) in progress; "
+       . (int)$iaActivation['in_scope'] . " of them Starlink installation job(s), " . (int)$iaActivation['exempted'] . " newly recorded as exempt (D3)"
+       . ($iaActivation['job_ids'] ? ': job ' . implode(', ', array_map('intval', $iaActivation['job_ids'])) : '') . ".\n";
+    echo "  Every other Starlink installation job now needs the customer's acceptance before it starts or is completed.\n";
+    $iaNow = PluginConfig::load($root, $dataDir);
+    if (!InstallAuth::whatsappOn($iaNow) && !InstallAuth::emailOn('request', $iaNow)) {
+        echo "  Note: no channel is switched on yet (install_auth_whatsapp, customer_email_install_auth_request), so a request\n";
+        echo "  will be refused until one is.\n";
+    }
+}
 
 foreach ($warn as $w) echo "\n  Note: " . $w . "\n";
 

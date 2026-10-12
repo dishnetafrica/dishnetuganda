@@ -386,9 +386,11 @@ if ($withMutants) {
          'the cached session record used instead of the account as stored now'],
         ['lib/JobAccess.php', "        if (\$assignee === null || \$assignee <= 0) return false;\n        \$mine = StaffDirectory::linkedUcrmUser(\$row);\n        return \$mine > 0 && \$mine === \$assignee;",
          "        \$mine = StaffDirectory::linkedUcrmUser(\$row);\n        return \$mine === (int)\$assignee;", 'uCRM user 0 treated as a match'],
+        // 5.18.82: the customer-authorisation guard now sits between this J6 block and the uCRM write, so the anchor ends at
+        // the guard's first comment line and the weakened copy writes uCRM BEFORE the J6 block (the later write stays).
         ['includes/api/api_scheduling.php',
-         "        if (\$_sjUganda) {   // J6, checked before uCRM is written\n            \$_sjMe = \$sjCaller();\n            if (!\$job) \$er2('Job not found.', 404);\n            \$sjMayAct(\$_sjMe, \$job);\n        }\n        \$result = \$crm->patch(\"scheduling/jobs/{\$jobId}\", ['status' => \$statusInt]);",
-         "        \$result = \$crm->patch(\"scheduling/jobs/{\$jobId}\", ['status' => \$statusInt]);\n        if (\$_sjUganda) {   // J6, checked before uCRM is written\n            \$_sjMe = \$sjCaller();\n            if (!\$job) \$er2('Job not found.', 404);\n            \$sjMayAct(\$_sjMe, \$job);\n        }",
+         "        if (\$_sjUganda) {   // J6, checked before uCRM is written\n            \$_sjMe = \$sjCaller();\n            if (!\$job) \$er2('Job not found.', 404);\n            \$sjMayAct(\$_sjMe, \$job);\n        }\n        // 5.18.82 (Uganda, install_auth_enabled): a Starlink installation starts",
+         "        \$result = \$crm->patch(\"scheduling/jobs/{\$jobId}\", ['status' => \$statusInt]);\n        if (\$_sjUganda) {   // J6, checked before uCRM is written\n            \$_sjMe = \$sjCaller();\n            if (!\$job) \$er2('Job not found.', 404);\n            \$sjMayAct(\$_sjMe, \$job);\n        }\n        // 5.18.82 (Uganda, install_auth_enabled): a Starlink installation starts",
          'the status check placed after the uCRM write'],
         ['lib/JobAccess.php', "        \$mine = StaffDirectory::linkedUcrmUser(\$row);", "        \$mine = (int)(\$row['ucrm_user_id'] ?? 0);",
          'acting on a job through a stored, unverified id (M7)'],
@@ -404,8 +406,10 @@ if ($withMutants) {
          'completion unchecked'],
         ['includes/api/api_crm_misc.php', "        \$_cmJobGuard(\$jobId);   // J6 on Uganda\n        \$surveys = \$store->load", "        \$surveys = \$store->load",
          'a survey readable by anyone'],
-        ['includes/api/api_crm_misc.php', "        if (!\$jobId || !\$sigData) \$er2('job_id and signature required.', 422);\n        \$_cmJobGuard(\$jobId);   // J6 on Uganda",
-         "        if (!\$jobId || !\$sigData) \$er2('job_id and signature required.', 422);", 'a signature saved by anyone'],
+        // 5.18.82: the signature handler keeps uCRM's job from the guard ($_cmJob) for the customer sign-off event; the
+        // weakened copy drops the guard and leaves the variable null, so the sign-off line stays silent.
+        ['includes/api/api_crm_misc.php', "        if (!\$jobId || !\$sigData) \$er2('job_id and signature required.', 422);\n        \$_cmJob = \$_cmJobGuard(\$jobId);   // J6 on Uganda",
+         "        if (!\$jobId || !\$sigData) \$er2('job_id and signature required.', 422);\n        \$_cmJob = null;", 'a signature saved by anyone'],
         ['lib/JobAccess.php', "    public const CREATE_ROLES = ['support_leader', 'support', 'support_engineer'];",
          "    public const CREATE_ROLES = ['support_leader', 'support', 'support_engineer', 'accountant'];", 'job creation widened to another role'],
     ];

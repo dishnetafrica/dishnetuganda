@@ -1,7 +1,9 @@
 <?php
 // Tab: leads — Call Management System
 // Smart Queue + Daily Assignment + Filter Tabs
-// All leads visible to all sales staff. PHP 7.4 compatible.
+// All leads visible to all sales staff — unless sales_own_leads_only is ON (5.18.89, docs/65 §AA, D7; Uganda only,
+// OFF by default): then a salesperson sees their own leads, and admins and All Leads holders see everything.
+// PHP 7.4 compatible.
 
         $allLeads = $store->load('leads.json') ?? [];
         $today = date('Y-m-d');
@@ -12,7 +14,10 @@
         // Only sales/field_agent roles join the daily rotation.
         // Admins can still see all leads but don't get leads assigned.
         $salesAgents = [];
-        foreach ($store->load('retailers.json') ?? [] as $ra) {
+        $__leadsRetailers = $store->load('retailers.json') ?? [];
+        require_once dirname(__DIR__, 2) . '/lib/OwnedLead.php';
+        require_once dirname(__DIR__, 2) . '/lib/LeadVisibility.php';
+        foreach ($__leadsRetailers as $ra) {
             if (empty($ra['is_active'])) continue;
             if (in_array($ra['role'] ?? '', ['sales', 'field_agent', 'sales_staff'], true)) {
                 $salesAgents[] = ['id' => (int)$ra['id'], 'name' => $ra['name'] ?? ''];
@@ -63,6 +68,8 @@
             foreach ($allLeads as $i => $l) {
                 if (in_array($l['status'] ?? '', ['won','lost'])) continue;
                 if (($l['daily_assign_date'] ?? '') === $today) continue;
+                // 5.18.89 (docs/65 §AA, D5): a lead from a salesperson's own number is on nobody else's call list.
+                if (OwnedLead::isProtected($l, $__leadsRetailers)) continue;
                 $unassignedToday[] = $i;
             }
             foreach ($unassignedToday as $idx) {
@@ -77,6 +84,12 @@
                 $store->save('leads.json', $allLeads);
             }
         }
+
+        // 5.18.89 (docs/65 §AA, D7): own leads only, when sales_own_leads_only is ON. Only now — the full list was
+        // saved above, and nothing below saves it — the page narrows to what this viewer may see: every list, every
+        // count and the lead opened by id. Off, or for an admin or All Leads holder, the list is unchanged.
+        $allLeads = LeadVisibility::filter($allLeads, (array)$retailer, (array)($config ?? []), $dataDir ?? null,
+                                           $rbac ?? null, $today);
 
         // ── Build filtered views ──
         // Archived leads: hidden from agents, only admin sees them via the 'archived' filter

@@ -143,8 +143,15 @@ class EventBus
      *
      * Filtering in SQL means a backlog of one type can no longer starve
      * another. WorkerBase's own comment asked for this.
+     *
+     * $excludeTypes is the other half, for the one caller that claims
+     * everything: cron/event_processor.php. It must never claim a type a
+     * dedicated worker owns — acknowledging one swallows the worker's job, and
+     * claiming then releasing one lets a backlog of it fill the batch every run
+     * (5.18.86, docs/65). Empty means no exclusion: every other caller is
+     * unchanged.
      */
-    public function consume(int $limit = 20, string $workerId = '', array $types = []): array
+    public function consume(int $limit = 20, string $workerId = '', array $types = [], array $excludeTypes = []): array
     {
         if (!$workerId) {
             $workerId = (string)getmypid();
@@ -163,6 +170,11 @@ class EventBus
             if ($wanted !== [] && !in_array('*', $wanted, true)) {
                 $typeClause = ' AND event_type IN (' . implode(',', array_fill(0, count($wanted), '?')) . ')';
                 $typeArgs   = $wanted;
+            }
+            $skip = array_values(array_filter(array_map('strval', $excludeTypes), 'strlen'));
+            if ($skip !== []) {
+                $typeClause .= ' AND event_type NOT IN (' . implode(',', array_fill(0, count($skip), '?')) . ')';
+                $typeArgs    = array_merge($typeArgs, $skip);
             }
 
             $selectStmt = $this->pdo->prepare('

@@ -11,6 +11,9 @@ const ALL_TAXES    = 'All prices include all taxes &mdash; URA taxes and UCC cha
                    . 'Nothing is added on top.';
 const NO_VAT       = 'No VAT is charged on this quotation.';
 const VAT_ITEMISED = 'VAT is itemised in the totals on page 1.';
+// Withdrawn from the end of clause 2 on 12 Oct 2026: the website says all taxes are included and nothing is added.
+const NEW_TAX      = ' Any new or increased government tax, levy or regulatory fee introduced after acceptance may be '
+                   . 'passed on at cost.';
 
 function item(string $label, string $price, string $type = 'product'): array {
     return ['label' => $label, 'type' => $type, 'unit' => '', 'quantity' => '1', 'price' => $price, 'total' => $price];
@@ -102,13 +105,24 @@ foreach (['kit' => 'a Starlink kit', 'kit_last' => 'a Starlink kit listed last',
 $c = clause2($new['kit_taxed']);
 t('a quote with uCRM tax lines: VAT is itemised, as before', substr_count($c, VAT_ITEMISED), 1);
 t('…and the all-taxes sentence is not printed beside it', substr_count($c, ALL_TAXES), 0);
-t('…clause 2 unchanged there', $c, clause2($old['kit_taxed']));
+t('…clause 2 unchanged there, but for the new-tax sentence withdrawn on 12 Oct (docs/67)', $c . NEW_TAX, clause2($old['kit_taxed']));
+foreach ($QUOTES as $k => $_) t("{$k}: no new tax is \"passed on at cost\"", substr_count($new[$k], trim(NEW_TAX)), 0);
 t('the baseline said no VAT is charged on a quote without tax lines (the contradiction 5.18.49 ends)', substr_count(clause2($old['no_kit']), NO_VAT), 1);
 
-// Nothing else on the page moves: every quote renders as before once clause 2's sentence is set back.
+// Nothing else on the page moves: every quote renders as before once clause 2's sentence is set back, and the T&C lines
+// changed on 12 Oct 2026 (tc_changes.php, docs/67 §I) are set back too — each found exactly once on both sides first,
+// so a pair that no longer matches, or a line that changed beyond its pair, fails here.
+$TC = require __DIR__ . '/tc_changes.php';
 foreach ($QUOTES as $k => $_) {
     $n = str_replace(ALL_TAXES, NO_VAT, page($new[$k]));
-    t("{$k}: the rest of the page is byte-identical to the baseline's", $n === page($old[$k]), true);
+    $o = page($old[$k]);
+    $ok = true;
+    foreach ($TC as [$was, $now]) {
+        if (substr_count($n, $now) !== 1 || substr_count($o, $was) !== 1) { $ok = false; break; }
+        $n = str_replace($now, $was, $n);
+    }
+    t("{$k}: each changed T&C line appears once, as listed", $ok, true);
+    t("{$k}: the rest of the page is byte-identical to the baseline's", $n === $o, true);
 }
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
