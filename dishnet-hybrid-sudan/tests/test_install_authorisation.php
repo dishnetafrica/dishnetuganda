@@ -50,6 +50,7 @@ const TECH2      = '256700000114';               // Sandbox Tech Two, uCRM user 
 const TECH2_MAIL = 'tech2@example.test';
 const REFUSAL    = 'Customer acceptance is required before installation can commence.';
 const TERMS_V1_HASH = '9308072840e784e49a0656987a3edfae33c6f3d081558cbf63625c23b071d2e1';   // SHA-256 of INSTALLATION-TERMS-v1.0, pinned
+const TERMS_V11_HASH = 'eee8644e8bb7ea509fa1977279f518d9f0f96ec0b5028431160a57fd833b1db0';  // SHA-256 of INSTALLATION-TERMS-v1.1, pinned — current since 5.18.94
 const ADMIN_WA   = '256700000110';               // Sandbox Admin — a leader for the alerts
 const LEAD_WA    = '256700000112';               // Sandbox Leader
 const ADMIN_MAIL = 'admin@example.test';
@@ -107,8 +108,10 @@ $jobs = [
     '935' => $job(935, 'Starlink Installation — rate limit', 1099),               // H7
     '936' => $job(936, 'Starlink Installation — channels', 1099),                 // H10
     '937' => $job(937, 'Starlink Installation — closed in uCRM', 1099),           // H3: closed in uCRM's own screen
+    '938' => $job(938, 'Starlink Installation — requested under v1.0', 1099),     // 29b: a request 5.18.93 sent, accepted after 5.18.94
     '939' => $job(939, 'Starlink Installation — request WhatsApp fails', 1099),   // H4: a failed request is not queued
     '940' => $job(940, 'Starlink Installation — created in progress', 1099),      // H3: first seen already in progress
+    '945' => $job(945, 'Starlink Installation — v1.0 request withdrawn', 1099),   // 29b: a v1.0 request withdrawn and sent again
 ];
 $accounts = function (SjSandbox $s) use ($link): void {
     $s->staff('admin', ['name' => 'Sandbox Admin', 'email' => 'admin@example.test', 'role' => 'admin', 'is_admin' => true, 'phone' => '+256700000110'] + $link(1000, 'admin@example.test'));
@@ -195,14 +198,51 @@ is_(array_column($s->q('SELECT job_id FROM install_auth_exempt'), 'job_id') === 
 $sql = (string)file_get_contents($root . '/migrations/086_install_authorisation.sql');
 preg_match('/CHECK \(event IN \((.*?)\)\)/s', $sql, $cm); preg_match_all("/'([A-Z_]+)'/", (string)($cm[1] ?? ''), $names);
 is_(array_values($names[1]) === InstallAuth::EVENTS, 'InstallAuth::EVENTS equals the migration\'s CHECK, name for name', json_encode($names[1]));
-is_(InstallationTerms::VERSION === 'INSTALLATION-TERMS-v1.0' && InstallationTerms::hash() === TERMS_V1_HASH, 'INSTALLATION-TERMS-v1.0 hashes to the pinned value', (string)InstallationTerms::hash());
+// 5.18.94 (docs/67 §J): v1.1 is the current version. v1.0 stays in the code byte for byte, because records name it.
+is_(InstallationTerms::VERSION === 'INSTALLATION-TERMS-v1.1' && InstallationTerms::hash() === TERMS_V11_HASH, 'INSTALLATION-TERMS-v1.1 is the current version and hashes to the pinned value', (string)InstallationTerms::hash());
+is_(InstallationTerms::hash('INSTALLATION-TERMS-v1.0') === TERMS_V1_HASH, 'INSTALLATION-TERMS-v1.0 still hashes to its pinned value', (string)InstallationTerms::hash('INSTALLATION-TERMS-v1.0'));
 $terms = (string)InstallationTerms::text();
-is_(strpos($terms, 'DRAFT — SUBJECT TO LEGAL REVIEW') !== false, 'the terms are labelled DRAFT — SUBJECT TO LEGAL REVIEW');
-is_(strpos($terms, 'Nothing in these Terms is intended to exclude or restrict any right or remedy that cannot lawfully be excluded or restricted under applicable Ugandan law.') !== false, 'the terms carry the brief\'s cautious clause');
-is_(strpos($terms, 'Once the Customer has accepted these Terms and DishNet has commenced the authorised installation works, the Customer remains responsible for applicable installation charges') !== false, 'the terms carry the brief\'s main protection, with its "subject to … rights that cannot lawfully be excluded" tail');
-is_(stripos($terms, 'no refund under any circumstances') === false, 'the terms never say "no refund under any circumstances"');
-is_(count(InstallationTerms::sections()) === 26 && InstallationTerms::sections()[25]['n'] === 25, 'twenty-five numbered sections and a preamble', (string)count(InstallationTerms::sections()));
-is_(!preg_match('/\+?2\d{11}/', $terms), 'no phone number in the terms');
+$terms10 = (string)InstallationTerms::text('INSTALLATION-TERMS-v1.0');
+is_(strpos($terms10, 'DRAFT — SUBJECT TO LEGAL REVIEW') !== false, 'v1.0 is labelled DRAFT — SUBJECT TO LEGAL REVIEW, as it always was');
+is_(strpos($terms, 'DRAFT') === false && stripos($terms, 'legal review') === false, 'v1.1 carries no DRAFT label (the operator decided against a legal review: docs/67 §J)');
+foreach (InstallationTerms::VERSIONS as $ver) {
+    $tv = (string)InstallationTerms::text($ver);
+    is_(strpos($tv, 'Nothing in these Terms is intended to exclude or restrict any right or remedy that cannot lawfully be excluded or restricted under applicable Ugandan law.') !== false, "[{$ver}] the terms carry the brief's cautious clause");
+    is_(strpos($tv, 'Once the Customer has accepted these Terms and DishNet has commenced the authorised installation works, the Customer remains responsible for applicable installation charges') !== false, "[{$ver}] the terms carry the brief's main protection, with its \"subject to … rights that cannot lawfully be excluded\" tail");
+    is_(stripos($tv, 'no refund under any circumstances') === false, "[{$ver}] the terms never say \"no refund under any circumstances\"");
+    $secs = InstallationTerms::sections($ver);
+    is_(count($secs) === 26 && $secs[25]['n'] === 25 && array_column($secs, 'n') === range(0, 25), "[{$ver}] twenty-five numbered sections, in order, and a preamble", (string)count($secs));
+    is_(!preg_match('/\+?2\d{11}/', $tv), "[{$ver}] no phone number in the terms");
+    // The page renders sections(), and the record's hash covers the whole text: put back together, the sections must BE
+    // the text. sections() drops a paragraph that follows a numbered clause, so a version that had one would be accepted
+    // without that paragraph ever being shown — this fails first (5.18.94).
+    $back = [];
+    foreach ($secs as $sec) { $back[] = $sec['n'] === 0 ? $sec['body'] : $sec['n'] . '. ' . $sec['title'] . "\n" . $sec['body']; }
+    is_(implode("\n\n", $back) === implode("\n\n", array_map('trim', preg_split('/\n\n+/', trim($tv)))), "[{$ver}] the sections, put back together, are the whole text — no paragraph dropped");
+}
+// v1.1 is v1.0 with exactly the reviewed changes (docs/67 §J item 8) — nothing else moved.
+$V11_CHANGES = [
+    ["Version INSTALLATION-TERMS-v1.0\nDRAFT — SUBJECT TO LEGAL REVIEW\n", "Version INSTALLATION-TERMS-v1.1\n"],
+    ['where one is shown, may be payable.', 'where one is shown, may be payable, subject to any cancellation right that cannot lawfully be excluded under applicable law.'],
+    ['the remainder has been recorded with you.', 'the remainder has been recorded with you. For six months after completion, DishNet repairs free of charge any fault caused by its own installation work.'],
+    ['does not replace, the authorisation given under section 1.', 'does not replace, the authorisation given under section 1. Sign-off does not take away any of your rights.'],
+    ["the records described in section 22, in accordance with DishNet's Privacy Policy and applicable Ugandan data protection law.",
+     "the records described in section 22. When the work is finished, the technician normally photographs the equipment and cabling installed, and DishNet records the location where the Installation was marked complete, where a location can be recorded. DishNet keeps any such photographs and that location with the records of the Installation, to support warranty claims and future service visits. DishNet handles all of this in accordance with its Privacy Policy and applicable Ugandan data protection law."],
+    ['These Terms are version INSTALLATION-TERMS-v1.0.', 'These Terms are version INSTALLATION-TERMS-v1.1.'],
+    ['DishNet is not liable for indirect or consequential loss. Nothing', 'DishNet is not liable for indirect or consequential loss. That limit does not apply to damage to your property caused by the negligence of DishNet or its technician, to death or personal injury, or to fraud. Nothing'],
+];
+$built = $terms10; $once = true;
+foreach ($V11_CHANGES as [$a, $b]) { $once = $once && substr_count($built, $a) === 1; $built = str_replace($a, $b, $built); }
+is_($once && $built === $terms, 'v1.1 is v1.0 with exactly the seven reviewed changes, each made once — nothing else differs');
+$sec11 = array_column(InstallationTerms::sections(), 'body', 'n');
+is_(strpos($sec11[25], 'That limit does not apply to damage to your property caused by the negligence of DishNet or its technician, to death or personal injury, or to fraud.') !== false,
+    '§25: damage to the customer\'s property from negligence, death or injury, and fraud are outside the cap');
+is_(strpos($sec11[23], 'the technician normally photographs the equipment and cabling installed') !== false && strpos($sec11[23], 'where a location can be recorded') !== false,
+    '§23: the completion photos and location are explained — "normally", and only where a location can be recorded');
+is_(strpos($sec11[14], 'For six months after completion, DishNet repairs free of charge any fault caused by its own installation work.') !== false, '§14: the six-month workmanship promise of the website\'s Installation page');
+is_(strpos($sec11[12], 'subject to any cancellation right that cannot lawfully be excluded under applicable law.') !== false && strpos($sec11[15], 'Sign-off does not take away any of your rights.') !== false,
+    '§12 and §15 say a statutory right is never taken away');
+is_(strpos($terms, 'UCC') === false && strpos($terms10, 'UCC') === false, 'neither version claims a UCC authorisation');
 
 // ── 1. A job is created and the detail says authorisation applies ───────────
 echo "\n1. Installation Job created successfully\n";
@@ -211,7 +251,7 @@ $newId = (int)($r[2]['data']['jobs'][0]['job_id'] ?? 0);
 is_($r[0] === 200 && $newId > 0, 'the admin creates a Starlink installation job through My Jobs, as before', $r[0] . ' ' . substr($r[1], 0, 200));
 $r = $s->api('tech', 'GET', 'scheduling_job_detail', null, "&job_id={$newId}");
 $ia = $r[2]['data']['install_auth'] ?? null;
-is_($r[0] === 200 && is_array($ia) && $ia['applies'] === true && $ia['status'] === 'none' && $ia['record'] === null && $ia['terms_version'] === 'INSTALLATION-TERMS-v1.0',
+is_($r[0] === 200 && is_array($ia) && $ia['applies'] === true && $ia['status'] === 'none' && $ia['record'] === null && $ia['terms_version'] === 'INSTALLATION-TERMS-v1.1',
     'its detail carries install_auth: applies, no record yet, the terms version', json_encode($ia));
 is_(($ia['refusal'] ?? '') === REFUSAL, 'and the refusal the server will give, word for word');
 $r = $s->api('tech', 'GET', 'scheduling_job_detail', null, '&job_id=905');
@@ -251,7 +291,7 @@ is_($row($s, 901) === null, 'none of the refusals left a record');
 
 $r = $s->api('tech', 'GET', 'install_auth_prefill', null, '&job_id=901');
 is_($r[0] === 200 && ($r[2]['data']['customer']['phone'] ?? '') === '+256700000915' && ($r[2]['data']['customer']['email'] ?? '') === CUST_MAIL
-    && ($r[2]['data']['currency'] ?? '') === 'UGX' && ($r[2]['data']['terms_hash'] ?? '') === TERMS_V1_HASH && ($r[2]['data']['link_days'] ?? 0) === 14,
+    && ($r[2]['data']['currency'] ?? '') === 'UGX' && ($r[2]['data']['terms_hash'] ?? '') === TERMS_V11_HASH && ($r[2]['data']['link_days'] ?? 0) === 14,
     'prefill: the customer\'s uCRM contact (contacts[0]), the currency, the terms, the link life — and no charge', substr($r[1], 0, 300));
 $n0 = count($s->texts()); $m0 = count($s->mails());
 $r = $request($s, 'tech', 901);
@@ -274,13 +314,13 @@ $m = $mails($s, CUST_MAIL, $m0);
 is_(count($m) === 1 && $subj($m[0]) === 'Action Required: Authorise Your DishNet Starlink Installation – Job 901', 'one e-mail to the customer with the brief\'s subject, verbatim', count($m) ? $subj($m[0]) : 'none');
 $html = (string)($m[0]['html'] ?? ''); $text = (string)($m[0]['text'] ?? '');
 is_(strpos($html, $tok901) !== false && strpos($html, 'ACCEPT &amp; AUTHORISE INSTALLATION') !== false && strpos($html, 'DECLINE INSTALLATION') !== false
-    && strpos($html, 'UGX 400,000') !== false && strpos($html, 'Starlink Standard Kit x1') !== false && strpos($html, 'INSTALLATION-TERMS-v1.0') !== false,
+    && strpos($html, 'UGX 400,000') !== false && strpos($html, 'Starlink Standard Kit x1') !== false && strpos($html, 'INSTALLATION-TERMS-v1.1') !== false,
     'the e-mail carries the link, both buttons, the charges, the equipment and the terms version', substr(strip_tags($html), 0, 300));
 is_(strpos($text, $tok901) !== false && strpos($text, 'Total: UGX 400,000') !== false, 'and its text part carries the link and the total');
 is_(($m[0]['reply_to'] ?? '') === 'jobs-reply@example.test', 'Reply-To is the tenant\'s reply address');
 $rec = $row($s, 901);
-is_(is_array($rec) && $rec['status'] === 'pending' && preg_match('/^ACC-\d{8}-000001$/', (string)$rec['acceptance_reference']) === 1 && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0'
-    && $rec['terms_hash'] === TERMS_V1_HASH && (int)$rec['requested_by'] === $s->ids['tech'] && $rec['customer_phone'] === '+256700000915' && $rec['customer_email'] === CUST_MAIL,
+is_(is_array($rec) && $rec['status'] === 'pending' && preg_match('/^ACC-\d{8}-000001$/', (string)$rec['acceptance_reference']) === 1 && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.1'
+    && $rec['terms_hash'] === TERMS_V11_HASH && (int)$rec['requested_by'] === $s->ids['tech'] && $rec['customer_phone'] === '+256700000915' && $rec['customer_email'] === CUST_MAIL,
     'the record: pending, ACC-YYYYMMDD-000001, the terms version and hash, who asked, where it went', json_encode($rec));
 is_($rec['token_hash'] === hash('sha256', $tok901) && strpos(json_encode($rec), $tok901) === false, 'the row holds SHA-256(token) and never the token');
 $price = json_decode((string)$rec['price_snapshot'], true); $scope = json_decode((string)$rec['scope_snapshot'], true);
@@ -317,18 +357,18 @@ foreach (['UGX 350,000' => 'the installation charge', 'UGX 50,000' => 'the trans
 }
 is_(preg_match('#Other agreed charges</td><td>None#', $g[1]) === 1, 'no other charge: "None", never an invented figure');
 echo "\n6. Customer sees the correct terms version\n";
-is_(strpos($g[1], 'Installation Terms &middot; INSTALLATION-TERMS-v1.0') !== false && strpos($g[1], TERMS_V1_HASH) !== false, 'the terms version and its SHA-256 are on the page');
+is_(strpos($g[1], 'Installation Terms &middot; INSTALLATION-TERMS-v1.1') !== false && strpos($g[1], TERMS_V11_HASH) !== false, 'the terms version and its SHA-256 are on the page');
 is_(substr_count($g[1], '<h3>') === 25 && strpos($g[1], '25. Limitation of liability') !== false, 'all twenty-five sections are rendered', (string)substr_count($g[1], '<h3>'));
-is_($hashIn($g[1]) === TERMS_V1_HASH, 'the form carries the hash of the terms it showed');
+is_($hashIn($g[1]) === TERMS_V11_HASH, 'the form carries the hash of the terms it showed');
 is_(strpos($g[1], 'I confirm that I have reviewed and accepted the Installation Terms and authorise DishNet Africa Limited to proceed with the installation described in this Installation Job.') !== false,
     'the confirmation wording is the brief\'s, with the legal entity from the profile');
 is_(strpos($g[1], 'Accept &amp; authorise installation') !== false && strpos($g[1], 'Decline installation') !== false, 'both buttons are there');
 
 // ── 7-11. The acceptance ─────────────────────────────────────────────────────
 echo "\n7. Customer accepts\n";
-$r = $post($s, ['t' => $tok901, 'action' => 'accept', 'name' => 'Canary Customer', 'terms_hash' => TERMS_V1_HASH]);
+$r = $post($s, ['t' => $tok901, 'action' => 'accept', 'name' => 'Canary Customer', 'terms_hash' => TERMS_V11_HASH]);
 is_($r[0] === 422 && strpos($r[1], 'tick the confirmation box') !== false && $row($s, 901)['status'] === 'pending', 'without the confirmation box: refused, still pending');
-$r = $post($s, ['t' => $tok901, 'action' => 'accept', 'agree' => '1', 'name' => '', 'terms_hash' => TERMS_V1_HASH]);
+$r = $post($s, ['t' => $tok901, 'action' => 'accept', 'agree' => '1', 'name' => '', 'terms_hash' => TERMS_V11_HASH]);
 is_($r[0] === 422 && $row($s, 901)['status'] === 'pending', 'without a name: refused, still pending');
 $n0 = count($s->texts()); $m0 = count($s->mails());
 $r = $accept($s, $tok901);
@@ -347,7 +387,7 @@ echo "\n9. Acceptance reference is generated\n";
 $today = (new DateTime('now', new DateTimeZone('Africa/Kampala')))->format('Ymd');
 is_($rec['acceptance_reference'] === "ACC-{$today}-000001" && $ref901 === $rec['acceptance_reference'], 'ACC-<Kampala date>-000001, the same the request answered with', (string)$rec['acceptance_reference']);
 echo "\n10. Terms hash is preserved\n";
-is_($rec['terms_hash'] === TERMS_V1_HASH && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0' && InstallationTerms::matches((string)$rec['terms_version'], (string)$rec['terms_hash']), 'the row names v1.0 and its hash, and the code still holds that exact text');
+is_($rec['terms_hash'] === TERMS_V11_HASH && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.1' && InstallationTerms::matches((string)$rec['terms_version'], (string)$rec['terms_hash']), 'the row names v1.1 and its hash, and the code still holds that exact text');
 echo "\n11. Acceptance timestamp is preserved\n";
 $g = $page($s, $tok901);
 is_($g[0] === 200 && strpos($g[1], InstallAuth::ALREADY) !== false && strpos($g[1], $ref901) !== false, 'opening the link again shows "Installation already authorised." with the reference');
@@ -388,7 +428,7 @@ is_(count($mails($s, null, $m0)) === 2 && count($texts($s, null, $n0)) === 2, 'e
 echo "\n14. Technician CRM shows CUSTOMER ACCEPTED\n";
 $r = $s->api('tech', 'GET', 'scheduling_job_detail', null, '&job_id=901');
 $ia = $r[2]['data']['install_auth'] ?? [];
-is_(($ia['status'] ?? '') === 'accepted' && ($ia['record']['acceptance_reference'] ?? '') === $ref901 && ($ia['record']['terms_version'] ?? '') === 'INSTALLATION-TERMS-v1.0'
+is_(($ia['status'] ?? '') === 'accepted' && ($ia['record']['acceptance_reference'] ?? '') === $ref901 && ($ia['record']['terms_version'] ?? '') === 'INSTALLATION-TERMS-v1.1'
     && ($ia['record']['customer_name'] ?? '') === 'Canary Customer' && preg_match('/EAT$/', (string)($ia['record']['accepted_at'] ?? '')) === 1,
     'the detail says accepted: the customer, the terms, the time, the reference', json_encode($ia['record'] ?? null));
 is_(!isset($ia['record']['token_hash']) && strpos($r[1], hash('sha256', $tok901)) === false && strpos($r[1], $tok901) === false, 'neither the token nor its hash is in the detail');
@@ -436,7 +476,7 @@ is_($has($events($s, 902), 'INSTALLATION_DECLINED[customer:web_link;reason:yes]'
 is_(count($texts($s, null, $n0)) === 0 && count($mails($s, null, $m0)) === 0, 'a decline sends nothing to the technician or the customer');
 $g = $page($s, $tok902);
 is_($g[0] === 200 && strpos($g[1], 'Installation declined') !== false && strpos($g[1], 'name="agree"') === false, 'the link now shows the decline; the form is gone');
-$r = $post($s, ['t' => $tok902, 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V1_HASH]);
+$r = $post($s, ['t' => $tok902, 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V11_HASH]);
 is_($r[0] === 200 && strpos($r[1], 'Installation declined') !== false && $row($s, 902)['status'] === 'declined', 'an accept after a decline changes nothing');
 echo "\n18. Declined job cannot start\n";
 foreach ([['scheduling_job_update', ['job_id' => 902, 'status' => 'open', 'notify_accept' => 1], 'Accept Job'],
@@ -460,7 +500,7 @@ foreach ([str_repeat('0', 64) => 'an unknown 64-hex token', 'not-a-token' => 'a 
     $g = $page($s, $tok);
     is_($g[0] === 404 && strpos($g[1], 'This link is not valid') !== false && strpos($g[1], 'name="agree"') === false, "{$what}: one neutral 404 page, no form", (string)$g[0]);
 }
-$r = $post($s, ['t' => str_repeat('0', 64), 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V1_HASH]);
+$r = $post($s, ['t' => str_repeat('0', 64), 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V11_HASH]);
 is_($r[0] === 404, 'an accept POST with an unknown token: 404');
 is_(json_encode($s->q('SELECT job_id, status, accepted_at FROM install_auth ORDER BY job_id')) === $before, 'nothing changed');
 echo "\n20. Expired token cannot accept\n";
@@ -470,7 +510,7 @@ $g = $page($s, $tok903);
 is_($g[0] === 410 && strpos($g[1], 'This link has expired') !== false, 'the page says the link has expired (410)', (string)$g[0]);
 $rec = $row($s, 903);
 is_($rec['status'] === 'expired' && $has($events($s, 903), 'INSTALLATION_LINK_EXPIRED[system:due]'), 'the record is now expired, with its event', json_encode($events($s, 903)));
-$r = $post($s, ['t' => $tok903, 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V1_HASH]);
+$r = $post($s, ['t' => $tok903, 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V11_HASH]);
 is_($r[0] === 410 && $row($s, 903)['status'] === 'expired', 'an accept POST on it: 410, still expired');
 $r = $s->api('tech', 'POST', 'scheduling_job_update', ['job_id' => 903, 'status' => 'open']);
 is_($r[0] === 422 && $msg($r) === REFUSAL, 'and the job still cannot start', $r[0] . ' ' . $msg($r));
@@ -505,7 +545,7 @@ $n0 = count($s->texts()); $m0 = count($s->mails());
 $r = $accept($s, $tok901, 'Somebody Else');
 $rec = $row($s, 901);
 is_($r[0] === 200 && strpos($r[1], InstallAuth::ALREADY) !== false, 'a second ACCEPT reads "Installation already authorised."', $r[0] . ' ' . substr(strip_tags($r[1]), 0, 160));
-is_($rec['accepted_at'] === $acceptedAt && $rec['accepted_by_name'] === 'Canary Customer' && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0' && $rec['acceptance_reference'] === $ref901,
+is_($rec['accepted_at'] === $acceptedAt && $rec['accepted_by_name'] === 'Canary Customer' && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.1' && $rec['acceptance_reference'] === $ref901,
     'the original time, name, terms and reference stand', json_encode($rec));
 is_(count($s->q('SELECT 1 FROM install_auth WHERE job_id = 901')) === 1 && count(array_filter($evNames($events($s, 901)), function ($n) { return $n === 'INSTALLATION_ACCEPTED'; })) === 1, 'one record, one INSTALLATION_ACCEPTED');
 is_(count($texts($s, null, $n0)) === 0 && count($mails($s, null, $m0)) === 0, 'and nobody is told twice');
@@ -594,13 +634,73 @@ is_(count($t1) === 1 && strpos((string)$t1[0]['text'], 'New Job Has Been Assigne
 
 // ── 29. The historical terms ─────────────────────────────────────────────────
 echo "\n29. Historical terms version remains unchanged\n";
-is_(InstallationTerms::text('INSTALLATION-TERMS-v1.0') === InstallationTerms::text() && InstallationTerms::hash('INSTALLATION-TERMS-v1.0') === TERMS_V1_HASH, 'v1.0 is a named constant with the pinned hash');
-is_(InstallationTerms::text('INSTALLATION-TERMS-v1.1') === null && InstallationTerms::hash('INSTALLATION-TERMS-v1.1') === null, 'an unknown version renders nothing rather than the latest');
-is_(InstallationTerms::matches('INSTALLATION-TERMS-v1.0', TERMS_V1_HASH) && !InstallationTerms::matches('INSTALLATION-TERMS-v1.0', str_repeat('a', 64)), 'matches(): the text the record names, byte for byte');
-is_(InstallationTerms::VERSIONS === ['INSTALLATION-TERMS-v1.0'], 'exactly one version exists today');
-is_($row($s, 901)['terms_version'] === 'INSTALLATION-TERMS-v1.0' && $row($s, 901)['terms_hash'] === TERMS_V1_HASH, 'the first acceptance still names v1.0 and its hash');
+is_(InstallationTerms::text('INSTALLATION-TERMS-v1.0') !== null && InstallationTerms::text('INSTALLATION-TERMS-v1.0') !== InstallationTerms::text() && InstallationTerms::hash('INSTALLATION-TERMS-v1.0') === TERMS_V1_HASH,
+    'v1.0 is still a named constant with its pinned hash, no longer the current text');
+is_(InstallationTerms::text('INSTALLATION-TERMS-v1.1') === InstallationTerms::text() && InstallationTerms::hash('INSTALLATION-TERMS-v1.1') === TERMS_V11_HASH, 'v1.1 is a named constant with its pinned hash, and the current text');
+is_(InstallationTerms::text('INSTALLATION-TERMS-v1.2') === null && InstallationTerms::hash('INSTALLATION-TERMS-v1.2') === null && InstallationTerms::sections('INSTALLATION-TERMS-v1.2') === [],
+    'an unknown version renders nothing rather than the latest');
+is_(InstallationTerms::matches('INSTALLATION-TERMS-v1.0', TERMS_V1_HASH) && InstallationTerms::matches('INSTALLATION-TERMS-v1.1', TERMS_V11_HASH)
+    && !InstallationTerms::matches('INSTALLATION-TERMS-v1.0', TERMS_V11_HASH) && !InstallationTerms::matches('INSTALLATION-TERMS-v1.1', TERMS_V1_HASH)
+    && !InstallationTerms::matches('INSTALLATION-TERMS-v1.0', str_repeat('a', 64)), 'matches(): the text the record names, byte for byte — never the other version\'s hash');
+is_(InstallationTerms::VERSIONS === ['INSTALLATION-TERMS-v1.0', 'INSTALLATION-TERMS-v1.1'], 'exactly two versions exist, the earlier one kept');
+is_($row($s, 901)['terms_version'] === 'INSTALLATION-TERMS-v1.1' && $row($s, 901)['terms_hash'] === TERMS_V11_HASH, 'the first acceptance still names the version it was given, and its hash');
 $g = $page($s, $tok901);
-is_(strpos($g[1], 'INSTALLATION-TERMS-v1.0') !== false && strpos($g[1], TERMS_V1_HASH) !== false, 'and its page re-reads them from the record');
+is_(strpos($g[1], 'INSTALLATION-TERMS-v1.1') !== false && strpos($g[1], TERMS_V11_HASH) !== false, 'and its page re-reads them from the record');
+
+echo "\n29b. A request sent under v1.0 is still honoured as v1.0; a new one takes v1.1 (5.18.94, docs/67 §J)\n";
+// What 5.18.93 leaves behind at the upgrade: pending requests naming v1.0. One is made here the way its request() made
+// one — a cancelled request superseded at a higher seq, the one rewrite the database's triggers allow — so every other
+// field is the real code's, and the token is known only to this test.
+$asV10 = function (SjSandbox $s, int $id) use ($row): string {
+    $tok = bin2hex(random_bytes(32));
+    $s->q("UPDATE install_auth SET status = 'pending', seq = (SELECT MAX(seq) + 1 FROM install_auth), terms_version = 'INSTALLATION-TERMS-v1.0', terms_hash = ?,
+           token_hash = ?, token_expires_at = datetime('now', '+14 days'), cancelled_at = NULL, cancel_reason = NULL, updated_at = datetime('now', '-3 minutes')
+           WHERE job_id = ? AND status = 'cancelled'", [TERMS_V1_HASH, hash('sha256', $tok), $id]);
+    return $tok;
+};
+$r = $request($s, 'tech', 938);
+is_($r[0] === 201 && $row($s, 938)['terms_version'] === 'INSTALLATION-TERMS-v1.1' && $row($s, 938)['terms_hash'] === TERMS_V11_HASH, 'a new request names the current version, v1.1', $r[0] . ' ' . $msg($r));
+$s->api('tech', 'POST', 'install_auth_cancel', ['job_id' => 938, 'reason' => 'made again under v1.0']);
+$tok938 = $asV10($s, 938);
+$rec = $row($s, 938);
+is_($rec['status'] === 'pending' && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0' && $rec['terms_hash'] === TERMS_V1_HASH && $rec['token_hash'] === hash('sha256', $tok938),
+    'the sandbox holds a pending request naming v1.0, as 5.18.93 wrote one', json_encode([$rec['status'], $rec['terms_version']]));
+$g = $page($s, $tok938);
+is_($g[0] === 200 && strpos($g[1], 'Installation Terms &middot; INSTALLATION-TERMS-v1.0') !== false && strpos($g[1], TERMS_V1_HASH) !== false && $hashIn($g[1]) === TERMS_V1_HASH,
+    'its page shows v1.0 and its hash, and the form carries v1.0\'s hash', $g[0] . ' ' . $hashIn($g[1]));
+is_(strpos($g[1], 'DRAFT — SUBJECT TO LEGAL REVIEW') !== false && strpos($g[1], 'That limit does not apply to damage to your property') === false && substr_count($g[1], '<h3>') === 25,
+    'the text shown is v1.0\'s — its DRAFT line included, none of v1.1\'s sentences — in twenty-five sections');
+$r = $post($s, ['t' => $tok938, 'action' => 'accept', 'agree' => '1', 'name' => 'Canary Customer', 'terms_hash' => TERMS_V11_HASH]);
+is_($r[0] === 409 && strpos($r[1], 'The terms have changed') !== false && $row($s, 938)['status'] === 'pending', 'accepting it with v1.1\'s hash is refused — 409 "The terms have changed" — and it stays pending', (string)$r[0]);
+$n0 = count($s->texts()); $m0 = count($s->mails());
+$r = $s->api('tech', 'POST', 'install_auth_resend', ['job_id' => 938]);
+$tok938b = $tokenIn($texts($s, CUST, $n0));
+$rec = $row($s, 938);
+is_($r[0] === 200 && $tok938b !== '' && $tok938b !== $tok938 && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0' && $rec['terms_hash'] === TERMS_V1_HASH && $page($s, $tok938)[0] === 404,
+    'a resend sends a new link to the same v1.0 request — the terms never move — and the old link is dead', $r[0] . ' ' . $msg($r));
+$m = $mails($s, CUST_MAIL, $m0);
+is_(count($m) === 1 && strpos((string)($m[0]['html'] ?? ''), 'INSTALLATION-TERMS-v1.0') !== false && strpos((string)($m[0]['html'] ?? ''), 'INSTALLATION-TERMS-v1.1') === false, 'and its e-mail names v1.0');
+$r = $accept($s, $tok938b);
+$rec = $row($s, 938);
+is_($r[0] === 200 && $rec['status'] === 'accepted' && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.0' && $rec['terms_hash'] === TERMS_V1_HASH
+    && InstallationTerms::matches((string)$rec['terms_version'], (string)$rec['terms_hash']), 'the customer accepts the v1.0 they were shown: accepted, naming v1.0 and its hash', $r[0] . ' ' . json_encode([$rec['status'], $rec['terms_version']]));
+$g = $page($s, $tok938b);
+is_(strpos($g[1], InstallAuth::ALREADY) !== false && strpos($g[1], 'INSTALLATION-TERMS-v1.0') !== false && strpos($g[1], TERMS_V1_HASH) !== false, 'and its page re-reads v1.0 and its hash from the record');
+// A v1.0 request that staff withdraw and send again is a new request: it takes the current version.
+$request($s, 'tech', 945);
+$s->api('tech', 'POST', 'install_auth_cancel', ['job_id' => 945, 'reason' => 'made again under v1.0']);
+$tok945 = $asV10($s, 945);
+is_($row($s, 945)['status'] === 'pending' && $row($s, 945)['terms_version'] === 'INSTALLATION-TERMS-v1.0', 'a second pending v1.0 request');
+$r = $s->api('tech', 'POST', 'install_auth_cancel', ['job_id' => 945, 'reason' => 'send the current terms']);
+is_($r[0] === 200 && $page($s, $tok945)[0] === 410, 'withdrawn: its v1.0 link answers 410', $r[0] . ' ' . $msg($r));
+$n0 = count($s->texts());
+$r = $request($s, 'tech', 945);
+$tok945b = $tokenIn($texts($s, CUST, $n0));
+$rec = $row($s, 945);
+is_($r[0] === 201 && $rec['status'] === 'pending' && $rec['terms_version'] === 'INSTALLATION-TERMS-v1.1' && $rec['terms_hash'] === TERMS_V11_HASH, 'sent again, it names v1.1 and its hash', $r[0] . ' ' . $msg($r));
+$g = $page($s, $tok945b);
+is_($g[0] === 200 && strpos($g[1], 'Installation Terms &middot; INSTALLATION-TERMS-v1.1') !== false && $hashIn($g[1]) === TERMS_V11_HASH && strpos($g[1], 'DRAFT') === false
+    && strpos($g[1], 'That limit does not apply to damage to your property') !== false, 'its page shows v1.1 — no DRAFT line, the §25 carve-out — and the form carries v1.1\'s hash');
 
 // ── Beside the brief: resend, withdraw, dispute, a job deleted in uCRM ───────
 echo "\n   The lifecycle beside the brief: resend, withdraw, dispute, job.delete\n";
@@ -917,7 +1017,7 @@ is_(count($al) === 1 && $al[0]['dedup_key'] === 'INSTAUTHALERT907:technician_not
 
 echo "\nH7. The public page writes nothing for a link that names nothing, and limits each link by itself\n";
 $before = (int)$s->q('SELECT COUNT(*) c FROM install_auth_rate')[0]['c'];
-for ($i = 0; $i < 25; $i++) $post($s, ['t' => bin2hex(random_bytes(32)), 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V1_HASH]);
+for ($i = 0; $i < 25; $i++) $post($s, ['t' => bin2hex(random_bytes(32)), 'action' => 'accept', 'agree' => '1', 'name' => 'X', 'terms_hash' => TERMS_V11_HASH]);
 for ($i = 0; $i < 5; $i++) $page($s, 'not-a-token-' . $i);
 is_((int)$s->q('SELECT COUNT(*) c FROM install_auth_rate')[0]['c'] === $before, 'thirty requests with unknown or malformed links: not one row written (5.18.82 wrote one for each)', (string)$s->q('SELECT COUNT(*) c FROM install_auth_rate')[0]['c']);
 $request($s, 'tech', 935); $tok935 = $tokenIn($texts($s, CUST));

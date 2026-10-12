@@ -35,7 +35,7 @@ $UG = [
     'email_support_wa'    => '256705993348',
     'email_reply_to'      => 'accounts@dishnetuganda.com',
     'email_legal_line'    => 'TIN 1059140632 · Reg. No. 80046255496181',
-    'email_badge_line'    => 'UCC Authorised Starlink Installer',
+    'email_badge_line'    => 'Starlink Installation',   // 5.18.94: no UCC authorisation is claimed (docs/67 §J)
     'email_currency'      => 'UGX',
 ];
 

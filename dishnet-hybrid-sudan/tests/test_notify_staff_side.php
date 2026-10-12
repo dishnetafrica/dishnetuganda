@@ -14,7 +14,8 @@ declare(strict_types=1);
  *      staff with no link.
  *   3. S-4: an administrator alert with no number leaves one line a day in the plugin log, where before it vanished;
  *      an operations alert that went, or failed, leaves a Message Log row like any other send.
- *   4. S-5: the alert-number field suggests the tenant's own number format.
+ *   4. S-5: the alert-number field suggests the tenant's own number format. 5.18.94: the marketing examples (the
+ *      assistant's identity line, the flyer caption) make no UCC claim (root docs/67 §K).
  *   5. S-6: the Workbench bulk send counts what WhatsApp accepted: a refused message is counted as failed.
  *   6. S-7: the help page's WhatsApp answers say what this install does, and name no screen that does not exist.
  *   7. South Sudan: 5.18.53 unchanged in each (docs/46 §E) — its brief still dies on its first line.
@@ -281,6 +282,9 @@ echo "\n4. Uganda — S-5 and S-7: the screens say what this install does\n";
 $p = $pagesCase($u);
 is_(strpos($p['setup'], 'name="alert_whatsapp" style="min-width:200px" placeholder="+256 7XX XXX XXX"') !== false
     && strpos($p['setup'], '+249XXXXXXXXX') === false, 'the alert-number field suggests a Uganda number, not Sudan\'s +249');
+is_(strpos($p['setup'], "IT solutions company and Starlink\n        installer in Uganda.&rdquo;") !== false
+    && strpos($p['setup'], 'Starlink Plans ✅ Professional installation"') !== false && strpos($p['setup'], 'UCC') === false,
+    '5.18.94: the marketing examples — the identity line and the flyer caption — make no UCC claim, and the page names UCC nowhere');
 is_(strpos($p['faq'], 'Message Log') !== false && strpos($p['faq'], 'Failed Queue') !== false && strpos($p['faq'], 'Settings → Notifications') !== false,
     'the help page sends staff to the Message Log and the Failed Queue, and to uCRM for its e-mails');
 is_(strpos($p['faq'], 'Notify tab') === false && strpos($p['faq'], 'wa.dishnetafrica.com') === false && strpos($p['faq'], 'our plugin never touches these') === false,
@@ -312,6 +316,8 @@ is_($sal['admin_lines'] === [] && $sal['ops_lines'] === [] && $sal['ops_rows'] =
 is_(count($sal['ops_sent_texts']) === 1 && count($sal['admin_set_texts']) === 1, 'and still go when a number is set (control)');
 $sp = $pagesCase($ss);
 is_(strpos($sp['setup'], 'placeholder="+249XXXXXXXXX"') !== false && strpos($sp['faq'], 'Notify tab') !== false, 'the screens as they were');
+is_(strpos($sp['setup'], "IT solutions company and UCC Authorised\n        Starlink Installer in Uganda.&rdquo;") !== false
+    && strpos($sp['setup'], 'Starlink Plans ✅ UCC Authorised Installer"') !== false, '…the marketing examples too: 5.18.94 changes them on Uganda alone');
 $sw = $bulkCase($ss);
 is_(($sw['job']['sent_wa'] ?? null) === 2 && count($sw['customers']) === 1, 'the Workbench there still counts the refused WhatsApp as sent',
     json_encode([$sw['job']['sent_wa'] ?? null, count($sw['customers'])]));
@@ -367,6 +373,10 @@ $mutants = [
     'Sudan\'s example number on Uganda (S-5)' => ['tabs/engage/wa_ai_setup.php', [
         ['            $_s5Ph = TenantProfile::current($_wCfg, $_wData ?? null)->phoneExample() ?: $_s5Ph;', '']],
         'pages', function (array $x) { return strpos($x['setup'], 'placeholder="+249XXXXXXXXX"') !== false; }, 'the field says +249'],
+    'the UCC examples back on Uganda (5.18.94)' => ['tabs/engage/wa_ai_setup.php', [
+        ['        $_mkUg = NotifyGate::uganda(is_array($_wCfg ?? null) ? $_wCfg : [], $_wData ?? null);', '        $_mkUg = false;']],
+        'pages', function (array $x) { return strpos($x['setup'], 'Starlink Plans ✅ UCC Authorised Installer"') !== false && strpos($x['setup'], '+256 7XX XXX XXX') !== false; },
+        'the caption example says UCC Authorised Installer'],
     'a refused WhatsApp counted as sent (S-6)' => ['includes/api/api_crm_misc.php', [
         ['                    if (!empty($_s6[\'success\'])) {', '                    if (true) {']],
         'bulk', function (array $x) { return ($x['job']['sent_wa'] ?? null) === 2; }, 'two counted, one went'],
