@@ -14,8 +14,11 @@
 # (its two literals — the server's checksum, size and time, and its folder's time — replaced, each exactly once).
 #
 # This rehearsal proves:
-#   · stage A refuses, before anything changes, each clause on its own (Q1), and a copy of the script blind to that clause
-#     reaches GO (Q2: caught); every stop before the move prints the rule that binds until it, and a copy that does not is
+#   · stage A refuses, before anything changes, each clause planted here on its own (Q1), and for most of them a copy of the
+#     script blind to that clause reaches GO (Q2: caught) — not planted: no stray store at all, unreadable keys, 5.18.93's
+#     record missing or without STRAY_COPY, STRAY_COPY_AT or STRAY_ENTS, the stray store not a regular file, a folder named
+#     like a data folder on the quarantine folder's path; planted without a blind copy: 1d, 1w–1w'', 1y'', 1z', 1z''; every
+#     stop before the move prints the rule that binds until it, and a copy that does not is
 #     caught; master's record of the retry job unreadable is refused at A8; one run at a time — with the folder's lock held,
 #     every mode stops at once, and a copy without the lock runs beside it (caught); a Ctrl-C during the holders control
 #     leaves no throwaway folder (a copy without its trap does: caught);
@@ -48,6 +51,15 @@
 #   · the put-back refuses over a new store, a changed kept file, a holder; it gives the same file its name back and
 #     records the folder's new reference; a side file beside the restored store is said, not judged (Q6); a destination
 #     on another filesystem, or behind a bind mount, moves nothing (Q7);
+#   · a line appended to <plugin>/data/migration.log inside every holder read (cron/dpo_reconcile.php appends one every
+#     five minutes) is never counted as a holder — not at A5, C6 or K10 (a copy that keeps it refuses at A5, and one that
+#     judges the kept file by the old folder FAILS K10 for good: caught) (Q3); the record's writes refused as on a full disk
+#     (strace's fault injection on that one file) at each marker, before and after the two steps and in the put-back: each
+#     run stops or ends NOT CONCLUSIVE with one command, never PASSED over a record it could not write (Q8);
+#   · a prompt left unanswered ends the run by itself and frees the lock (Q1); the put-back reads the two names again after
+#     its word, and the gate again, sorted as before it (Q8, Q3); <plugin>/data replaced is no conclusion, never a FAIL
+#     (Q4); with 5.18.91 live and the gate opened the put-back refuses, and after a rollback to 5.18.90 --check's one next
+#     step is the put-back, in its check and its verdict alike (Q6);
 #   · nothing reaches Evolution; the clone, /tmp, /dev/shm and the script's own TMPDIR are left as found.
 #
 # Everything runs in a sandbox; it never touches this checkout, the server or the network, and refuses to run where the
@@ -452,12 +464,13 @@ if [ -n "\$detach" ]; then
   [ -n "\${FAKE_EXEC_D_FAIL:-}" ] && { echo "fake docker: exec -d refused (rehearsal control)" >&2; exit 1; }
   "\${pre[@]}" "\${args[@]}" </dev/null >/dev/null 2>&1 & exit 0
 fi
-# Once the stray store's old name is gone: the gate's probe refused (FAKE_GATE_FAIL_ON_MOVE), or answering a planted line
+# Once the stray store's old name is gone: the gate's probe refused (FAKE_GATE_FAIL_ON_MOVE, or while $SB/gate-fail exists —
+# made by a hook while a prompt waits), or answering a planted line
 # (FAKE_GATE_LINE), or the container recycling
 # for N seconds from the first exec after the move (FAKE_RECYCLE_ON_MOVE=N) — a runtime's text on standard output and
 # exit 126, or with FAKE_RECYCLE_STDERR the daemon's refusal on standard error and exit 1.
 if [ ! -e "$PD/data/plugin.sqlite3" ] && [ ! -L "$PD/data/plugin.sqlite3" ]; then
-  if [ -n "\${FAKE_GATE_FAIL_ON_MOVE:-}" ]; then case " \$* " in *" display_errors=stderr "*) echo "fake docker: the gate's probe refused (rehearsal control)" >&2; exit 1 ;; esac; fi
+  if [ -n "\${FAKE_GATE_FAIL_ON_MOVE:-}" ] || [ -f "$SB/gate-fail" ]; then case " \$* " in *" display_errors=stderr "*) echo "fake docker: the gate's probe refused (rehearsal control)" >&2; exit 1 ;; esac; fi
   if [ -n "\${FAKE_GATE_LINE:-}" ]; then case " \$* " in *" display_errors=stderr "*) printf '%s\n' "\$FAKE_GATE_LINE"; exit 0 ;; esac; fi
   if [ -n "\${FAKE_RECYCLE_ON_MOVE:-}" ]; then
     [ -f "$SB/recycle-until" ] || echo \$(( \$(date +%s) + FAKE_RECYCLE_ON_MOVE )) > "$SB/recycle-until"
@@ -954,7 +967,7 @@ while True:
     if not answered and prompt.search(buf):
         answered = True
         if opt['hook']: subprocess.run(opt['hook'], shell=True, executable='/bin/bash')
-        os.write(fd, opt['answer'].encode() + b'\n')
+        if opt['answer'] != '__NONE__': os.write(fd, opt['answer'].encode() + b'\n')   # __NONE__: nothing typed at all
     if opt['at'] and not fired and opt['at'].encode() in buf:
         fired = True
         time.sleep(float(opt['delay']))
@@ -1021,7 +1034,12 @@ q1 "1b the installed manifest not 5.18.93's — A0" "but the installed manifest 
 cp -p "$PD/lib/StarlinkRetryScope.php" "$SB/scope.kept"; printf '\n// edited\n' >> "$PD/lib/StarlinkRetryScope.php"
 q1 "1c a file of the gate edited by hand — A0" "NO-GO: installed, not as 69c87a6 has them: lib/StarlinkRetryScope.php"; cp -p "$SB/scope.kept" "$PD/lib/StarlinkRetryScope.php"; q1ok
 cp -p "$PD/ucrm.json" "$SB/ucrm.kept"; php -r '$f = $argv[1]; $u = json_decode((string)file_get_contents($f), true); $u["pluginDataDir"] = $argv[2]; file_put_contents($f, json_encode($u));' "$PD/ucrm.json" "$IN_CONTAINER/data"
-q1 "1d ucrm.json naming <plugin>/data — the live directory would be the stray store itself" "NO-GO: the plugin's live data directory would be $IN_CONTAINER/data"; cp -p "$SB/ucrm.kept" "$PD/ucrm.json"; q1ok
+q1 "1d ucrm.json naming <plugin>/data — the live directory would be the stray store itself" "NO-GO: the plugin's live data directory would be $IN_CONTAINER/data"; O1D="$(qrun -- --check)"; cp -p "$SB/ucrm.kept" "$PD/ucrm.json"; q1ok
+check "$(has "$O1D" 'no live database is found — send this log now')$(has "$O1D" 'must stay where it is')$(has "$O1D" 'quarantine.env')" "yesnono" \
+  "1d2 --check under the same ucrm.json: a reason that fits its mode (the file is not in <plugin>/data to stay there), and no record asked for that does not exist"
+ucrm_pdd() { php -r '$f = $argv[1]; $u = json_decode((string)file_get_contents($f), true); $u["pluginDataDir"] = $argv[2]; file_put_contents($f, json_encode($u));' "$PD/ucrm.json" "$1"; }
+ucrm_pdd "$IN_CONTAINER/./data"
+q1 "1d' ucrm.json naming <plugin>/./data — the live path an alias of the stray store: A1 refuses before anything opens it" "NO-GO: the stray store and the live database are the same file"; cp -p "$SB/ucrm.kept" "$PD/ucrm.json"; q1ok
 cp -p "$STATE" "$SB/state.kept"
 sed -i 's/^STRAY_CTRL=seen$/STRAY_CTRL=not-seen/' "$STATE"; q1 "1e 5.18.93's A14 did not see the stray store — A2" "STRAY_CTRL=not-seen"; cp -p "$SB/state.kept" "$STATE"; q1ok
 printf 'STRAY_R19_FAILED=%s\n' "$(date -u +%s)" >> "$STATE"; q1 "1f an R19 failure in 5.18.93's state file — A2" "dnb-5.18.93/state-5.18.93.env"; cp -p "$SB/state.kept" "$STATE"; q1ok
@@ -1030,8 +1048,8 @@ q1 "1f' …in a kept earlier copy of it (.prev-*) — A2" "state-5.18.93.env.pre
 cp -p "$PREV" "$SB/prev.kept"; printf 'STRAY_R19_FAILED=1\n' >> "$PREV"; q1 "1f'' …in 5.18.92's state file — A2" "dnb-5.18.92/state-5.18.92.env"; cp -p "$SB/prev.kept" "$PREV"; q1ok
 sed -i "s/^STRAY_COPY=db=[^ ]*/STRAY_COPY=db=0000000000000000:1:1/" "$STATE"; q1 "1g 5.18.93's record of the stray store at the copy not the file's (the file as the literal) — A4" "not as 5.18.93's copy recorded it"; cp -p "$SB/state.kept" "$STATE"; q1ok
 logs_only "early20.log:after-20m.log"; q1 "1h only the 20-minute log, no day-later one — A3" "NO-GO: no day-later check yet"; q1ok
-check "$(has "$(cat "$SB/q1.last")" 'Until the quarantine has moved the file: deploy or roll back nothing')$(has "$(cat "$SB/q1.last")" 'run neither diagnose-sales-pipeline.sh nor migrations/migrate_tickets_data.php')" "yesyes" \
-  "…the refusal prints the rule that binds until the move: deploy or roll back nothing, save no plugin settings, run neither tool"
+check "$(has "$(cat "$SB/q1.last")" 'Until the quarantine has moved the file: deploy or roll back nothing')$(has "$(cat "$SB/q1.last")" 'run neither diagnose-sales-pipeline.sh nor migrations/migrate_tickets_data.php')$(has "$(cat "$SB/q1.last")" 'quarantine.env')" "yesyesno" \
+  "…the refusal prints the rule that binds until the move: deploy or roll back nothing, save no plugin settings, run neither tool — and asks for no quarantine.env, which does not exist yet"
 logs_only "early20.log:after-20m.log" "day-1.log:after-x.log"; q1 "1h' a day-later log begun one second before the bound — A3" "NO-GO: no day-later check yet"; q1ok
 logs_only "day.log:after-$DAY_TS.log" "fail.log:after-zfail.log"; q1 "1i the latest day-later log FAILED (V4) — A3" "did not pass, or did not conclude R19"; q1ok
 logs_only "earlyday.log:after-y.log"; q1 "1j a day-later log that PASSED without R19's conclusive line — A3" "did not pass, or did not conclude R19"; q1ok
@@ -1104,6 +1122,12 @@ QRECS="$MOUNT/rec" QLOGDIR="$MOUNT/rec/dnb-stray-quarantine" q1 "1z' the quarant
 mv "$QD" "$SB/qd.real"; ln -s "$SB/qd.real" "$QD"; OUT="$(qrun --answer NO)"; rm -f "$QD"; mv "$SB/qd.real" "$QD"
 check "$(has "$OUT" 'is not a directory of its own (a symlink, or a file)')$(unchanged)" "yessnapnokeptnorec" "1z'' the quarantine folder a symlink — refused before anything is written into it"
 OUT="$(qrun --answer quarantine)"; check "$(has "$OUT" 'STOP: not confirmed')$(unchanged)" "yessnapnokeptnorec" "1zz the word in lower case: not confirmed, nothing changed"
+check "$(grep -c 'read -r -t 900 answer </dev/tty || answer=""' "$QS")" "2" "1zz' each prompt waits 15 minutes at most for its word (read -t 900, both)"
+M="$(mutant q1-wait "$QP" 'local answer=""; read -r -t 900 answer </dev/tty || answer=""
+  [ "$answer" = "QUARANTINE" ]' 'local answer=""; read -r -t 3 answer </dev/tty || answer=""
+  [ "$answer" = "QUARANTINE" ]')"; OUT="$(qrun --answer __NONE__ --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'STOP: not confirmed')$(has "$OUT" '[ptyrun: timeout]')$(unchanged)" "yesnosnapnokeptnorec" "1zz'' nothing typed at all: the run stops by itself at its time (3 s in a copy; 15 minutes in the script), nothing changed"
+OUT="$(qrun --answer NO)"; check "$(went_go "$OUT")" "yesyesyes" "…and its lock goes with it: the next run reaches GO"
 check "$(sha256sum "$VAULT" | cut -c1-16)$(data_digest)" "$VAULT0$DQ0" "Q1's refusals changed neither the vault nor any data of the plugin"
 # Master's record of the retry job unreadable (its table gone): refused at A8, before the word. (After the data check: the
 # record is written again, at another time, by the harness as master writes it.)
@@ -1150,6 +1174,10 @@ q2ok() { check "$(went_go "$Q2O")$(unchanged)" "yesyesyessnapnokeptnorec" "2 $Q2
 printf '%s\n' "$BASE" > "$PD/.deployed-commit"; q2 a0-commit '[ "$LIVE" = "$EXPECTED_LIVE_COMMIT" ] || stop' ': || stop' --; printf '%s\n' "$PIN" > "$PD/.deployed-commit"; q2ok
 sed -i 's/"version": "5.18.93"/"version": "5.18.92"/' "$PD/manifest.json"; q2 a0-version '[ "$LIVE_VERSION" = "$EXPECTED_VERSION" ] || stop' ': || stop' --; cp -p "$SB/manifest.kept" "$PD/manifest.json"; q2ok
 printf '\n// edited\n' >> "$PD/lib/StarlinkRetryScope.php"; q2 a0-files '[ -z "$gb" ] || stop "NO-GO: installed' ': || stop "NO-GO: installed' --; cp -p "$SB/scope.kept" "$PD/lib/StarlinkRetryScope.php"; q2ok
+ucrm_pdd "$IN_CONTAINER/./data"; m="$(mutant q2-a1-same "$QP" '[ "$src_key" != "$LIVE_KEY" ] || stop' ': || stop')"; o="$(qrun --answer NO --script "$m")"; rm -f "$m"; cp -p "$SB/ucrm.kept" "$PD/ucrm.json"
+SA1="$(stray_snap)"; rm -f "$SRC-wal" "$SRC-shm"; touch -d "$REF_DIR_Y" "$PD/data"
+check "$(has "$o" 'ok    A1')$(has "$o" 'GO — evidence recorded')$( [ "$SA1" = "$SNAP0" ] && echo same || echo changed)$(unchanged)" "yesnochangedsnapnokeptnorec" \
+  "2 a1-same: a copy without A1's same-file refusal passes A1 (caught) — and its gate probe then opens the stray store with SQLite, which changes the folder (put back here): A6's refusal comes too late"
 sed -i 's/^STRAY_CTRL=seen$/STRAY_CTRL=not-seen/' "$STATE"; q2 a2-ctrl '[ "$c_ctrl" = "seen" ] || stop' ': || stop' --; cp -p "$SB/state.kept" "$STATE"; q2ok
 printf 'STRAY_R19_FAILED=1\n' >> "$STATE"; q2 a2-r19 '[ -z "$r19f" ] || stop' ': || stop' --; cp -p "$SB/state.kept" "$STATE"; q2ok
 logs_only "early20.log:after-20m.log" "day-1.log:after-x.log"; q2 a3-bound '[ "$te" -ge "$bound_e" ] && [ "$te" -ge "$best_e" ]' '[ "$te" -ge "$best_e" ]' --; q2ok
@@ -1166,7 +1194,7 @@ touch -d "@$(( REF_DIR_T + 60 ))" "$PD/data"; q2 a4-dir '[ "$dir_t" = "$EXPECTED
 setpriv --reuid 1000 --regid 1000 --clear-groups -- touch "$PD/data/planted.txt"; touch -d "$REF_DIR_Y" "$PD/data"
 q2 a4-entries 'stop "NO-GO: the stray folder'"'"'s entries are not as' 'say "NO-GO-blind: entries are not as' --; rm -f "$PD/data/planted.txt"; touch -d "$REF_DIR_Y" "$PD/data"; q2ok
 if chattr +i "$SRC" 2>/dev/null; then q2 a4-attr 'case "$fa$da" in *i*|*a*) stop' 'case "$fa$da" in *x*) stop' --; chattr -i "$SRC"; q2ok; fi
-holder_py fd "$SRC"; q2 a5-held 'held_by_none || stop "NO-GO: the stray store is held — locks' ': || stop "NO-GO: the stray store is held — locks' --; holder_stop; q2ok
+holder_py fd "$SRC"; q2 a5-held 'held_by_none || stop "NO-GO: the stray store is $(hold_text)' ': || stop "NO-GO: the stray store is $(hold_text)' --; holder_stop; q2ok
 holder_py fd "$SRC"; q2 a5-unresolved "xargs -0 -r stat -L -c '%d:%i' 2>/dev/null \\" "xargs -0 -r readlink 2>/dev/null \\" --; holder_stop
 check "$(has "$Q2O" "NO-GO: the holder instruments' controls did not pass")$(has "$Q2O" 'GO — evidence recorded')$(unchanged)" "yesnosnapnokeptnorec" \
   "2 a5-unresolved: a copy whose descriptor scan does not resolve each descriptor to its file is stopped by the scan's own control (the control has teeth), before any holder count is believed"
@@ -1199,8 +1227,8 @@ qb() {   # qb LABEL HOOK EXPECTED [qrun options…] — the change made while th
   check "$(has "$o" "$text")$(has "$o" 'linked ')$( [ -e "$KEPT" ] && echo kept || echo nokept)$( [ -e "$SRC" ] && echo src)$( [ -e "$QREC" ] && echo rec || echo norec)" "yesnonokeptsrcnorec" "$label"
   rm -f "$QREC"   # cleanup only: no record is written — the reads come first (asserted above)
 }
-qb "B1 a holder starts while the prompt waits: 'nothing moved: the stray store is held now'" "touch '$SB/qb.ready'; python3 -c 'import os,time; fd=os.open(\"$SRC\", os.O_RDONLY); open(\"$SB/qb.held\",\"w\").close(); time.sleep(30)' >/dev/null 2>&1 & echo \$! > '$SB/qb.pid'; for i in \$(seq 1 50); do [ -f '$SB/qb.held' ] && break; sleep 0.1; done" \
-  "nothing moved: the stray store is held now"
+qb "B1 a holder starts while the prompt waits: 'nothing moved: the stray store, read again now, is held'" "touch '$SB/qb.ready'; python3 -c 'import os,time; fd=os.open(\"$SRC\", os.O_RDONLY); open(\"$SB/qb.held\",\"w\").close(); time.sleep(30)' >/dev/null 2>&1 & echo \$! > '$SB/qb.pid'; for i in \$(seq 1 50); do [ -f '$SB/qb.held' ] && break; sleep 0.1; done" \
+  "nothing moved: the stray store, read again now, is held — locks and open descriptors: 0 1"
 kill "$(cat "$SB/qb.pid")" 2>/dev/null; rm -f "$SB/qb.pid" "$SB/qb.held" "$SB/qb.ready"
 check "$(stray_snap)" "$SNAP0" "…the stray folder exactly as seeded"
 qb "B2 the live commit changes while the prompt waits" "printf '%s\n' '$BASE' > '$PD/.deployed-commit'" "nothing moved: the container now serves $BASE"; printf '%s\n' "$PIN" > "$PD/.deployed-commit"
@@ -1227,7 +1255,7 @@ qbm() {   # qbm LABEL ANCHOR REPLACEMENT HOOK
   check "$(has "$o" 'nothing moved: the link could not be made')$(rec_last Q_STAGE)$( [ -e "$KEPT" ] && echo kept || echo nokept)" "yesabandonednokept" "B' $label: the copy without that read goes on to the link (caught); safe here: its link is never made, and it records abandoned"
   rm -f "$QREC" "$QD"/quarantine.env.void-*
 }
-qbm held 'holders "$src_key"; held_by_none || stop "nothing moved: the stray store is held now' 'holders "$src_key"; : || stop "nothing moved: the stray store is held now' \
+qbm held 'holders "$src_key"; held_by_none || stop "nothing moved: the stray store, read again now' 'holders "$src_key"; : || stop "nothing moved: the stray store, read again now' \
   "python3 -c 'import os,time; fd=os.open(\"$SRC\", os.O_RDONLY); open(\"$SB/qb.held\",\"w\").close(); time.sleep(30)' >/dev/null 2>&1 & echo \$! > '$SB/qb.pid'; for i in \$(seq 1 50); do [ -f '$SB/qb.held' ] && break; sleep 0.1; done"
 kill "$(cat "$SB/qb.pid")" 2>/dev/null; rm -f "$SB/qb.pid" "$SB/qb.held"
 qbm gate 'g2="$(gate_line)"; gate_ok "$g2" || stop' 'g2="$(gate_line)"; : || stop' "php() { setpriv --reuid 1000 --regid 1000 --clear-groups -- $PHPBIN \"\$@\"; }; php -r '\$f = \$argv[1]; \$c = json_decode((string)file_get_contents(\$f), true); \$c[\"tenant_profile\"] = \"south-sudan\"; \$c[\"currency_code\"] = \"SSP\"; file_put_contents(\$f, json_encode(\$c));' '$DATA/kyc_config.json'; printf '%s' '{\"config\":{\"currency_code\":\"SSP\",\"tenant_profile\":\"south-sudan\"}}' > '$VAULT'"
@@ -1279,7 +1307,7 @@ check "$(rec_last Q_STAGE)$(stat -c %h "$SRC")$( [ "$(stat -c '%d:%i' "$KEPT")" 
 OUT="$(qrun --answer NO -- --check)"
 check "$(has "$OUT" 'stopped between its two steps (record: prepared)')$(has "$OUT" 'run --put-back')$(has "$OUT" '(check): NOT CONCLUSIVE — HALF-DONE: run --put-back')$(has "$OUT" '(check): PASSED')$(fails "$OUT")" "yesyesyesno0" \
   "…--check: stopped between its two steps — run --put-back; NOT CONCLUSIVE, never PASSED"
-OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'STOP: an earlier run stopped between its two steps')$(has "$OUT" 'Run --put-back: it removes only the kept name')$(has "$OUT" 'Until the quarantine has moved the file')" "yesyesyes" \
+OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'STOP: an earlier run stopped between its two steps')$(has "$OUT" 'Run --put-back: it removes only the kept name')$(has "$OUT" 'Until the quarantine has moved the file')$(has "$OUT" 'and its quarantine.env')" "yesyesyesyes" \
   "…the quarantine command names the one command, --put-back, and the rule that binds until the move"
 OUT="$(qrun --answer PUTBACK -- --put-back)"
 check "$(fails "$OUT")$(has "$OUT" 'the quarantine stopped between its two steps')$(rec_last Q_STAGE)$(stat -c %h "$SRC")$( [ -e "$KEPT" ] && echo kept || echo nokept)$(stray_snap)" "0yesabandoned1nokept$SNAP0" \
@@ -1358,10 +1386,82 @@ check "$(has "$OUT" 'note  C6 whether anything holds the moved file was not meas
 OUT="$(qrun -- --check)"; check "$(failline "$OUT" K0)$(okline "$OUT" K10)" "noyes" "…the next --check measures the holders again (K10), and no K0"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_KILL=$SRC")"
-M="$(mutant q8-c6ctl "$QP" '    note "C6 whether anything holds the moved file was not measured' '    bad "C6 whether anything holds the moved file was not measured')"
+M="$(mutant q8-c6ctl "$QP" '    note "C6 whether anything holds the moved file was not measured: the controls did not pass' '    bad "C6 whether anything holds the moved file was not measured: the controls did not pass')"
 OUT="$(qrun --answer NO --script "$M" --env FAKE_EXEC_D_FAIL=1)"; rm -f "$M"
 check "$(failline "$OUT" C6)$(rec_last Q_CHECK_FAILED | grep -c .)" "yes1" "8f2 a copy that FAILS C6 on an unmeasured holder records a failure that nothing observed, for good (caught)"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+# 8g: the old name's removal refused (nothing done): the kept name is taken back, and nothing has moved.
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_FAIL=$SRC")"
+check "$(has "$OUT" 'nothing moved: the old name could not be removed; the kept name was removed again')$(rec_last Q_STAGE)$(stat -c %h "$SRC")$(stat -c '%d:%i' "$SRC")$( [ -e "$KEPT" ] && echo kept || echo nokept)$(has "$OUT" 'Until the quarantine has moved the file')" "yesabandoned1${KEY0}nokeptyes" \
+  "8g the old name's removal refused: the kept name taken back, the record abandoned, the stray store one name as seeded, the rule until the move printed"
+check "$(stray_snap)" "$SNAP0" "…the stray folder exactly as seeded"
+M="$(mutant q8-takeback "$QP" '      rm -f -- "$KEPT" 2>/dev/null
+      if absent "$KEPT" && [ "$(links_of "$SRC")" = "1" ]; then rec_put Q_STAGE abandoned' '      if absent "$KEPT" && [ "$(links_of "$SRC")" = "1" ]; then rec_put Q_STAGE abandoned')"
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --script "$M" --env "SHIM_RM_FAIL=$SRC")"; rm -f "$M"
+check "$(has "$OUT" 'the kept name could not be taken back')$(rec_last Q_STAGE)$(stat -c %h "$SRC")" "yeslinked2" "8g' a copy that does not take the kept name back leaves two names and a record that says linked (caught)"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")$(rec_last Q_STAGE)$(stat -c %h "$SRC")" "0abandoned1" "…which --put-back closes"; q_reset
+# 8h: a half-done quarantine whose old name goes while PUTBACK waits: the kept name — then the store's only one — stays.
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_LN_KILL=$KEPT")"; check "$(rec_last Q_STAGE)$(stat -c %h "$SRC")" "prepared2" "8h killed straight after the link: two names"
+OUT="$(qrun --answer PUTBACK --hook "rm -f '$SRC'" -- --put-back)"
+check "$(has "$OUT" 'are no longer the stray store')$( [ "$(stat -c '%d:%i' "$KEPT")" = "$KEY0" ] && echo kept)$(stat -c %h "$KEPT")$(rec_last Q_STAGE)" "yeskept1prepared" \
+  "…the old name removed while PUTBACK waits: read again after the word, refused — the kept name, now the store's only one, is not removed"
+ln "$KEPT" "$SRC"; ln "$SRC" "$SB/store.safety"   # the two names back, and a third, so that the weakened copy below cannot lose the store
+M="$(mutant q8-halfre "$QP" '      [ -f "$SRC" ] && [ ! -L "$SRC" ] && [ "$(key_of "$SRC")" = "$kq" ] && [ "$(key_of "$KEPT")" = "$kq" ] && [ "$(links_of "$KEPT")" = "2" ] \' '      true \')"
+OUT="$(qrun --answer PUTBACK --script "$M" --hook "rm -f '$SRC'" -- --put-back)"; rm -f "$M"
+check "$( [ -e "$KEPT" ] && echo kept || echo nokept)$( [ -e "$SRC" ] && echo src || echo nosrc)$(stat -c %h "$SB/store.safety")" "nokeptnosrc1" \
+  "8h' a copy that does not read the names again after the word removes the store's last name (caught — it survives here only by the third name the trial made)"
+ln "$SB/store.safety" "$SRC"; rm -f "$SB/store.safety"; q_reset
+# 8i: linked, the store at its old name with one name, nothing kept — what an undo interrupted before its record leaves.
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_PREKILL=$SRC")"; rm -f "$KEPT"
+check "$(rec_last Q_STAGE)$(stat -c %h "$SRC")$( [ -e "$KEPT" ] && echo kept || echo nokept)" "linked1nokept" "8i killed before the old name went, then the kept name removed (an undo interrupted before its record): linked, one name, nothing kept"
+OUT="$(qrun -- --check)"; check "$(has "$OUT" 'not quarantined (record: linked)')$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE — NOT QUARANTINED')" "yes0yes" "…--check: not quarantined — never a FAIL"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(has "$OUT" 'nothing is kept')$(has "$OUT" 'the record says linked')$(has "$OUT" 'by another hand')$(has "$OUT" 'Type PUTBACK')" "yesyesnono" "…--put-back: nothing to put back — not 'by another hand'"
+M="$(mutant q8-linked1 "$QP" '      if [ "$st" = "linked" ] && key_ok "$kq" && [ -f "$SRC" ]' '      if false && [ -f "$SRC" ]')"; OUT="$(qrun --answer NO --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'the files are not as that leaves them')$(went_go "$OUT")" "yesnonono" "8i' a copy without that case sends the operator to us over a state the script's own undo leaves (caught)"
+OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'an earlier run moved nothing in the end (its record: linked')$(went_go "$OUT")" "yesyesyesyes" "…the quarantine command sets that record aside and starts again, to GO"
+q_reset
+# 8j: a run resumed 25 minutes after the move, its gate not measured: one --check time in its log, and not one already past.
+ho_times() { VT="$(sed -n 's/.*(quarantine): NOT CONCLUSIVE — the gate was not measured: run --check at or after \([0-9TZ:-]*\)\..*/\1/p' <<<"$1")"; HT="$(sed -n 's/^  --check           at or after \([0-9TZ:-]*\):.*/\1/p' <<<"$1")"; }
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_KILL=$SRC")"; printf 'Q_AT=%s\n' "$(( $(date -u +%s) - 1500 ))" >> "$QREC"
+OUT="$(qrun --answer NO --env FAKE_GATE_FAIL_ON_MOVE=1)"; ho_times "$(qlast)"
+check "$( [ -n "$VT" ] && [ "$VT" = "$HT" ] && echo same || echo "differ:$VT/$HT")$( [ -n "$VT" ] && [ "$(date -u -d "$VT" +%s)" -gt "$(date -u +%s)" ] && echo ahead)" "sameahead" \
+  "8j a run resumed 25 minutes after the move, its gate not measured: the verdict and the hand-over name one --check time, ten minutes on — not the move + 20 minutes, already past"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+OUT="$(QPATH="$SH_PATH" qrun --answer QUARANTINE --env "SHIM_RM_KILL=$SRC")"; printf 'Q_AT=%s\n' "$(( $(date -u +%s) - 1500 ))" >> "$QREC"
+M="$(mutant q8-ho "$QP" '  say "  --check           at or after $(check_at):' '  say "  --check           at or after $(check_time "$(rec_get Q_AT)"):')"; OUT="$(qrun --answer NO --script "$M" --env FAKE_GATE_FAIL_ON_MOVE=1)"; rm -f "$M"; ho_times "$(qlast)"
+check "$( [ -n "$VT" ] && [ -n "$HT" ] && [ "$VT" != "$HT" ] && echo differ)" "differ" "8j' a copy whose hand-over keeps the move + 20 minutes names two times in one log, one already past (caught)"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+# 8k–8p: the record's writes refused as on a full disk — strace's fault injection on that one file: ENOSPC from the Nth write on.
+nospace() { printf 'strace -f -qq -o /dev/null -P %s -e trace=write -e inject=write:error=ENOSPC%s' "$QREC" "${1:+:when=$1}"; }
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace)")"
+check "$(has "$OUT" 'nothing moved: the record could not be written (is the disk full?)')$( [ -e "$QREC" ] && echo rec || echo norec)$(unchanged)$(has "$OUT" 'Until the quarantine has moved the file')$(has "$OUT" 'quarantine.env')" "yesnorecsnapnokeptnorecyesno" \
+  "8k the record's first write refused (the file made, nothing in it): nothing moved, the empty record removed — it holds no stage — and the stop asks for no record"
+OUT="$(qrun --answer NO)"; check "$(went_go "$OUT")" "yesyesyes" "…the next run is not blocked by it: GO"
+M="$(mutant q8-emptyrec "$QP" '|| { [ -n "$(rec_get Q_STAGE)" ] || rm -f -- "$RECORD"; stop' '|| { stop')"; OUT="$(qrun --answer QUARANTINE --script "$M" --wrap "$(nospace)")"; rm -f "$M"
+OUT="$(qrun --answer NO)"; check "$(stat -c %s "$QREC" 2>/dev/null)$(has "$OUT" 'exists with no stage in it')" "0yes" "8k' a copy that leaves the empty record blocks every later run (caught)"; rm -f "$QREC"
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 3+)")"
+check "$(has "$OUT" 'nothing removed: the record could not be written (is the disk full?)')$(rec_last Q_STAGE)$(stat -c %h "$SRC")$(has "$OUT" 'Until the quarantine has moved the file')" "yesprepared2yes" \
+  "8l the marker before the unlink refused: nothing removed — two names, the record prepared — and --put-back named"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")$(rec_last Q_STAGE)$(stat -c %h "$SRC")" "0abandoned1" "…which --put-back closes"; q_reset
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 4+)")"
+check "$(has "$OUT" 'the file is moved, but the record could not be written')$(rec_last Q_STAGE)$( [ -e "$SRC" ] && echo src || echo nosrc)$(has "$OUT" '(quarantine): PASSED')" "yeslinkednosrcno" \
+  "8m the move's own record refused after the unlink: it stops saying so — the record linked, the old name gone — never PASSED"
+OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'this run does them, and changes nothing')$(rec_last Q_STAGE)$(fails "$OUT")" "yesdone0" "…the quarantine command resumes it: done"
+OUT="$(qrun --answer PUTBACK --wrap "$(nospace)" -- --put-back)"
+check "$(has "$OUT" 'nothing changed: the record could not be written (is the disk full?)')$( [ -e "$SRC" ] && echo src || echo nosrc)$( [ "$(stat -c '%d:%i' "$KEPT")" = "$KEY0" ] && echo kept)$(rec_last PUTBACK_STAGE | grep -c .)" "yesnosrckept0" \
+  "8n the put-back's first marker refused: nothing changed — the kept file kept, no put-back recorded"
+M="$(mutant q8-pbmark "$QP" '      rec_put PUTBACK_STAGE prepared || stop "nothing changed: the record could not be written' '      rec_put PUTBACK_STAGE prepared; : "nothing changed: the record could not be written')"
+OUT="$(qrun --answer PUTBACK --script "$M" --wrap "$(nospace)" -- --put-back)"; rm -f "$M"
+check "$(okline "$OUT" PB1)$(rec_last PUTBACK_STAGE | grep -c .)$(stat -c %h "$SRC")$( [ -e "$KEPT" ] && echo kept || echo nokept)" "yes01nokept" \
+  "8n' a copy without that precondition puts the file back while the record says nothing of it (caught)"
+printf 'PUTBACK_STAGE=linked\n' >> "$QREC"; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(has "$OUT" 'only the record is written')$(fails "$OUT")" "yes0" "…its record written by hand to what it left, then --put-back writes the rest"; q_reset
+OUT="$(qrun --answer QUARANTINE --wrap "$(nospace 6+)")"
+check "$(has "$OUT" '(quarantine): NOT CONCLUSIVE — the record could not be written (is the disk full?)')$(rec_last Q_STAGE)$(fails "$OUT")" "yesmoved0" "8o stage C's record refused: NOT CONCLUSIVE, the record left at moved — never done over a record it could not finish"
+OUT="$(qrun --answer NO)"; check "$(rec_last Q_STAGE)$(fails "$OUT")$(has "$OUT" '(quarantine): PASSED')" "done0yes" "…the quarantine command finishes it: done, PASSED"
+OUT="$(qrun --answer PUTBACK --wrap "$(nospace 2+)" -- --put-back)"
+check "$(okline "$OUT" PB1)$(has "$OUT" '(putback): NOT CONCLUSIVE — the put-back is done, but its record could not be written')$(rec_last PUTBACK_STAGE)$(rec_last PUTBACK_AT | grep -c .)" "yesyesprepared0" \
+  "8p the put-back's closing writes refused: the file is back, NOT CONCLUSIVE (never PASSED), the record left at prepared"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(has "$OUT" 'only the record is written')$(fails "$OUT")$(rec_last PUTBACK_AT | grep -c .)" "yes01" "…--put-back again writes only the record"; q_reset
 
 echo; echo "== Q7. a destination behind a bind mount of the same device: nothing moved =="
 mkdir -p "$SB/bindsrc"
@@ -1387,6 +1487,12 @@ for k in Q_SHA256 Q_DB Q_OWNER Q_MODE Q_KEY_BEFORE Q_BIRTH Q_DIR_T_BEFORE Q_ENTS
   [ -n "$(rec_last "$k")" ] || echo "missing:$k"; done > "$SB/reckeys"; check "$(cat "$SB/reckeys")" "" "the record holds every key the next deploy script must read"
 OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'STOP: already quarantined at')$(has "$OUT" 'run --check at or after')$(has "$OUT" 'Until the quarantine has moved the file')" "yesyesno" \
   "the quarantine run again: already quarantined — run --check at its time; the rule before the move is not printed after it"
+chmod 644 "$QP"
+OUT="$(qrun --answer NO --wrap "setpriv --reuid 1000 --regid 1000 --clear-groups --")"
+check "$(has "$OUT" 'STOP: run it as root')$(has "$OUT" 'Until the quarantine has moved the file')" "yesno" "3a' run without root after the move: it stops — and, unable to read the record, judges nothing: no rule before the move after it"
+M="$(mutant q3-root "$QP" '  [ "$(id -u)" = "0" ] || return 0   # the record under /root cannot be read: judge nothing' '  :')"; chmod 644 "$M"
+OUT="$(qrun --answer NO --script "$M" --wrap "setpriv --reuid 1000 --regid 1000 --clear-groups --")"; rm -f "$M"
+check "$(has "$OUT" 'STOP: run it as root')$(has "$OUT" 'Until the quarantine has moved the file')" "yesyes" "3a'' a copy that judges without root prints the rule before the move after it (caught)"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")$(stat -c '%d:%i' "$SRC")" "0$KEY0" "…put back"; q_reset
 OUT="$(qrun --answer QUARANTINE --at 'the old name is gone at' --intr HUP)"
 for i in $(seq 1 120); do [ "$(rec_last Q_STAGE)" = "done" ] && ! pgrep -f "$QP" >/dev/null && break; sleep 0.5; done
@@ -1403,7 +1509,7 @@ OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'this run does them, and changes 
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
 # A holder opens the store after stage B's last read, just before the unlink: stage C FAILS C6, records it, never PASSES.
 OUT="$(QPATH="$SB/shim:$SB/bin:$PATH" qrun --answer QUARANTINE --env "SHIM_RM_HOLD=$SRC")"; OWNLOG="$(qlast)"
-check "$(failline "$OWNLOG" C6 'held (')$(okline "$OWNLOG" C5)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" '(quarantine): PASSED')$(has "$OWNLOG" '(quarantine): 1 FAILED')$(has "$OWNLOG" 'Do not run the put-back: a check above FAILED')$(has "$OWNLOG" '--put-back 2>&1 | tee')$(has "$OWNLOG" 'hand-over')" "yesyesdone1noyesyesnono" \
+check "$(failline "$OWNLOG" C6 'is held — locks and open descriptors')$(okline "$OWNLOG" C5)$(rec_last Q_STAGE)$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OWNLOG" '(quarantine): PASSED')$(has "$OWNLOG" '(quarantine): 1 FAILED')$(has "$OWNLOG" 'Do not run the put-back: a check above FAILED')$(has "$OWNLOG" '--put-back 2>&1 | tee')$(has "$OWNLOG" 'hand-over')" "yesyesdone1noyesyesnono" \
   "3e a holder opens the store between stage B's last read and the unlink: stage C FAILS C6 and records it, never PASSED; no put-back command and no --check time: one next step"
 OUT="$(qrun --answer NO)"; check "$(has "$OUT" 'but its own checks FAILED at')$(has "$OUT" 'and wait for a decision')$(has "$OUT" 'run --check now')" "yesyesno" "…the quarantine run again says its own checks FAILED, and to wait for a decision"
 shim_stop; OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
@@ -1453,7 +1559,7 @@ OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
 check "$(has "$OUT" 'Type PUTBACK')$(has "$OUT" 'nothing changed: the gate no longer reads as it must')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesyesnosrc" \
   "3g' a copy without that refusal before the word is still stopped by the read after it, before the link: two layers"
 M="$(mutant q3-pbgate2 "$QP" "    stop \"NO-GO: the INSTALLED retry job's gate no longer reads as it must (\$g) while" "    : \"NO-GO: the INSTALLED retry job's gate no longer reads as it must (\$g) while" \
-  '{ gate_installed && gate_ok "$g2"; } || ungated_version "$v2" \' '{ true; } || ungated_version "$v2" \')"
+  '      if ! { { gate_installed && gate_ok "$g2"; } || ungated_version "$v2"; }; then' '      if false; then')"
 OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
 check "$(okline "$OUT" PB1)$(stat -c '%d:%i' "$SRC" 2>/dev/null)" "yes$KEY0" "3g'' a copy without either puts the file back under an open gate (caught)"
 cfg_back; vault_back; q_reset
@@ -1468,7 +1574,39 @@ OUT="$(qrun --env FAKE_GATE_FAIL_ON_MOVE=1 -- --check)"
 check "$(has "$OUT" "note  K11 the gate's question could not be asked")$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE — the gate was not measured')$(has "$OUT" '(check): PASSED')" "yes0yesno" "…--check with the probe refused: K11 not measured, NOT CONCLUSIVE"
 OUT="$(qrun --answer PUTBACK --env FAKE_GATE_FAIL_ON_MOVE=1 -- --put-back)"
 check "$(has "$OUT" "NO-GO: the gate's question could not be asked")$(has "$OUT" 'Type PUTBACK')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnonosrc" "…--put-back with the probe refused while 5.18.93 is live: refused before the word, nothing changed"
+OUT="$(qrun --answer PUTBACK --hook "touch '$SB/gate-fail'" -- --put-back)"; rm -f "$SB/gate-fail"
+check "$(has "$OUT" "nothing changed: the gate's question could not be asked now")$(has "$OUT" 'the job would open it')$( [ -e "$SRC" ] && echo src || echo nosrc)$(rec_last PUTBACK_STAGE | grep -c .)" "yesnonosrc0" \
+  "3h' the probe stops answering while PUTBACK waits: the read after the word says not measured — run again in ten minutes — never 'the job would open it'"
 OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"; q_reset
+# A job migrating the LIVE store appends to <plugin>/data/migration.log while a holder count is read — as
+# cron/dpo_reconcile.php does every five minutes: no reading of the stray store or of the kept file may count that as a holder.
+ML_Y="$(stat -c %y "$PD/data/migration.log")"; cp -p "$PD/data/migration.log" "$SB/ml.kept"; ML0="$(wc -l < "$PD/data/migration.log")"
+dpo_writer >/dev/null
+check "$( [ "$(wc -l < "$PD/data/migration.log")" -gt "$ML0" ] && echo grew)$(stat -c %u:%g "$PD/data/migration.log")" "grew1000:1000" \
+  "3i control: the real writer — MigrationRunner with its default log, as cron/dpo_reconcile.php runs it — appends to <plugin>/data/migration.log"
+mkdir -p "$SB/logshim"; cat > "$SB/logshim/xargs" <<SH
+#!/usr/bin/env bash
+# rehearsal shim: one line appended to <plugin>/data/migration.log inside every descriptor scan — between a holder count's
+# two reads — then the real xargs
+printf '%s WARNING rehearsal: a line as cron/dpo_reconcile.php appends it\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$PD/data/migration.log"
+real="\$(PATH="\$(printf '%s' "\$PATH" | sed 's#^$SB/logshim:##')" command -v xargs)"; exec "\$real" "\$@"
+SH
+chmod +x "$SB/logshim/xargs"; LS_PATH="$SB/logshim:$SB/bin:$PATH"
+M="$(mutant q3-log "$QP" "else stray_state | sed 's/ log=[^ ]*//'; fi; }" "else stray_state; fi; }")"; OUT="$(QPATH="$LS_PATH" qrun --answer NO --script "$M")"; rm -f "$M"
+check "$(has "$OUT" 'NO-GO: the stray store is not shown unheld')$(has "$OUT" ' log=')$(went_go "$OUT")" "yesyesnonono" "3i' a copy that keeps migration.log in the steadiness test refuses at A5 over a holder that does not exist (caught)"
+ML1="$(wc -l < "$PD/data/migration.log")"
+OUT="$(QPATH="$LS_PATH" qrun --answer QUARANTINE)"; OWNLOG="$(qlast)"
+check "$(okline "$OWNLOG" A5)$(okline "$OWNLOG" C6)$(fails "$OWNLOG")$(has "$OWNLOG" '(quarantine): PASSED')$(rec_last Q_STAGE)$( [ "$(wc -l < "$PD/data/migration.log")" -gt $(( ML1 + 2 )) ] && echo appended)" "yesyes0yesdoneappended" \
+  "3i the quarantine with a line appended to migration.log inside every holder read: A5 and C6 ok, PASSED"
+OUT="$(QPATH="$LS_PATH" qrun -- --check)"
+check "$(okline "$OUT" K10)$(fails "$OUT")" "yes0" "…and --check the same: K10 ok, nothing FAILED"
+cp -p "$QREC" "$SB/qrecml.kept"
+M="$(mutant q3-log2 "$QP" 'hold_state() { if [ -n "$HOLD_WATCH" ]; then' 'hold_state() { if false; then' "else stray_state | sed 's/ log=[^ ]*//'; fi; }" "else stray_state; fi; }")"
+OUT="$(QPATH="$LS_PATH" qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(failline "$OUT" K10 'not shown unheld')$(rec_last Q_CHECK_FAILED | grep -c .)" "yes1" "3i'' a copy that judges the kept file by the old folder's state, migration.log included, FAILS K10 and records it for good (caught)"
+cp -p "$SB/qrecml.kept" "$QREC"
+OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(fails "$OUT")" "0" "…put back"
+cat "$SB/ml.kept" > "$PD/data/migration.log"; touch -d "$ML_Y" "$PD/data/migration.log"; q_reset
 # The quarantine, traced: no php or python process opens either name; nothing made, linked or removed in <plugin>/data but the one name.
 OUT="$(qrun --answer QUARANTINE --wrap "strace -f -qq -o $SB/strace.out -e trace=execve,open,openat,creat,link,linkat,unlink,unlinkat,rename,renameat,renameat2,mkdir,mkdirat")"
 cat > "$SB/trace.py" <<'PY'
@@ -1500,17 +1638,17 @@ QAT="$(rec_last Q_AT)"
 
 echo; echo "== Q4. --check: conclusive only after a completed run of the retry job past the move =="
 OUT="$(qrun -- --check)"
-check "$(fails "$OUT")$(has "$OUT" 'note  K13 master has not run the retry job since the move yet')$(okline "$OUT" K4)$(okline "$OUT" K8)$(okline "$OUT" K10)$(okline "$OUT" K11)$(has "$OUT" '(check): NOT CONCLUSIVE — run --check again after')$(has "$OUT" '(check): PASSED')" "0yesyesyesyesyesyesno" \
+check "$(fails "$OUT")$(has "$OUT" 'note  K13 master has not begun the retry job more than two minutes after the move yet')$(okline "$OUT" K4)$(okline "$OUT" K8)$(okline "$OUT" K10)$(okline "$OUT" K11)$(has "$OUT" '(check): NOT CONCLUSIVE — run --check again after')$(has "$OUT" '(check): PASSED')" "0yesyesyesyesyesyesno" \
   "4a straight after: K4–K11 ok, not yet conclusive (master's last run of the job is from before the move): NOT CONCLUSIVE, never PASSED"
 M="$(mutant q4-verdict "$QP" '  elif [ -n "$UNSETTLED" ]; then say' '  elif false; then say')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
 check "$(has "$OUT" '(check): PASSED')" "yes" "4a' a copy whose verdict keys on failures alone calls the same check PASSED (caught)"
 qat_back() { sed -i "s/^Q_AT=.*/Q_AT=$1/" "$QREC"; }   # the move N seconds ago, as a later --check finds it (the record's line, as copy_back moves the deploy's)
 NOW="$(date -u +%s)"; qat_back $(( NOW - 1200 )); QAT=$(( NOW - 1200 ))
 set_sched $(( QAT + 120 )); OUT="$(qrun -- --check)"
-check "$(notes "$OUT")$(has "$OUT" 'note  K13 master has not started the retry job in the 20 minutes since the move')$(has "$OUT" '(check): NOT CONCLUSIVE — master has not run the retry job since the move, 20 minutes ago')" "1yesyes" \
+check "$(notes "$OUT")$(has "$OUT" 'note  K13 master has not begun the retry job more than two minutes after the move, in the 20 minutes since it')$(has "$OUT" '(check): NOT CONCLUSIVE — master has not begun the retry job more than two minutes after the move, 20 minutes ago')" "1yesyes" \
   "4b a run that began 120 s after the move, read 20 minutes after it: not conclusive (the margin is strict) — and, with no run since in twice the job's interval, said so instead of a time already past"
-M="$(mutant q4-past "$QP" 'elif [ "$now" -lt $(( q_at + 1200 )) ]; then note "K13 master has not run' 'elif true; then note "K13 master has not run')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
-check "$(has "$OUT" 'has not started the retry job in the')" "no" "4b2 a copy that always names the move + 20 minutes sends the operator to a time already past (caught)"
+M="$(mutant q4-past "$QP" 'elif [ "$now" -lt $(( q_at + 1200 )) ]; then note "K13 master has not begun' 'elif true; then note "K13 master has not begun')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(has "$OUT" 'minutes since it (its last')" "no" "4b2 a copy that always names the move + 20 minutes sends the operator to a time already past (caught)"
 set_sched $(( QAT + 121 )); OUT="$(qrun -- --check)"; check "$(fails "$OUT")$(okline "$OUT" K13 'the quarantine holds')" "0yes" "4c 121 s after: conclusive — the quarantine holds"
 set_sched $(( QAT + 600 )) -1; OUT="$(qrun -- --check)"; check "$(has "$OUT" 'not a completed run')$(okline "$OUT" K13)" "yesno" "4d a run still running: not conclusive"
 set_sched $(( NOW + 300 )); OUT="$(qrun -- --check)"; check "$(has "$OUT" 'is later than now: not evidence')$(okline "$OUT" K13)" "yesno" "4e master's record later than now: not evidence"
@@ -1543,7 +1681,12 @@ setpriv --reuid 1000 --regid 1000 --clear-groups -- touch "$PD/data/wallet.json.
 setpriv --reuid 1000 --regid 1000 --clear-groups -- touch "$PD/data/fiber_events.log"; OUT="$(qrun -- --check)"
 check "$(fails "$OUT")$(has "$OUT" 'note  K7 other entries made or removed in <plugin>/data since the move')$(has "$OUT" 'new:fiber_events.log')$(okline "$OUT" K13)" "0yesyesyes" "4j another writer's file appears there: a note naming it — still conclusive"; rm -f "$PD/data/fiber_events.log"
 KM="$(stat -c %y "$KEPT")"; touch -d "@$(( $(stat -c %Y "$KEPT") + 1 ))" "$KEPT"; fail_trial "4k the kept file's time moved: K8 FAILS" K8 'missing or changed'; touch -d "$KM" "$KEPT"
-holder_py fd "$KEPT"; fail_trial "4l a process holds the kept file: K10 FAILS" K10 'held (0 1)'; holder_stop
+touch -d "@$(( $(stat -c %Y "$KEPT") + 1 ))" "$KEPT"; OUT="$(qrun --env FAKE_GATE_FAIL_ON_MOVE=1 -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(failline "$OUT" K8)$(has "$OUT" "note  K11 the gate's question could not be asked")$(has "$OUT" 'run --check at or after')$(has "$OUT" '(check): 1 FAILED')" "yesyesnoyes" \
+  "4k2 a FAIL and an unmeasured gate in one log: the gate's note names no --check time — after a FAIL, one next step"
+M="$(mutant q4-when "$QP" '[ "$FAIL" != "0" ] || when=' 'when=')"; OUT="$(qrun --script "$M" --env FAKE_GATE_FAIL_ON_MOVE=1 -- --check)"; rm -f "$M"; cp -p "$SB/qrec.kept" "$QREC"; touch -d "$KM" "$KEPT"
+check "$(failline "$OUT" K8)$(has "$OUT" 'run --check at or after')" "yesyes" "4k2' a copy that names the time whatever FAIL is prints it beside the FAIL (caught)"
+holder_py fd "$KEPT"; fail_trial "4l a process holds the kept file: K10 FAILS" K10 'held — locks and open descriptors: 0 1'; holder_stop
 ns_holder "$KEPT"; fail_trial "4l' a namespaced process holds it through a bind mount: K10 FAILS" K10 'held'; ns_stop
 setpriv --reuid 1000 --regid 1000 --clear-groups -- true; touch "$KEPT-shm"; fail_trial "4m a side file beside the kept file: K9 FAILS" K9 'side files beside the kept file (-shm)'; rm -f "$KEPT-shm"
 cfg_keep; vault_keep; file_set tenant_profile south-sudan; file_set currency_code SSP; printf '{"config":{"currency_code":"SSP","tenant_profile":"south-sudan"}}' > "$VAULT"
@@ -1557,7 +1700,7 @@ for t in "K4|absent \"\$SRC\" && [ \"\$(side_of \"\$SRC\")\" = \"-\" ]; then ok 
   check "$(failline "$OUT" "$id")$(fails "$OUT")$(okline "$OUT" K13 'the quarantine holds')$(has "$OUT" 'stray-store quarantine (check): PASSED')" "no0yesyes" \
     "4o a copy blind to $id passes the planted file: nothing else FAILs it, and it calls the quarantine held (caught)"; cp -p "$SB/qrec.kept" "$QREC"
 done
-M="$(mutant q4-held "$QP" 'holders "$rk"; if held_by_none; then ok "K10' 'holders "$rk"; if true; then ok "K10')"; holder_py fd "$KEPT"; OUT="$(qrun --script "$M" -- --check)"; holder_stop; rm -f "$M"
+M="$(mutant q4-held "$QP" '    if held_by_none; then ok "K10' '    if true; then ok "K10')"; holder_py fd "$KEPT"; OUT="$(qrun --script "$M" -- --check)"; holder_stop; rm -f "$M"
 check "$(failline "$OUT" K10)$(fails "$OUT")$(okline "$OUT" K13 'the quarantine holds')$(has "$OUT" 'stray-store quarantine (check): PASSED')" "no0yesyes" \
   "4o' a copy blind to K10's holders passes a held kept file: nothing else FAILs it, and it calls the quarantine held (caught)"; cp -p "$SB/qrec.kept" "$QREC"
 # The record itself: no move time, a stage the script never writes, none at all, or one the files contradict.
@@ -1573,8 +1716,10 @@ check "$(failline "$OUT" K1 'match no state a run leaves')" "yes" "…a record t
 GL_ERR='live=same inside=no store=error tenant=uganda skip=yes | by-store=none by-files+vault=uganda'
 GL_SS='live=same inside=no store=error tenant=uganda skip=yes | by-store=south-sudan by-files+vault=uganda'
 OUT="$(qrun --env "FAKE_GATE_LINE=$GL_ERR" -- --check)"
-check "$(has "$OUT" 'note  K11 the gate still stops the retry job, but it was not read as required')$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE — the gate was not read as required')$(rec_last Q_CHECK_FAILED | grep -c .)" "yes0yes0" \
-  "4t the gate stops the job on the files and the vault, but the live store could not be read a second time: not measured — NOT CONCLUSIVE, nothing recorded as failed"
+check "$(has "$OUT" 'note  K11 the gate still stops the retry job, but it was not read as required')$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE — the gate was not read as required')$(rec_last Q_CHECK_FAILED | grep -c .)$(okline "$OUT" K13)$(okline "$OUT" K13 'the quarantine holds')" "yes0yes0yesno" \
+  "4t the gate stops the job on the files and the vault, but the live store could not be read a second time: not measured — NOT CONCLUSIVE, nothing recorded as failed; K13 says the job ran, never 'the quarantine holds'"
+M="$(mutant q4-holds "$QP" "\$( [ -z \"\$UNSETTLED\" ] && printf ': the quarantine holds')" ": the quarantine holds")"; OUT="$(qrun --script "$M" --env "FAKE_GATE_LINE=$GL_ERR" -- --check)"; rm -f "$M"
+check "$(okline "$OUT" K13 'the quarantine holds')$(has "$OUT" '(check): NOT CONCLUSIVE')" "yesyes" "4t' a copy whose K13 always concludes says 'the quarantine holds' in a NOT CONCLUSIVE log (caught)"
 OUT="$(qrun --env "FAKE_GATE_LINE=$GL_SS" -- --check)"
 check "$(failline "$OUT" K11 'by-store=south-sudan')$(rec_last Q_CHECK_FAILED | grep -c .)" "yes1" "4u control: the same reading with the store naming another tenant FAILS K11 and is recorded"; cp -p "$SB/qrec.kept" "$QREC"
 M="$(mutant q4-anyskip "$QP" '"live=same inside=no store="*" tenant=uganda skip=yes | by-store=uganda by-files+vault=uganda"|"live=same inside=no store="*" tenant=uganda skip=yes | by-store=none by-files+vault=uganda")
@@ -1583,6 +1728,19 @@ M="$(mutant q4-anyskip "$QP" '"live=same inside=no store="*" tenant=uganda skip=
 check "$(failline "$OUT" K11)$(has "$OUT" 'not read as required')" "noyes" "4v a copy that takes any skip=yes reading as not measured lets 4u's control through (caught)"; cp -p "$SB/qrec.kept" "$QREC"
 OUT="$(qrun --answer PUTBACK --env "FAKE_GATE_LINE=$GL_ERR" -- --put-back)"
 check "$(has "$OUT" 'NO-GO: the gate still stops the retry job but was not read as required')$(has "$OUT" 'Type PUTBACK')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnonosrc" "4w the put-back refuses such a reading while 5.18.93 is live, before the word"
+# <plugin>/data replaced (an upload of the plugin, a restore): K3 has no conclusion, and K5/K6 compare nothing with the old folder's files.
+mv "$PD/data" "$SB/data.real"; mkdir "$PD/data"; cp -p "$SB/data.real/config.json" "$PD/data/"; chown -R 1000:1000 "$PD/data"
+OUT="$(qrun -- --check)"
+check "$(has "$OUT" 'note  K3')$(has "$OUT" 'note  K5/K6 not compared')$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE')$(rec_last Q_CHECK_FAILED | grep -c .)" "yesyes0yes0" \
+  "4x <plugin>/data replaced by a new folder (no sqlite_migration.log in it): K3 no conclusion, K5/K6 not compared — NOT CONCLUSIVE, nothing recorded as failed"
+M="$(mutant q4-k3 "$QP" 'if [ -n "$indet" ]; then   # not the folder of the move' 'if false; then   # not the folder of the move')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(failline "$OUT" K5)$(rec_last Q_CHECK_FAILED | grep -c .)" "yes1" "4x' a copy that compares the new folder's files with the old one's FAILS K5 on a log that is merely absent, and records it for good (caught)"; cp -p "$SB/qrec.kept" "$QREC"
+rm -rf "${PD:?}/data"; cp -a "$SB/data.real" "$PD/data"   # a copy of the folder: the same files and times, another folder
+OUT="$(qrun -- --check)"; check "$(has "$OUT" 'note  K3')$(fails "$OUT")$(has "$OUT" '(check): NOT CONCLUSIVE')" "yes0yes" "4x2 …replaced by a copy of itself (the same files and times): still no conclusion"
+M="$(mutant q4-k3b "$QP" 'elif [ "$(data_key)" != "$(rec_get Q_DATA_KEY)" ]; then' 'elif false; then')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(okline "$OUT" K13 'the quarantine holds')$(has "$OUT" '(check): PASSED')" "yesyes" "4x2' a copy blind to K3 takes the copy for the folder of the move and calls the quarantine held (caught)"
+rm -rf "${PD:?}/data"; mv "$SB/data.real" "$PD/data"; cp -p "$SB/qrec.kept" "$QREC"
+OUT="$(qrun -- --check)"; check "$(okline "$OUT" K3)$(fails "$OUT")" "yes0" "…the folder of the move back: K3 ok again"
 # The gate-down control: 5.18.90's retry job, which has no gate, run as master runs it against the real plugin folder.
 git -C "$REPO" show "$OLDER2:$P/$JOB" > "$PD/cron_starlink_block_retry_590.php"; chown 1000:1000 "$PD/cron_starlink_block_retry_590.php"
 sml_keep; SML_T0="$(sha256sum "$PD/data/sqlite_migration.log" | cut -c1-16):$(stat -c %Y "$PD/data/sqlite_migration.log")"
@@ -1638,7 +1796,7 @@ OUT="$(qrun --answer PUTBACK -- --put-back)"; check "$(has "$OUT" 'NO-GO: there 
 KM="$(stat -c %y "$KEPT")"; touch -d "@$(( $(stat -c %Y "$KEPT") + 1 ))" "$KEPT"; OUT="$(qrun --answer PUTBACK -- --put-back)"
 check "$(has "$OUT" 'NO-GO: the kept file is not the stray store as recorded')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnosrc" "6b the kept file changed: refused"; touch -d "$KM" "$KEPT"
 holder_py fd "$KEPT"; OUT="$(qrun --answer PUTBACK -- --put-back)"; holder_stop
-check "$(has "$OUT" 'NO-GO: the stray store is held now (0 1)')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnosrc" "6c a holder of the kept file: refused"
+check "$(has "$OUT" 'NO-GO: the stray store, read now, is held — locks and open descriptors: 0 1')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnosrc" "6c a holder of the kept file: refused"
 OUT="$(qrun --answer putback -- --put-back)"; check "$(has "$OUT" 'STOP: not confirmed')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesnosrc" "6d a word other than PUTBACK: nothing changed"
 M="$(mutant q6-src "$QP" 'else stop "NO-GO: there is a file at $SRC' 'else case_="back"; : "NO-GO: there is a file at $SRC')"
 setpriv --reuid 1000 --regid 1000 --clear-groups -- sh -c "printf x > '$SRC'"; OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
@@ -1649,25 +1807,39 @@ OUT="$(qrun --answer PUTBACK --hook "bash '$SB/ss_all.sh'" -- --put-back)"
 check "$(has "$OUT" 'nothing changed: the gate no longer reads as it must')$( [ -e "$SRC" ] && echo src || echo nosrc)$( [ "$(stat -c '%d:%i' "$KEPT")" = "$KEY0" ] && echo kept)$(rec_last PUTBACK_STAGE | grep -c .)$(rec_last PUTBACK_AT | grep -c .)" "yesnosrckept00" \
   "6j the configuration turned to South Sudan while PUTBACK waits: the put-back reads the gate again and refuses — nothing changed, nothing recorded"
 cfg_back; vault_back   # Uganda again before the weakened copy's run: its hook turns it while its own prompt waits
-M="$(mutant q6-pbregate "$QP" '{ gate_installed && gate_ok "$g2"; } || ungated_version "$v2" \' '{ true; } || ungated_version "$v2" \' '      ln -T -- "$KEPT" "$SRC" 2>/dev/null || {' '      false || {')"
+M="$(mutant q6-pbregate "$QP" '      if ! { { gate_installed && gate_ok "$g2"; } || ungated_version "$v2"; }; then' '      if false; then' '      ln -T -- "$KEPT" "$SRC" 2>/dev/null || {' '      false || {')"
 OUT="$(qrun --answer PUTBACK --hook "bash '$SB/ss_all.sh'" --script "$M" -- --put-back)"; rm -f "$M"
 check "$(has "$OUT" 'nothing changed: the gate no longer reads as it must')$(has "$OUT" 'nothing changed: the link could not be made')" "noyes" "6j2 a copy that does not read the gate again goes on to the link under an open gate (caught; its link made safe here)"
 cfg_back; vault_back; cp -p "$SB/qrec.kept" "$QREC"
+# 5.18.91 live (after the rollbacks the runbook allows), the gate opened: both of the put-back's refusals rest on 5.18.91
+# being read as a release with the gate.
+cp -p "$PD/manifest.json" "$SB/manifest6k.kept"; sed -i 's/"version": "5.18.92"/"version": "5.18.91"/' "$PD/manifest.json"; cfg_keep; vault_keep; bash "$SB/ss_all.sh"
+OUT="$(qrun --answer PUTBACK -- --put-back)"
+check "$(has "$OUT" "NO-GO: the INSTALLED retry job's gate no longer reads as it must")$(has "$OUT" 'while 5.18.91 is live')$(has "$OUT" 'Type PUTBACK')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesyesnonosrc" \
+  "6k 5.18.91 live with the gate opened: the put-back refuses before the word"
+M="$(mutant q6-591 "$QP" '[ "$1" != "5.18.91" ] && ' '' '      ln -T -- "$KEPT" "$SRC" 2>/dev/null || {' '      false || {')"
+OUT="$(qrun --answer PUTBACK --script "$M" -- --put-back)"; rm -f "$M"
+check "$(has "$OUT" '5.18.91 has no gate')$(has "$OUT" 'nothing changed: the link could not be made')" "yesyes" \
+  "6k' a copy that reads 5.18.91 as a release without the gate passes both of the put-back's gate refusals, to the link (caught; its link made safe here)"
+cp -p "$SB/manifest6k.kept" "$PD/manifest.json"; cfg_back; vault_back; cp -p "$SB/qrec.kept" "$QREC"
 # A rollback to 5.18.90 without the put-back first: its retry job has no gate, while the gate's library stays on disk
 # (deploy-hybrid.sh deletes nothing) and still answers the probe as before.
 cp -p "$PD/cron_starlink_block_retry.php" "$SB/job92.kept"; cp -p "$PD/manifest.json" "$SB/manifest92.kept"
 git -C "$REPO" show "$OLDER2:$P/$JOB" > "$PD/cron_starlink_block_retry.php"; chown 1000:1000 "$PD/cron_starlink_block_retry.php"
 OUT="$(qrun --answer PUTBACK -- --put-back)"
 check "$(has "$OUT" 'NO-GO: the INSTALLED retry job has no gate')$(has "$OUT" 'the installed code is not one release')$( [ -e "$SRC" ] && echo src || echo nosrc)" "yesyesnosrc" "6h 5.18.90's job under 5.18.92's manifest: the put-back refuses — the installed code is not one release"
+set_sched $(( $(date -u +%s) - 1 )); OUT="$(qrun -- --check)"; cp -p "$SB/qrec.kept" "$QREC"
+check "$(failline "$OUT" K11 'has no gate' 'Send this log now and wait for a decision')$(has "$OUT" 'Run --put-back now')$(has "$OUT" '(check): 1 FAILED — send the log file')$(has "$OUT" 'Do nothing else first.')" "yesnoyesyes" \
+  "6h2 --check in that state: K11 FAILS — send the log and wait — and names no put-back, which would refuse here (the installed code is not one release)"
 sed -i 's/"version": "5.18.92"/"version": "5.18.90"/' "$PD/manifest.json"
 set_sched $(( $(date -u +%s) - 1 ))
 OUT="$(qrun -- --check)"
-check "$(failline "$OUT" K11 'has no gate' 'Run --put-back now')$(has "$OUT" '(check): PASSED')$(rec_last Q_CHECK_FAILED | grep -c .)" "yesno1" \
-  "6i after a rollback to 5.18.90 without the put-back: --check FAILS K11 — the installed job has no gate, though its library would still answer — and names the put-back; never PASSED"
+check "$(failline "$OUT" K11 'has no gate' 'Run --put-back now')$(has "$OUT" '(check): PASSED')$(rec_last Q_CHECK_FAILED | grep -c .)$(has "$OUT" '(check): 1 FAILED — run --put-back now (runbook rule 2)')$(has "$OUT" 'Do nothing else first')" "yesno1yesno" \
+  "6i after a rollback to 5.18.90 without the put-back: --check FAILS K11 — the installed job has no gate, though its library would still answer — and names the put-back, in K11 and in the verdict alike: one next step; never PASSED"
 cp -p "$SB/qrec.kept" "$QREC"
-M="$(mutant q6-gatejob "$QP" '  if ! gate_installed; then
-    if [ "$MODE" = "check" ]; then' '  if false; then
-    if [ "$MODE" = "check" ]; then')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+M="$(mutant q6-failstep "$QP" '${FAIL_STEP:-send the log file' '${FAIL_STEP_IGNORED:-send the log file')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
+check "$(has "$OUT" 'Run --put-back now')$(has "$OUT" 'Do nothing else first')" "yesyes" "6i' a copy whose verdict ignores K11's step tells the operator both to put back now and to do nothing else first (caught)"; cp -p "$SB/qrec.kept" "$QREC"
+M="$(mutant q6-gatejob "$QP" '  if ! gate_installed; then' '  if false; then')"; OUT="$(qrun --script "$M" -- --check)"; rm -f "$M"
 check "$(okline "$OUT" K11 'skip=yes')$(has "$OUT" '(check): PASSED')" "yesyes" "6i2 a copy that asks the library alone calls the gate holding and the quarantine PASSED (caught)"; cp -p "$SB/qrec.kept" "$QREC"
 OUT="$(qrun --answer PUTBACK -- --put-back)"
 check "$(has "$OUT" '5.18.90 has no gate (its retry job calls none): the retry job WILL open it again')" "yes" "6f with 5.18.90 live the put-back goes ahead (runbook rule 2), saying the job will open the file again"
