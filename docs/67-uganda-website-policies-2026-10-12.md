@@ -4,7 +4,8 @@
 site is deployed by the operator (EasyPanel, `dishnet-web-uganda/`), never from this session. The quotation and invoice
 templates changed with it (§I) and are loaded into uCRM by staff. **Every legal point behind these pages comes from
 search results, not from the law itself:** this session could not open ulii.org, ucc.co.ug, pdpo.go.ug, ura.go.ug or
-starlink.com. A Ugandan advocate should read §D, §E and §I before the pages go live.
+starlink.com. A Ugandan advocate should read §D, §E and §I before the pages go live; the operator has decided
+not to commission that review (§J item 8).
 
 The operator asked for warranty, returns and other policies for the Uganda website. They should follow how Starlink
 handles these in Uganda and how others do it, and be written "so we don't get any legal challenges".
@@ -170,7 +171,8 @@ source. **None may be cited on the site, and none is cited there, by section num
    plans for household use only. Breaking a supplier's contract is not a crime in Uganda. The risk is commercial:
    Starlink can suspend accounts it treats as resold, and the customer then turns to DishNet. **Get Starlink's written
    position, or an authorised-reseller agreement.** Advising customers and helping them order in their own name, then
-   installing and supporting for a fee, is the low-risk model; it is not what the documents describe today.
+   installing and supporting for a fee, is the low-risk model. Since §J the pages offer it beside the managed plan;
+   on a DishNet plan (quotation clause 10, the customer-portal terms) the account is still DishNet's to manage.
    The pages keep the operator's phrase "registered and managed by DishNet on your behalf" (§H). Ask Starlink
    which it accepts: DishNet as its customers' agent, or DishNet as the account holder that supplies them.
 2. **The UCC licence.** The UCC letter of 4 Sep 2026 (§J) is a conditional no-objection, not a licence. It says to
@@ -189,6 +191,8 @@ source. **None may be cited on the site, and none is cited there, by section num
 6. **"Unlimited" and speed claims elsewhere** (`fiber.html`, the FAQ's speed range) are unchanged marketing. The
    fair-use section keeps fiber uncapped and says Starlink plans are network-managed.
 7. **The customer-portal terms (v1.1, `lib/LegalContent.php` from `profiles/uganda.json`) differ from the website:**
+   - "UCC-authorised Starlink installer" (`legal.identity`, the first sentence): the website no longer says it, and
+     the UCC letter does not support it. First in the next plugin release (§J);
    - "suspension without further notice" — the same in effect as the website's automatic pause;
    - "leased equipment returned within 14 days" — quotation clause 12 says 7;
    - "credit for extended outages at our discretion" — the website gives a 3-day service credit.
@@ -197,30 +201,23 @@ source. **None may be cited on the site, and none is cited there, by section num
    better for the customer applies. Aligning the portal text needs a plugin release (bump `legal.version.tos`, so every
    customer re-accepts). **Not done here.**
 8. **Installation Terms v1.0 still shows "DRAFT — SUBJECT TO LEGAL REVIEW"** to every customer who opens the
-   acceptance link. The Starlink Installation page summarises that text. Decide, after the legal review, whether to
-   release v1.1 without that line. Proposed for v1.1:
+   acceptance link. The Starlink Installation page summarises that text. No legal review will be commissioned (§J
+   item 8); decide whether to release v1.1 without that line. Proposed for v1.1 (the first point already applies
+   on the website, §J item 5):
    - take property damage from negligence, and death or injury, out of the §25 cap;
    - add the installation photos and completion location to §23.
 
-9. **Quotation clause 2** still says "Any new or increased government tax, levy or regulatory fee introduced after
-   acceptance may be passed on at cost". The website says all taxes are included and nothing is added on top. Clause 1
-   makes the website prevail. Deleting the sentence is the operator's decision: clause 2 is the line approved on
-   27 Sep (docs/42 §9), and a test pins it.
-10. **The customer indemnity (quotation clause 16)** appears on no website page. It is now limited to the customer's
-    own use, content and breaches, and to Starlink's Acceptable Use and Fair Use Policies. Decide with the advocate
-    whether to keep it. If it stays, add it to the Terms of Service.
-11. **Flex agreed at the office.** Returns §6 gives the 7-day cancellation only when a Flex package is agreed by
-    WhatsApp, e-mail or online, while §1 gives the change-of-mind return for equipment to every customer. Decide
-    whether a Flex package agreed at the office gets the 7 days too, and write it in §6 and in the Flex agreement.
+9. **Quotation clause 2.** Done: the sentence on a new or increased tax being passed on at cost is deleted (§J item 2).
+10. **The customer indemnity (quotation clause 16).** Done: kept, narrowed, and stated in Terms §12 (§J item 3).
+11. **Flex agreed at the office.** Done on the website: Returns §6 gives the 7-day cancellation wherever the package
+    was agreed, on section 2's terms (§J item 4). Write the same in the Flex agreement.
 12. **Upcountry delivery.** `why-dishnet.html` says upcountry is not extra, and the kits page says delivery anywhere in
     Uganda is included. The policies allow a delivery charge "if there is one". Confirm that no upcountry charge is
     ever made, or change the marketing.
-13. **"The DishNet app"** is promised on `contact.html`, `fiber.html`, `services.html` and `hotspot.html` ("live
-    dashboard in the DishNet app"), while `get-the-app.html` says it cannot be downloaded yet. Reword these until the
-    app is released.
-14. **"24/7"** appears on `index.html`, `contact.html`, `whatsapp.html` and `why-dishnet.html`. The automated
-    assistant answers at any hour and a person can be asked for; the policies promise only that WhatsApp is answered
-    every day. Keep "24/7" only if a person really can take over at night.
+13. **"The DishNet app".** Done: it is now the customer portal on `contact.html`, `fiber.html` and `services.html`, and
+    `hotspot.html` no longer promises a dashboard (§J item 6).
+14. **"24/7".** Done: the support claims now read "every day", and messages may be sent at any time (§J item 6). If a
+    person is confirmed to cover nights, "24/7" can return.
 
 ## F. New operational commitments the pages create
 
@@ -273,15 +270,15 @@ From the day the pages go live, the business must:
   why-dishnet.html 1). None was added.
 - **Templates (§I):** `test_quote_tax_line.php` 31/0, `test_kit_tax_note.php` 68/0, `test_invoice_template_links.php`
   21/0.
-- **The quotation harness** `scripts/harness/quotation-template/rehearse.sh` passes 35/0 on Twig 3 and Twig 2, and
+- **The quotation harness** `scripts/harness/quotation-template/rehearse.sh` passes 43/0 on Twig 3 and Twig 2, and
   REHEARSAL 8 ok / 0 failed. Its controls:
   - a template with one extra, unlisted wording change fails (8 failed);
   - a template with a listed change only half made fails (16 failed);
   - before the harness learned the changes, the edited template failed it (8 failed), so the guard bites;
   - clause 14 put back in the second column, without the list knowing, fails (8 failed).
 - **Page 2 still fits.** Printed with Chromium at A4 (only an approximation of uCRM's PDF engine), every sample
-  quotation is two pages. Page 2's content measures 925 px against 951 px before 12 Oct, and its tallest column
-  531 px against 558 px (after §J). At 108% zoom it is still two pages; the old template spills there.
+  quotation is two pages. Page 2's content measures 947 px against 951 px before 12 Oct, and its tallest column
+  554 px against 558 px (after §J). At 108% zoom it is still two pages; the old template spills there.
 - **The invoice harness** passes 21/0, REHEARSAL 7 ok / 0 failed.
 
 ## H. The adversarial review (12 Oct)
@@ -299,8 +296,10 @@ documents), and plain language with valid HTML. A skeptic then checked each revi
 
 Where findings collided, one decision sheet settled them (D1–D18):
 - **Billing:** it follows practice. The service pauses at the end of the paid period.
-- **Contract:** it is with DishNet. DishNet manages the Starlink account.
-- **Identity:** independence plus the UCC-installer line.
+- **Contract:** it is with DishNet. DishNet manages the Starlink account. (§J item 1: on a DishNet plan; a customer
+  may also buy in their own name.)
+- **Identity:** independence plus the UCC-installer line. (The UCC line is withdrawn, §J: the UCC letter is a
+  conditional no-objection, not a licence.)
 - **Taxes:** all included, nothing added.
 - **Installation Terms:** they cover Starlink jobs only.
 - **Warranty:** it is DishNet's own.
@@ -310,7 +309,8 @@ Where findings collided, one decision sheet settled them (D1–D18):
 - **Flex:** follows its own agreement and the Hire Purchase Act.
 - **Privacy:** named the Privacy Policy, with no claim of compliance or registration, and marketing stated as it is
   done.
-- **UCC:** reached through ucc.co.ug, with no phone number until staff confirm one.
+- **UCC:** reached through ucc.co.ug, with no phone number until staff confirm one. (Superseded, §J item 7: the
+  toll-free line 0800 222 777, from the UCC letterhead.)
 - **Precedence:** where documents differ, the version better for the customer applies.
 
 Five editors applied the findings, each owning its own files, and a skeptic per group checked the text against the
@@ -373,11 +373,13 @@ Not applied, with the reason:
 The quotation is the document a customer accepts. Before this change it contradicted the new pages. It called itself
 "the entire agreement", gave "the manufacturer's warranty only", made equipment "not returnable unless defective on
 arrival", deemed work "accepted … unless a defect is reported in writing within 48 hours", and made a refund "the
-customer's sole and entire remedy". The changes, text only, with no Twig construct and clause 2 untouched:
+customer's sole and entire remedy". The changes are text
+only, with no Twig construct; clause 2 loses only its last sentence (§J):
 
 - **Clause 1:** the quotation, its T&C and DishNet's published policies form the agreement. Where the quotation is less
   favourable, the policies apply.
 - **Step 5:** the 48-hour acceptance sentence is removed.
+- **Step 6:** "On a DishNet service plan, DishNet manages the Starlink account" (§J).
 - **The header badge** (quotation and invoice): "UCC Authorised Starlink Installer" becomes "Starlink Installation"
   (§J).
 - **Clause 2:** the "new or increased government tax … passed on at cost" sentence is deleted (§J). The rest of the
@@ -394,6 +396,7 @@ customer's sole and entire remedy". The changes, text only, with no Twig constru
   Starlink" is deleted (§J).
 - **Clause 10:** "a refund … is the customer's sole and entire remedy" becomes "and refunds any unused prepaid service
   fees", and the clause opens "Under a DishNet service plan," (§J).
+- **Clause 11:** account management, and support of the Starlink account, only under a DishNet service plan (§J).
 - **Clause 12:** equipment is covered by DishNet's Warranty Policy (12 months on Starlink kits from delivery) in
   addition to the manufacturer's warranty. The exclusions are the Warranty Policy's, replacing "cover is lost through
   … lightning, power surges, water or weather damage". Loaned equipment is returned in working condition, fair wear
@@ -414,15 +417,17 @@ customer's sole and entire remedy". The changes, text only, with no Twig constru
 the repository, so it may differ from the repository copy.
 - **If uCRM's template is the repository's** (sha256 of `template.html.twig`
   `33e1e6a85c24078a6e85ef20679f3f92ee2ea9c919f22dcedfa10f3a8907e1e6`), upload the new ZIP.
-- **Otherwise,** paste the changed clauses (the diff of this commit) into the live template.
+- **Otherwise,** paste every changed line into the live template: everything that changed since commit
+  `e0766324` (`git diff e0766324 -- dishnet-hybrid-sudan/ucrm_pdf_templates`). Never paste a single commit's diff:
+  these clauses changed in four commits.
 
 Either way, the proof is the next real quotation; never make a test quote for a real customer. The ZIPs are built like
 uCRM's exports (`template.html.twig` then `template.css`, deflated, fixed timestamp):
 
 | File | sha256 |
 |---|---|
-| `template-quotation-uganda-2026-10-12.zip` | `f2d46afd441d9db1bf2b162d007c7531c3f940704994d46fab62419680b814a6` |
-| — its `template.html.twig` | `5aed1478e2c63566426b2accd823d42adee79a7849b3692542c7e84d9bbfefd8` |
+| `template-quotation-uganda-2026-10-12.zip` | `85fcda2383cb188407cc49cde0b608b317cd8a9b56cd402d6fab57911ef6b55c` |
+| — its `template.html.twig` | `419eb068abec065e3b72eaab2269396f4eb3fa8ae4a38240b72e94bdca95e543` |
 | — its `template.css` (unchanged) | `654e406a5ebccb0fe44b059bf45170890b69f3e8190e1fbb7aedf825748c846e` |
 | `template-invoice-uganda-2026-10-12.zip` | `46c1094b1d7c0df8cfe6dcca6c0eb31bb7cafa2be47d72c89b37098bb9bdc661` |
 | — its `template.html.twig` | `683f065617b0764ce98474ed6eba11018dcb57753afcb15860ebe3a861e9af08` |
@@ -432,7 +437,7 @@ uCRM's exports (`template.html.twig` then `template.css`, deflated, fixed timest
 "manufacturer's warranty only" beside a website that promises more is the contradiction this change removes.
 
 The quotation harness required everything outside clause 2 to be byte-identical to its 27 Sep baseline. It now carries
-the fifteen changed lines and the clause-14 move as an exact list
+the eighteen changed lines and the clause-14 move as an exact list
 (`scripts/harness/quotation-template/tc_changes.php`). Each entry is asserted to occur once, on both sides, and is
 set back before the byte comparison, so any other change still fails (§G).
 
@@ -455,13 +460,32 @@ So no page, and neither template, claims a UCC authorisation or licence any more
 When the licence is granted, add "UCC-licensed (Equipment Vending and Installation Licence no. …)" to the policy hub
 and the Terms of Sale, and restore a badge.
 
-**Still saying it, outside this change.** These are plugin settings and code, so they need a plugin release or a uCRM
-setting change, and plugin work waits for the stray-store quarantine:
-- `dishnet-hybrid-sudan/profiles/uganda.json`: `positioning` and the e-mail `badge_line`. The assistant's identity
-  and the customer e-mails read these.
-- `tools/set_email_brand.php` sets the e-mail badge "UCC Authorised Starlink Installer".
-- `tools/pdf_template_doctor.php` warns when a PDF lacks "UCC". After these templates it will warn on the invoice;
-  that warning is expected.
+**Still saying it, outside this change.** These are plugin settings and code. A plugin release, and any save of plugin
+settings in uCRM, waits for the stray-store quarantine:
+- **The customer-portal Terms of Service, which every Uganda customer accepts at sign-in.** This is the most important
+  one. `legal.identity` in `dishnet-hybrid-sudan/profiles/uganda.json` reads "an IT solutions provider and
+  UCC-authorised Starlink installer …", and `lib/LegalContent.php` prints it as the Terms' first sentence. In the next
+  plugin release:
+  - drop "UCC-authorised";
+  - bump `legal.version.tos` (1.1 → 1.2) and `legal.dated`, so that customers accept the corrected text;
+  - update `tests/test_portal_tenant.php`, both the sentence and the version pins.
+- **The assistant's identity and the plans flyer.** These are the settings `ai_identity_line` and `wa_flyer_caption`
+  (WhatsApp AI setup → Marketing), plus the flyer image if it carries the line.
+  `dishnet-hybrid-sudan/docs/UGANDA-EMAIL-LIFECYCLE-AUDIT.md` §5 records that they said "UCC Authorised Starlink
+  Installer". The setup screen's example texts (`tabs/engage/wa_ai_setup.php`) suggest the same line; fix them in the
+  release.
+- **The customer e-mails' badge:** `email_badge_line`, set by `dishnet-hybrid-sudan/tools/set_email_brand.php`.
+  Clearing it is not enough, because `EmailTemplate::brand()` falls back to the profile's `email_brand.badge_line`.
+  - Now: set a non-empty replacement, such as "Starlink Installation".
+  - In the release: fix the profile.
+
+  The profile's `positioning` also carries the line, but nothing reads it.
+- **`dishnet-hybrid-sudan/tools/pdf_template_doctor.php`** checks only the quotation for "UCC"; the invoice check looks
+  for Uganda, UGX and TIN.
+  - A quotation with uCRM tax lines now warns that it lacks "the UCC authorisation line". That warning is expected.
+  - A quotation without tax lines passes only on clause 2's "UCC charges". That is a false OK.
+
+  Remove the check in the release.
 
 **Decisions taken on the operator's instruction ("I will go with your advice"):**
 1. **The Starlink account.** The pages now describe the business as the operator does:
@@ -470,7 +494,8 @@ setting change, and plugin work waits for the stray-store quarantine:
    - on a DishNet plan, the managed service, DishNet registers and manages the account on the customer's behalf, and
      the contract is with DishNet.
 
-   This is in Terms §3, Terms of Sale §7 and quotation clause 10 ("Under a DishNet service plan, …"). For Starlink's
+   This is in Terms §3, Terms of Sale §7, and the quotation's step 6 and clauses 10 and 11 ("under a DishNet
+   service plan"). The installation-day blog post now describes both models too. For Starlink's
    resale rule, the lower-risk direction is to keep managed accounts in the customer's own name where possible.
    Starlink's written position is still the open question (§E item 1).
 2. **Quotation clause 2.** "Any new or increased government tax … may be passed on at cost" is deleted, so the
@@ -478,23 +503,33 @@ setting change, and plugin work waits for the stray-store quarantine:
    harness now asserts that the sentence is gone.
 3. **The customer indemnity** stays (quotation clause 16) and is now stated in Terms §12. It is narrowed to three
    things: unlawful use or misuse, the customer's content, and breach of the terms or of Starlink's Acceptable Use or
-   Fair Use Policy.
-4. **Flex.** The 7-day cancellation applies whether the package was agreed at the office or electronically (Returns
-   §6).
+   Fair Use Policy. Terms §12 reaches as far as clause 16: claims, demands and penalties, including from network
+   operators, rights holders and authorities.
+4. **Flex.** The 7-day cancellation applies whether the package was agreed at the office or electronically, on the
+   same terms as a change-of-mind return under section 2 (Returns §6).
 5. **The installation cap.** It never applies to damage to the customer's property from DishNet's negligence, or to
    death or personal injury. This holds for every job, including those accepted under v1.0 (Starlink Installation
-   §8). Installation Terms v1.1 (plugin) should say the same.
+   §8). The Warranty Policy (§4) and the Starlink Installation page's own note say the same. Installation Terms v1.1
+   (plugin) should say it too.
 6. **Marketing.**
-   - "The DishNet app" becomes the customer portal on `contact.html`, `fiber.html` and `services.html`, and is
-     removed from `hotspot.html`.
-   - "24/7" becomes "any time" on `contact.html`, `whatsapp.html` and `why-dishnet.html`.
-   - `index.html` keeps "24/7 Support channels": the channels accept messages at any hour.
+   - "The DishNet app" becomes the customer portal on `contact.html`, `fiber.html` and `services.html`.
+   - `hotspot.html` no longer promises a live dashboard or "live revenue reports": no zone operates yet. The zone
+     agreement will say how an owner sees users, sales and revenue.
+   - Support: "24/7" and "any time" become "every day" on `index.html`, `contact.html`, `whatsapp.html` and
+     `why-dishnet.html`, with "message any time". The binding pages promise that WhatsApp is answered every day, and
+     no person has been confirmed to cover nights. "One tap to a real person" becomes "One tap to our team".
+   - No page offers installer "certification" any more (`reseller.html`, `become-a-distributor.html`,
+     `careers.html`): DishNet trains, and installing for customers needs any licence the UCC requires.
+   - The installation-day blog post describes both account models, as the Terms do.
 7. **Complaints.** The page gives UCC's toll-free line, 0800 222 777, taken from the UCC letterhead.
 8. **Legal review.** The operator has decided not to commission an advocate's review. This record still says that no
    lawyer has read the pages.
 9. **Upcountry delivery.** Unchanged: the policies allow a charge "if there is one".
 10. **PDPO.** The operator is registering. Add the number to the Privacy Policy when it is issued.
 
-Page 2 of the quotation now measures 925 px (it was 951 px before 12 Oct), its tallest column 531 px (it was 558 px).
-It is still two pages at 108% zoom, the point where the old template already spills. The harness lists 15 changed
+Page 2 of the quotation now measures 947 px (it was 951 px before 12 Oct), its tallest column 554 px (it was 558 px).
+It is still two pages at 108% zoom, the point where the old template already spills. The harness lists 18 changed
 lines and the clause-14 move.
+
+A second independent review of this batch upheld 22 of 25 findings. All are applied: the page and template fixes
+above, and these corrections to this record.

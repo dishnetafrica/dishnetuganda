@@ -387,7 +387,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
       <h2 class="section-title">Built around a local team</h2>
       <div class="ben-grid">
         <div class="ben"><h3>🤝 One local team</h3><p>Sales, installation, billing and technical support are coordinated through DishNet's Uganda operation.</p></div>
-        <div class="ben"><h3>🎓 Training provided</h3><p>Partners receive structured training suited to their model before going live. Technical installation is a separate certification.</p></div>
+        <div class="ben"><h3>🎓 Training provided</h3><p>Partners receive structured training suited to their model before going live. Technical installation is separate training.</p></div>
         <div class="ben"><h3>🛠️ Technical backup</h3><p>Partners escalate to authorised DishNet technicians. Complex installations can be handled jointly.</p></div>
         <div class="ben"><h3>📦 Genuine hardware</h3><p>Where a model includes hardware, it is genuine, supported equipment — handled under agreed terms.</p></div>
         <div class="ben"><h3>🧭 Clear processes</h3><p>Orders, onboarding, support and (where relevant) stock follow defined DishNet procedures.</p></div>
@@ -601,7 +601,7 @@ var TRAIN_TECH=[
   M('Installation prerequisites','What must be true before an installation can begin.','Technical staff','~1 hour',true),
   M('Basic troubleshooting','First-line diagnosis of common connectivity problems.','Technical / support staff','~1 hour',true),
   M('Site readiness','Checking a site is ready for equipment.','Technical staff','~45 min',false),
-  M('Escalation to authorised DishNet technicians','When a job must go to a certified DishNet technician.','Technical / support staff','~30 min',false),
+  M('Escalation to authorised DishNet technicians','When a job must go to a trained DishNet technician.','Technical / support staff','~30 min',false),
   M('Safety & customer-premises requirements','Working safely on a customer’s premises.','Technical staff','~45 min',true)
 ];
 
@@ -855,13 +855,13 @@ function computeTraining(){
   if(md.length)groups.push({tag:'model',label:modelLabel+' modules',sub:'Matched to your selected model.',mods:md});
   var techTriggers=['sell_hardware','outlet','first_line','stock'];
   var needsTech=S.activities.some(function(a){return techTriggers.indexOf(a)>-1;});
-  if(needsTech)groups.push({tag:'tech',label:'Technical modules (optional)',sub:'For staff who will touch hardware, sites or first-line support. Separate from any installation certification.',mods:TRAIN_TECH});
+  if(needsTech)groups.push({tag:'tech',label:'Technical modules (optional)',sub:'For staff who will touch hardware, sites or first-line support. Separate from installation training.',mods:TRAIN_TECH});
   return groups;
 }
 STEP_HTML[5]=function(){
   var groups=computeTraining();var total=groups.reduce(function(n,g){return n+g.mods.length;},0);
   var html='<p class="step-intro">Based on your choices, here is the training DishNet proposes for a <b>'+esc(MODEL_NAME[S.model]||'partner')+'</b>. Durations are estimates. Nothing here has been scheduled or completed — it shows the training DishNet proposes.</p>';
-  html+='<div class="notice" style="margin-bottom:20px"><span class="ic">🎓</span><div><strong>'+total+' proposed modules.</strong> Sales training and technical certification are separate. Completing a sales module does not authorise anyone to perform installations — only certified DishNet technicians install equipment.</div></div>';
+  html+='<div class="notice" style="margin-bottom:20px"><span class="ic">🎓</span><div><strong>'+total+' proposed modules.</strong> Sales training and technical training are separate. Completing a sales module does not authorise anyone to perform installations — only trained DishNet technicians install equipment.</div></div>';
   groups.forEach(function(g){
     html+='<div class="tr-group"><h3><span class="tr-tag tag-'+g.tag+'">'+(g.tag==='core'?'Core':g.tag==='tech'?'Technical':'Model')+'</span>'+esc(g.label)+'</h3><p class="tr-sub">'+esc(g.sub)+'</p>';
     g.mods.forEach(function(m){
