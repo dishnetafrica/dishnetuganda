@@ -835,7 +835,8 @@ stage_c() {
     fi
   fi
 }
-# A stage-C failure is recorded as soon as there is one (once): a run killed later in stage C leaves it for the resumed run.
+# A failure is recorded as soon as there is one (once), in stage C and in --check: a run killed later leaves it for the
+# next one — a resumed run stops over it, and a later --check FAILs K0.
 fail_record() { [ "$FAIL" = "0" ] || [ -n "$(rec_get Q_CHECK_FAILED)" ] || rec_put Q_CHECK_FAILED "$(date -u +%s)"; }
 
 # ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -889,6 +890,7 @@ check_mode() {
       summary; [ "$FAIL" = "0" ]; return ;;
     *) bad "K1 the record's stage is not one this script writes (${st:-none}) — send this log"; summary; return 1 ;;
   esac
+  trap '' HUP PIPE   # a lost terminal or a dead tee does not cut --check short; a failure is recorded as soon as there is one
   local fail0="$FAIL" indet="" lv f k earlier
   earlier="$(rec_get Q_CHECK_FAILED)"
   [ -z "$earlier" ] || bad "K0 an earlier run FAILED (at $(utc_of "$earlier"); recorded in $RECORD as Q_CHECK_FAILED) — what it saw may no longer be there, so no later check passes over it. Send every log file"
@@ -921,7 +923,7 @@ check_mode() {
     if held_by_none; then ok "K10 no process holds the kept file"
     elif [ "$HOLD_ANY" = "unread" ]; then note "K10 whether anything holds the kept file was not measured: $(hold_text)"; indet=yes
     else bad "K10 the kept file is $(hold_text)"; fi; fi
-  gate_after K11
+  fail_record; gate_after K11; fail_record   # before and after the container's two questions
   for f in "$RECORDS"/dnb-5.18.9[123]/state-5.18.9[123].env; do
     [ -f "$f" ] || continue
     k="$(grep -m1 '^STRAY_R19_FAILED=' "$f" 2>/dev/null)"; [ -n "$k" ] || continue
@@ -937,10 +939,10 @@ check_mode() {
   elif [ "$rt" -gt $(( q_at + 120 )) ]; then ok "K13 the retry job ran at $(utc_of "$rt"), after the move (at $(utc_of "$q_at")), and nothing made a new database, side file, sqlite_migration.log or *.json.migrated in <plugin>/data; the kept file is unchanged$( [ -z "$UNSETTLED" ] && printf ': the quarantine holds')"
   elif [ "$now" -lt $(( q_at + 1200 )) ]; then note "K13 master has not begun the retry job more than two minutes after the move yet (its last: $(utc_of "$rt")): not yet conclusive. Run --check again after $(check_at)"; unsettled "run --check again after $(check_at)"
   else   # twenty minutes and no run: the job runs every ten — master is not running it as before
-    note "K13 master has not begun the retry job more than two minutes after the move, in the $(( (now - q_at) / 60 )) minutes since it (its last: $(utc_of "$rt")) — it is not being run as before: not conclusive. Send this log now; run --check again after $(check_at) only if asked"
+    note "K13 master has not begun the retry job more than two minutes after the move, in the $(( (now - q_at) / 60 )) minutes since it (its last: $(utc_of "$rt")) — it is not being run as before: not conclusive. Send this log now; $( if [ -n "$UNSETTLED" ]; then printf 'run --check at or after %s' "$(check_at)"; else printf 'run --check again after %s only if asked' "$(check_at)"; fi)"
     unsettled "master has not begun the retry job more than two minutes after the move, $(( (now - q_at) / 60 )) minutes ago: send this log"; fi
   if [ "$FAIL" != "$fail0" ] && [ -z "$earlier" ]; then
-    if rec_put Q_CHECK_FAILED "$now"; then say "  record          the failure is recorded in $RECORD (Q_CHECK_FAILED): every later --check fails too"
+    if [ -n "$(rec_get Q_CHECK_FAILED)" ] || rec_put Q_CHECK_FAILED "$now"; then say "  record          the failure is recorded in $RECORD (Q_CHECK_FAILED): every later --check fails too"
     else note "K14 the failure could not be recorded in $RECORD (is the disk full?): a later --check cannot see it, and could pass over it. Free space, then $( if [ -n "$FAIL_STEP" ]; then printf '%s' "$FAIL_STEP"; else printf '%s' "send every log (this run's may be cut short on a full disk), say that this run FAILED, and wait for a decision — do not run --check again first"; fi)"; fi
   fi
   runbook; summary
