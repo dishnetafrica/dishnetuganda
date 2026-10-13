@@ -11416,16 +11416,17 @@ Also refuted:
    in uCRM, and run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
 2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) were merged to main on 13 Oct, at
    the operator's word, through [PR #23](https://github.com/dishnetafrica/dishnetuganda/pull/23) (main `7790bef`).
-   Redeploy the website from main. **Redeployed:** on 13 Oct the deploy's second run read the evening changes on
-   the live site (A19: `privacy.html` recordings ×1, `installation.html` "normally photographs" ×1).
+   Redeploy the website from main. **The live site carries them:** on 13 Oct the deploy's second run read the
+   evening changes there (A19: `privacy.html` recordings ×1, `installation.html` "normally photographs" ×1, no
+   note). The redeploy itself is not in the log.
 3. **The go-live day.** The documents are dated **16 October 2026**. A20 refuses after that day in Kampala; before it,
    it notes that customers accept documents dated in the future. **For another day, the release is cut again with that
    date, and re-pinned and rehearsed.**
 4. **Both branches must be on GitHub.** `claude/study-this-jhe2eg` is pushed with this entry. `release/5.18.94`
    (`f4b4c96`) was pushed on 13 Oct, at the operator's word.
 4b. **The e-mail badge (A18).** The first deploy run stopped because `email_badge_line` still said UCC (RESULT below).
-   Run `scripts/set-email-badge-5.18.94.sh` first; it must end PASSED. **Done before the second run:** A18 then read
-   the badge ok in both copies. The badge script's own log has not been sent yet.
+   Run `scripts/set-email-badge-5.18.94.sh` first; it must end PASSED. **Before the second run the badge was
+   changed:** A18 then read it ok in both copies. Whether this script did it is not known until its log is sent.
 5. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.94 && mkdir -p /root/dnb-5.18.94 && bash scripts/deploy-5.18.94.sh 2>&1 | tee /root/dnb-5.18.94/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
@@ -11566,11 +11567,13 @@ its log file stays on the server in `/root/dnb-5.18.94`.
   - A18 read `ai_identity_line=set:ok/set:ok wa_flyer_caption=unset:ok/unset:ok email_badge_line=set:ok/set:ok
     badge-shown=ok/ok` (files/store).
   - A21: call recordings are deleted after 365 days, in the store row and the files.
-  - A19: the website shows the policies hub and the new Terms (the identity sentence, no UCC claim), and the 12 Oct
-    evening changes — recordings in `privacy.html`, *"normally photographs"* in `installation.html`.
+  - A19: the website shows the policies hub and its Terms of Service, which the portal's new Terms point to (the
+    identity sentence, no UCC claim), and the 12 Oct evening changes — recordings in `privacy.html`, *"normally
+    photographs"* in `installation.html`.
   - A14: the quarantine holds — moved 10:34:04 UTC, its `--check` begun 11:41:58 UTC passed, no run of it going.
   - Two notes. A17: two installation requests are still pending under v1.0 (three at the first run), and keep it.
-    A20: the documents are dated 16 October 2026, after that day in Kampala.
+    A20: the documents are dated 16 October 2026, after today (13 Oct) in Kampala, so a customer who signs in
+    before then accepts them with that date shown as Effective. A note, not a refusal.
 - **The backup**, in `/root/dnb-5.18.94/backup-20261013T134921Z`:
   - `plugin.sqlite3` (34M; integrity ok, 251 tables, SQLite 3.48.0);
   - the data folder without the live databases (186M), and the installed 5.18.93 (11M);
@@ -11580,19 +11583,21 @@ its log file stays on the server in `/root/dnb-5.18.94`.
 - **The deploy.** `DEPLOY` typed. The checkout went to `f4b4c96` for `deploy-hybrid.sh`, the container served
   `f4b4c96`, and the checkout went back to the branch. **The copy: 13:58:04 UTC.**
 - **V, over the public address:** V1–V13 passed.
-  - V3–V3i: every switch, setting and 087 row unchanged.
+  - V3–V3i: the switches, the Inbox's settings row, the AI and WhatsApp settings (26/25 keys) and 087's rows and
+    trail unchanged.
   - V4: no fatal or parse error since 13:58:03 UTC (12 lines read).
-  - V13: the public Terms and Privacy are version 1.2, dated 16 October 2026, with no "UCC". `app_legal_version`
-    answers 1.2 / 1.2, so every Uganda customer is asked once more at the next sign-in.
-- **R, read only:** every R check passed except R19, which is a note.
+  - V13: the public Terms and Privacy are version 1.2, with the identity sentence and no "UCC";
+    `app_legal_version` answers 1.2 / 1.2, dated 16 October 2026. So every Uganda customer should be asked once more
+    at the next sign-in — to be seen at the portal sign-in below.
+- **R, read only:** every R check passed except R19, which gave only a note; R3 gave a note beside its passes.
   - R1: the 23 files installed exactly as `f4b4c96` has them; R5: the 265 files of earlier releases are all there;
     R14: Domain B is byte for byte.
   - R7 read cash in hand and the photo tables. Its figures are not copied here.
   - R13: the event queue lost nothing (9345 events, all done).
   - R22: the installed documents are 5.18.94's.
   - Two notes. R3: `migration.log` holds no line for 087, as on every deploy since 5.18.89; the store was read
-    instead. R19: the quarantine holds, but master had not run the retry job since the copy (its last run 13:55:05
-    UTC), so not yet conclusive.
+    instead. R19: the quarantine holds, but master had not completed a run of the retry job since the copy (its last
+    completed run 13:55:05 UTC), so not yet conclusive.
 - **Still the operator's:**
   1. `--after-only` at or after 14:18:04 UTC (runbook step 6). Expected: PASSED, R19 conclusive.
   2. Then the quarantine's own `--check`. Expected: PASSED, with one note, K2: the container serves `f4b4c96`, not
