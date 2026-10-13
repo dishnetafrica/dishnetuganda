@@ -42,7 +42,7 @@ $dial = PortalLocale::dialHint(ConfigVault::fill(
 // (explicit configuration → profile → the literal that was here before).
 require_once dirname(__DIR__, 2) . '/lib/TenantProfile.php';
 $lwProfile = TenantProfile::current(is_array($config ?? null) ? $config : [], getDataDir($_lwRoot));
-$legalVer  = dnLegalVersion($lwProfile);   // 5.18.42: Uganda 1.1 / South Sudan 1.0 — the consent step shows and records the tenant's
+$legalVer  = dnLegalVersion($lwProfile);   // 5.18.42: Uganda 1.1 / South Sudan 1.0 (5.18.94: Uganda 1.2) — the consent step shows and records the tenant's
 
 // Already signed in? Phase 2: the HttpOnly session cookie, verified under the
 // customer key set and against the session table — a decoded-but-unchecked
@@ -237,7 +237,7 @@ body{display:flex;flex-direction:column;min-height:100vh}
     <div class="title">One quick thing</div>
     <div class="consent-intro">
       Before we sign you in, please review and accept our Terms of Service and
-      Privacy Policy. This is a one-time step.
+      Privacy Policy. <?= htmlspecialchars($lwProfile->login('consent_note', 'This is a one-time step.'), ENT_QUOTES, 'UTF-8') ?>
     </div>
     <div class="err" id="err-consent"></div>
     <div class="consent-box">

@@ -461,7 +461,8 @@ When the licence is granted, add "UCC-licensed (Equipment Vending and Installati
 and the Terms of Sale, and restore a badge.
 
 **Still saying it, outside this change.** These are plugin settings and code. A plugin release, and any save of plugin
-settings in uCRM, waits for the stray-store quarantine:
+settings in uCRM, waits for the stray-store quarantine. (The operator changed the three settings by hand on 12 Oct; the
+code is 5.18.94, §K.)
 - **The customer-portal Terms of Service, which every Uganda customer accepts at sign-in.** This is the most important
   one. `legal.identity` in `dishnet-hybrid-sudan/profiles/uganda.json` reads "an IT solutions provider and
   UCC-authorised Starlink installer …", and `lib/LegalContent.php` prints it as the Terms' first sentence. In the next
@@ -533,3 +534,59 @@ lines and the clause-14 move.
 
 A second independent review of this batch upheld 22 of 25 findings. All are applied: the page and template fixes
 above, and these corrections to this record.
+
+## K. The plugin release 5.18.94: the customer portal and the Installation Terms (12 Oct, built)
+
+On the operator's "Prepare it now (Recommended)", after the uCRM templates and the three settings were changed by hand
+(the assistant's identity line, the flyer caption and the e-mail badge).
+
+**The customer portal's Terms of Service and Privacy Policy (Uganda).** Every Uganda customer accepts these at sign-in.
+- They no longer call DishNet "UCC-authorised" (`legal.identity` in `profiles/uganda.json`).
+- Their sections now say what the website's Terms of Service and Privacy Policy say. A tenant's profile may now replace
+  a section's body (`legal.terms_text.<key>`, `legal.privacy_text.<key>`; the keys are listed by
+  `dnLegalSectionKeys()` in `lib/LegalContent.php`). The headings never change. Uganda replaces ten Terms sections
+  and six Privacy sections. South Sudan replaces none and renders byte for byte as before.
+- Among the corrections:
+  - no "best-effort" service;
+  - no discretionary outage credit: the website's credit after 3 days applies;
+  - no late-payment or reconnection fee;
+  - no suspension "without further notice";
+  - a monthly plan ends at any time, a Flex package follows its own agreement, and an Acceptable Use ending comes
+    only after a request to stop;
+  - the WiFi passwords, call recordings, the six-year and two-year retention periods, and the PDPO;
+  - our equipment is returned when a plan ends with no fixed number of days, as on the website (13 Oct, the review);
+  - the Privacy Policy's contact paragraph promises no reply time ("within a few business days" is gone); requests
+    about your information are answered within 14 days, as on the website (13 Oct, the review).
+- Both documents become version **1.2**, so every Uganda customer is asked to accept once more at the next sign-in.
+  `legal.dated` is the go-live day. The consent step now reads "We ask again only when they change." instead of
+  "This is a one-time step."
+
+**Installation Terms v1.1.** New requests take v1.1; v1.0 stays in the code byte for byte, because records name it.
+v1.1 is v1.0 with seven changes, and the test asserts that nothing else differs:
+1. no "DRAFT — SUBJECT TO LEGAL REVIEW" line (item 8 of §J);
+2. §12 keeps any cancellation right the law gives;
+3. §14 adds the website's six-month workmanship promise;
+4. §15 says sign-off takes away no right;
+5. §23 says what the completion photos and location are ("normally", and only where a location can be recorded);
+6. §24 names v1.1;
+7. §25 keeps damage to the customer's property from negligence, death or injury, and fraud outside the cap (item 5).
+
+A request sent under v1.0 before the deploy keeps v1.0: its page shows v1.0, accepts only v1.0's hash, and a resend
+keeps v1.0. Staff who want the customer to see v1.1 withdraw it and request again. The test proves each step (case 29b).
+
+**The UCC defaults.** The e-mail badge preset (`tools/set_email_brand.php`) and the profile's badge become
+"Starlink Installation". On Uganda, the WhatsApp AI setup screen's examples no longer suggest the UCC line (South
+Sudan's page is unchanged, byte for byte), and `tools/pdf_template_doctor.php` no longer looks for "UCC" in a quotation.
+
+**The website, in step.** The Privacy Policy's Payments row now says when the WiFi password is kept (including a
+change made in the customer portal). The Communications row adds call recordings "where a call is recorded", and
+retention adds "Call recordings, where a call is recorded: up to 12 months". The Starlink Installation page says the
+technician "normally" photographs the work, and records the location "where a location can be recorded". These
+changes are on the development branch and **not yet on main**: merge them to main, then redeploy the website. The
+deploy's A19 says so when the live site does not have them yet (13 Oct, the review).
+
+**Follow-up for the operator, at the next quotation template reload (13 Oct, the review).** Clause 12 of the Uganda
+quotation still says loaned equipment is returnable "within 7 days of termination". The website and the portal now set
+no fixed number of days. Clause 1 already makes the website prevail where the quotation is less favourable, so nothing
+is untrue meanwhile. But the next reload of the template in uCRM should drop "within 7 days of termination". This
+release keeps the repository copy as the operator loaded it on 12 Oct.

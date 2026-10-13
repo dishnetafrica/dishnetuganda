@@ -159,15 +159,26 @@ if ($old) {
     $techOf = function (array $mails): array {
         return array_map(function ($m) { preg_match_all('/Technician: ([^\r\n]*)/', (string)($m['data'] ?? ''), $x); return $x[1]; }, $mails);
     };
-    $noTech = function (array $mails): array {
-        return array_map(function ($m) {
+    // 5.18.94 (root docs/67 §J–§K): the e-mail's badge line on Uganda is the profile's, and it no longer claims a UCC
+    // authorisation — "Starlink Installation" where 5.18.51 printed "UCC Authorised Starlink Installer". The second
+    // deliberate difference; the assertion after the comparison says which line is which.
+    $badgeOld = 'UCC Authorised Starlink Installer'; $badgeNew = 'Starlink Installation';
+    $noTech = function (array $mails) use ($badgeOld, $badgeNew): array {
+        return array_map(function ($m) use ($badgeOld, $badgeNew) {
             $m['data'] = preg_replace(['/(Technician: )[^\r\n]*/', '#(>Technician</td><td[^>]*>)[^<]*#'], ['$1<technician>', '$1<technician>'], (string)($m['data'] ?? ''));
+            $m['data'] = str_replace([$badgeOld, $badgeNew], '<badge>', $m['data']);
             return $m;
         }, $mails);
     };
     is_(count($customerMail) === 1 && $noTech($old['mail']) === $noTech($customerMail),
         'the customer\'s "installation scheduled" e-mail: the same message, byte for byte (T4.11), but for the technician\'s name — the engineer\'s five aside',
         count($old['mail']) . ' vs ' . count($customerMail));
+    $badgeOf = function (array $mails) use ($badgeOld, $badgeNew): array {
+        return array_map(function ($m) use ($badgeOld, $badgeNew) { $d = (string)($m['data'] ?? ''); return substr_count($d, $badgeOld) . '/' . substr_count($d, $badgeNew); }, $mails);
+    };
+    is_($badgeOf($old['mail']) === ['2/0'] && $badgeOf($customerMail) === ['0/2'],
+        '5.18.94: its badge line, in the HTML and the text part, is "Starlink Installation", where 5.18.51 printed "UCC Authorised Starlink Installer"',
+        json_encode([$badgeOf($old['mail']), $badgeOf($customerMail)]));
     is_($techOf($old['mail']) === [['Sandbox Tech']] && $techOf($customerMail) === [['Sandbox']],
         '5.18.85: its Technician row is the first name on the staff account linked to the assignee, where 5.18.51 read users/{id}',
         json_encode([$techOf($old['mail']), $techOf($customerMail)]));

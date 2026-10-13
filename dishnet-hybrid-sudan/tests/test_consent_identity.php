@@ -68,12 +68,12 @@ t('…even if a row held 0', CustomerSession::hasCurrentConsent($pdo, 'x', 0, $U
 
 echo "\n1b. The versions are the tenant's (5.18.42, docs/38 A2): the same rows, judged under each profile\n";
 $vSS = dnLegalVersion($SS);
-t('the profiles carry different versions (uganda 1.1, south-sudan 1.0)', [$ver['tos'], $ver['privacy'], $vSS['tos'], $vSS['privacy']], ['1.1', '1.1', '1.0', '1.0']);
+t('the profiles carry different versions (uganda 1.2 since 5.18.94, south-sudan 1.0)', [$ver['tos'], $ver['privacy'], $vSS['tos'], $vSS['privacy']], ['1.2', '1.2', '1.0', '1.0']);
 t('customer 7 accepted uganda\'s current version → true under the uganda profile', CustomerSession::hasCurrentConsent($pdo, '+256772123456', 7, $UG), true);
 t('…the same row judged under south-sudan (1.0) → false: a row never satisfies another tenant\'s version', CustomerSession::hasCurrentConsent($pdo, '+256772123456', 7, $SS), false);
 $ins->execute(['+211927000555', $vSS['tos'], $vSS['privacy'], time(), '127.0.0.1', 11]);   // a South Sudan customer at 1.0
 t('a 1.0 row → true under south-sudan (nobody there is asked again)', CustomerSession::hasCurrentConsent($pdo, '+211927000555', 11, $SS), true);
-t('…and false under uganda (1.1): every Uganda customer is asked once more', CustomerSession::hasCurrentConsent($pdo, '+211927000555', 11, $UG), false);
+t('…and false under uganda (1.2): every Uganda customer is asked once more', CustomerSession::hasCurrentConsent($pdo, '+211927000555', 11, $UG), false);
 
 echo "\n2. Over HTTP: the phone route consents, the e-mail route of the same customer passes, another customer does not\n";
 // The copy keeps the plugin's directory NAME: a customer token's issuer is derived from it, and the test

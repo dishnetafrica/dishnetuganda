@@ -240,7 +240,8 @@ if ($quoteId <= 0) {
             if ($found) { $sudanFound = true; no('the PDF contains: ' . implode(', ', $found) . ' — this is the Sudan template'); }
             else        { ok('no Juba, South Sudan, +211 or dishnetafrica in the PDF text'); }
 
-            foreach (['Uganda' => 'the country', 'UCC' => 'the UCC authorisation line',
+            // 5.18.94: no UCC authorisation line is expected — the templates claim none (docs/67 §J).
+            foreach (['Uganda' => 'the country',
                       'UGX' => 'shilling amounts', 'TIN' => 'the tax identification number'] as $need => $what) {
                 stripos($text, $need) !== false ? ok("the PDF shows {$what}")
                                                 : wr("the PDF does not mention {$what}");

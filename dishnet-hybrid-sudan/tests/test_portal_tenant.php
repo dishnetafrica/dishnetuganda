@@ -213,21 +213,41 @@ foreach (['terms' => $terms['body'], 'privacy' => $priv['body']] as $k => $b) {
 }
 echo "\n2b. Change set A2 (docs/38 §7.3, approved): the Uganda documents say Uganda — and nothing of the other tenant's law, fees or products\n";
 has('[uganda] terms: identity (point 1), governing law (2), the forum (3, conservative), products (8)', $terms['body'], [
-    'DishNet Africa Limited (&quot;DishNet&quot;, &quot;we&quot;, &quot;us&quot;) is an IT solutions provider and UCC-authorised Starlink installer registered in Uganda (Reg. No. 80046255496181), providing Starlink internet services to customers in Kampala and across Uganda.',
-    'These Terms are governed by the laws of the Republic of Uganda.', 'submitted to the courts of Uganda.', 'upstream providers (SpaceX/Starlink)', 'hardware (Starlink dishes and routers)', 'violate Starlink&#039;s acceptable use policy']);
+    'DishNet Africa Limited (&quot;DishNet&quot;, &quot;we&quot;, &quot;us&quot;) is an independent IT solutions provider and Starlink installer registered in Uganda (Reg. No. 80046255496181), providing Starlink internet services to customers in Kampala and across Uganda.',
+    'These terms are governed by the laws of Uganda, and the courts of Uganda can decide disputes about them.', 'including the Uganda Communications Commission', 'they depend on the Starlink network, which we do not operate', 'Equipment you have bought and paid for in full belongs to you.', 'violate Starlink&#039;s acceptable use policy']);
+// 5.18.94 (docs/67 §J): the Uganda wording follows the website policies — no UCC authorisation, the website terms apply
+// beside these, a monthly plan (never a Flex package) ends at any time, the outage credit is a right, not a discretion.
+none('[uganda] terms: no UCC authorisation, no best-effort, no discretionary credit, no suspension without notice, no late fee', $terms['body'],
+    ['UCC-authorised', 'UCC Authorised', 'best-effort', 'at our discretion', 'without further notice', 'Late-payment', 'may change without notice']);
+has('[uganda] terms: the precedence, the Flex limit, the AUP-only ending after a request to stop, the credit', $terms['body'],
+    ['Our website terms and policies, listed at dishnetuganda.com/policies.html, also apply.', 'You may end a monthly plan at any time',
+     'A Flex package, or another package with a minimum term, follows the written agreement you sign for it, which does not take away any right to cancel that the law gives you.',
+     'except a kit on a Flex package', 'if you seriously or repeatedly break our Acceptable Use Policy or use the service unlawfully (we first ask you to stop',
+     'we credit your account with one day&#039;s share of your monthly charge']);
 none('[uganda] terms: no South Sudan fee, court, product or regulator (points 3, 7, 8)', $terms['body'], ['USD 25', 'USD 150', '5% of', '6-month', '120-day', 'Cheques', 'fibre', 'LTE', 'courts of Juba', 'registered in South Sudan', 'Republic of South Sudan']);
 has('[uganda] terms: with no confirmed Uganda figure the Billing and Transfer sections state none and point to the invoice (point 7, conservative)', $terms['body'],
-    ['Late-payment and reconnection charges, where they apply, are those stated on your quotation or invoice.', 'Any minimum service period, transfer fee and processing time are confirmed to you in writing before a transfer.']);
+    ['There is no reconnection fee.', 'Any minimum service period, transfer fee and processing time are confirmed to you in writing before a transfer.']);
 has('[uganda] privacy: the regulator sentence (point 4), both sign-in channels (9), the entity', $priv['body'],
-    ['The Uganda Communications Commission and other Ugandan authorities — if required by law', 'six-digit code to your WhatsApp number or your e-mail address', 'Login codes by WhatsApp or e-mail', 'how DishNet Africa Limited handles information']);
+    ['the Uganda Communications Commission and other authorities, where the law requires it', 'six-digit code to your WhatsApp number or your e-mail address', 'Login codes by WhatsApp or e-mail', 'how DishNet Africa Limited handles information']);
+none('[uganda] privacy: no claim the WiFi password stays on the router, no unenforced technical-data period, no "anyone else" promise', $priv['body'],
+    ['stays on your router', '90 to 365', '3 additional years', 'anyone else without your permission']);
+has('[uganda] privacy: the WiFi passwords, call recordings, retention and the regulator', $priv['body'],
+    ['when you change them or turn on the hotspot in this portal', 'where a call is recorded, the recording',
+     'Enquiries that did not lead to an order: up to two years after our last contact.', 'Call recordings, where a call is recorded: up to 12 months.',
+     'and then for six years, the period within which a legal claim about them can usually be brought', 'Personal Data Protection Office (pdpo.go.ug)']);
 none('[uganda] privacy: no fibre/LTE sharing clause (point 10), no South Sudan regulator', $priv['body'], ['Splynx', 'Fibre and LTE partners', 'South Sudan regulatory authorities', 'DishNet Africa Ltd.']);
-has('[uganda] the documents carry version 1.1 (point 6: Uganda customers accept once more; South Sudan is not asked)', $terms['body'] . $priv['body'], ['v1.1']);
+has('[uganda] the documents carry version 1.2 (5.18.94: Uganda customers accept once more; South Sudan is not asked)', $terms['body'] . $priv['body'], ['v1.2']);
 $lv = http($base, 'GET', '?page=api&action=app_legal_version');
-is_(($lv['json']['data']['tos_version'] ?? '') === '1.1' && ($lv['json']['data']['privacy_version'] ?? '') === '1.1' && ($lv['json']['data']['dated'] ?? '') === '26 September 2026',
-    '[uganda] app_legal_version answers the tenant\'s versions and date (1.1 / 1.1 / 26 September 2026)', substr($lv['body'], 0, 200));
-has('[uganda] the sign-in page\'s consent step shows the tenant\'s version and date', $login['body'], ['v1.1', 'Effective <strong>26 September 2026']);
+$UG_DATED = TenantProfile::load('uganda')->text('legal.dated');
+is_($UG_DATED === '16 October 2026', '[uganda] the documents are dated the 5.18.94 go-live day (re-pinned if the deploy moves)', $UG_DATED);
+is_(($lv['json']['data']['tos_version'] ?? '') === '1.2' && ($lv['json']['data']['privacy_version'] ?? '') === '1.2' && ($lv['json']['data']['dated'] ?? '') === $UG_DATED,
+    '[uganda] app_legal_version answers the tenant\'s versions and date (1.2 / 1.2 / the go-live day)', substr($lv['body'], 0, 200));
+has('[uganda] the sign-in page\'s consent step shows the tenant\'s version and date', $login['body'], ['v1.2', 'Effective <strong>' . $UG_DATED]);
+has('[uganda] the consent step says it asks again only when the documents change', $login['body'], ['We ask again only when they change.']);
+none('[uganda] …and no longer calls a re-acceptance a one-time step', $login['body'], ['This is a one-time step.']);
 has('[uganda] terms: the contact section reads the tenant', $terms['body'], ['Reach us on WhatsApp at +256 705 993 348 or email accounts@dishnetuganda.com']);
-has('[uganda] privacy: the rights and contact sections read the tenant', $priv['body'], ['contact accounts@dishnetuganda.com with your', 'WhatsApp +256 705 993 348 or email accounts@dishnetuganda.com']);
+has('[uganda] privacy: the rights and contact sections read the tenant', $priv['body'], ['Contact accounts@dishnetuganda.com or WhatsApp +256 705 993 348.', 'For any privacy question or request, e-mail accounts@dishnetuganda.com with ', 'in the subject, or WhatsApp +256 705 993 348.']);
+none('[uganda] privacy: the contact section promises no reply time beyond the website\'s (5.18.94, the review)', $priv['body'], ['within a few business days']);
 
 echo "\n3. The control on the control: a literal planted into the sandbox copy IS seen on the served page\n";
 $pp = $ug['tmp'] . '/tabs/customer_app/portal.php'; $src = (string)file_get_contents($pp);
@@ -271,6 +291,8 @@ $p2 = http($base2, 'GET', '?page=privacy');
 has('[south-sudan] privacy: the sharing and sign-in sentences exactly as before', $p2['body'], ['Fibre and LTE partners (e.g. Splynx-managed operators) — for service activation and support. Payment processors', 'South Sudan regulatory authorities — if required by law', 'WhatsApp and login codes', 'only your phone number so we can route the code to you.']);
 $lv2 = http($base2, 'GET', '?page=api&action=app_legal_version');
 is_(($lv2['json']['data']['tos_version'] ?? '') === '1.0' && ($lv2['json']['data']['dated'] ?? '') === '18 April 2026', '[south-sudan] app_legal_version still answers 1.0 / 18 April 2026', substr($lv2['body'], 0, 200));
+$login2 = http($base2, 'GET', '?page=customer_login');
+has('[south-sudan] the consent step reads as before 5.18.94 (no consent_note in its profile)', $login2['body'], ['Privacy Policy. This is a one-time step.', 'v1.0']);
 has('[south-sudan] the invoice screen without a tax line: the total only, no "Before tax" row and no tax note (the control)', $sp['invoice_detail&inv_id=301'], ['>Total<', '$ 50,000.00']);
 none('[south-sudan] the invoice screen without a tax line', $sp['invoice_detail&inv_id=301'], ['>Before tax<', 'inv-tax-line', 'Each tax or levy']);
 

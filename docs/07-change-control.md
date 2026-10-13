@@ -10553,7 +10553,7 @@ The command, as root on the server, on its own:
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; NOT RUN. It may run only after 5.18.93's day-later `--after-only` (at or after 13:06:21 UTC on 12 Oct) has PASSED and its log has been read, and only on the operator's word
+## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, due at or after 10:54:04 UTC, PENDING
 
 The operator's order (the 5.18.91 entry): fix the wrong-database access first; once that is deployed and verified,
 quarantine the old database as its own step. 5.18.91 stopped the retry job from opening it, and 5.18.92 and 5.18.93
@@ -11053,6 +11053,9 @@ What it proves, section by section:
 
    Expected: GO, then after `QUARANTINE`, stage C PASSED. If the terminal is lost, reconnect, wait two minutes and
    run the same command again: it finishes its own checks, or names the one command to run.
+   **Run 13 Oct, begun 10:23:31 UTC (`20261013T102331Z`): GO, `QUARANTINE` typed, the stray store moved at 10:34:04
+   UTC; PASSED, 16 ok, 0 failed, 0 notes** — read from the pasted terminal. Its log files and `quarantine.env` stay
+   on the server, where the next `--check` and 5.18.94's A14 read them (the RESULT below).
 3. **At least 20 minutes after the move** (the log's hand-over line prints the time); it changes nothing but its own log
    and, on a failure, one line of the record:
 
@@ -11094,6 +11097,41 @@ What it proves, section by section:
     record (`sed`), the time (`date`) and the record's size (`stat`), then appends — loses it; from the record line on,
     nothing does.
 
+### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` PENDING
+
+Read from the terminal the operator pasted; the log file (`quarantine-20261013T102331Z.log`), its own log
+(`quarantine-20261013T102331Z.own.log`) and `quarantine.env` stay on the server, in `/root/dnb-stray-quarantine`.
+
+- **The pull before it** moved the server's checkout of `claude/study-this-jhe2eg` from `4c5b77c` to `4a7c4e8`. That
+  brings the quarantine script (unchanged since `7408a70`, the reviewed one), `deploy-5.18.94.sh`, the website's
+  sources and the records. It installs nothing: the container still served 5.18.93 (`69c87a6`), A0.
+- **Stage A, 8 ok:**
+  - A0: the container serves `69c87a6` (5.18.93); the retry job and the four files its gate reads are that
+    release's.
+  - A1: the live database and the stray store are two files (keys `64769:2646215` and `64769:2912241`).
+  - A2: 5.18.93's record matches (the copy at 11 Oct 13:06:21 UTC, its A14 "seen"); no R19 failure in any of the
+    three deploy records from 5.18.91 on.
+  - A3: the day-later check, `after-20261012T133555Z.log`, PASSED with R19 conclusive.
+  - A4: the stray store exactly as every deploy since 5.18.91 recorded it (sha256 `dc85ae6ddafaae19…`, 2,379,776
+    bytes), one name, no side file; its folder unchanged since 10 Oct 02:45:47 UTC.
+  - A5: no process held it, beside the controls.
+  - A6: the installed retry job's gate stops it on this server's configuration (`skip=yes`, Uganda by the store and
+    by the files and vault).
+  - A7: the quarantine folder is root's, mode 700, on the same filesystem, out of sight of all 28 containers.
+  - A second copy of the same bytes is in 5.18.93's backup (`stray-data.tar.gz`).
+- **The move:** `QUARANTINE` typed; the kept name linked (the same key, two names), then the old name removed at
+  10:34:04 UTC.
+- **Stage C, 8 ok:**
+  - C1, C4: the kept file is the stray store itself — the same key, one name, the same sha256, size, time, owner,
+    mode and birth.
+  - C2, C3: the old name is gone with no side file, and the folder's entries are as before, less that one.
+  - C5, C6: no side file beside the kept file, and no process holds it.
+  - C7: the live commit, the live database and the retry job's files are as before.
+  - C8: the installed gate still stops the retry job.
+  - The container is as before (started 1 Oct 06:30:41 UTC, 0 restarts).
+- **Next:** its `--check` at or after 10:54:04 UTC. It is conclusive once master has run the retry job after the move;
+  master last ran it at 10:15:06 UTC, before the move.
+
 ### The put-back — its own command, never pasted with the quarantine
 
 Only if it is ever needed: before any rollback to 5.18.90 (rule 2), or to close a quarantine that stopped between its
@@ -11110,3 +11148,333 @@ gate while a gated release is live (read before the word and again after it).
 As root on the server, on its own:
 
     cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --put-back 2>&1 | tee /root/dnb-stray-quarantine/putback-$(date -u +%Y%m%dT%H%M%SZ).log
+
+## 12–13 Oct — 5.18.94: the customer portal's Terms of Service and Privacy Policy without the UCC claim, section by section as the website's policies (Uganda only; version 1.2, so every Uganda customer accepts once more); Installation Terms v1.1 for new requests, v1.0 kept byte for byte; the UCC defaults removed; no migration; South Sudan byte for byte; Domain B unchanged. `release/5.18.94` = `f4b4c96`, cut on live 5.18.93 (`69c87a6`); `scripts/deploy-5.18.94.sh` pinned to it and rehearsed twice — `release/5.18.94` NOT PUSHED; NOT DEPLOYED
+
+**Request.** The UCC letter of 4 Sep is a conditional no-objection, not a licence (root docs/67 §J). So nothing the
+plugin shows a Uganda customer may call DishNet "UCC-authorised". On 12 Oct the operator chose **"Templates + the 3
+settings"**, changed the two uCRM templates and three settings by hand (*"done updated the tempalte"*), then chose
+**"Prepare it now (Recommended)"**, *"ok go ahead"* and *"ok"*. On the legal points the operator's word is *"go with
+your advice"*; no lawyer reviews this text (root docs/67 §J).
+
+### Release notes
+
+Root docs/67 §K is the record of what the texts say. In short:
+
+- **The customer portal's Terms of Service and Privacy Policy (Uganda).** Every Uganda customer accepts these at
+  sign-in.
+  - The identity sentence (`legal.identity`) no longer says "UCC-authorised".
+  - A tenant's profile may now replace a section's body: `legal.terms_text.<key>` and `legal.privacy_text.<key>`, the
+    keys listed by `dnLegalSectionKeys()` in `lib/LegalContent.php`. The headings never change.
+  - Uganda replaces ten Terms sections and six Privacy sections with the website's wording. South Sudan replaces none,
+    and its documents render byte for byte as before (sha256 `b2f4ff3b34bb1fcabc11bc87…`).
+  - Both documents become version **1.2**, dated **16 October 2026** (`legal.dated`, the go-live day; provisional until
+    the operator confirms it). The consent step now says *"We ask again only when they change."*
+  - **Every Uganda customer is asked to accept once more at the next sign-in.** Consent is recorded per version pair
+    (`app_tos_consent`), so the earlier 1.1 records stay as they were.
+- **Installation Terms v1.1.** New requests take v1.1, which is v1.0 with seven reviewed changes (root docs/67 §K)
+  and no DRAFT line. v1.0 stays in the code byte for byte (hash `9308072840e784e4…`), because every record names its own
+  version and hash. A request sent under v1.0 before the deploy is still shown, accepted and resent as v1.0.
+  `InstallationTerms::VERSIONS` lists both; v1.1's hash is `eee8644e8bb7ea50…`.
+- **The UCC defaults.** The e-mail badge preset (`tools/set_email_brand.php`) and the profile's badge become
+  *"Starlink Installation"*. On Uganda, the WhatsApp AI setup screen's examples no longer suggest the UCC line; South
+  Sudan's page is byte for byte as before. `tools/pdf_template_doctor.php` no longer looks for "UCC" in a quotation.
+- **The repository's copies of the two Uganda uCRM templates** (quotation and invoice) come with the release, as the
+  operator loaded them on 12 Oct. The release changes nothing in uCRM.
+- **Not changed:** every setting and switch, every record, `cron/master.php`, `main.php`, the retry job and its gate,
+  the pilot. No migration.
+
+**What the review of 13 Oct changed** (see Reviews), before anything was pushed:
+- `terms_text.termination` no longer gives 14 days to return DishNet's equipment. The website gives no fixed number of
+  days, and the portal now says the same.
+- A Uganda `privacy_text.contact` replaces the shared *"we'll respond within a few business days"*. That sentence
+  contradicted the rights section's 14 days in the same document.
+
+### Files — 23 against `69c87a6`: 1 added, 22 changed, none removed
+
+- **Added (1):** `tests/test_legal_overrides.php`.
+- **Taken whole from the development branch (16 changed):** `lib/LegalContent.php`, `lib/InstallationTerms.php`,
+  `lib/EmailTemplate.php`, `profiles/uganda.json`, `tabs/customer_app/login_web.php`, `tabs/engage/wa_ai_setup.php`,
+  `tools/set_email_brand.php`, `tools/pdf_template_doctor.php`, `ucrm_pdf_templates/quotation_uganda/template.html.twig`,
+  `ucrm_pdf_templates/invoice_uganda/template.html.twig`, and the tests `test_portal_tenant.php`,
+  `test_consent_identity.php`, `test_install_authorisation.php`, `test_email_no_sudan.php`,
+  `test_job_notifications_day.php`, `test_notify_staff_side.php`.
+- **The version alone (6):** `manifest.json` (5.18.94) and the pins in the five `tests/test_distributor_*.php`.
+- **23 files changed, 470 insertions(+), 102 deletions(-).** No migration; nothing outside the plugin.
+- sha256: `profiles/uganda.json` `1b582649c460c0c0…` (5.18.93's: `fe083287453d5648…`); `lib/LegalContent.php`
+  `011fd3eb2318b89b…`; `lib/InstallationTerms.php` `eed0550c0cf73381…`; `tests/test_legal_overrides.php`
+  `f80148fa9ef9b8b1…`; `tabs/engage/wa_ai_setup.php` `70a9d3f873070e8d…`; `manifest.json` `0b421e856df2defc…`.
+
+### Ancestry
+
+`f4b4c96` (5.18.94, release) ← `69c87a6` (5.18.93, live) ← `247a480` (5.18.92).
+- **The development commits are `9f113568`** (the change) **and `85143cbf`** (the review's fixes). The release's seventeen
+  files of the change are `85143cbf`'s byte for byte (the rehearsal's §0 control).
+- `f4b4c96` amends `ade2969`, the first cut of the release, with the same parent. `ade2969` was never pushed. The
+  amendment changed three files: `profiles/uganda.json`, `tests/test_legal_overrides.php` and
+  `tests/test_portal_tenant.php`.
+- The script and the rehearsal: `ee7540fc` (pinned to `f4b4c96`, the review's fixes), `e5648d5b` (rehearsal trial 1:
+  a rollback runs RB, not R19) and `fa9ed3fd` (the verification's fixes).
+- The development branch's version pins also cover tests the release does not carry, and its `cron/master.php` still
+  carries the undeployed media job; the release's is 5.18.92's.
+
+### Tests
+
+- **The development branch, the full suite twice, after the review's fixes:** 291 files, **14,482 passed, 0 failed**,
+  in each of two runs (13 Oct). Before the review's fixes it was 14,476, twice; the six new assertions are the review's
+  pins.
+- **The release, the full suite twice:** 279 files, **13,560 passed, 0 failed**, in each of two runs (13 Oct): the first cut's (`ade2969`) 13,554, twice, plus the six new pins.
+- **`tests/test_legal_overrides.php`, new: 80 passed, 0 failed.** It pins:
+  - the section keys against the documents;
+  - Uganda's overrides, exactly the set, in order, each non-empty and rendered exactly (ten Terms, six Privacy);
+  - South Sudan's golden sha256;
+  - the withdrawn statements, which must not appear: "UCC-authorised", "best-effort", "at our discretion", "without
+    further notice", the late-payment fee, *"within a few business days"*, *"returned within 14 days"* and seven more;
+  - version 1.2.
+
+  Its control removes one override in a copy of the profile and sees the old sentence come back.
+- **The tests the change touches:** `test_portal_tenant` 121, `test_consent_identity` 34,
+  `test_install_authorisation` 381, `test_email_no_sudan` 62, `test_job_notifications_day` 52,
+  `test_notify_staff_side` 56 — all 0 failed.
+- **Weakened copies:** twenty copies of the change, each weakened in one place, are each caught by the test that
+  guards it, and the unchanged copy passes every test (run again on `85143cbf`, 13 Oct). Among them: the South Sudan
+  tenant check removed, v1.1 reverted to v1.0, and the review's two — the 14-day return put back, and the contact
+  override deleted, which brings back *"within a few business days"*.
+
+### South Sudan and Domain B
+
+- South Sudan's Terms and Privacy are byte for byte as before: the golden sha256 in `test_portal_tenant` and
+  `test_legal_overrides`, and A17 and R22 on the server, under its own PHP.
+- The WhatsApp AI setup screen's examples change on Uganda only, behind `NotifyGate::uganda()`. South Sudan's page is
+  asserted byte for byte (`test_notify_staff_side`).
+- Domain B is untouched: nothing under `dishnet-hybrid-sudan/` that Domain B reads changes. A7 and R14 check it on the
+  server.
+
+### `scripts/deploy-5.18.94.sh` — 3552 lines, sha256 `c4a10b6896e4b15e…`
+
+5.18.93's script, rebuilt by a builder whose every edit asserts its anchor and its result. It keeps 5.18.93's checks
+and adds:
+
+- **A0's short-form guard.** `deploy-hybrid.sh` records the copied commit in Git's short form (`%h`), and Git lengthens
+  that form as a checkout's object count grows (8 characters from about 16,000 objects). The rehearsal's first clone
+  wrote `69c87a6f`. Before anything changes, the short forms the server's checkout would write for the pin and for
+  5.18.93 must be the 7-character ones this script names. Otherwise it stops, and names the remedy:
+  `git -C /opt/dishnet config core.abbrev 7`.
+- **A14, the quarantine.** It reads `quarantine.env` and the files, read only, as the quarantine's own `--check`
+  judges them. The move must be done, with no failure and no put-back. Nothing may be at the old name. The kept file
+  must be unchanged. A `--check` that began at least 20 minutes after the move must have PASSED. No run of the
+  quarantine script may hold its lock.
+  - **Since the review:** a failure this script recorded (`STRAY_Q_FAILED`, R19's or RB's, in its state file or in one
+    kept beside it) stops a later deploy. The deploy goes on only once a `--check` of the quarantine that began after
+    the latest such failure has PASSED, and it then says so in a note.
+  - **Since the verification:** every run that finds the quarantine broken records its own time, R19 in a deploy or an
+    `--after-only`, RB after a rollback. So a second failure after a passing `--check` is never lost. A14's lines name
+    the one check that runs after this run: R19, or RB after a rollback.
+- **A17, the pin's documents** under the server's own PHP:
+  - South Sudan byte for byte, both the golden and the live code's;
+  - Uganda 1.2 with its date, every override in place (10/6), and no "UCC";
+  - v1.1 the reviewed text, v1.0 kept and hashing as its records say;
+  - every authorisation record still matching its terms through the pin's code;
+  - the pin's test of the overrides passing (80/0).
+- **A18, the three settings.** `ai_identity_line`, `wa_flyer_caption` and `email_badge_line` must not say UCC, in
+  either copy, and neither may the badge the pin would show. The log prints set or not set and UCC or ok — never a
+  value.
+- **A19, the website.** The policies hub must link the Terms and the Privacy Policy. `terms.html` must carry the
+  identity sentence and no UCC authorisation claim. If the server cannot reach the website (curl 000), A19 says so and
+  neither passes nor refuses. If the Privacy and Installation pages lack the 12 Oct evening changes, A19 says that too.
+- **A20, the date.** The documents' date is never before today in Kampala. On the day it is ok; before it, a note.
+- **A21, the retention.** `recording_retention_days` in the store row the maintenance job reads must be a whole number
+  from 1 to 365. **Since the review,** a blank refuses as well: the job reads a blank as 0, which keeps recordings for
+  ever.
+- **V13** reads the public Terms, Privacy and `app_legal_version` after the copy.
+- **R19, the quarantine after the copy.** It is conclusive once master has run the retry job after the copy. Each
+  failure it sees is recorded with its own time (`STRAY_Q_FAILED`) and fails every later `--after-only`. A `--rollback`
+  runs RB instead of R1–R22, and RB fails on it too.
+- **R22, the installed documents.** The same checks as A17, through the installed code.
+- **RB, after a rollback.** The documents must be 5.18.93's again. Records made under v1.1, which 5.18.93 cannot show,
+  are counted and named. **Since the review,** RB fails on a recorded quarantine failure, and records its own, each
+  time it sees the quarantine broken, as R19 does.
+- **The end of the log** says what a rollback does to consent, as the review corrected it: a customer who accepted 1.1
+  before is not asked again and sees 1.1, with the UCC claim, with no prompt. One who accepted only 1.2 is asked for
+  1.1.
+
+### The rehearsal — `scripts/harness/deploy-5.18.94/rehearse.sh` (677 lines, sha256 `f67fa5d486f498a0…`)
+
+It builds the quarantine's own sandbox: the real 5.18.93 deploy, the stray store, the quarantine moved and checked.
+Then it runs 5.18.94's script against it:
+
+- **94-0:** what is rehearsed, and the controls:
+  - the release delta;
+  - the seventeen files the development branch's;
+  - the fake docker's umask;
+  - the stand-in website and date.
+- **94-1:** A0's short-form guard, and A14 before and after the quarantine.
+- **94-2:** A17–A21, each refused on its own planted fault, each with a weakened copy. **Since the review:**
+  - every run's today in Kampala is the day before the documents' date, so the rehearsal no longer depends on the real
+    date;
+  - the website keeps the identity sentence but adds a UCC claim, with a copy that drops only that clause;
+  - a blank retention, with a copy that reads it as the default.
+- **94-3:** the deploy, as the operator runs it.
+- **94-4:** `--after-only`. R19 is not yet conclusive, then conclusive. V4 catches a planted fatal. The quarantine's own
+  `--check` runs. R19 fails on a database at the old name and stays failed.
+- **94-5:** the rollback, with a v1.1 request pending; a deploy again over it; and a copy that refused that redeploy.
+- **94-5b (since the review):** a recorded failure is not forgotten.
+  - It carries into a rollback, where RB fails; a rollback runs no R19.
+  - A deploy refuses until a `--check` of the quarantine that began after the failure has PASSED, then goes on with a
+    note. A copy that forgets the failure is caught.
+  - RB records its own failure, and a deploy then waits for a passing `--check` after it.
+  - **Since the verification (5b-j to 5b-t):** a second failure after a passing `--check`, through an `--after-only`
+    and through a rollback. R19 and RB each add their own line, and a deploy refuses until a `--check` after the
+    latest. A copy whose R19 records only the first failure is caught, and so is a copy whose RB does. A14 names R19
+    in an `--after-only`, RB in a rollback, never the other.
+- **94-6:** what the rehearsal left behind:
+  - every weakened copy found its anchor;
+  - Evolution was never called;
+  - no copy of the code was left;
+  - the checkout is unchanged.
+
+**Trial 1 (13 Oct): 242 passed, 1 failed.** 5b-b expected R19 to fail in a `--rollback` on the recorded failure. A
+rollback runs RB instead of R1–R22 (`deploy-5.18.94.sh:3262` today), and RB did fail on it, as it must. So the script was
+right and its words were wrong: the header, R19's comment and its record line, and RB's comment said R19 runs after a
+rollback. They are corrected (`e5648d5b`), and 5b-b now expects RB's FAIL and no R19 line.
+
+**Trials 2 and 3 (on `e5648d5b`): 243 passed, 0 failed, twice.** Then the verification's fixes (`fa9ed3fd`) added 5b-j to
+5b-t.
+
+**Result, twice in a row on the committed script (`fa9ed3fd`):** **256 passed, 0 failed**, trials 4 and 5, each with 91 runs of the deploy scripts and 12 of the quarantine.
+
+### Reviews
+
+An independent review of the whole release ran on 12–13 Oct, at `ade2969`. Agents read it from five sides: the legal
+texts, the plugin code, the release's integrity, the deploy script, and the rehearsal's coverage. Each finding was then
+checked by another agent that tried to refute it. **Of 32 findings, 10 were confirmed: seven distinct defects, three of
+them found twice. An eleventh, a gap in the rehearsal's coverage, had no verdict and was fixed anyway.** All of them
+are fixed: the texts in `f4b4c96` (from `85143cbf`), the script and the rehearsal in `ee7540fc`:
+
+1. **Three return deadlines for DishNet's equipment** (found twice): the portal said 14 days, the quotation's clause 12
+   says 7, and the website gives none.
+   - Fix: the portal now gives none, as the website does.
+   - The quotation is the operator's template in uCRM, so this release does not change it (Known limits 3).
+   - Its clause 1 already makes the website prevail where the quotation is less favourable.
+2. **Two reply times in one Privacy Policy:** the rights section said 14 days, the shared contact section *"within a
+   few business days"*. Fix: a Uganda contact override, worded as the website's section 1.
+3. **"Redeploy the website from main" would not bring the 12 Oct evening changes,** because main does not have them.
+   Fixed in A19's note, the header and root docs/67 §K: merge them to main first.
+4. **The rollback paragraph said every Uganda customer is asked again.** Most are not: anyone who accepted 1.1 before
+   sees it again, with the UCC claim, without a prompt. Reworded.
+5. **A21 counted a blank retention as 365** (found twice), but the maintenance job reads a blank as 0, which keeps
+   recordings for ever. A blank now refuses.
+6. **`STRAY_Q_FAILED` was not sticky** (found twice): a rollback never read it, and a redeploy reduced it to a note.
+   Fixed by the A14 and RB changes above.
+7. **The rehearsal depended on the real date:** from 16 Oct in Kampala every run would have stopped at A20. It now
+   fixes the date.
+8. **The coverage gap:** A19's UCC-claim clause was never tested alone, because the old-website variant also removed
+   the identity sentence. Now tested alone, with its weakened copy.
+
+**The verification of the fixes (13 Oct).** A second workflow read the fixes from four sides: the texts, the
+recorded failure, A21/A19 and the rollback paragraph, and the rehearsal. Each finding was checked by an agent that
+tried to refute it. **Of 16 findings, 5 were confirmed, four distinct, all fixed in `fa9ed3fd`:**
+
+1. **Only the first failure in a state file was recorded.** A second failure after a passing `--check` was lost, and a
+   deploy went on with no `--check` after it. R19 and RB now append their own time each time (medium).
+2. **A14 said "R19 and RB judge it"**, though only one of them runs. It now names the one that does (low, found twice).
+3. **The header's list of writes** did not say that RB adds a line to the deploy's state file (low).
+4. **A19's note** stated a fact about main as of writing as if it were the server's state. It now says so (low).
+
+Refuted, and fixed anyway where it cost nothing:
+- the stale `UG_OVERRIDES` constant (now privacy=6);
+- a last record line with no newline (A14 now reads it);
+- 5b-b's regex for an `ok` line.
+
+Also refuted:
+- the portal's privacy contact names the profile's own address where the website names `info@dishnetafrica.com`
+  (Known limits 9);
+- the tests' pins are exact phrases, not patterns;
+- a retention stored as a JSON float or `true` is refused, though the maintenance job would read it — a safe
+  refusal of a value no tool writes.
+
+**The 21 findings of the first review refuted, in short:**
+- the portal's breach notice is stricter than the website's, so it binds DishNet and harms no one;
+- the retention text is the website's, and its operator duty is recorded (root docs/67 §F);
+- `accounts@dishnetuganda.com` is the profile's own address, as before;
+- A20 before the day is a deliberate note;
+- several coverage points are covered elsewhere or are not defects.
+
+### Deployment runbook — each step is the operator's, and in this order
+
+1. **The quarantine first.** Its command was handed over on 12 Oct, and **run on 13 Oct: PASSED, the stray store moved at
+   10:34:04 UTC** (the quarantine's RESULT above); its `--check` is due at or after 10:54:04 UTC. Its `--check`, at least 20 minutes after the move,
+   must have PASSED, and its logs must have been read. Until then, deploy or roll back nothing, save no plugin setting
+   in uCRM, and run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
+2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) are on `claude/study-this-jhe2eg`,
+   not on main. Merge them to main, through a pull request at the operator's word, then redeploy the website.
+3. **The go-live day.** The documents are dated **16 October 2026**. A20 refuses after that day in Kampala; before it,
+   it notes that customers accept documents dated in the future. **For another day, the release is cut again with that
+   date, and re-pinned and rehearsed.**
+4. **Both branches must be on GitHub.** `claude/study-this-jhe2eg` is pushed with this entry. **`release/5.18.94`
+   (`f4b4c96`) is pushed only at the operator's word.**
+5. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.94 && mkdir -p /root/dnb-5.18.94 && bash scripts/deploy-5.18.94.sh 2>&1 | tee /root/dnb-5.18.94/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, with these notes:
+   - R3's, as on every deploy since 5.18.89;
+   - A17's, if a v1.0 request is still pending;
+   - A20's, if run before the day;
+   - R19's, not yet conclusive.
+
+   Press nothing on the Salesperson numbers card and run no `tools/set_config.php` while it runs.
+6. **At least 20 minutes after the copy**, read-only:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, R19 conclusive.
+7. **Then the quarantine's own `--check`**, as its runbook says. Sign in to the portal once as a Uganda customer: the
+   consent step shows version 1.2, dated 16 October 2026.
+
+### Known limits and open risks
+
+1. **A rollback brings the UCC claim back for most customers without a prompt.** The documents become 5.18.93's
+   (1.1). A customer who accepted 1.1 before is not asked again; only one who accepted only 1.2 is asked.
+2. **Deploying before the documents' date** means a customer signing in before then accepts documents shown as
+   *"Effective 16 October 2026"*. A20 says so; it is the operator's choice.
+3. **Follow-up for the operator: quotation clause 12** still says loaned equipment is returnable *"within 7 days of
+   termination"*. The website and the portal now set no fixed number of days, and clause 1 makes the website prevail.
+   Drop the seven days at the next reload of the Uganda quotation template in uCRM. The repository's copy is kept as
+   the operator loaded it on 12 Oct.
+4. **The website's 12 Oct evening changes are not on main.** Until they are merged and deployed, A19 notes that the
+   portal's Privacy Policy says a little more than the website's: call recordings, and "normally" photographs.
+5. **The short form Git writes.** If the server's checkout writes 8-character commits, A0 stops before anything changes
+   and names the remedy: `git -C /opt/dishnet config core.abbrev 7`. The real repository has about 13,000 objects
+   (measured here once repacked), so 7 characters are expected.
+6. **`tests/test_customer_pwa.php` leaves `php -S … /tmp/dn_pwa_*` servers running** after a suite run. Found on 12
+   Oct and stopped by hand. Any harness that binds a port should check for them first. Not changed here.
+7. **One focused run of `tests/test_install_authorisation.php` on 13 Oct failed one assertion:** *"the technician is
+   told by the e-mail copy alone"*, 380 passed, 1 failed. Run again on its own at once, it passed 381/0, and it passed
+   in every suite run since (two development runs, two release runs, and the weakened-copy control run). Its output was not kept, so the cause is unknown. The assertion reads the
+   events a request writes after an acceptance. Not changed here.
+8. **After a recorded quarantine failure,** a deploy waits for a `--check` that began after the latest one (A14).
+   That is deliberate. What the failure showed may be gone by then, so send every log file first.
+9. **Two addresses for privacy requests.** The portal's Privacy Policy names the Uganda profile's e-mail address
+   (`email` in `profiles/uganda.json`, as every portal page does), and the website names `info@dishnetafrica.com`. Both
+   are DishNet's. Making them one is the operator's choice, and a later change: the profile's address appears on every
+   portal page.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.94.sh --rollback` asks for `ROLLBACK`, puts 5.18.93 (`69c87a6`) back through `deploy-hybrid.sh`,
+and checks it (RB). After it:
+- the portal's documents are 1.1 again, with the UCC claim (Known limits 1);
+- new installation requests take v1.0, and a pending v1.1 request must be withdrawn and requested again (RB counts
+  them);
+- master keeps 5.18.92's lock, `main.php` keeps 5.18.93's change, and the retry job keeps 5.18.91's gate;
+- `tests/test_legal_overrides.php`, the file 5.18.94 added, stays on disk, reached by nothing.
+
+Then run the quarantine's own `--check`.
+
+The command, as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --rollback
+
+By hand, only if the script cannot run:
+`cd /opt/dishnet && git checkout 69c87a6 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
