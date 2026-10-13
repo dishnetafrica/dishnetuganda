@@ -128,8 +128,9 @@
 #                        rollback that is declined or stops leaves the deploy's state file as the deploy wrote it. It
 #                        rolls back only a deploy the container's record shows: after a copy that stopped part-way (the
 #                        record still 5.18.93's, a file this release changes no longer 5.18.93's) it refuses, and prints
-#                        the by-hand put-back. It needs no quarantine check before it; after it R19 and RB say whether
-#                        the quarantine still holds, and a failure is recorded in the deploy's state file as R19's is
+#                        the by-hand put-back. It needs no quarantine check before it; after it RB says whether the
+#                        quarantine still holds (R19 is the deploy's and --after-only's), fails on a failure recorded
+#                        before, and records its own in the deploy's state file as R19 does
 #   --plugin-base <url>  the public URL of public.php, if the derived one is wrong
 #
 # What it never does: open, move, rename, copy, delete or write the kept file or anything at the stray store's old name,
@@ -3190,8 +3191,9 @@ else bad "R18 the installed retry job does not act as $EXPECTED_VERSION's must: 
 # the copy — master's record read first, then the files, so a run that starts in between cannot pass for one that is
 # over — and a note before then: run --after-only again. Whether a process holds the kept file is the quarantine's own
 # --check's to measure (its K10); the runbook runs it after this. A failure is recorded in the state file
-# (STRAY_Q_FAILED) and fails every later --after-only and --rollback of this deploy, and a later deploy refuses until a
-# --check of the quarantine that began after it has PASSED (A14): what showed it may be gone by then.
+# (STRAY_Q_FAILED) and fails every later --after-only of this deploy (RB fails a --rollback on it; R19 does not run in a
+# rollback), and a later deploy refuses until a --check of the quarantine that began after it has PASSED (A14): what
+# showed it may be gone by then.
 SLR_RUN_RAW="$(slr_last_run)"; SLR_RUN_T="${SLR_RUN_RAW#running:}"
 if [ "$MODE" = "deploy" ]; then R19_COPY_T="${COPY_AT:-}"; else R19_COPY_T="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"; fi
 case "$R19_COPY_T" in ''|*[!0-9]*|0) R19_COPY_T="" ;; esac
@@ -3213,7 +3215,7 @@ if [ "$FAIL" != "$R19_FC0" ]; then
   R19_SUM="R19 FAILED — the quarantine does not hold"
   if [ -z "$R19_FAILED_LINE" ]; then
     if [ -n "$STATE" ] && [ -f "$STATE" ] && printf 'STRAY_Q_FAILED=%s\n' "$(date -u +%s)" >> "$STATE" 2>/dev/null; then
-      echo "  quarantine      R19 FAILED — recorded in $STATE (STRAY_Q_FAILED): every later --after-only and --rollback fails R19 too, and a deploy waits for a --check of the quarantine that passes after it (A14)"
+      echo "  quarantine      R19 FAILED — recorded in $STATE (STRAY_Q_FAILED): every later --after-only fails R19 on it and a --rollback fails RB, and a deploy waits for a --check of the quarantine that passes after it (A14)"
     else note "R19 FAILED, and the failure could NOT be recorded in the state file ($STATE): a later run will not know of it — keep this log file with the others"; fi
   fi
 elif [ "$NOTE" != "$R19_NC0" ]; then R19_SUM="it holds; not yet conclusive (R19's note)"
@@ -3410,8 +3412,9 @@ case "$IA_RB" in
 esac
 # The quarantine, after the rollback: 5.18.93's retry job keeps the same gate (RB above), so the quarantine must still
 # hold exactly as A14 read it; this run never touched it. The quarantine's own --check is the authority — run it next.
-# A failure recorded in the deploy's state file (STRAY_Q_FAILED, R19's — of this run or an earlier one) fails RB too, and
-# RB's own failure is recorded there as R19's is, so a later deploy waits for a passing --check after it (A14).
+# A failure recorded in the deploy's state file (STRAY_Q_FAILED — an earlier run's R19 or RB; R19 does not run in a
+# rollback) fails RB too, and RB's own failure is recorded there as R19's is, so a later deploy waits for a passing
+# --check after it (A14).
 q_judge
 RB_QF="$(grep -m1 '^STRAY_Q_FAILED=' "$STATE" 2>/dev/null)"
 if [ "$Q_HOLDS" = "yes" ] && [ -z "$RB_QF" ]; then ok "RB the quarantine still holds, as its record says: nothing at the stray store's old name, the kept file unchanged — this run never touched either ($Q_SAYS)"
