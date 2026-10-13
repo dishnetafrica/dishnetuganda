@@ -10553,7 +10553,7 @@ The command, as root on the server, on its own:
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; NOT RUN. It may run only after 5.18.93's day-later `--after-only` (at or after 13:06:21 UTC on 12 Oct) has PASSED and its log has been read, and only on the operator's word
+## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, due at or after 10:54:04 UTC, PENDING
 
 The operator's order (the 5.18.91 entry): fix the wrong-database access first; once that is deployed and verified,
 quarantine the old database as its own step. 5.18.91 stopped the retry job from opening it, and 5.18.92 and 5.18.93
@@ -11053,6 +11053,9 @@ What it proves, section by section:
 
    Expected: GO, then after `QUARANTINE`, stage C PASSED. If the terminal is lost, reconnect, wait two minutes and
    run the same command again: it finishes its own checks, or names the one command to run.
+   **Run 13 Oct, begun 10:23:31 UTC (`20261013T102331Z`): GO, `QUARANTINE` typed, the stray store moved at 10:34:04
+   UTC; PASSED, 16 ok, 0 failed, 0 notes** — read from the pasted terminal. Its log files and `quarantine.env` stay
+   on the server, where the next `--check` and 5.18.94's A14 read them (the RESULT below).
 3. **At least 20 minutes after the move** (the log's hand-over line prints the time); it changes nothing but its own log
    and, on a failure, one line of the record:
 
@@ -11093,6 +11096,41 @@ What it proves, section by section:
 13. **A kill in the few milliseconds between a FAIL's line and its record line** — while `fail_record` reads the
     record (`sed`), the time (`date`) and the record's size (`stat`), then appends — loses it; from the record line on,
     nothing does.
+
+### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` PENDING
+
+Read from the terminal the operator pasted; the log file (`quarantine-20261013T102331Z.log`), its own log
+(`quarantine-20261013T102331Z.own.log`) and `quarantine.env` stay on the server, in `/root/dnb-stray-quarantine`.
+
+- **The pull before it** moved the server's checkout of `claude/study-this-jhe2eg` from `4c5b77c` to `4a7c4e8`. That
+  brings the quarantine script (unchanged since `7408a70`, the reviewed one), `deploy-5.18.94.sh`, the website's
+  sources and the records. It installs nothing: the container still served 5.18.93 (`69c87a6`), A0.
+- **Stage A, 8 ok:**
+  - A0: the container serves `69c87a6` (5.18.93); the retry job and the four files its gate reads are that
+    release's.
+  - A1: the live database and the stray store are two files (keys `64769:2646215` and `64769:2912241`).
+  - A2: 5.18.93's record matches (the copy at 11 Oct 13:06:21 UTC, its A14 "seen"); no R19 failure in any of the
+    three deploy records from 5.18.91 on.
+  - A3: the day-later check, `after-20261012T133555Z.log`, PASSED with R19 conclusive.
+  - A4: the stray store exactly as every deploy since 5.18.91 recorded it (sha256 `dc85ae6ddafaae19…`, 2,379,776
+    bytes), one name, no side file; its folder unchanged since 10 Oct 02:45:47 UTC.
+  - A5: no process held it, beside the controls.
+  - A6: the installed retry job's gate stops it on this server's configuration (`skip=yes`, Uganda by the store and
+    by the files and vault).
+  - A7: the quarantine folder is root's, mode 700, on the same filesystem, out of sight of all 28 containers.
+  - A second copy of the same bytes is in 5.18.93's backup (`stray-data.tar.gz`).
+- **The move:** `QUARANTINE` typed; the kept name linked (the same key, two names), then the old name removed at
+  10:34:04 UTC.
+- **Stage C, 8 ok:**
+  - C1, C4: the kept file is the stray store itself — the same key, one name, the same sha256, size, time, owner,
+    mode and birth.
+  - C2, C3: the old name is gone with no side file, and the folder's entries are as before, less that one.
+  - C5, C6: no side file beside the kept file, and no process holds it.
+  - C7: the live commit, the live database and the retry job's files are as before.
+  - C8: the installed gate still stops the retry job.
+  - The container is as before (started 1 Oct 06:30:41 UTC, 0 restarts).
+- **Next:** its `--check` at or after 10:54:04 UTC. It is conclusive once master has run the retry job after the move;
+  master last ran it at 10:15:06 UTC, before the move.
 
 ### The put-back — its own command, never pasted with the quarantine
 
@@ -11364,7 +11402,8 @@ Also refuted:
 
 ### Deployment runbook — each step is the operator's, and in this order
 
-1. **The quarantine first.** Its command was handed over on 12 Oct. Its `--check`, at least 20 minutes after the move,
+1. **The quarantine first.** Its command was handed over on 12 Oct, and **run on 13 Oct: PASSED, the stray store moved at
+   10:34:04 UTC** (the quarantine's RESULT above); its `--check` is due at or after 10:54:04 UTC. Its `--check`, at least 20 minutes after the move,
    must have PASSED, and its logs must have been read. Until then, deploy or roll back nothing, save no plugin setting
    in uCRM, and run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
 2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) are on `claude/study-this-jhe2eg`,
