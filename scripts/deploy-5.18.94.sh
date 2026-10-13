@@ -30,8 +30,9 @@
 #            its folder's lock. Nothing here opens, moves, copies or writes the kept file or anything at the old name: both
 #            are read as files. After the copy R19 says whether the quarantine still holds — no database and no side file
 #            at the old name, nothing new in <plugin>/data, the kept file unchanged — and is conclusive once master has
-#            run the retry job after the copy. A failure is recorded in this script's own state file (STRAY_Q_FAILED) and
-#            fails every later run; the quarantine's own --check is the authority, and the runbook runs it after this.
+#            run the retry job after the copy. A failure is recorded in this script's own state file (STRAY_Q_FAILED):
+#            every later --after-only and --rollback fails on it, and a later deploy refuses (A14) until a --check of the
+#            quarantine that began after it has PASSED; that --check is the authority, and the runbook runs it after this.
 #
 #   THE OPERATOR'S uCRM EDITS FIRST. The assistant's identity line (ai_identity_line), the flyer caption (wa_flyer_caption)
 #            and the e-mail badge (email_badge_line) are settings, not code: stage A refuses while any of them says "UCC" in
@@ -101,7 +102,8 @@
 # 5.18.93 must be the live plugin (it is, since 11 Oct 13:06 UTC): this script refuses any other live commit or version.
 #
 # Run as root on the server, then send back THE LOG FILE (never a copy of the terminal) — only after the quarantine's
-# --check has PASSED, and after the website shows the 12 Oct policies:
+# --check has PASSED, and after the website shows the 12 Oct policies (its 12 Oct evening changes merged to main and the
+# website redeployed):
 #
 #   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.94 \
 #     && mkdir -p /root/dnb-5.18.94 \
@@ -126,7 +128,8 @@
 #                        rollback that is declined or stops leaves the deploy's state file as the deploy wrote it. It
 #                        rolls back only a deploy the container's record shows: after a copy that stopped part-way (the
 #                        record still 5.18.93's, a file this release changes no longer 5.18.93's) it refuses, and prints
-#                        the by-hand put-back. It needs no quarantine check before it, and runs the same R19 after it
+#                        the by-hand put-back. It needs no quarantine check before it; after it R19 and RB say whether
+#                        the quarantine still holds, and a failure is recorded in the deploy's state file as R19's is
 #   --plugin-base <url>  the public URL of public.php, if the derived one is wrong
 #
 # What it never does: open, move, rename, copy, delete or write the kept file or anything at the stray store's old name,
@@ -188,7 +191,7 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="ade2969"   # 5.18.94 (release) — the portal's documents without the UCC claim, Installation Terms v1.1; cut on 5.18.93; branch release/5.18.94
+EXPECTED_PLUGIN_COMMIT="f4b4c96"   # 5.18.94 (release) — the portal's documents without the UCC claim, Installation Terms v1.1; cut on 5.18.93; branch release/5.18.94
 EXPECTED_VERSION="5.18.94"
 BASELINE_COMMIT="69c87a6"          # 5.18.93 (release) — what the server runs first, and the rollback
 BASELINE_VERSION="5.18.93"
@@ -305,7 +308,7 @@ SS_LEGAL_SHA256="b2f4ff3b34bb1fcabc11bc87beb9f66cbafee22605c3a9e69d42ebcb1ead463
 UG_LEGAL_VERSION="1.2"; UG_LEGAL_DATED="16 October 2026"; UG_LEGAL_BASE_VERSION="1.1"; UG_LEGAL_BASE_DATED="26 September 2026"
 UG_OVERRIDES="terms=10 privacy=5"                  # the sections profiles/uganda.json replaces (tests/test_legal_overrides.php pins the keys)
 LEGAL_TEST="tests/test_legal_overrides.php"
-LEGAL_TEST_SIGNATURE="75 passed, 0 failed rc=0"
+LEGAL_TEST_SIGNATURE="80 passed, 0 failed rc=0"
 UCC_KEYS="ai_identity_line wa_flyer_caption email_badge_line"   # the operator's uCRM edits (A18): never printed, only whether they say UCC
 RETENTION_KEY="recording_retention_days"           # cron_maintenance.php's; absent is 365 — the Privacy Policy says "up to 12 months" (A21)
 WEBSITE="${DNB_WEBSITE:-https://dishnetuganda.com}"   # the policies the portal's Terms point to (A19)
@@ -1158,7 +1161,8 @@ ia_state() { [ -n "$DB_OWNER" ] || { echo "?noowner"; return; }; docker exec -u 
 # neighbours): each key in the configuration files as the installed plugin reads them (the vault filling only what is
 # missing) and in the store row — set or not set, and UCC or ok, never the value; the badge a code root would SHOW over
 # each copy (EmailTemplate::brand(): the configured value, else the profile's); the retention in days (absent: 365, the
-# maintenance job's default — it reads the store row). One line:
+# maintenance job's default — it reads the store row; blank, or anything but a whole number: ?, which A21 refuses — the
+# job reads a blank or false as 0, which keeps every recording for ever). One line:
 #   <key>=<set|unset>:<UCC|ok>/<…> … badge-shown=<UCC|ok>/<UCC|ok> retention=<files>/<store>   or ?
 UCC_PHP="$(cat <<'PHP'
 [$code, $inst, $pdd, $keys, $rk] = array_slice($argv, 1, 5);
@@ -1176,7 +1180,7 @@ try {
     $out = [];
     foreach (explode(" ", $keys) as $k) $out[] = $k . "=" . $one($f, $k) . "/" . $one($s, $k);
     $out[] = "badge-shown=" . $u(EmailTemplate::brand($f)["badge_line"] ?? "") . "/" . $u(EmailTemplate::brand($s)["badge_line"] ?? "");
-    $r = function (array $c) use ($rk) { $v = $c[$rk] ?? null; if ($v === null || $v === "") return "365"; return preg_match('/^\s*-?\d+\s*$/', (string)$v) ? (string)(int)$v : "?"; };
+    $r = function (array $c) use ($rk) { $v = $c[$rk] ?? null; if ($v === null) return "365"; return (is_int($v) || (is_string($v) && preg_match('/^\s*-?\d+\s*$/', $v))) ? (string)(int)$v : "?"; };
     $out[] = "retention=" . $r($f) . "/" . $r($s);
     echo implode(" ", $out);
 } catch (Throwable $e) { echo "?", get_class($e); }
@@ -1920,11 +1924,28 @@ fi
 # from a run the quarantine's runbook forbids after the move — that script's R19 fails for good once the file is gone. It
 # is not evidence of an opener (the quarantine's K12); said, never a reason to stop.
 Q_K12=""; for f in "${DNB_RECORDS:-/root}"/dnb-5.18.9[123]/state-5.18.9[123].env; do [ -f "$f" ] && grep -q '^STRAY_R19_FAILED=' "$f" 2>/dev/null && Q_K12="$Q_K12 ${f#"${DNB_RECORDS:-/root}"/}"; done
+# A failure this script recorded (STRAY_Q_FAILED — R19's or RB's) in its state file, or in one a later deploy kept beside
+# it, is not forgotten by deploying again: what showed it may be gone by now, so a deploy goes on only once a --check of
+# the quarantine that began after the latest such failure has PASSED — the quarantine's own --check is the authority (the
+# review of 13 Oct). A time that cannot be read refuses.
+Q_FAIL_LAST=""; Q_FAIL_IN=""
+for f in "$STATE" "$STATE".prev-*; do
+  [ -f "$f" ] && grep -q '^STRAY_Q_FAILED=' "$f" 2>/dev/null || continue
+  Q_FAIL_IN="$Q_FAIL_IN ${f##*/}"
+  while IFS= read -r v; do
+    case "$v" in ''|*[!0-9]*) Q_FAIL_LAST="?" ;; *) case "$Q_FAIL_LAST" in '?') ;; '') Q_FAIL_LAST="$v" ;; *) [ "$v" -le "$Q_FAIL_LAST" ] || Q_FAIL_LAST="$v" ;; esac ;; esac
+  done < <(sed -n 's/^STRAY_Q_FAILED=//p' "$f" 2>/dev/null)
+done
 if [ "$MODE" = "deploy" ]; then
   [ "$Q_LOCK" = "free" ] || stop "NO-GO (A14): $( [ "$Q_LOCK" = "held" ] && echo "a run of scripts/quarantine-stray-store.sh is going on this server — it holds its folder's lock" || echo "whether a run of scripts/quarantine-stray-store.sh is going cannot be told ($Q_DIR cannot be opened, or this host has no flock)") — wait until it has ended and a --check of it has PASSED, then run this again. Nothing was changed. Send the log file"
   [ "$Q_HOLDS" = "yes" ] || stop "NO-GO (A14): the stray store's quarantine is not done, or does not hold — $Q_WHY. $EXPECTED_VERSION is deployed only after it: a new live commit before the move voids the quarantine script. Nothing was changed. Send the log file, with $Q_RECORD and every *.own.log in $Q_DIR"
   [ "$QCL_R" = "passed" ] || stop "NO-GO (A14): no --check of the quarantine that began at least $((Q_CHECK_GAP / 60)) minutes after the move PASSED with \"the quarantine holds\" ($( case "$QCL_R" in none) echo "there is none";; *) echo "the newest, $(basename "$QCL_F"), is $QCL_R";; esac )) — run it (cd $REPO && bash scripts/quarantine-stray-store.sh --check, as its runbook says), send its log, then run this again. Nothing was changed"
+  if [ -n "$Q_FAIL_IN" ]; then
+    [ "$Q_FAIL_LAST" != "?" ] || stop "NO-GO (A14): a run of this script recorded the quarantine broken (STRAY_Q_FAILED in${Q_FAIL_IN}, in $OUT) at a time that cannot be read, so whether a --check of it has passed since cannot be told. Send every log file, with those state files. Nothing was changed"
+    [ "$QCL_T" -gt "$Q_FAIL_LAST" ] || stop "NO-GO (A14): a run of this script found the quarantine broken at $(utc_of "$Q_FAIL_LAST") (STRAY_Q_FAILED in${Q_FAIL_IN}, in $OUT), and the newest passing --check of the quarantine began before that ($(utc_of "$QCL_T")). What that run saw may be gone by now: send every log file — that run's and this one — then run the quarantine's --check; a deploy goes on only after one that began after the failure has PASSED. Nothing was changed"
+  fi
   ok "A14 the stray store is quarantined and the quarantine holds: its record says done, moved at $(utc_of "$(q_get Q_AT)"), no failure, no put-back; <plugin>/data is the folder of the move, nothing at the old name, nothing a new store makes; the kept file is the same, unchanged, no side file; its --check begun $(utc_of "$QCL_T") PASSED; no run of it is going"
+  [ -z "$Q_FAIL_IN" ] || note "A14 a run of this script found the quarantine broken at $(utc_of "$Q_FAIL_LAST") (STRAY_Q_FAILED in${Q_FAIL_IN}); the quarantine's --check begun $(utc_of "$QCL_T"), after it, PASSED — so this deploy goes on. Send that run's log file with this one"
   [ -z "$Q_K12" ] || note "A14 a state file records an R19 failure after the move (${Q_K12# }): a run of that release's deploy script in a mode the quarantine's runbook forbids after the move (its R19 fails for good once the file is gone) — not evidence of an opener (the quarantine's K12). Say which run it was"
 elif [ "$Q_HOLDS" = "yes" ]; then echo "  quarantine      holds as its record says (R19 and RB judge it after this run's checks)"
 else note "A14 the quarantine does not hold as its record says — $Q_WHY. This run changes nothing of it; R19$( [ "$MODE" = "rollback" ] && echo " and RB") judge it below. Send the log file, with $Q_RECORD"; fi
@@ -2030,7 +2051,7 @@ if [ "$MODE" = "deploy" ]; then
   [ "$(lfield "$LG_PIN" ug)" = "$UG_LEGAL_VERSION/$UG_LEGAL_VERSION" ] || A17_BAD="$A17_BAD pin:uganda-not-$UG_LEGAL_VERSION"
   [ "${LG_PIN##*| dated=}" = "$UG_LEGAL_DATED" ] || A17_BAD="$A17_BAD pin:uganda-dated(${LG_PIN##*| dated=})"
   [ "$(lfield "$LG_PIN" ucc)" = "0" ] || A17_BAD="$A17_BAD pin:uganda-says-UCC"
-  [ "$(lfield "$LG_PIN" over)" = "10/5" ] || A17_BAD="$A17_BAD pin:overrides($(lfield "$LG_PIN" over))"
+  [ "$(lfield "$LG_PIN" over)" = "10/6" ] || A17_BAD="$A17_BAD pin:overrides($(lfield "$LG_PIN" over))"
   [ "$(lfield "$LG_PIN" ss_sha)" = "$SS_LEGAL_SHA256" ] || A17_BAD="$A17_BAD pin:south-sudan-changed"
   [ "$(lfield "$LG_PIN" ss)" = "$(lfield "$LG_BASE" ss)" ] || A17_BAD="$A17_BAD pin:south-sudan-version"
   [ "$(lfield "$LG_BASE" ss_sha)" = "$SS_LEGAL_SHA256" ] || A17_BAD="$A17_BAD live:south-sudan-not-measured"
@@ -2062,7 +2083,7 @@ if [ "$MODE" = "deploy" ]; then
   [ -z "$UCC_HIT" ] || stop "NO-GO (A18): these still say UCC — $UCC_HIT (files/store). Change them first: the identity line and the flyer caption on the WhatsApp AI screen (Save marketing); the e-mail badge with tools/set_email_brand.php --set email_badge_line=\"Starlink Installation\" (never --uganda, which writes the UCC line until $EXPECTED_VERSION is live). Nothing was changed. Send the log file"
   ok "A18 none of ai_identity_line, wa_flyer_caption or email_badge_line says UCC, in either copy, and the badge the pin would show does not ($(printf '%s' "$UCC_A" | sed -E 's/ retention=[^ ]*//'))"
   RET="${UCC_A##*retention=}"; RET_F="${RET%%/*}"; RET_S="${RET#*/}"
-  case "$RET_S" in ''|*[!0-9]*) stop "NO-GO (A21): $RETENTION_KEY in the store row is not a number ($RET_S) — the maintenance job would read it as 0, keep every recording for ever, and the Privacy Policy would be untrue. Set it to 365 or less. Nothing was changed" ;; esac
+  case "$RET_S" in ''|*[!0-9]*) stop "NO-GO (A21): $RETENTION_KEY in the store row is blank or not a whole number ($RET_S) — the maintenance job may read it as 0 and keep every recording for ever, and the Privacy Policy would be untrue. Set it to a whole number from 1 to 365. Nothing was changed. Send the log file" ;; esac
   { [ "$RET_S" -ge 1 ] && [ "$RET_S" -le 365 ]; } || stop "NO-GO (A21): $RETENTION_KEY is $RET_S in the store row the maintenance job reads — the new Privacy Policy says call recordings are kept up to 12 months: set it to 365 or less (0 keeps them for ever). Nothing was changed. Send the log file"
   ok "A21 call recordings are deleted after $RET_S day(s) (the store row the maintenance job reads; the files say $RET_F) — within the 12 months the Privacy Policy states"
   [ "$RET_F" = "$RET_S" ] || note "A21 the configuration files say $RET_F for $RETENTION_KEY, the store row $RET_S: the maintenance job reads the store row"
@@ -2085,7 +2106,7 @@ if [ "$MODE" = "deploy" ]; then
     { [ "$W_POL" = "200" ] && [ "$W_POL_OK" = "yes" ] && [ "$W_TOS" = "200" ] && [ "$W_TOS_ID" != "0" ] && [ "${W_TOS_UCC:-1}" = "0" ]; } \
       || stop "NO-GO (A19): the website does not show the 12 Oct policies the portal's new Terms point to — policies.html $W_POL (links $W_POL_OK), terms.html $W_TOS (identity ×$W_TOS_ID, a UCC claim ×${W_TOS_UCC:-?}). Deploy the website first. Nothing was changed. Send the log file"
     ok "A19 the website shows the policies hub and the Terms of Service the portal's new Terms point to — the identity sentence, no UCC authorisation claim"
-    { [ "$W_PRV" = "200" ] && [ "$W_PRV_REC" != "0" ] && [ "$W_INS" = "200" ] && [ "$W_INS_PH" != "0" ]; } || note "A19 the website's Privacy Policy or Starlink Installation page is not yet the 12 Oct evening's (recordings ×$W_PRV_REC, \"normally photographs\" ×$W_INS_PH): the portal's Privacy says a little more than the website's until it is deployed — redeploy the website from main"
+    { [ "$W_PRV" = "200" ] && [ "$W_PRV_REC" != "0" ] && [ "$W_INS" = "200" ] && [ "$W_INS_PH" != "0" ]; } || note "A19 the website's Privacy Policy or Starlink Installation page is not yet the 12 Oct evening's (recordings ×$W_PRV_REC, \"normally photographs\" ×$W_INS_PH): the portal's Privacy says a little more than the website's until it is deployed — those changes are on the development branch, not on main yet: merge them to main, then redeploy the website"
   fi
   DATED_YMD="$(date -d "$UG_LEGAL_DATED" +%Y%m%d 2>/dev/null || true)"; TODAY_KLA="$(TZ=Africa/Kampala date +%Y%m%d)"
   case "$DATED_YMD" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) stop "NO-GO (A20): the documents' date, \"$UG_LEGAL_DATED\", cannot be read as a date. Nothing was changed" ;; esac
@@ -3169,7 +3190,8 @@ else bad "R18 the installed retry job does not act as $EXPECTED_VERSION's must: 
 # the copy — master's record read first, then the files, so a run that starts in between cannot pass for one that is
 # over — and a note before then: run --after-only again. Whether a process holds the kept file is the quarantine's own
 # --check's to measure (its K10); the runbook runs it after this. A failure is recorded in the state file
-# (STRAY_Q_FAILED) and fails every later run: what showed it may be gone by then.
+# (STRAY_Q_FAILED) and fails every later --after-only and --rollback of this deploy, and a later deploy refuses until a
+# --check of the quarantine that began after it has PASSED (A14): what showed it may be gone by then.
 SLR_RUN_RAW="$(slr_last_run)"; SLR_RUN_T="${SLR_RUN_RAW#running:}"
 if [ "$MODE" = "deploy" ]; then R19_COPY_T="${COPY_AT:-}"; else R19_COPY_T="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"; fi
 case "$R19_COPY_T" in ''|*[!0-9]*|0) R19_COPY_T="" ;; esac
@@ -3191,7 +3213,7 @@ if [ "$FAIL" != "$R19_FC0" ]; then
   R19_SUM="R19 FAILED — the quarantine does not hold"
   if [ -z "$R19_FAILED_LINE" ]; then
     if [ -n "$STATE" ] && [ -f "$STATE" ] && printf 'STRAY_Q_FAILED=%s\n' "$(date -u +%s)" >> "$STATE" 2>/dev/null; then
-      echo "  quarantine      R19 FAILED — recorded in $STATE (STRAY_Q_FAILED): every later run fails R19 too"
+      echo "  quarantine      R19 FAILED — recorded in $STATE (STRAY_Q_FAILED): every later --after-only and --rollback fails R19 too, and a deploy waits for a --check of the quarantine that passes after it (A14)"
     else note "R19 FAILED, and the failure could NOT be recorded in the state file ($STATE): a later run will not know of it — keep this log file with the others"; fi
   fi
 elif [ "$NOTE" != "$R19_NC0" ]; then R19_SUM="it holds; not yet conclusive (R19's note)"
@@ -3220,7 +3242,7 @@ R22_BAD=""
 [ "$(lfield "$LG_R" terms)" = "$TERMS_V11" ] && [ "$(lfield "$LG_R" versions)" = "$TERMS_V10,$TERMS_V11" ] || R22_BAD="$R22_BAD terms-versions"
 [ "$(lfield "$LG_R" v10)" = "$TERMS_V10_SHA256" ] && [ "$(lfield "$LG_R" v11)" = "$TERMS_V11_SHA256" ] && [ "$(lfield "$LG_R" draft)" = "no" ] || R22_BAD="$R22_BAD terms-text"
 [ "$(lfield "$LG_R" ug)" = "$UG_LEGAL_VERSION/$UG_LEGAL_VERSION" ] && [ "${LG_R##*| dated=}" = "$UG_LEGAL_DATED" ] || R22_BAD="$R22_BAD uganda-version-or-date"
-[ "$(lfield "$LG_R" ucc)" = "0" ] && [ "$(lfield "$LG_R" over)" = "10/5" ] || R22_BAD="$R22_BAD uganda-text(ucc $(lfield "$LG_R" ucc), overrides $(lfield "$LG_R" over))"
+[ "$(lfield "$LG_R" ucc)" = "0" ] && [ "$(lfield "$LG_R" over)" = "10/6" ] || R22_BAD="$R22_BAD uganda-text(ucc $(lfield "$LG_R" ucc), overrides $(lfield "$LG_R" over))"
 [ "$(lfield "$LG_R" ss_sha)" = "$SS_LEGAL_SHA256" ] || R22_BAD="$R22_BAD south-sudan-changed"
 case "$IA_R" in "rows="*" unknown=0 unknown_pending=0 unmatched=0 unmatched_pending=0") ;; *) R22_BAD="$R22_BAD records-unmatched($IA_R)" ;; esac
 if [ "$MODE" = "deploy" ] && [ -n "${IA_PIN:-}" ]; then
@@ -3388,9 +3410,19 @@ case "$IA_RB" in
 esac
 # The quarantine, after the rollback: 5.18.93's retry job keeps the same gate (RB above), so the quarantine must still
 # hold exactly as A14 read it; this run never touched it. The quarantine's own --check is the authority — run it next.
+# A failure recorded in the deploy's state file (STRAY_Q_FAILED, R19's — of this run or an earlier one) fails RB too, and
+# RB's own failure is recorded there as R19's is, so a later deploy waits for a passing --check after it (A14).
 q_judge
-if [ "$Q_HOLDS" = "yes" ]; then ok "RB the quarantine still holds, as its record says: nothing at the stray store's old name, the kept file unchanged — this run never touched either ($Q_SAYS)"
-else bad "RB the quarantine does not hold after the rollback — $Q_WHY. Send this log file with $Q_RECORD"; fi
+RB_QF="$(grep -m1 '^STRAY_Q_FAILED=' "$STATE" 2>/dev/null)"
+if [ "$Q_HOLDS" = "yes" ] && [ -z "$RB_QF" ]; then ok "RB the quarantine still holds, as its record says: nothing at the stray store's old name, the kept file unchanged — this run never touched either ($Q_SAYS)"
+elif [ "$Q_HOLDS" = "yes" ]; then bad "RB the quarantine holds as its record says now, but a run of this script found it broken ($RB_QF, in $STATE) — what it saw may be gone. Send every log file, with $Q_RECORD"
+else
+  bad "RB the quarantine does not hold after the rollback — $Q_WHY. Send this log file with $Q_RECORD"
+  if [ -z "$RB_QF" ]; then
+    if [ -n "$STATE" ] && [ -f "$STATE" ] && printf 'STRAY_Q_FAILED=%s\n' "$(date -u +%s)" >> "$STATE" 2>/dev/null; then echo "  quarantine      RB FAILED — recorded in $STATE (STRAY_Q_FAILED): a later deploy waits for a --check of the quarantine that passes after it (A14)"
+    else note "RB FAILED, and the failure could NOT be recorded in the state file ($STATE): a later run will not know of it — keep this log file with the others"; fi
+  fi
+fi
 note "RB run the quarantine's --check next (cd $REPO && bash scripts/quarantine-stray-store.sh --check, its own command): it is the authority on the kept file, and it measures what this script does not — whether a process holds it"
 check_domainb "$BASELINE_COMMIT" "RB"
 # 5.18.86's Inbox route is live on this server: the rollback must leave it whole.
@@ -3496,8 +3528,9 @@ if [ "$MODE" != "rollback" ]; then
   echo
   echo "  Only if it is ever needed — its own command, never pasted together with the deploy (root docs/44 §16.9) —"
   echo "  the rollback to $BASELINE_VERSION ($BASELINE_COMMIT) asks you to type ROLLBACK before it changes anything. It puts back"
-  echo "  5.18.93: the portal's documents back to version $UG_LEGAL_BASE_VERSION with the UCC claim, so every Uganda customer"
-  echo "  is asked once more; new installation requests take $TERMS_V10, and a pending $TERMS_V11 request must be"
+  echo "  5.18.93: the portal's documents back to version $UG_LEGAL_BASE_VERSION with the UCC claim. A customer who accepted"
+  echo "  $UG_LEGAL_BASE_VERSION before is not asked again and sees it with no prompt; one who accepted only $UG_LEGAL_VERSION is asked"
+  echo "  for $UG_LEGAL_BASE_VERSION. New installation requests take $TERMS_V10, and a pending $TERMS_V11 request must be"
   echo "  withdrawn and requested again; master keeps its lock, the retry job its gate; every switch stays as it is."
   echo "  Then run the quarantine's own --check:"
   echo "      cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --rollback"

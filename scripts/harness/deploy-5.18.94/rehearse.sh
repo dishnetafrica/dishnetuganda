@@ -75,11 +75,11 @@ rm -f "$H94_PREFIX"
 # 5.18.94's own rehearsal, on the sandbox built above: 5.18.93 (69c87a6) live, the stray store still in the plugin folder.
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 B93="$PIN"; F94=scripts/deploy-5.18.94.sh; REL94=release/5.18.94; DEPLOY94="$REPO/$F94"
-FIX94=9f113568                                                      # the change on the development branch (the commit holding it)
+FIX94=85143cbf                                                      # the change on the development branch (the commit holding it)
 TV10=9308072840e784e49a0656987a3edfae33c6f3d081558cbf63625c23b071d2e1  # INSTALLATION-TERMS-v1.0, as every record made under it names it
 TV11=eee8644e8bb7ea509fa1977279f518d9f0f96ec0b5028431160a57fd833b1db0  # INSTALLATION-TERMS-v1.1, the reviewed text
 SS_GOLD=b2f4ff3b34bb1fcabc11bc87beb9f66cbafee22605c3a9e69d42ebcb1ead4637 # South Sudan's Terms and Privacy (test_portal_tenant's golden)
-LEGAL_SIG="75 passed, 0 failed rc=0"
+LEGAL_SIG="80 passed, 0 failed rc=0"
 ADDED94="tests/test_legal_overrides.php"
 TAKEN94="lib/LegalContent.php lib/InstallationTerms.php lib/EmailTemplate.php profiles/uganda.json tabs/customer_app/login_web.php tabs/engage/wa_ai_setup.php tools/set_email_brand.php tools/pdf_template_doctor.php ucrm_pdf_templates/quotation_uganda/template.html.twig ucrm_pdf_templates/invoice_uganda/template.html.twig tests/test_portal_tenant.php tests/test_consent_identity.php tests/test_install_authorisation.php tests/test_email_no_sudan.php tests/test_job_notifications_day.php tests/test_notify_staff_side.php"
 PINS94="tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php"
@@ -191,7 +191,7 @@ check "$(has "$(pubget page=terms)" 'v1.1')$(has "$(pubget page=terms)" 'UCC')$(
 
 # ── The website, as dishnet-web-uganda/site has it at the clone's commit (the 12 Oct pages), and three variants ─────────
 WSRC="$REPO/dishnet-web-uganda/site"; WROOT="$SB/website"; mkdir -p "$WROOT"
-for v in ok old nopriv nopol; do cp -a "$WSRC" "$WROOT/$v"; done
+for v in ok old nopriv nopol ucc; do cp -a "$WSRC" "$WROOT/$v"; done
 python3 - "$WROOT" <<'PY' || echo "website:variants" >> "$SB/anchor-missing"
 import sys, os
 r = sys.argv[1]
@@ -201,12 +201,15 @@ edit(os.path.join(r, 'old', 'terms.html'), 'independent Ugandan company: an IT s
      'independent Ugandan company: an IT solutions provider and UCC-authorised Starlink installer')
 edit(os.path.join(r, 'nopriv', 'privacy.html'), 'Call recordings, where a call is recorded', 'Recordings of calls')
 open(os.path.join(r, 'nopol', 'policies.html'), 'w').write('<!DOCTYPE html><html><body><h1>Policies</h1><p>Coming soon.</p></body></html>')   # a hub without the two links
+edit(os.path.join(r, 'ucc', 'terms.html'), '</body>', '<p>DishNet Africa is a UCC-authorised Starlink installer.</p></body>')   # the identity sentence kept, a claim beside it
 PY
 WPORT94="$(free_port)"; "$PHPBIN" -S "127.0.0.1:$WPORT94" -t "$WROOT" >"$SB/website.log" 2>&1 & PIDS+=($!)
 for i in $(seq 1 50); do curl -s --noproxy '*' -o /dev/null "http://127.0.0.1:$WPORT94/ok/policies.html" && break; sleep 0.1; done
 WEB_OK="http://127.0.0.1:$WPORT94/ok"; WEB_DOWN="http://127.0.0.1:$(free_port)"
 check "$(curl -s --noproxy '*' "$WEB_OK/terms.html" | grep -c 'independent Ugandan company: an IT solutions provider and Starlink installer')$(curl -s --noproxy '*' "http://127.0.0.1:$WPORT94/nopol/policies.html" | grep -c 'href="terms.html"')$(curl -s --noproxy '*' "$WEB_OK/policies.html" | grep -c 'href="terms.html"')" "102" \
   "control: the stand-in website serves the 12 Oct Terms and its policies hub (both links), and the variant's hub carries no link"
+check "$(curl -s --noproxy '*' "http://127.0.0.1:$WPORT94/ucc/terms.html" | grep -c 'independent Ugandan company: an IT solutions provider and Starlink installer')$(curl -s --noproxy '*' "http://127.0.0.1:$WPORT94/ucc/terms.html" | grep -ciE 'UCC[- ]authori[sz]ed')" "11" \
+  "control: the UCC variant keeps the identity sentence and adds one UCC claim"
 
 # ── Kampala's date, as the script reads it (TZ=Africa/Kampala date +%Y%m%d) — moved only where a scenario says so ─────
 mkdir -p "$SB/datebin"
@@ -218,9 +221,14 @@ SH
 chmod +x "$SB/datebin/date"
 check "$(PATH="$SB/datebin:$PATH" FAKE_TODAY=20991231 TZ=Africa/Kampala date +%Y%m%d)$(PATH="$SB/datebin:$PATH" TZ=Africa/Kampala date +%Y%m%d)" "20991231$(TZ=Africa/Kampala date +%Y%m%d)" \
   "control: the stand-in date answers the planted day only when asked for one"
+# Every run's today in Kampala is the day before the documents' date, unless a scenario says otherwise — so A20 reads the
+# same whatever day the rehearsal runs (the review of 13 Oct: on the real day, every run would have refused at A20).
+DATED94="$(git -C "$REPO" show "$P94:$P/profiles/uganda.json" | python3 -c 'import sys, json; print(json.load(sys.stdin)["legal"]["dated"])')"
+DATED94_YMD="$(date -d "$DATED94" +%Y%m%d)"; TODAY94="$(date -d "$DATED94 -1 day" +%Y%m%d)"; AFTER94="$(date -d "$DATED94 +1 day" +%Y%m%d)"
+check "$DATED94|$DATED94_YMD|$TODAY94|$AFTER94" "16 October 2026|20261016|20261015|20261017" "control: the pin's documents are dated 16 October 2026; every run's today in Kampala is the day before"
 
 run94() {   # [--answer WORD] [--script FILE] [--env K=V]… [--website URL] [--today YYYYMMDD], then the script's options — as run does
-  local answer="" script="$DEPLOY94" extra=() web="$WEB_OK" today="" n o cmd
+  local answer="" script="$DEPLOY94" extra=() web="$WEB_OK" today="$TODAY94" n o cmd
   while :; do case "${1:-}" in --answer) answer="$2"; shift 2 ;; --script) script="$2"; shift 2 ;; --env) extra+=("$2"); shift 2 ;;
     --website) web="$2"; shift 2 ;; --today) today="$2"; shift 2 ;; *) break ;; esac; done
   : > "$SB/docker.log"
@@ -381,7 +389,7 @@ v94() {   # v94 LABEL EXPECTED-TEXT PATH OLD NEW — the pin with one file edite
 v94 "2a a pin whose Uganda identity says UCC refuses (A17)" "pin:uganda-says-UCC" profiles/uganda.json \
   '"identity": "an independent IT solutions provider' '"identity": "a UCC-authorised, independent IT solutions provider'
 v94 "2b a pin whose Uganda documents carry another date refuses (A17)" "pin:uganda-dated(" profiles/uganda.json '"dated": "16 October 2026"' '"dated": "17 October 2026"'
-v94 "2c a pin whose Uganda Terms lost an override refuses (A17): the shared text would come back" "pin:overrides(9/5)" profiles/uganda.json '"billing": "' '"billing_old": "'
+v94 "2c a pin whose Uganda Terms lost an override refuses (A17): the shared text would come back" "pin:overrides(9/6)" profiles/uganda.json '"billing": "' '"billing_old": "'
 v94 "2d a pin whose v1.1 text changed refuses (A17): it is not the reviewed text" "pin:v1.1-not-the-reviewed-text" lib/InstallationTerms.php \
   'These Terms are version INSTALLATION-TERMS-v1.1. Your acceptance' 'These Terms are version INSTALLATION-TERMS-v1.1. Your agreement'
 # A record that would no longer match its terms under the pin's code: a v1.1 request (as made only after a deploy) with
@@ -425,7 +433,12 @@ a21() {   # a21 LABEL VALUE EXPECTED
 }
 a21 "2j retention 0 (keep for ever) refuses (A21)" 0 "recording_retention_days is 0 in the store row"
 a21 "2k retention 400 days refuses (A21): longer than the 12 months the policy states" 400 "recording_retention_days is 400 in the store row"
-a21 "2l retention not a number refuses (A21)" "a year" "recording_retention_days in the store row is not a number (?)"
+a21 "2l retention not a number refuses (A21)" "a year" "recording_retention_days in the store row is blank or not a whole number (?)"
+a21 "2l' retention blank refuses (A21): the maintenance job reads a blank as 0, which keeps every recording for ever" "" "recording_retention_days in the store row is blank or not a whole number (?)"
+cfg_keep; vault_keep; row_set recording_retention_days ""
+M="$(mutant a21blank "$DEPLOY94" 'if ($v === null) return "365";' 'if ($v === null || $v === "") return "365";')"; fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
+check "$(went94 "$OUT")$(has "$OUT" 'ok    A21 call recordings are deleted after 365 day(s)')" "yesyesyes" "2l'' a copy that reads a blank as the default reaches the question over it (caught)"
+cfg_back; vault_back
 cfg_keep; vault_keep; row_set recording_retention_days 400
 M="$(mutant a21 "$DEPLOY94" '{ [ "$RET_S" -ge 1 ] && [ "$RET_S" -le 365 ]; } || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2k' a copy without the bound reaches the question over 400 days (caught)"
@@ -441,6 +454,10 @@ nogo94 "2n the website's Terms still claiming UCC refuses (A19)" "NO-GO (A19): t
 check "$(has "$OUT" 'terms.html 200 (identity ×0, a UCC claim ×')" "yes" "…it says what it found: the identity sentence missing, the claim counted"
 fresh94; OUT="$(run94 --answer NO --website "http://127.0.0.1:$WPORT94/nopol")"
 nogo94 "2o the website's policies hub without its links refuses (A19)" "policies.html 200 (links no)" "$OUT"
+fresh94; OUT="$(run94 --answer NO --website "http://127.0.0.1:$WPORT94/ucc")"
+nogo94 "2o' the website's Terms keeping the identity sentence but claiming UCC beside it refuses (A19)" "terms.html 200 (identity ×1, a UCC claim ×1)" "$OUT"
+M="$(mutant a19ucc "$DEPLOY94" ' && [ "${W_TOS_UCC:-1}" = "0" ]; }' '; }')"; fresh94; OUT="$(run94 --answer NO --script "$M" --website "http://127.0.0.1:$WPORT94/ucc")"; rm -f "$M"
+check "$(went94 "$OUT")" "yesyes" "2o'' a copy that does not count the website's UCC claim reaches the question over it (caught)"
 M="$(mutant a19 "$DEPLOY94" '{ [ "$W_POL" = "200" ] && [ "$W_POL_OK" = "yes" ] && [ "$W_TOS" = "200" ] && [ "$W_TOS_ID" != "0" ] && [ "${W_TOS_UCC:-1}" = "0" ]; }' 'true')"
 fresh94; OUT="$(run94 --answer NO --script "$M" --website "http://127.0.0.1:$WPORT94/old")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2n' a copy that does not read the website's Terms reaches the question over the old ones (caught)"
@@ -453,14 +470,14 @@ check "$(has "$OUT" "note  A19 the website ($WEB_DOWN) could not be reached from
 check "$(okline "$OUT94A" A19 'the website shows the policies hub and the Terms of Service' 'no UCC authorisation claim')$(has "$OUT94A" 'note  A19')" "yesno" \
   "2r the 12 Oct website: A19 ok, no note"
 # The documents' date against today in Kampala.
-fresh94; OUT="$(run94 --answer NO --today 20261017)"
-nogo94 "2s the day after the documents' date in Kampala refuses (A20): never deployed backdated" "NO-GO (A20): the Uganda documents are dated 16 October 2026, before today in Kampala (20261017)" "$OUT"
-M="$(mutant a20 "$DEPLOY94" '[ "$DATED_YMD" -ge "$TODAY_KLA" ] || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M" --today 20261017)"; rm -f "$M"
+fresh94; OUT="$(run94 --answer NO --today "$AFTER94")"
+nogo94 "2s the day after the documents' date in Kampala refuses (A20): never deployed backdated" "NO-GO (A20): the Uganda documents are dated 16 October 2026, before today in Kampala ($AFTER94)" "$OUT"
+M="$(mutant a20 "$DEPLOY94" '[ "$DATED_YMD" -ge "$TODAY_KLA" ] || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M" --today "$AFTER94")"; rm -f "$M"
 check "$(went94 "$OUT")" "yesyes" "2s' a copy without the date's bound reaches the question a day late (caught)"
-fresh94; OUT="$(run94 --answer NO --today 20261016)"
+fresh94; OUT="$(run94 --answer NO --today "$DATED94_YMD")"
 check "$(okline "$OUT" A20 'the Uganda documents are dated 16 October 2026' 'today in Kampala')$(went94 "$OUT")" "yesyesyes" "2t on the day itself: A20 ok"
-check "$(has "$OUT94A" "note  A20 the Uganda documents are dated 16 October 2026, after today in Kampala ($(TZ=Africa/Kampala date +%Y%m%d))")" "yes" \
-  "2u before the day (today, here): said — a customer signing in before then accepts them with that date shown as Effective"
+check "$(has "$OUT94A" "note  A20 the Uganda documents are dated 16 October 2026, after today in Kampala ($TODAY94)")" "yes" \
+  "2u the day before (every run's today): said — a customer signing in before then accepts them with that date shown as Effective"
 check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(host_code94)|$(left_tmp94)" "$KEPT0|0|$QREC0|$D94|$B93|0|$TMP94" \
   "…after section 2: nothing changed, no copy of the code left on the host or in /tmp"
 
@@ -475,7 +492,7 @@ for l in "ok    A0 the release delta is exactly 5.18.94's $N94 files — 1 added
          "ok    A13 the pin's retry job" \
          "ok    A15 under this server's own PHP" "ok    A16 under this server's own PHP" \
          "documents test  pin  5.18.94's $ADDED94 under PHP" \
-         "ok    A17 the pin's documents, under this server's own PHP: South Sudan's Terms and Privacy byte for byte the live code's and the golden (sha256 ${SS_GOLD:0:16}…); Uganda's version 1.2, dated 16 October 2026, every override in place (terms/privacy 10/5)" \
+         "ok    A17 the pin's documents, under this server's own PHP: South Sudan's Terms and Privacy byte for byte the live code's and the golden (sha256 ${SS_GOLD:0:16}…); Uganda's version 1.2, dated 16 October 2026, every override in place (terms/privacy 10/6)" \
          "the pin's test of the overrides passes ($LEGAL_SIG)" \
          "note  A17 pending request(s) made under INSTALLATION-TERMS-v1.0 (v1.0:1) keep INSTALLATION-TERMS-v1.0" \
          "ok    A18 none of ai_identity_line, wa_flyer_caption or email_badge_line says UCC" \
@@ -583,6 +600,37 @@ check "$(has "$OUT" 'live:records-unmatched')$(went94 "$OUT")$(live)" "yesnono$B
   "5' a copy that counts a version the live code does not hold as a record that does not match refuses a redeploy after a rollback (the defect this rehearsal found, caught)"
 fresh94; OUT="$(run94 --answer DEPLOY)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)" "0yes$P94" "…rolled back and deployed again with the script as it is: PASSED, $P94 serving"
+
+echo; echo "== 94-5b. a recorded failure is not forgotten: into a rollback, and a deploy waits for a --check after it =="
+# The review of 13 Oct: a deploy run again wrote a new state file and only noted the old failure. R19's failure (a database
+# at the old name after the copy), then the database gone again: the rollback still FAILS on it (R19 and RB), and a deploy
+# refuses (A14) until a --check of the quarantine that began after it has PASSED.
+: > "$SRC"; chown 1000:1000 "$SRC"; base_log; OUT="$(run94 --after-only)"
+check "$(failline "$OUT" R19 'the quarantine no longer holds')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "yes1" "5b-a a database at the old name after the redeploy: R19 FAILS and records it"
+rm -f "$SRC"; fresh94; OUT="$(run94 --answer ROLLBACK --rollback)"
+check "$(live)|$(failline "$OUT" R19 'an earlier run found the quarantine broken')$(failline "$OUT" RB 'the quarantine holds as its record says now, but a run of this script found it broken')$(has "$OUT" '5.18.94 (rollback): PASSED')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "$B93|yesyesno1" \
+  "5b-b the database gone again, then --rollback: 5.18.93 back, but R19 and RB FAIL on the recorded failure (recorded once)"
+D96="$(data94)"; fresh94; OUT="$(run94 --answer DEPLOY)"
+check "$(has "$OUT" 'NO-GO (A14): a run of this script found the quarantine broken at')$(has "$OUT" 'and the newest passing --check of the quarantine began before that')$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$D96" \
+  "5b-c a deploy after it refuses (A14) — the newest passing --check began before the failure — nothing deployed or changed"
+M="$(mutant a14sticky "$DEPLOY94" '[ "$QCL_T" -gt "$Q_FAIL_LAST" ] || stop' 'true || stop')"; fresh94; OUT="$(run94 --answer NO --script "$M")"; rm -f "$M"
+check "$(went94 "$OUT")$(live)" "yesyes$B93" "5b-c' a copy that forgets the recorded failure reaches the question over it (caught)"
+OUT="$(qrun -- --check)"
+check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-d the quarantine's own --check, after the failure: PASSED"
+fresh94; OUT="$(run94 --answer DEPLOY)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)|$(has "$OUT" 'note  A14 a run of this script found the quarantine broken at')$(has "$OUT" 'after it, PASSED — so this deploy goes on')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")$(grep -l '^STRAY_Q_FAILED=' "$STATE94".prev-* | wc -l | tr -d ' ')" "0yes$P94|yesyes01" \
+  "5b-e deployed after that --check: PASSED, the earlier failure said (A14's note), the new state file clean, the old one kept"
+# RB's own failure is recorded when R19 recorded none (a copy whose R19 records nothing): a later deploy then waits too.
+: > "$SRC"; chown 1000:1000 "$SRC"
+M="$(mutant r19norec "$DEPLOY94" 'if [ -z "$R19_FAILED_LINE" ]; then' 'if false; then')"; fresh94; OUT="$(run94 --answer ROLLBACK --script "$M" --rollback)"; rm -f "$M"
+check "$(live)|$(failline "$OUT" RB 'the quarantine does not hold after the rollback')$(has "$OUT" 'RB FAILED — recorded in')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "$B93|yesyes1" \
+  "5b-f a rollback with a database at the old name, R19 recording nothing: RB FAILS and records it itself"
+rm -f "$SRC"; D97="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
+check "$(has "$OUT" 'NO-GO (A14): a run of this script found the quarantine broken at')$(went94 "$OUT")|$(live)|$(data94)" "yesnono|$B93|$D97" "5b-g …and a deploy after it refuses (A14) on RB's record"
+OUT="$(qrun -- --check)"; check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-h the quarantine's own --check again: PASSED"
+fresh94; OUT="$(run94 --answer DEPLOY)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)$(has "$OUT" 'note  A14 a run of this script found the quarantine broken at')" "0yes${P94}yes" "5b-i …deployed after it: PASSED, $P94 serving"
+check "$(kept_state | cut -d/ -f1-2)|$(oldname)" "$(printf '%s' "$KEPT1" | cut -d/ -f1-2)|0" "…the kept file as it was, nothing at the old name"
 
 echo; echo "== 94-6. what the rehearsal left behind, and what it never reached =="
 check "$(evo_calls)" "0" "Evolution never called — not by the quarantine, the deploy, its checks or the installed code they ran"
