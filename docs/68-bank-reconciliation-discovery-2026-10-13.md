@@ -565,11 +565,11 @@ Rows that name an account which does not exist are left out of all four, and are
 3. `the connections changed 0 and 0 row(s); query_only=1`.
 4. `read twice, immutable: the readings are identical; the database file did not move …; side files none, before or after`.
 5. `the pages' settings row … — the same`. If it says DIFFERENT, every currency of both is measured, and that is a finding.
-6. `12 Sep adjust. found: …`. If it lists candidates instead, look at those ids in the Cashbook. Then run the same command
-   with `--adjustment-id=N` after `bash scripts/bank-recon-p0.sh`.
+6. `12 Sep adjust. found: …`. If it lists candidates instead, stop and send the log (superseded by §P: a second run only on
+   your word, through the gated command).
 
-If something else happens:
-- **Exit 3** means the plugin wrote during the reading: run it again.
+If something else happens (superseded by §P: nothing is run again without your word):
+- **Exit 3** means the plugin wrote during the reading, or a check failed.
 - **Exit 2** names its reason.
 - **A STOP** comes from the command's own checks, before P0 runs.
 
@@ -632,94 +632,184 @@ You approved P0 with six gates:
 6. obtain the 5.18.94 after-check evidence separately.
 
 This session cannot reach the server, so the gates are built into what you run: `scripts/bank-recon-p0-run.sh`, in
-commit `c277befc3707cf349074426eb494c25b7b18a531`. It refuses before P0, naming the gate, whenever one does not hold.
+commit `bc0fd773d37b12c4dfaf2776662bce64f4d97532`. It refuses before P0, naming the gate, whenever one does not hold.
+- A second independent review (four lenses, two sceptics per finding) upheld 20 of 22 findings against its first
+  version. All are fixed.
+- A check of those fixes found six more gaps, all fixed in this version:
+  - `ucrm.json` read too loosely;
+  - a fetch that could add tags;
+  - a log that Ctrl-C could cut off;
+  - a rebase named as a detached HEAD;
+  - an unidentified adjustment reported as plain DONE;
+  - wording.
 
 **Verified here before handing over.**
 - `5954ede513f46e6ddcdb061fa60ce63f65cdacf5` (§O, with the review's fixes) is on `claude/study-this-jhe2eg` on GitHub.
 - At that commit, the tool's sha256 is `0143dae93cf34ba4…` and the command's is `9a96e7fe1cd32529…`. The command pins the
   tool's.
 - The runner pins all three. This checkout was clean when the runner was committed.
+- The runner's own sha256 is `db26db9706e84b873ab5e6280bd4329ddf0f8b4de7485f0f9911b122f902a8ab`; the line below checks it.
 
-**The command — one line, as root on the server.** Then send back THE LOG FILE it names, not a copy of the terminal:
+**The command — one line, as root on the server, after the P0 log of any earlier attempt has been sent.** Then send back
+THE LOG FILE it names, not a copy of the terminal:
 
-    umask 077 && mkdir -p /root/dnb-bank-recon && cd /opt/dishnet && git fetch -q origin claude/study-this-jhe2eg && git cat-file blob c277befc3707cf349074426eb494c25b7b18a531:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "c2824607565020bc7c4cedfd44f7d2709a05bfa750e61cf4d06c016df16d1cba  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob bc0fd773d37b12c4dfaf2776662bce64f4d97532:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "db26db9706e84b873ab5e6280bd4329ddf0f8b4de7485f0f9911b122f902a8ab  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
+
+- The parentheses keep `umask 077` and `cd` inside the command, and your shell is left as it was.
+- `env -u` starts the runner without `BASH_ENV`, `ENV` or `UCRM_CONTAINER`, whatever your shell exports.
+- The `tee` at the end ignores Ctrl-C and a hang-up. So an interrupted run's log still ends with its exit line.
 
 **What it changes, and what it never touches.**
-- The `git fetch` adds Git objects to `/opt/dishnet/.git` and moves `origin/claude/study-this-jhe2eg` and `FETCH_HEAD`.
-  That is all it changes in the checkout. There is no checkout, pull, merge or reset.
-- The working tree, the index, HEAD and every local branch are never written. Every git command in the runner runs with
-  `--no-optional-locks`, so not even the index's stat cache is refreshed.
-- In `/root/dnb-bank-recon` (made 0700) it writes:
+- **The fetch** adds Git objects to `/opt/dishnet/.git`, writes `FETCH_HEAD`, and moves one ref,
+  `origin/claude/study-this-jhe2eg`, adding a line to that ref's reflog.
+  - No local branch or tag is created or moved: the refspec is explicit and `--refmap=` is empty.
+  - **No tag is fetched (`--no-tags`).** Without it, git adds any tag that points into the fetched history. The
+    rehearsal measured that (R28).
+  - `followRemoteHEAD=never` stops git 2.48 and later from creating `refs/remotes/origin/HEAD` on a fetch. Older git
+    never does that.
+    - The sandbox has git 2.43, so this one setting is **not rehearsed**.
+    - On older git it is an unknown setting, which git ignores.
+  - Automatic garbage collection, maintenance, hooks, commit-graph writing and submodules are switched off for it.
+  - There is no checkout, pull, merge or reset.
+- **The working tree, the index, HEAD and every local branch are never written.** Every git command in the runner runs
+  with `--no-optional-locks`, so not even the index's stat cache is refreshed.
+- **In `/root/dnb-bank-recon`** (`chmod 700` by the line) it writes:
   - the runner;
   - one folder `src-5954ede-…` holding the two reviewed files, taken out of the commit;
   - the log (0600).
-- If the runner's sha256 does not match, `sha256sum` prints FAILED and nothing runs. There is then no log; tell me what
-  the terminal said.
+- **If the runner's sha256 does not match,** `sha256sum` prints FAILED and nothing runs. There is then no log; tell me
+  what the terminal said. Likewise if the fetch or `git cat-file` fails.
 
-**What the runner checks, in order. Any failure stops it before P0, with exit 4 and `GATE REFUSED: <reason>`.**
-- **G1, the checkout.** Each of these is a refusal:
-  - a merge, rebase, cherry-pick, revert or bisect in progress;
+**What the runner checks, in order. Any failure stops it before P0 with `GATE REFUSED: <reason>` and
+`P0 was NOT run (exit 4)`.**
+- **G0, first.**
+  - It must run as root.
+  - `UCRM_CONTAINER`, if set, must be `ucrm`; otherwise P0 would read another container than the one checked.
+  - `git`, `docker` and `sha256sum` must be present.
+  - The log folder must be root's and mode 700.
+  - An option other than `--adjustment-id=N` (at most 10 digits) is refused even before G0. The log then holds only
+    the message and `RUNNER EXIT 4`, with no `GATE REFUSED` line.
+- **G1, the checkout.** It must be the top of a git checkout. Each of these is a refusal:
+  - a merge, rebase, cherry-pick, revert or bisect in progress. This is checked first, so a rebase is named as a
+    rebase, although it detaches HEAD;
+  - a detached HEAD;
   - a tracked file modified or staged;
-  - an untracked file in the plugin folder (its `data/` aside), which the 09 Oct record says has none.
+  - any file git does not track inside the plugin folder (its `data/` aside), ignored ones included, counted as the
+    09 Oct record and the deploy scripts count it.
 
   Untracked files elsewhere are counted and listed (at most five), not refused: P0 never reads the checkout's files.
 - **G2, the reviewed P0.**
-  - The commit must be present, and the fetched branch must still contain it.
-  - Both files are taken out of the commit, never out of the working tree, and each must match its reviewed sha256.
+  - The commit must be present, and `origin/claude/study-this-jhe2eg` must still contain it.
+  - Both files are taken out of the commit with `git cat-file`, never out of the working tree, and each must match its
+    reviewed sha256.
   - The command must pin the same tool.
 - **G3, the book.**
-  - The container must be running.
+  - The `ucrm` container must be running.
+  - Its `ucrm.json` must exist and be a JSON object. A file that is missing, unreadable, truncated or not JSON is
+    refused. It is never taken to mean "names no folder".
   - The data folder must resolve to `/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data`, the live store since 09 Oct.
     Anything else is an unexpected database path.
   - `plugin.sqlite3` must be there, owned by `1000:1000`.
-- **G4.** P0 runs once. Its exit is reported as it is: 0 done, 1 the command's stop, 2 refused, 3 stopped. **It is never
-  retried.**
+- **G4.** P0 runs once, in `ucrm`, with `UCRM_CONTAINER`, `BASH_ENV` and `ENV` removed from its environment.
+  - Its exit is reported as it is: 0 done, 1 the P0 command's stop, 2 refused, 3 stopped. **It is never retried.**
+  - **Afterwards the P0 command's own `installed` line must name `ucrm`, the folder checked in G3, and owner
+    `1000:1000`.**
+    - The command reads `ucrm.json` again itself. If the file changed between the two reads, the result is
+      `RESULT: THE P0 COMMAND READ ANOTHER FOLDER … (exit 6)`, never `P0 DONE`.
+    - The same result follows if the command did not say which folder it read.
+  - **If the 12 Sep adjustment was not identified,** the result is
+    `RESULT: P0 DONE (exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED`. Options B and D are then not computed.
 - **G5.** The checkout is proved unchanged afterwards: HEAD, the branch, every local branch and tag, the stash, the
-  index, and the status of every file. A change, which nothing here makes, would be reported as exit 5 and not repaired.
+  index, and the status of every file.
+  - Ignored files are included; an ignored directory counts as one entry.
+  - If anything changed (nothing here changes it), the result is `RESULT: THE CHECKOUT CHANGED while P0 ran (exit 5)`,
+    never `P0 DONE`. Nothing is repaired.
 
-**Reading the log.** §O's six checks, plus the runner's own lines:
-- `checkout … tracked files modified or staged: 0`;
-- `reviewed P0 commit 5954ede…`;
-- the two `= reviewed` sha256s;
-- `book … owner 1000:1000 — as expected`;
-- `checkout unchanged`;
-- `RESULT: P0 DONE (exit 0)`.
+**A complete log ends with `RUNNER EXIT <n>`.**
+- The command pipes into `tee`, so the terminal's own status is tee's, not the runner's. Read the status from the log.
+- An interrupted run ends the same way: 130 for Ctrl-C, 129 for a hang-up, 143 for a kill. The rehearsal sent Ctrl-C
+  and a hang-up while P0 was running (R27, R27h).
+  - After Ctrl-C the P0 reading inside the container may run on to its end, or stop. Either way it writes nothing.
+  - Its result does not reach the log.
+- **A log that does not end with that line was cut off. It is no result.**
+
+**Reading the log.** Each line below is quoted after its label and padding; each must be there:
+- `checkout … at <commit> on <branch>`;
+- `tracked files modified or staged: 0; not tracked inside dishnet-hybrid-sudan/ (data/ aside, ignored included): 0`;
+- `reviewed P0 … commit 5954ede513f46e6ddcdb061fa60ce63f65cdacf5`;
+- `tool sha256 0143dae93cf34ba4… = reviewed; command sha256 9a96e7fe1cd32529… = reviewed; the command pins the same tool`;
+- `book … /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data/plugin.sqlite3, owner 1000:1000 — as expected`;
+- §O's checks 1–5, inside the P0 part;
+- `12 Sep adjust.  found: the one live unassigned row of …`, inside the P0 part;
+- `checkout … unchanged: HEAD, branch, local branches and tags, stash, index and every file's status are as before`;
+- `folder … the P0 command read the folder checked above: /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data, owner
+  1000:1000, in ucrm`;
+- `RESULT: P0 DONE (exit 0)`, then `RUNNER EXIT 0`.
 
 The P0 command's own `this checkout` line reads `not readable as a git checkout`. That is expected: it runs from the
 extracted folder, which the runner has verified.
 
-**If it stops**, at any gate or with P0's exit 1, 2 or 3: send the log. Nothing is retried or repaired, and a further
-run waits for your word.
+**If it stops**, at any gate, with P0's exit 1, 2 or 3, with exit 5 or 6, or interrupted: send the log. Nothing is
+retried or repaired. A further run waits for your word.
+
+**If the 12 Sep adjustment could not be picked alone,** that is a stop too.
+- The result line says so.
+- The log lists up to ten candidate ids, each with its direction and status only.
+- A second run, only on your word, is the same line with ` --adjustment-id=N` added right after
+  `bash /root/dnb-bank-recon/bank-recon-p0-run.sh`, before ` 2>&1`.
 
 **The log stays confidential.** It holds the book's totals. It is not committed, and its figures will not be written into
 the repository.
 
 ### P.1 The 5.18.94 after-checks — separately, each with its own log
 
-No evidence for any of them has reached this session. Each is reported only from its own log or screen; a check whose log
-is not sent is reported as not evidenced. Run them separately from P0, not at the same time. These are the commands
-recorded in docs/07 (5.18.94 runbook steps 6–7):
+No evidence for any of them has reached this session. Each is reported only from its own log or screen. A check whose log
+is not sent is reported as **not evidenced**, never as passed or as not run.
 
-1. **What already exists**, read only:
+**Run them after the P0 log has been written, never at the same time.**
+- Items 2, 3 and 4 are recorded runbook steps: docs/07, 5.18.94 runbook steps 6 and 7. For item 4, only the details
+  below are added here.
+- Items 1 and 5 are new here.
+
+1. **What already exists.** Read only:
 
        TZ=UTC ls -l --time-style=+%FT%TZ /root/dnb-5.18.94/ /root/dnb-stray-quarantine/
 
-   This shows whether `--after-only`, `--check` or the badge script were already run. Send the listing.
-2. **`--after-only`**, read only:
+   It shows which runs saved a log there. A run whose log is not there is reported as not evidenced, not as not run.
+   Send the listing.
+2. **`--after-only`**: the recorded command (step 6), wrapped in `( umask 077 && … )` so that its log is private:
 
-       cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log
+       ( umask 077 && cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log )
 
    Expected: PASSED, R19 conclusive.
-3. **The quarantine's own `--check`.** It changes nothing but its own log and, on a failure, one line of its record:
 
-       cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log
+   It is **not read-only**, by its own header (`scripts/deploy-5.18.94.sh`, `--after-only`):
+   - its checks use throwaway copies in temporary folders, which it removes;
+   - the switch read may refresh the vault;
+   - R7's run of the cash-in-hand tool may add its 071 checksum warning to the live `migration.log`;
+   - on an R19 failure it appends one line to its state file. That line then fails every later `--after-only` and every
+     `--rollback` (RB) of this deploy, and blocks later deploys until a `--check` begun after it has passed.
+
+   It changes no setting and no financial row. Like P0's, **its log holds the book's cash-in-hand totals (R7)**: send it as
+   a file, and its figures stay out of the repository and the record.
+3. **The quarantine's own `--check`**, as recorded. It changes nothing but its own log and, on a failure, one line of its
+   record:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
 
    Expected: PASSED, with one note, K2: the container serves `f4b4c96`, not `69c87a6`. That note is expected after this
    deploy.
-4. **The portal's consent version.** Sign in once as a Uganda customer. Say what the consent step shows (expected
-   version 1.2, dated 16 October 2026); a screenshot is enough if it shows no customer's details.
-5. **The badge script's log**, if it was run: `/root/dnb-5.18.94/badge-*.log`. If the listing shows none, the script's
-   run is not evidenced, and will be reported so.
+4. **The portal's consent version.**
+   - Use your own or a test Uganda account, one whose WhatsApp you hold and which has not signed in since 13 Oct
+     13:58:04 UTC.
+   - Report the line under the consent box; expected: `Terms v1.2 · Privacy v1.2 · Effective 16 October 2026`.
+   - Then press **Go back**, which signs you out and records no acceptance, unless it is your own account.
+   - If no consent step appears, report "no consent step shown". That is **not** evidence of 1.2.
+5. **The badge script's log**, if it was run.
+   - The command handed over in the conversation on 13 Oct wrote it to `/root/dnb-5.18.94/badge-<time>.log`. That name
+     is in no repository file.
+   - If the listing shows none, say where it was written, if you know. Otherwise its run is not evidenced, and will be
+     reported so.
 
 ---
 

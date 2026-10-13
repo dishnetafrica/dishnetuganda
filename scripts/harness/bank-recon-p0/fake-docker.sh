@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
+# (-p: like the real docker, a binary, this fake never reads BASH_ENV — rehearse-run.sh R22b exports one.)
 # fake-docker.sh — the docker the P0 wrapper sees in the rehearsal. STRICT: it answers exactly the calls bank-recon-p0.sh
 # makes, and every other call — another inspect format, another exec command, another php invocation, a cp — exits 99,
 # so a new or changed call cannot pass unseen. The container's /data is $FAKE_MNT: every argument beginning /data/ is
@@ -30,12 +31,13 @@ esac; done
 [ "${FAKE_RUNNING:-true}" = "true" ] || { echo "Error: container $1 is not running" >&2; exit 1; }
 shift
 P=/data/ucrm/data/plugins
-SNIP='$u=@json_decode((string)@file_get_contents($argv[1]),true); echo rtrim((string)($u["pluginDataDir"]??""),"/");'
+SNIP='$u=@json_decode((string)@file_get_contents($argv[1]),true); echo rtrim((string)($u["pluginDataDir"]??""),"/");'   # the command's
+SNIP_STRICT='$s=@file_get_contents($argv[1]); if(!is_string($s)) exit(3); $u=json_decode($s,true); if(!is_array($u)) exit(4); echo rtrim((string)($u["pluginDataDir"]??""),"/");'   # the runner's G3
 ok=""
 if [ -z "$stdin" ] && [ -z "$user" ]; then
   case "$#|$1|${2:-}|${3:-}" in
     "2|cat|$P/dishnet-hybrid-sudan/.deployed-commit|") ok=1 ;;
-    "4|php|-r|$SNIP") [ "$4" = "$P/dishnet-hybrid-sudan/ucrm.json" ] && ok=1 ;;
+    "4|php|-r|$SNIP"|"4|php|-r|$SNIP_STRICT") [ "$4" = "$P/dishnet-hybrid-sudan/ucrm.json" ] && ok=1 ;;
     "3|test|-f|"*) case "$3" in /data/*/plugin.sqlite3) ok=1 ;; esac ;;
     "4|stat|-c|%u:%g") case "$4" in /data/*/plugin.sqlite3) ok=1 ;; esac ;;
   esac
@@ -45,6 +47,12 @@ elif [ -n "$stdin" ] && [ -n "$user" ]; then
   fi
 fi
 [ -n "$ok" ] || no exec ${user:+-u $user} ${stdin:+-i} "$@"
+# Rehearsal hooks, off unless set: FAKE_PHP_R_FAIL=1 makes the ucrm.json read fail as a broken container would;
+# FAKE_ON_P0=<command> runs that command on the host as P0 starts (something else writing meanwhile);
+# FAKE_ON_CMD_READ=<command> runs it just before the P0 command's own ucrm.json read (a change after the runner's G3).
+if [ "$1" = php ] && [ "${2:-}" = -r ] && [ -n "${FAKE_PHP_R_FAIL:-}" ]; then echo "exec REFUSED-BY-REHEARSAL php -r" >> "$T"; exit 1; fi
+if [ "$1" = php ] && [ "${2:-}" = -r ] && [ "${3:-}" = "$SNIP" ] && [ -n "${FAKE_ON_CMD_READ:-}" ]; then sh -c "$FAKE_ON_CMD_READ"; fi
+if [ -n "$stdin" ] && [ -n "${FAKE_ON_P0:-}" ]; then sh -c "$FAKE_ON_P0"; fi
 args=(); for a in "$@"; do case "$a" in /data/*) args+=("$MNT/${a#/data/}") ;; *) args+=("$a") ;; esac; done
 echo "exec ${user:-root} ${stdin:-nostdin} ${args[*]}" | cut -c1-400 >> "$T"
 pre=(); [ -z "$user" ] || pre=(setpriv --reuid="${user%%:*}" --regid="${user##*:}" --clear-groups)
