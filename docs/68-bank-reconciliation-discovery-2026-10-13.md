@@ -5,8 +5,8 @@ data was read: this is a read of the code (live `f4b4c96` = 5.18.94, and the dev
 Ecobank PDF, opened in an isolated folder and read with every digit and name masked. **Coding waits for your approval of
 the decisions in §K and of the exceptions in §M.**
 
-**Update, 13 October (later): P0 is built, rehearsed and reviewed (§O). It has NOT been run on the server; that run waits
-for your approval.** Nothing else in this plan has been started.
+**Update, 13 October (later): P0 is built, rehearsed and reviewed (§O), and approved to run under six gates. The gated
+command is in §P; it has NOT been run yet.** Nothing else in this plan has been started.
 
 **Method.** Four read-only reviewers mapped the account model, posting and controls, the existing bank import and the
 infrastructure; a fifth checked their claims against the code. The first draft of this plan was then attacked by three more
@@ -493,12 +493,8 @@ development branch; rehearsed on synthetic books; attacked by an independent rev
 sha256 is not the reviewed one), `scripts/harness/bank-recon-p0/` (the rehearsal). No plugin file changes; nothing is
 installed or deployed.
 
-**The command — only once you approve the run.** As root on the server; then send back THE LOG FILE:
-
-    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-bank-recon && bash scripts/bank-recon-p0.sh 2>&1 | tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log
-
-There is no rollback, because it changes nothing. The only thing the command adds anywhere is the log file in `/root/dnb-bank-recon/`.
-It also brings the checkout up to date with `git pull`, as every hand-over does.
+**The command: superseded by §P.** The `git pull` form first written here is withdrawn: it would have updated the server's
+checkout. Use only the gated command in §P.
 
 **What it reads.** Through `docker exec`:
 - the `ucrm` container's `/data` mount, the plugin's `manifest.json`, `.deployed-commit` and `ucrm.json` (for the data
@@ -625,7 +621,107 @@ record will carry the decision you take and whether these checks passed.
 not run. The bank reconciliation module is not built and not switched on. The statement is not in the repository: every
 figure above comes from synthetic books.
 
+## P. The gated run — approved 13 October with six gates; for the operator to run
+
+You approved P0 with six gates:
+1. verify the commit, the working-tree state and the checksums first;
+2. show the command, and run nothing that differs;
+3. run P0 only after those checks pass, and nothing else;
+4. keep the log confidential;
+5. stop at any race, inconsistent reading, unexpected path or failed check: no retry, no repair;
+6. obtain the 5.18.94 after-check evidence separately.
+
+This session cannot reach the server, so the gates are built into what you run: `scripts/bank-recon-p0-run.sh`, in
+commit `c277befc3707cf349074426eb494c25b7b18a531`. It refuses before P0, naming the gate, whenever one does not hold.
+
+**Verified here before handing over.**
+- `5954ede513f46e6ddcdb061fa60ce63f65cdacf5` (§O, with the review's fixes) is on `claude/study-this-jhe2eg` on GitHub.
+- At that commit, the tool's sha256 is `0143dae93cf34ba4…` and the command's is `9a96e7fe1cd32529…`. The command pins the
+  tool's.
+- The runner pins all three. This checkout was clean when the runner was committed.
+
+**The command — one line, as root on the server.** Then send back THE LOG FILE it names, not a copy of the terminal:
+
+    umask 077 && mkdir -p /root/dnb-bank-recon && cd /opt/dishnet && git fetch -q origin claude/study-this-jhe2eg && git cat-file blob c277befc3707cf349074426eb494c25b7b18a531:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "c2824607565020bc7c4cedfd44f7d2709a05bfa750e61cf4d06c016df16d1cba  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log
+
+**What it changes, and what it never touches.**
+- The `git fetch` adds Git objects to `/opt/dishnet/.git` and moves `origin/claude/study-this-jhe2eg` and `FETCH_HEAD`.
+  That is all it changes in the checkout. There is no checkout, pull, merge or reset.
+- The working tree, the index, HEAD and every local branch are never written. Every git command in the runner runs with
+  `--no-optional-locks`, so not even the index's stat cache is refreshed.
+- In `/root/dnb-bank-recon` (made 0700) it writes:
+  - the runner;
+  - one folder `src-5954ede-…` holding the two reviewed files, taken out of the commit;
+  - the log (0600).
+- If the runner's sha256 does not match, `sha256sum` prints FAILED and nothing runs. There is then no log; tell me what
+  the terminal said.
+
+**What the runner checks, in order. Any failure stops it before P0, with exit 4 and `GATE REFUSED: <reason>`.**
+- **G1, the checkout.** Each of these is a refusal:
+  - a merge, rebase, cherry-pick, revert or bisect in progress;
+  - a tracked file modified or staged;
+  - an untracked file in the plugin folder (its `data/` aside), which the 09 Oct record says has none.
+
+  Untracked files elsewhere are counted and listed (at most five), not refused: P0 never reads the checkout's files.
+- **G2, the reviewed P0.**
+  - The commit must be present, and the fetched branch must still contain it.
+  - Both files are taken out of the commit, never out of the working tree, and each must match its reviewed sha256.
+  - The command must pin the same tool.
+- **G3, the book.**
+  - The container must be running.
+  - The data folder must resolve to `/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data`, the live store since 09 Oct.
+    Anything else is an unexpected database path.
+  - `plugin.sqlite3` must be there, owned by `1000:1000`.
+- **G4.** P0 runs once. Its exit is reported as it is: 0 done, 1 the command's stop, 2 refused, 3 stopped. **It is never
+  retried.**
+- **G5.** The checkout is proved unchanged afterwards: HEAD, the branch, every local branch and tag, the stash, the
+  index, and the status of every file. A change, which nothing here makes, would be reported as exit 5 and not repaired.
+
+**Reading the log.** §O's six checks, plus the runner's own lines:
+- `checkout … tracked files modified or staged: 0`;
+- `reviewed P0 commit 5954ede…`;
+- the two `= reviewed` sha256s;
+- `book … owner 1000:1000 — as expected`;
+- `checkout unchanged`;
+- `RESULT: P0 DONE (exit 0)`.
+
+The P0 command's own `this checkout` line reads `not readable as a git checkout`. That is expected: it runs from the
+extracted folder, which the runner has verified.
+
+**If it stops**, at any gate or with P0's exit 1, 2 or 3: send the log. Nothing is retried or repaired, and a further
+run waits for your word.
+
+**The log stays confidential.** It holds the book's totals. It is not committed, and its figures will not be written into
+the repository.
+
+### P.1 The 5.18.94 after-checks — separately, each with its own log
+
+No evidence for any of them has reached this session. Each is reported only from its own log or screen; a check whose log
+is not sent is reported as not evidenced. Run them separately from P0, not at the same time. These are the commands
+recorded in docs/07 (5.18.94 runbook steps 6–7):
+
+1. **What already exists**, read only:
+
+       TZ=UTC ls -l --time-style=+%FT%TZ /root/dnb-5.18.94/ /root/dnb-stray-quarantine/
+
+   This shows whether `--after-only`, `--check` or the badge script were already run. Send the listing.
+2. **`--after-only`**, read only:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, R19 conclusive.
+3. **The quarantine's own `--check`.** It changes nothing but its own log and, on a failure, one line of its record:
+
+       cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log
+
+   Expected: PASSED, with one note, K2: the container serves `f4b4c96`, not `69c87a6`. That note is expected after this
+   deploy.
+4. **The portal's consent version.** Sign in once as a Uganda customer. Say what the consent step shows (expected
+   version 1.2, dated 16 October 2026); a screenshot is enough if it shows no customer's details.
+5. **The badge script's log**, if it was run: `/root/dnb-5.18.94/badge-*.log`. If the listing shows none, the script's
+   run is not evidenced, and will be reported so.
+
 ---
 
-*Discovery, and P0 as built (§O). No plugin file changed; no migration, no production data, no deployment. The supplied
+*Discovery, P0 as built (§O) and its gated run (§P). No plugin file changed; no migration, no production data, no deployment. The supplied
 statement stays outside the repository.*
