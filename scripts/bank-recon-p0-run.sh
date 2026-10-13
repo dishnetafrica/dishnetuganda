@@ -18,17 +18,22 @@
 #   G2  the reviewed P0: commit P0_COMMIT is present, and the fetched branch still contains it. The tool and the command
 #       are taken out of THAT commit (never out of the working tree) into a new folder, and each must match its reviewed
 #       sha256; the command must pin the same tool sha256.
-#   G3  the book: the container is running; its ucrm.json is read (a failed read stops here); the data folder resolves,
-#       as the command resolves it, to EXPECTED_DATA (the live store since 09 Oct); plugin.sqlite3 is there; its owner is
-#       EXPECTED_OWNER. Anything else is an unexpected database path and stops here.
+#   G3  the book: the container is running; its ucrm.json exists and is a JSON object (missing, unreadable, truncated or
+#       not JSON stops here); the data folder it names, or the folder beside the plugin when it names none, is
+#       EXPECTED_DATA (the live store since 09 Oct); plugin.sqlite3 is there; its owner is EXPECTED_OWNER. Anything else is
+#       an unexpected database path and stops here.
 #   G4  then P0 runs ONCE, in this container, with UCRM_CONTAINER, BASH_ENV and ENV removed from its environment. Whatever
-#       its exit, it is reported with its meaning and NOT retried.
+#       its exit, it is reported with its meaning and NOT retried. Afterwards the P0 command's own `installed` line must
+#       name this container, EXPECTED_DATA and EXPECTED_OWNER — the command reads ucrm.json again itself, so a change in
+#       between would otherwise go unseen (exit 6). If the 12 Sep adjustment was not identified, the result says so.
 #   G5  afterwards the checkout is proved untouched: HEAD, the branch, every local branch and tag, the stash, the index and
-#       the status of every file are the same as before P0.
+#       the status of every file (an ignored directory counts as one entry) are the same as before P0.
 #
 # Exit: P0's own exit (0 done; 1 the command's STOP; 2 P0 refused; 3 P0 stopped on a check); 4 a gate refused before P0;
-# 5 the checkout changed while P0 ran (nothing here changes it — reported, never repaired). The exit is ALWAYS the log's
-# last line, "RUNNER EXIT <n>": the hand-over pipes into tee, whose status the shell reports instead.
+# 5 the checkout changed while P0 ran (nothing here changes it — reported, never repaired); 6 the P0 command read another
+# folder than the one checked. The exit is the log's last line, "RUNNER EXIT <n>" (the hand-over pipes into tee, whose
+# status the shell reports instead; its tee ignores Ctrl-C and a hang-up, so the line is written then too). A log that
+# does not end with that line was cut off and is no result.
 
 set -u
 umask 077
@@ -69,11 +74,11 @@ command -v git >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 && command -
 
 # ── G1: the checkout ───────────────────────────────────────────────────────────────────────────────────────────────
 [ "$(g rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] && [ "$(g rev-parse --show-toplevel 2>/dev/null)" = "$(realpath "$REPO" 2>/dev/null)" ] || gate "$REPO is not the top of a git checkout"
-g symbolic-ref -q HEAD >/dev/null || gate "the checkout is on a detached HEAD — not the state the records describe"
 GD="$(g rev-parse --absolute-git-dir)"
 for f in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG rebase-merge rebase-apply; do
   [ ! -e "$GD/$f" ] || gate "the checkout has an operation in progress ($f) — not the state the records describe"
 done
+g symbolic-ref -q HEAD >/dev/null || gate "the checkout is on a detached HEAD — not the state the records describe"
 fingerprint() {   # everything a checkout update could change, as one line
   printf '%s|%s|%s|%s|%s|%s\n' \
     "$(g rev-parse HEAD 2>/dev/null)" \
@@ -121,8 +126,8 @@ done
 
 # ── G3: the book ────────────────────────────────────────────────────────────────────────────────────────────────────
 [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" = "true" ] || gate "the $CONTAINER container is not running"
-PDD="$(dx "$CONTAINER" php -r '$u=@json_decode((string)@file_get_contents($argv[1]),true); echo rtrim((string)($u["pluginDataDir"]??""),"/");' "$IN_CONTAINER/ucrm.json" 2>/dev/null)" \
-  || gate "the container's ucrm.json could not be read — the data folder cannot be established"
+PDD="$(dx "$CONTAINER" php -r '$s=@file_get_contents($argv[1]); if(!is_string($s)) exit(3); $u=json_decode($s,true); if(!is_array($u)) exit(4); echo rtrim((string)($u["pluginDataDir"]??""),"/");' "$IN_CONTAINER/ucrm.json" 2>/dev/null)" \
+  || gate "the container's ucrm.json is missing, unreadable or not JSON — the data folder cannot be established"
 [ -n "$PDD" ] || PDD="$EXPECTED_DATA"   # ucrm.json names none (09 Oct): the folder beside the plugin, as the command chooses
 [ "${PDD%/}" = "$EXPECTED_DATA" ] || gate "the data folder would be $PDD, not $EXPECTED_DATA — an unexpected database path"
 dx "$CONTAINER" test -f "$EXPECTED_DATA/plugin.sqlite3" 2>/dev/null || gate "no plugin.sqlite3 in $EXPECTED_DATA"
@@ -132,8 +137,13 @@ ok "book" "$EXPECTED_DATA/plugin.sqlite3, owner $OWN — as expected"
 
 # ── G4: P0, once ────────────────────────────────────────────────────────────────────────────────────────────────────
 printf '\n  ── P0 begins (it runs once; whatever it ends with is reported, not retried) ──\n'
-env -u UCRM_CONTAINER -u BASH_ENV -u ENV GIT_CEILING_DIRECTORIES="$WORK" bash "$SRC/scripts/bank-recon-p0.sh" ${ADJ[@]+"${ADJ[@]}"}
-rc=$?
+# Every line goes on to the log as it comes; two lines without figures are kept aside for the checks below.
+env -u UCRM_CONTAINER -u BASH_ENV -u ENV GIT_CEILING_DIRECTORIES="$WORK" bash "$SRC/scripts/bank-recon-p0.sh" ${ADJ[@]+"${ADJ[@]}"} 2>&1 \
+  | while IFS= read -r line || [ -n "$line" ]; do
+      printf '%s\n' "$line"
+      case "$line" in "  installed "*|"  12 Sep adjust. "*) printf '%s\n' "$line" >> "$SRC/kept-lines" ;; esac
+    done
+rc=${PIPESTATUS[0]}
 printf '  ── P0 ended: exit %s ──\n\n' "$rc"
 
 # ── G5: the checkout, untouched ─────────────────────────────────────────────────────────────────────────────────────
@@ -143,11 +153,29 @@ if [ "$AFTER" = "$BEFORE" ]; then
 else
   ok "checkout" "CHANGED while P0 ran (before $BEFORE, after $AFTER) — not by this run, which only reads it; nothing repaired"
 fi
+# The command prints "  installed  <commit> in <container>; data <folder>; database owner <uid:gid>" before it reads.
+INSTALLED="$(grep '^  installed ' "$SRC/kept-lines" 2>/dev/null | tail -n1)"
+READ="$(printf '%s\n' "$INSTALLED" | sed -E 's/^  installed +[^ ]+ //')"
+if [ -n "$INSTALLED" ] || [ "$rc" != 1 ]; then   # exit 1 with no such line: the command stopped before reading anything
+  if [ "$READ" != "in $CONTAINER; data $EXPECTED_DATA; database owner $EXPECTED_OWNER" ]; then
+    ok "folder" "the P0 command read: ${READ:-(it printed no such line)}"
+    echo
+    echo "  RESULT: THE P0 COMMAND READ ANOTHER FOLDER than the one checked, or did not say which (exit 6); P0 ended with"
+    echo "  exit $rc. Do not use these figures. Nothing was repaired. Send this log file."
+    exit 6
+  fi
+  ok "folder" "the P0 command read the folder checked above: $EXPECTED_DATA, owner $EXPECTED_OWNER, in $CONTAINER"
+fi
 echo
 if [ "$AFTER" != "$BEFORE" ]; then
   echo "  RESULT: THE CHECKOUT CHANGED while P0 ran (exit 5); P0 itself ended with exit $rc. Do not use these figures until the"
   echo "  change is explained. Nothing was repaired. Send this log file."
   exit 5
+fi
+if [ "$rc" = 0 ] && grep -q '^  12 Sep adjust\.  .*not identified' "$SRC/kept-lines" 2>/dev/null; then
+  echo "  RESULT: P0 DONE (exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED: options B and D are not computed. Send this"
+  echo "  LOG FILE back (confidential: it holds the book's totals). A second run, with --adjustment-id=N, only on your word."
+  exit 0
 fi
 case "$rc" in
   0) echo "  RESULT: P0 DONE (exit 0). Send this LOG FILE back; keep it confidential: it holds the book's totals." ;;
