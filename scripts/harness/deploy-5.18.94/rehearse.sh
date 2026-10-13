@@ -536,7 +536,7 @@ copy_back94() {   # the copy N minutes ago: the marker file's time, the recorded
   sed -i -e "s/^COPY_AT=.*/COPY_AT=$t/" -e "s/^DEPLOYED_AT=.*/DEPLOYED_AT=$(date -u -d "@$(( t - 60 ))" +%Y-%m-%dT%H:%M:%SZ)/" "$STATE94"; }
 copy_back94 30; COPY94="$(sed -n 's/^COPY_AT=//p' "$STATE94" | tail -1)"
 set_sched $(( COPY94 - 60 )); base_log; OUT="$(run94 --after-only)"
-check "$(fails "$OUT")$(has "$OUT" 'note  R19 the quarantine holds')$(has "$OUT" '5.18.94 (after): PASSED')" "0yesyes" "4a 30 minutes after the copy, master's last run of the job before it: PASSED, R19 not yet conclusive"
+check "$(fails "$OUT")$(has "$OUT" 'note  R19 the quarantine holds')$(has "$OUT" '5.18.94 (after): PASSED')$(has "$OUT" "holds as its record says (R19 judges it after this run's checks)")" "0yesyesyes" "4a 30 minutes after the copy, master's last run of the job before it: PASSED, R19 not yet conclusive (A14 names R19 as the judge)"
 set_sched $(( COPY94 + 120 )); base_log; OUT="$(run94 --after-only)"
 check "$(has "$OUT" 'note  R19 the quarantine holds')" "yes" "4b a run of the job that began only 120 s after the copy: still not conclusive (the margin is strict)"
 set_sched $(( COPY94 + 300 )); base_log; OUT="$(run94 --after-only)"
@@ -608,8 +608,8 @@ echo; echo "== 94-5b. a recorded failure is not forgotten: into a rollback, and 
 : > "$SRC"; chown 1000:1000 "$SRC"; base_log; OUT="$(run94 --after-only)"
 check "$(failline "$OUT" R19 'the quarantine no longer holds')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "yes1" "5b-a a database at the old name after the redeploy: R19 FAILS and records it"
 rm -f "$SRC"; fresh94; OUT="$(run94 --answer ROLLBACK --rollback)"
-check "$(live)|$(failline "$OUT" RB 'the quarantine holds as its record says now, but a run of this script found it broken')$(has "$OUT" '5.18.94 (rollback): PASSED')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")$(grep -cE '^  (ok|FAIL|note)  R19 ' <<<"$OUT")" "$B93|yesno10" \
-  "5b-b the database gone again, then --rollback: 5.18.93 back, but RB FAILS on the recorded failure (recorded once; a rollback runs no R19)"
+check "$(live)|$(failline "$OUT" RB 'the quarantine holds as its record says now, but a run of this script found it broken')$(has "$OUT" '5.18.94 (rollback): PASSED')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")$(grep -cE '^  (ok    |FAIL  |note  )R19 ' <<<"$OUT")$(has "$OUT" "holds as its record says (RB judges it after this run's checks)")" "$B93|yesno10yes" \
+  "5b-b the database gone again, then --rollback: 5.18.93 back, but RB FAILS on the recorded failure (recorded once; a rollback runs no R19, and A14 names RB)"
 D96="$(data94)"; fresh94; OUT="$(run94 --answer DEPLOY)"
 check "$(has "$OUT" 'NO-GO (A14): a run of this script found the quarantine broken at')$(has "$OUT" 'and the newest passing --check of the quarantine began before that')$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$D96" \
   "5b-c a deploy after it refuses (A14) — the newest passing --check began before the failure — nothing deployed or changed"
@@ -622,13 +622,39 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)|$(has "$OU
   "5b-e deployed after that --check: PASSED, the earlier failure said (A14's note), the new state file clean, the old one kept"
 # RB's own failure is recorded (a rollback runs no R19, so RB is the only check that can): a later deploy then waits too.
 : > "$SRC"; chown 1000:1000 "$SRC"; fresh94; OUT="$(run94 --answer ROLLBACK --rollback)"
-check "$(live)|$(failline "$OUT" RB 'the quarantine does not hold after the rollback')$(has "$OUT" 'RB FAILED — recorded in')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "$B93|yesyes1" \
-  "5b-f a rollback with a database at the old name: RB FAILS and records it in the deploy's state file"
+check "$(live)|$(failline "$OUT" RB 'the quarantine does not hold after the rollback')$(has "$OUT" 'RB FAILED — recorded in')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")$(has "$OUT" 'RB judges it below')$(grep -E '^  (note  |ok    |FAIL  )A14 |^  quarantine ' <<<"$OUT" | grep -c 'R19')" "$B93|yesyes1yes0" \
+  "5b-f a rollback with a database at the old name: RB FAILS and records it in the deploy's state file; A14 names RB, never R19"
 rm -f "$SRC"; D97="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
 check "$(has "$OUT" 'NO-GO (A14): a run of this script found the quarantine broken at')$(went94 "$OUT")|$(live)|$(data94)" "yesnono|$B93|$D97" "5b-g …and a deploy after it refuses (A14) on RB's record"
 OUT="$(qrun -- --check)"; check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-h the quarantine's own --check again: PASSED"
 fresh94; OUT="$(run94 --answer DEPLOY)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)$(has "$OUT" 'note  A14 a run of this script found the quarantine broken at')" "0yes${P94}yes" "5b-i …deployed after it: PASSED, $P94 serving"
+check "$(kept_state | cut -d/ -f1-2)|$(oldname)" "$(printf '%s' "$KEPT1" | cut -d/ -f1-2)|0" "…the kept file as it was, nothing at the old name"
+# The verification of 13 Oct: only the first failure in a state file was recorded, so a second one after a passing --check
+# was lost, and a deploy went on with no --check after it. Each run that finds the quarantine broken now records its own
+# time — R19 in an --after-only, RB after a rollback — and A14 waits for a --check after the latest.
+: > "$SRC"; chown 1000:1000 "$SRC"; base_log; OUT="$(run94 --after-only)"
+check "$(failline "$OUT" R19 'the quarantine no longer holds')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")$(has "$OUT" 'R19 judges it below')" "yes1yes" "5b-j a database at the old name: R19 FAILS and records it (A14's note names R19)"
+rm -f "$SRC"; OUT="$(qrun -- --check)"; check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-k gone again, and the quarantine's --check PASSES"
+: > "$SRC"; chown 1000:1000 "$SRC"
+M="$(mutant r19first "$DEPLOY94" '  if [ "$Q_HOLDS" != "yes" ]; then   # R19 saw it broken in this run' '  if [ -z "$R19_FAILED_LINE" ]; then   # R19 saw it broken in this run')"; base_log; OUT="$(run94 --script "$M" --after-only)"; rm -f "$M"
+check "$(failline "$OUT" R19 'the quarantine no longer holds')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "yes1" "5b-l' back after that --check: a copy whose R19 records only the first failure leaves this one out (caught by the count)"
+base_log; OUT="$(run94 --after-only)"
+check "$(failline "$OUT" R19 'the quarantine no longer holds')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "yes2" "5b-l …the script's R19 records its own time: a second line"
+M="$(mutant rbfirst "$DEPLOY94" '  if [ "$Q_HOLDS" != "yes" ]; then   # RB saw it broken after this rollback' '  if [ -z "$RB_QF" ]; then   # RB saw it broken after this rollback')"; fresh94; OUT="$(run94 --answer ROLLBACK --script "$M" --rollback)"; rm -f "$M"
+check "$(live)|$(failline "$OUT" RB 'the quarantine does not hold after the rollback')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "$B93|yes2" "5b-m' a rollback while it is still broken, by a copy whose RB records only the first: its failure is left out (caught by the count)"
+rm -f "$SRC"; D98="$(data94)"; fresh94; OUT="$(run94 --answer NO)"
+check "$(has "$OUT" 'NO-GO (A14): a run of this script found the quarantine broken at')$(went94 "$OUT")|$(live)|$(data94)" "yesnono|$B93|$D98" "5b-n gone again: a deploy refuses (A14) — the latest recorded failure is after the --check that passed"
+OUT="$(qrun -- --check)"; check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-o the quarantine's --check after the latest failure: PASSED"
+fresh94; OUT="$(run94 --answer DEPLOY)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "0yes${P94}0" "5b-p …and a deploy goes on: PASSED, a new state file with no failure"
+: > "$SRC"; chown 1000:1000 "$SRC"; base_log; OUT="$(run94 --after-only)"
+check "$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "1" "5b-q a database at the old name: R19 records it"
+fresh94; OUT="$(run94 --answer ROLLBACK --rollback)"
+check "$(live)|$(failline "$OUT" RB 'the quarantine does not hold after the rollback')$(has "$OUT" 'RB FAILED — recorded in')$(grep -c '^STRAY_Q_FAILED=' "$STATE94")" "$B93|yesyes2" "5b-r a rollback while it is still broken: RB records its own time beside R19's — a second line"
+rm -f "$SRC"; OUT="$(qrun -- --check)"; check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "5b-s gone again: the quarantine's --check PASSES"
+fresh94; OUT="$(run94 --answer DEPLOY)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)" "0yes$P94" "5b-t …deployed after it: PASSED, $P94 serving"
 check "$(kept_state | cut -d/ -f1-2)|$(oldname)" "$(printf '%s' "$KEPT1" | cut -d/ -f1-2)|0" "…the kept file as it was, nothing at the old name"
 
 echo; echo "== 94-6. what the rehearsal left behind, and what it never reached =="

@@ -150,8 +150,10 @@
 # of main.php in a folder of its own against a stand-in uCRM, the documents are rendered and hashed, and the
 # assistant's prompt is built and hashed, never sent; all of it is removed when the run ends. The writes are the
 # documented deploy (or rollback), a backup under /root/dnb-5.18.94/ (the event queue's snapshot and a copy of
-# <plugin>/data's remaining files included), a record of where the deploy started (a rollback's in a file of its own; a
-# deploy run again keeps the earlier one beside it, and says if it recorded an R19 failure), and the time of the copy on
+# <plugin>/data's remaining files included), a record of where the deploy started (a rollback's in a file of its own;
+# R19, and RB after a rollback, add one STRAY_Q_FAILED line to the deploy's each time they find the quarantine broken; a
+# deploy run again keeps the earlier one beside it, says if any recorded a failure, and refuses (A14) until a --check
+# of the quarantine that began after the latest has PASSED), and the time of the copy on
 # the files this release changes. The plugin's data directory is never <plugin>/data: if nothing else is found, nothing
 # is read, in any mode.
 #
@@ -307,7 +309,7 @@ TERMS_V10_SHA256="9308072840e784e49a0656987a3edfae33c6f3d081558cbf63625c23b071d2
 TERMS_V11_SHA256="eee8644e8bb7ea509fa1977279f518d9f0f96ec0b5028431160a57fd833b1db0"
 SS_LEGAL_SHA256="b2f4ff3b34bb1fcabc11bc87beb9f66cbafee22605c3a9e69d42ebcb1ead4637"
 UG_LEGAL_VERSION="1.2"; UG_LEGAL_DATED="16 October 2026"; UG_LEGAL_BASE_VERSION="1.1"; UG_LEGAL_BASE_DATED="26 September 2026"
-UG_OVERRIDES="terms=10 privacy=5"                  # the sections profiles/uganda.json replaces (tests/test_legal_overrides.php pins the keys)
+UG_OVERRIDES="terms=10 privacy=6"                  # the sections profiles/uganda.json replaces (tests/test_legal_overrides.php pins the keys)
 LEGAL_TEST="tests/test_legal_overrides.php"
 LEGAL_TEST_SIGNATURE="80 passed, 0 failed rc=0"
 UCC_KEYS="ai_identity_line wa_flyer_caption email_badge_line"   # the operator's uCRM edits (A18): never printed, only whether they say UCC
@@ -1911,7 +1913,8 @@ fi
 # same file, unchanged, with no side file; a --check of the quarantine that began at least 20 minutes after the move
 # PASSED with "the quarantine holds" — its own log in its folder, the newest such; and no run of that script holds its
 # folder's lock now. The lock is only tried and let go at once: a --check run during the deploy is the operator's to
-# avoid (the runbook). After a rollback or in an --after-only run this is said, not refused: R19 and RB judge it.
+# avoid (the runbook). After a rollback or in an --after-only run this is said, not refused: R19 judges it after an
+# --after-only run, RB after a rollback (a rollback runs no R19).
 q_judge
 QCL="$(q_check_log)"; QCL_F="${QCL%% *}"; QCL_R="${QCL##* }"; QCL_T="$(printf '%s' "$QCL" | awk '{print $2}')"
 echo "  quarantine      $Q_SAYS   (its record $Q_RECORD, read only)"
@@ -1933,10 +1936,12 @@ Q_FAIL_LAST=""; Q_FAIL_IN=""
 for f in "$STATE" "$STATE".prev-*; do
   [ -f "$f" ] && grep -q '^STRAY_Q_FAILED=' "$f" 2>/dev/null || continue
   Q_FAIL_IN="$Q_FAIL_IN ${f##*/}"
-  while IFS= read -r v; do
+  while IFS= read -r v || [ -n "$v" ]; do
     case "$v" in ''|*[!0-9]*) Q_FAIL_LAST="?" ;; *) case "$Q_FAIL_LAST" in '?') ;; '') Q_FAIL_LAST="$v" ;; *) [ "$v" -le "$Q_FAIL_LAST" ] || Q_FAIL_LAST="$v" ;; esac ;; esac
   done < <(sed -n 's/^STRAY_Q_FAILED=//p' "$f" 2>/dev/null)
 done
+[ -n "$Q_FAIL_IN" ] && [ -z "$Q_FAIL_LAST" ] && Q_FAIL_LAST="?"   # a record whose time could not be read refuses
+Q_JUDGE="$( [ "$MODE" = "rollback" ] && echo RB || echo R19 )"   # what judges the quarantine after this run: a rollback runs RB, not R19
 if [ "$MODE" = "deploy" ]; then
   [ "$Q_LOCK" = "free" ] || stop "NO-GO (A14): $( [ "$Q_LOCK" = "held" ] && echo "a run of scripts/quarantine-stray-store.sh is going on this server — it holds its folder's lock" || echo "whether a run of scripts/quarantine-stray-store.sh is going cannot be told ($Q_DIR cannot be opened, or this host has no flock)") — wait until it has ended and a --check of it has PASSED, then run this again. Nothing was changed. Send the log file"
   [ "$Q_HOLDS" = "yes" ] || stop "NO-GO (A14): the stray store's quarantine is not done, or does not hold — $Q_WHY. $EXPECTED_VERSION is deployed only after it: a new live commit before the move voids the quarantine script. Nothing was changed. Send the log file, with $Q_RECORD and every *.own.log in $Q_DIR"
@@ -1948,8 +1953,8 @@ if [ "$MODE" = "deploy" ]; then
   ok "A14 the stray store is quarantined and the quarantine holds: its record says done, moved at $(utc_of "$(q_get Q_AT)"), no failure, no put-back; <plugin>/data is the folder of the move, nothing at the old name, nothing a new store makes; the kept file is the same, unchanged, no side file; its --check begun $(utc_of "$QCL_T") PASSED; no run of it is going"
   [ -z "$Q_FAIL_IN" ] || note "A14 a run of this script found the quarantine broken at $(utc_of "$Q_FAIL_LAST") (STRAY_Q_FAILED in${Q_FAIL_IN}); the quarantine's --check begun $(utc_of "$QCL_T"), after it, PASSED — so this deploy goes on. Send that run's log file with this one"
   [ -z "$Q_K12" ] || note "A14 a state file records an R19 failure after the move (${Q_K12# }): a run of that release's deploy script in a mode the quarantine's runbook forbids after the move (its R19 fails for good once the file is gone) — not evidence of an opener (the quarantine's K12). Say which run it was"
-elif [ "$Q_HOLDS" = "yes" ]; then echo "  quarantine      holds as its record says (R19 and RB judge it after this run's checks)"
-else note "A14 the quarantine does not hold as its record says — $Q_WHY. This run changes nothing of it; R19$( [ "$MODE" = "rollback" ] && echo " and RB") judge it below. Send the log file, with $Q_RECORD"; fi
+elif [ "$Q_HOLDS" = "yes" ]; then echo "  quarantine      holds as its record says ($Q_JUDGE judges it after this run's checks)"
+else note "A14 the quarantine does not hold as its record says — $Q_WHY. This run changes nothing of it; $Q_JUDGE judges it below. Send the log file, with $Q_RECORD"; fi
 # A12 — the pin's gate on THIS server's own configuration (refusal 12). Run as the database's owner, with the live store
 # held open read-only as cron/master.php holds it, the pin's StarlinkRetryScope must find the live directory this script
 # found, outside the plugin folder, read the live store, resolve Uganda and say skip — or the fix would not take effect
@@ -2107,7 +2112,7 @@ if [ "$MODE" = "deploy" ]; then
     { [ "$W_POL" = "200" ] && [ "$W_POL_OK" = "yes" ] && [ "$W_TOS" = "200" ] && [ "$W_TOS_ID" != "0" ] && [ "${W_TOS_UCC:-1}" = "0" ]; } \
       || stop "NO-GO (A19): the website does not show the 12 Oct policies the portal's new Terms point to — policies.html $W_POL (links $W_POL_OK), terms.html $W_TOS (identity ×$W_TOS_ID, a UCC claim ×${W_TOS_UCC:-?}). Deploy the website first. Nothing was changed. Send the log file"
     ok "A19 the website shows the policies hub and the Terms of Service the portal's new Terms point to — the identity sentence, no UCC authorisation claim"
-    { [ "$W_PRV" = "200" ] && [ "$W_PRV_REC" != "0" ] && [ "$W_INS" = "200" ] && [ "$W_INS_PH" != "0" ]; } || note "A19 the website's Privacy Policy or Starlink Installation page is not yet the 12 Oct evening's (recordings ×$W_PRV_REC, \"normally photographs\" ×$W_INS_PH): the portal's Privacy says a little more than the website's until it is deployed — those changes are on the development branch, not on main yet: merge them to main, then redeploy the website"
+    { [ "$W_PRV" = "200" ] && [ "$W_PRV_REC" != "0" ] && [ "$W_INS" = "200" ] && [ "$W_INS_PH" != "0" ]; } || note "A19 the website's Privacy Policy or Starlink Installation page is not yet the 12 Oct evening's (recordings ×$W_PRV_REC, \"normally photographs\" ×$W_INS_PH): the portal's Privacy says a little more than the website's until it is deployed — they were on the development branch, not on main, when this script was written (13 Oct): if main does not have them yet, merge them to main; then redeploy the website"
   fi
   DATED_YMD="$(date -d "$UG_LEGAL_DATED" +%Y%m%d 2>/dev/null || true)"; TODAY_KLA="$(TZ=Africa/Kampala date +%Y%m%d)"
   case "$DATED_YMD" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) stop "NO-GO (A20): the documents' date, \"$UG_LEGAL_DATED\", cannot be read as a date. Nothing was changed" ;; esac
@@ -2191,7 +2196,8 @@ PHP
   cp "$DEST/.deployed-commit" "$BK/deployed-commit.before" 2>/dev/null || true
   # 5.18.91: a rollback writes its own record, never the deploy's. A rollback that is declined, or stops before it changes
   # anything, leaves this release live — and the deploy's state file (R19's references, V4's start) must stay as the
-  # deploy wrote it.
+  # deploy wrote it. 5.18.94: the one line a rollback ever adds to it is RB's STRAY_Q_FAILED, after the rollback is
+  # done and only when RB finds the quarantine broken, so that a later deploy waits for a --check after it (A14).
   STATE_W="$STATE"; [ "$MODE" = "rollback" ] && STATE_W="$OUT/rollback-state-$TS.env"
   # 5.18.91: a deploy run again — after a rollback, or one declined at its question — writes a new state file. The earlier
   # one is kept beside it first, or nothing is written (the tenth and eleventh reviews); and every deploy run says an R19
@@ -2202,7 +2208,7 @@ PHP
   fi
   if [ "$MODE" = "deploy" ]; then
     SLR_EARLIER="$(grep -l '^STRAY_Q_FAILED=' "$STATE".prev-* 2>/dev/null | paste -sd' ' -)"
-    [ -n "$SLR_EARLIER" ] && note "an earlier run of this deploy found the quarantine broken (STRAY_Q_FAILED in $SLR_EARLIER): something made a new store at the old name, or changed the kept file, after that deploy. Send every log file — this one and that run's"
+    [ -n "$SLR_EARLIER" ] && note "an earlier run of this script (a deploy's or an --after-only's R19, or a rollback's RB) found the quarantine broken (STRAY_Q_FAILED in $SLR_EARLIER): something made a new store at the old name, or changed the kept file, after that deploy. Send every log file — this one and that run's"
   fi
   # DEPLOYED_AT in ISO-8601, the form the container log writes its times in (V4 of an --after-only run reads it).
   printf 'DEPLOYED_AT=%s\nFROM_COMMIT=%s\nSW_BEFORE=%s\nIA_BEFORE=%s\nWA_BEFORE=%s\nIX_BEFORE=%s\nLC_BEFORE=%s\nLS_BEFORE=%s\nQU_BEFORE=%s\nSA_BEFORE=%s\nTB_BEFORE=%s\nPF_BEFORE=%s\nMN_BEFORE=%s\nOL_BEFORE=%s\nHC_BEFORE=%s\nFH_BEFORE=%s\nWA87_BEFORE=%s\nEQ_FILE=%s\nEQ_BEFORE=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LIVE_BEFORE" "$SW_BEFORE" "$IA_BEFORE" "$WA_BEFORE" "$IX_BEFORE" "$LC_BEFORE" "$LS_BEFORE" "$QU_BEFORE" "$SA_BEFORE" "$TB_BEFORE" "$PF_BEFORE" "$MN_BEFORE" "$OL_BEFORE" "$HC_BEFORE" "$FH_BEFORE" "$WA87_BEFORE" "$BK/event-queue.tsv" "$EQ_BEFORE" > "$STATE_W"
@@ -3213,7 +3219,7 @@ elif case "$SLR_RUN_RAW" in ''|*[!0-9]*) true ;; *) false ;; esac || [ "$SLR_RUN
 else ok "R19 the quarantine holds: master ran the retry job at $(utc_of "$SLR_RUN_T"), after the copy (at $(utc_of "$R19_COPY_T")), and nothing made a database or a side file at the stray store's old name, nothing a new store's first start makes appeared in <plugin>/data, and the kept file is unchanged — the installed gate kept the job away"; fi
 if [ "$FAIL" != "$R19_FC0" ]; then
   R19_SUM="R19 FAILED — the quarantine does not hold"
-  if [ -z "$R19_FAILED_LINE" ]; then
+  if [ "$Q_HOLDS" != "yes" ]; then   # R19 saw it broken in this run: its own time, every time, so A14 waits for a --check after the latest
     if [ -n "$STATE" ] && [ -f "$STATE" ] && printf 'STRAY_Q_FAILED=%s\n' "$(date -u +%s)" >> "$STATE" 2>/dev/null; then
       echo "  quarantine      R19 FAILED — recorded in $STATE (STRAY_Q_FAILED): every later --after-only fails R19 on it and a --rollback fails RB, and a deploy waits for a --check of the quarantine that passes after it (A14)"
     else note "R19 FAILED, and the failure could NOT be recorded in the state file ($STATE): a later run will not know of it — keep this log file with the others"; fi
@@ -3421,7 +3427,7 @@ if [ "$Q_HOLDS" = "yes" ] && [ -z "$RB_QF" ]; then ok "RB the quarantine still h
 elif [ "$Q_HOLDS" = "yes" ]; then bad "RB the quarantine holds as its record says now, but a run of this script found it broken ($RB_QF, in $STATE) — what it saw may be gone. Send every log file, with $Q_RECORD"
 else
   bad "RB the quarantine does not hold after the rollback — $Q_WHY. Send this log file with $Q_RECORD"
-  if [ -z "$RB_QF" ]; then
+  if [ "$Q_HOLDS" != "yes" ]; then   # RB saw it broken after this rollback: its own time, every time, so A14 waits for a --check after the latest
     if [ -n "$STATE" ] && [ -f "$STATE" ] && printf 'STRAY_Q_FAILED=%s\n' "$(date -u +%s)" >> "$STATE" 2>/dev/null; then echo "  quarantine      RB FAILED — recorded in $STATE (STRAY_Q_FAILED): a later deploy waits for a --check of the quarantine that passes after it (A14)"
     else note "RB FAILED, and the failure could NOT be recorded in the state file ($STATE): a later run will not know of it — keep this log file with the others"; fi
   fi
