@@ -2454,7 +2454,7 @@ if [ -n "$PLUGIN_BASE" ]; then
   http GET "$PLUGIN_BASE?page=terms"; V13_T="$HTTP_CODE"; V13_TU="$(count 'UCC')"; V13_TV="$(count "v$V13_V")"; V13_TI="$(count 'an independent IT solutions provider and Starlink installer registered in Uganda')"
   http GET "$PLUGIN_BASE?page=privacy"; V13_P="$HTTP_CODE"; V13_PU="$(count 'UCC')"; V13_PV="$(count "v$V13_V")"
   http GET "$PLUGIN_BASE?page=api&action=app_legal_version"; V13_L="$HTTP_CODE"
-  V13_LV="$(printf '%s' "$HTTP_BODY" | tr -d ' \n' | grep -oE '"(tos_version|privacy_version|dated)":"[^"]*"' | sed -E 's/"([a-z_]+)":"([^"]*)"/\1=\2/' | sort | paste -sd' ' -)"
+  V13_LV="$(printf '%s' "$HTTP_BODY" | tr -d '\n' | grep -oE '"(tos_version|privacy_version|dated)" *: *"[^"]*"' | sed -E 's/"([a-z_]+)" *: *"([^"]*)"/\1=\2/' | sort | paste -sd' ' -)"   # the values as sent, spaces kept (rehearsal trial 1: "16 October 2026" read as 16October2026)
   echo "  documents       ?page=terms $V13_T (identity ×$V13_TI, UCC ×$V13_TU, v$V13_V ×$V13_TV) · ?page=privacy $V13_P (UCC ×$V13_PU, v$V13_V ×$V13_PV) · app_legal_version $V13_L ($V13_LV)"
   if [ "$V13_T$V13_P$V13_L" = "000000000" ]; then note "V13 could not probe the public address ($PLUGIN_BASE, curl 000) — R22 reads the installed documents directly"
   elif [ "$MODE" = "rollback" ]; then
