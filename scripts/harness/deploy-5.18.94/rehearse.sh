@@ -147,6 +147,20 @@ check "$(bash -n "$DEPLOY94" && echo parses)" "parses" "the script parses"
 check "$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)|$(git -C "$REPO" log -1 --format=%h "$B93" -- $P)" "$P94|$B93" \
   "control: the clone, in one pack as a fresh clone is, writes the 7-character short form scripts/deploy-hybrid.sh records — as the server's checkout recorded 69c87a6 on 11 Oct"
 
+# ── The fake docker's exec runs with a container's own umask, 022 — a real `docker exec` never carries the calling
+# script's (deploy-5.18.94.sh sets 077): trial 1 measured R21's copy folder left 700, out of the database owner's reach,
+# where the server ran the same code on 11 Oct and passed. The edit asserted, as every edit here. ──────────────────────
+python3 - "$SB/bin/docker" <<'PYD' || echo "fakedocker:umask" >> "$SB/anchor-missing"
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = 'detach=""; user=""\n'
+assert s.count(old) == 1
+s = s.replace(old, 'umask 022   # a container\'s own, never the calling script\'s\n' + old, 1)
+open(p, 'w').write(s)
+PYD
+check "$(grep -c "^umask 022" "$SB/bin/docker")$(env PATH="$SB/bin:$PATH" bash -c 'umask 077; docker exec ucrm sh -c umask')" "10022" \
+  "control: the fake docker's exec runs with the container's umask (022), whatever the calling script set"
+
 # ── The stand-in public.php serves the two documents and the version endpoint, as public.php and api_customer_app.php do ─
 python3 - "$SB/web/public.php" <<'PY' || echo "standin:legal" >> "$SB/anchor-missing"
 import sys
@@ -287,8 +301,8 @@ check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')$(has "$(cat "$QCH
   "the --check the runbook asks for — 30 minutes after the move, master's run of the job since: PASSED, the quarantine holds"
 KEPT0="$(kept_state)"; QREC0="$(sha256sum "$QREC" | cut -c1-16)"
 fresh94; OUT="$(run94 --answer NO)"
-check "$(okline "$OUT" A14 'the stray store is quarantined and the quarantine holds' 'no failure, no put-back')$(went94 "$OUT")$(has "$OUT" 'STOP: not confirmed')|$(quiet94)" "yesyesyesyes|$B93|0|$D94|$KEPT0|0" \
-  "1f now A14 passes, the run reaches the question, and a word other than DEPLOY stops it with nothing changed"
+check "$(okline "$OUT" A14 'the stray store is quarantined and the quarantine holds' 'no failure, no put-back')$(went94 "$OUT")$(has "$OUT" 'STOP: not confirmed')|$(quiet94)" "yesyesyesyes|$B93|1|$D94|$KEPT0|0" \
+  "1f now A14 passes, the run reaches the question, and a word other than DEPLOY stops it with nothing changed but the backup GO takes before it asks"
 check "$(sha256sum "$QREC" | cut -c1-16)" "$QREC0" "…the quarantine's record is exactly as before: the script reads it, never writes it"
 # Each clause on its own: planted in the record (the last line of a key wins), or beside the files; put back after each.
 a14() {   # a14 LABEL EXPECTED-REASON — run, then: refused at A14 with that reason, never the question, nothing changed
@@ -341,7 +355,7 @@ fresh94; OUT="$(run94 --answer NO)"
 check "$(has "$OUT" 'note  A14 a state file records an R19 failure after the move (dnb-5.18.93/state-5.18.93.env)')$(went94 "$OUT")" "yesyesyes" \
   "1u 5.18.93's state file records an R19 failure after the move (a run the runbook forbids): said, never a reason to stop"
 sed -i '/^STRAY_R19_FAILED=/d' "$SB/out/state-5.18.93.env"
-check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(backups94)" "$KEPT0|0|$QREC0|$D94|$B93|0" "…after section 1: the quarantine, the data and the live release exactly as before it"
+check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)" "$KEPT0|0|$QREC0|$D94|$B93" "…after section 1: the quarantine, the data and the live release exactly as before it"
 
 echo; echo "== 94-2. A17–A21: the documents, the records, the operator's settings, the website, the date =="
 nogo94() {   # nogo94 LABEL EXPECTED-TEXT OUTPUT [DATA-DIGEST] — refused with that text, never the question, nothing deployed or changed
@@ -447,8 +461,8 @@ fresh94; OUT="$(run94 --answer NO --today 20261016)"
 check "$(okline "$OUT" A20 'the Uganda documents are dated 16 October 2026' 'today in Kampala')$(went94 "$OUT")" "yesyesyes" "2t on the day itself: A20 ok"
 check "$(has "$OUT94A" "note  A20 the Uganda documents are dated 16 October 2026, after today in Kampala ($(TZ=Africa/Kampala date +%Y%m%d))")" "yes" \
   "2u before the day (today, here): said — a customer signing in before then accepts them with that date shown as Effective"
-check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(backups94)|$(host_code94)|$(left_tmp94)" "$KEPT0|0|$QREC0|$D94|$B93|0|0|$TMP94" \
-  "…after section 2: nothing changed, no backup, no copy of the code left on the host or in /tmp"
+check "$(kept_state)|$(oldname)|$(sha256sum "$QREC" | cut -c1-16)|$(data94)|$(live)|$(host_code94)|$(left_tmp94)" "$KEPT0|0|$QREC0|$D94|$B93|0|$TMP94" \
+  "…after section 2: nothing changed, no copy of the code left on the host or in /tmp"
 
 echo; echo "== 94-3. the deploy, as the operator runs it =="
 fresh94; OUT="$(run94 --answer DEPLOY)"
@@ -514,7 +528,7 @@ check "$(fails "$OUT")$(okline "$OUT" R19 'the quarantine holds: master ran the 
 check "$(data94)$(kept_state)$(oldname)$(host_code94)$(left_tmp94)" "$D94${KEPT0}00$TMP94" "…the --after-only runs wrote nothing and left nothing behind"
 # V4: 5.18.93 has no known fatal, so any fatal of the plugin since the deploy fails — 5.18.92's old line at main.php:484
 # too, named by its time and file:line, never by more of its text.
-base_log; touch "$SB/web/.plant_old"; OUT="$(run94 --after-only)"
+base_log; chown 1000:1000 "$SB/container.log"; touch "$SB/web/.plant_old"; OUT="$(run94 --after-only)"   # the stand-in writes as the server's owner
 check "$(failline "$OUT" V4 '1 fatal line(s) of')$(grep -A7 -E '^  FAIL  V4' <<<"$OUT" | grep -cE '^ +20[0-9-]+T[0-9:]+Z main\.php:484$')$(grep -A7 -E '^  FAIL  V4' <<<"$OUT" | grep -cE 'not callable|UNCAUGHT')$(ls -A "$SB/web" | grep -c '^\.plant_old$')" "yes100" \
   "4c' a fatal of the plugin since the deploy — 5.18.92's old line at main.php:484, planted during the run — FAILS V4, named by its time and file:line only"
 base_log
@@ -572,7 +586,7 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.94 (deploy): PASSED')$(live)" "0yes$P94
 
 echo; echo "== 94-6. what the rehearsal left behind, and what it never reached =="
 check "$(evo_calls)" "0" "Evolution never called — not by the quarantine, the deploy, its checks or the installed code they ran"
-check "$(ls -a "$REPO/scripts" | grep -cE '^\..+\.sh$')" "0" "no weakened or re-pinned copy is left in the clone's scripts/"
+check "$(ls -a "$REPO/scripts" | grep -E '^\..+\.sh$' | paste -sd, -)" ".qpin.sh" "no weakened or re-pinned copy is left in the clone's scripts/ — the quarantine's one pinned copy aside, as its own rehearsal counts it"
 check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )" "" "every weakened copy and every planted edit found its anchor exactly once — none was skipped"
 M="$(mutant anchorprobe94 "$DEPLOY94" 'NO SUCH ANCHOR IN THE SCRIPT' 'x' 2>/dev/null)"
 check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )$(test -e "$M" && echo made || echo none)" "mutant:anchorprobe94 none" \
