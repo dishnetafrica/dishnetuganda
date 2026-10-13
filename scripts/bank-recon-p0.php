@@ -9,21 +9,26 @@
  * Why it cannot write:
  *   - it loads NO plugin code. CashbookService's constructor alters cb_ledger and its bookBase() refreshes the
  *     configuration vault; SqliteStore::create() runs migrations. None of them is touched;
- *   - SQLite opens the database with SQLITE_OPEN_READONLY and immutable=1, then PRAGMA query_only=ON (checked). Immutable,
- *     SQLite takes no lock and makes no file: a plain read-only open of this WAL-mode book would MAKE its -wal and -shm
- *     when they are missing and leave them behind (measured; docs/07, 5.18.91), and could not be stopped from doing so;
+ *   - SQLite opens the database with SQLITE_OPEN_READONLY and immutable=1, then PRAGMA query_only=ON and temp_store=MEMORY
+ *     (both checked). Immutable, SQLite takes no lock and makes no file beside the book: a plain read-only open of this
+ *     WAL-mode book would MAKE its -wal and -shm when they are missing and leave them behind (measured; docs/07, 5.18.91),
+ *     and could not be stopped from doing so; temp_store=MEMORY keeps a large sort out of the temporary directory;
  *   - so it reads only while the plugin has the book closed — no -wal, no -shm: then the file holds every committed row,
  *     because SQLite removes the -wal only after copying all of it back. It waits up to two minutes for that moment;
  *   - an immutable reader is not protected from a writer, so it reads the book twice, on two connections, and the result
  *     only counts if both readings are identical, the file's inode, size and times did not move, and no side file appeared;
+ *     a reading that SQLite cannot finish (the plugin rewrote pages under it) ends as "run again" (exit 3), never as an
+ *     uncaught error — SQLite's own words for that ("malformed") would wrongly read as damage to the book;
  *   - every query goes through q(): one statement, beginning SELECT or WITH, inside one read transaction (BEGIN … ROLLBACK);
  *   - each reading ends with total_changes() — the rows that connection changed — and fails unless it is 0;
  *   - the only file functions used are is_file, is_dir, is_readable, is_writable, realpath, stat and file_get_contents
  *     (the three configuration files and the vault, for the book's currencies).
  *
- * What it prints: aggregates only — counts and net totals per currency and per kind of account, the figure the Cashbook
- * hero shows today, and that figure under four candidate definitions. Never a description, a person, a reference or a
- * customer; account names only for bank, cash and mobile-money accounts, with any run of 4+ digits masked.
+ * What it prints: counts and net totals per currency and per kind of account; cash in hand as the dashboard, the evening
+ * WhatsApp and the Cashbook hero show it today, and under four candidate definitions; account ids with their kind and
+ * currency; the 12 Sep adjustment row's id, date, direction, status and whether its category is a capital one. Nothing
+ * free-text: no name (of an account or anyone), description, person, reference, customer or category is printed — every
+ * other printed value is a number, a checked date or one of a fixed list of codes.
  *
  * Exit: 0 done; 2 refused before reading (wrong folder, no database, the book kept open, unexpected schema); 3 a check
  * failed.
@@ -40,12 +45,16 @@ function out(string $s = ''): void { echo $s, "\n"; }
 function refuse(int $code, string $why): void { out("P0: REFUSED — {$why}. Nothing was written."); exit($code); }
 function fail(string $why): void { out(''); out("P0: FAILED — {$why}. Nothing was written."); exit(3); }
 function money(float $v): string { return number_format(round($v, 2), 2); }
-/** A short label for the log: printable, at most 40 characters, and any run of 4+ digits (an account or phone number) masked. */
-function label(?string $v): string {
-    $v = preg_replace('/[^\p{L}\p{N} &().,\/_+\x{2013}-]/u', '?', (string)$v) ?? '?';
-    $v = preg_replace('/\p{N}{4,}/u', '####', $v) ?? '?';
-    return preg_replace('/^(.{39}).+$/us', '$1…', $v) ?? '?';
-}
+/** Only a value from a fixed list is ever printed; anything else reads "(other)". */
+const KINDS     = ['bank', 'cash', 'momo', 'receivable', 'payable', 'inventory', 'asset', 'director', 'equity'];
+const TXN_TYPES = ['SALE', 'PAYMENT', 'EXPENSE', 'TRANSFER', 'OPENING_BALANCE', 'REFUND', 'ADJUSTMENT', 'DIRECTOR_FUNDING'];
+const STATUSES  = ['approved', 'pending_approval', 'rejected', 'voided', 'voided_reconcile'];
+const PROJECTS  = ['dishnet', '4g', 'bluecard'];
+function pick(?string $v, array $allowed): string { return in_array((string)$v, $allowed, true) ? (string)$v : '(other)'; }
+/** A currency code as stored (case kept: a lowercase code is a finding), or "(other)". */
+function code(?string $v): string { return preg_match('/^[A-Za-z]{3}$/', (string)$v) ? (string)$v : '(other)'; }
+/** A ledger source: the plugin's writers use short lowercase identifiers; anything else reads "(other)". */
+function src(?string $v): string { return preg_match('/^[a-z][a-z_]{0,31}$/', (string)$v) ? (string)$v : '(other)'; }
 /** A date or a month for the log, or "?" when it is not one. */
 function day(?string $v): string { return preg_match('/^\d{4}-\d{2}(-\d{2})?$/', (string)$v) ? (string)$v : '?'; }
 
@@ -147,8 +156,10 @@ function measure(PDO $pdo, string $cur, string $base, int $adjId, string $accJoi
     $curP = $cur === $base ? "(l.currency = :c OR l.currency IS NULL OR l.currency = '')" : 'l.currency = :c';
     $prjP = $project === '' ? '' : ' AND l.project = :p';
     $bind = [':c' => $cur] + ($project === '' ? [] : [':p' => $project]);
-    $today = (float)(q($pdo, "SELECT ROUND(COALESCE(SUM(CASE WHEN l.direction='in' THEN {$amt} ELSE -{$amt} END), 0), 2) AS bal
-                               FROM cb_ledger l WHERE l.{$live} AND {$curP}{$prjP}", $bind)[0]['bal'] ?? 0);
+    $t = q($pdo, "SELECT ROUND(COALESCE(SUM(CASE WHEN l.direction='in' THEN {$amt} ELSE -{$amt} END), 0), 2) AS bal,
+                         COALESCE(SUM(CASE WHEN l.direction='in' THEN {$amt} ELSE -{$amt} END), 0) AS raw
+                    FROM cb_ledger l WHERE l.{$live} AND {$curP}{$prjP}", $bind)[0];
+    $today = (float)($t['bal'] ?? 0); $raw = (float)($t['raw'] ?? 0);
     $cls = ['U' => [0, 0.0], 'ADJ' => [0, 0.0], 'CASH' => [0, 0.0], 'MOMO' => [0, 0.0], 'BANK' => [0, 0.0], 'OTHER' => [0, 0.0], 'ORPHAN' => [0, 0.0]];
     foreach (q($pdo, "SELECT CASE WHEN l.id = :adj THEN 'ADJ'
                                   WHEN COALESCE(l.account_id,0) = 0 THEN 'U'
@@ -162,7 +173,7 @@ function measure(PDO $pdo, string $cur, string $base, int $adjId, string $accJoi
     }
     $sum = 0.0; foreach ($cls as $v) $sum += $v[1];
     $U = $cls['U'][1]; $A = $cls['ADJ'][1]; $C = $cls['CASH'][1] + $cls['MOMO'][1];
-    return ['today' => $today, 'cls' => $cls, 'sum' => $sum, 'ok' => abs(round($sum, 2) - $today) < 0.005,
+    return ['today' => $today, 'cls' => $cls, 'sum' => $sum, 'ok' => abs($sum - $raw) < 0.005,
             'opts' => ['A' => $U + $A + $C, 'B' => $U + $C, 'C' => $U + $A, 'D' => $U]];
 }
 
@@ -177,12 +188,15 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
             PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY,
         ]);
         $pdo->exec('PRAGMA query_only = ON');
+        $pdo->exec('PRAGMA temp_store = MEMORY');
         $pdo->exec('BEGIN');
     } catch (Throwable $e) {
         refuse(2, 'the database could not be opened read-only and immutable (' . get_class($e) . ')');
     }
+    try {
     $qo = (int)(q($pdo, 'SELECT * FROM pragma_query_only')[0]['query_only'] ?? 0);
     if ($qo !== 1) fail('query_only is not on for this connection');
+    if ((int)(q($pdo, 'SELECT * FROM pragma_temp_store')[0]['temp_store'] ?? 0) !== 2) fail('temp_store is not MEMORY for this connection');
 
     $tables = array_column(q($pdo, "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cb_ledger','cb_accounts','kyc_config')"), 'name');
     if (!in_array('cb_ledger', $tables, true)) refuse(2, 'no cb_ledger table');
@@ -208,19 +222,21 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
         $o('                  the pages\' settings row: base ' . $rowBase . ', currencies ' . implode(',', $rowCurs)
             . ($rowBase === $base && $rowCurs === $curs ? ' — the same' : ' — DIFFERENT: every currency of both is measured below; blank-currency rows count as ' . $base));
         foreach ($rowCurs as $c) if (!in_array($c, $curs, true)) $curs[] = $c;
+        $shown = $rowCurs;
     } else {
         $o('                  the pages\' settings row: none');
+        $shown = bookCurrencies([], $eff);
+        foreach ($shown as $c) if (!in_array($c, $curs, true)) $curs[] = $c;
     }
 
     // ── Accounts: names only for money accounts ──────────────────────────────────────────────────────────────────
     if ($hasAcc) {
-        $o('  accounts        id   kind         cur  active  rows  name');
-        foreach (q($pdo, "SELECT a.id, a.name, a.kind, a.currency, a.active,
+        $o('  accounts        id   kind         cur      active  rows   (names are not printed: match the ids on Accounts → Opening Balances)');
+        foreach (q($pdo, "SELECT a.id, a.kind, a.currency, a.active,
                                   (SELECT COUNT(*) FROM cb_ledger l WHERE l.account_id = a.id AND l.{$live}) AS n
                              FROM cb_accounts a ORDER BY a.id") as $a) {
-            $money = in_array((string)$a['kind'], ['bank', 'cash', 'momo'], true);
-            $o(sprintf('                  %-4d %-12s %-4s %-6s %5d  %s', (int)$a['id'], label((string)$a['kind']), label((string)$a['currency']),
-                ((int)$a['active'] === 1 ? 'yes' : 'no'), (int)$a['n'], $money ? label((string)$a['name']) : '(name withheld: not a money account)'));
+            $o(sprintf('                  %-4d %-12s %-8s %-6s %5d', (int)$a['id'], pick((string)$a['kind'], KINDS), code((string)$a['currency']),
+                ((int)$a['active'] === 1 ? 'yes' : 'no'), (int)$a['n']));
         }
     }
 
@@ -235,16 +251,20 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
                         AND (UPPER(COALESCE(description,'')) LIKE '%ADJUSTMENT%' OR UPPER(COALESCE(category,'')) LIKE '%ADJUST%')",
                     [ADJ_DATE . '%']);
         if (count($r) === 1) { $adj = $r[0]; $adjHow = 'found: the one live unassigned row of ' . ADJ_DATE . ' named an adjustment'; }
-        else $adjHow = count($r) . ' candidate(s) on ' . ADJ_DATE . ' — not identified; run again with --adjustment-id=N';
+        else $adjHow = count($r) . ' candidate(s) on ' . ADJ_DATE . ' — not identified' . ($r ? ': ids ' . implode(', ', array_map(
+                static fn($x) => (int)$x['id'] . ' (' . pick((string)$x['direction'], ['in', 'out']) . ', ' . pick((string)$x['status'], STATUSES) . ')',
+                array_slice($r, 0, 10))) . (count($r) > 10 ? ', …' : '') . '; open them in the Cashbook, then run again with --adjustment-id=N' : '');
     }
     $adjId = $adj ? (int)$adj['id'] : -1;
     if ($adj) {
         $typ  = strtoupper(trim((string)$adj['txn_type']));
         $inPl = (string)$adj['status'] === 'approved'
             && ($typ !== '' ? !in_array($typ, CAPITAL_TXN_TYPES, true) : !in_array((string)$adj['category'], CAPITAL_CATEGORIES, true));
-        $o("  12 Sep adjust.  {$adjHow}: id {$adjId}, " . day(substr((string)$adj['date'], 0, 10)) . ', ' . label((string)$adj['direction'])
-            . ', category "' . label((string)$adj['category']) . '", ' . ($typ === '' ? 'untyped' : label($typ)) . ', source ' . label((string)($adj['source'] ?: '-'))
-            . ', ' . label((string)$adj['status']) . ', project ' . label((string)$adj['project']) . ', currency ' . label((string)(($adj['currency'] ?? '') ?: '(blank = base)')));
+        $o("  12 Sep adjust.  {$adjHow}: id {$adjId}, " . day(substr((string)$adj['date'], 0, 10)) . ', ' . pick((string)$adj['direction'], ['in', 'out'])
+            . ', category ' . (in_array((string)$adj['category'], CAPITAL_CATEGORIES, true) ? 'a capital one' : 'not a capital one')
+            . ', ' . ($typ === '' ? 'untyped' : pick($typ, TXN_TYPES)) . ', source ' . src((string)$adj['source'])
+            . ', ' . pick((string)$adj['status'], STATUSES) . ', project ' . pick((string)$adj['project'], PROJECTS)
+            . ', currency ' . ((string)($adj['currency'] ?? '') === '' ? '(blank = base)' : code((string)$adj['currency'])));
         $o('                  in the P&L of ' . day(substr((string)$adj['date'], 0, 7)) . ': ' . ($inPl
             ? 'YES — voiding it would move that month\'s P&L by its full amount'
             : 'no — approved capital/typed row or not approved: voiding it would not move the P&L'));
@@ -264,7 +284,7 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
                       WHERE l.source = 'bank_import' GROUP BY k ORDER BY k");
     $o(sprintf('  earlier import  %d row(s), %d voided; dated %s to %s; on %s; references: BANK-<hash> %d, other BANK- %d, none %d',
         (int)$bi['n'], (int)$bi['v'], $bi['d1'] === null ? '-' : day((string)$bi['d1']), $bi['d2'] === null ? '-' : day((string)$bi['d2']),
-        $biOn ? implode(', ', array_map(static fn($r) => label((string)$r['k']) . ' ' . $r['n'], $biOn)) : '-',
+        $biOn ? implode(', ', array_map(static fn($r) => ($r['k'] === '(none)' ? '(none)' : pick((string)$r['k'], KINDS)) . ' ' . $r['n'], $biOn)) : '-',
         (int)$bi['h'], (int)$bi['b'] - (int)$bi['h'], (int)$bi['n'] - (int)$bi['b']));
 
     // ── Per currency ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -272,7 +292,7 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
     foreach (q($pdo, "SELECT COALESCE(currency,'') AS c, COUNT(*) AS n FROM cb_ledger WHERE {$live} GROUP BY c") as $x) {
         $c = (string)$x['c'];
         if ($c === '' || in_array($c, $curs, true)) continue;
-        $extra[] = label($c) . " {$x['n']}";
+        $extra[] = code($c) . " {$x['n']}";
     }
     $checks = [];
     foreach ($curs as $cur) {
@@ -294,7 +314,8 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
                   [':c' => $cur]);
 
         $o('');
-        $o("{$cur}  cash in hand today (the Cashbook hero, the dashboard and the evening WhatsApp; all projects)   " . money($m['today']));
+        $o("{$cur}  cash in hand today, all projects — as the accounts dashboard and the evening WhatsApp show it"
+            . (in_array($cur, $shown, true) ? '' : ' (this currency is NOT listed on the pages)') . '   ' . money($m['today']));
         $o('       rows by where they sit                               rows                 net');
         $row = static function (string $l, array $v) use ($o): void { $o(sprintf('       %-50s %6d %19s', $l, $v[0], money($v[1]))); };
         $row('unassigned (no account), without the adjustment', $cls['U']);
@@ -308,7 +329,7 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
         $o(sprintf('       of these, pending approval %d (net %s) and rejected %d (net %s) — today\'s figure counts both',
             $pend['pending_approval'][0], money($pend['pending_approval'][1]), $pend['rejected'][0], money($pend['rejected'][1])));
         $o('       cash and mobile-money accounts by type: ' . ($comp
-            ? implode(' · ', array_map(static fn($r) => label((string)$r['t']) . ' ' . $r['n'] . ' (' . money((float)$r['net']) . ')', $comp)) : 'none'));
+            ? implode(' · ', array_map(static fn($r) => ($r['t'] === 'untyped' ? 'untyped' : pick((string)$r['t'], TXN_TYPES)) . ' ' . $r['n'] . ' (' . money((float)$r['net']) . ')', $comp)) : 'none'));
         $labels = [
             'A' => 'bank and other accounts out, adjustment kept      ',
             'B' => 'bank and other accounts out, adjustment out       ',
@@ -324,9 +345,9 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
         }
         $line = [];
         foreach (array_keys($labels) as $k) {
-            $line[] = (!$adj && in_array($k, ['B', 'D'], true)) ? "{$k} -" : "{$k} " . $delta($md['opts'][$k], $md['today']);
+            $line[] = (!$adj && in_array($k, ['B', 'D'], true)) ? "{$k} -" : "{$k} " . money($md['opts'][$k]) . ' (' . $delta($md['opts'][$k], $md['today']) . ')';
         }
-        $o('       the Cashbook page (project dishnet, its default) today ' . money($md['today']) . '; vs today: ' . implode(' · ', $line)
+        $o('       the Cashbook hero (project dishnet, the page\'s default) today ' . money($md['today']) . '; under each option: ' . implode(' · ', $line)
             . ($md['ok'] ? '' : ' — PARTS DO NOT ADD UP'));
     }
     if ($extra) { $o(''); $o('  other currencies in the book, not shown on the hero: ' . implode(', ', $extra) . ' row(s)'); }
@@ -334,6 +355,12 @@ function readBook(string $db, string $base, array $curs, array $eff, array $cfgF
     $changed = (int)(q($pdo, 'SELECT total_changes() AS n')[0]['n'] ?? -1);
     $qo2     = (int)(q($pdo, 'SELECT * FROM pragma_query_only')[0]['query_only'] ?? 0);
     $pdo->exec('ROLLBACK');
+    } catch (Throwable $e) {
+        $code = $e instanceof PDOException ? (string)($e->errorInfo[1] ?? $e->getCode()) : '-';
+        fail('SQLite could not finish reading the book (' . get_class($e) . ', code ' . preg_replace('/[^0-9A-Za-z]/', '', $code)
+            . '). With the book read immutable, that means the plugin rewrote it during the reading; the book itself is not'
+            . ' touched by this. Nothing was measured; run again');
+    }
     $pdo = null;
     return ['lines' => $L, 'checks' => $checks, 'changed' => $changed, 'qo' => $qo2];
 }

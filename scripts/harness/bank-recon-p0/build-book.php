@@ -66,7 +66,11 @@ $momo  = (int)$must($cb->addAccount('MoMo 0700123456 RH', 'UGX', 'momo'), 'momo'
 $dir   = (int)$must($cb->addAccount('RH-MARK Director Loan', 'UGX', 'director'), 'director')['id']; // withheld
 $inv   = (int)$must($cb->addAccount('RH-MARK Stock', 'UGX', 'inventory'), 'inventory')['id'];      // withheld
 $bank2 = (int)$must($cb->addAccount('Bank 7000000001', 'UGX', 'bank'), 'bank 2')['id'];             // masked
-$ids += ['bankU' => $bankU, 'bankD' => $bankD, 'cash' => $cash, 'momo' => $momo, 'dir' => $dir, 'inv' => $inv, 'bank2' => $bank2];
+// the review's leak fixtures: digits split by separators, a person's name in a money account's name
+$cb->addAccount('MoMo 0772 123 456 RH-MARK', 'UGX', 'momo');
+$cb->addAccount('Airtel +256 700 987 654', 'UGX', 'momo');
+$cash2 = (int)$must($cb->addAccount('Cash – RH-MARK Person', 'UGX', 'cash'), 'cash 2')['id'];
+$ids += ['bankU' => $bankU, 'bankD' => $bankD, 'cash' => $cash, 'momo' => $momo, 'dir' => $dir, 'inv' => $inv, 'bank2' => $bank2, 'cash2' => $cash2];
 
 $must($cb->recordOpeningBalance($cash, 500000.0, '2026-08-01', 'RH-MARK opening', 'OB-C', 'RH-MARK Admin'), 'cash opening');
 $must($cb->recordOpeningBalance($momo, 80000.0, '2026-08-01', 'RH-MARK opening', 'OB-M', 'RH-MARK Admin'), 'momo opening');
@@ -89,7 +93,7 @@ $cb->addEntryRaw(['direction' => 'out', 'amount' => 7000, 'currency' => 'ugx', '
 $cb->addEntryRaw(['direction' => 'out', 'amount' => 9, 'currency' => 'KES', 'category' => 'Purchase', 'description' => 'RH-MARK other currency', 'date' => '2026-09-09', 'status' => 'approved']);
 
 // the 12 Sep adjustment: untyped, unassigned, as the live one is described (docs/07:3540)
-$cb->addEntryRaw(['direction' => 'out', 'amount' => 123456, 'currency' => 'UGX', 'category' => 'Adjustment', 'description' => 'ADJUSTMENT ENTRY RH-MARK', 'person' => 'RH-MARK Person', 'date' => '2026-09-12', 'status' => 'approved', 'approved_by' => 'RH-MARK Admin']);
+$cb->addEntryRaw(['direction' => 'out', 'amount' => 123456, 'currency' => 'UGX', 'category' => 'Adjustment RH-MARK 0772 123 456', 'description' => 'ADJUSTMENT ENTRY RH-MARK', 'person' => 'RH-MARK Person', 'date' => '2026-09-12', 'status' => 'approved', 'approved_by' => 'RH-MARK Admin', 'source' => 'RH-MARK src']);
 $ids['adj'] = (int)$pdo->query("SELECT id FROM cb_ledger WHERE description = 'ADJUSTMENT ENTRY RH-MARK'")->fetchColumn();
 if ($variant === 'two-adj') {
     $cb->addEntryRaw(['direction' => 'in', 'amount' => 1, 'currency' => 'UGX', 'category' => 'Adjustment', 'description' => 'second ADJUSTMENT RH-MARK', 'date' => '2026-09-12', 'status' => 'approved']);
@@ -101,6 +105,10 @@ $cb->addEntryRaw(['direction' => 'out', 'amount' => 5000, 'currency' => 'UGX', '
 $cb->addEntryRaw(['direction' => 'out', 'amount' => 60000, 'currency' => 'UGX', 'category' => 'Bank Transfer', 'description' => 'RH-MARK banked', 'date' => '2026-09-11', 'status' => 'approved', 'account_id' => $cash, 'txn_type' => 'TRANSFER']);
 $cb->addEntryRaw(['direction' => 'out', 'amount' => 15000, 'currency' => 'UGX', 'category' => 'Transport', 'description' => 'RH-MARK cash expense', 'date' => '2026-09-11', 'status' => 'approved', 'account_id' => $cash, 'txn_type' => 'EXPENSE']);
 $cb->addEntryRaw(['direction' => 'out', 'amount' => 20000, 'currency' => 'UGX', 'category' => 'Purchase', 'description' => 'RH-MARK pending cash', 'date' => '2026-09-11', 'status' => 'pending_approval', 'account_id' => $cash, 'txn_type' => 'EXPENSE']);
+// free text where a code belongs: a type on a cash row, and a currency code
+$cb->addEntryRaw(['direction' => 'in', 'amount' => 1000, 'currency' => 'UGX', 'category' => 'Receipt', 'description' => 'RH-MARK typed', 'date' => '2026-09-11', 'status' => 'approved', 'account_id' => $cash2, 'txn_type' => 'RH-MARK 0772 123 456']);
+$pdo->exec("INSERT INTO cb_ledger (sr, project, date, direction, amount, currency, category, description, status, account_id, created_at, updated_at)
+            VALUES ('ODD-1', 'dishnet', '2026-09-11', 'in', 1, 'RH-MARK 0772 123 456', 'Receipt', 'RH-MARK odd currency', 'approved', 0, '2026-09-11', '2026-09-11')");
 // a row naming an account that does not exist (the plugin's own writer refuses one; an old book can hold one)
 $pdo->exec("INSERT INTO cb_ledger (sr, project, date, direction, amount, currency, category, description, status, account_id, created_at, updated_at)
             VALUES ('ORPH-1', 'dishnet', '2026-09-11', 'in', 3333, 'UGX', 'Receipt', 'RH-MARK orphan', 'approved', 999, '2026-09-11', '2026-09-11')");

@@ -24,14 +24,16 @@ $curs  = dn_book_currencies(PluginConfig::read($root, $data));
 $row   = $store->load('kyc_config.json');
 $rowB  = $row ? dn_book_base($row) : null;
 $rowC  = $row ? dn_book_currencies($row) : [];
-$all   = $curs; foreach ($rowC as $c) if (!in_array($c, $all, true)) $all[] = $c;
+$shown = $row ? $rowC : dn_book_currencies([]);
+$all   = $curs; foreach ($shown as $c) if (!in_array($c, $all, true)) $all[] = $c;
 
 $pdo  = $store->getPdo();
 $acc  = [];
 foreach ($pdo->query('SELECT id, kind FROM cb_accounts') as $a) $acc[(int)$a['id']] = (string)$a['kind'];
 $rows = $pdo->query('SELECT * FROM cb_ledger')->fetchAll(PDO::FETCH_ASSOC);
 
-$out = ['base' => $base, 'currencies' => $curs, 'row_base' => $rowB, 'row_currencies' => $rowC, 'per' => []];
+$out = ['base' => $base, 'currencies' => $curs, 'row_base' => $rowB, 'row_currencies' => $rowC,
+        'shown' => $shown, 'per' => []];
 foreach ($all as $cur) {
     foreach (['' => 'all', 'dishnet' => 'dishnet'] as $proj => $key) {
         $cls = ['U' => [0, 0.0], 'ADJ' => [0, 0.0], 'CASH' => [0, 0.0], 'MOMO' => [0, 0.0], 'BANK' => [0, 0.0], 'OTHER' => [0, 0.0], 'ORPHAN' => [0, 0.0]];

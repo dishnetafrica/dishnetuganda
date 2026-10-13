@@ -15,7 +15,9 @@ if (!preg_match("/new PDO\('sqlite:file:' \. \\\$db \. '\?immutable=1', null, nu
     $bad[] = 'the open is not immutable and read-only';
 }
 preg_match_all('/->exec\(\s*([^)]*)\)/', $code, $m);
-foreach ($m[1] as $e) if (!in_array(trim($e), ["'PRAGMA query_only = ON'", "'BEGIN'", "'ROLLBACK'"], true)) $bad[] = "exec({$e})";
+foreach ($m[1] as $e) if (!in_array(trim($e), ["'PRAGMA query_only = ON'", "'PRAGMA temp_store = MEMORY'", "'BEGIN'", "'ROLLBACK'"], true)) $bad[] = "exec({$e})";
+foreach (["'PRAGMA query_only = ON'", "'PRAGMA temp_store = MEMORY'"] as $need) if (!in_array($need, array_map('trim', $m[1]), true)) $bad[] = "no exec({$need})";
+if (preg_match_all('/catch \(Throwable \$e\)/', $code) !== 2) $bad[] = 'the open and the reading are not each guarded by catch (Throwable)';
 if (preg_match_all('/->(query|prepare)\(/', $code) !== 1) $bad[] = 'a query outside q()';
 $noExec = preg_replace('/->exec\(/', '->X(', $code);
 if (preg_match('/\b(file_put_contents|fopen|fwrite|fputs|unlink|rename|copy|touch|mkdir|rmdir|chmod|chown|chgrp|tempnam|tmpfile|symlink|link|shell_exec|exec|system|passthru|proc_open|popen|pcntl_exec|mail|curl_init|fsockopen|stream_socket_client|file|ini_set|putenv|setcookie|header)\s*\(/i', $noExec, $mm)) {

@@ -28,7 +28,10 @@ foreach ($e['per'] as $cur => $x) {
     $a = $x['all']; $d = $x['dishnet'];
     $sec = preg_match('/^' . preg_quote($cur, '/') . '  cash in hand today.*?(?=^[A-Z]{3}  cash in hand today|^  checks|\z)/ms', $o, $m) ? $m[0] : '';
     is_($sec !== '', "$cur: a section is printed");
-    is_(preg_match('/cash in hand today \(.*\)\s+' . preg_quote(money($a['today']), '/') . '$/m', $sec) === 1, "$cur: today " . money($a['today']) . ' = CashbookService::cashInHand()');
+    $shown = in_array($cur, $e['shown'], true);
+    is_(preg_match('/cash in hand today, all projects — as the accounts dashboard and the evening WhatsApp show it'
+        . ($shown ? '' : ' \(this currency is NOT listed on the pages\)') . '\s+' . preg_quote(money($a['today']), '/') . '$/m', $sec) === 1,
+        "$cur: today " . money($a['today']) . ' = CashbookService::cashInHand()' . ($shown ? '' : ', marked as not listed on the pages'));
     foreach ($labels as $k => $l) {
         if ($k === 'ORPHAN' && $a['cls'][$k][0] === 0) { is_(strpos($sec, $l) === false, "$cur: no orphan line when there is none"); continue; }
         is_(preg_match('/^       ' . preg_quote($l, '/') . '\s+' . $a['cls'][$k][0] . '\s+' . preg_quote(money($a['cls'][$k][1]), '/') . '$/m', $sec) === 1,
@@ -45,10 +48,10 @@ foreach ($e['per'] as $cur => $x) {
         }
         is_(preg_match('/^       ' . $k . '  .*?\s' . preg_quote(money($a['opts'][$k]), '/') . '\s+' . preg_quote(delta($a['opts'][$k], $a['today']), '/') . '$/m', $sec) === 1,
             "$cur: option $k " . money($a['opts'][$k]) . ' (' . delta($a['opts'][$k], $a['today']) . ')');
-        $pl[] = "$k " . delta($d['opts'][$k], $d['today']);
+        $pl[] = "$k " . money($d['opts'][$k]) . ' (' . delta($d['opts'][$k], $d['today']) . ')';
     }
-    is_(strpos($sec, 'the Cashbook page (project dishnet, its default) today ' . money($d['today']) . '; vs today: ' . implode(' · ', $pl)) !== false,
-        "$cur: the Cashbook page (dishnet) " . money($d['today']) . ' = cashInHand(cur, dishnet); ' . implode(' · ', $pl));
+    is_(strpos($sec, 'the Cashbook hero (project dishnet, the page\'s default) today ' . money($d['today']) . '; under each option: ' . implode(' · ', $pl)) !== false,
+        "$cur: the Cashbook hero (dishnet) " . money($d['today']) . ' = cashInHand(cur, dishnet); ' . implode(' · ', $pl));
 }
 is_(preg_match('/^P0: DONE — read only; nothing was written\.$/m', $o) === 1, 'P0 says DONE');
 is_(preg_match('/the connections changed 0 and 0 row\(s\); query_only=1/', $o) === 1, 'both connections changed 0 rows, query_only=1');

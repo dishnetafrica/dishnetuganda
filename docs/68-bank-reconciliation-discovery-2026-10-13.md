@@ -5,6 +5,9 @@ data was read: this is a read of the code (live `f4b4c96` = 5.18.94, and the dev
 Ecobank PDF, opened in an isolated folder and read with every digit and name masked. **Coding waits for your approval of
 the decisions in §K and of the exceptions in §M.**
 
+**Update, 13 October (later): P0 is built, rehearsed and reviewed (§O). It has NOT been run on the server; that run waits
+for your approval.** Nothing else in this plan has been started.
+
 **Method.** Four read-only reviewers mapped the account model, posting and controls, the existing bank import and the
 infrastructure; a fifth checked their claims against the code. The first draft of this plan was then attacked by three more
 reviewers (accounting, security, accuracy): 58 findings, all taken in below — among them two errors of mine about the 12 Sep
@@ -481,7 +484,148 @@ records, and are therefore put to you one by one:
 | 5 | Deployment and rollback plan | P3 | pinned deploy scripts, rehearsals, each rollback handed over on its own |
 | 6 | Confirmation that no production financial records were changed | every step | the deploy's before-and-after checks; P0's figures |
 
+## O. P0 as built — 13 October (not run on the server)
+
+You approved *"prepare and test P0 only"*, strictly read-only, with only the minimum aggregate figures. Built on the
+development branch; rehearsed on synthetic books; attacked by an independent review. **Not run on the server.**
+
+**Files.** `scripts/bank-recon-p0.php` (the tool), `scripts/bank-recon-p0.sh` (the one command, which refuses any tool whose
+sha256 is not the reviewed one), `scripts/harness/bank-recon-p0/` (the rehearsal). No plugin file changes; nothing is
+installed or deployed.
+
+**The command — only once you approve the run.** As root on the server; then send back THE LOG FILE:
+
+    cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-bank-recon && bash scripts/bank-recon-p0.sh 2>&1 | tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log
+
+There is no rollback, because it changes nothing. The only thing the command adds anywhere is the log file in `/root/dnb-bank-recon/`.
+It also brings the checkout up to date with `git pull`, as every hand-over does.
+
+**What it reads.** Through `docker exec`:
+- the `ucrm` container's `/data` mount, the plugin's `manifest.json`, `.deployed-commit` and `ucrm.json` (for the data
+  folder's name);
+- the live `plugin.sqlite3`, and in it only `cb_ledger`, `cb_accounts` and the settings row (`kyc_config`);
+- the three configuration files and the vault, for the book's two currency settings, rebuilt as `bookBase()` rebuilds them.
+
+It never opens a database in `<plugin>/data`. It never reaches uCRM or the network.
+
+**Why it cannot write.**
+1. The tool is piped into the container's PHP on standard input, so nothing is copied in. It loads no plugin code: the
+   Cashbook's own classes alter tables and refresh the vault.
+2. SQLite opens the book **immutable and read-only**, with `query_only=ON` and `temp_store=MEMORY`, all checked. Immutable,
+   SQLite takes no lock and makes no file. A plain read-only open would make the `-wal` and `-shm` and leave them behind;
+   that was measured here, as in docs/07 5.18.91.
+3. It reads only at a moment when the plugin has the book closed, so that no `-wal` or `-shm` is beside it. It waits up to
+   two minutes for such a moment. Every query is one `SELECT`, inside one read transaction that ends in `ROLLBACK`.
+4. It reads the book **twice**, on two connections. The figures count only if all four of these hold:
+   - both readings are identical;
+   - SQLite reports 0 rows changed on each connection;
+   - the file's inode, size and times did not move;
+   - no side file appeared.
+
+   A reading that SQLite cannot finish ends as "run again" (exit 3). It is never shown as an error that could read like
+   damage to the book.
+5. PHP runs as the database's owner, never root, with `log_errors=0` and `opcache.enable_cli=0`. So nothing is appended to
+   a php.ini error log or a cache file.
+
+**What it prints, and what it does not.** It prints, per currency:
+- cash in hand today, all projects, as the accounts dashboard and the evening WhatsApp show it;
+- the same rows split by where they sit: unassigned, the 12 Sep adjustment, cash accounts, mobile-money accounts, bank
+  accounts, other accounts, and accounts that do not exist;
+- the pending and rejected rows inside today's figure;
+- the cash and mobile-money rows by type;
+- the four candidate figures A–D, with each one's difference from today;
+- the same for the Cashbook hero, which shows project `dishnet` by default.
+
+Elsewhere in the log it prints:
+- account ids, with kind, currency, active and row count;
+- the 12 Sep adjustment row's id, date, direction, status, type and source, and whether its category is a capital one;
+- the earlier import's counts and dates.
+
+**No name is printed: not of an account, nor of anyone.** Nor is any description, person, reference, customer or
+category. Every other value is a number, a checked date or a code from a fixed list. Match the account ids on
+*Accounts → Opening Balances*.
+
+Narrower than the P0 row of §J, as your "minimum" asked:
+- no account names;
+- the cash and mobile-money rows by type only, not also by source and category;
+- the adjustment's month in the P&L as yes/no, not as that month's P&L totals.
+
+**The four candidate definitions (for D2).** Today's figure counts every non-voided row of the currency, whatever its
+account.
+
+| | Counts | Leaves out |
+|---|---|---|
+| **A** | unassigned rows, the adjustment, cash and mobile-money accounts | bank and other accounts |
+| **B** | unassigned rows, cash and mobile-money accounts | bank and other accounts, the adjustment |
+| **C** | unassigned rows, the adjustment | every account |
+| **D** | unassigned rows | every account, the adjustment |
+
+Rows that name an account which does not exist are left out of all four, and are counted on their own line.
+
+**How to read the log before sending it.** Each of these must hold:
+1. The command's last line says P0 finished (exit 0), and P0's own last line, just before it, is
+   `P0: DONE — read only; nothing was written.`
+2. `the parts add up:` reads `ok` for every currency.
+3. `the connections changed 0 and 0 row(s); query_only=1`.
+4. `read twice, immutable: the readings are identical; the database file did not move …; side files none, before or after`.
+5. `the pages' settings row … — the same`. If it says DIFFERENT, every currency of both is measured, and that is a finding.
+6. `12 Sep adjust. found: …`. If it lists candidates instead, look at those ids in the Cashbook. Then run the same command
+   with `--adjustment-id=N` after `bash scripts/bank-recon-p0.sh`.
+
+If something else happens:
+- **Exit 3** means the plugin wrote during the reading: run it again.
+- **Exit 2** names its reason.
+- **A STOP** comes from the command's own checks, before P0 runs.
+
+**The log carries real totals.** Treat it as confidential. **The figures will not be written into the repository.** The
+record will carry the decision you take and whether these checks passed.
+
+**Evidence.**
+- **The rehearsal:** `scripts/harness/bank-recon-p0/rehearse.sh`, run on synthetic books written through the plugin's own
+  code.
+  - Seven books: Uganda, South Sudan, three settings edge cases, and two adjustment cases.
+  - Every figure equals the plugin's own `CashbookService::cashInHand()` and `bookBase()`, and an independent row-by-row
+    count.
+  - Every file P0 could reach is identical afterwards: content, inode, size, times, owner and mode.
+  - No planted name, phone number, account number, reference or free-text value is printed.
+  - The other cases:
+    - the plugin holding the book;
+    - a writer between and during the readings, including a 30,000-row book against a writer that closes it every few
+      hundred milliseconds;
+    - every refusal;
+    - the source rules;
+    - the command itself, through a strict fake docker.
+  - Every weakened copy of the tool and the command is caught.
+  - Counts: 95 checks on the reviewed files, plus 30 weakened copies of the tool and the command, each caught. That is
+    **125 ok, 0 failed, on two consecutive runs**, with the files unchanged between them.
+  - The reviewed files: tool sha256 `0143dae93cf34ba4…` (pinned in the command), command sha256 `9a96e7fe1cd32529…`.
+- **The review:** four independent reviewers (read-only, figures, leaks, the command), each finding checked by two
+  sceptics.
+  - 16 findings: 13 upheld, all fixed and covered by the rehearsal; 3 refuted.
+  - The most important one was reproduced: a reading interrupted by a plugin write ended as an uncaught "database disk
+    image is malformed" (exit 255).
+    - The book itself is not damaged by that: integrity_check said ok.
+    - But the message would have read like corruption on your server.
+    - It now ends as "run again". In the stress test, 4 to 7 readings in each run of 12 were caught that way, over four runs,
+      and none crashed.
+  - The other fixes:
+    - account names dropped;
+    - digits split by separators (`0772 123 456`), which the first masking missed;
+    - a category, type, source or currency in free text now reads `(other)`;
+    - the labels: today's all-projects figure is the dashboard's and the evening WhatsApp's; the Cashbook hero is project
+      `dishnet`;
+    - `temp_store=MEMORY`;
+    - `log_errors=0`;
+    - an exact comparison of the totals, not a rounded one;
+    - clearer stops;
+    - the checkout's commit and the command's own sha256 in the log;
+    - the candidate ids listed when the adjustment is not found alone.
+
+**Not done, deliberately.** No production run. No deploy. The quarantine was not touched. The importer's `--commit` was
+not run. The bank reconciliation module is not built and not switched on. The statement is not in the repository: every
+figure above comes from synthetic books.
+
 ---
 
-*Discovery only. No file outside `docs/` changed; no migration, no production data, no deployment. The supplied statement stays outside
-the repository.*
+*Discovery, and P0 as built (§O). No plugin file changed; no migration, no production data, no deployment. The supplied
+statement stays outside the repository.*

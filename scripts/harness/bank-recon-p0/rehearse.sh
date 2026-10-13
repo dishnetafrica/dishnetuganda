@@ -40,7 +40,7 @@ bad() { fails=$((fails+1)); echo "  FAIL $*"; }
 chk() { local m="$1"; shift; if "$@"; then ok "$m"; else bad "$m"; fi; }
 O=1000:1000
 own() { setpriv --reuid=1000 --regid=1000 --clear-groups "$@"; }
-SECRETS='RH-MARK|0700123456|7000000001|BANK-REF001|BANK-0123456789ab|ADJUSTMENT ENTRY|Approver|Driver|reason|orphan|card purchase'
+SECRETS='RH-MARK|0700123456|7000000001|0772|987 654|\+256|Airtel|MoMo|Ecobank|Cash – |BANK-REF001|BANK-0123456789ab|ADJUSTMENT ENTRY|Approver|Driver|reason|orphan|card purchase|malformed|Uncaught|Fatal'
 noleak() { ! grep -Eq "$SECRETS" "$1"; }
 has()   { grep -Fq -- "$2" "$1"; }
 
@@ -75,7 +75,7 @@ snap() {    # every file P0 could reach, with its content and identity
 }
 p0() {      # p0 <work dir> <tool> [args…] — P0 as the owner, the tool on standard input; rc in $RC, output in <dir>/out
   local d="$1" t="$2"; shift 2
-  own env -i PATH=/usr/bin:/bin DN_VAULT_FILE="$d/vault.json" php -d display_errors=stderr -- "$d/live" "$SB/plugin" "$@" < "$t" > "$d/out" 2>&1
+  own env -i PATH=/usr/bin:/bin DN_VAULT_FILE="$d/vault.json" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- "$d/live" "$SB/plugin" "$@" < "$t" > "$d/out" 2>&1
   RC=$?
 }
 
@@ -96,7 +96,11 @@ t1() {      # t1 <tool> — the six books (and the named adjustment), figures, n
   done
   d="$(fresh ug)"; p0 "$d" "$T"
   chk "T1 ug: the adjustment is found alone and placed in September's P&L" has "$d/out" "in the P&L of 2026-09: YES"
-  chk "T1 ug: account names are masked or withheld" bash -c "grep -q 'MoMo #### RH' '$d/out' && grep -q 'Bank ####' '$d/out' && [ \$(grep -c 'name withheld: not a money account' '$d/out') = 2 ]"
+  chk "T1 ug: the accounts are listed by id, kind and currency only (no names); a free-text type reads (other)" bash -c "[ \$(grep -cE '^                  [0-9]+ +(bank|cash|momo|director|inventory) +(UGX|USD) +yes +[0-9]+\$' '$d/out') = 10 ] && grep -q 'match the ids on Accounts' '$d/out' && grep -q 'cash and mobile-money accounts by type: .*(other) 1 (1,000.00)' '$d/out'"
+  chk "T1 ug: the adjustment line carries codes only (category as capital or not, source (other))" bash -c "grep -q 'category not a capital one, untyped, source (other), approved, project dishnet, currency UGX' '$d/out'"
+  chk "T1 ug: a free-text currency code is reported as (other)" bash -c "grep -q 'other currencies in the book, not shown on the hero: .*(other) 1' '$d/out'"
+  d="$(fresh two-adj)"; p0 "$d" "$T"
+  chk "T1 two-adj: the two candidates are listed by id, direction and status, nothing else" bash -c "grep -qE '2 candidate\(s\) on 2026-09-12 — not identified: ids $ADJ2 \(out, approved\), [0-9]+ \(in, approved\); open them in the Cashbook, then run again with --adjustment-id=N\$' '$d/out'"
   d="$(fresh two-adj-named)"; p0 "$d" "$T" "--adjustment-id=$ADJ2"
   chk "T1 two-adj: --adjustment-id names it" has "$d/out" "named by --adjustment-id: id $ADJ2"
   d="$(fresh ug)"; snap "$d" > "$d/snap.before"; p0 "$d" "$T" "--adjustment-id=1"; snap "$d" > "$d/snap.after"
@@ -177,8 +181,29 @@ writer() {      # writer <dir> <mode>: close | keep | other — as the owner, on
   own php "$H/hold.php" "$1/live/plugin.sqlite3" "$1/paused" 4 "$2" "$1/go" &
   holders+=($!); WRITER=$!
 }
+failcopy() {    # a copy whose reading meets a query SQLite cannot answer, after the accounts (anchor asserted)
+  local c="$SB/fail.$(basename "$2").php"
+  awk '{ print } /^    \/\/ ── The 12 Sep adjustment/ { print "    q($pdo, \"SELECT * FROM rh_no_such_table\");" }' "$2" > "$c"
+  [ "$(grep -c 'rh_no_such_table' "$c")" = 1 ] || { echo "failcopy: anchor not found"; exit 3; }
+  echo "$c"
+}
 t4() {
-  local T="$1" P d m
+  local T="$1" P d m F i rcs bursts
+  d="$(fresh ug)"; F="$(failcopy x "$T")"
+  own env -i PATH=/usr/bin:/bin DN_VAULT_FILE="$d/vault.json" php -d display_errors=stderr -d log_errors=1 -d error_log="$d/php-errors.log" -- "$d/live" "$SB/plugin" < "$F" > "$d/out" 2>&1; RC=$?
+  chk "T4e a reading SQLite cannot finish ends as 'run again' (3), not an uncaught error; SQLite's words are not printed; even with log_errors on, no error log is written" \
+    bash -c "[ $RC = 3 ] && grep -q 'SQLite could not finish reading the book (PDOException, code 1)' '$d/out' && ! grep -qiE 'fatal|uncaught|no such table|malformed' '$d/out' && [ ! -e '$d/php-errors.log' ]"
+  d="$(fresh ug)"
+  own php "$H/grow.php" "$d/live/plugin.sqlite3" 30000
+  rm -f "$d/ready"; own php "$H/stress.php" "$d/live/plugin.sqlite3" 25 "$d/ready" > "$d/bursts" & holders+=($!); local SP=$!
+  i=0; while [ ! -f "$d/ready" ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
+  rcs=""; local W5; W5="$(waitcopy 5 "$T")"
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do p0 "$d" "$W5"; rcs="$rcs $RC"; cat "$d/out" >> "$d/all.out"; done
+  wait "$SP" 2>/dev/null; bursts="$(cat "$d/bursts" 2>/dev/null)"
+  chk "T4f twelve readings against a writer that closes the book every few hundred ms ($bursts bursts): every exit is 0, 2 or 3 (were:$rcs), never an uncaught error" \
+    bash -c "! echo '$rcs' | grep -qE '(^| )(1|[4-9]|[0-9]{2,})( |\$)' && ! grep -qiE 'fatal|uncaught|malformed' '$d/all.out'"
+  chk "T4f the book is intact afterwards (integrity_check ok)" bash -c "[ \"\$(php -r '\$p=new PDO(\"sqlite:\".\$argv[1]); echo \$p->query(\"PRAGMA integrity_check\")->fetchColumn();' '$d/live/plugin.sqlite3')\" = ok ]"
+  echo "  note T4f exits:$rcs (3 = the writer was caught mid-reading; 0 = a clean moment)"
   P="$(pausecopy x "$T")"
   d="$(fresh ug)"; ( sleep 0.5; : > "$d/go" ) & p0 "$d" "$P"
   chk "T4 control: the instrumented copy with no writer finishes (0)" bash -c "[ $RC = 0 ] && grep -q 'P0: DONE' '$d/out'"
@@ -218,6 +243,8 @@ wsetup() {      # wsetup <book>: a server-shaped /data mount and a checkout copy
   cp -a "$SB/books/$1/vault.json" "$M/ucrm/data/plugins/.dishnet-sudan.vault.json"
   chown -R "$O" "$M"
   cp "$WRAP_T" "$W/repo/scripts/bank-recon-p0.sh"; cp "$TOOL_T" "$W/repo/scripts/bank-recon-p0.php"
+  git -C "$W/repo" init -q && git -C "$W/repo" add -A && git -C "$W/repo" -c user.name=rh -c user.email=rh@example.invalid commit -qm p0 \
+    || { echo "wsetup: git failed"; exit 3; }
   cp "$H/fake-docker.sh" "$W/bin/docker"; chmod +x "$W/bin/docker"
 }
 wrun() {        # wrun [args…]: the wrapper as the operator runs it; rc in $RC, output in $W/out, trace in $W/trace
@@ -231,8 +258,11 @@ t6() {
   wsetup ug; ( cd "$M" && find . -printf '%p|%i|%s|%T@|%u:%g|%m\n' | sort; find . -type f -exec sha256sum {} + | sort ) > "$W/s0"; wrun
   ( cd "$M" && find . -printf '%p|%i|%s|%T@|%u:%g|%m\n' | sort; find . -type f -exec sha256sum {} + | sort ) > "$W/s1"
   chk "T6a the wrapper runs P0 and exits 0" bash -c "[ $RC = 0 ] && grep -q 'P0: DONE' '$W/out' && grep -q 'P0 finished (exit 0)' '$W/out'"
-  chk "T6a it names the installed commit, the data folder and the owner" bash -c "grep -q 'installed       f4b4c96 in ucrm; data /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data; database owner 1000:1000' '$W/out'"
-  chk "T6a P0 ran as the owner, on standard input, with no file copied into the container" bash -c "grep -q '^exec 1000:1000 stdin php -d display_errors=stderr -- ' '$W/trace' && ! grep -q '^exec root stdin' '$W/trace' && ! grep -q ' cp ' '$W/trace'"
+  chk "T6a it names the installed commit, the data folder and the owner" bash -c "grep -q 'installed       f4b4c96 in ucrm; data /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data; database owner 1000:1000\$' '$W/out'"
+  chk "T6a it names this checkout's commit, both P0 files as committed, and the wrapper's sha256" bash -c "grep -q \"this checkout   \$(git -C '$W/repo' rev-parse --short HEAD), both P0 files as committed; wrapper sha256 \$(sha256sum '$W/repo/scripts/bank-recon-p0.sh' | cut -c1-16)…\" '$W/out'"
+  chk "T6a every docker call was one the strict fake allows; none refused" bash -c "! grep -q '^REFUSED' '$W/trace' && [ \$(grep -c '^inspect ' '$W/trace') = 2 ]"
+  chk "T6a its closing line says what the log holds" bash -c "grep -q 'no name, description, person, reference or customer' '$W/out'"
+  chk "T6a P0 ran as the owner, on standard input, with no file copied into the container" bash -c "grep -q '^exec 1000:1000 stdin php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- ' '$W/trace' && ! grep -q '^exec root stdin' '$W/trace' && ! grep -q ' cp ' '$W/trace'"
   chk "T6a its figures equal the plugin's own" php "$H/check.php" "$W/out" "$SB/books/ug/exp.json" yes
   chk "T6a nothing under the mount changed" cmp -s "$W/s0" "$W/s1"
   chk "T6a nothing planted is printed" noleak "$W/out"
@@ -255,7 +285,13 @@ t6() {
   wsetup ug; chown 0:0 "$PD/plugin.sqlite3"; wrun
   chk "T6j a root-owned database: STOP, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'owner is 0:0' '$W/out' && ! p0ran"
   wsetup ug; rm -f "$PD/plugin.sqlite3"; own php -r '$p=new PDO("sqlite:".$argv[1]); $p->exec("CREATE TABLE other(x)");' "$PD/plugin.sqlite3"; wrun
-  chk "T6k P0's refusal comes through: exit 2" bash -c "[ $RC = 2 ] && grep -q 'no cb_ledger table' '$W/out' && grep -q 'refused before reading (exit 2)' '$W/out'"
+  chk "T6k P0's refusal comes through: exit 2" bash -c "[ $RC = 2 ] && grep -q 'no cb_ledger table' '$W/out' && grep -q 'P0 refused (exit 2)' '$W/out'"
+  wsetup ug; rm -f "$PD/plugin.sqlite3"; wrun
+  chk "T6m no database in the named data folder: STOP says so, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'no plugin.sqlite3 in /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data' '$W/out' && ! p0ran"
+  wsetup ug; echo '# edited' >> "$W/repo/scripts/bank-recon-p0.sh"; wrun
+  chk "T6n an edited wrapper is named in the log" bash -c "[ $RC = 0 ] && grep -q '1 P0 file(s) EDITED' '$W/out'"
+  wsetup ug; wrun --adjustment-id=12345678901
+  chk "T6o an --adjustment-id of 11 digits: exit 2, docker never called" bash -c "[ $RC = 2 ] && grep -q 'at most 10 digits' '$W/out' && [ ! -s '$W/trace' ]"
 }
 
 suite() {       # suite <tool> <wrapper>: everything; returns the failures it added
@@ -289,7 +325,7 @@ mutant() {      # mutant <name> <file: tool|wrap> <perl substitution> [tests]
   if [ "$caught" -gt 0 ]; then ok "mutant $name is caught ($caught assertion(s): $(grep -m1 FAIL "$SB/mut.$name.log" | cut -c8-90))"; else bad "mutant $name is NOT caught"; fi
 }
 echo; echo "== weakened copies =="
-mutant write-guards-off tool 's/PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY,\n//; s/\$pdo->exec\(\x27PRAGMA query_only = ON\x27\);\n        \$pdo->exec\(\x27BEGIN\x27\);/\$pdo->exec(\x27BEGIN\x27); \$pdo->exec("UPDATE cb_ledger SET updated_at = updated_at");/' "t1 t5"
+mutant write-guards-off tool 's/PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY,\n//; s/\$pdo->exec\(\x27PRAGMA query_only = ON\x27\);\n//; s/\x27sqlite:file:\x27 \. \$db \. \x27\?immutable=1\x27/\x27sqlite:\x27 . \$db/; s/(\$pdo->exec\(\x27BEGIN\x27\);)/$1 \$pdo->exec("UPDATE cb_ledger SET updated_at = updated_at");/' "t1 t5"
 mutant no-readonly-flag tool 's/PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY,\n//' "t1 t5"
 mutant no-query-only tool 's/\$pdo->exec\(\x27PRAGMA query_only = ON\x27\);\n//' "t1"
 mutant plain-open tool 's/\x27sqlite:file:\x27 \. \$db \. \x27\?immutable=1\x27/\x27sqlite:\x27 . \$db/' "t1 t5"
@@ -300,8 +336,11 @@ mutant case-blind-currency tool 's/: \x27l\.currency = :c\x27;/: \x27UPPER(l.cur
 mutant ssp-uses-amount tool 's/\$cur === \x27SSP\x27 \? \x27COALESCE\(l\.ssp_amount,0\)\x27 : \x27l\.amount\x27/\x27l.amount\x27/g' "t1"
 mutant adjustment-unassigned tool 's/CASE WHEN l\.id = :adj THEN \x27ADJ\x27/CASE WHEN l.id = -:adj THEN \x27ADJ\x27/' "t1"
 mutant adjustment-description tool 's/(\$o\("  12 Sep adjust\.  \{\$adjHow\}: id \{\$adjId\}, ")/$1 . \$adj[\x27description\x27] . " " /' "t1"
-mutant names-not-withheld tool 's/\$money \? label\(\(string\)\$a\[\x27name\x27\]\) : \x27\(name withheld: not a money account\)\x27/label((string)\$a[\x27name\x27])/' "t1"
-mutant no-masking tool 's/\$v = preg_replace\(\x27\/\\p\{N\}\{4,\}\/u\x27, \x27####\x27, \$v\) \?\? \x27\?\x27;\n//' "t1"
+mutant names-printed tool 's/SELECT a\.id, a\.kind, a\.currency, a\.active,/SELECT a.id, a.name, a.kind, a.currency, a.active,/; s/\(int\)\$a\[\x27n\x27\]\)\);/(int)\$a[\x27n\x27]) . \x27  \x27 . \$a[\x27name\x27]);/' "t1"
+mutant raw-category tool 's/(\x27, category \x27 \. )\(in_array\(\(string\)\$adj\[\x27category\x27\], CAPITAL_CATEGORIES, true\) \? \x27a capital one\x27 : \x27not a capital one\x27\)/$1\$adj[\x27category\x27]/' "t1"
+mutant no-whitelist tool 's/\{ return in_array\(\(string\)\$v, \$allowed, true\) \? \(string\)\$v : \x27\(other\)\x27; \}/{ return (string)\$v; }/' "t1"
+mutant no-catch tool 's/\} catch \(Throwable \$e\) \{\n        \$code/} catch (LogicException \$e) {\n        \$code/' "t4"
+mutant no-temp-store tool 's/        \$pdo->exec\(\x27PRAGMA temp_store = MEMORY\x27\);\n//; s/    if \(\(int\)\(q\(\$pdo, \x27SELECT \* FROM pragma_temp_store\x27\)[^\n]*\n//' "t1 t5"
 mutant no-second-reading tool 's/\$r2 = readBook\(\$db, \$base, \$curs, \$eff, \$cfgFrom, \$adjArg\);/\$r2 = \$r1;/' "t4"
 mutant no-file-check tool 's/ \|\| \$after !== \$before \|\| \$sidesNow\) \{/) {/' "t4"
 mutant effective-merge tool 's/\$cfg\[\$k\] = \$d\[\$k\]; \$cfgFrom\[\$k\] = basename\(\$p\);/if (!(is_string(\$d[\$k]) \&\& trim(\$d[\$k]) === \x27\x27 \&\& isset(\$cfg[\$k]))) \$cfg[\$k] = \$d[\$k]; \$cfgFrom[\$k] = basename(\$p);/' "t1"
@@ -313,5 +352,8 @@ mutant wrap-root-owner wrap 's/\x27\x27\|0:\*\|\*:\*:\*\)/\x27\x27|*:*:*)/' "t6"
 mutant wrap-stray-folder wrap 's/^\[ "\$\{PDD_IN%\/\}" != "\$IN_CONTAINER\/data" \] \|\| stop[^\n]*\n//m' "t6"
 mutant wrap-as-root wrap 's/docker exec -i -u "\$U" "\$CONTAINER" php/docker exec -i "\$CONTAINER" php/' "t6"
 mutant wrap-not-root-ok wrap 's/^\[ "\$\(id -u\)" = "0" \] \|\| stop[^\n]*\n//m' "t6"
+mutant wrap-log-errors wrap 's/ -d log_errors=0//' "t6"
+mutant wrap-no-db-check wrap 's/^dx "\$CONTAINER" test -f [^\n]*\n//m' "t6"
+mutant wrap-no-adj-bound wrap 's/^ *\[ "\$\{#ADJ\}" -le 10 \] \|\| \{[^\n]*\n/ ;;\n/m' "t6"
 echo; echo "== total: $pass ok, $fails failed (the suite on the reviewed files: $MAIN_FAILS failed) =="
 [ "$fails" = 0 ]
