@@ -545,7 +545,7 @@ On the operator's "Prepare it now (Recommended)", after the uCRM templates and t
 - Their sections now say what the website's Terms of Service and Privacy Policy say. A tenant's profile may now replace
   a section's body (`legal.terms_text.<key>`, `legal.privacy_text.<key>`; the keys are listed by
   `dnLegalSectionKeys()` in `lib/LegalContent.php`). The headings never change. Uganda replaces ten Terms sections
-  and five Privacy sections. South Sudan replaces none and renders byte for byte as before.
+  and six Privacy sections. South Sudan replaces none and renders byte for byte as before.
 - Among the corrections:
   - no "best-effort" service;
   - no discretionary outage credit: the website's credit after 3 days applies;
@@ -553,7 +553,10 @@ On the operator's "Prepare it now (Recommended)", after the uCRM templates and t
   - no suspension "without further notice";
   - a monthly plan ends at any time, a Flex package follows its own agreement, and an Acceptable Use ending comes
     only after a request to stop;
-  - the WiFi passwords, call recordings, the six-year and two-year retention periods, and the PDPO.
+  - the WiFi passwords, call recordings, the six-year and two-year retention periods, and the PDPO;
+  - our equipment is returned when a plan ends with no fixed number of days, as on the website (13 Oct, the review);
+  - the Privacy Policy's contact paragraph promises no reply time ("within a few business days" is gone); requests
+    about your information are answered within 14 days, as on the website (13 Oct, the review).
 - Both documents become version **1.2**, so every Uganda customer is asked to accept once more at the next sign-in.
   `legal.dated` is the go-live day. The consent step now reads "We ask again only when they change." instead of
   "This is a one-time step."
@@ -578,5 +581,12 @@ Sudan's page is unchanged, byte for byte), and `tools/pdf_template_doctor.php` n
 **The website, in step.** The Privacy Policy's Payments row now says when the WiFi password is kept (including a
 change made in the customer portal). The Communications row adds call recordings "where a call is recorded", and
 retention adds "Call recordings, where a call is recorded: up to 12 months". The Starlink Installation page says the
-technician "normally" photographs the work, and records the location "where a location can be recorded". These need
-the website redeployed.
+technician "normally" photographs the work, and records the location "where a location can be recorded". These
+changes are on the development branch and **not yet on main**: merge them to main, then redeploy the website. The
+deploy's A19 says so when the live site does not have them yet (13 Oct, the review).
+
+**Follow-up for the operator, at the next quotation template reload (13 Oct, the review).** Clause 12 of the Uganda
+quotation still says loaned equipment is returnable "within 7 days of termination". The website and the portal now set
+no fixed number of days. Clause 1 already makes the website prevail where the quotation is less favourable, so nothing
+is untrue meanwhile. But the next reload of the template in uCRM should drop "within 7 days of termination". This
+release keeps the repository copy as the operator loaded it on 12 Oct.

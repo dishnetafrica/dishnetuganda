@@ -36,7 +36,7 @@ is_($hU === $hS, 'privacy: the headings are the shared ones, except the sign-in 
 
 echo "\n2. Uganda's overrides: exactly the pinned set, each non-empty, each rendered exactly\n";
 $PIN = ['terms'   => ['about', 'service', 'billing', 'acceptable_use', 'equipment', 'transfers', 'termination', 'liability', 'changes', 'jurisdiction'],
-        'privacy' => ['collect', 'use', 'share', 'retention', 'rights']];
+        'privacy' => ['collect', 'use', 'share', 'retention', 'rights', 'contact']];
 $wa = TenantProfile::formatWa($ug->contact('support_wa', '211921443002'));
 $em = $ug->email() ?: 'info@dishnetafrica.com';
 foreach ($PIN as $doc => $want) {
@@ -63,7 +63,7 @@ echo "\n4. Uganda carries none of the withdrawn statements, and the version is 1
 $text = implode("\n", array_column(dnTermsContent($ug), 'body')) . "\n" . implode("\n", array_column(dnPrivacyContent($ug), 'body'));
 foreach (['UCC-authorised', 'UCC Authorised', 'best-effort', 'at our discretion', 'without further notice', 'Late-payment',
           '3 additional years', 'stays on your router', 'anyone else without your permission', 'may change without notice',
-          '90 to 365', 'You may end your service at any time'] as $n) {
+          '90 to 365', 'You may end your service at any time', 'within a few business days', 'returned within 14 days'] as $n) {
     is_(strpos($text, $n) === false, "[uganda] no \"$n\"");
 }
 $v = dnLegalVersion($ug);

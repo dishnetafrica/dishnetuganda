@@ -246,7 +246,8 @@ has('[uganda] the sign-in page\'s consent step shows the tenant\'s version and d
 has('[uganda] the consent step says it asks again only when the documents change', $login['body'], ['We ask again only when they change.']);
 none('[uganda] …and no longer calls a re-acceptance a one-time step', $login['body'], ['This is a one-time step.']);
 has('[uganda] terms: the contact section reads the tenant', $terms['body'], ['Reach us on WhatsApp at +256 705 993 348 or email accounts@dishnetuganda.com']);
-has('[uganda] privacy: the rights and contact sections read the tenant', $priv['body'], ['Contact accounts@dishnetuganda.com or WhatsApp +256 705 993 348.', 'WhatsApp +256 705 993 348 or email accounts@dishnetuganda.com']);
+has('[uganda] privacy: the rights and contact sections read the tenant', $priv['body'], ['Contact accounts@dishnetuganda.com or WhatsApp +256 705 993 348.', 'For any privacy question or request, e-mail accounts@dishnetuganda.com with ', 'in the subject, or WhatsApp +256 705 993 348.']);
+none('[uganda] privacy: the contact section promises no reply time beyond the website\'s (5.18.94, the review)', $priv['body'], ['within a few business days']);
 
 echo "\n3. The control on the control: a literal planted into the sandbox copy IS seen on the served page\n";
 $pp = $ug['tmp'] . '/tabs/customer_app/portal.php'; $src = (string)file_get_contents($pp);
