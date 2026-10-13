@@ -632,7 +632,7 @@ You approved P0 with six gates:
 6. obtain the 5.18.94 after-check evidence separately.
 
 This session cannot reach the server, so the gates are built into what you run: `scripts/bank-recon-p0-run.sh`, in
-commit `bc0fd773d37b12c4dfaf2776662bce64f4d97532`. It refuses before P0, naming the gate, whenever one does not hold.
+commit `d913c8fd45efffb1dc7c9737e3d4947d6432ecb4`. It refuses before P0, naming the gate, whenever one does not hold.
 - A second independent review (four lenses, two sceptics per finding) upheld 20 of 22 findings against its first
   version. All are fixed.
 - A check of those fixes found six more gaps, all fixed in this version:
@@ -642,22 +642,36 @@ commit `bc0fd773d37b12c4dfaf2776662bce64f4d97532`. It refuses before P0, naming 
   - a rebase named as a detached HEAD;
   - an unidentified adjustment reported as plain DONE;
   - wording.
+- A review of that version (four lenses, two sceptics per finding) upheld seven distinct defects. All are fixed here:
+  - a git read of the checkout that failed counted as "nothing modified";
+  - an unfinished cherry-pick sequence (`.git/sequencer`) was not refused;
+  - a signal during one of the runner's own git reads could divert the exit line away from the log;
+  - TERM to the whole job cut the log;
+  - the runner kept two P0 lines in a file that this section did not list (they are now kept in memory only);
+  - the second-run form of the adjustment line was missing from the reading list;
+  - one rehearsal case could not tell the two DONE results apart.
+
+  Three refuted findings were taken as improvements: the unidentified adjustment now has its own exit (7), its owner
+  and "no `installed` line" branches are rehearsed, and the interruption cases are described exactly. The sceptics
+  refuted the claim that a symlinked data folder could make P0 read another book: the plugin opens the same path, so it
+  is the live book either way.
 
 **Verified here before handing over.**
 - `5954ede513f46e6ddcdb061fa60ce63f65cdacf5` (§O, with the review's fixes) is on `claude/study-this-jhe2eg` on GitHub.
 - At that commit, the tool's sha256 is `0143dae93cf34ba4…` and the command's is `9a96e7fe1cd32529…`. The command pins the
   tool's.
 - The runner pins all three. This checkout was clean when the runner was committed.
-- The runner's own sha256 is `db26db9706e84b873ab5e6280bd4329ddf0f8b4de7485f0f9911b122f902a8ab`; the line below checks it.
+- The runner's own sha256 is `082b70c59ff01f5843ddd97deaf41868ce884e1f8f49865245612df9e60fa8b4`; the line below checks it.
 
 **The command — one line, as root on the server, after the P0 log of any earlier attempt has been sent.** Then send back
 THE LOG FILE it names, not a copy of the terminal:
 
-    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob bc0fd773d37b12c4dfaf2776662bce64f4d97532:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "db26db9706e84b873ab5e6280bd4329ddf0f8b4de7485f0f9911b122f902a8ab  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob d913c8fd45efffb1dc7c9737e3d4947d6432ecb4:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "082b70c59ff01f5843ddd97deaf41868ce884e1f8f49865245612df9e60fa8b4  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
 
 - The parentheses keep `umask 077` and `cd` inside the command, and your shell is left as it was.
 - `env -u` starts the runner without `BASH_ENV`, `ENV` or `UCRM_CONTAINER`, whatever your shell exports.
-- The `tee` at the end ignores Ctrl-C and a hang-up. So an interrupted run's log still ends with its exit line.
+- The `tee` at the end ignores Ctrl-C, a hang-up and TERM (a plain `kill`). So an interrupted run's log still ends
+  with its exit line.
 
 **What it changes, and what it never touches.**
 - **The fetch** adds Git objects to `/opt/dishnet/.git`, writes `FETCH_HEAD`, and moves one ref,
@@ -690,9 +704,11 @@ THE LOG FILE it names, not a copy of the terminal:
   - An option other than `--adjustment-id=N` (at most 10 digits) is refused even before G0. The log then holds only
     the message and `RUNNER EXIT 4`, with no `GATE REFUSED` line.
 - **G1, the checkout.** It must be the top of a git checkout. Each of these is a refusal:
-  - a merge, rebase, cherry-pick, revert or bisect in progress. This is checked first, so a rebase is named as a
-    rebase, although it detaches HEAD;
+  - a merge, rebase, cherry-pick, revert or bisect in progress, including a cherry-pick or revert sequence left
+    unfinished (`.git/sequencer`). This is checked first, so a rebase is named as a rebase, although it detaches HEAD;
   - a detached HEAD;
+  - any git read of the checkout's state that fails, for example on an unreadable index. A failed read is never taken
+    as "nothing modified";
   - a tracked file modified or staged;
   - any file git does not track inside the plugin folder (its `data/` aside), ignored ones included, counted as the
     09 Oct record and the deploy scripts count it.
@@ -705,8 +721,9 @@ THE LOG FILE it names, not a copy of the terminal:
   - The command must pin the same tool.
 - **G3, the book.**
   - The `ucrm` container must be running.
-  - Its `ucrm.json` must exist and be a JSON object. A file that is missing, unreadable, truncated or not JSON is
-    refused. It is never taken to mean "names no folder".
+  - Its `ucrm.json` must exist and be valid JSON that decodes the way the plugin's own loader decodes it. A file that
+    is missing, unreadable, truncated, not JSON or a bare value is refused. It is never taken to mean "names no
+    folder".
   - The data folder must resolve to `/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data`, the live store since 09 Oct.
     Anything else is an unexpected database path.
   - `plugin.sqlite3` must be there, owned by `1000:1000`.
@@ -718,19 +735,27 @@ THE LOG FILE it names, not a copy of the terminal:
       `RESULT: THE P0 COMMAND READ ANOTHER FOLDER … (exit 6)`, never `P0 DONE`.
     - The same result follows if the command did not say which folder it read.
   - **If the 12 Sep adjustment was not identified,** the result is
-    `RESULT: P0 DONE (exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED`. Options B and D are then not computed.
+    `RESULT: P0 RAN (its exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED (exit 7)`, never `P0 DONE`. Options B and
+    D are then not computed.
 - **G5.** The checkout is proved unchanged afterwards: HEAD, the branch, every local branch and tag, the stash, the
   index, and the status of every file.
   - Ignored files are included; an ignored directory counts as one entry.
   - If anything changed (nothing here changes it), the result is `RESULT: THE CHECKOUT CHANGED while P0 ran (exit 5)`,
     never `P0 DONE`. Nothing is repaired.
+  - If git cannot read the checkout again afterwards, the result is
+    `RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)`, never "unchanged".
 
 **A complete log ends with `RUNNER EXIT <n>`.**
 - The command pipes into `tee`, so the terminal's own status is tee's, not the runner's. Read the status from the log.
-- An interrupted run ends the same way: 130 for Ctrl-C, 129 for a hang-up, 143 for a kill. The rehearsal sent Ctrl-C
-  and a hang-up while P0 was running (R27, R27h).
-  - After Ctrl-C the P0 reading inside the container may run on to its end, or stop. Either way it writes nothing.
-  - Its result does not reach the log.
+- An interrupted run ends the same way: 130 for Ctrl-C, 129 for a hang-up, 143 for TERM, the signal a plain `kill`
+  sends.
+  - The rehearsal sent Ctrl-C, a hang-up and TERM to the whole job after P0 began, while its `docker exec` was under
+    way (R27, R27h, R27t).
+  - It also sent Ctrl-C while the runner was inside one of its own git reads written into a file (R27g).
+  - The exit line is written on a copy of the log's descriptor, so no redirection in force at that moment can divert
+    it.
+  - After an interruption the P0 reading inside the container may run on to its end, or stop. Either way it writes
+    nothing, and its result does not reach the log.
 - **A log that does not end with that line was cut off. It is no result.**
 
 **Reading the log.** Each line below is quoted after its label and padding; each must be there:
@@ -740,19 +765,21 @@ THE LOG FILE it names, not a copy of the terminal:
 - `tool sha256 0143dae93cf34ba4… = reviewed; command sha256 9a96e7fe1cd32529… = reviewed; the command pins the same tool`;
 - `book … /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data/plugin.sqlite3, owner 1000:1000 — as expected`;
 - §O's checks 1–5, inside the P0 part;
-- `12 Sep adjust.  found: the one live unassigned row of …`, inside the P0 part;
+- inside the P0 part, the adjustment line in one of two forms:
+  - `12 Sep adjust.  found: the one live unassigned row of …`, on a first run;
+  - `12 Sep adjust.  named by --adjustment-id: id N, …`, on a second run made on your word;
 - `checkout … unchanged: HEAD, branch, local branches and tags, stash, index and every file's status are as before`;
 - `folder … the P0 command read the folder checked above: /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data, owner
   1000:1000, in ucrm`;
-- `RESULT: P0 DONE (exit 0)`, then `RUNNER EXIT 0`.
+- `RESULT: P0 DONE (exit 0). Send this LOG FILE back; …`, then `RUNNER EXIT 0`.
 
 The P0 command's own `this checkout` line reads `not readable as a git checkout`. That is expected: it runs from the
 extracted folder, which the runner has verified.
 
-**If it stops**, at any gate, with P0's exit 1, 2 or 3, with exit 5 or 6, or interrupted: send the log. Nothing is
+**If it stops**, at any gate, with P0's exit 1, 2 or 3, with exit 5, 6 or 7, or interrupted: send the log. Nothing is
 retried or repaired. A further run waits for your word.
 
-**If the 12 Sep adjustment could not be picked alone,** that is a stop too.
+**If the 12 Sep adjustment could not be picked alone,** that is a stop too (exit 7).
 - The result line says so.
 - The log lists up to ten candidate ids, each with its direction and status only.
 - A second run, only on your word, is the same line with ` --adjustment-id=N` added right after

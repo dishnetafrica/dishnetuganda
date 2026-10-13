@@ -12,10 +12,12 @@
 #       unexpected data folder, an unexpected owner, a loose log folder, a bad option, not root;
 #   R15 P0's own stop (exit 3) is reported and NOT retried; R16 a git repository above the work folder is not taken for
 #       the checkout;
-#   R17–R28 the later findings: UCRM_CONTAINER and BASH_ENV dropped; a change during P0 (exit 5); ignored plugin files; a
-#       detached HEAD; a rebase named as such; ucrm.json unreadable, missing or truncated; ucrm.json changed between the
-#       gate and the P0 command's own read (exit 6); the adjustment not identified; Ctrl-C and a hang-up still end the log
-#       with RUNNER EXIT (and, as a control, a plain tee would not); the line fetches no tag (and, as a control, would);
+#   R17–R30 the later findings: UCRM_CONTAINER and BASH_ENV dropped; a change during P0 (exit 5); ignored plugin files; a
+#       detached HEAD; a rebase and a cherry-pick sequence named as such; ucrm.json unreadable, missing or truncated;
+#       ucrm.json or the owner changed between the gate and the P0 command's own read, or no `installed` line (exit 6);
+#       the adjustment not identified (exit 7); Ctrl-C, a hang-up and TERM still end the log with RUNNER EXIT, also
+#       during a git read redirected to a file (and, as a control, a plain tee would not); the line fetches no tag (and,
+#       as a control, would); a checkout git cannot read, before P0 (refused) and after it (exit 5);
 #   M   weakened copies of the runner, each caught.
 # Fictitious data only. Refuses to run where the server could be.
 #
@@ -54,6 +56,7 @@ chk "the documented commit holds exactly this runner" bash -c "git -C '$R' cat-f
 # ── The book, behind the fake docker ──────────────────────────────────────────────────────────────────────────────────
 mkdir -p "$SB/bin" "$SB/plugin"; cp -a "$R/dishnet-hybrid-sudan/lib" "$R/dishnet-hybrid-sudan/migrations" "$SB/plugin/"
 cp "$H/fake-docker.sh" "$SB/bin/docker"; chmod +x "$SB/bin/docker"
+mkdir -p "$SB/slowgit"; cp "$H/slow-git.sh" "$SB/slowgit/git"; chmod +x "$SB/slowgit/git"; export REAL_GIT="$(command -v git)"
 book() {        # book <dir> [variant]: a server-shaped /data under <dir>/mnt with the synthetic Uganda book; sets M
   M="$1/mnt"; local PL="$M/ucrm/data/plugins/dishnet-hybrid-sudan" PD="$M/ucrm/data/plugins/.dishnet-hybrid-sudan-data" V="${2:-ug}"
   mkdir -p "$PL/data" "$PD"; cp -a "$SB/plugin/lib" "$SB/plugin/migrations" "$PL/"; echo '{"version":"5.18.94"}' > "$PL/manifest.json"
@@ -106,9 +109,11 @@ handover() {    # handover [line]: the line run as typed; rc in RC, log in LOG, 
 }
 handover_sig() { # handover_sig <INT|HUP> [line]: the line in its own process group, as a terminal runs it; once P0 has
                  # begun, the signal goes to the whole group, as Ctrl-C or a closed terminal sends it
-  local sig="$1" i=0 pid; shift; sandline "$@"; rm -f "$D/p0-begun"
+  # SIGAT=git: instead, the signal comes while the runner is inside its first `g cat-file blob … > file` (slow-git.sh)
+  local sig="$1" i=0 pid pre="$SB/bin" hook="touch '$D/p0-begun'; sleep 30" flag=""; shift; sandline "$@"; rm -f "$D/p0-begun"
+  if [ "${SIGAT:-p0}" = git ]; then pre="$SB/slowgit:$SB/bin"; hook=""; flag="$D/p0-begun"; fi
   # a background job of this script starts with SIGINT ignored; perl puts every signal back to its default first
-  env PATH="$SB/bin:$PATH" FAKE_MNT="$M" FAKE_TRACE="$TR" FAKE_ON_P0="touch '$D/p0-begun'; sleep 30" \
+  env PATH="$pre:$PATH" FAKE_MNT="$M" FAKE_TRACE="$TR" FAKE_ON_P0="$hook" SLOW_GIT_FLAG="$flag" \
     perl -e '$SIG{$_}="DEFAULT" for qw(INT QUIT HUP TERM); exec @ARGV or die' setsid bash -c "$L" > "$D/terminal" 2>&1 &
   pid=$!
   while [ ! -e "$D/p0-begun" ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done
@@ -153,6 +158,8 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   chk "R1 its figures equal the plugin's own" php "$H/check.php" "$LOG" "$SB/book0/exp.json" yes
   chk "R1 the checkout is byte-for-byte as before — HEAD, branches, stash, index (not refreshed), every file and its time" cmp -s "$D/s0" "$D/s1"
   chk "R1 the runner says so too" grep -qE 'checkout +unchanged: HEAD, branch, local branches and tags, stash, index' "$LOG"
+  chk "R1 the adjustment found: the plain DONE line, nothing about it not being identified" \
+    bash -c "grep -q '^  RESULT: P0 DONE (exit 0). Send this LOG FILE back' '$LOG' && ! grep -q 'NOT IDENTIFIED' '$LOG' && grep -q '^  12 Sep adjust.  found: ' '$LOG'"
   chk "R1 the P0 command's own line names the folder the gate checked" grep -qE 'folder +the P0 command read the folder checked above: /data/ucrm/data/plugins/\.dishnet-hybrid-sudan-data, owner 1000:1000, in ucrm$' "$LOG"
   chk "R1 the fetch brought no tag (origin holds one on the P0 commit)" bash -c "[ -z \"\$(git -C '$CK' tag -l)\" ] && git -C '$ORIG' rev-parse -q --verify refs/tags/rh-b >/dev/null"
   chk "R1 the log is 0600 in a 0700 folder owned by root" bash -c "[ \"\$(stat -c '%a %u' '$LOG')\" = '600 0' ] && [ \"\$(stat -c '%a %u' '$WK')\" = '700 0' ]"
@@ -221,15 +228,29 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   FAKE_ON_CMD_READ="printf '{\"pluginDataDir\":\"/data/ucrm/data/plugins/elsewhere\"}\\n' > '$M/ucrm/data/plugins/dishnet-hybrid-sudan/ucrm.json'" handover
   chk "R25 ucrm.json changed after the gate, before the P0 command's own read: READ ANOTHER FOLDER (exit 6), never P0 DONE" \
     bash -c "[ '$RC' = 6 ] && grep -q 'RESULT: THE P0 COMMAND READ ANOTHER FOLDER' '$LOG' && grep -qE 'folder +the P0 command read: in ucrm; data /data/ucrm/data/plugins/elsewhere; database owner 1000:1000\$' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG'"
+  D="$SB/r25b"; world "$D"; FAKE_ON_CMD_READ="chown 1001:1001 '$M/ucrm/data/plugins/.dishnet-hybrid-sudan-data/plugin.sqlite3'" handover
+  chk "R25b the book's owner changed after the gate, before the P0 command's own stat: exit 6, naming the owner it read" \
+    bash -c "[ '$RC' = 6 ] && grep -qE 'folder +the P0 command read: in ucrm; data /data/ucrm/data/plugins/\.dishnet-hybrid-sudan-data; database owner 1001:1001\$' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG'"
+  D="$SB/r25c"; world "$D"; sed -i '/^echo "  installed /d' "$TMPCL/scripts/bank-recon-p0.sh"
+  if grep -q '^echo "  installed ' "$TMPCL/scripts/bank-recon-p0.sh" || ! grep -q '^TOOL_SHA=' "$TMPCL/scripts/bank-recon-p0.sh"; then bad "R25c: the command could not be doctored"; fi
+  G -C "$TMPCL" commit -qam N; G -C "$TMPCL" push -q origin claude/study-this-jhe2eg
+  sandboxed "$RUNSRC" "$(G -C "$TMPCL" rev-parse HEAD)" | sed "s/^WRAP_SHA=\"[0-9a-f]*\"\$/WRAP_SHA=\"$(sha256sum < "$TMPCL/scripts/bank-recon-p0.sh" | cut -c1-64)\"/" > "$D/x.sh"; direct "$D/x.sh"
+  chk "R25c a P0 command that ran P0 (exit 0) without saying which folder it read: exit 6, never DONE" \
+    bash -c "[ '$RC' = 6 ] && grep -q 'the P0 command read: (it printed no such line)' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ] && grep -q '^P0: DONE' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG'"
   D="$SB/r26"; world "$D"; rm -rf "$D/mnt"; cp -a "$SB/book2/mnt" "$D/mnt"; M="$D/mnt"; handover
-  chk "R26 the 12 Sep adjustment not identified: DONE, BUT NOT IDENTIFIED — B and D not computed; P0 ran once; no plain DONE" \
-    bash -c "[ '$RC' = 0 ] && grep -q 'candidate(s) on .* not identified' '$LOG' && grep -q 'RESULT: P0 DONE (exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED' '$LOG' && ! grep -q 'RESULT: P0 DONE (exit 0). Send' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ]"
+  chk "R26 the 12 Sep adjustment not identified: a stop (exit 7) — B and D not computed; P0 ran once; no DONE line" \
+    bash -c "[ '$RC' = 7 ] && grep -q 'candidate(s) on .* — not identified' '$LOG' && grep -q 'RESULT: P0 RAN (its exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED (exit 7)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ]"
   D="$SB/r27"; world "$D"; ckstate > "$D/s0"; handover_sig INT; ckstate > "$D/s1"
-  chk "R27 Ctrl-C while P0 runs: the log still ends RUNNER EXIT 130, no RESULT line, nothing retried, the checkout unchanged" \
+  chk "R27 Ctrl-C after P0 began (its docker exec under way): the log still ends RUNNER EXIT 130, no RESULT, the checkout unchanged" \
     bash -c "[ '$RC' = 130 ] && grep -q 'P0 begins' '$LOG' && ! grep -q 'RESULT:' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 0 ] && cmp -s '$D/s0' '$D/s1'"
   D="$SB/r27h"; world "$D"; handover_sig HUP
-  chk "R27h a hang-up while P0 runs: the log still ends RUNNER EXIT 129, no RESULT line" bash -c "[ '$RC' = 129 ] && ! grep -q 'RESULT:' '$LOG'"
-  D="$SB/r27c"; world "$D"; plain="${LINE/| ( trap \'\' INT HUP; exec tee /| tee /}"; plain="${plain% )} )"; plain="${plain/.log ) )/.log )}"
+  chk "R27h a hang-up after P0 began: the log still ends RUNNER EXIT 129, no RESULT line" bash -c "[ '$RC' = 129 ] && ! grep -q 'RESULT:' '$LOG'"
+  D="$SB/r27t"; world "$D"; handover_sig TERM
+  chk "R27t TERM to the whole job after P0 began (kill %1): the log still ends RUNNER EXIT 143, no RESULT line" bash -c "[ '$RC' = 143 ] && ! grep -q 'RESULT:' '$LOG'"
+  D="$SB/r27g"; world "$D"; SIGAT=git handover_sig INT
+  chk "R27g Ctrl-C while the runner's own git read writes into a file: the exit line still reaches the log, not that file; no docker call" \
+    bash -c "[ '$RC' = 130 ] && ! grep -q 'P0 begins' '$LOG' && [ ! -s '$TR' ] && ! grep -rqs 'RUNNER EXIT' '$WK'/src-*"
+  D="$SB/r27c"; world "$D"; plain="${LINE/| ( trap \'\' INT HUP TERM; exec tee /| tee /}"; plain="${plain% )} )"; plain="${plain/.log ) )/.log )}"
   [ "$plain" != "$LINE" ] || bad "R27c: the line could not be weakened"
   handover_sig INT "$plain"
   chk "R27c control: the same Ctrl-C with a plain tee cuts the log off before RUNNER EXIT — R27 has something to prove" \
@@ -239,6 +260,13 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
     bash -c "[ \"\$(git -C '$CK' tag -l)\" = rh-b ] && ! cmp -s '$D/s0' '$D/s1'"
   D="$SB/r4b"; world "$D"; G -C "$CK" checkout -q --detach; mkdir "$CK/.git/rebase-merge"; handover
   chk "R4b a rebase in progress (HEAD detached by it): refused, naming the rebase" refused 'the checkout has an operation in progress (rebase-merge)'
+  D="$SB/r4c"; world "$D"; mkdir "$CK/.git/sequencer"; echo "pick 0000000 x" > "$CK/.git/sequencer/todo"; handover
+  chk "R4c a cherry-pick sequence left unfinished (.git/sequencer, no CHERRY_PICK_HEAD): refused" refused 'the checkout has an operation in progress (sequencer)'
+  D="$SB/r29"; world "$D"; head -c 300 /dev/urandom > "$CK/.git/index"; handover
+  chk "R29 an index git cannot read: refused before P0 — a failed read is never 'nothing modified'" refused "git could not read the checkout's state"
+  D="$SB/r30"; world "$D"; FAKE_ON_P0="head -c 300 /dev/urandom > '$CK/.git/index'" handover
+  chk "R30 the index made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
+    bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && ! grep -qE 'checkout +unchanged' '$LOG'"
   D="$SB/r22"; world "$D"; printf 'echo BASH_ENV RAN\n' > "$D/benv.sh"; BASH_ENV="$D/benv.sh" handover
   # (the rehearsal's own bash -c stands in for the operator's interactive shell, which would not read BASH_ENV; only the log counts)
   chk "R22 BASH_ENV exported: the line starts the runner without it; nothing of it reaches the log" bash -c "[ '$RC' = 0 ] && ! grep -q 'BASH_ENV RAN' '$LOG'"
@@ -285,14 +313,21 @@ mutant no-ceiling           's/ GIT_CEILING_DIRECTORIES="\$WORK" bash "\$SRC/ ba
 mutant not-root-ok          's/^\[ "\$\(id -u\)" = "0" \] \|\| gate[^\n]*\n//m'
 mutant no-container-gate    's/^\[ "\$\{UCRM_CONTAINER:-\$CONTAINER\}" = "\$CONTAINER" \] \|\| gate[^\n]*\n//m'
 mutant keeps-bash-env       's/env -u UCRM_CONTAINER -u BASH_ENV -u ENV /env -u UCRM_CONTAINER /'
-mutant no-exit-line         's/^trap \x27printf "\\n  RUNNER EXIT %s\\n" "\$\?"\x27 EXIT\n//m'
+mutant no-exit-line         's/^trap \x27printf "\\n  RUNNER EXIT %s\\n" "\$\?" >&3\x27 EXIT\n//m'
+mutant exit-line-on-stdout  's/"\$\?" >&3\x27 EXIT/"\$?"\x27 EXIT/'
 mutant changed-as-done      's/^if \[ "\$AFTER" != "\$BEFORE" \]; then\n/if false; then\n/m'
 mutant exclude-ignored      's/ls-files --others -- "\$PLUGIN"/ls-files --others --exclude-standard -- "\$PLUGIN"/'
 mutant detached-ok          's/^g symbolic-ref -q HEAD >\/dev\/null \|\| gate[^\n]*\n//m'
 mutant ucrm-read-ignored    's/\)" \\\n  \|\| gate "the container\x27s ucrm.json is missing[^\n]*\n/)"\n/'
 mutant weak-ucrm-read       's/\$s=\@file_get_contents\(\$argv\[1\]\); if\(!is_string\(\$s\)\) exit\(3\); \$u=json_decode\(\$s,true\); if\(!is_array\(\$u\)\) exit\(4\); /\$u=\@json_decode((string)\@file_get_contents(\$argv[1]),true); /'
 mutant no-folder-check      's/^  if \[ "\$READ" != [^\n]*\n/  if false; then\n/m'
-mutant candidates-as-done   's/^if \[ "\$rc" = 0 \] && grep -q \x27\^  12 Sep adjust[^\n]*\n/if false; then\n/m'
+mutant candidates-as-done   's/^if \[ "\$rc" = 0 \] && \[\[ "\$ADJLINE"[^\n]*\n/if false; then\n/m'
+mutant always-not-identified 's/\[\[ "\$ADJLINE" == \*" — not identified"\* \]\]/true/'
+mutant no-sequencer         's/ rebase-apply sequencer; do/ rebase-apply; do/'
+mutant git-read-unchecked   's/\|\| gate "git could not read the checkout[^\n]*/|| true/g'
+mutant after-err-unseen     's/^if \[\[ "\$AFTER" == \*\x27\?ERR\?\x27\* \]\]; then\n  echo "  RESULT: THE CHECKOUT COULD NOT/if false; then\n  echo "  RESULT: THE CHECKOUT COULD NOT/m'
+mutant owner-not-compared   's/if \[ "\$READ" != "in \$CONTAINER; data \$EXPECTED_DATA; database owner \$EXPECTED_OWNER" \]/if [ "\${READ%; database owner *}" != "in \$CONTAINER; data \$EXPECTED_DATA" ]/'
+mutant installed-optional   's/^if \[ -n "\$INSTALLED" \] \|\| \[ "\$rc" != 1 \]; then/if [ -n "\$INSTALLED" ]; then/m'
 mutant detached-first       's/^(GD="\$\(g rev-parse --absolute-git-dir\)"\n(?:[^\n]*\n){3})(g symbolic-ref -q HEAD[^\n]*\n)/$2$1/m'
 echo; echo "== total: $pass ok, $fails failed (the gated run itself: $MAIN failed) =="
 [ "$fails" = 0 ]
