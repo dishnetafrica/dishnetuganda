@@ -10553,7 +10553,7 @@ The command, as root on the server, on its own:
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, due at or after 10:54:04 UTC, PENDING
+## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, begun 11:41:58 UTC: PASSED 9 ok / 0 failed / 0 notes — conclusive (the retry job ran at 11:30:08 UTC, after the move)
 
 The operator's order (the 5.18.91 entry): fix the wrong-database access first; once that is deployed and verified,
 quarantine the old database as its own step. 5.18.91 stopped the retry job from opening it, and 5.18.92 and 5.18.93
@@ -11097,7 +11097,7 @@ What it proves, section by section:
     record (`sed`), the time (`date`) and the record's size (`stat`), then appends — loses it; from the record line on,
     nothing does.
 
-### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` PENDING
+### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` 11:41:58 UTC: PASSED 9 ok / 0 failed / 0 notes, conclusive
 
 Read from the terminal the operator pasted; the log file (`quarantine-20261013T102331Z.log`), its own log
 (`quarantine-20261013T102331Z.own.log`) and `quarantine.env` stay on the server, in `/root/dnb-stray-quarantine`.
@@ -11129,8 +11129,16 @@ Read from the terminal the operator pasted; the log file (`quarantine-20261013T1
   - C7: the live commit, the live database and the retry job's files are as before.
   - C8: the installed gate still stops the retry job.
   - The container is as before (started 1 Oct 06:30:41 UTC, 0 restarts).
-- **Next:** its `--check` at or after 10:54:04 UTC. It is conclusive once master has run the retry job after the move;
-  master last ran it at 10:15:06 UTC, before the move.
+- **Its `--check`, begun 11:41:58 UTC (`check-20261013T114158Z`): PASSED, 9 ok, 0 failed, 0 notes** — read from the
+  pasted terminal; its own log stays on the server, where 5.18.94's A14 reads it.
+  - K3–K6: `<plugin>/data` is the folder of the move, with no database or side file at the old name, and
+    `sqlite_migration.log` and the `*.json.migrated` files as at the move.
+  - K8–K10: the kept file is unchanged, has no side file, and no process holds it.
+  - K11: the installed gate still stops the retry job.
+  - **K13, conclusive:** master ran the retry job at 11:30:08 UTC, after the move, and nothing made a new database,
+    side file, `sqlite_migration.log` or `*.json.migrated` in `<plugin>/data`. The quarantine holds.
+  - It began 67 minutes after the move, so it is the kind of `--check` 5.18.94's A14 asks for: at least 20 minutes
+    after the move, PASSED with "the quarantine holds".
 
 ### The put-back — its own command, never pasted with the quarantine
 
@@ -11403,7 +11411,7 @@ Also refuted:
 ### Deployment runbook — each step is the operator's, and in this order
 
 1. **The quarantine first.** Its command was handed over on 12 Oct, and **run on 13 Oct: PASSED, the stray store moved at
-   10:34:04 UTC** (the quarantine's RESULT above); its `--check` is due at or after 10:54:04 UTC. Its `--check`, at least 20 minutes after the move,
+   10:34:04 UTC; its `--check`, begun 11:41:58 UTC, PASSED and conclusive** (the quarantine's RESULT above). Its `--check`, at least 20 minutes after the move,
    must have PASSED, and its logs must have been read. Until then, deploy or roll back nothing, save no plugin setting
    in uCRM, and run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
 2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) are on `claude/study-this-jhe2eg`,
