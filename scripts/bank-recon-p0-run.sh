@@ -9,8 +9,9 @@
 # command is in docs/68 §P, not repeated here. Every git call here passes --no-optional-locks, so not even the index's
 # stat cache is refreshed.
 #
-#   G0  root; no UCRM_CONTAINER naming another container than the one checked below (the P0 command reads it); the log
-#       folder root's own, mode 700.
+#   G0  root; no UCRM_CONTAINER naming another container than the one checked below (the P0 command reads it); this bash
+#       keeps a pipeline's last command in the shell (lastpipe, job control off), or the checks after P0 could not read
+#       its lines; the log folder root's own, mode 700.
 #   G1  the checkout: a git repository at /opt/dishnet; no merge, rebase, cherry-pick, revert or bisect in progress (a
 #       sequence left in .git/sequencer included); on a branch (not a detached HEAD); every git read of its state
 #       succeeds (a read that fails is a refusal, never "nothing found"); no tracked file modified or staged; no file git
@@ -87,7 +88,6 @@ GD="$(g rev-parse --absolute-git-dir)"
 for f in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG rebase-merge rebase-apply sequencer; do
   [ ! -e "$GD/$f" ] || gate "the checkout has an operation in progress ($f) — not the state the records describe"
 done
-g symbolic-ref -q HEAD >/dev/null || gate "the checkout is on a detached HEAD — not the state the records describe"
 part() {   # part <command…>: its output's hash, or ?ERR? when it fails ('?' is in no ref name and no hash)
   local o; o="$("$@" 2>/dev/null)" || { printf '?ERR?'; return; }; printf '%s' "$o" | sha256sum | cut -c1-16
 }
@@ -95,6 +95,10 @@ headref() {       # the branch HEAD is on; "detached" only when git says so (exi
   local r; r="$(g symbolic-ref -q HEAD 2>/dev/null)"
   case $? in 0) printf '%s' "$r" ;; 1) printf 'detached' ;; *) printf '?ERR?' ;; esac
 }
+case "$(headref)" in
+  detached) gate "the checkout is on a detached HEAD — not the state the records describe" ;;
+  '?ERR?')  gate "git could not read the checkout's state (the branch HEAD is on) — it cannot be shown clean or unchanged" ;;
+esac
 fingerprint() {   # everything a checkout update could change, as one line
   printf '%s|%s|%s|%s|%s|%s\n' \
     "$(g rev-parse HEAD 2>/dev/null || printf '?ERR?')" \
