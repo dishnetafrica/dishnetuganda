@@ -24,10 +24,11 @@
 #       beside the plugin when it names none, is
 #       EXPECTED_DATA (the live store since 09 Oct); plugin.sqlite3 is there; its owner is EXPECTED_OWNER. Anything else is
 #       an unexpected database path and stops here.
-#   G4  then P0 runs ONCE, in this container, with UCRM_CONTAINER, BASH_ENV and ENV removed from its environment. Whatever
-#       its exit, it is reported with its meaning and NOT retried. Afterwards the P0 command's own `installed` line must
-#       name this container, EXPECTED_DATA and EXPECTED_OWNER — the command reads ucrm.json again itself, so a change in
-#       between would otherwise go unseen (exit 6). If the 12 Sep adjustment was not identified, the run is a stop (exit 7).
+#   G4  then P0 runs ONCE, in this container, with UCRM_CONTAINER, BASH_ENV, ENV, SHELLOPTS and BASHOPTS removed from its
+#       environment. Whatever its exit, it is reported with its meaning and NOT retried. Afterwards the P0 command's own
+#       `installed` line must name this container, EXPECTED_DATA and EXPECTED_OWNER — the command reads ucrm.json again
+#       itself, so a change in between would otherwise go unseen (exit 6). If the 12 Sep adjustment was not identified,
+#       the run is a stop (exit 7).
 #   G5  afterwards the checkout is proved untouched: HEAD, the branch, every local branch and tag, the stash, the index and
 #       the status of every file (an ignored directory counts as one entry) are the same as before P0; a read that fails
 #       afterwards is reported as "could not be read again" (exit 5), never as unchanged.
@@ -41,7 +42,8 @@
 
 set -u
 umask 077
-shopt -s lastpipe   # (no job control in a script) the loop that passes P0's output on runs in this shell: no side file
+set +m              # no job control, even if an exported SHELLOPTS asked for it ("monitor"): lastpipe needs it off
+shopt -s lastpipe   # the loop that passes P0's output on runs in this shell, so it keeps two lines without a side file
 exec 3>&1          # the exit line goes to this copy of the log: a signal during `g … > file` must not divert it there
 trap 'printf "\n  RUNNER EXIT %s\n" "$?" >&3' EXIT
 trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
@@ -76,6 +78,7 @@ printf '\n== bank-recon P0, gated run — %s ==\n\n' "$(date -u +%Y%m%dT%H%M%SZ)
 [ "$(id -u)" = "0" ] || gate "run this as root"
 [ "${UCRM_CONTAINER:-$CONTAINER}" = "$CONTAINER" ] || gate "UCRM_CONTAINER is set to '$UCRM_CONTAINER' — P0 would read that container, not the $CONTAINER checked here; unset it"
 command -v git >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1 || gate "git, docker or sha256sum is missing"
+LP=0; true | LP=1; [ "$LP" = 1 ] || gate "this bash does not run a pipeline's last command in the shell (lastpipe) — the checks after P0 could not read its lines"
 [ -d "$WORK" ] && [ "$(stat -c '%u %a' "$WORK")" = "0 700" ] || gate "$WORK must exist, owned by root, mode 700 (the hand-over makes it with umask 077) — the log is confidential"
 
 # ── G1: the checkout ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -88,13 +91,17 @@ g symbolic-ref -q HEAD >/dev/null || gate "the checkout is on a detached HEAD �
 part() {   # part <command…>: its output's hash, or ?ERR? when it fails ('?' is in no ref name and no hash)
   local o; o="$("$@" 2>/dev/null)" || { printf '?ERR?'; return; }; printf '%s' "$o" | sha256sum | cut -c1-16
 }
+headref() {       # the branch HEAD is on; "detached" only when git says so (exit 1), ?ERR? when it cannot read HEAD
+  local r; r="$(g symbolic-ref -q HEAD 2>/dev/null)"
+  case $? in 0) printf '%s' "$r" ;; 1) printf 'detached' ;; *) printf '?ERR?' ;; esac
+}
 fingerprint() {   # everything a checkout update could change, as one line
   printf '%s|%s|%s|%s|%s|%s\n' \
     "$(g rev-parse HEAD 2>/dev/null || printf '?ERR?')" \
-    "$(g symbolic-ref -q HEAD 2>/dev/null || echo detached)" \
+    "$(headref)" \
     "$(part g for-each-ref --format='%(refname) %(objectname)' refs/heads refs/tags)" \
     "$(part g stash list)" \
-    "$(part cat "$GD/index")" \
+    "$(part sha256sum "$GD/index")" \
     "$(part g -c core.quotePath=false status --porcelain=v1 --untracked-files=all --ignored=matching)"
 }
 BEFORE="$(fingerprint)"
@@ -150,7 +157,7 @@ printf '\n  ── P0 begins (it runs once; whatever it ends with is reported, n
 # Every line goes on to the log as it comes; two of them are also kept, in this shell only, for the checks below: the
 # command's first `installed` line and P0's `12 Sep adjust.` line.
 INSTALLED=""; ADJLINE=""
-env -u UCRM_CONTAINER -u BASH_ENV -u ENV GIT_CEILING_DIRECTORIES="$WORK" bash "$SRC/scripts/bank-recon-p0.sh" ${ADJ[@]+"${ADJ[@]}"} 2>&1 \
+env -u UCRM_CONTAINER -u BASH_ENV -u ENV -u SHELLOPTS -u BASHOPTS GIT_CEILING_DIRECTORIES="$WORK" bash "$SRC/scripts/bank-recon-p0.sh" ${ADJ[@]+"${ADJ[@]}"} 2>&1 \
   | while IFS= read -r line || [ -n "$line" ]; do
       printf '%s\n' "$line"
       case "$line" in
