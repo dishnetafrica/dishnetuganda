@@ -104,7 +104,8 @@ readlog() {     # what the operator reads: the log's last line, RUNNER EXIT <n> 
 }
 handover() {    # handover [line]: the line run as typed; rc in RC, log in LOG, trace in TR
   sandline "$@"
-  env PATH="$SB/bin:$PATH" FAKE_MNT="$M" FAKE_TRACE="$TR" bash -c "$L" > "$D/terminal" 2>&1; RC=$?   # as typed: tee's status
+  # HO_PRE: a folder put first on PATH; HO_ENV: one NAME=value added to the environment, as an operator's shell might
+  env PATH="${HO_PRE:+$HO_PRE:}$SB/bin:$PATH" ${HO_ENV:+"$HO_ENV"} FAKE_MNT="$M" FAKE_TRACE="$TR" bash -c "$L" > "$D/terminal" 2>&1; RC=$?   # as typed: tee's status
   readlog
 }
 handover_sig() { # handover_sig <INT|HUP> [line]: the line in its own process group, as a terminal runs it; once P0 has
@@ -160,6 +161,8 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   chk "R1 the runner says so too" grep -qE 'checkout +unchanged: HEAD, branch, local branches and tags, stash, index' "$LOG"
   chk "R1 the adjustment found: the plain DONE line, nothing about it not being identified" \
     bash -c "grep -q '^  RESULT: P0 DONE (exit 0). Send this LOG FILE back' '$LOG' && ! grep -q 'NOT IDENTIFIED' '$LOG' && grep -q '^  12 Sep adjust.  found: ' '$LOG'"
+  chk "R1 no warning from bash or anything else in the log: no 'warning:' line, no line naming the runner's own file" \
+    bash -c "! grep -qi 'warning:' '$LOG' && ! grep -q 'bank-recon-p0-run.sh: ' '$LOG'"
   chk "R1 the P0 command's own line names the folder the gate checked" grep -qE 'folder +the P0 command read the folder checked above: /data/ucrm/data/plugins/\.dishnet-hybrid-sudan-data, owner 1000:1000, in ucrm$' "$LOG"
   chk "R1 the fetch brought no tag (origin holds one on the P0 commit)" bash -c "[ -z \"\$(git -C '$CK' tag -l)\" ] && git -C '$ORIG' rev-parse -q --verify refs/tags/rh-b >/dev/null"
   chk "R1 the log is 0600 in a 0700 folder owned by root" bash -c "[ \"\$(stat -c '%a %u' '$LOG')\" = '600 0' ] && [ \"\$(stat -c '%a %u' '$WK')\" = '700 0' ]"
@@ -265,11 +268,24 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   D="$SB/r29"; world "$D"; head -c 300 /dev/urandom > "$CK/.git/index"; handover
   chk "R29 an index git cannot read: refused before P0 — a failed read is never 'nothing modified'" refused "git could not read the checkout's state"
   D="$SB/r30"; world "$D"; FAKE_ON_P0="head -c 300 /dev/urandom > '$CK/.git/index'" handover
+  D="$SB/r31"; world "$D"; FAKE_ON_P0="echo garbage > '$CK/.git/HEAD'" handover
+  chk "R31 HEAD made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
+    bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG'"
+  D="$SB/r32"; world "$D"; HO_PRE="$SB/slowgit" HO_ENV="FAIL_SYMREF_IF=$D/symref-fails" FAKE_ON_P0="touch '$D/symref-fails'" handover
+  chk "R32 only the branch read of HEAD fails after P0 (exit 128): COULD NOT BE READ AGAIN, not taken for 'detached', not CHANGED" \
+    bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: THE CHECKOUT CHANGED' '$LOG'"
   chk "R30 the index made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
     bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && ! grep -qE 'checkout +unchanged' '$LOG'"
   D="$SB/r22"; world "$D"; printf 'echo BASH_ENV RAN\n' > "$D/benv.sh"; BASH_ENV="$D/benv.sh" handover
   # (the rehearsal's own bash -c stands in for the operator's interactive shell, which would not read BASH_ENV; only the log counts)
   chk "R22 BASH_ENV exported: the line starts the runner without it; nothing of it reaches the log" bash -c "[ '$RC' = 0 ] && ! grep -q 'BASH_ENV RAN' '$LOG'"
+  D="$SB/r22c"; world "$D"; HO_ENV="SHELLOPTS=braceexpand:hashall:interactive-comments:monitor:noclobber" handover
+  chk "R22c SHELLOPTS exported with job control on (monitor) in the operator's shell: the line drops it — P0 DONE, the folder confirmed" \
+    bash -c "[ '$RC' = 0 ] && grep -qE 'folder +the P0 command read the folder checked above' '$LOG' && grep -q 'RESULT: P0 DONE (exit 0). Send' '$LOG'"
+  D="$SB/r22d"; world "$D"; mkdir -p "$WK"; chmod 700 "$WK"; (cd "$CK" && G fetch -q origin claude/study-this-jhe2eg); TR="$D/trace"; : > "$TR"
+  env PATH="$SB/bin:$PATH" FAKE_MNT="$M" FAKE_TRACE="$TR" SHELLOPTS=braceexpand:hashall:interactive-comments:monitor bash "$D/runner.sh" > "$D/direct.log" 2>&1; RC=$?; LOG="$D/direct.log"
+  chk "R22d the runner itself started with job control on (SHELLOPTS monitor): it turns it off — P0 DONE, the folder confirmed, not a false exit 6" \
+    bash -c "[ '$RC' = 0 ] && grep -qE 'folder +the P0 command read the folder checked above' '$LOG' && [ \"\$(tail -n1 '$LOG')\" = '  RUNNER EXIT 0' ]"
   D="$SB/r22b"; world "$D"; printf 'echo BASH_ENV RAN\n' > "$D/benv.sh"; BASH_ENV="$D/benv.sh" direct "$D/runner.sh"
   chk "R22b the runner started with BASH_ENV set (its own bash reads it once): P0 runs once (exit 0), and P0's command does not read it" \
     bash -c "[ '$RC' = 0 ] && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ] && [ \$(grep -c 'BASH_ENV RAN' '$LOG') = 1 ]"
@@ -327,6 +343,10 @@ mutant no-sequencer         's/ rebase-apply sequencer; do/ rebase-apply; do/'
 mutant git-read-unchecked   's/\|\| gate "git could not read the checkout[^\n]*/|| true/g'
 mutant after-err-unseen     's/^if \[\[ "\$AFTER" == \*\x27\?ERR\?\x27\* \]\]; then\n  echo "  RESULT: THE CHECKOUT COULD NOT/if false; then\n  echo "  RESULT: THE CHECKOUT COULD NOT/m'
 mutant owner-not-compared   's/if \[ "\$READ" != "in \$CONTAINER; data \$EXPECTED_DATA; database owner \$EXPECTED_OWNER" \]/if [ "\${READ%; database owner *}" != "in \$CONTAINER; data \$EXPECTED_DATA" ]/'
+mutant index-through-shell  's/"\$\(part sha256sum "\$GD\/index"\)"/"\$(part cat "\$GD\/index")"/'
+mutant no-set-m             's/^set \+m [^\n]*\n//m'
+mutant lastpipe-unguarded   's/^set \+m [^\n]*\n//m; s/^LP=0; true \| LP=1;[^\n]*\n//m'
+mutant headref-detached     's/\*\) printf \x27\?ERR\?\x27 ;; esac/*) printf \x27detached\x27 ;; esac/'
 mutant installed-optional   's/^if \[ -n "\$INSTALLED" \] \|\| \[ "\$rc" != 1 \]; then/if [ -n "\$INSTALLED" ]; then/m'
 mutant detached-first       's/^(GD="\$\(g rev-parse --absolute-git-dir\)"\n(?:[^\n]*\n){3})(g symbolic-ref -q HEAD[^\n]*\n)/$2$1/m'
 echo; echo "== total: $pass ok, $fails failed (the gated run itself: $MAIN failed) =="

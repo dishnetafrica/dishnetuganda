@@ -632,7 +632,7 @@ You approved P0 with six gates:
 6. obtain the 5.18.94 after-check evidence separately.
 
 This session cannot reach the server, so the gates are built into what you run: `scripts/bank-recon-p0-run.sh`, in
-commit `d913c8fd45efffb1dc7c9737e3d4947d6432ecb4`. It refuses before P0, naming the gate, whenever one does not hold.
+commit `057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1`. It refuses before P0, naming the gate, whenever one does not hold.
 - A second independent review (four lenses, two sceptics per finding) upheld 20 of 22 findings against its first
   version. All are fixed.
 - A check of those fixes found six more gaps, all fixed in this version:
@@ -651,6 +651,12 @@ commit `d913c8fd45efffb1dc7c9737e3d4947d6432ecb4`. It refuses before P0, naming 
   - the second-run form of the adjustment line was missing from the reading list;
   - one rehearsal case could not tell the two DONE results apart.
 
+  A check of those fixes (three lenses, two sceptics per finding) upheld three regressions they had introduced. All
+  three are fixed:
+  - the index was hashed through a shell variable, so every log gained two bash `ignored null byte` warnings;
+  - an exported `SHELLOPTS` could switch job control on, so a good run would have ended in a false exit 6;
+  - a failed read of HEAD's branch was taken for "detached".
+
   Three refuted findings were taken as improvements: the unidentified adjustment now has its own exit (7), its owner
   and "no `installed` line" branches are rehearsed, and the interruption cases are described exactly. The sceptics
   refuted the claim that a symlinked data folder could make P0 read another book: the plugin opens the same path, so it
@@ -661,15 +667,17 @@ commit `d913c8fd45efffb1dc7c9737e3d4947d6432ecb4`. It refuses before P0, naming 
 - At that commit, the tool's sha256 is `0143dae93cf34ba4…` and the command's is `9a96e7fe1cd32529…`. The command pins the
   tool's.
 - The runner pins all three. This checkout was clean when the runner was committed.
-- The runner's own sha256 is `082b70c59ff01f5843ddd97deaf41868ce884e1f8f49865245612df9e60fa8b4`; the line below checks it.
+- The runner's own sha256 is `b78f2d2d259d7bc35711649fad75669939a77ded3a1d53b06bd9316ac90d526b`; the line below checks it.
 
 **The command — one line, as root on the server, after the P0 log of any earlier attempt has been sent.** Then send back
 THE LOG FILE it names, not a copy of the terminal:
 
-    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob d913c8fd45efffb1dc7c9737e3d4947d6432ecb4:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "082b70c59ff01f5843ddd97deaf41868ce884e1f8f49865245612df9e60fa8b4  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob 057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "b78f2d2d259d7bc35711649fad75669939a77ded3a1d53b06bd9316ac90d526b  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER -u SHELLOPTS -u BASHOPTS bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
 
 - The parentheses keep `umask 077` and `cd` inside the command, and your shell is left as it was.
-- `env -u` starts the runner without `BASH_ENV`, `ENV` or `UCRM_CONTAINER`, whatever your shell exports.
+- `env -u` starts the runner without `BASH_ENV`, `ENV`, `UCRM_CONTAINER`, `SHELLOPTS` or `BASHOPTS`, whatever your
+  shell exports. Your shell's own options, if it exports them, therefore do not reach the runner. The runner also turns
+  job control off itself and checks that it can keep P0's lines; it refuses if it cannot.
 - The `tee` at the end ignores Ctrl-C, a hang-up and TERM (a plain `kill`). So an interrupted run's log still ends
   with its exit line.
 
