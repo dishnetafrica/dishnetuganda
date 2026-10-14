@@ -10553,7 +10553,7 @@ The command, as root on the server, on its own:
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 247a480 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
 
-## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, due at or after 10:54:04 UTC, PENDING
+## 11 Oct — the stray store's quarantine: `scripts/quarantine-stray-store.sh` — written, its design reviewed adversarially once and its code eight times, rehearsed twice after the last round; RUN 13 Oct, on the operator's word after 5.18.93's day-later `--after-only` had PASSED — moved at 10:34:04 UTC: PASSED 16 ok / 0 failed / 0 notes; its `--check`, begun 11:41:58 UTC: PASSED 9 ok / 0 failed / 0 notes — conclusive (the retry job ran at 11:30:08 UTC, after the move)
 
 The operator's order (the 5.18.91 entry): fix the wrong-database access first; once that is deployed and verified,
 quarantine the old database as its own step. 5.18.91 stopped the retry job from opening it, and 5.18.92 and 5.18.93
@@ -11097,7 +11097,7 @@ What it proves, section by section:
     record (`sed`), the time (`date`) and the record's size (`stat`), then appends — loses it; from the record line on,
     nothing does.
 
-### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` PENDING
+### RESULT — RUN 13 Oct (moved 10:34:04 UTC): PASSED 16 ok / 0 failed / 0 notes; `--check` 11:41:58 UTC: PASSED 9 ok / 0 failed / 0 notes, conclusive
 
 Read from the terminal the operator pasted; the log file (`quarantine-20261013T102331Z.log`), its own log
 (`quarantine-20261013T102331Z.own.log`) and `quarantine.env` stay on the server, in `/root/dnb-stray-quarantine`.
@@ -11129,8 +11129,16 @@ Read from the terminal the operator pasted; the log file (`quarantine-20261013T1
   - C7: the live commit, the live database and the retry job's files are as before.
   - C8: the installed gate still stops the retry job.
   - The container is as before (started 1 Oct 06:30:41 UTC, 0 restarts).
-- **Next:** its `--check` at or after 10:54:04 UTC. It is conclusive once master has run the retry job after the move;
-  master last ran it at 10:15:06 UTC, before the move.
+- **Its `--check`, begun 11:41:58 UTC (`check-20261013T114158Z`): PASSED, 9 ok, 0 failed, 0 notes** — read from the
+  pasted terminal; its own log stays on the server, where 5.18.94's A14 reads it.
+  - K3–K6: `<plugin>/data` is the folder of the move, with no database or side file at the old name, and
+    `sqlite_migration.log` and the `*.json.migrated` files as at the move.
+  - K8–K10: the kept file is unchanged, has no side file, and no process holds it.
+  - K11: the installed gate still stops the retry job.
+  - **K13, conclusive:** master ran the retry job at 11:30:08 UTC, after the move, and nothing made a new database,
+    side file, `sqlite_migration.log` or `*.json.migrated` in `<plugin>/data`. The quarantine holds.
+  - It began 67 minutes after the move, so it is the kind of `--check` 5.18.94's A14 asks for: at least 20 minutes
+    after the move, PASSED with "the quarantine holds".
 
 ### The put-back — its own command, never pasted with the quarantine
 
@@ -11149,7 +11157,7 @@ As root on the server, on its own:
 
     cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --put-back 2>&1 | tee /root/dnb-stray-quarantine/putback-$(date -u +%Y%m%dT%H%M%SZ).log
 
-## 12–13 Oct — 5.18.94: the customer portal's Terms of Service and Privacy Policy without the UCC claim, section by section as the website's policies (Uganda only; version 1.2, so every Uganda customer accepts once more); Installation Terms v1.1 for new requests, v1.0 kept byte for byte; the UCC defaults removed; no migration; South Sudan byte for byte; Domain B unchanged. `release/5.18.94` = `f4b4c96`, cut on live 5.18.93 (`69c87a6`); `scripts/deploy-5.18.94.sh` pinned to it and rehearsed twice — `release/5.18.94` NOT PUSHED; NOT DEPLOYED
+## 12–13 Oct — 5.18.94: the customer portal's Terms of Service and Privacy Policy without the UCC claim, section by section as the website's policies (Uganda only; version 1.2, so every Uganda customer accepts once more); Installation Terms v1.1 for new requests, v1.0 kept byte for byte; the UCC defaults removed; no migration; South Sudan byte for byte; Domain B unchanged. `release/5.18.94` = `f4b4c96`, cut on live 5.18.93 (`69c87a6`); `scripts/deploy-5.18.94.sh` pinned to it and rehearsed twice — `release/5.18.94` pushed 13 Oct; DEPLOYED 13 Oct (copy 13:58:04 UTC): PASSED 84 ok / 0 failed / 4 notes, after a first run at 11:43 UTC stopped at A18 with nothing changed — RESULT below
 
 **Request.** The UCC letter of 4 Sep is a conditional no-objection, not a licence (root docs/67 §J). So nothing the
 plugin shows a Uganda customer may call DishNet "UCC-authorised". On 12 Oct the operator chose **"Templates + the 3
@@ -11403,16 +11411,25 @@ Also refuted:
 ### Deployment runbook — each step is the operator's, and in this order
 
 1. **The quarantine first.** Its command was handed over on 12 Oct, and **run on 13 Oct: PASSED, the stray store moved at
-   10:34:04 UTC** (the quarantine's RESULT above); its `--check` is due at or after 10:54:04 UTC. Its `--check`, at least 20 minutes after the move,
+   10:34:04 UTC; its `--check`, begun 11:41:58 UTC, PASSED and conclusive** (the quarantine's RESULT above). Its `--check`, at least 20 minutes after the move,
    must have PASSED, and its logs must have been read. Until then, deploy or roll back nothing, save no plugin setting
    in uCRM, and run neither `diagnose-sales-pipeline.sh` nor `migrations/migrate_tickets_data.php`.
-2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) are on `claude/study-this-jhe2eg`,
-   not on main. Merge them to main, through a pull request at the operator's word, then redeploy the website.
+2. **The website.** Its 12 Oct evening changes (`privacy.html`, `installation.html`) were merged to main on 13 Oct, at
+   the operator's word, through [PR #23](https://github.com/dishnetafrica/dishnetuganda/pull/23) (main `7790bef`).
+   Redeploy the website from main. **The live site carries them:** on 13 Oct the deploy's second run read the
+   evening changes there (A19: `privacy.html` recordings ×1, `installation.html` "normally photographs" ×1, no
+   note). The redeploy itself is not in the log.
 3. **The go-live day.** The documents are dated **16 October 2026**. A20 refuses after that day in Kampala; before it,
    it notes that customers accept documents dated in the future. **For another day, the release is cut again with that
    date, and re-pinned and rehearsed.**
-4. **Both branches must be on GitHub.** `claude/study-this-jhe2eg` is pushed with this entry. **`release/5.18.94`
-   (`f4b4c96`) is pushed only at the operator's word.**
+4. **Both branches must be on GitHub.** `claude/study-this-jhe2eg` is pushed with this entry. `release/5.18.94`
+   (`f4b4c96`) was pushed on 13 Oct, at the operator's word.
+4b. **The e-mail badge (A18).** The first deploy run stopped because `email_badge_line` still said UCC (RESULT below).
+   Run `scripts/set-email-badge-5.18.94.sh` first; it must end PASSED. **Before the second run the badge was
+   changed:** A18 then read it ok in both copies. Whether this script did it is not known until its log is sent.
+   **14 Oct listing:** a log `badge-20261013T134846Z.log` exists in `/root/dnb-5.18.94` (1,732 bytes, last written 13:48:49
+   UTC, 32 s before the second deploy run began). Its content has not been sent, so whether the script ended PASSED is
+   still **not evidenced**.
 5. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.94 && mkdir -p /root/dnb-5.18.94 && bash scripts/deploy-5.18.94.sh 2>&1 | tee /root/dnb-5.18.94/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
@@ -11424,26 +11441,39 @@ Also refuted:
    - R19's, not yet conclusive.
 
    Press nothing on the Salesperson numbers card and run no `tools/set_config.php` while it runs.
+   **Run 13 Oct, begun 13:49:21 UTC: PASSED, 84 ok / 0 failed / 4 notes (A17, A20, R3, R19), the copy at 13:58:04
+   UTC** — read from the pasted terminal (RESULT below). The first run, begun 11:43:39 UTC, stopped at A18.
 6. **At least 20 minutes after the copy**, read-only:
 
        cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log
 
    Expected: PASSED, R19 conclusive.
+   **Run 14 Oct, begun 03:13:46 UTC (wrapped in `( umask 077 && … )`): PASSED, 58 ok / 0 failed / 1 note**, read from the
+   pasted terminal; the log file (`after-20261014T031346Z.log`) was not sent. **R19 conclusive:** master ran the retry job
+   at 03:05:04 UTC, after the copy (13 Oct 13:58:04 UTC), and the quarantine holds. The note is R3's: `migration.log`
+   holds no line for 087, read from the store instead. R7 read the live book (its figures stay out of this record). Every
+   switch, setting, row and route compared before and after was unchanged.
 7. **Then the quarantine's own `--check`**, as its runbook says. Sign in to the portal once as a Uganda customer: the
    consent step shows version 1.2, dated 16 October 2026.
+   **`--check` run 14 Oct, begun 03:14:46 UTC: PASSED, 9 ok / 0 failed / 1 note** (K2: the container serves `f4b4c96`, not
+   `69c87a6`, as expected after this deploy), read from the pasted terminal. K13: the retry job ran after the move and
+   nothing appeared in `<plugin>/data`; the kept file is unchanged. Its own log is
+   `/root/dnb-stray-quarantine/check-20261014T031446Z.own.log`; neither log file was sent.
+   **The portal sign-in has not been reported: not evidenced.**
 
 ### Known limits and open risks
 
 1. **A rollback brings the UCC claim back for most customers without a prompt.** The documents become 5.18.93's
    (1.1). A customer who accepted 1.1 before is not asked again; only one who accepted only 1.2 is asked.
 2. **Deploying before the documents' date** means a customer signing in before then accepts documents shown as
-   *"Effective 16 October 2026"*. A20 says so; it is the operator's choice.
+   *"Effective 16 October 2026"*. A20 says so; it is the operator's choice. **So deployed on 13 Oct** (A20's note).
 3. **Follow-up for the operator: quotation clause 12** still says loaned equipment is returnable *"within 7 days of
    termination"*. The website and the portal now set no fixed number of days, and clause 1 makes the website prevail.
    Drop the seven days at the next reload of the Uganda quotation template in uCRM. The repository's copy is kept as
    the operator loaded it on 12 Oct.
-4. **The website's 12 Oct evening changes are not on main.** Until they are merged and deployed, A19 notes that the
-   portal's Privacy Policy says a little more than the website's: call recordings, and "normally" photographs.
+4. **The website's 12 Oct evening changes are on main since 13 Oct** (PR #23). Until the website is redeployed from
+   main, A19 notes that the portal's Privacy Policy says a little more than the website's: call recordings, and
+   "normally" photographs. **Closed on 13 Oct:** the deploy's second run read both on the live site, with no note.
 5. **The short form Git writes.** If the server's checkout writes 8-character commits, A0 stops before anything changes
    and names the remedy: `git -C /opt/dishnet config core.abbrev 7`. The real repository has about 13,000 objects
    (measured here once repacked), so 7 characters are expected.
@@ -11478,3 +11508,114 @@ The command, as root on the server, on its own:
 
 By hand, only if the script cannot run:
 `cd /opt/dishnet && git checkout 69c87a6 && { bash scripts/deploy-hybrid.sh; git checkout -; }`.
+
+### RESULT — DEPLOYED 13 Oct (copy 13:58:04 UTC): PASSED 84 ok / 0 failed / 4 notes; the first run, begun 11:43:39 UTC, NO-GO at A18 with nothing changed
+
+**The first run — 13 Oct, begun 11:43:39 UTC: NO-GO at A18, nothing changed. The e-mail badge still said UCC.**
+
+- **The run.** `/opt/dishnet` was pulled to `4688315`, and `release/5.18.94` (`f4b4c96`) fetched. Live: `69c87a6`
+  (5.18.93), PHP 8.1.34 in the container. Stage A is read only.
+- **20 checks passed:** A7, A0, A3, A4, A5, A5b, A8, A9, A9b, A9c, A10, A11, A2, A6, A14, A12, A13, A15, A16 and
+  A17. A14 read the quarantine as holding: moved 10:34:04 UTC, and its `--check`, begun 11:41:58 UTC, passed.
+  **One note**, A17's: three installation requests are pending under v1.0, and they keep v1.0.
+- **A18 stopped the run.** It read `ai_identity_line=set:ok/set:ok wa_flyer_caption=unset:ok/unset:ok
+  email_badge_line=set:UCC/set:UCC badge-shown=UCC/UCC retention=365/365` (files/store). So the e-mail badge still
+  said UCC, in the configuration files and in the store row; the identity line and the flyer caption did not.
+  **Nothing was changed.** No state file was written: the deploy writes one only after stage A passes, so the next
+  run starts clean.
+- **The remedy: `scripts/set-email-badge-5.18.94.sh`** (159 lines, sha256 `d91bbce53bd70517…`), one command as root. It
+  sets the badge to *"Starlink Installation"* with the plugin's own tool, `tools/set_email_brand.php --set`, as A18's
+  message says. That tool saves through `PluginConfig::saveOverrides()`: `kyc_config.json` first, then the same keys
+  into the store row. In order, stopping at the first thing that is not as expected:
+  1. 5.18.93 is live, and the tool and every library under `lib/` are `69c87a6`'s byte for byte (compared with Git,
+     read as files on the host). The live data folder and its database's owner are found the way the deploy finds
+     them; `kyc_config.json` belongs to the same user.
+  2. Nothing is at the stray store's old name in `<plugin>/data`; that folder's entries and time are noted.
+  3. The deploy's own A18 reader (taken from `deploy-5.18.94.sh`, checked by its sha256) runs over the installed code.
+  4. If the badge already reads *"Starlink Installation"* in both copies, it changes nothing and says so. Otherwise it
+     compares `kyc_config.json` with the store row, key by key. The save copies every key of the file into the store
+     row, so it refuses if any other key differs, or is in the file and not in the store. It names those keys, never
+     a value. Keys only the store holds are kept by the save.
+  5. The save runs as the database's owner (never root), aimed at the live data folder (`DN_DATA_DIR`), never at
+     `<plugin>/data`. The tool's own output lists the brand, phone numbers among it, and is kept out of the log.
+  6. Then both copies are read again. The badge must read *"Starlink Installation"* in both; every other key must be
+     as before in both. `kyc_config.json` must keep its owner, A18's other answers must be as before, and
+     `<plugin>/data` must be untouched.
+
+  It prints key names, counts, set or unset, UCC or ok and short hashes — never a setting's value, and not the
+  retention's number. Every STOP says whether anything was changed. A reading that fails after the save is reported
+  as *not measured*, never as *not set*.
+- **The rehearsal** (scratch, not in the repository). A copy of the server's layout: 5.18.93's code, the live data
+  folder with a store row and `kyc_config.json` owned by uid 1000, `<plugin>/data` as the quarantine left it, and the
+  5.18.94 pin. A fake `docker` ran each command in the container's paths, as uid 1000. **29 scenarios, 181 checks,
+  0 failed** on the final file. The run before it passed the same 181 checks; its file differed only in the
+  header comment. They include:
+  - the straight run, and a re-run that changes nothing;
+  - each refusal before any change, with both copies proved unchanged: a differing key, a file-only key, anything at
+    the stray store's old name, another live commit, `ucrm.json` naming `<plugin>/data`, a root-owned database or
+    file, a missing store row, an altered library or a missing tool, another A18 reader, the container stopped;
+  - accepted variants: nested settings in another key order, no data folder named in `ucrm.json`, the two copies'
+    badges differing, a missing badge in one copy;
+  - the tool failing, not saying it saved, changing another key, touching `<plugin>/data`, the store left unwritten
+    (the mirror's silent failure), and a reading failing after the save.
+
+  After the straight run, the deploy's A18 reader, run over the **5.18.94 pin's** code, read no UCC. No setting's
+  value appeared in any log. **18 weakened copies of the script were each caught.**
+- **The review.** Three reviewers (correctness, side effects, the operator and the deploy after it) found no blocker
+  and seven minor points. All seven were applied before the rehearsal above: the installed code checked byte for
+  byte; no retention number in the log; key counts without the badge; *nothing to do* checked first and still naming
+  other UCC keys; and clearer messages when the tool does not say it saved, or a reading fails after the save.
+- **Next, the operator's:** run it and send its log; if it ends PASSED, run the deploy again, the same command as
+  before (runbook step 5).
+
+**The second run — 13 Oct, begun 13:49:21 UTC: PASSED, 84 ok / 0 failed / 4 notes.** Read from the pasted terminal;
+its log file stays on the server in `/root/dnb-5.18.94`.
+
+- **Before it.** `/opt/dishnet` was at `a2c94fc` (*"Already up to date"*), and `release/5.18.94` fetched. Live:
+  `69c87a6` (5.18.93), PHP 8.1.34. The badge had been changed since the first run: A18 read it ok in both copies.
+  Whether that was `set-email-badge-5.18.94.sh` cannot be told from this log; that script's own log has not been
+  sent.
+- **Stage A, read only — 23 checks passed:** A7, A0, A3, A4, A5, A5b, A8, A9, A9b, A9c, A10, A11, A2, A6, A14, A12,
+  A13, A15, A16, A17, A18, A21 and A19.
+  - A18 read `ai_identity_line=set:ok/set:ok wa_flyer_caption=unset:ok/unset:ok email_badge_line=set:ok/set:ok
+    badge-shown=ok/ok` (files/store).
+  - A21: call recordings are deleted after 365 days, in the store row and the files.
+  - A19: the website shows the policies hub and its Terms of Service, which the portal's new Terms point to (the
+    identity sentence, no UCC claim), and the 12 Oct evening changes — recordings in `privacy.html`, *"normally
+    photographs"* in `installation.html`.
+  - A14: the quarantine holds — moved 10:34:04 UTC, its `--check` begun 11:41:58 UTC passed, no run of it going.
+  - Two notes. A17: two installation requests are still pending under v1.0 (three at the first run), and keep it.
+    A20: the documents are dated 16 October 2026, after today (13 Oct) in Kampala, so a customer who signs in
+    before then accepts them with that date shown as Effective. A note, not a refusal.
+- **The backup**, in `/root/dnb-5.18.94/backup-20261013T134921Z`:
+  - `plugin.sqlite3` (34M; integrity ok, 251 tables, SQLite 3.48.0);
+  - the data folder without the live databases (186M), and the installed 5.18.93 (11M);
+  - `<plugin>/data` copied as files (68K), the folder itself left where it is;
+  - the configuration vault;
+  - the event queue's snapshot: 9343 events, none not done.
+- **The deploy.** `DEPLOY` typed. The checkout went to `f4b4c96` for `deploy-hybrid.sh`, the container served
+  `f4b4c96`, and the checkout went back to the branch. **The copy: 13:58:04 UTC.**
+- **V, over the public address:** V1–V13 passed.
+  - V3–V3i: the switches, the Inbox's settings row, the AI and WhatsApp settings (26/25 keys) and 087's rows and
+    trail unchanged.
+  - V4: no fatal or parse error since 13:58:03 UTC (12 lines read).
+  - V13: the public Terms and Privacy are version 1.2, with the identity sentence and no "UCC";
+    `app_legal_version` answers 1.2 / 1.2, dated 16 October 2026. So every Uganda customer should be asked once more
+    at the next sign-in — to be seen at the portal sign-in below.
+- **R, read only:** every R check passed except R19, which gave only a note; R3 gave a note beside its passes.
+  - R1: the 23 files installed exactly as `f4b4c96` has them; R5: the 265 files of earlier releases are all there;
+    R14: Domain B is byte for byte.
+  - R7 read cash in hand and the photo tables. Its figures are not copied here.
+  - R13: the event queue lost nothing (9345 events, all done).
+  - R22: the installed documents are 5.18.94's.
+  - Two notes. R3: `migration.log` holds no line for 087, as on every deploy since 5.18.89; the store was read
+    instead. R19: the quarantine holds, but master had not completed a run of the retry job since the copy (its last
+    completed run 13:55:05 UTC), so not yet conclusive.
+- **Still the operator's:**
+  1. `--after-only` at or after 14:18:04 UTC (runbook step 6). Expected: PASSED, R19 conclusive.
+  2. Then the quarantine's own `--check`. Expected: PASSED, with one note, K2: the container serves `f4b4c96`, not
+     `69c87a6`. That note is expected after this deploy. Its wording, written before 5.18.94, speaks only of
+     rollbacks.
+  3. One sign-in to the portal as a Uganda customer. The consent step should show version 1.2, dated 16 October 2026.
+  4. The badge script's log, if it was run.
+
