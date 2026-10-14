@@ -813,6 +813,17 @@ retried or repaired. A further run waits for your word.
 **The log stays confidential.** It holds the book's totals. It is not committed, and its figures will not be written into
 the repository.
 
+**Result — run 14 Oct, begun 03:13:18 UTC: `RUNNER EXIT 7`.** Read from the terminal you pasted; the log file
+(`/root/dnb-bank-recon/p0-20261014T031318Z.log`) was not sent. No figure from it is recorded here.
+- **Every gate held.** The checkout was clean and on the branch. The two reviewed files came out of `5954ede5` with
+  their reviewed sha256s. The book was in the expected folder, with the expected owner.
+- **P0's own checks held.** The parts add up in both currencies. The connections changed no row. The two immutable
+  readings were identical. The file did not move, and no side file appeared, before or after.
+- **After P0,** the checkout was unchanged, and the P0 command had read the folder that was checked.
+- **Exit 7:** the automatic rule found no live, unassigned row dated 2026-09-12 whose description or category names an
+  adjustment. So options B and D were not computed; A and C were.
+- **A second run waits for your word:** the same line with ` --adjustment-id=N`, once the row's id is known.
+
 ### P.1 The 5.18.94 after-checks — separately, each with its own log
 
 No evidence for any of them has reached this session. Each is reported only from its own log or screen. A check whose log

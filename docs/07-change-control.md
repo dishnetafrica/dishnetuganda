@@ -11427,6 +11427,9 @@ Also refuted:
 4b. **The e-mail badge (A18).** The first deploy run stopped because `email_badge_line` still said UCC (RESULT below).
    Run `scripts/set-email-badge-5.18.94.sh` first; it must end PASSED. **Before the second run the badge was
    changed:** A18 then read it ok in both copies. Whether this script did it is not known until its log is sent.
+   **14 Oct listing:** a log `badge-20261013T134846Z.log` exists in `/root/dnb-5.18.94` (1,732 bytes, last written 13:48:49
+   UTC, 32 s before the second deploy run began). Its content has not been sent, so whether the script ended PASSED is
+   still **not evidenced**.
 5. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.94 && mkdir -p /root/dnb-5.18.94 && bash scripts/deploy-5.18.94.sh 2>&1 | tee /root/dnb-5.18.94/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
@@ -11445,8 +11448,18 @@ Also refuted:
        cd /opt/dishnet && bash scripts/deploy-5.18.94.sh --after-only 2>&1 | tee /root/dnb-5.18.94/after-$(date -u +%Y%m%dT%H%M%SZ).log
 
    Expected: PASSED, R19 conclusive.
+   **Run 14 Oct, begun 03:13:46 UTC (wrapped in `( umask 077 && … )`): PASSED, 58 ok / 0 failed / 1 note**, read from the
+   pasted terminal; the log file (`after-20261014T031346Z.log`) was not sent. **R19 conclusive:** master ran the retry job
+   at 03:05:04 UTC, after the copy (13 Oct 13:58:04 UTC), and the quarantine holds. The note is R3's: `migration.log`
+   holds no line for 087, read from the store instead. R7 read the live book (its figures stay out of this record). Every
+   switch, setting, row and route compared before and after was unchanged.
 7. **Then the quarantine's own `--check`**, as its runbook says. Sign in to the portal once as a Uganda customer: the
    consent step shows version 1.2, dated 16 October 2026.
+   **`--check` run 14 Oct, begun 03:14:46 UTC: PASSED, 9 ok / 0 failed / 1 note** (K2: the container serves `f4b4c96`, not
+   `69c87a6`, as expected after this deploy), read from the pasted terminal. K13: the retry job ran after the move and
+   nothing appeared in `<plugin>/data`; the kept file is unchanged. Its own log is
+   `/root/dnb-stray-quarantine/check-20261014T031446Z.own.log`; neither log file was sent.
+   **The portal sign-in has not been reported: not evidenced.**
 
 ### Known limits and open risks
 
