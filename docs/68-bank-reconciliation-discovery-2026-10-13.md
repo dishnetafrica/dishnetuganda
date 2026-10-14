@@ -671,6 +671,15 @@ commit `3d250082dea1fa99cad1283068e8f94d204657f0`. It refuses before P0, naming 
   tool's.
 - The runner pins all three. This checkout was clean when the runner was committed.
 - The runner's own sha256 is `8e7eb192bb7a27b932e96ea8cca7e2605709a8c4cf7293915878f95d067013e4`; the line below checks it.
+- Fetched back from GitHub on 14 Oct, the branch (`f706e956`) holds both commits, and their files hash as above.
+- **Rehearsed** (`scripts/harness/bank-recon-p0/rehearse-run.sh`): the line, read out of this section and run as written
+  with only its server paths and pins replaced.
+  - Two full runs on 14 Oct (00:38 and 01:17 UTC), 107 passed and 0 failed each: 67 cases, and 40 weakened copies of
+    the runner, every one caught.
+  - The files did not change during the runs.
+  - The P0 rehearsal (`rehearse.sh`), on the same P0 files and the same fake docker: 125 passed, 0 failed.
+- Not rehearsed: `followRemoteHEAD=never` (the sandbox has git 2.43), and the runner's own `-u SHELLOPTS -u BASHOPTS`
+  for P0's start, which the line already provides.
 
 **The command — one line, as root on the server, after the P0 log of any earlier attempt has been sent.** Then send back
 THE LOG FILE it names, not a copy of the terminal:
@@ -704,6 +713,8 @@ THE LOG FILE it names, not a copy of the terminal:
   - the log (0600).
 - **If the runner's sha256 does not match,** `sha256sum` prints FAILED and nothing runs. There is then no log; tell me
   what the terminal said. Likewise if the fetch or `git cat-file` fails.
+- **If your shell has `noclobber` set** and the runner is already in `/root/dnb-bank-recon` from an earlier run, the
+  shell says `cannot overwrite existing file` and nothing runs. There is then no log; tell me what the terminal said.
 
 **What the runner checks, in order. Any failure stops it before P0 with `GATE REFUSED: <reason>` and
 `P0 was NOT run (exit 4)`.**
