@@ -12,7 +12,7 @@
 #       unexpected data folder, an unexpected owner, a loose log folder, a bad option, not root;
 #   R15 P0's own stop (exit 3) is reported and NOT retried; R16 a git repository above the work folder is not taken for
 #       the checkout;
-#   R17–R30 the later findings: UCRM_CONTAINER and BASH_ENV dropped; a change during P0 (exit 5); ignored plugin files; a
+#   R17–R33 the later findings: UCRM_CONTAINER and BASH_ENV dropped; a change during P0 (exit 5); ignored plugin files; a
 #       detached HEAD; a rebase and a cherry-pick sequence named as such; ucrm.json unreadable, missing or truncated;
 #       ucrm.json or the owner changed between the gate and the P0 command's own read, or no `installed` line (exit 6);
 #       the adjustment not identified (exit 7); Ctrl-C, a hang-up and TERM still end the log with RUNNER EXIT, also
@@ -268,20 +268,35 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   D="$SB/r29"; world "$D"; head -c 300 /dev/urandom > "$CK/.git/index"; handover
   chk "R29 an index git cannot read: refused before P0 — a failed read is never 'nothing modified'" refused "git could not read the checkout's state"
   D="$SB/r30"; world "$D"; FAKE_ON_P0="head -c 300 /dev/urandom > '$CK/.git/index'" handover
+  chk "R30 the index made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
+    bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && ! grep -qE 'checkout +unchanged' '$LOG'"
   D="$SB/r31"; world "$D"; FAKE_ON_P0="echo garbage > '$CK/.git/HEAD'" handover
   chk "R31 HEAD made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
     bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG'"
   D="$SB/r32"; world "$D"; HO_PRE="$SB/slowgit" HO_ENV="FAIL_SYMREF_IF=$D/symref-fails" FAKE_ON_P0="touch '$D/symref-fails'" handover
   chk "R32 only the branch read of HEAD fails after P0 (exit 128): COULD NOT BE READ AGAIN, not taken for 'detached', not CHANGED" \
     bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: THE CHECKOUT CHANGED' '$LOG'"
-  chk "R30 the index made unreadable while P0 ran: COULD NOT BE READ AGAIN (exit 5), never unchanged, never DONE" \
-    bash -c "[ '$RC' = 5 ] && grep -q 'RESULT: THE CHECKOUT COULD NOT BE READ AGAIN after P0 (exit 5)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && ! grep -qE 'checkout +unchanged' '$LOG'"
   D="$SB/r22"; world "$D"; printf 'echo BASH_ENV RAN\n' > "$D/benv.sh"; BASH_ENV="$D/benv.sh" handover
   # (the rehearsal's own bash -c stands in for the operator's interactive shell, which would not read BASH_ENV; only the log counts)
   chk "R22 BASH_ENV exported: the line starts the runner without it; nothing of it reaches the log" bash -c "[ '$RC' = 0 ] && ! grep -q 'BASH_ENV RAN' '$LOG'"
-  D="$SB/r22c"; world "$D"; HO_ENV="SHELLOPTS=braceexpand:hashall:interactive-comments:monitor:noclobber" handover
-  chk "R22c SHELLOPTS exported with job control on (monitor) in the operator's shell: the line drops it — P0 DONE, the folder confirmed" \
-    bash -c "[ '$RC' = 0 ] && grep -qE 'folder +the P0 command read the folder checked above' '$LOG' && grep -q 'RESULT: P0 DONE (exit 0). Send' '$LOG'"
+  # xtrace too: the runner never resets it, so if the line let SHELLOPTS through, its trace ("+ …") would be in the log
+  SO="SHELLOPTS=braceexpand:hashall:interactive-comments:monitor:noclobber:xtrace"
+  D="$SB/r22c"; world "$D"; HO_ENV="$SO" handover
+  chk "R22c SHELLOPTS exported (job control and xtrace on) in the operator's shell: the line drops it — no trace in the log, P0 DONE, the folder confirmed" \
+    bash -c "[ '$RC' = 0 ] && ! grep -q '^+' '$LOG' && grep -qE 'folder +the P0 command read the folder checked above' '$LOG' && grep -q 'RESULT: P0 DONE (exit 0). Send' '$LOG'"
+  D="$SB/r22e"; world "$D"; noso="${LINE/ -u SHELLOPTS -u BASHOPTS bash / bash }"
+  [ "$noso" != "$LINE" ] || bad "R22e: the line could not be weakened"
+  HO_ENV="$SO" handover "$noso"
+  chk "R22e control: the same line without -u SHELLOPTS -u BASHOPTS lets the trace into the log — R22c has something to prove" \
+    bash -c "grep -q '^+' '$LOG'"
+  D="$SB/r22f"; world "$D"; perl -0pe 's/^shopt -s lastpipe[^\n]*\n//m' "$D/runner.sh" > "$D/x.sh"
+  cmp -s "$D/runner.sh" "$D/x.sh" && bad "R22f: the runner could not be weakened"
+  direct "$D/x.sh"
+  chk "R22f a bash that does not keep a pipeline's last command in the shell (lastpipe removed): refused before P0, never a false exit 6" \
+    refused "this bash does not run a pipeline's last command in the shell"
+  D="$SB/r33"; world "$D"; touch "$D/symref-fails"; HO_PRE="$SB/slowgit" HO_ENV="FAIL_SYMREF_IF=$D/symref-fails" handover
+  chk "R33 HEAD's branch cannot be read before P0 (exit 128): refused as unreadable, not as a detached HEAD" \
+    eval "refused \"git could not read the checkout's state (the branch HEAD is on)\" && ! grep -q 'detached HEAD' '$LOG'"
   D="$SB/r22d"; world "$D"; mkdir -p "$WK"; chmod 700 "$WK"; (cd "$CK" && G fetch -q origin claude/study-this-jhe2eg); TR="$D/trace"; : > "$TR"
   env PATH="$SB/bin:$PATH" FAKE_MNT="$M" FAKE_TRACE="$TR" SHELLOPTS=braceexpand:hashall:interactive-comments:monitor bash "$D/runner.sh" > "$D/direct.log" 2>&1; RC=$?; LOG="$D/direct.log"
   chk "R22d the runner itself started with job control on (SHELLOPTS monitor): it turns it off — P0 DONE, the folder confirmed, not a false exit 6" \
@@ -333,7 +348,10 @@ mutant no-exit-line         's/^trap \x27printf "\\n  RUNNER EXIT %s\\n" "\$\?" 
 mutant exit-line-on-stdout  's/"\$\?" >&3\x27 EXIT/"\$?"\x27 EXIT/'
 mutant changed-as-done      's/^if \[ "\$AFTER" != "\$BEFORE" \]; then\n/if false; then\n/m'
 mutant exclude-ignored      's/ls-files --others -- "\$PLUGIN"/ls-files --others --exclude-standard -- "\$PLUGIN"/'
-mutant detached-ok          's/^g symbolic-ref -q HEAD >\/dev\/null \|\| gate[^\n]*\n//m'
+mutant detached-ok          's/^  detached\) gate[^\n]*\n//m'
+mutant headref-err-as-ok    's/^  \x27\?ERR\?\x27\)  gate[^\n]*\n//m'
+mutant part-swallows-errors 's/ \|\| \{ printf \x27\?ERR\?\x27; return; \}//'
+mutant no-lp-guard          's/^LP=0; true \| LP=1;[^\n]*\n//m'
 mutant ucrm-read-ignored    's/\)" \\\n  \|\| gate "the container\x27s ucrm.json is missing[^\n]*\n/)"\n/'
 mutant weak-ucrm-read       's/\$s=\@file_get_contents\(\$argv\[1\]\); if\(!is_string\(\$s\)\) exit\(3\); \$u=json_decode\(\$s,true\); if\(!is_array\(\$u\)\) exit\(4\); /\$u=\@json_decode((string)\@file_get_contents(\$argv[1]),true); /'
 mutant no-folder-check      's/^  if \[ "\$READ" != [^\n]*\n/  if false; then\n/m'
@@ -348,6 +366,6 @@ mutant no-set-m             's/^set \+m [^\n]*\n//m'
 mutant lastpipe-unguarded   's/^set \+m [^\n]*\n//m; s/^LP=0; true \| LP=1;[^\n]*\n//m'
 mutant headref-detached     's/\*\) printf \x27\?ERR\?\x27 ;; esac/*) printf \x27detached\x27 ;; esac/'
 mutant installed-optional   's/^if \[ -n "\$INSTALLED" \] \|\| \[ "\$rc" != 1 \]; then/if [ -n "\$INSTALLED" ]; then/m'
-mutant detached-first       's/^(GD="\$\(g rev-parse --absolute-git-dir\)"\n(?:[^\n]*\n){3})(g symbolic-ref -q HEAD[^\n]*\n)/$2$1/m'
+mutant detached-first       's/^(for f in MERGE_HEAD[^\n]*\n[^\n]*\ndone\n)(.*?)(^fingerprint\(\) \{)/$2$1$3/ms'
 echo; echo "== total: $pass ok, $fails failed (the gated run itself: $MAIN failed) =="
 [ "$fails" = 0 ]

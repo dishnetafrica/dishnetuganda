@@ -632,7 +632,7 @@ You approved P0 with six gates:
 6. obtain the 5.18.94 after-check evidence separately.
 
 This session cannot reach the server, so the gates are built into what you run: `scripts/bank-recon-p0-run.sh`, in
-commit `057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1`. It refuses before P0, naming the gate, whenever one does not hold.
+commit `3d250082dea1fa99cad1283068e8f94d204657f0`. It refuses before P0, naming the gate, whenever one does not hold.
 - A second independent review (four lenses, two sceptics per finding) upheld 20 of 22 findings against its first
   version. All are fixed.
 - A check of those fixes found six more gaps, all fixed in this version:
@@ -657,6 +657,9 @@ commit `057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1`. It refuses before P0, naming 
   - an exported `SHELLOPTS` could switch job control on, so a good run would have ended in a false exit 6;
   - a failed read of HEAD's branch was taken for "detached".
 
+  A last check of those three fixes found two rehearsal cases that could not fail (one read another case's result;
+  one passed whatever the line did). Both are fixed, each with a control showing it can now fail.
+
   Three refuted findings were taken as improvements: the unidentified adjustment now has its own exit (7), its owner
   and "no `installed` line" branches are rehearsed, and the interruption cases are described exactly. The sceptics
   refuted the claim that a symlinked data folder could make P0 read another book: the plugin opens the same path, so it
@@ -667,12 +670,12 @@ commit `057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1`. It refuses before P0, naming 
 - At that commit, the tool's sha256 is `0143dae93cf34ba4…` and the command's is `9a96e7fe1cd32529…`. The command pins the
   tool's.
 - The runner pins all three. This checkout was clean when the runner was committed.
-- The runner's own sha256 is `b78f2d2d259d7bc35711649fad75669939a77ded3a1d53b06bd9316ac90d526b`; the line below checks it.
+- The runner's own sha256 is `8e7eb192bb7a27b932e96ea8cca7e2605709a8c4cf7293915878f95d067013e4`; the line below checks it.
 
 **The command — one line, as root on the server, after the P0 log of any earlier attempt has been sent.** Then send back
 THE LOG FILE it names, not a copy of the terminal:
 
-    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob 057c8479dc4131b1cf2b4e9e0b55aace0f0bfab1:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "b78f2d2d259d7bc35711649fad75669939a77ded3a1d53b06bd9316ac90d526b  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER -u SHELLOPTS -u BASHOPTS bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob 3d250082dea1fa99cad1283068e8f94d204657f0:scripts/bank-recon-p0-run.sh > /root/dnb-bank-recon/bank-recon-p0-run.sh && echo "8e7eb192bb7a27b932e96ea8cca7e2605709a8c4cf7293915878f95d067013e4  /root/dnb-bank-recon/bank-recon-p0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER -u SHELLOPTS -u BASHOPTS bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/p0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
 
 - The parentheses keep `umask 077` and `cd` inside the command, and your shell is left as it was.
 - `env -u` starts the runner without `BASH_ENV`, `ENV`, `UCRM_CONTAINER`, `SHELLOPTS` or `BASHOPTS`, whatever your
@@ -708,6 +711,8 @@ THE LOG FILE it names, not a copy of the terminal:
   - It must run as root.
   - `UCRM_CONTAINER`, if set, must be `ucrm`; otherwise P0 would read another container than the one checked.
   - `git`, `docker` and `sha256sum` must be present.
+  - Bash must run a pipeline's last command in the runner's own shell (`lastpipe`, with job control off). Otherwise the
+    checks after P0 could not read its lines, so it refuses.
   - The log folder must be root's and mode 700.
   - An option other than `--adjustment-id=N` (at most 10 digits) is refused even before G0. The log then holds only
     the message and `RUNNER EXIT 4`, with no `GATE REFUSED` line.
@@ -715,8 +720,8 @@ THE LOG FILE it names, not a copy of the terminal:
   - a merge, rebase, cherry-pick, revert or bisect in progress, including a cherry-pick or revert sequence left
     unfinished (`.git/sequencer`). This is checked first, so a rebase is named as a rebase, although it detaches HEAD;
   - a detached HEAD;
-  - any git read of the checkout's state that fails, for example on an unreadable index. A failed read is never taken
-    as "nothing modified";
+  - any git read of the checkout's state that fails, for example on an unreadable index or an unreadable HEAD. A failed
+    read is never taken as "nothing modified" or as "detached";
   - a tracked file modified or staged;
   - any file git does not track inside the plugin folder (its `data/` aside), ignored ones included, counted as the
     09 Oct record and the deploy scripts count it.
@@ -735,7 +740,8 @@ THE LOG FILE it names, not a copy of the terminal:
   - The data folder must resolve to `/data/ucrm/data/plugins/.dishnet-hybrid-sudan-data`, the live store since 09 Oct.
     Anything else is an unexpected database path.
   - `plugin.sqlite3` must be there, owned by `1000:1000`.
-- **G4.** P0 runs once, in `ucrm`, with `UCRM_CONTAINER`, `BASH_ENV` and `ENV` removed from its environment.
+- **G4.** P0 runs once, in `ucrm`, with `UCRM_CONTAINER`, `BASH_ENV`, `ENV`, `SHELLOPTS` and `BASHOPTS` removed from its
+  environment.
   - Its exit is reported as it is: 0 done, 1 the P0 command's stop, 2 refused, 3 stopped. **It is never retried.**
   - **Afterwards the P0 command's own `installed` line must name `ucrm`, the folder checked in G3, and owner
     `1000:1000`.**
