@@ -3939,6 +3939,9 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
     *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
     the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+  - **16 Oct 2026 — VOID was typed, measured by R0** (`docs/69` Part 4, read-only). Cash-ins #3, #4 and #5 are each
+    voided, `voided_by` the 5.18.70 tool, `voided_at` 2026-10-04, category as recorded, not relabelled. None of the three
+    has a `CIN-` row in the staff ledger, as expected for `Collection` cash-ins. The records log itself is still not on file.
 
 ## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 

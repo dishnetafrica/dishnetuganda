@@ -971,3 +971,18 @@ be rebuilt (§2.3.8).
   not remember it.
 - **Nothing is decided by R0.** Its counts feed R1, D2, D3 and the questions in §3.3; each later step waits for its own
   go.
+
+## Result — 16 Oct 2026, 21:16 UTC
+
+**`RUNNER EXIT 0`.** Read from the terminal the operator pasted; the log file itself was not sent.
+- **Every gate held.** The server checkout (`a2c94fc`, on the branch) had nothing modified, staged or untracked. The
+  reviewed commit `fa327f4a` was present, and the fetched branch held it, four commits on. The tool and the command were
+  taken out of that commit with their reviewed sha256s. The book was in the expected folder, owned by 1000:1000; the
+  installed plugin is `f4b4c96`.
+- **R0 read the book twice.** The two readings were identical; the file did not move and no side file appeared. Both
+  connections changed 0 rows, and the parts added up.
+- **Afterwards** the checkout was unchanged, and the command had read the folder that was checked.
+- **What it found stays out of this repository**, as above. Two outcomes close questions on record, and carry no figure:
+  - **the 12 Sep adjustment is found**: exactly one candidate, live and unassigned, so P0's second run can be prepared
+    (§3.2, question 2);
+  - **VOID was typed for the three 25 Sep cash-ins**: all three were voided by the 5.18.70 tool on 4 Oct (`docs/07`).
