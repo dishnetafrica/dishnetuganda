@@ -44,7 +44,7 @@
   function typed() {
     var t = (input && input.value || '').trim();
     if (auto && t.indexOf(auto) === 0) t = t.slice(auto.length).replace(/^[\s,;:.\u2013\u2014-]+/, '');
-    return t;
+    return located(t);
   }
 
   window.DN_ADDR = function () {
@@ -66,7 +66,7 @@
     if (whereLine) whereLine.textContent = has ? (t || ('GPS pin ' + pin)) : '';
   }
 
-  function reveal() {
+  function reveal(e) {
     var t = typed();
     showWhere();
     if (!t && !pin) {
@@ -78,10 +78,10 @@
     var panel = document.getElementById('orderFlow');
     if (!panel) return;
     panel.hidden = false;
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!toOrder(e)) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  if (geo) geo.addEventListener('click', function () {
+  if (geo) geo.addEventListener('click', function (ev) {
     if (!navigator.geolocation) {
       geoText('GPS unavailable');
       say('This browser cannot share your location — please type your town or address instead.');
@@ -94,7 +94,7 @@
       pin = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
       geoText('Pin saved');
       if (input && (!input.value || input.value === auto)) { auto = 'My location pin (' + pin + ')'; input.value = auto; }
-      reveal();
+      reveal(ev);
       say('Location pin saved.');
     }, function (err) {
       geoText('Detect');
@@ -107,8 +107,75 @@
 
   var go = document.getElementById('ofGo');
   if (go) go.addEventListener('click', reveal);
-  if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') reveal(); });
+  if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') reveal(e); });
   if (input) input.addEventListener('input', showWhere);
+
+  // ── What counts as a location ──
+  // typed() passes its text through here last. Two kinds of box are empty:
+  //  - one with no letter or digit in it. trim() removes spaces but not a
+  //    pasted zero-width space, a soft hyphen or a direction mark, and a box
+  //    holding only those, or only punctuation, looks empty and is not a
+  //    location. So the panel does not open on it, does not name it, and no
+  //    order carries it. A browser without Unicode property escapes keeps
+  //    the trim() test alone;
+  //  - the Detect text cut short from its end (one Backspace too many). It
+  //    is still the pin, which the order carries anyway. Text that holds
+  //    anything more than the Detect text wrote is kept as typed.
+  // Invisible characters at either end of a real location are left out too.
+  // Nothing in the box is changed; only what the order and the panel use.
+  function located(t) {
+    if (auto && t.indexOf('My location pin (') === 0 && auto.indexOf(t) === 0) return '';
+    var word, edge;
+    try { word = new RegExp('[\\p{L}\\p{N}]', 'u'); edge = new RegExp('^[\\s\\p{Cf}]+|[\\s\\p{Cf}]+$', 'gu'); } catch (err) { return t; }
+    return word.test(t) ? t.replace(edge, '') : '';
+  }
+
+  // ── The order flow's checkout needs a location ──
+  // The order is never sent without one. The panel opens only with a
+  // location, but the box can be emptied afterwards. prices.js's "Complete
+  // order on WhatsApp" (data-of-wa) puts DN_ADDR() in the order; its handler
+  // sits on the flow and runs in the bubbling phase. This one runs first, in
+  // the capture phase on document: with no location left it stops the click,
+  // so nothing is sent, says so in the status line and puts the visitor back
+  // in the box. Enter and Space on the button arrive as this same click.
+  // With a location it does nothing.
+  var NEED = 'Type your town or address, or tap Detect, to complete your order.';
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-of-wa]') : null;
+    if (!b || window.DN_ADDR()) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    say(NEED);
+    if (input) input.focus();
+  }, true);
+  // That prompt goes as soon as a location is typed, rather than staying under the box.
+  if (input) input.addEventListener('input', function () { if (msg && msg.textContent === NEED && typed()) say(''); });
+
+  // Back to the order. A keyboard user put back in the box would otherwise be
+  // left there once the location is in, dozens of Tab stops from the button.
+  // So when reveal() comes from the keyboard (Enter in the box, or Check My
+  // Options or Detect pressed with a key; a mouse or touch click has
+  // e.detail of 1 or more) and the kit and plan are already chosen, focus
+  // goes to "Complete order on WhatsApp", which is scrolled to the middle of
+  // the screen with the order summary above it. Only while focus is still
+  // where the visitor acted. The Enter that got here is cancelled, or the
+  // button would take it as a press and send the order at once.
+  function toOrder(e) {
+    var b = document.querySelector('#orderFlow [data-of-wa]');
+    var keys = !!e && (e.type === 'keydown' || (e.type === 'click' && e.detail === 0));
+    if (!keys || !b || b.disabled || document.activeElement !== e.target) return false;
+    if (e.type === 'keydown') e.preventDefault();
+    b.focus({ preventScroll: true });
+    b.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
+  }
+
+  // Holding Enter on that button would press it again with every key
+  // repeat, and open WhatsApp once for each. Only the first press counts.
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (e.repeat && e.key === 'Enter' && t && t.closest && t.closest('[data-of-wa]')) e.preventDefault();
+  }, true);
 
   // ── WhatsApp links that carry the visitor's location ──
   // Two kinds: a link whose message ends "My location is " (the tail is
