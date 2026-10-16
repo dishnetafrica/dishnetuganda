@@ -4,6 +4,11 @@
 
 **Every name and amount in the examples is invented. No figure from P0 appears here.**
 
+**Your decisions of 16 October** (your words: *"Ok build I will. Go with your recommendation"*):
+- **D13 = A**, statement first, with a list of expected payments.
+- **R0 approved to be built.** It will be built, rehearsed and reviewed like P0, then handed over. You run it on the server; it changes nothing.
+- The other recommendations in §3.1 are taken as the direction. **Each production step still waits for its own go**, as §3.2 says, and the decisions that need evidence (D2, D3, D14, D23, D25, D26) wait for R0, P0's second run and your answers in §3.3.
+
 **How to read the labels**
 - **[M]** Measured: read in the code or in the record. A `file:line` is given.
 - **[I]** Inferred from what was read. The code was not run to prove it.
@@ -761,7 +766,7 @@ Every other correction in the three critiques, and in the two checks of version 
 | D8, D9 | Statement formats; CSV first | Open | Ecobank CSV first, for UGX and for USD |
 | D10 | Lock signed-off periods | Open | Yes, for bank accounts (R3). **It does not cover cash-stream repairs** (D28) |
 | D11, D12 | Statement retention; project `dishnet` for bank rows | Open | Unchanged |
-| **D13** | A statement-first plus an Expected list, or B uCRM-first (your literal request) | Open | **A**, chosen knowingly (§1.6, §2.2) |
+| **D13** | A statement-first plus an Expected list, or B uCRM-first (your literal request) | **Decided 16 Oct: A** | **A**, chosen knowingly (§1.6, §2.2) |
 | **D14** | Which uCRM methods mean which account, per currency; which method staff pick for a bank payment, in uCRM and in the staff app (which offers Bank, F44); card; cheque | Open | You name them from the screen; the plugin reads the ids. Unmapped methods are held. **The Expected list is built only if bank methods are in use** |
 | **D15** | Days before an expected payment is flagged; who chases it | Open | Your number |
 | **D16** | Costs per customer | **Scope answered: all of them.** Split rules open | Shipping and Starlink-payment fees split across an order's kits in proportion to line price; a shared trip split by the shares a person states |
@@ -788,7 +793,7 @@ Sizes are rough and relative, for comparison only [I]: **S** small, **M** medium
 |---|---|---|---|---|
 | **Now** | Use *Accounts → Reconcile* with its caveats. Leave *Sync Now* with a From date, *Debug + Sync* and voided entries alone | None | — | — · exists |
 | P0, 2nd run | P0 with `--adjustment-id=N` | None | The 12 Sep row's id, found through R0's candidate list (the screen shows the SR No., not the id), and its state (question 2). If it is voided or assigned to an account, P0 ends with exit 3 and needs a change first. An edited date or wording does not stop it (F16). If it was deleted, there is no id to give, and P0 needs a change first | S · exists |
-| **R0** | The read-only census (§2.3.8), **plus the candidate rows for the 12 Sep adjustment** (id, date, status and account kind only) | None: a script in the checkout | Your go | M · P0's runner, gates and masking |
+| **R0** | The read-only census (§2.3.8), **plus the candidate rows for the 12 Sep adjustment** (id, date, status and account kind only) | None: a script in the checkout | **Build approved 16 Oct**; its run waits for the hand-over | M · P0's runner, gates and masking |
 | **S1a** | A read-only Expected view on Collection Reconcile: voided rows shown apart, matched counts per uCRM method, `COL-` and KYC rows resolved (§2.3.7), incomplete reads flagged, every amount and total per currency, "landed in the book as". Collection Reconcile is shown on both tenants (F53), so the change is gated per D22 | Yes; read-only screen, **no migration** | **D1**, because it shows bank-method money; D14 for the method names | S · Collection Reconcile |
 | **S1b** | A read-only kit-cost view per customer: currency or *uncosted*, sold/lent label. Uganda-gated | Yes; read-only screen, **no migration** | D20; D25 for the labels | S · `CustomerAccountService` |
 | P1 | Build dark on the development branch, Uganda only | No | §K and §M approvals | L · docs/68 design |
