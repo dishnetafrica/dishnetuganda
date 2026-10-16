@@ -219,17 +219,26 @@ t4() {
 
 # ── T5: the source ─────────────────────────────────────────────────────────────────────────────────────────────────
 src_ok() { php "$H/srccheck.php" "$1"; }   # 0 when every static rule holds
+src_bad() {     # src_bad <copy> <tool>: the copy differs from the tool AND srccheck refuses it (exit 1 exactly: a PHP
+                # error, exit 255, or a missing command, 127, is never taken for a refusal). A shell function, so it is
+                # called directly: inside `bash -c` it would not exist, and `!` would turn "command not found" into a pass
+  local rc; ! cmp -s "$1" "$2" || return 1
+  php "$H/srccheck.php" "$1" > /dev/null 2>&1; rc=$?; [ "$rc" = 1 ]
+}
 t5() {
   local T="$1" c
   chk "T5 the tool keeps every static rule" src_ok "$T"
+  c="$SB/plant.php"; { cat "$T"; printf '%s\n' '// a comment changes no rule'; } > "$c"
+  chk "T5 control on the controls: a copy that differs only by a comment keeps every rule (srccheck exit 0)" src_ok "$c"
+  chk "T5 control on the controls: … and src_bad does not take it for a refusal, so a refusal below is srccheck's own" eval "! src_bad '$c' '$T'"
   for plant in 'require "x.php";' 'new CashbookService(1, 2);' '$q = $x->query("SELECT 1");' 'file_put_contents("/tmp/x", "y");' '$y = `id`;' '$z = $w->exec("DELETE FROM cb_ledger");'; do
     c="$SB/plant.php"; { cat "$T"; echo "$plant"; } > "$c"
-    chk "T5 control: a copy with  $plant  is caught" bash -c "! src_ok '$c' >/dev/null"
+    chk "T5 control: a copy with  $plant  is caught" src_bad "$c" "$T"
   done
   c="$SB/plant.php"; sed 's/PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY,//' "$T" > "$c"
-  chk "T5 control: a copy without SQLITE_OPEN_READONLY is caught" bash -c "! src_ok '$c' >/dev/null"
+  chk "T5 control: a copy without SQLITE_OPEN_READONLY is caught" src_bad "$c" "$T"
   c="$SB/plant.php"; sed "s/?immutable=1'/'/" "$T" > "$c"
-  chk "T5 control: a copy without immutable=1 is caught" bash -c "! src_ok '$c' >/dev/null"
+  chk "T5 control: a copy without immutable=1 is caught" src_bad "$c" "$T"
 }
 
 # ── T6: the wrapper through a fake docker ──────────────────────────────────────────────────────────────────────────
@@ -266,6 +275,7 @@ t6() {
   chk "T6a its figures equal the plugin's own" php "$H/check.php" "$W/out" "$SB/books/ug/exp.json" yes
   chk "T6a nothing under the mount changed" cmp -s "$W/s0" "$W/s1"
   chk "T6a nothing planted is printed" noleak "$W/out"
+  chk "T6a control: the trace test the refusals below use ('P0 not run') sees this run of P0" p0ran
   wsetup two-adj; wrun "--adjustment-id=$ADJ2"
   chk "T6b --adjustment-id reaches P0" bash -c "[ $RC = 0 ] && grep -q 'named by --adjustment-id: id $ADJ2' '$W/out'"
   wsetup ug; wrun --commit
@@ -273,21 +283,21 @@ t6() {
   wsetup ug; : > "$W/trace"; env PATH="$W/bin:$PATH" FAKE_MNT="$M" FAKE_TRACE="$W/trace" setpriv --reuid=1000 --regid=1000 --clear-groups bash "$W/repo/scripts/bank-recon-p0.sh" > "$W/out" 2>&1; RC=$?
   chk "T6d not root: STOP, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'run this as root' '$W/out' && ! grep -q 'php -d' '$W/trace'"
   wsetup ug; echo '// edited' >> "$W/repo/scripts/bank-recon-p0.php"; wrun
-  chk "T6e an edited tool: STOP (sha256), P0 not run" bash -c "[ $RC = 1 ] && grep -q 'not the reviewed version' '$W/out' && ! p0ran"
+  chk "T6e an edited tool: STOP (sha256), P0 not run" bash -c "[ $RC = 1 ] && grep -q 'not the reviewed version' '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; FAKE_RUNNING=false wrun
-  chk "T6f the container not running: STOP" bash -c "[ $RC = 1 ] && grep -q 'is not running' '$W/out' && ! p0ran"
+  chk "T6f the container not running: STOP" bash -c "[ $RC = 1 ] && grep -q 'is not running' '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; rm -f "$PL/manifest.json"; wrun
-  chk "T6g no installed plugin: STOP" bash -c "[ $RC = 1 ] && grep -q 'no installed plugin' '$W/out' && ! p0ran"
+  chk "T6g no installed plugin: STOP" bash -c "[ $RC = 1 ] && grep -q 'no installed plugin' '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; printf '{"pluginDataDir":"/data/ucrm/data/plugins/dishnet-hybrid-sudan/data"}\n' > "$PL/ucrm.json"; cp -a "$PD/plugin.sqlite3" "$PL/data/"; chown -R "$O" "$PL"; wrun
-  chk "T6h ucrm.json naming <plugin>/data: STOP before P0" bash -c "[ $RC = 1 ] && grep -q \"stray store's old place\" '$W/out' && ! p0ran"
+  chk "T6h ucrm.json naming <plugin>/data: STOP before P0" bash -c "[ $RC = 1 ] && grep -q \"stray store's old place\" '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; printf '{}\n' > "$PL/ucrm.json"; chown "$O" "$PL/ucrm.json"; wrun
   chk "T6i ucrm.json without a data folder: the folder beside the plugin is used, P0 runs (0)" bash -c "[ $RC = 0 ] && grep -q 'data /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data' '$W/out'"
   wsetup ug; chown 0:0 "$PD/plugin.sqlite3"; wrun
-  chk "T6j a root-owned database: STOP, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'owner is 0:0' '$W/out' && ! p0ran"
+  chk "T6j a root-owned database: STOP, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'owner is 0:0' '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; rm -f "$PD/plugin.sqlite3"; own php -r '$p=new PDO("sqlite:".$argv[1]); $p->exec("CREATE TABLE other(x)");' "$PD/plugin.sqlite3"; wrun
   chk "T6k P0's refusal comes through: exit 2" bash -c "[ $RC = 2 ] && grep -q 'no cb_ledger table' '$W/out' && grep -q 'P0 refused (exit 2)' '$W/out'"
   wsetup ug; rm -f "$PD/plugin.sqlite3"; wrun
-  chk "T6m no database in the named data folder: STOP says so, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'no plugin.sqlite3 in /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data' '$W/out' && ! p0ran"
+  chk "T6m no database in the named data folder: STOP says so, P0 not run" bash -c "[ $RC = 1 ] && grep -q 'no plugin.sqlite3 in /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data' '$W/out' && ! grep -q '^exec .* php -d display_errors=stderr' '$W/trace'"
   wsetup ug; echo '# edited' >> "$W/repo/scripts/bank-recon-p0.sh"; wrun
   chk "T6n an edited wrapper is named in the log" bash -c "[ $RC = 0 ] && grep -q '1 P0 file(s) EDITED' '$W/out'"
   wsetup ug; wrun --adjustment-id=12345678901

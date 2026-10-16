@@ -181,7 +181,7 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   chk "R4 a merge in progress: refused before P0" refused 'the checkout has an operation in progress (MERGE_HEAD)'
   D="$SB/r5"; world "$D"; echo x > "$CK/dishnet-hybrid-sudan/stray.php"; handover
   chk "R5 an untracked file inside the plugin folder: refused before P0" refused 'files git does not track inside dishnet-hybrid-sudan/'
-  D="$SB/r5b"; world "$D"; echo x > "$CK/dishnet-hybrid-sudan/data/plugin.log"; echo n > "$CK/notes.txt"; ckstate > "$D/s0"; handover; ckstate > "$D/s1"
+  D="$SB/r5b"; world "$D"; mkdir -p "$CK/dishnet-hybrid-sudan/data"; echo x > "$CK/dishnet-hybrid-sudan/data/plugin.log" || bad "R5b: the data/ file could not be planted"; echo n > "$CK/notes.txt"; ckstate > "$D/s0"; handover; ckstate > "$D/s1"
   chk "R5b untracked files in data/ and outside the plugin: listed, not refused; P0 runs; they are left as they are" \
     bash -c "[ $RC = 0 ] && grep -q 'untracked, not read by P0: notes.txt' '$LOG' && cmp -s '$D/s0' '$D/s1'"
   D="$SB/r6"; world "$D"; sandboxed "$RUNSRC" 1111111111111111111111111111111111111111 > "$D/x.sh"; direct "$D/x.sh"
@@ -243,6 +243,16 @@ suite() {       # suite <runner source>: every case; failures counted in $fails
   D="$SB/r26"; world "$D"; rm -rf "$D/mnt"; cp -a "$SB/book2/mnt" "$D/mnt"; M="$D/mnt"; handover
   chk "R26 the 12 Sep adjustment not identified: a stop (exit 7) — B and D not computed; P0 ran once; no DONE line" \
     bash -c "[ '$RC' = 7 ] && grep -q 'candidate(s) on .* — not identified' '$LOG' && grep -q 'RESULT: P0 RAN (its exit 0), BUT THE 12 SEP ADJUSTMENT WAS NOT IDENTIFIED (exit 7)' '$LOG' && ! grep -q 'RESULT: P0 DONE' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ]"
+  # R26b: the SECOND run's line — the documented one with --adjustment-id=N after the runner, the form handed over once
+  # R0 has named the adjustment; on the same book, whose automatic rule found two candidates (R26)
+  ADJB="$(php -r 'echo json_decode(file_get_contents($argv[1]),true)["adj"];' "$SB/book2/ids.json")"
+  o2=' bash /root/dnb-bank-recon/bank-recon-p0-run.sh 2>&1 '; n2=" bash /root/dnb-bank-recon/bank-recon-p0-run.sh --adjustment-id=$ADJB 2>&1 "
+  L2="${LINE/"$o2"/"$n2"}"
+  [ "$(printf '%s' "$LINE" | grep -oF -- "$o2" | wc -l)" = 1 ] && [ "$(printf '%s' "$L2" | grep -oF -- "--adjustment-id=$ADJB 2>&1" | wc -l)" = 1 ] \
+    || bad "R26b: the second-run line could not be formed from the documented one"
+  D="$SB/r26b"; world "$D"; rm -rf "$D/mnt"; cp -a "$SB/book2/mnt" "$D/mnt"; M="$D/mnt"; handover "$L2"
+  chk "R26b the second-run line (the documented one, --adjustment-id=N after the runner): P0 DONE (exit 0), the adjustment named by --adjustment-id, B and D computed, P0 ran once" \
+    bash -c "[ '$RC' = 0 ] && grep -q 'named by --adjustment-id: id $ADJB' '$LOG' && grep -q '^  RESULT: P0 DONE (exit 0)' '$LOG' && ! grep -q 'not computed' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 1 ] && [ \"\$(tail -n1 '$LOG')\" = '  RUNNER EXIT 0' ]"
   D="$SB/r27"; world "$D"; ckstate > "$D/s0"; handover_sig INT; ckstate > "$D/s1"
   chk "R27 Ctrl-C after P0 began (its docker exec under way): the log still ends RUNNER EXIT 130, no RESULT, the checkout unchanged" \
     bash -c "[ '$RC' = 130 ] && grep -q 'P0 begins' '$LOG' && ! grep -q 'RESULT:' '$LOG' && [ \$(grep -c '^exec 1000:1000 stdin php' '$TR') = 0 ] && cmp -s '$D/s0' '$D/s1'"
@@ -367,5 +377,6 @@ mutant lastpipe-unguarded   's/^set \+m [^\n]*\n//m; s/^LP=0; true \| LP=1;[^\n]
 mutant headref-detached     's/\*\) printf \x27\?ERR\?\x27 ;; esac/*) printf \x27detached\x27 ;; esac/'
 mutant installed-optional   's/^if \[ -n "\$INSTALLED" \] \|\| \[ "\$rc" != 1 \]; then/if [ -n "\$INSTALLED" ]; then/m'
 mutant detached-first       's/^(for f in MERGE_HEAD[^\n]*\n[^\n]*\ndone\n)(.*?)(^fingerprint\(\) \{)/$2$1$3/ms'
+mutant data-not-excluded    's/ ":\(exclude\)\$PLUGIN\/data"//'
 echo; echo "== total: $pass ok, $fails failed (the gated run itself: $MAIN failed) =="
 [ "$fails" = 0 ]
