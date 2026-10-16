@@ -867,8 +867,14 @@ R0's files, pins and texts.
 - `rehearse-run.sh` — the line, run as written with only its two server paths and its two pins replaced, against a
   sandbox checkout and a strict fake docker. 16 Oct, two runs (14:54 and 16:06 UTC): **132 passed, 0 failed each**; of
   them, 42 weakened copies of the runner, every one caught.
-- Those four runs used the same tool, command and runner, with the pins not yet set. The runs against the pins above
-  are recorded below once made.
+- Those four runs used the same tool, command and runner, with the pins not yet set.
+- **Against the pins above**, after both commits were pushed and GitHub served all three files with the sha256s above:
+  - `rehearse.sh`, 16 Oct 17:17–17:29 UTC: **282 passed, 0 failed**, the 70 weakened copies caught;
+  - `rehearse-run.sh` with `PINS=real`, which reads the line out of this Part and checks that its commit holds exactly
+    this runner and its sha256 is the runner's own: 16 Oct 17:29–18:23 and 18:24–19:18 UTC, **134 passed, 0 failed
+    each**, the 42 weakened copies caught. The two runs match line for line, except that one weakened copy was caught by 8
+    assertions in the first and 9 in the second (timing);
+  - the R0 files and the harness hashed the same before and after all three runs.
 - Not rehearsed: `followRemoteHEAD=never` (the sandbox has git 2.43).
 
 ## The command — one line, as root on the server
