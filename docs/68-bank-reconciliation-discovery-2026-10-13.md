@@ -678,6 +678,19 @@ commit `3d250082dea1fa99cad1283068e8f94d204657f0`. It refuses before P0, naming 
     the runner, every one caught.
   - The files did not change during the runs.
   - The P0 rehearsal (`rehearse.sh`), on the same P0 files and the same fake docker: 125 passed, 0 failed.
+  - **Correction, 16 Oct — some of those passes ran nothing.** Building R0's copy of this harness found three defects in
+    P0's, confirmed in P0's own logs:
+    - `rehearse.sh`: 14 checks called a shell function inside `bash -c`, where it does not exist, and negated the
+      resulting "command not found" into a pass. Each final log holds those 14 lines.
+      - The 8 T5 controls (`scripts/harness/bank-recon-p0/rehearse.sh:227`, `:230`, `:232`) proved nothing. Each was
+        meant to show that a copy of the tool with a forbidden call planted fails the source check.
+      - The 6 T6 checks (`:276-290`) proved their exit code and message, but not their last part, that P0 did not run.
+    - `rehearse-run.sh` R5b (`:184`): `data/` is git-ignored, so the sandbox checkout had no `data/` folder and the
+      planted file was never written. R5b therefore never tested that a file in `data/` is left out of the count.
+    - P0's tool, command and runner are unchanged by this, and the 14 Oct run stands on its own gates and checks.
+      **The P0 harness is to be fixed and rehearsed again before P0's second run.** R0's harness has the three fixes. Its
+      R5b now plants the file, and a weakened copy of R0's runner (a copy of P0's) without the `data/` exclusion is
+      caught by it (`docs/69` Part 4).
 - Not rehearsed: `followRemoteHEAD=never` (the sandbox has git 2.43), and the runner's own `-u SHELLOPTS -u BASHOPTS`
   for P0's start, which the line already provides.
 

@@ -6,7 +6,7 @@
 
 **Your decisions of 16 October** (your words: *"Ok build I will. Go with your recommendation"*):
 - **D13 = A**, statement first, with a list of expected payments.
-- **R0 approved to be built.** It will be built, rehearsed and reviewed like P0, then handed over. You run it on the server; it changes nothing.
+- **R0 approved to be built.** It will be built, rehearsed and reviewed like P0, then handed over. You run it on the server; it changes nothing. **Built 16 Oct; its hand-over is Part 4.**
 - The other recommendations in §3.1 are taken as the direction. **Each production step still waits for its own go**, as §3.2 says, and the decisions that need evidence (D2, D3, D14, D23, D25, D26) wait for R0, P0's second run and your answers in §3.3.
 
 **How to read the labels**
@@ -793,7 +793,7 @@ Sizes are rough and relative, for comparison only [I]: **S** small, **M** medium
 |---|---|---|---|---|
 | **Now** | Use *Accounts → Reconcile* with its caveats. Leave *Sync Now* with a From date, *Debug + Sync* and voided entries alone | None | — | — · exists |
 | P0, 2nd run | P0 with `--adjustment-id=N` | None | The 12 Sep row's id, found through R0's candidate list (the screen shows the SR No., not the id), and its state (question 2). If it is voided or assigned to an account, P0 ends with exit 3 and needs a change first. An edited date or wording does not stop it (F16). If it was deleted, there is no id to give, and P0 needs a change first | S · exists |
-| **R0** | The read-only census (§2.3.8), **plus the candidate rows for the 12 Sep adjustment** (id, date, status and account kind only) | None: a script in the checkout | **Build approved 16 Oct**; its run waits for the hand-over | M · P0's runner, gates and masking |
+| **R0** | The read-only census (§2.3.8), **plus the candidate rows for the 12 Sep adjustment** (id, date, status and account kind only) | None: a script in the checkout | **Built 16 Oct; the hand-over is Part 4**; its run waits for you | M · P0's runner, gates and masking |
 | **S1a** | A read-only Expected view on Collection Reconcile: voided rows shown apart, matched counts per uCRM method, `COL-` and KYC rows resolved (§2.3.7), incomplete reads flagged, every amount and total per currency, "landed in the book as". Collection Reconcile is shown on both tenants (F53), so the change is gated per D22 | Yes; read-only screen, **no migration** | **D1**, because it shows bank-method money; D14 for the method names | S · Collection Reconcile |
 | **S1b** | A read-only kit-cost view per customer: currency or *uncosted*, sold/lent label. Uganda-gated | Yes; read-only screen, **no migration** | D20; D25 for the labels | S · `CustomerAccountService` |
 | P1 | Build dark on the development branch, Uganda only | No | §K and §M approvals | L · docs/68 design |
@@ -828,4 +828,140 @@ Please answer from the screens, **with no amounts, names, phone numbers or accou
 10. **Repair date (D18).** Should a repaired entry carry its original date (past months' figures change, shown to you first) or today's date?
 11. **Since voiding.** Have you deleted payments in uCRM as well as voiding entries in the Cashbook (I2)? Have you pressed *Sync Now* with a From date, or *Debug + Sync*?
 12. **South Sudan (D22).** Should the safety fixes apply to South Sudan too, or to Uganda only?
-13. **R0.** May the read-only census be prepared, rehearsed and run by you only, like P0?
+13. **R0.** May the read-only census be prepared, rehearsed and run by you only, like P0? **Answered 16 Oct: yes. Built; the hand-over is Part 4.**
+
+---
+
+# Part 4 — R0: the hand-over (16 October)
+
+**Status: built, reviewed and rehearsed; committed and pinned; not run anywhere.** You run it on the server. It reads
+the book and changes nothing: there is no rollback because there is nothing to roll back, and no other command belongs
+with this one.
+
+**What R0 tells us.** It counts the voided entries (by source, path and month, with when each was voided and what
+evidence of it is kept), entries deleted outright, probable double entries (candidates only, never proof), receipts by
+collection method, reversals, the rows of 12 Sep, **the candidate rows for the 12 Sep adjustment** (so P0's second run
+can be given its id), the deliberate voids, whether VOID was typed for the three 25 Sep cash-ins, and live kits with no
+Starlink account. It prints counts, entry ids, dates and codes only — **never a name, description, person, reference,
+customer or amount**. The 12 Sep adjustment's candidates are found by a hash of the figure docs/07 records, never by the
+figure.
+
+**How it was built.** The same write-proof mechanics, gates and masking as P0 (`docs/68` §O, §P), copied: the tool is
+piped into the container's PHP, runs as the database's owner, opens the book read-only and immutable with `query_only`,
+waits until the plugin has the book closed, reads it twice and compares the two readings. The gated runner is P0's, with
+R0's files, pins and texts.
+
+**The pins.**
+- Commit `fa327f4a02fcb07a529380bc123580857970d6c5` holds the tool (`scripts/bank-recon-r0.php`, sha256
+  `9cb7e4fecb592f1a…`) and the command (`scripts/bank-recon-r0.sh`, sha256 `c34d4675a131c2bb…`). The command pins the
+  tool's sha256.
+- Commit `72cf1dcec816f3202e465a9498c1bbc3284ce055` holds the runner (`scripts/bank-recon-r0-run.sh`), which pins
+  commit `fa327f4a` and both sha256s.
+- The runner's own sha256 is `36da24023d0af5b30e4a5546689139979f148ddd9697b99a725d5bf44d9cb604`; the line below
+  checks it.
+
+**Rehearsed** (`scripts/harness/bank-recon-r0/`, synthetic books only; every name and figure in them is invented):
+- `rehearse.sh` — the tool and the command on synthetic books, including a 30,000-row book, a plugin writing during
+  the reading, and books built the way the webhook writes reversals. 16 Oct, two runs (14:41 and 15:51 UTC): **282
+  passed, 0 failed each**; of them, 70 weakened copies of the tool and the command, every one caught.
+- `rehearse-run.sh` — the line, run as written with only its two server paths and its two pins replaced, against a
+  sandbox checkout and a strict fake docker. 16 Oct, two runs (14:54 and 16:06 UTC): **132 passed, 0 failed each**; of
+  them, 42 weakened copies of the runner, every one caught.
+- Those four runs used the same tool, command and runner, with the pins not yet set. The runs against the pins above
+  are recorded below once made.
+- Not rehearsed: `followRemoteHEAD=never` (the sandbox has git 2.43).
+
+## The command — one line, as root on the server
+
+Run it after the log of any earlier attempt has been sent. Then send back THE LOG FILE it names, not a copy of the
+terminal:
+
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob 72cf1dcec816f3202e465a9498c1bbc3284ce055:scripts/bank-recon-r0-run.sh > /root/dnb-bank-recon/bank-recon-r0-run.sh && echo "36da24023d0af5b30e4a5546689139979f148ddd9697b99a725d5bf44d9cb604  /root/dnb-bank-recon/bank-recon-r0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER -u SHELLOPTS -u BASHOPTS bash /root/dnb-bank-recon/bank-recon-r0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/r0-$(date -u +%Y%m%dT%H%M%SZ).log ) )
+
+- The parentheses keep `umask 077` and `cd` inside the command; your shell is left as it was.
+- `env -u` starts the runner without `BASH_ENV`, `ENV`, `UCRM_CONTAINER`, `SHELLOPTS` or `BASHOPTS`, whatever your shell
+  exports. The runner also turns job control off itself and checks that it can keep R0's lines; it refuses if it cannot.
+- The `tee` at the end ignores Ctrl-C, a hang-up and TERM, so an interrupted run's log still ends with its exit line.
+- **R0 may print nothing for up to two minutes** after its `installed` and `this checkout` lines: it waits until the
+  plugin has the book closed (no `-wal` or `-shm` beside it), then reads it twice. Leave it running; Ctrl-C ends the run
+  with no result (exit 130 below).
+- **No rollback exists or is needed: nothing is written to the book, the plugin or the checkout.**
+
+## What it changes, and what it never touches
+
+- **The fetch** adds Git objects to `/opt/dishnet/.git`, writes `FETCH_HEAD`, and moves one ref,
+  `origin/claude/study-this-jhe2eg` (one reflog line). No local branch or tag is created or moved; no tag is fetched
+  (`--no-tags`); automatic gc, maintenance, hooks, commit-graph writing and submodules are off for it. There is no
+  checkout, pull, merge or reset.
+- **The working tree, the index, HEAD and every local branch are never written**; every git command in the runner runs
+  with `--no-optional-locks`.
+- **In `/root/dnb-bank-recon`** (`chmod 700`) it writes the runner, one folder `src-r0-fa327f4-…` holding the two
+  reviewed files taken out of commit `fa327f4a`, and the log `r0-<UTC time>.log` (mode 0600). P0's files there are left
+  as they are.
+- **The book** is opened read-only and immutable, with `query_only`, by the plugin's own owner (1000:1000) inside the
+  `ucrm` container. It is read twice and the two readings are compared.
+- If the runner's sha256 does not match, `sha256sum` prints FAILED and nothing runs: there is no log; say what the
+  terminal said. Likewise if the fetch or `git cat-file` fails. A `git cat-file` that fails still leaves an empty
+  `bank-recon-r0-run.sh` behind, and a shell with `noclobber` set then refuses to overwrite it
+  (`cannot overwrite existing file`): delete it before the next attempt.
+
+## Reading the log — each of these lines must be there
+
+1. `checkout        /opt/dishnet at <commit> on <branch>`
+2. `tracked files modified or staged: 0; not tracked inside dishnet-hybrid-sudan/ (data/ aside, ignored included): 0; …`
+3. `reviewed R0     commit fa327f4a02fcb07a529380bc123580857970d6c5; origin/claude/study-this-jhe2eg at …`
+4. `… tool sha256 9cb7e4fecb592f1a… = reviewed; command sha256 c34d4675a131c2bb… = reviewed; the command pins the same tool`
+5. `book            /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data/plugin.sqlite3, owner 1000:1000 — as expected`
+6. Inside the R0 part:
+   - `installed       <commit> in ucrm; data /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data; database owner 1000:1000`
+   - `this checkout   not readable as a git checkout; …` — expected: the command runs from the extracted folder, which
+     is not a checkout;
+   - `database        … — read-only, immutable, query_only=1; JSON functions yes` (or `no`, which the sections then say);
+   - the `tables`, `stores` and `columns` lines, then every section (voided rows by source, path and month; void time and
+     evidence; fin_audit records; twin candidates; the I1 families; receipt rows by method; reversals; rows of 12 Sep;
+     adjustment candidates; the five largest unassigned rows per currency; deliberate voids; the three 25 Sep cash-ins;
+     equipment). **A section may read `absent` — that is a result, not a fault.**
+   - `checks          the parts add up: ok (…); the connections changed 0 and 0 row(s); query_only=1`
+   - `read twice, immutable[ (after waiting N s for the plugin to close the book)]: the readings are identical; the database file did not move (inode, size, times); side files none, before or after`
+     — the part in square brackets is there only when R0 waited for the plugin, N its seconds;
+   - `R0: DONE — read only; nothing was written.`
+7. `checkout        unchanged: HEAD, branch, local branches and tags, stash, index and every file's status are as before`
+8. `folder          the R0 command read the folder checked above: /data/ucrm/data/plugins/.dishnet-hybrid-sudan-data, owner 1000:1000, in ucrm`
+9. `RESULT: R0 DONE (exit 0). Send this LOG FILE back; keep it confidential: it holds the book's ids and counts.`
+10. The last line: `RUNNER EXIT 0`.
+
+**A log that does not end with `RUNNER EXIT <n>` was cut off and is no result.**
+
+| Exit | What it means | What to do |
+|---|---|---|
+| 0 | R0 DONE | send the log file |
+| 1 | the R0 command stopped before R0 ran (the reason is above) | send the log file |
+| 2 | R0 refused (the reason is above) | send the log file |
+| 3 | R0 stopped: it saw the plugin write during the reading, a check failed, or an internal error | send the log file; not retried |
+| 4 | a gate refused before R0 ran (`GATE REFUSED: <reason>`, `R0 was NOT run`) — also any option given to the runner | send the log file |
+| 5 | the checkout changed while R0 ran, or could not be read again | send the log file; do not use the counts |
+| 6 | the R0 command read another folder than the one checked, or did not say which | send the log file; do not use the counts |
+| 129 / 130 / 143 | the run was interrupted (a hang-up, Ctrl-C, TERM): there is no RESULT line; R0's reading inside the container may run on to its end, or stop, and writes nothing either way | send the log file; not retried |
+| 255 or other | R0 did not finish (e.g. a PHP fatal error) | send the log file; not retried |
+
+Nothing is ever retried or repaired; a further run waits for your word. Of the exit-3 lines,
+`R0: FAILED — SQLite could not finish reading the book … run again` is the plugin-wrote-it case (a later run may
+succeed), while `R0: FAILED — an internal error (<class>, line <n>) … do not run it again` is R0's own fault: the fix is
+in the tool, not in the timing. Neither line carries any text from the book.
+
+## What the log holds, and what it never holds
+
+It holds counts, ids, dates, status codes and kinds of the real book. It never holds a name, description, person,
+reference text, category text, customer or amount. **The log stays confidential: send it as a file, never paste it;
+none of its content enters the repository** — neither its counts nor its ids, nor any statement from which they could
+be rebuilt (§2.3.8).
+
+## After the log
+
+- **The 12 Sep adjustment.** The `adj. candidates` section lists each candidate's id, date, status and account kind. If
+  exactly one candidate is the 12 Sep entry, its id goes to P0's second run (§3.2), which gets its own hand-over and its
+  own go. If there are several or none, I will ask you about them in words (date and status only).
+- **The 25 Sep cash-ins.** The `25 Sep cash-ins` section answers whether VOID was typed at the 5.18.70 prompt; you need
+  not remember it.
+- **Nothing is decided by R0.** Its counts feed R1, D2, D3 and the questions in §3.3; each later step waits for its own
+  go.
