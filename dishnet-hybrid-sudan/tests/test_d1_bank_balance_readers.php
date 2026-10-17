@@ -6,9 +6,11 @@ declare(strict_types=1);
  * rendered or opened but the plugin's own PHP files, read as tokens. It loads no configuration and writes nothing but
  * its own temporary folder.
  *
- * What it matches: CALLS ONLY — `->currencyPositions(`, `->balancesByAccount(` and `->accountBalance(` — in every PHP
- * file of the plugin outside a tests/ directory and data/, with comments stripped first (token_get_all). A comment that
- * names a method is not a call: accounts_dashboard.php says "currencyPositions() is not called on this page any more".
+ * What it matches: CALLS ONLY — `->currencyPositions(`, `->balancesByAccount(`, `->accountBalance(` and `->accountLedger(`
+ * (one account's rows, each with its running balance, a bank account's included; SPEC §b.3's fourth per-account
+ * reader) — in every PHP file of the plugin outside a tests/ directory and data/, with comments stripped first
+ * (token_get_all). A comment that names a method is not a call: accounts_dashboard.php says "currencyPositions() is
+ * not called on this page any more".
  * Neither is a string, inline HTML, a property read, "$cb->m()" inside a string (a property, then text) or
  * `function m(`. A call is still a call with spaces or a comment between its parts, or another letter case (PHP's method
  * names have none). The defining class, lib/CashbookService.php, is excluded: its own calls are the readers'
@@ -59,7 +61,7 @@ require_once __DIR__ . '/fixtures/staff_jobs_scenario.php';                 // s
 
 /** The live code: 5.18.94, the release P3b replaces. */
 const T4_LIVE = 'f4b4c96';
-const T4_METHODS  = ['currencyPositions', 'balancesByAccount', 'accountBalance'];
+const T4_METHODS  = ['currencyPositions', 'balancesByAccount', 'accountBalance', 'accountLedger'];
 /** The defining class: its own calls (currencyPositions → balancesByAccount, accountLedger → accountBalance) are the
  *  readers' implementation. */
 const T4_EXCLUDED = ['lib/CashbookService.php'];
@@ -70,7 +72,7 @@ const T4_GATE = '$_ceoCb->cashOnlyRuleInForce()';
  *  judge a planted tab call against the SPEC instead of against the list it is guarding (M26). */
 const T4_SPEC_TABS = ['tabs/accounts/opening_balances.php' => 'accountBalance', 'tabs/admin/ceo_dashboard.php' => 'currencyPositions'];
 /** SPEC §d.1 T4's allowed list: file => [method => exact number of calls]. lib/BankImport.php:296-302 is
- *  existingCapital()'s own SQL and calls none of the three, so it adds nothing to the entry. */
+ *  existingCapital()'s own SQL and calls none of the four, so it adds nothing to the entry. */
 const T4_ALLOWED = [
     'tabs/accounts/opening_balances.php'    => ['accountBalance' => 1],     // Opening Balances (:133): account administration, off the Uganda menu; P3c, Q14
     'tabs/admin/ceo_dashboard.php'          => ['currencyPositions' => 1],  // exactly one, in the else of if ($_ceoRuleA): rule off only (Q28)
@@ -110,7 +112,7 @@ function t4_ch(array $tok, int $i, string $ch): bool { return isset($tok[$i]) &&
 /** Is token $i of id $id? */
 function t4_id(array $tok, int $i, int $id): bool { return isset($tok[$i]) && $tok[$i][0] === $id; }
 
-/** The three readers' calls in a token list: [method as declared, line, index of the name]. */
+/** The readers' calls (T4_METHODS) in a token list: [method as declared, line, index of the name]. */
 function t4_calls(array $tok): array
 {
     static $ops = null, $want = [];
@@ -380,7 +382,7 @@ foreach ($gates as $label => [$want, $code]) {
 }
 is_($miss === [], 'the gate reader accepts false-then-' . T4_GATE . ' and refuses ' . (count($gates) - 1) . ' other ways of setting ' . T4_RULE, implode('; ', $miss));
 
-// On the tree under test: the three names are the class's real methods (a misspelt name would make every check vacuous),
+// On the tree under test: the four names are the class's real methods (a misspelt name would make every check vacuous),
 // the class calls some of them itself (so its exclusion matters), and the comment SPEC §d.1 cites is not a call.
 $cbTok = t4_tokens((string)@file_get_contents($root . '/lib/CashbookService.php'));
 $decl = [];
@@ -388,7 +390,7 @@ for ($i = 0, $n = count($cbTok); $i + 1 < $n; $i++) {
     if (t4_id($cbTok, $i, T_FUNCTION) && t4_id($cbTok, $i + 1, T_STRING)) $decl[strtolower($cbTok[$i + 1][1])] = true;
 }
 $undeclared = array_values(array_filter(T4_METHODS, function ($m) use ($decl) { return !isset($decl[strtolower($m)]); }));
-is_($undeclared === [], 'lib/CashbookService.php declares all three: ' . implode(', ', T4_METHODS), 'not declared: ' . implode(', ', $undeclared));
+is_($undeclared === [], 'lib/CashbookService.php declares all ' . count(T4_METHODS) . ': ' . implode(', ', T4_METHODS), 'not declared: ' . implode(', ', $undeclared));
 $cbSelf = count(t4_calls($cbTok));
 is_($cbSelf >= 1, "lib/CashbookService.php, the one file excluded, holds {$cbSelf} call(s) of its own — the exclusion matters",
     "found {$cbSelf}");
@@ -546,6 +548,8 @@ if ($withMutants) {
     $MUTANTS = [
         ['the unchanged copy', T4_CEO, '$_ceoRuleA = false;', '$_ceoRuleA = false;', null, false],
         ['a call planted in a tab: the Cashbook page reads ->currencyPositions(', 'tabs/accounts/cashbook.php', $cbLive, $cbPlant, null, true],
+        ['a call planted in a tab: the Cashbook page reads a bank account\'s ledger, ->accountLedger(', 'tabs/accounts/cashbook.php', $cbLive,
+            $cbLive . ' $_cbLed = $cb->accountLedger(1); $_cbBankBal = $_cbLed[\'balance\'] ?? 0;', null, true],
         ['a call planted in a tab: the landing page reads ->balancesByAccount(', 'tabs/accounts/accounts_dashboard.php',
             '$_held = $_adJsonSvc->getUSDBalance($_hid);', '$_held = $_adJsonSvc->getUSDBalance($_hid); $_dashAcc = $cbDash->balancesByAccount();', null, true],
         ['a call planted in a tab: the CEO page reads ->accountBalance(', T4_CEO,

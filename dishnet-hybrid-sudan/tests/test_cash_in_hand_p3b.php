@@ -20,12 +20,16 @@ declare(strict_types=1);
  *      exception, a newer blank-currency row, asserted apart;
  *   5. E9: putting the adjustment-shaped row on the bank moves the figure by exactly that row;
  *   6. E1: a legacy cb_ledger whose account_id is nullable keeps it so, and its NULL row counts;
- *   7. E15: with no cb_accounts only unassigned rows count, nothing throws, and sqlite_master is untouched;
+ *   7. E15: with no cb_accounts only unassigned rows count, nothing throws, and sqlite_master is untouched; then, on
+ *      the same instance, a cash account created afterwards and a row posted on it count (the table-exists memo caches
+ *      only true);
  *   8. E11: every movement in the map-definition table, under A and, as the contrast, under 5.18.94's rule;
  *   9. the truth table: cashOnlyRuleInForce() per book, and 5.18.94's SQL wherever the rule is off;
  *  10. the end check: every vault written is this test's own, and a vault at the default path is untouched.
  *
- * Runs from any code copy (deploy A22 and R25 run it from one), never from a plugin folder holding a live book.
+ * Runs from any code copy that holds lib/ AND profiles/ (deploy A22 and R25 run it from one), never from a plugin folder
+ * holding a live book. The Uganda gate reads profiles/<id>.json beside lib/ (TenantProfile::load()); without it every
+ * book reads as rule-off, so a copy without profiles/ is refused up front, by name.
  *
  *   php test_cash_in_hand_p3b.php [--root=DIR]
  */
@@ -48,6 +52,17 @@ if (is_file($root . '/data/config.json') || is_file($root . '/data/kyc_config.js
     is_(false, 'this test runs from a code copy, never from a plugin folder holding a configuration or a book', $root . '/data');
     printf("\n%d passed, %d failed\n", $pass, $fail);
     exit(1);
+}
+
+// The gate reads profiles/<id>.json beside lib/ (TenantProfile::load(), lib/TenantProfile.php). On a copy without them
+// StaffJobsGate::applies() answers false for every book, and every rule-A assertion below would fail for a reason none
+// of them names. Refuse, by name, before anything is built.
+foreach (['uganda', 'south-sudan'] as $t1Prof) {
+    if (!is_array(json_decode((string)@file_get_contents($root . '/profiles/' . $t1Prof . '.json'), true))) {
+        is_(false, "this code copy holds profiles/{$t1Prof}.json (the Uganda gate reads it; without profiles/ every book reads as rule-off)", $root . '/profiles');
+        printf("\n%d passed, %d failed\n", $pass, $fail);
+        exit(1);
+    }
 }
 
 // ── 0. Its own vault and data folder, before any service exists ──────────────
@@ -459,6 +474,13 @@ try {
     $acc['RH-Cash Spaced K']  = (int)$pdoU->query("SELECT id FROM cb_accounts WHERE name='RH-Cash Spaced K'")->fetchColumn();
     is_(count(array_filter($acc)) === 16, 'sixteen accounts: the chart, seven more kinds and currencies, an inactive wallet, two odd kinds');
 } catch (\Throwable $e) { t1_threw('setting up book U', $e); }
+// The precondition of sections 1–9: rule A is in force on book U. Checked here, by name, so that a gate that is off —
+// in the copy's code or its configuration — stops the run with that reason, not with every rule-A assertion below.
+if ($U !== null) {
+    is_($U['rule'] === true, 'rule A is in force on the Uganda book U (cashOnlyRuleInForce() is true) — the precondition of sections 1–9',
+        'cashOnlyRuleInForce() = ' . var_export($U['rule'], true));
+    if ($U['rule'] !== true) { printf("\n%d passed, %d failed\n", $pass, $fail); exit(1); }
+}
 
 /**
  * Book U, one act at a time: [class, what, the act, its legs]. A leg is [stored currency, project, signed amount,
@@ -527,6 +549,9 @@ function t1_steps_u(array $U, array $a): array {
         ['text id (word)', "a row whose account id is the text 'abc' (E4)", function () use ($pdo) {
                 t1_raw($pdo, ['sr' => 'RH-RAW-4', 'date' => '2026-09-11', 'direction' => 'in', 'amount' => 14.14, 'currency' => 'UGX', 'account_id' => 'abc', 'description' => 'RH-U text id word']); },
             [['UGX', 'dishnet', 14.14, false, true]]],
+        ['text id (digits first)', "a row whose account id is the text '<cash id>x' (E4: never cast — a cast would read it as the cash account)", function () use ($pdo, $cash) {
+                t1_raw($pdo, ['sr' => 'RH-RAW-6', 'date' => '2026-09-11', 'direction' => 'in', 'amount' => 15.15, 'currency' => 'UGX', 'account_id' => $cash . 'x', 'description' => 'RH-U text id digits']); },
+            [['UGX', 'dishnet', 15.15, false, true]]],
         ['Cash kind', "a row on an account of kind 'Cash' (E6: exact kinds only)", function () use ($e, $a) { $e('2026-09-11', 'in', 36.36, 'UGX', 'dishnet', $a['RH-Cash Capital K'], 'RH-U Cash kind'); },
             [['UGX', 'dishnet', 36.36, false, true]]],
         ['cash-space kind', "a row on an account of kind 'cash ' (trailing space, E6)", function () use ($e, $a) { $e('2026-09-11', 'in', 37.37, 'UGX', 'dishnet', $a['RH-Cash Spaced K'], 'RH-U cash space kind'); },
@@ -622,11 +647,13 @@ try {
     $classes = ['unassigned' => 0, 'cash' => 0, 'momo' => 0, 'inactive momo' => 0, 'mismatched-currency cash row' => 0,
         'adjustment-shaped' => 0, 'bank' => 0, 'inventory' => 0, 'asset' => 0, 'director' => 0, 'equity' => 0,
         'receivable' => 0, 'payable' => 0, 'orphan id' => 0, 'negative id' => 0, "text id ''" => 0, 'text id (a word)' => 0,
+        'text id that a cast would read as a cash or momo account' => 0,
         "kind 'Cash'" => 0, "kind 'cash '" => 0, 'pending_approval' => 0, 'rejected' => 0, 'voided' => 0,
         'voided_reconcile' => 0, "status 'Approved'" => 0, "status ''" => 0, "currency 'ugx'" => 0, 'blank currency' => 0,
         'blank currency on a cash account' => 0, 'USD' => 0, 'USD on a bank account' => 0, 'project dishnet' => 0,
         'project 4g' => 0, 'project bluecard' => 0, "direction neither 'in' nor 'out'" => 0];
     if ($U !== null) {
+        $kU2 = t1_kinds($pdoU);
         foreach ($pdoU->query('SELECT l.status, l.direction, l.currency, l.project, l.date, typeof(l.account_id) AS t, l.account_id,
                                       a.id AS aid, a.kind, a.active, a.currency AS acur
                                  FROM cb_ledger l LEFT JOIN cb_accounts a ON a.id = l.account_id')->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -643,6 +670,7 @@ try {
             if ($r['t'] === 'integer' && (int)$r['account_id'] < 0) $classes['negative id']++;
             if ($r['t'] === 'text' && (string)$r['account_id'] === '') $classes["text id ''"]++;
             if ($r['t'] === 'text' && (string)$r['account_id'] !== '') $classes['text id (a word)']++;
+            if ($r['t'] === 'text' && (int)$r['account_id'] > 0 && in_array($kU2[(int)$r['account_id']] ?? '', T1_CASH_KINDS, true)) $classes['text id that a cast would read as a cash or momo account']++;
             if ($kind === 'Cash') $classes["kind 'Cash'"]++;
             if ($kind === 'cash ') $classes["kind 'cash '"]++;
             foreach (['pending_approval', 'rejected', 'voided', 'voided_reconcile'] as $s) if ($st === $s) $classes[$s]++;
@@ -792,7 +820,7 @@ try {
 } catch (\Throwable $e) { t1_threw('E1, the legacy book', $e); }
 
 // ═════════════════════════════════════════════════════════════════════════════
-echo "\n8. E15 — a Uganda book with no cb_accounts: unassigned rows only, nothing created\n";
+echo "\n8. E15 — a Uganda book with no cb_accounts: unassigned rows only, nothing created; then an account on the same instance\n";
 try {
     $E = t1_book('noaccounts', $UG_CFG);
     // Only rows on no account through the writers: any non-zero account id makes addEntryRaw() look the account up,
@@ -830,6 +858,23 @@ try {
         }
         is_($bad === '', "…which is P0's A over its dummy join and the row-by-row reading, in every cell", $bad);
     }
+    // The table-exists memo caches only true (CashbookService::accountsTableExists()): this same instance, which has read
+    // the book while it had no cb_accounts, must count a cash account created afterwards and a row posted on it.
+    $b0 = ['' => $E['cb']->cashInHand('UGX', ''), 'dishnet' => $E['cb']->cashInHand('UGX', 'dishnet')];
+    $na = $E['cb']->addAccount('RH-E Cash box K', 'UGX', 'cash');
+    is_(($na['ok'] ?? false) === true && (int)($na['id'] ?? 0) > 0 && t1_has_accounts($E['pdo']),
+        'control: addAccount() on the same instance creates cb_accounts and a cash account', json_encode($na));
+    t1_entry($E['cb'], '2026-09-06', 'in', 5.00, 'UGX', 'dishnet', (int)($na['id'] ?? 0), 'RH-E on the new cash box');
+    $b1 = ['' => $E['cb']->cashInHand('UGX', ''), 'dishnet' => $E['cb']->cashInHand('UGX', 'dishnet')];
+    is_(abs($b1[''] - $b0[''] - 5.00) < 0.005 && abs($b1['dishnet'] - $b0['dishnet'] - 5.00) < 0.005,
+        'the same instance counts a row on a cash account created after its first read (+5.00, all projects and dishnet): no "no table" was cached',
+        'all projects ' . t1_fmt($b1[''] - $b0['']) . ', dishnet ' . t1_fmt($b1['dishnet'] - $b0['dishnet']));
+    $nid = t1_id_by_desc($E['pdo'], 'RH-E on the new cash box'); $nbal = null;
+    foreach ($E['cb']->getEntries(['project' => '', 'currency' => '', 'limit' => 100000]) as $r) if ((int)$r['id'] === $nid) $nbal = $r['running_balance'];
+    is_($nid > 0 && $nbal !== null && abs((float)$nbal - $b1['']) < 0.005, "…and on the same instance that row, the stream's newest, carries cash in hand as its Balance (E17)",
+        'row ' . $nid . ': ' . var_export($nbal, true) . ', cash in hand ' . t1_fmt($b1['']));
+    $fresh = new CashbookService($E['store'], $E['dir']);
+    is_(abs($fresh->cashInHand('UGX', '') - $b1['']) < 0.005, 'and a fresh instance reads the same figure (the control)', t1_fmt($fresh->cashInHand('UGX', '')));
 } catch (\Throwable $e) { t1_threw('E15, the book without accounts', $e); }
 
 // ═════════════════════════════════════════════════════════════════════════════

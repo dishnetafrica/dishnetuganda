@@ -326,7 +326,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
 <?php if ($_ceoRuleA): /* 5.18.95 (P3b, X5): cash in hand per currency, all projects, at most two tiles — no account position, no bank balance */ ?>
     <?php $_ct = 0; foreach ($_ceoCih as $_ceoCihCur => $_ceoCihAmt): if ($_ct >= 2) break; $_ct++; ?>
     <div class="cd-k <?= $_ceoCihAmt<0?'cd-alert-red':'cd-alert-green' ?>">
-        <div class="cd-kv" style="color:<?= $_ceoCihAmt>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_ceoCihCur) ?> <?= number_format($_ceoCihAmt,2) ?></div>
+        <div class="cd-kv" style="font-size:clamp(16px,5.5vw,22px);color:<?= $_ceoCihAmt>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_ceoCihCur) ?> <?= number_format($_ceoCihAmt,2) ?></div>
         <div class="cd-kl"><?= htmlspecialchars($_ceoCihCur) ?> Cash in hand</div><div class="cd-ks">cash &amp; mobile money · all projects</div>
     </div>
     <?php endforeach; for (; $_ct < 2; $_ct++): ?>

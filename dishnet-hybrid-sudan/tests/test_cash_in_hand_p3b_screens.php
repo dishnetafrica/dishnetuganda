@@ -10,10 +10,12 @@ declare(strict_types=1);
  * plugin's own writers, in process, on the sandbox's own store; every amount and name is invented. The oracle is always
  * THIS checkout's library (the figures are also pinned by hand), so a weakened tree served by the sandbox is judged
  * against the rule, never against itself. Also proved on the same book:
- *   1. the CEO page reads "Cash in hand" under its new heading, negative USD red, "Today's collections";
+ *   1. the CEO page reads "Cash in hand" under its new heading, negative USD red, "Today's collections", and the two
+ *      tiles size their 2-dp figure to the screen so that both fit a 320px phone;
  *   2. the Cashbook's Alert 2 per currency, the Add Entry pill in the base code, the new wording and the count;
  *   3. Alert 6 as recorded (Q7): shown with cash in hand above zero, a pending disbursement and no receipt in seven
- *      days; not shown once one approved receipt on the Ecobank account falls inside the window;
+ *      days; not shown on BlueCARD, where its other two tests hold and cash in hand is below zero; not shown once one
+ *      approved receipt on the Ecobank account falls inside the window;
  *   4. movement: a bank-account row moves no cash-in-hand screen; a pending row moves nothing until it is approved,
  *      then moves every screen whose scope holds it by exactly its amount;
  *   5. control: currencyPositions() — the Phase-C account position, bank included — is unchanged on the same book;
@@ -120,8 +122,9 @@ $e(['project' => '4g', 'date' => $day(21), 'direction' => 'in', 'amount' => 1750
 $raw(['project' => '4g', 'date' => $day(20), 'direction' => 'out', 'amount' => 222, 'currency' => 'UGX', 'category' => 'Site Power', 'description' => 'RH 4G bank expense', 'account_id' => $bankU]);
 $e(['project' => '4g', 'date' => $day(19), 'direction' => 'out', 'amount' => 30, 'currency' => 'USD', 'category' => 'Misc Expense', 'description' => 'RH 4G dollar spending']);
 $e(['project' => '4g', 'date' => $day(11), 'direction' => 'out', 'amount' => 50, 'currency' => 'UGX', 'category' => 'Staff Advance', 'person' => 'RH-Collector One', 'description' => 'RH 4G pending disbursement', 'validation_status' => 'pending']);
-// bluecard — exactly one row
-$e(['project' => 'bluecard', 'date' => $day(12), 'direction' => 'out', 'amount' => 125, 'currency' => 'UGX', 'category' => 'Misc Expense', 'description' => 'RH BlueCARD expense']);
+// bluecard — exactly one row, and it is a pending disbursement: Alert 6's other two tests then hold on BlueCARD, so its
+// "not shown" (section E) can only come from cash in hand below zero
+$e(['project' => 'bluecard', 'date' => $day(12), 'direction' => 'out', 'amount' => 125, 'currency' => 'UGX', 'category' => 'Staff Advance', 'person' => 'RH-Collector One', 'description' => 'RH BlueCARD pending disbursement', 'validation_status' => 'pending']);
 is_(!in_array(false, $ok, true) && count($ok) === 10, 'every writer accepted its row (openings, two fundings, two transfers, a void)', json_encode($ok));
 // money held by a collector — the exposure the landing page's Office figure subtracts
 $s->store()->appendWithId('payment_collections.json', ['retailer_id' => $s->ids['coll'], 'amount' => $EXPO, 'currency' => 'UGX',
@@ -238,7 +241,7 @@ $read = function () use ($s, $PROJ, $CHIPS, $VIEWS, $cbPage, $heroes, $balCells,
     // the CEO dashboard
     $html = $s->page('boss', 'page=dashboard&tab=ceo_dashboard');
     $pages['ceo'] = $html;
-    preg_match_all('/<div class="cd-k (cd-alert-red|cd-alert-green)">\s*<div class="cd-kv" style="color:([^;]+);">([A-Z]{3}) (-?[0-9,]+\.[0-9]{2})<\/div>\s*<div class="cd-kl">([A-Z]{3}) Cash in hand<\/div>/', $html, $m, PREG_SET_ORDER);
+    preg_match_all('/<div class="cd-k (cd-alert-red|cd-alert-green)">\s*<div class="cd-kv" style="(?:font-size:[^;]+;)?color:([^;]+);">([A-Z]{3}) (-?[0-9,]+\.[0-9]{2})<\/div>\s*<div class="cd-kl">([A-Z]{3}) Cash in hand<\/div>/', $html, $m, PREG_SET_ORDER);
     $ct = []; foreach ($m as $x) if ($x[3] === $x[5]) $ct[$x[3]] = $money($x[4]);
     foreach (['UGX', 'USD'] as $c) $v["CEO tile, {$c}"] = [$ct[$c] ?? null, $c, ''];
     // the evening WhatsApp, as master.php runs it at 18:00
@@ -331,9 +334,14 @@ is_(preg_match_all('/<div class="cd-kl">[A-Z]{3} Cash in hand<\/div><div class="
     'two tiles labelled "<CUR> Cash in hand", sub-line "cash & mobile money · all projects"');
 is_(preg_match('/[A-Z]{3} Position<\/div>/', $ceo) === 0 && strpos($ceo, '+ unassigned') === false && preg_match('/<div class="cd-ks">\d+ accounts?<\/div>/', $ceo) === 0,
     'no "Position" tile, no "account(s) + unassigned" sub-line');
-is_(preg_match('/<div class="cd-k cd-alert-red">\s*<div class="cd-kv" style="color:#991b1b;">USD -320\.00<\/div>\s*<div class="cd-kl">USD Cash in hand/', $ceo) === 1,
+is_(preg_match('/<div class="cd-k cd-alert-red">\s*<div class="cd-kv" style="font-size:clamp\(16px,5\.5vw,22px\);color:#991b1b;">USD -320\.00<\/div>\s*<div class="cd-kl">USD Cash in hand/', $ceo) === 1,
     'USD below zero is drawn "USD -320.00", red');
-is_(preg_match('/<div class="cd-k cd-alert-green">\s*<div class="cd-kv" style="color:#15803d;">UGX 9,385\.00<\/div>/', $ceo) === 1, 'UGX above zero is drawn "UGX 9,385.00", green');
+is_(preg_match('/<div class="cd-k cd-alert-green">\s*<div class="cd-kv" style="font-size:clamp\(16px,5\.5vw,22px\);color:#15803d;">UGX 9,385\.00<\/div>/', $ceo) === 1, 'UGX above zero is drawn "UGX 9,385.00", green');
+// A 2-dp figure at the shared 22px pushed the two-column grid past a 320px phone (".cd-g4" is repeat(2,1fr), whose
+// columns grow to their longest word): the rule-A tiles scale their figure with the screen, and nothing else changes.
+is_(preg_match_all('/<div class="cd-kv" style="font-size:clamp\(16px,5\.5vw,22px\);color:#(?:15803d|991b1b);">[A-Z]{3} -?[0-9,]+\.[0-9]{2}<\/div>\s*<div class="cd-kl">[A-Z]{3} Cash in hand<\/div>/', $ceo) === 2
+    && substr_count($ceo, 'font-size:clamp(16px,5.5vw,22px)') === 2,
+    'both cash-in-hand tiles size their figure clamp(16px, 5.5vw, 22px), so two 2-dp figures fit a 320px screen; no other element does');
 is_(strpos($ceo, "Today's collections</div>") !== false && strpos($ceo, "Today's Cash</div>") === false, '"Today\'s Cash" reads "Today\'s collections"');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -373,6 +381,12 @@ echo "\nE. Alert 6, as recorded (Q7)\n";
 $no7 = function (array $titles): bool { return in_array('No cash received in last 7 days', $titles, true); };
 is_($no7($al['dishnet']), 'dishnet: UGX cash in hand above zero, a pending disbursement, no receipt in seven days — the alert is shown', json_encode($al['dishnet']));
 is_($no7($al['4g']), '4g: the same, while its dollar balance is below zero — the first test reads base cash in hand, not $projBal', json_encode($al['4g']));
+$bcPend = count($svc()->getPendingDisbursements('bluecard'));
+$bcIn7  = (float)($svc()->query("SELECT COALESCE(SUM(amount),0) AS t FROM cb_ledger WHERE project='bluecard' AND direction='in' AND status='approved' AND date>=?",
+                   [date('Y-m-d', strtotime('-7 days'))])[0]['t'] ?? 0);
+is_($bcPend > 0 && $bcIn7 == 0.0 && $cih('UGX', 'bluecard') < 0,
+    "control: on BlueCARD Alert 6's other two tests hold ({$bcPend} pending disbursement, no approved receipt in seven days) and UGX cash in hand is below zero, so only the first test can hide it",
+    'pending ' . $bcPend . ', receipts ' . $f2($bcIn7) . ', cash in hand ' . $f2($cih('UGX', 'bluecard')));
 is_(!$no7($al['bluecard']), 'BlueCARD: cash in hand below zero — not shown');
 $raw(['project' => 'dishnet', 'date' => date('Y-m-d'), 'direction' => 'in', 'amount' => 4321, 'currency' => 'UGX', 'category' => 'Receipt',
       'description' => 'RH-Client Four bank receipt (uCRM sync)', 'account_id' => $bankU, 'source' => 'crm_api_sync']);
@@ -451,6 +465,12 @@ if ($withMutants) {
     };
     $CB = 'lib/CashbookService.php'; $CEO = 'tabs/admin/ceo_dashboard.php'; $PAGE = 'tabs/accounts/cashbook.php';
     $MUTANTS = [
+        ['Alert 6 under rule A ignores cash in hand (its first test always true)', [[$PAGE,
+            "if ((\$_cbRuleA ? (\$_cbCih[\$_cbBase] ?? 0) : \$projBal) > 0 && \$_recentInAmt == 0 && \$pendingCount > 0) {",
+            "if ((\$_cbRuleA ? 1 : \$projBal) > 0 && \$_recentInAmt == 0 && \$pendingCount > 0) {"]]],
+        ['P3B-PAGES-1: the rule-A CEO tile at the shared 22px again', [[$CEO,
+            "<div class=\"cd-kv\" style=\"font-size:clamp(16px,5.5vw,22px);color:<?= \$_ceoCihAmt>=0",
+            "<div class=\"cd-kv\" style=\"color:<?= \$_ceoCihAmt>=0"]]],
         ['M6 (CEO tile): MONEY_KINDS, bank included', [[$CB,
             "\$kinds = implode(',', array_map([\$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));",
             "\$kinds = implode(',', array_map([\$this->pdo(), 'quote'], self::MONEY_KINDS));"]]],
