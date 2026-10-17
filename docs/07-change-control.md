@@ -11623,7 +11623,7 @@ its log file stays on the server in `/root/dnb-5.18.94`.
   4. The badge script's log, if it was run.
 
 
-## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — PUSHED 17 Oct; DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes — RESULT below
+## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — PUSHED 17 Oct; DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes — RESULT below; AFTER-CHECKS 17 Oct 16:04 UTC: repair key written, `--after-only` PASSED 68 ok / 0 failed / 1 note (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
 
 **Request.** While designing the Ecobank Bank screen (17 Oct), the design review found that the photo viewer could be
 pointed at any file in the plugin's data folder. The operator answered *"ok go ahed fix secruitry first"*. A sweep of
@@ -11844,5 +11844,32 @@ and the terminal held none.
   ledger's last row and the database's size the same as stage A's; **R23a–g every fix in the installed code, each
   control exact**; R2–R22 as in 5.18.94 — every switch, setting, row, route, prompt and policy unchanged, South Sudan and
   Domain B unchanged, the event queue's one waiting event still there.
-- **Still to come:** the repair key file; `--after-only` (R19 conclusive); the quarantine's `--check`; the Splynx key
-  replaced.
+- **Still to come (at the time):** the repair key file; `--after-only` (R19 conclusive); the quarantine's `--check`;
+  the Splynx key replaced. The first three are done — AFTER-CHECKS below.
+
+### AFTER-CHECKS — 17 Oct 16:04 UTC: all three PASSED
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. None of the three
+commands prints a secret, and the terminal held none: the key file's content was never shown.
+
+- **The repair key file (Runbook 3).** Written by its own command: *"repair key written: 49 bytes, owner 1000:1000,
+  mode 600"* — 48 hex characters and the newline, owned by the plugin's PHP user. The deploy had found no file at that name
+  (A23a), so nothing was moved aside. The repair page now opens with that key and with nothing else.
+- **`--after-only`, begun 16:04:13 UTC: PASSED 68 ok / 0 failed / 1 note.**
+  - Live `098f6b3` (5.18.95), as the deploy left it. V1–V13 passed; V4: no fatal since 15:05:25 UTC (2,176 lines read).
+  - R1–R23g as at the deploy, each control exact. R7: the migration ledger's last row the same, the database 32,768
+    bytes larger since the deploy's stage A (a live plugin writes; no migration).
+  - **R19 is conclusive:** master ran the retry job at 16:00:06 UTC, after the copy (15:05:34 UTC). Nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - **R24: the repair key file is in place** (32–64 bytes, one line of the key's form, readable by the plugin's PHP
+    user; its content was not read). The summary says *"repair key — in place, nothing to do"*. R24b: the
+    `pdf_link_secret` is present.
+  - The one note: R3, `migration.log` holds no line for 087, as on every deploy since 5.18.89.
+- **The quarantine's `--check`, begun 16:04:56 UTC: PASSED 9 ok / 0 failed / 2 notes.** K3–K13 hold: the old name is
+  empty, the kept file is unchanged (key, one name, sha256, size, time, owner, mode), no process holds it, and the
+  installed gate still stops the retry job, which ran at 16:00:06 UTC with nothing made. The notes: K2, the container
+  serves `098f6b3` rather than the quarantine's `69c87a6` (the gate is the same); K7, `config.json` in `<plugin>/data`
+  removed and remade since the move — names only, another writer's file, not a database.
+- **Still to do:** replace the Splynx key and secret in Splynx itself, then enter the new ones under Settings → Splynx
+  (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
+  repository.
