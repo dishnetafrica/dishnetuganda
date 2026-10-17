@@ -542,6 +542,70 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.97 (2026-10-17) — the Bank screen v1: Ecobank statements shown like the Cashbook, posted nowhere
+
+### Why
+Since 5.18.96 (P3b) cash in hand counts cash, mobile money and entries with no account, approved only: bank money is
+not in it. The operator asked to see the Ecobank statement the way the Cashbook shows cash. This is D1 as docs/69
+recommends it: bank balances on the Bank screen only. It ships after P3b, on its own, and after the 5.18.95 photo-route
+fix, which is what keeps a stored statement out of reach of a crafted address.
+
+### What
+- A new page, **Bank**, Uganda only, at `?page=dashboard&tab=bank`. **No menu link**: the sidebar is unchanged, and the
+  page is opened by its address or a bookmark, as Opening Balances is. One Ecobank account at a time; UGX and USD are
+  never added together.
+- **Upload, check, keep.** An Ecobank *Account Details* CSV, one account per file. `lib/EcobankDetailsCsv.php` checks
+  the whole file (the 23 columns, dates, amounts in whole cents, the running-balance chain in the bank's line order, the
+  closing balance); `lib/BankStatementStore.php` checks it against the chosen account (currency, last four digits, the
+  lines already kept). **If any check fails, nothing is kept**, and the screen says which check failed in one fixed
+  sentence. Keep adds only the lines not already kept. An account's first file asks once to link its last four digits.
+- **The lines:** newest first, with Ecobank's own running balance; a month filter with its opening, in, out and closing;
+  a CSV export of the lines on screen; a Statements tab with every check and kept file. The top card reads *AS STATED
+  BY ECOBANK*, slate grey, so it is never taken for the green and blue CASH IN HAND cards.
+- **Migration 088:** five new tables (`bank_account_profiles`, `bank_checks`, `bank_statements`,
+  `bank_statement_lines`, `bank_line_events`). No existing table changes. The emergency repair page refuses to drop any
+  of the five.
+- **The switch:** `bank_screen_enabled` (bool, `tools/set_config.php`). **Off after the deploy.** While it is off, and
+  on any install that is not Uganda or where SSP can be booked, the tab, the upload and the export each refuse with
+  fixed text and write nothing. `BankGate::open()` reads it through `PluginConfig::read()`, never from public.php's
+  store copy of the settings.
+- **Admins only.** `$_tabPerms['bank']` is `*admin`, and every page, upload and export re-reads the staff record
+  (`BankGate::allows()`), never the session copy: an admin whose right was just removed, or who was deactivated, is
+  refused on the next request. An upload needs the form token **and** a request that shows it came from this site's
+  own page (`BankGate::fromOwnPage()`: `Sec-Fetch-Site: same-origin`, or else an Origin, or else a Referer, naming this
+  host). A request that shows nothing, or shows another site, is refused, because the token is the same for every
+  user and is printed on the login page. The export refuses a request another site started (a link or an image
+  elsewhere), so no other site can write an export event in an admin's name. A visitor who is not signed in is sent
+  to the login page before anything else is decided, so nothing tells them whether the screen is switched on.
+- **The private folder:** `data/bank_statements/<account id>/` holds each kept file byte for byte (folders 0700, files
+  0600). A checked file waiting to be kept sits in `data/bank_statements/.pending/` and is deleted on keep or discard,
+  or at the next upload once it is two hours old. **Not under `uploads/`**, so it is not in the Google Drive backup,
+  the admin backup download or the hourly local backup. No route serves it in v1. The lines themselves are in the
+  plugin database, so they travel with every database backup.
+- **Nothing posted.** No Cashbook entry is created, changed or deleted. The screen never reads `cb_ledger`; of the book
+  it reads only the account list (`cb_accounts`). Cash in hand and every Cashbook page, export and report are
+  unchanged. `lib/BankStatement.php`, `lib/BankImport.php` and `tools/bank_statement.php` are unchanged, and the screen
+  does not use them.
+- South Sudan: no screen. 088's tables exist there and stay empty.
+
+### Operator action
+- None at the deploy: the switch stays off. Once the deploy has passed and the P3b cash count is recorded, the switch
+  is handed over as its own command (`--key bank_screen_enabled --value 1`, inside the container). It is turned off
+  with the same tool's `--clear`.
+- Do not open the downloaded CSV in Excel and save it before uploading: Excel rewrites the dates.
+
+### SAFETY
+- Never post a bank line to the Cashbook from this screen, and never make it read `cb_ledger`. Matching lines to the
+  book is a later release of its own.
+- Never put statement content in a flash, a log, an event, a URL or an error message: no name, account number,
+  amount, description, reference or file name. A refusal says at most a line number, a date, a currency or the last
+  four digits.
+- Never move `bank_statements/` under `uploads/`, and never add a route that takes a path into it. A download route
+  is its own reviewed change, built on 5.18.95's rule: refuse the path, then contain the file by `realpath`.
+- Never widen `BankGate::GRANTS` (admins only) or read the switch from the store copy without an instruction.
+- 088 is final as shipped: a change to it is a new migration.
+- Never use a real statement as a fixture. `tests/fixtures/bank_statement_gen.php` invents every value.
+
 ## 5.18.95 (2026-10-17) — security: photo route, repair key, EFRIS links, Splynx credentials
 
 ### Why
