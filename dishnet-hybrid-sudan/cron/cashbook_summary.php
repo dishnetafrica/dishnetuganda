@@ -55,11 +55,16 @@ if (empty($recipients)) {
 $today   = date('Y-m-d');
 
 // On a book without SSP (Uganda) the evening summary says what the LEDGER says is
-// in hand, one figure per currency — the same running balance the Cashbook page's
-// hero shows (5.18.68; accounts, bank balances and the account/no-account split are
-// not reported, the operator's decision, docs/07) — then today's trading P&L per
-// currency, nothing summed across currencies, no $ symbols. The legacy USD/SSP
-// message below remains exactly as-is for the dual-currency (Sudan) book.
+// in hand, one figure per currency — cashInHand(), the figure the Cashbook page's
+// hero and the landing page show (5.18.68; per-account figures, bank balances and
+// the account/no-account split are not reported, the operator's decision, docs/07)
+// — then today's trading P&L per currency, nothing summed across currencies, no $
+// symbols. 5.18.95 (P3b, D2 = A): where the service's cashOnlyRuleInForce() holds
+// (the Uganda tenant and no SSP) that figure is approved entries on cash and
+// mobile-money accounts or on no account, and one italic line under the figures
+// says so; on any other book it is still every entry not voided, any account, and
+// the message is 5.18.94's. The legacy USD/SSP message below remains exactly as-is
+// for the dual-currency (Sudan) book.
 if (!dn_ssp_selectable($config)) {
     $plToday   = $cb->plByPeriod('', $today, $today);
     $lines   = [];
@@ -67,6 +72,10 @@ if (!dn_ssp_selectable($config)) {
     $lines[] = "";
     foreach (dn_book_currencies($config) as $cihCur) {
         $lines[] = "*{$cihCur} CASH IN HAND: {$cihCur} " . number_format($cb->cashInHand($cihCur), 2) . "*";
+    }
+    if ($cb->cashOnlyRuleInForce()) {
+        // 5.18.95: what the figures count, said only where they count it — the service's own gate, never "no SSP" alone
+        $lines[] = "_Cash and mobile money, entries with no account, approved entries._";
     }
     $lines[] = "";
     foreach ($plToday as $pl) {

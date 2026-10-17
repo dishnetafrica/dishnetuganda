@@ -107,11 +107,22 @@ $todayLeads = count(array_filter($leads, fn($l)=>str_starts_with($l['created_at'
 // ── Cashbook ─────────────────────────────────────────────────────────
 $_ceoSSP = dn_ssp_selectable($config ?? null);
 $_ceoPositions = []; $_ceoPl = [];
+// 5.18.95 (P3b, X5; D2 = A): where the service's own gate says the cash-in-hand rule is in force (the Uganda tenant AND
+// a book without SSP, read from the service's configuration), the two cashbook tiles are cash in hand per currency, all
+// projects — CashbookService::cashInHand(), the landing page's figure — and currencyPositions() (bank balances included)
+// is not called. A book with SSP never asks, and anything thrown before the gate is read leaves the rule off: on every
+// book where it is off the positions are read and drawn as before.
+$_ceoRuleA = false; $_ceoCih = [];
 if (!$_ceoSSP) {
     try {
         require_once dirname(__DIR__, 2) . '/lib/CashbookService.php';
         $_ceoCb = new CashbookService($store, $dataDir);
-        $_ceoPositions = $_ceoCb->currencyPositions();
+        $_ceoRuleA = $_ceoCb->cashOnlyRuleInForce();
+        if ($_ceoRuleA) {
+            foreach (dn_book_currencies($config ?? null) as $_ceoCihCur) $_ceoCih[$_ceoCihCur] = $_ceoCb->cashInHand($_ceoCihCur);
+        } else {
+            $_ceoPositions = $_ceoCb->currencyPositions();
+        }
         $_ceoPl = $_ceoCb->plByPeriod('dishnet', date('Y-m') . '-01', date('Y-m-d'));
     } catch (Throwable $e) {}
 }
@@ -253,7 +264,11 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
         <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
+<?php if ($_ceoRuleA): /* 5.18.95: the figure is every collection today, bank-method ones included, so under the cash-in-hand rule it is not called cash. Tags at column 0, so that a book without the rule gets 5.18.94's page byte for byte */ ?>
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">Today's collections</div>
+<?php else: ?>
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">Today's Cash</div>
+<?php endif; ?>
             <div style="font-size:26px;font-weight:900;color:#10b981;letter-spacing:-1px;"><?= dn_cur($config) ?><?= number_format($revenueToday) ?></div>
             <div style="font-size:11px;color:#64748b;"><?= count($todayCols) ?> payments</div>
         </div>
@@ -300,10 +315,24 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
 </div>
 
 <!-- CASHBOOK -->
+<?php if ($_ceoRuleA): /* 5.18.95: the tiles below are all projects; Revenue and Expenses are plByPeriod('dishnet', …) */ ?>
+<div class="cd-section">🏦 Cashbook — cash in hand: all projects · revenue and expenses: DishNet</div>
+<?php else: ?>
 <div class="cd-section">🏦 Cashbook — DishNet</div>
+<?php endif; ?>
 <?php if (!$_ceoSSP): ?>
 <!-- Phase C: positions and month P&L per currency — no mixed sums, no fixed rates -->
 <div class="cd-g4">
+<?php if ($_ceoRuleA): /* 5.18.95 (P3b, X5): cash in hand per currency, all projects, at most two tiles — no account position, no bank balance */ ?>
+    <?php $_ct = 0; foreach ($_ceoCih as $_ceoCihCur => $_ceoCihAmt): if ($_ct >= 2) break; $_ct++; ?>
+    <div class="cd-k <?= $_ceoCihAmt<0?'cd-alert-red':'cd-alert-green' ?>">
+        <div class="cd-kv" style="color:<?= $_ceoCihAmt>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_ceoCihCur) ?> <?= number_format($_ceoCihAmt,2) ?></div>
+        <div class="cd-kl"><?= htmlspecialchars($_ceoCihCur) ?> Cash in hand</div><div class="cd-ks">cash &amp; mobile money · all projects</div>
+    </div>
+    <?php endforeach; for (; $_ct < 2; $_ct++): ?>
+    <div class="cd-k"><div class="cd-kv">—</div><div class="cd-kl">&nbsp;</div><div class="cd-ks">&nbsp;</div></div>
+    <?php endfor; ?>
+<?php else: ?>
     <?php $_ct = 0; foreach ($_ceoPositions as $_cp): if ($_ct >= 2) break; $_ct++; ?>
     <div class="cd-k <?= $_cp['total']<0?'cd-alert-red':'cd-alert-green' ?>">
         <div class="cd-kv" style="color:<?= $_cp['total']>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_cp['currency']) ?> <?= number_format($_cp['total'],0) ?></div>
@@ -312,6 +341,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
     <?php endforeach; for (; $_ct < 2; $_ct++): ?>
     <div class="cd-k"><div class="cd-kv">—</div><div class="cd-kl">&nbsp;</div><div class="cd-ks">&nbsp;</div></div>
     <?php endfor; ?>
+<?php endif; ?>
     <?php $_pl0 = reset($_ceoPl) ?: null; $_plc = $_pl0 ? htmlspecialchars($_pl0['currency']) : htmlspecialchars(dn_book_base($config ?? null)); ?>
     <div class="cd-k cd-alert-blue">
         <div class="cd-kv" style="color:#1d4ed8;"><?= $_plc ?> <?= number_format($_pl0['revenue_total'] ?? 0,0) ?></div>

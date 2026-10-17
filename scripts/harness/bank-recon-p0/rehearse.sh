@@ -45,8 +45,14 @@ noleak() { ! grep -Eq "$SECRETS" "$1"; }
 has()   { grep -Fq -- "$2" "$1"; }
 
 # ── The sandbox plugin (a copy of lib/ and migrations/; the checkout's plugin is never run) and the master books ─────────
+# Taken from P0's own commit, not the checkout: P0's "today" is cash in hand as P0 was written against it (every row not
+# voided, any account), and 5.18.95 (P3b) changed what cashInHand() counts on a Uganda book. check.php compares the two.
+P0_LIB_COMMIT=5954ede513f46e6ddcdb061fa60ce63f65cdacf5   # = P0_COMMIT in scripts/bank-recon-p0-run.sh
 mkdir -p "$SB/plugin/data" "$SB/books"
-cp -a "$R/dishnet-hybrid-sudan/lib" "$R/dishnet-hybrid-sudan/migrations" "$SB/plugin/"
+( set -o pipefail; git -C "$R" archive "$P0_LIB_COMMIT" dishnet-hybrid-sudan/lib dishnet-hybrid-sudan/migrations \
+    | tar -x -C "$SB/plugin" --strip-components=1 ) \
+  && cmp -s "$SB/plugin/lib/CashbookService.php" <(git -C "$R" show "$P0_LIB_COMMIT:dishnet-hybrid-sudan/lib/CashbookService.php") \
+  || { echo "cannot take lib/ and migrations/ from $P0_LIB_COMMIT"; exit 3; }
 chown -R "$O" "$SB/plugin" "$SB/books"
 build() {   # build <name> <variant> — a master book and its expected figures, written as the owner
   local d="$SB/books/$1"; mkdir -p "$d/live"; chown -R "$O" "$d"
