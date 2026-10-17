@@ -89,15 +89,57 @@ class CashbookService
     {
         if ($this->bookBaseCache === null) {
             require_once __DIR__ . '/currency.php';
+            $this->bookBaseCache = dn_book_base($this->bookConfig());
+        }
+        return $this->bookBaseCache;
+    }
+
+    /**
+     * P3b — the configuration this book is read under, loaded once per instance
+     * and shared by bookBase() and cashOnlyRuleInForce(), so the base and the
+     * cash-in-hand rule can never disagree inside one instance. The same load
+     * bookBase() always made (one vault refresh, not two); a throwable is [],
+     * which reads as the Sudan defaults, as before.
+     */
+    private ?array $bookCfgCache = null;
+
+    private function bookConfig(): array
+    {
+        if ($this->bookCfgCache === null) {
             require_once __DIR__ . '/PluginConfig.php';
             try {
                 $cfg = PluginConfig::load(dirname(__DIR__), $this->dataDir);
             } catch (\Throwable $e) {
                 $cfg = [];
             }
-            $this->bookBaseCache = dn_book_base($cfg);
+            $this->bookCfgCache = $cfg;
         }
-        return $this->bookBaseCache;
+        return $this->bookCfgCache;
+    }
+
+    /**
+     * P3b (D2 = A) — is the cash-in-hand rule in force on this book?
+     *
+     * True only where the tenant profile resolves to Uganda (StaffJobsGate, given
+     * the data directory as it must always be) AND SSP is not bookable, both read
+     * from bookConfig(). Anything unclear — any throwable — is false, which keeps
+     * the rule every book had before 5.18.96. Memoised per instance.
+     */
+    private ?bool $cashRuleCache = null;
+
+    public function cashOnlyRuleInForce(): bool
+    {
+        if ($this->cashRuleCache === null) {
+            try {
+                require_once __DIR__ . '/currency.php';
+                if (!class_exists('StaffJobsGate')) require_once __DIR__ . '/StaffJobsGate.php';
+                $cfg = $this->bookConfig();
+                $this->cashRuleCache = StaffJobsGate::applies($cfg, $this->dataDir) && !dn_ssp_selectable($cfg);
+            } catch (\Throwable $e) {
+                $this->cashRuleCache = false;
+            }
+        }
+        return $this->cashRuleCache;
     }
 
     /** Currency for a CRM payment row: its own currencyCode, else the base. */
@@ -551,6 +593,9 @@ class CashbookService
      *  never be added into a cash position. */
     public const MONEY_KINDS = ['bank', 'cash', 'momo'];
 
+    /** P3b (D2 = A): the kinds whose rows are cash in hand. Not MONEY_KINDS, which includes bank. */
+    public const CASH_IN_HAND_KINDS = ['cash', 'momo'];
+
     private function isCapitalRow(array $r): bool
     {
         $t = strtoupper(trim((string)($r['txn_type'] ?? '')));
@@ -661,12 +706,63 @@ class CashbookService
     }
 
     /**
-     * 5.18.68 — what the ledger itself says is in hand, per currency: the running
-     * balance the Balance column reaches on the latest row of that currency's
-     * stream, within the given project (the Cashbook page's own scope). The same
-     * rows and the same arithmetic as getEntries()' streams — accounts, counterparts
-     * and the unassigned split play no part. A book without SSP shows this figure
+     * P3b — whether cb_accounts exists, read from sqlite_master. A read path must
+     * never create the table (ensureAccountsTable() is DDL), so this only looks.
+     * Memoised only once true: nothing in the plugin drops the table, while a
+     * write in this same instance may create it.
+     */
+    private ?bool $hasAccountsTable = null;
+
+    private function accountsTableExists(): bool
+    {
+        if ($this->hasAccountsTable === true) return true;
+        if ($this->dbq("SELECT name FROM sqlite_master WHERE type='table' AND name='cb_accounts'")) {
+            $this->hasAccountsTable = true;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * P3b (D2 = A) — the one cash-in-hand predicate, appended right after the
+     * not-voided test by cashInHand() and by both getEntries() running-balance
+     * streams, so the hero and the Balance column count the same rows.
+     *
+     * '' when the rule is off: the SQL is then the 5.18.94 text, byte for byte.
+     * When it is on: approved rows only, and only rows with no account (NULL or 0,
+     * the adjustment among them) or on an account whose kind is exactly one of
+     * CASH_IN_HAND_KINDS (active or not; the account's own currency plays no
+     * part). A non-zero id that names no account, a text id, or any other kind
+     * is out. Without cb_accounts, only rows with no account count.
+     */
+    private function cashOnlyWhere(): string
+    {
+        if (!$this->cashOnlyRuleInForce()) return '';
+        $kinds = implode(',', array_map([$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));
+        return " AND status='approved' AND (COALESCE(account_id,0)=0"
+            . ($this->accountsTableExists()
+                ? " OR account_id IN (SELECT id FROM cb_accounts WHERE kind IN ({$kinds}))"
+                : '')
+            . ')';
+    }
+
+    /**
+     * What the ledger itself says is in hand, per currency, within the given
+     * project ('' = all projects): the running balance the Balance column reaches
+     * on the latest row of that currency's stream. getEntries()' streams use the
+     * same rows and the same arithmetic. The currency is normalised as before:
+     * the book's base takes rows stored with no currency; any other currency
+     * matches exactly; SSP sums ssp_amount. A book without SSP shows this figure
      * in place of the Phase-C position cards.
+     *
+     * Which rows count depends on one gate, cashOnlyRuleInForce() — the Uganda
+     * tenant profile AND a book without SSP:
+     *   - gate false (South Sudan, every other book, any doubt) — the 5.18.68
+     *     rule, unchanged: every row not voided, whatever its status or account;
+     *     accounts, counterparts and the unassigned split play no part;
+     *   - gate true (5.18.96, D2 = A) — approved rows only, on a cash or mobile-
+     *     money account or on no account at all (cashOnlyWhere()). Bank,
+     *     counterpart and orphan rows, and pending or rejected ones, are out.
      */
     public function cashInHand(string $currency, string $project = ''): float
     {
@@ -676,6 +772,7 @@ class CashbookService
         $amt  = $cur === 'SSP' ? 'COALESCE(ssp_amount,0)' : 'amount';
         $sql  = "SELECT ROUND(COALESCE(SUM(CASE WHEN direction='in' THEN {$amt} ELSE -{$amt} END), 0), 2) AS bal
                  FROM cb_ledger WHERE status NOT IN ('voided','voided_reconcile')"
+              . $this->cashOnlyWhere()
               . ($cur === $base
                   ? " AND (currency=" . $this->pdo()->quote($base) . " OR currency IS NULL OR currency='')"
                   : " AND currency=" . $this->pdo()->quote($cur));
@@ -1967,13 +2064,20 @@ class CashbookService
         $base       = $this->bookBase();
         $streamCur  = $currFilter !== '' ? $currFilter : $base;
         $amtCol     = $streamCur === 'SSP' ? 'COALESCE(ssp_amount,0)' : 'amount';
-        $currWhere  = ($currFilter === '')
+        // P3b: under D2 = A the streams count exactly cashInHand()'s rows — the same
+        // predicate, and a base-currency filter takes blank-currency rows as the
+        // hero does. With the rule off, $cashWhere is '' and the base filter keeps
+        // its 5.18.94 form, so the SQL is unchanged byte for byte.
+        $cashRule   = $this->cashOnlyRuleInForce();
+        $cashWhere  = $this->cashOnlyWhere();
+        $currWhere  = ($currFilter === '' || ($cashRule && $currFilter === $base))
             ? " AND (currency=" . $this->pdo()->quote($base) . " OR currency IS NULL OR currency='')"
             : " AND currency=" . $this->pdo()->quote($streamCur);
         if ($projFilter) {
             $allRows = $this->dbq(
                 "SELECT id, direction, {$amtCol} as bal_amt FROM cb_ledger
                  WHERE project=? AND status NOT IN ('voided','voided_reconcile')"
+                . $cashWhere
                 . $currWhere
                 . " ORDER BY date ASC, id ASC",
                 [$projFilter]
@@ -1982,6 +2086,7 @@ class CashbookService
             $allRows = $this->dbq(
                 "SELECT id, direction, {$amtCol} as bal_amt FROM cb_ledger
                  WHERE status NOT IN ('voided','voided_reconcile')"
+                . $cashWhere
                 . $currWhere
                 . " ORDER BY date ASC, id ASC"
             );
@@ -1993,7 +2098,7 @@ class CashbookService
             $q = "SELECT id, direction, currency,
                          CASE WHEN currency='SSP' THEN COALESCE(ssp_amount,0) ELSE amount END AS bal_amt
                   FROM cb_ledger
-                  WHERE status NOT IN ('voided','voided_reconcile')
+                  WHERE status NOT IN ('voided','voided_reconcile')" . $cashWhere . "
                     AND currency IS NOT NULL AND currency != '' AND currency != " . $this->pdo()->quote($base)
                . ($projFilter ? " AND project=?" : "")
                . " ORDER BY date ASC, id ASC";
