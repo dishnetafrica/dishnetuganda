@@ -485,7 +485,7 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 
 | Surface | URL | Purpose |
 |---------|-----|---------|
-| Emergency Repair | `public.php?page=emergency_repair&key=<KEY>` | Pre-bootstrap diagnostic + repair endpoint. Plain text. Runs after $dataDir is set but before SqliteStore::create() — usable when the plugin is broken. Actions: `diagnose` (default, read-only integrity_check + per-table probe), `clear_wal` (delete stale -wal/-shm), `drop_table&t=NAME&confirm=YES_DROP_NAME` (destructive, with hardcoded blacklist of money/customer tables), `vacuum`. Key in `data/emergency_repair_key.txt`. |
+| Emergency Repair | `public.php?page=emergency_repair&key=<KEY>` | Pre-bootstrap diagnostic + repair endpoint. Plain text. Runs after $dataDir is set but before SqliteStore::create() — usable when the plugin is broken. Actions: `diagnose` (default, read-only integrity_check + per-table probe), `clear_wal` (delete stale -wal/-shm), `drop_table&t=NAME&confirm=YES_DROP_NAME` (destructive, with hardcoded blacklist of money/customer tables), `vacuum`. Key in `data/emergency_repair_key.txt`, **required** since 5.18.95: no file, an empty or unreadable one, a key under 32 characters or the old built-in key → 403, page disabled (no built-in key; compared with `hash_equals`). |
 | Starlink Suspensions tab | `?page=dashboard&tab=starlink_suspensions` | Admin-only view of sl_suspension_state + sl_suspension_log. Force-restore button calls StarlinkBlockService::restore() with `triggeredBy='manual:<name>'`. CSRF-protected. |
 
 ## Recent Changes (v4.21.79 → v4.21.82) — 2026-05-04

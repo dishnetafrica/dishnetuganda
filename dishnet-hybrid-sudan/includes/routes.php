@@ -57,9 +57,21 @@ if ($page === 'kyc_photo') {
     // Other staff can only view expense photos (their own uploads are filename-matched)
     $allowedRoles = ['admin','accountant','support_leader','field_accountant'];
     $isPrivileged = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', $allowedRoles, true);
-    $f = trim($_GET['f'] ?? '');
-    $f = str_replace(['..', chr(92), chr(0)], '', $f);
-    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
+    // ── K1 (5.18.95): refuse, then contain — never strip ──
+    // The strip that stood here removed '..', backslashes and NULs, so '.\.' became '..' once its
+    // backslash was gone. A path with any of those shapes is now refused whole, and the file served
+    // is the one realpath() finds inside its own allow-listed folder, so a symlink that leaves the
+    // folder is refused too (the shape of JobPhotos::path). Every writer stores folder/…/name with
+    // no empty, '.' or '..' segment, so no stored path is refused.
+    $f = $_GET['f'] ?? '';
+    if (!is_string($f)) { http_response_code(400); exit('Invalid path'); }
+    $f    = trim($f);
+    $fSeg = explode('/', $f);
+    if ($f === '' || $f[0] === '/' || strpos($f, chr(92)) !== false || strpos($f, chr(0)) !== false
+        || in_array('', $fSeg, true) || in_array('.', $fSeg, true) || in_array('..', $fSeg, true)) {
+        http_response_code(400); exit('Invalid path');
+    }
+    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f, $fDir)) {
         http_response_code(400); exit('Invalid path');
     }
     // KYC photos: privileged only. Expense photos: privileged or own upload (exp-{rid}-*.ext)
@@ -73,8 +85,13 @@ if ($page === 'kyc_photo') {
     if (!$isPrivileged && !$isOwnPhoto) {
         http_response_code(403); exit('Access denied');
     }
-    $full = $dataDir . '/' . $f;
-    if (!file_exists($full)) { http_response_code(404); exit('Not found'); }
+    // The base is the folder the allow-list matched (kyc_photos, kyc_uploads or uploads/<folder>). The
+    // file must resolve inside it and be a file, else 404; what is served is the resolved path.
+    $fBase = realpath($dataDir . '/' . $fDir[1]);
+    $full  = realpath($dataDir . '/' . $f);
+    if ($fBase === false || $full === false || strpos($full, $fBase . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+        http_response_code(404); exit('Not found');
+    }
     $mime = mime_content_type($full) ?: 'application/octet-stream';
     $inline = in_array($mime, ['image/jpeg','image/png','image/gif','image/webp']);
     header('Content-Type: ' . $mime);

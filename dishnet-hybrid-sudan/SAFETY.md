@@ -542,6 +542,41 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.95 (2026-10-17) — emergency_repair has no built-in key (K2)
+
+### Why
+`public.php?page=emergency_repair` offers drop_table, vacuum and clear_wal
+before the plugin initialises. When `data/emergency_repair_key.txt` was absent
+it fell back to a built-in key, and that key was printed in the Runbook, in
+the Starlink Suspensions error box and in EMERGENCY_RECOVERY.md (root docs/48
+PD-11). Anyone who had seen one of them could open the page on a host with no
+key file.
+
+### What
+- The key file is REQUIRED. No file, an unreadable or empty one, a key
+  shorter than 32 characters, or the old built-in key (any case) → 403,
+  "disabled until a key file of at least 32 characters exists". Fail closed.
+- The key is compared with `hash_equals`; a key parameter that is not a
+  string is 403. A refusal never prints the expected key, any part of it, or
+  the one supplied.
+- The Runbook shows the URL with `key=YOUR-KEY` and says the page works only
+  after an admin has put the key file on the server. The Starlink Suspensions
+  error box no longer links to the page; it points to the Runbook.
+- Unchanged: everything after the check (actions, output, the drop_table
+  blacklist), and the page still runs before `SqliteStore::create()`.
+
+### Operator action
+- Before you need the page, put a key of at least 32 characters in
+  `data/emergency_repair_key.txt` on the server (one line). A host with no
+  key file, or with the old built-in key in it, has the page disabled from
+  5.18.95 until then.
+
+### SAFETY
+- Never print a repair key in a page, a link, a doc or an error message.
+- Never add a fallback key: no key file means the page is off.
+- The v4.21.16 note below records the old default. It is history,
+  superseded by this note.
+
 ## v4.21.114 (2026-06-19) — Emergency "Route all via Accounts" toggle
 
 ### Why
