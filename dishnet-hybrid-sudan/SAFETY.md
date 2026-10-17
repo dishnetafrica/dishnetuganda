@@ -542,6 +542,49 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.95 (2026-10-17) — security: photo route, repair key, EFRIS links, Splynx credentials
+
+### Why
+A design review of the Bank screen and a sweep that followed found four holes in the live code (5.18.94), on both
+tenants. The repository is public, so anything written in the code is known to anyone.
+- **K1** `?page=kyc_photo`: the path was cleaned with `str_replace(['..', '\\', NUL], '')`, which a dot, backslash,
+  dot sequence survives, and the file was read with no containment. An admin, accountant, support leader or field
+  accountant could read any file the web server can open, the database and the settings among them.
+- **K2** `?page=emergency_repair` (before login): with no `data/emergency_repair_key.txt`, or an empty one, it fell
+  back to a key printed in the Runbook, the Starlink Suspensions error box and EMERGENCY_RECOVERY.md (root docs/48
+  PD-11), and offered drop_table, vacuum and clear_wal.
+- **A2/D1** `?page=efris_pdf` (before login): the link token fell back to a key written in the code when
+  `webhook_secret` was unset.
+- **D5** the Splynx API key and secret were written in the code (public.php, cron_splynx_sync.php and the admin page
+  `?page=splynx_patch`, which also printed them).
+
+### What
+- **K1:** the path is refused (400), never cleaned, when it is not a string, is empty, starts with `/`, holds a
+  backslash or a NUL, or has an empty, `.` or `..` segment. The file served is the one `realpath()` finds inside the
+  allow-listed folder it names, and a file; otherwise 404. Roles and the own-expense-photo rule are unchanged.
+- **K2:** the key file is REQUIRED: at least 32 printable characters, no spaces, never containing the old built-in
+  key. A disabled page and a wrong key get one and the same 403. `hash_equals`; a non-string key is refused. No
+  answer prints the stored key: the action lines show `key=YOUR-KEY`. The Runbook and the Suspensions box no longer
+  show a key. drop_table also refuses staff logins, sessions, the financial audit trail, customer identities,
+  payment, photo and installation-authorisation tables, whatever the name's case.
+- **A2/D1:** EFRIS links are minted and checked with `PdfLinkToken` under the install's own `pdf_link_secret`, from
+  the store copy of kyc_config.json on both sides. No fallback key. A bad token and a missing file get the same 404.
+  A link made before the deploy stops opening; it is made again from the EFRIS tab.
+- **D5:** no Splynx key or secret in the code; they come only from Settings → Splynx. `?page=splynx_patch` answers
+  410 and changes nothing.
+- Unchanged: everything a legitimate user does, on both tenants. No migration, no setting, no switch.
+
+### Operator action
+- Put a repair key in `data/emergency_repair_key.txt` on the server **before** you need the page (e.g. the output
+  of `openssl rand -hex 24`, written there on the server, never pasted anywhere).
+- Replace the Splynx API key in Splynx and enter the new one under Settings → Splynx: the old values are public.
+
+### SAFETY
+- Never clean a path from a request; refuse it, then contain the file by `realpath`.
+- Never add a fallback key, and never print a key in a page, a link, a doc or an error message.
+- Never write a credential in the code: the repository is public.
+- The v4.21.16 note below records the old repair default. It is history, superseded by this note.
+
 ## v4.21.114 (2026-06-19) — Emergency "Route all via Accounts" toggle
 
 ### Why

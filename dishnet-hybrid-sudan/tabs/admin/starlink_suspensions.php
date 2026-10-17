@@ -113,8 +113,8 @@ try {
     echo '<div style="padding:18px;background:#FFEBEE;border:1px solid #EF9A9A;border-radius:10px;color:#c0392b;">';
     echo '<strong>Failed to ensure sl_suspension_state schema.</strong><br>';
     echo htmlspecialchars($e->getMessage()) . '<br><br>';
-    echo 'If this persists, the database may be partly corrupt. Try ';
-    echo '<a href="public.php?page=emergency_repair&key=DISHNET_REPAIR" style="color:#D41C1C;font-weight:600;">Emergency Repair</a>.';
+    // 5.18.95 (K2): no link and no key here; the repair page has no built-in key, the Runbook says how.
+    echo 'If this persists, the database may be partly corrupt: follow the Emergency Repair steps in the Runbook (System menu, Runbook).';
     echo '</div>';
     return;
 }

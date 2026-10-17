@@ -210,7 +210,8 @@ echo "\n5. Every link builder mints through PdfLinkToken; the old scheme survive
 foreach (['webhook.php' => 'PdfLinkToken::ensureSecret(', 'cron_quote_wa.php' => 'PdfLinkToken::mint(', 'lib/DeliveryPdfService.php' => 'PdfLinkToken::mint(',
           'cron_maintenance.php' => 'PdfLinkToken::random(', 'includes/api/api_whatsapp.php' => 'PdfLinkToken::random(',
           'cron_invoice_notify.php' => 'PdfLinkToken::random(', 'includes/api/api_customer_app.php' => 'PdfLinkToken::random(',
-          'public.php' => 'PdfLinkToken::ensureSecret('] as $f => $needle) {
+          'public.php' => 'PdfLinkToken::ensureSecret(',
+          'tabs/admin/efris.php' => 'PdfLinkToken::mint(', 'efris_pdf.php' => 'PdfLinkToken::verify('] as $f => $needle) {  // EFRIS: 5.18.95
     $src = codeNC($root . '/' . $f);
     is_(strpos($src, $needle) !== false, "$f uses $needle");
     is_(strpos($src, "/PdfLinkToken.php'") !== false, "$f loads the helper itself");
@@ -223,8 +224,9 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, Fil
     if (preg_match("#webhook_secret'\\]\\s*\\?\\?\\s*(\\(\\s*\\\$[A-Za-z_]+\\['evo_webhook_secret'\\]\\s*\\?\\?\\s*)?'dishnet'#", $src)) $oldScheme[] = substr($p, strlen($root) + 1);
 }
 sort($oldScheme);
-t('the "webhook_secret ?? \'dishnet\'" fallback survives ONLY in the two EFRIS files recorded as a follow-up (not in Phase 1 scope)',
-  $oldScheme, ['efris_pdf.php', 'tabs/admin/efris.php']);
+// 5.18.95: the two EFRIS files, recorded here as the follow-up since 5.18.37, now mint and verify through PdfLinkToken.
+t('the "webhook_secret ?? \'dishnet\'" fallback survives nowhere (EFRIS moved to PdfLinkToken in 5.18.95)',
+  $oldScheme, []);
 $files = codeNC($root . '/includes/api/api_public_files.php');
 foreach (['serve_receipt_pdf', 'serve_delivery_pdf'] as $a) {
     $at = strpos($files, "if (\$act === '{$a}')"); $blk = substr($files, (int)$at, 2200);

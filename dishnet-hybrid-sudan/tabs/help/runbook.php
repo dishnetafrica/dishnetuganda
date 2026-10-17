@@ -133,7 +133,9 @@ $token   = htmlspecialchars($retailer['api_token'] ?? '', ENT_QUOTES);
     <div class="rb-emergency">
         <h3>🚨 Plugin crashed / System Error?</h3>
         <p><strong>Step 1 — Try the emergency repair URL first:</strong></p>
-        <p style="font-size:12px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;word-break:break-all;"><?= h(dn_plugin_public($config)) ?>?page=emergency_repair&amp;key=DISHNET_REPAIR</p>
+        <p style="font-size:12px;background:rgba(0,0,0,.3);padding:8px 12px;border-radius:8px;font-family:monospace;word-break:break-all;"><?= h(dn_plugin_public($config)) ?>?page=emergency_repair&amp;key=YOUR-KEY</p>
+        <?php /* 5.18.95 (K2): the page has no built-in key any more, so none is printed here. */ ?>
+        <p style="font-size:12px;margin-top:6px;color:rgba(255,255,255,.7);">The page works only after an admin has put a key of at least 32 characters in data/emergency_repair_key.txt on the server; use that key in place of YOUR-KEY.</p>
         <p style="font-size:12px;margin-top:6px;color:rgba(255,255,255,.7);">This works even when the plugin is completely broken. It deletes stale database files and self-heals.</p>
         <p><strong>Step 2 — If that doesn't work:</strong> UCRM Admin → System → Plugins → Upload new plugin ZIP (works even when plugin shows error)</p>
         <p><strong>Step 3 — SSH (last resort):</strong></p>

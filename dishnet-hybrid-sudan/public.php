@@ -216,9 +216,10 @@ if (in_array(($_GET['action'] ?? ''), ['dn_resolve_owner', 'dn_resolve_kits'], t
 // table with a malformed b-tree) this endpoint lets you fix it without
 // SSH or UCRM interface.
 //
-// Access:  /public.php?page=emergency_repair&key=DISHNET_REPAIR
-// Replace DISHNET_REPAIR with the value in data/emergency_repair_key.txt
-// (file is optional — defaults to 'DISHNET_REPAIR' if absent).
+// Access:  /public.php?page=emergency_repair&key=YOUR-KEY
+// YOUR-KEY is the one line in data/emergency_repair_key.txt, at least 32
+// characters. The file is REQUIRED (5.18.95): without it the page is disabled
+// (403). There is no built-in key any more, and the old one is refused.
 //
 // Optional second confirmation for destructive actions:
 //   &confirm=YES_DROP_<TABLE_NAME>   only required when action=drop_table
@@ -234,13 +235,24 @@ if (in_array(($_GET['action'] ?? ''), ['dn_resolve_owner', 'dn_resolve_kits'], t
 if (($_GET['page'] ?? '') === 'emergency_repair') {
     header('Content-Type: text/plain; charset=UTF-8');
 
-    // Key check  read from a simple flat file to avoid needing SqliteStore
-    $keyFile = $dataDir . '/emergency_repair_key.txt';
-    $storedKey = file_exists($keyFile) ? trim(file_get_contents($keyFile)) : 'DISHNET_REPAIR';
-    if (($_GET['key'] ?? '') !== $storedKey) {
+    // ── K2 (5.18.95): the key file is required; there is no built-in key ──
+    // Read from a simple flat file to avoid needing SqliteStore. A missing, unreadable or empty
+    // file, a key under 32 characters or with anything but printable ASCII (no space, BOM or
+    // line break), or one containing the old built-in key (burned: pages and docs printed it)
+    // leaves the page disabled: 403, fail closed. The key is compared with hash_equals. A
+    // disabled page and a wrong key get the same answer, so a caller cannot tell whether a key
+    // file is in place, and no answer prints the expected key, any part of it, or the one supplied.
+    $keyFile   = $dataDir . '/emergency_repair_key.txt';
+    $storedKey = (is_file($keyFile) && is_readable($keyFile)) ? @file_get_contents($keyFile) : false;
+    $storedKey = is_string($storedKey) ? trim($storedKey) : '';
+    $keyUsable = strlen($storedKey) >= 32 && preg_match('/^[\x21-\x7E]+\z/', $storedKey) === 1
+        && stripos($storedKey, 'DISHNET_REPAIR') === false;
+    $givenKey  = $_GET['key'] ?? null;
+    if (!$keyUsable || !is_string($givenKey) || !hash_equals($storedKey, $givenKey)) {
         http_response_code(403);
-        echo "403 Unauthorized  wrong key\n";
-        echo "Set your key in: data/emergency_repair_key.txt (one line, no whitespace)\n";
+        echo "403 Forbidden — emergency repair is disabled, or the key is wrong\n";
+        echo "The page works only with the one line in data/emergency_repair_key.txt on the server:\n";
+        echo "at least 32 printable characters, no spaces. An admin puts it there.\n";
         exit;
     }
 
@@ -310,8 +322,12 @@ if (($_GET['page'] ?? '') === 'emergency_repair') {
             'wallet_topups', 'cash_handovers', 'payment_collections', 'payments',
             'kyc_applications', 'leads', 'lte_subscribers', 'fiber_purchases',
             'fiber_invoices', 'sl_kits', 'duplicate_confirmations',
+            // 5.18.95: staff logins, sessions, the financial audit trail, customer identities and payment records
+            'retailers', 'fin_audit', 'login_sessions', 'login_attempts', 'customer_identities', 'customer_sessions',
+            'kyc_config', 'dpo_payments', 'dpo_payment_events', 'wallet_events', 'wallet_transactions',
+            'job_photos', 'job_completion_gps', 'install_auth', 'install_auth_events', 'install_auth_activations',
         ];
-        if (in_array($tName, $forbidden, true)) {
+        if (in_array(strtolower($tName), $forbidden, true)) {
             echo "✗ REFUSED: '{$tName}' contains money/customer/audit data — never droppable here.\n";
             echo "  If you really need to drop this, do it manually via sqlite3 CLI after a backup.\n";
             echo "\n=== Done ===\n";
@@ -426,7 +442,7 @@ if (($_GET['page'] ?? '') === 'emergency_repair') {
             echo "\n  → If only bookkeeping tables are corrupt (master_schedule,\n";
             echo "    sync_queue_log, etc.), drop+recreate is safe:\n";
             foreach ($bad as $b) {
-                echo "      ?page=emergency_repair&key={$storedKey}&action=drop_table&t={$b['table']}&confirm=YES_DROP_{$b['table']}\n";
+                echo "      ?page=emergency_repair&key=YOUR-KEY&action=drop_table&t={$b['table']}&confirm=YES_DROP_{$b['table']}\n";
             }
         }
     } catch (\Throwable $e) {
@@ -446,9 +462,9 @@ if (($_GET['page'] ?? '') === 'emergency_repair') {
     echo "\n";
 
     echo "Available actions:\n";
-    echo "  ?page=emergency_repair&key={$storedKey}&action=clear_wal\n";
-    echo "  ?page=emergency_repair&key={$storedKey}&action=drop_table&t=NAME&confirm=YES_DROP_NAME\n";
-    echo "  ?page=emergency_repair&key={$storedKey}&action=vacuum\n";
+    echo "  ?page=emergency_repair&key=YOUR-KEY&action=clear_wal\n";
+    echo "  ?page=emergency_repair&key=YOUR-KEY&action=drop_table&t=NAME&confirm=YES_DROP_NAME\n";
+    echo "  ?page=emergency_repair&key=YOUR-KEY&action=vacuum\n";
     echo "\n=== Done ===\n";
     $repairPdo = null;
     exit;
@@ -579,12 +595,8 @@ if (!isset($config['cron_sync_path']))             $config['cron_sync_path']    
 if (!isset($config['cron_maintenance_path']))      $config['cron_maintenance_path'] = __DIR__ . '/cron_maintenance.php';
 // Splynx ISP Framework integration
 if (empty($config['splynx_url']))                  $config['splynx_url']                = 'https://my.dishnetafrica.com';
-if (empty($config['splynx_key']))                  $config['splynx_key']                = '2b10a77dd91668b95b4355200689b0bc';
-if (empty($config['splynx_secret']))               $config['splynx_secret']             = '9174fd8da2d4b7bf35a369cd1a020d45';
-// Persist to file so cron scripts (which load config directly) also see credentials
-if (empty($store->load('kyc_config.json')['splynx_key'])) {
-    $store->save('kyc_config.json', $config);
-}
+// 5.18.95: the Splynx key and secret are no longer written in the code (the repository is public). They live only in
+// the settings (Settings → Splynx), where an admin enters them; without them Splynx sync reports "not configured".
 if (!isset($config['splynx_auto_provision']))      $config['splynx_auto_provision']     = false;
 if (!isset($config['splynx_sync_interval_minutes']))$config['splynx_sync_interval_minutes'] = 5;
 if (!isset($config['splynx_default_tariff_id']))   $config['splynx_default_tariff_id']  = 1;
