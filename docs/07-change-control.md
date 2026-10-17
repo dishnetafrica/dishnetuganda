@@ -11623,7 +11623,7 @@ its log file stays on the server in `/root/dnb-5.18.94`.
   4. The badge script's log, if it was run.
 
 
-## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — NOT pushed, NOT deployed
+## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — PUSHED 17 Oct; DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes — RESULT below
 
 **Request.** While designing the Ecobank Bank screen (17 Oct), the design review found that the photo viewer could be
 pointed at any file in the plugin's data folder. The operator answered *"ok go ahed fix secruitry first"*. A sweep of
@@ -11817,6 +11817,32 @@ and checks it (RB): every changed file 5.18.94's, every defect back — **the fo
 again on its built-in key when no key file exists. A key file written for 5.18.95 stays and keeps working with 5.18.94.
 Then run the quarantine's own `--check`. The summary prints the command, with its own log, on its own lines.
 
-### RESULT
+### RESULT — DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes
 
-Not yet run.
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no secret,
+and the terminal held none.
+
+- **The run.** Begun 15:04:28 UTC. `/opt/dishnet` fast-forwarded to `bda21f6`, and `release/5.18.95` (`098f6b3`) fetched.
+  Live before: `f4b4c96` (5.18.94), PHP 8.1.34 in the container. No tracked edits, nothing untracked under the plugin.
+- **Stage A passed.** A0, A7, the delta exactly the 21 files, no migration. **A22a–g:** every fix read in the pin, and each
+  control on `f4b4c96` gave exactly the defect verdict its check was written for. A2–A18, A21 as in 5.18.94; A14: the
+  quarantine holds, its `--check` of 14 Oct 03:14:46 UTC began after 5.18.94's copy. Backup in
+  `/root/dnb-5.18.95/backup-20261017T150428Z` (the database, the data folder without the repair key file, the installed
+  5.18.94, the stray folder as files, the vault, the event queue).
+- **The notes (6):**
+  - **A23a and R24, the repair key file: ABSENT.** So until this deploy the repair page opened, before any login, with
+    the key written in the code. It is now shut for everyone until the key file is written (Runbook 3).
+  - **A23b:** the Splynx key and secret are present in the settings. 5.18.94's code wrote the code's values there when
+    they were empty, so these are likely the public ones: replace them in Splynx (Runbook 5).
+  - **A17:** two installation requests pending under v1.0 keep v1.0, as in 5.18.94.
+  - **R3:** `migration.log` holds no line for 087; read from the store instead, as on every deploy since 5.18.89.
+  - **R19:** the quarantine holds; not yet conclusive (master's last run of the retry job, 15:05:07 UTC, was before the
+    copy). `--after-only` after 15:25:34 UTC.
+  - **A23c and R24b:** the `pdf_link_secret` is present.
+- **The copy:** 15:05:34 UTC, the container serving `098f6b3`. V1–V13 passed; V4: no fatal since 15:05:33 UTC.
+- **Stage R passed.** R1 the 21 files byte for byte, the manifest 5.18.95; R5 all 275 earlier files; R7 the migration
+  ledger's last row and the database's size the same as stage A's; **R23a–g every fix in the installed code, each
+  control exact**; R2–R22 as in 5.18.94 — every switch, setting, row, route, prompt and policy unchanged, South Sudan and
+  Domain B unchanged, the event queue's one waiting event still there.
+- **Still to come:** the repair key file; `--after-only` (R19 conclusive); the quarantine's `--check`; the Splynx key
+  replaced.
