@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * test_cash_in_hand_p3b_south_sudan.php — P3b (5.18.95, D2 = A; SPEC §d.1 T3): wherever the cash-in-hand rule is not in
+ * test_cash_in_hand_p3b_south_sudan.php — P3b (5.18.96, D2 = A; SPEC §d.1 T3): wherever the cash-in-hand rule is not in
  * force, every output is 5.18.94's, byte for byte.
  *
  * Two trees, the 5.18.50 method: f4b4c96 (5.18.94, the live code) taken from Git by sj_baseline_tree(), and this tree.
@@ -28,7 +28,7 @@ declare(strict_types=1);
  *
  * Two things are kept apart rather than normalised away, each as narrowly as it can be:
  *   - the tool's error stream (ConfigVault's notices go there, by error_log()) is compared on its own, byte for byte,
- *     beside the printed lines: 5.18.95 loads the configuration before its banner, to choose the rule line, and that
+ *     beside the printed lines: 5.18.96 loads the configuration before its banner, to choose the rule line, and that
  *     moves where a notice falls among the printed lines, not what either stream says;
  *   - a page that fails on both trees prints the failing statement's line (lib/error_handler.php), which the lines P3b
  *     adds above it move. That number alone is normalised, and only where the line each tree cites holds the same
@@ -107,8 +107,8 @@ require_once $lib . '/lib/CashbookService.php';
 
 const T3_BASELINE   = 'f4b4c96';
 const T3_OLD_BANNER = '== cash in hand (5.18.71) — read-only ==';
-const T3_NEW_BANNER = '== cash in hand (5.18.95) — read-only ==';
-const T3_NEW_RULE   = '  rule       every entry not voided, any account (as before 5.18.95)';
+const T3_NEW_BANNER = '== cash in hand (5.18.96) — read-only ==';
+const T3_NEW_RULE   = '  rule       every entry not voided, any account (as before 5.18.96)';
 const T3_OLD_SENT   = "  the ledger's running balance per currency (rows not voided; accounts and the unassigned split play no part):";
 const T3_ADMIN      = 'RH-Admin One';
 const T3_STDERR     = "\n\0 the error stream \0\n";
@@ -499,7 +499,7 @@ foreach ($BOOKS as $tag => $B) {
         // tools/cash_in_hand.php: the banner and the rule line against fixed text, everything else byte for byte
         if ($sameStmt > 0) echo "  note [{$tag}] {$sameStmt} page(s) failed on both trees at the same statement; only its line number was normalised\n";
         // Its error stream apart: ConfigVault's notices go there (error_log), and where they fall among the printed lines
-        // follows when the tool first loads the configuration, which 5.18.95 does before its banner to choose the rule line.
+        // follows when the tool first loads the configuration, which 5.18.96 does before its banner to choose the rule line.
         [$ta, $tb, $inMinute] = t3_pair(function (SjSandbox $s) { return t3_run_split($s, 'tools/cash_in_hand.php'); }, $old, $new, false);
         is_($inMinute, "[{$tag}] tools/cash_in_hand.php: read from both trees within one minute");
         [$ta, $errA] = array_pad(explode(T3_STDERR, $ta, 2), 2, '');
@@ -515,7 +515,7 @@ foreach ($BOOKS as $tag => $B) {
         $restA = implode("\n", array_values(array_filter($la, function ($l) { return strpos($l, '== cash in hand ') !== 0 && strpos($l, '  rule ') !== 0; })));
         $restB = implode("\n", array_values(array_filter($lb, function ($l) { return strpos($l, '== cash in hand ') !== 0 && strpos($l, '  rule ') !== 0; })));
         is_($restA === $restB, "[{$tag}] tools/cash_in_hand.php, every other line (" . strlen($restB) . ' bytes)', $restA === $restB ? '' : t3_where($restA, $restB));
-        is_(in_array(T3_OLD_SENT, $la, true) && in_array(T3_OLD_SENT, $lb, true), "[{$tag}] the tool's sentence is the one before 5.18.95, on both trees");
+        is_(in_array(T3_OLD_SENT, $la, true) && in_array(T3_OLD_SENT, $lb, true), "[{$tag}] the tool's sentence is the one before 5.18.96, on both trees");
 
         // What the comparison stood on: real pages, the rule off on this tree, the per-run values found where expected
         [, $rule] = $new->run('__p3b_t3_read.php', [json_encode($curs)]);

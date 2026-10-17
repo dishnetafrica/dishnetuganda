@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * test_d1_bank_balance_readers.php — P3b (5.18.95; D1 and X5; SPEC §d.1 T4): no page, cron, worker, tool or API reads
+ * test_d1_bank_balance_readers.php — P3b (5.18.96; D1 and X5; SPEC §d.1 T4): no page, cron, worker, tool or API reads
  * an account balance — the bank's among them — except the readers the design keeps on purpose. Static: nothing is run,
  * rendered or opened but the plugin's own PHP files, read as tokens. It loads no configuration and writes nothing but
  * its own temporary folder.

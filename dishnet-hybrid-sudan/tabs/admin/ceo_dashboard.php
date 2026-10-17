@@ -107,7 +107,7 @@ $todayLeads = count(array_filter($leads, fn($l)=>str_starts_with($l['created_at'
 // ── Cashbook ─────────────────────────────────────────────────────────
 $_ceoSSP = dn_ssp_selectable($config ?? null);
 $_ceoPositions = []; $_ceoPl = [];
-// 5.18.95 (P3b, X5; D2 = A): where the service's own gate says the cash-in-hand rule is in force (the Uganda tenant AND
+// 5.18.96 (P3b, X5; D2 = A): where the service's own gate says the cash-in-hand rule is in force (the Uganda tenant AND
 // a book without SSP, read from the service's configuration), the two cashbook tiles are cash in hand per currency, all
 // projects — CashbookService::cashInHand(), the landing page's figure — and currencyPositions() (bank balances included)
 // is not called. A book with SSP never asks, and anything thrown before the gate is read leaves the rule off: on every
@@ -264,7 +264,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
         <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
-<?php if ($_ceoRuleA): /* 5.18.95: the figure is every collection today, bank-method ones included, so under the cash-in-hand rule it is not called cash. Tags at column 0, so that a book without the rule gets 5.18.94's page byte for byte */ ?>
+<?php if ($_ceoRuleA): /* 5.18.96: the figure is every collection today, bank-method ones included, so under the cash-in-hand rule it is not called cash. Tags at column 0, so that a book without the rule gets 5.18.94's page byte for byte */ ?>
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">Today's collections</div>
 <?php else: ?>
             <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;">Today's Cash</div>
@@ -315,7 +315,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
 </div>
 
 <!-- CASHBOOK -->
-<?php if ($_ceoRuleA): /* 5.18.95: the tiles below are all projects; Revenue and Expenses are plByPeriod('dishnet', …) */ ?>
+<?php if ($_ceoRuleA): /* 5.18.96: the tiles below are all projects; Revenue and Expenses are plByPeriod('dishnet', …) */ ?>
 <div class="cd-section">🏦 Cashbook — cash in hand: all projects · revenue and expenses: DishNet</div>
 <?php else: ?>
 <div class="cd-section">🏦 Cashbook — DishNet</div>
@@ -323,7 +323,7 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
 <?php if (!$_ceoSSP): ?>
 <!-- Phase C: positions and month P&L per currency — no mixed sums, no fixed rates -->
 <div class="cd-g4">
-<?php if ($_ceoRuleA): /* 5.18.95 (P3b, X5): cash in hand per currency, all projects, at most two tiles — no account position, no bank balance */ ?>
+<?php if ($_ceoRuleA): /* 5.18.96 (P3b, X5): cash in hand per currency, all projects, at most two tiles — no account position, no bank balance */ ?>
     <?php $_ct = 0; foreach ($_ceoCih as $_ceoCihCur => $_ceoCihAmt): if ($_ct >= 2) break; $_ct++; ?>
     <div class="cd-k <?= $_ceoCihAmt<0?'cd-alert-red':'cd-alert-green' ?>">
         <div class="cd-kv" style="font-size:clamp(16px,5.5vw,22px);color:<?= $_ceoCihAmt>=0?'#15803d':'#991b1b' ?>;"><?= htmlspecialchars($_ceoCihCur) ?> <?= number_format($_ceoCihAmt,2) ?></div>

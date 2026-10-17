@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * test_cash_in_hand_p3b_screens.php — P3b (5.18.95, D2 = A; SPEC §d.1 T2): on a Uganda book every screen that shows
+ * test_cash_in_hand_p3b_screens.php — P3b (5.18.96, D2 = A; SPEC §d.1 T2): on a Uganda book every screen that shows
  * cash in hand shows CashbookService::cashInHand() for its own scope, at 2 dp — the Cashbook hero per project, the
  * Balance column's top value per stream, the CSV export, the landing hero and chips, the Office figure, the CEO tiles,
  * the evening WhatsApp, tools/cash_in_hand.php and the API's running balances.
@@ -66,7 +66,7 @@ $money = function (string $s): ?float {                                     // "
 $f2 = function ($v): string { return $v === null ? 'none' : number_format((float)$v, 2); };
 $same = function ($a, $b): bool { return $a !== null && $b !== null && abs((float)$a - (float)$b) < 0.005; };
 $day  = function (int $n): string { return date('Y-m-d', strtotime("-{$n} days")); };
-$RULE_LINE = 'approved entries with no account or on cash and mobile-money accounts (5.18.95)';
+$RULE_LINE = 'approved entries with no account or on cash and mobile-money accounts (5.18.96)';
 $RULE_SENT = "  the ledger's cash in hand per currency (approved entries with no account or on cash and mobile-money accounts):";
 $OLD_SENT  = "  the ledger's running balance per currency (rows not voided; accounts and the unassigned split play no part):";
 $HERO_SUB  = 'cash &amp; mobile money · entries with no account · approved';
@@ -374,7 +374,7 @@ is_($pg0['wa'] !== '' && strpos($pg0['wa'], "\n" . $WA_LINE . "\n") !== false, "
 $tool = $pg0['tool'];
 is_(preg_match('/^  rule       (.*)$/m', $tool, $tr) === 1 && $tr[1] === $RULE_LINE, "the tool's rule line reads \"{$RULE_LINE}\"", $tr[1] ?? $tool);
 is_(strpos($tool, "\n" . $RULE_SENT . "\n") !== false && strpos($tool, $OLD_SENT) === false, "the tool's sentence is the rule-A one, and the old one is gone", $tool);
-is_(strpos($tool, '== cash in hand (5.18.95) — read-only ==') !== false && strpos($tool, 'READ-ONLY — nothing was changed.') !== false, 'the tool\'s banner is (5.18.95) and its READ-ONLY line is kept');
+is_(strpos($tool, '== cash in hand (5.18.96) — read-only ==') !== false && strpos($tool, 'READ-ONLY — nothing was changed.') !== false, 'the tool\'s banner is (5.18.96) and its READ-ONLY line is kept');
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nE. Alert 6, as recorded (Q7)\n";
@@ -489,7 +489,7 @@ if ($withMutants) {
             "foreach (\$_ceoCb->currencyPositions() as \$_ceoCihCur => \$_ceoP) \$_ceoCih[\$_ceoCihCur] = (float)\$_ceoP['total'];"]]],
         ['M18b: the CEO page draws positions under rule A', [
             [$CEO, "        } else {\n            \$_ceoPositions = \$_ceoCb->currencyPositions();\n        }", "        }\n            \$_ceoPositions = \$_ceoCb->currencyPositions();"],
-            [$CEO, "<?php if (\$_ceoRuleA): /* 5.18.95 (P3b, X5):", "<?php if (false): /* 5.18.95 (P3b, X5):"]]],
+            [$CEO, "<?php if (\$_ceoRuleA): /* 5.18.96 (P3b, X5):", "<?php if (false): /* 5.18.96 (P3b, X5):"]]],
         ['M19a: the CEO label "Position" is back', [[$CEO,
             "<div class=\"cd-kl\"><?= htmlspecialchars(\$_ceoCihCur) ?> Cash in hand</div>", "<div class=\"cd-kl\"><?= htmlspecialchars(\$_ceoCihCur) ?> Position</div>"]]],
         ['M19b: the CEO heading reverted to "Cashbook — DishNet" under rule A', [[$CEO,
@@ -502,7 +502,7 @@ if ($withMutants) {
             "<?php if (\$_cbRuleA): ?><?= htmlspecialchars(\$_cbBase) ?> <?php echo number_format(\$_cbCih[\$_cbBase] ?? 0, 2); ?>",
             "<?php if (false): ?><?= htmlspecialchars(\$_cbBase) ?> <?php echo number_format(\$_cbCih[\$_cbBase] ?? 0, 2); ?>"]]],
         ['M22a (Uganda book half): the tool\'s rule line removed', [['tools/cash_in_hand.php',
-            "echo \"  rule       \" . (\$ruleA ? 'approved entries with no account or on cash and mobile-money accounts (5.18.95)'\n                         : 'every entry not voided, any account (as before 5.18.95)') . \"\\n\";\n", '']]],
+            "echo \"  rule       \" . (\$ruleA ? 'approved entries with no account or on cash and mobile-money accounts (5.18.96)'\n                         : 'every entry not voided, any account (as before 5.18.96)') . \"\\n\";\n", '']]],
         ['M22b (Uganda book half): the tool always prints the old wording', [['tools/cash_in_hand.php',
             "\$ruleA   = \$cb->cashOnlyRuleInForce();", "\$ruleA   = false;"]]],
         ['M23: the evening WhatsApp computes its own figure (getBalanceByCurrency)', [['cron/cashbook_summary.php',

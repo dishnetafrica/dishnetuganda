@@ -75,7 +75,7 @@ $staffPos     = $cb->getStaffCashPosition($proj);
 $pendingTotal = array_sum(array_column($pendingDisbs, 'amount'));
 $pendingCount = count($pendingDisbs);
 $projBal      = $proj === '4g' ? $g4Bal : ($proj === 'bluecard' ? $bcBal : $dnBal);
-// 5.18.95 (P3b, D2 = A): where the service's own gate says the cash-in-hand rule is in
+// 5.18.96 (P3b, D2 = A): where the service's own gate says the cash-in-hand rule is in
 // force (the Uganda tenant AND a book without SSP), Alert 2, Alert 6's first test and the
 // Add Entry base pill read cash in hand per currency, this project, instead of $projBal —
 // approved USD rows on every account, bank included, printed under the base symbol. A book
@@ -200,7 +200,7 @@ if (count($overduePend) > 0) {
         'detail'=>'Staff received cash but no voucher received. Oldest: '.(reset($overduePend)['date']??'').' — '.htmlspecialchars(reset($overduePend)['person']??'').' ' . dn_cur($config) . number_format(reset($overduePend)['amount'],0),
         'link'=>'?'.http_build_query(array_merge($_GET,['cb_view'=>'pending']))];
 }
-// Alert 2: Negative balance. 5.18.95: under the cash-in-hand rule, one alert per currency
+// Alert 2: Negative balance. 5.18.96: under the cash-in-hand rule, one alert per currency
 // whose cash in hand is below zero, in that currency's own code (the title is escaped where
 // it is drawn); otherwise the $projBal alert, as before.
 if ($_cbRuleA) {
@@ -239,7 +239,7 @@ $_recentIn = $cb->query(
     [$proj, date('Y-m-d', strtotime('-7 days'))]
 );
 $_recentInAmt = (float)($_recentIn[0]['tot'] ?? 0);
-// 5.18.95: under the cash-in-hand rule the first test reads base cash in hand. The receipt
+// 5.18.96: under the cash-in-hand rule the first test reads base cash in hand. The receipt
 // sum above is unchanged on every book: it counts every approved IN row of the project, on
 // any account and in any currency, because the alert watches whether receipts are still
 // being recorded at all, and a bank receipt from the uCRM sync shows that they are.
@@ -966,7 +966,7 @@ $fa_todayAmt  = round(array_sum(array_column(array_values($fa_todayCols),'amount
        account/no-account split are not shown here (the operator's decision, docs/07);
        each currency keeps its own figure and no combined total exists. -->
   <?php
-    // 5.18.95 (P3b, D2 = A): the hero is cashInHand(), the figure the Balance column reaches
+    // 5.18.96 (P3b, D2 = A): the hero is cashInHand(), the figure the Balance column reaches
     // on its latest row within this project. Which rows count follows the service's gate:
     // under the cash-in-hand rule (the Uganda tenant AND no SSP) only approved rows on a cash
     // or mobile-money account or on no account at all, so bank and counterpart rows are out;

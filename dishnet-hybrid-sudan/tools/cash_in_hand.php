@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 /**
- * cash_in_hand.php — 5.18.71; 5.18.95 (P3b, D2 = A). READ-ONLY. Prints what the ledger itself says is in hand, per
+ * cash_in_hand.php — 5.18.71; 5.18.96 (P3b, D2 = A). READ-ONLY. Prints what the ledger itself says is in hand, per
  * currency and per project — the figure the Cashbook page's card and (since 5.18.71) the accounts dashboard's hero show on
- * a book without SSP: CashbookService::cashInHand(). Since 5.18.95 that figure has two rules, and the "rule" line says
+ * a book without SSP: CashbookService::cashInHand(). Since 5.18.96 that figure has two rules, and the "rule" line says
  * which one ran. Where the service's cashOnlyRuleInForce() holds (the Uganda tenant and no SSP, from the service's own
  * configuration) it is approved entries with no account or on cash and mobile-money accounts; on any other book it is
  * still the running balance of each currency's stream (rows not voided), accounts and the unassigned split playing no
@@ -31,13 +31,13 @@ $config  = dn_book_effective_config();
 $tenant  = TenantProfile::current($config, $dataDir)->id();
 $base    = dn_book_base($config);
 $cb      = new CashbookService($store, $dataDir);
-$ruleA   = $cb->cashOnlyRuleInForce();   // 5.18.95: the service's own gate decides the rule line, never $tenant
+$ruleA   = $cb->cashOnlyRuleInForce();   // 5.18.96: the service's own gate decides the rule line, never $tenant
 $hasLedger = (bool)$store->getPdo()->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cb_ledger'")->fetchColumn();
 
-echo "\n== cash in hand (5.18.95) — read-only ==\n";
+echo "\n== cash in hand (5.18.96) — read-only ==\n";
 echo "  data dir   {$dataDir}\n  tenant     {$tenant}\n  base       {$base}\n  currencies " . implode(', ', dn_book_currencies($config)) . "\n";
-echo "  rule       " . ($ruleA ? 'approved entries with no account or on cash and mobile-money accounts (5.18.95)'
-                         : 'every entry not voided, any account (as before 5.18.95)') . "\n";
+echo "  rule       " . ($ruleA ? 'approved entries with no account or on cash and mobile-money accounts (5.18.96)'
+                         : 'every entry not voided, any account (as before 5.18.96)') . "\n";
 if (!$hasLedger) { echo "\n  no cashbook ledger yet (cb_ledger absent) — nothing to show.\n\n"; exit(0); }
 if ($ruleA) {
     echo "\n  the ledger's cash in hand per currency (approved entries with no account or on cash and mobile-money accounts):\n";

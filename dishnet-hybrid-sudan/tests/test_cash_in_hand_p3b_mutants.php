@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * test_cash_in_hand_p3b_mutants.php — P3b (5.18.95; SPEC §d.3): T1's weakened copies, committed. T1
+ * test_cash_in_hand_p3b_mutants.php — P3b (5.18.96; SPEC §d.3): T1's weakened copies, committed. T1
  * (test_cash_in_hand_p3b.php) runs in process with no exec() and no shell, because deploy A22 and R25 run it on the
  * server; so the copies SPEC §d.3 assigns to T1 are applied here instead, the way T2 (§H), T3 (§4) and T4 (§E) apply
  * their own. Development and release suites only, never on the server: it copies the plugin and runs child processes.

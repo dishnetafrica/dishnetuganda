@@ -123,7 +123,7 @@ class CashbookService
      * True only where the tenant profile resolves to Uganda (StaffJobsGate, given
      * the data directory as it must always be) AND SSP is not bookable, both read
      * from bookConfig(). Anything unclear — any throwable — is false, which keeps
-     * the rule every book had before 5.18.95. Memoised per instance.
+     * the rule every book had before 5.18.96. Memoised per instance.
      */
     private ?bool $cashRuleCache = null;
 
@@ -760,7 +760,7 @@ class CashbookService
      *   - gate false (South Sudan, every other book, any doubt) — the 5.18.68
      *     rule, unchanged: every row not voided, whatever its status or account;
      *     accounts, counterparts and the unassigned split play no part;
-     *   - gate true (5.18.95, D2 = A) — approved rows only, on a cash or mobile-
+     *   - gate true (5.18.96, D2 = A) — approved rows only, on a cash or mobile-
      *     money account or on no account at all (cashOnlyWhere()). Bank,
      *     counterpart and orphan rows, and pending or rejected ones, are out.
      */

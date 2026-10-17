@@ -84,7 +84,7 @@ $_dashSSP  = dn_ssp_selectable($config ?? null);
 // figure the Cashbook page's card shows — never the Phase-C account position (bank balances, working capital), which the
 // operator asked not to see on this book. The chips are the base currency per project, as South Sudan's hero shows its
 // projects. currencyPositions() is not called on this page any more.
-// 5.18.95 (P3b, D2 = A): what cashInHand() counts is the service's rule, not this page's. Where cashOnlyRuleInForce()
+// 5.18.96 (P3b, D2 = A): what cashInHand() counts is the service's rule, not this page's. Where cashOnlyRuleInForce()
 // holds (the Uganda tenant and no SSP, read from the service's own configuration) it is approved entries on cash and
 // mobile-money accounts or on no account; anywhere else it is still every entry not voided, any account. The office
 // figure below follows it. $_dashRuleA draws the hero's definition line, and only under that rule: a book with SSP never
@@ -321,8 +321,8 @@ try { $__invCache=$store->load('ucrm_invoices_cache.json')??[]; $_invUnpaid=arra
   </div>
   <div class="d2-bal">
     <?php if (!$_dashSSP): ?>
-<?php if ($_dashRuleA): /* 5.18.95: tags at column 0, so that a book without the rule gets 5.18.94's page byte for byte */ ?>
-    <!-- 5.18.95 (P3b, D2 = A): cash in hand per currency — approved entries on cash and mobile-money accounts or on no
+<?php if ($_dashRuleA): /* 5.18.96: tags at column 0, so that a book without the rule gets 5.18.94's page byte for byte */ ?>
+    <!-- 5.18.96 (P3b, D2 = A): cash in hand per currency — approved entries on cash and mobile-money accounts or on no
          account, as the Cashbook page's card shows it. The account position (bank balances, working capital) is not
          shown on this book. -->
 <?php else: ?>

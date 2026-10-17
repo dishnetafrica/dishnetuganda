@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * test_cash_in_hand_p3b.php — P3b (5.18.95; D2 = A, docs/69): on a Uganda book, cash in hand is the approved money in
+ * test_cash_in_hand_p3b.php — P3b (5.18.96; D2 = A, docs/69): on a Uganda book, cash in hand is the approved money in
  * the cash and mobile-money accounts plus every approved row on no account. Bank, counterpart and orphan rows, and
  * pending or rejected ones, are out. Wherever the rule is not in force — South Sudan, the two misconfigured books, a
  * book whose gate cannot decide — the figure and the Balance column are 5.18.94's.
@@ -718,7 +718,7 @@ echo "\n4. E17 — the Balance column: All, UGX and USD views, every project; he
 try {
     if ($U !== null) {
         t1_views($U, ['', 'UGX', 'USD'], ['UGX', 'USD'], true, true);
-        // Lowercase rows: their own 'ugx' stream in the All view, non-null, as before 5.18.95; compared with no hero.
+        // Lowercase rows: their own 'ugx' stream in the All view, non-null, as before 5.18.96; compared with no hero.
         $lc = 0; $bad = '';
         foreach ($cbU->getEntries(['project' => '', 'currency' => '', 'limit' => 100000]) as $r) {
             if ($r['currency'] !== 'ugx') continue;
