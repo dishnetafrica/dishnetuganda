@@ -222,7 +222,7 @@ T1_TEST="tests/test_cash_in_hand_p3b.php"          # in process, on synthetic bo
 T4_TEST="tests/test_d1_bank_balance_readers.php"   # static, with 5.18.94's own tree as its positive control (R24)
 # T1's count is the release suite's own run of the release commit — the one number this script cannot read off the code.
 # Until it is pinned here the script refuses to run (below) rather than accept any count.
-T1_SIGNATURE="__T1_PASSED__ passed, 0 failed rc=0"
+T1_SIGNATURE="548 passed, 0 failed rc=0"
 # T4 without its weakened copies (--no-mutants): its matcher and readers (6), the positive control on 5.18.94's tree (4),
 # the tree judged (4), the allowed list against the SPEC (6).
 T4_SIGNATURE="20 passed, 0 failed, 0 skipped rc=0"
