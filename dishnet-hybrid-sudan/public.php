@@ -322,8 +322,12 @@ if (($_GET['page'] ?? '') === 'emergency_repair') {
             'wallet_topups', 'cash_handovers', 'payment_collections', 'payments',
             'kyc_applications', 'leads', 'lte_subscribers', 'fiber_purchases',
             'fiber_invoices', 'sl_kits', 'duplicate_confirmations',
+            // 5.18.95: staff logins, sessions, the financial audit trail, customer identities and payment records
+            'retailers', 'fin_audit', 'login_sessions', 'login_attempts', 'customer_identities', 'customer_sessions',
+            'kyc_config', 'dpo_payments', 'dpo_payment_events', 'wallet_events', 'wallet_transactions',
+            'job_photos', 'job_completion_gps', 'install_auth', 'install_auth_events', 'install_auth_activations',
         ];
-        if (in_array($tName, $forbidden, true)) {
+        if (in_array(strtolower($tName), $forbidden, true)) {
             echo "✗ REFUSED: '{$tName}' contains money/customer/audit data — never droppable here.\n";
             echo "  If you really need to drop this, do it manually via sqlite3 CLI after a backup.\n";
             echo "\n=== Done ===\n";
@@ -591,12 +595,8 @@ if (!isset($config['cron_sync_path']))             $config['cron_sync_path']    
 if (!isset($config['cron_maintenance_path']))      $config['cron_maintenance_path'] = __DIR__ . '/cron_maintenance.php';
 // Splynx ISP Framework integration
 if (empty($config['splynx_url']))                  $config['splynx_url']                = 'https://my.dishnetafrica.com';
-if (empty($config['splynx_key']))                  $config['splynx_key']                = '2b10a77dd91668b95b4355200689b0bc';
-if (empty($config['splynx_secret']))               $config['splynx_secret']             = '9174fd8da2d4b7bf35a369cd1a020d45';
-// Persist to file so cron scripts (which load config directly) also see credentials
-if (empty($store->load('kyc_config.json')['splynx_key'])) {
-    $store->save('kyc_config.json', $config);
-}
+// 5.18.95: the Splynx key and secret are no longer written in the code (the repository is public). They live only in
+// the settings (Settings → Splynx), where an admin enters them; without them Splynx sync reports "not configured".
 if (!isset($config['splynx_auto_provision']))      $config['splynx_auto_provision']     = false;
 if (!isset($config['splynx_sync_interval_minutes']))$config['splynx_sync_interval_minutes'] = 5;
 if (!isset($config['splynx_default_tariff_id']))   $config['splynx_default_tariff_id']  = 1;

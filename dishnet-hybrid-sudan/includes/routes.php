@@ -536,48 +536,16 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
     exit;
 }
 
-// ── Splynx config patch — admin only, run once ────────────────────────────────
+// ── Splynx config patch — RETIRED (5.18.95) ───────────────────────────────────
+// It wrote a Splynx key and secret held in the code into kyc_config.json and printed them. The repository is public,
+// so those values are known; they must be replaced in Splynx and entered under Settings → Splynx. The page now only
+// says so, and changes nothing.
 if ($page === 'splynx_patch') {
     $r = $auth->requireLogin();
     if (!($r['is_admin'] ?? false)) { http_response_code(403); exit('Admin only.'); }
-
-    $cfgFile = $dataDir . '/kyc_config.json';
-    $cfg     = json_decode(file_get_contents($cfgFile), true) ?: [];
-    $cfg['splynx_url']    = 'https://my.dishnetafrica.com';
-    $cfg['splynx_key']    = '2b10a77dd91668b95b4355200689b0bc';
-    $cfg['splynx_secret'] = '9174fd8da2d4b7bf35a369cd1a020d45';
-    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-    $key   = $cfg['splynx_key'];
-    $sec   = $cfg['splynx_secret'];
-    $base  = rtrim($cfg['splynx_url'], '/');
-    $basic = 'Authorization: Basic ' . base64_encode($key . ':' . $sec);
-
-    header('Content-Type: text/html; charset=UTF-8');
-    echo '<pre style="font-family:monospace;font-size:13px;padding:20px;background:#0f172a;color:#e2e8f0;">';
-    echo "✅ Credentials saved\n";
-    echo "URL:    {$base}\n";
-    echo "Basic:  " . base64_encode($key . ':' . $sec) . "\n\n";
-
-    foreach (['/api/2.0/admin/administrators','/api/2.0/admin/customers/customer','/api/2.0/admin/tariffs/internet'] as $path) {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $base . $path,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HTTPHEADER     => [$basic, 'Accept: application/json'],
-        ]);
-        $raw  = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $icon = ($code >= 200 && $code < 300) ? '✅' : ($code === 401 ? '🔑 BAD CREDS' : '❌');
-        echo "{$icon} HTTP {$code} — {$path}\n";
-        echo "   " . htmlspecialchars(substr((string)$raw, 0, 300)) . "\n\n";
-        if ($code >= 200 && $code < 300) { echo "✅ SPLYNX CONNECTED — NOC tab will work now\n"; break; }
-    }
-    echo '</pre>';
-    exit;
+    http_response_code(410);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit("This page is retired. Enter the Splynx API key and secret under Settings → Splynx.\n");
 }
 
 // ── I-04 FIX: Serve proof image by recharge request ID ───────────────────

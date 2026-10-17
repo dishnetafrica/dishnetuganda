@@ -72,6 +72,11 @@ is_($refused($r), 'a key given as a list: 403', (string)$r[0]);
 $r = $repair($s, '&key=' . GOOD_KEY);
 is_($opened($r), 'the right key opens the page (diagnose, read-only)', $r[0] . ' ' . substr($r[1], 0, 120));
 is_(strpos($r[1], 'key=YOUR-KEY') !== false, 'its action lines show key=YOUR-KEY');
+foreach (['retailers', 'fin_audit', 'RETAILERS', 'cb_ledger'] as $t) {
+    $d = $repair($s, '&key=' . GOOD_KEY . '&action=drop_table&t=' . $t . '&confirm=YES_DROP_' . $t);
+    is_($d[0] === 200 && strpos($d[1], 'REFUSED') !== false && strpos($d[1], 'Dropping table') === false,
+        "drop_table refuses {$t}, whatever its case", substr($d[1], -200));
+}
 
 echo "\n4. No answer carries the stored key\n";
 is_(strpos($r[1], GOOD_KEY) === false, 'the opened page does not print the stored key');

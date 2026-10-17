@@ -15,11 +15,11 @@ Access this URL in your browser while logged into UCRM:
 https://crm.dishnetafrica.com/crm/_plugins/dishnet-hybrid-telecom/public.php?page=emergency_repair&key=YOUR-KEY
 ```
 
-**It works only after an admin has put a key of at least 32 characters in
-`data/emergency_repair_key.txt` on the server** (one line); use that key in place of
-`YOUR-KEY`. Since 5.18.95 there is no built-in key: with no key file, an empty or
-unreadable one, a key shorter than 32 characters, or the old built-in key, the page
-answers 403 and does nothing. Put the file there **before** you need it.
+**It works only after an admin has put a key of at least 32 printable characters
+(no spaces) in `data/emergency_repair_key.txt` on the server** (one line); use that key
+in place of `YOUR-KEY`. Since 5.18.95 there is no built-in key: with no key file, an
+empty or unreadable one, a shorter key, or one containing the old built-in key, the
+page answers 403 and does nothing. Put the file there **before** you need it.
 
 This page runs BEFORE the plugin initializes — it works even if the plugin
 is completely broken. It will:
