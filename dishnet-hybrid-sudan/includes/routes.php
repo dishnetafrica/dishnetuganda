@@ -57,9 +57,21 @@ if ($page === 'kyc_photo') {
     // Other staff can only view expense photos (their own uploads are filename-matched)
     $allowedRoles = ['admin','accountant','support_leader','field_accountant'];
     $isPrivileged = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', $allowedRoles, true);
-    $f = trim($_GET['f'] ?? '');
-    $f = str_replace(['..', chr(92), chr(0)], '', $f);
-    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
+    // ── K1 (5.18.95): refuse, then contain — never strip ──
+    // The strip that stood here removed '..', backslashes and NULs, so '.\.' became '..' once its
+    // backslash was gone. A path with any of those shapes is now refused whole, and the file served
+    // is the one realpath() finds inside its own allow-listed folder, so a symlink that leaves the
+    // folder is refused too (the shape of JobPhotos::path). Every writer stores folder/…/name with
+    // no empty, '.' or '..' segment, so no stored path is refused.
+    $f = $_GET['f'] ?? '';
+    if (!is_string($f)) { http_response_code(400); exit('Invalid path'); }
+    $f    = trim($f);
+    $fSeg = explode('/', $f);
+    if ($f === '' || $f[0] === '/' || strpos($f, chr(92)) !== false || strpos($f, chr(0)) !== false
+        || in_array('', $fSeg, true) || in_array('.', $fSeg, true) || in_array('..', $fSeg, true)) {
+        http_response_code(400); exit('Invalid path');
+    }
+    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f, $fDir)) {
         http_response_code(400); exit('Invalid path');
     }
     // KYC photos: privileged only. Expense photos: privileged or own upload (exp-{rid}-*.ext)
@@ -73,8 +85,13 @@ if ($page === 'kyc_photo') {
     if (!$isPrivileged && !$isOwnPhoto) {
         http_response_code(403); exit('Access denied');
     }
-    $full = $dataDir . '/' . $f;
-    if (!file_exists($full)) { http_response_code(404); exit('Not found'); }
+    // The base is the folder the allow-list matched (kyc_photos, kyc_uploads or uploads/<folder>). The
+    // file must resolve inside it and be a file, else 404; what is served is the resolved path.
+    $fBase = realpath($dataDir . '/' . $fDir[1]);
+    $full  = realpath($dataDir . '/' . $f);
+    if ($fBase === false || $full === false || strpos($full, $fBase . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+        http_response_code(404); exit('Not found');
+    }
     $mime = mime_content_type($full) ?: 'application/octet-stream';
     $inline = in_array($mime, ['image/jpeg','image/png','image/gif','image/webp']);
     header('Content-Type: ' . $mime);
@@ -519,48 +536,16 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
     exit;
 }
 
-// ── Splynx config patch — admin only, run once ────────────────────────────────
+// ── Splynx config patch — RETIRED (5.18.95) ───────────────────────────────────
+// It wrote a Splynx key and secret held in the code into kyc_config.json and printed them. The repository is public,
+// so those values are known; they must be replaced in Splynx and entered under Settings → Splynx. The page now only
+// says so, and changes nothing.
 if ($page === 'splynx_patch') {
     $r = $auth->requireLogin();
     if (!($r['is_admin'] ?? false)) { http_response_code(403); exit('Admin only.'); }
-
-    $cfgFile = $dataDir . '/kyc_config.json';
-    $cfg     = json_decode(file_get_contents($cfgFile), true) ?: [];
-    $cfg['splynx_url']    = 'https://my.dishnetafrica.com';
-    $cfg['splynx_key']    = '2b10a77dd91668b95b4355200689b0bc';
-    $cfg['splynx_secret'] = '9174fd8da2d4b7bf35a369cd1a020d45';
-    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-    $key   = $cfg['splynx_key'];
-    $sec   = $cfg['splynx_secret'];
-    $base  = rtrim($cfg['splynx_url'], '/');
-    $basic = 'Authorization: Basic ' . base64_encode($key . ':' . $sec);
-
-    header('Content-Type: text/html; charset=UTF-8');
-    echo '<pre style="font-family:monospace;font-size:13px;padding:20px;background:#0f172a;color:#e2e8f0;">';
-    echo "✅ Credentials saved\n";
-    echo "URL:    {$base}\n";
-    echo "Basic:  " . base64_encode($key . ':' . $sec) . "\n\n";
-
-    foreach (['/api/2.0/admin/administrators','/api/2.0/admin/customers/customer','/api/2.0/admin/tariffs/internet'] as $path) {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $base . $path,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HTTPHEADER     => [$basic, 'Accept: application/json'],
-        ]);
-        $raw  = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $icon = ($code >= 200 && $code < 300) ? '✅' : ($code === 401 ? '🔑 BAD CREDS' : '❌');
-        echo "{$icon} HTTP {$code} — {$path}\n";
-        echo "   " . htmlspecialchars(substr((string)$raw, 0, 300)) . "\n\n";
-        if ($code >= 200 && $code < 300) { echo "✅ SPLYNX CONNECTED — NOC tab will work now\n"; break; }
-    }
-    echo '</pre>';
-    exit;
+    http_response_code(410);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit("This page is retired. Enter the Splynx API key and secret under Settings → Splynx.\n");
 }
 
 // ── I-04 FIX: Serve proof image by recharge request ID ───────────────────

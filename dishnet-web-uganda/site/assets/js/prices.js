@@ -9,7 +9,7 @@
  * degrades to "ask us", never to a blank or a stale number.
  *
  *   <script src="assets/js/prices.js" defer
- *           data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/prices.php"
+ *           data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=prices"
  *           data-whatsapp="256705993348"></script>
  *
  * Renders into:
@@ -121,13 +121,13 @@
     var cur = data.currency || 'UGX';
 
     // Cheapest live plan — the "and then what?" every hardware price needs.
-    var cheapest = (data.plans || []).filter(function (p) { return !isBusiness(p); })
-                                     .sort(function (a, b) { return a.price - b.price; })[0]
-                || (data.plans || [])[0] || null;
+    var home = (data.plans || []).filter(function (p) { return !isBusiness(p); })
+                                 .sort(function (a, b) { return a.price - b.price; })[0] || null;
+    var cheapest = home || (data.plans || [])[0] || null;
     var fromMonthly = cheapest ? fmt(cur, cheapest.price) + '/month' : '';
-
+    // A [data-dishnet-from-line] ships hidden and names home plans: show it only for a home-plan figure.
     Array.prototype.forEach.call(document.querySelectorAll('[data-dishnet-from]'), function (el) {
-      if (fromMonthly) el.textContent = fromMonthly;
+      if (!fromMonthly) return; el.textContent = fromMonthly; var line = el.closest ? el.closest('[data-dishnet-from-line]') : null; if (line && home) line.hidden = false;
     });
 
     // Individual price slots (kit cards etc.)

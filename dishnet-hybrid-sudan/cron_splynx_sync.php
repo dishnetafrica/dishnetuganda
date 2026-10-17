@@ -56,10 +56,8 @@ require_once __DIR__ . '/lib/SplynxCustomerService.php';
 $store  = SqliteStore::create($dataDir);
 $config = $store->load('kyc_config.json') ?: [];
 
-// ── Ensure Splynx credentials are set (seeded here in case config predates setup) ──
+// ── Splynx: the URL has a default; the key and secret come only from the settings (5.18.95) ──
 if (empty($config['splynx_url']))     $config['splynx_url']    = 'https://my.dishnetafrica.com';
-if (empty($config['splynx_key']))     $config['splynx_key']    = '2b10a77dd91668b95b4355200689b0bc';
-if (empty($config['splynx_secret']))  $config['splynx_secret'] = '9174fd8da2d4b7bf35a369cd1a020d45';
 
 // ── Check if Splynx is configured ────────────────────────────────────────────
 

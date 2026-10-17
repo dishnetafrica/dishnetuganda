@@ -3939,6 +3939,9 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
     *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
     the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+  - **16 Oct 2026 — VOID was typed, measured by R0** (`docs/69` Part 4, read-only). Cash-ins #3, #4 and #5 are each
+    voided, `voided_by` the 5.18.70 tool, `voided_at` 2026-10-04, category as recorded, not relabelled. None of the three
+    has a `CIN-` row in the staff ledger, as expected for `Collection` cash-ins. The records log itself is still not on file.
 
 ## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 
@@ -11619,3 +11622,254 @@ its log file stays on the server in `/root/dnb-5.18.94`.
   3. One sign-in to the portal as a Uganda customer. The consent step should show version 1.2, dated 16 October 2026.
   4. The badge script's log, if it was run.
 
+
+## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — PUSHED 17 Oct; DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes — RESULT below; AFTER-CHECKS 17 Oct 16:04 UTC: repair key written, `--after-only` PASSED 68 ok / 0 failed / 1 note (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
+
+**Request.** While designing the Ecobank Bank screen (17 Oct), the design review found that the photo viewer could be
+pointed at any file in the plugin's data folder. The operator answered *"ok go ahed fix secruitry first"*. A sweep of
+the live code followed: every file read driven by a request, every route that runs before a login, every default key
+or secret written in the code, and the status of root docs/48's PD-1…PD-13. It also measured that **the GitHub
+repository is public**, so everything written in the code, in its history too, is readable by anyone. P3b (cash in
+hand under D2 = A) moves to 5.18.96 and the Bank screen to 5.18.97, after this release; the Bank screen's design makes
+the photo-viewer fix a precondition of its deploy.
+
+### Release notes
+
+Four holes, closed with the same code on Uganda and South Sudan. Nothing a legitimate user does changes, except the
+repair page's key file.
+
+- **K1 — the photo viewer (`?page=kyc_photo`).** Who could use it: a signed-in admin, accountant, support leader or
+  field accountant. The path was cleaned with a one-pass `str_replace()` that a crafted path survives, and the file
+  was read with no containment, so the viewer could serve the database and the configuration files.
+  - Now a path that is not a string, is empty, starts with `/`, or holds a backslash, a NUL byte or an empty, `.` or `..`
+    segment is refused (400) and never cleaned.
+  - The file served is the one `realpath()` finds inside the allow-listed photo folder the path names, and it must be a
+    file; otherwise 404. A symbolic link that leaves its folder is refused.
+  - The roles and the field agent's own-expense-photo rule are unchanged.
+- **K2 — the emergency-repair page (`?page=emergency_repair`, before any login).** With no
+  `data/emergency_repair_key.txt`, or an empty one, it fell back to a key written in the code, and the Runbook and the
+  Starlink Suspensions error box printed it. It offers drop_table, vacuum and clear_wal. Root docs/48 PD-11.
+  - The key file is now **required**: one line of at least 32 printable characters, no space, never containing the old
+    built-in key. A disabled page and a wrong key get one and the same 403; the key is compared with `hash_equals`; a
+    key that is not a string is refused.
+  - No answer prints the stored key: the action lines show `key=YOUR-KEY`. The Runbook shows the address with
+    `key=YOUR-KEY` and says the page works only once the key file exists; the Suspensions box links nowhere.
+  - drop_table also refuses the staff accounts, sessions, the financial audit trail, customer identities and sessions,
+    the payment, photo and installation-authorisation tables, whatever the name's case.
+- **A2/D1 — the EFRIS PDF link (`?page=efris_pdf`, before any login).** Its token fell back to a key written in the
+  code when `webhook_secret` was unset. The EFRIS tab now mints, and `efris_pdf.php` checks, `PdfLinkToken`'s token
+  under the install's own `pdf_link_secret`, read from the store copy of `kyc_config.json` on both sides — the key the
+  receipt and delivery links already use. No fallback. A bad token and a missing file get the same 404. **A link made
+  before the deploy stops opening;** it is made again from the EFRIS tab (these links live two UTC days and only an
+  admin makes one).
+- **D5 — the Splynx API key and secret were written in the code** (`public.php` and `cron_splynx_sync.php` filled them
+  into the settings; `?page=splynx_patch` wrote them to `kyc_config.json` and printed them). They now come only from
+  Settings → Splynx, and `?page=splynx_patch` answers 410 and changes nothing. **The values in the history stay public:
+  only replacing them in Splynx closes that** (Known limits 1).
+- **Not changed:** every setting, switch and record; `cron/master.php`, `main.php`, the retry job and its gate; the
+  pilot; South Sudan's behaviour except the closed holes. No migration.
+
+### Files — 21 against `f4b4c96`: 4 added, 17 changed, none removed
+
+- **Added (4):** `tests/test_kyc_photo_route.php`, `tests/test_emergency_repair_key.php`,
+  `tests/test_efris_pdf_link.php`, `tests/test_splynx_no_code_credentials.php`.
+- **Taken whole from the development commit `8357cd1c` (each identical to live before the change):** `efris_pdf.php`,
+  `tabs/admin/efris.php`, `cron_splynx_sync.php`, `tabs/help/runbook.php`, `tabs/admin/starlink_suspensions.php`,
+  `EMERGENCY_RECOVERY.md`, `MANIFEST.md`, `SAFETY.md`, `tests/test_pdf_link_token.php` (its EFRIS pin moves: the old
+  scheme now survives nowhere).
+- **Live's text plus the change's hunks alone:** `includes/routes.php` and `public.php` (the development branch's carry
+  the undeployed PD-8 guard and the partner API). The hunks' change lines equal the development commits' exactly.
+- **The version alone (6):** `manifest.json` (5.18.95) and the pins in the five `tests/test_distributor_*.php`.
+- 21 files changed, 570 insertions(+), 101 deletions(-).
+
+### Ancestry
+
+`098f6b3` (5.18.95, release) ← `f4b4c96` (5.18.94, live). The development commits are `e54625b0` (K1, K2) and
+`8357cd1c` (A2/D1, D5, K2's hardening); the script and the rehearsal `423ff052`. P3b's development line (5.18.96) is
+built on top of `423ff052`.
+
+### Tests
+
+- **The development branch, the full suite twice:** 295 files, **14,569 passed, 0 failed**, in each of two runs, file
+  by file identical (17 Oct). That is 5.18.94's 291 / 14,482 plus the four new files and their 87 assertions.
+  - A first run made with a private `TMPDIR` (mode 0700) failed 7 assertions in `test_cli_data_dir` and
+    `test_sl_block_retry_scope`. Both drop privileges with `setpriv` and cannot enter such a folder; the same 7 fail on
+    live `f4b4c96` and on the development branch's own tip under it, and both pass with the default `TMPDIR` on every
+    tree (19/0 and 86/0). The two counted runs used the default.
+- **The release, the full suite twice:** 283 files, **13,649 passed, 0 failed**, in each of two runs, identical (17
+  Oct): 5.18.94's 279 / 13,560 plus the four new files and the moved EFRIS pins.
+- **The new tests,** each over real HTTP on the sandbox, each with a control on `f4b4c96`:
+  - `test_kyc_photo_route` **39/0**: every allowed folder serves its photo byte for byte with its type to the four
+    privileged roles; a field agent sees only their own expense photo; a missing photo 404, a folder off the list 400;
+    the route's source refuses rather than cleans and contains by `realpath`. On `f4b4c96` the 36 behaviour checks pass
+    too (legitimate viewing unchanged) and the three source checks fail.
+  - `test_emergency_repair_key` **30/0**: with no key file, the old key, an empty key or none get 403 and nothing runs;
+    unusable key files (the old key, one containing it, 31 characters, a space) the same; a usable key: a wrong one and
+    a list get the same 403, the right one opens diagnose with `key=YOUR-KEY`; no answer prints the stored key; the
+    Runbook and the Suspensions page carry no key; drop_table refuses four protected names in any case. On `f4b4c96`
+    the old key opens the page with no key file. Four weakened copies (no length rule, the old key not refused, a
+    disabled page that still compares, the key printed again) are each caught.
+  - `test_efris_pdf_link` **10/0**: a link minted under the store copy's key opens the PDF byte for byte, yesterday's
+    too; an old-scheme token, a wrong one, an empty one and a missing file get the same 404. On `f4b4c96` the
+    old-scheme token opens it. A weakened copy without the token check is caught.
+  - `test_splynx_no_code_credentials` **6/0**: no PHP file assigns a quoted Splynx key or secret; requests leave none in
+    the configuration; `splynx_patch` answers 410 to an admin and changes nothing, 403 to an accountant. On `f4b4c96`
+    the first request writes the code's key into the configuration (its value never printed).
+- **The traversal shapes themselves** were reproduced on invented files during the sweep and the design, and the fix
+  was run against them there; they are not in a committed test.
+
+### South Sudan and Domain B
+
+- The fixes are the same code on both tenants; no line of them asks which tenant it is on. South Sudan's documents are
+  compared byte for byte on the server (A17, R22), as in 5.18.94.
+- Domain B is untouched: A7 and R14.
+
+### `scripts/deploy-5.18.95.sh` — 3,973 lines, sha256 `0c8b6da7ec971f6c…`
+
+Derived from `deploy-5.18.94.sh` by an asserted builder (71 edits), then reviewed (6 defects fixed, 32 edits). It keeps
+5.18.94's checks as regressions and adds:
+
+- **A22a–g, the fixes read as text in the pin,** each with its control: the same check on `f4b4c96` from Git must give
+  exactly the defect verdict it was written for, or the run refuses. No check prints a line of code: 5.18.94's holds
+  the Splynx values.
+- **A23, notes, never refusals:** whether the repair key file is in place (its size by `wc -c`, its lines by `grep -c`,
+  whether the plugin's PHP user may read it — never its content); whether the Splynx key and secret and the
+  `pdf_link_secret` are present in the settings (never their values).
+- **A14** also reads 5.18.94's state files, and needs a passing quarantine `--check` begun after 5.18.94's copy.
+- **A19 and A20 are gone** (5.18.94's own preconditions; A20 refuses every day after 16 Oct).
+- **R7:** the migration ledger's last row the same, and `plugin.sqlite3` the same size or larger. 5.18.94's R7 run of
+  the cash-in-hand tool on the live store is gone.
+- **R23a–g:** the same checks on the installed files; **R24:** the notes again; **RB:** after a rollback, every changed
+  file 5.18.94's by sha256 and every defect back.
+- Nothing it runs on the server opens a socket. Every command it prints carries its own log. The rollback is printed
+  once, after the verdict. When the key file is not in place, the summary prints the command that writes a new random
+  key into it, run alone, showing only the file's size, owner and mode.
+
+### The rehearsal — `scripts/harness/deploy-5.18.95/rehearse.sh` (871 lines, sha256 `1f86cdef659dfb5b…`)
+
+It cuts 5.18.94's rehearsal at its 94-3 marker, then runs the real `deploy-5.18.94.sh`, its `--after-only` and the
+quarantine's `--check`, so the sandbox starts as production is. Then 5.18.95: the controls (the delta; the 19 files
+the development commit's; the two files live's plus the hunks); A14 with failures planted in 5.18.94's state; the key
+file in each state, with every planted key, Splynx and PDF value searched for in every output, log and state file;
+each A22 check refusing on a pin with its one fix reverted, and weakened copies of the checks themselves; the deploy;
+`--after-only` run from the printed text; the rollback run verbatim from the printed text, and a redeploy; what is left
+behind.
+
+- **Trial 1 (17 Oct, 12:32–12:55 UTC): 382 passed, 0 failed** (125 runs of the deploy scripts, 9 of the quarantine).
+- **Trial 2 (17 Oct, 12:56–13:20 UTC): 382 passed, 0 failed, the same 125 and 9 runs.**
+
+### Reviews
+
+- **The sweep** (four lenses over `f4b4c96`): 29 findings, 26 confirmed by a sceptic that tried to refute each and
+  reproduced it on invented files, several of them the same defect found twice. This release takes the four whose fix
+  is local, needs no migration and changes nothing a legitimate user does (K2's key file aside); the rest are recorded
+  (Known limits 2).
+- **The fixes:** a bypass review of the repair page found no way past the gate and three hardenings, all applied (the
+  stored key no longer printed; one answer for disabled and wrong; printable keys only). Two test writers and one bypass
+  reviewer were stopped by a safety filter; the two tests were then written by hand, without traversal inputs.
+- **The script and the rehearsal:** an independent static review found six defects, all fixed before the rehearsal
+  ran: controls that passed when any defect showed, now pinned exactly; the key note disagreeing with PHP's `trim()`; A14
+  not checking the quarantine's rule 3; an ineffective guard in `db_judge`; a misplaced key file going into the backup;
+  the header's account of what runs on the server.
+
+### Runbook — each step is the operator's, and each needs the operator's word
+
+1. **Say the word to push.** `release/5.18.95` and the development branch are pushed together, just before the deploy:
+   the repository is public, and the fix shows where the holes were.
+2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.95 && mkdir -p /root/dnb-5.18.95 && bash scripts/deploy-5.18.95.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.95/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, with notes: A23's (the key file, Splynx, the PDF key), R3's, R19's not yet conclusive.
+3. **If the summary says the repair key file is not in place,** run the key command it prints, on its own. The key goes
+   into the file and nowhere else. Never paste it, the file or a repair link anywhere.
+4. **At least 20 minutes after the copy**, the `--after-only` the summary prints, its own command; then the quarantine's
+   own `--check`.
+5. **Replace the Splynx API key and secret in Splynx** and enter the new ones under Settings → Splynx.
+
+### Known limits and open risks
+
+1. **The repository is public.** The old repair key, the EFRIS fallback key, the Splynx key and secret, the WhatsApp
+   feed secret and the BlueCard feed tokens are in its history. Removing a literal from the code does not unpublish
+   it: each must be replaced at its source. The Splynx pair can be replaced now (Runbook 5); the WhatsApp feed secret
+   and the BlueCard tokens need both ends changed together, in the next security release.
+2. **Recorded for the next security release** (the sweep's findings, verified): the WhatsApp webhook accepts a request
+   when its secret is blank (A3/D2) and its feed secret is a code literal (D3); the BlueCard feed proxy runs before any
+   login (PD-12/D6); a reflected script injection on the stock dashboard (PD-9); the login and `me` answers return the
+   whole account record (PD-3); unlisted tabs are open (PD-5); `customer_360` reads any client (PD-6); the stock API's
+   roles (PD-7); the JSON API's CORS and CSRF (PD-8, its JSON half fixed on the development branch, not deployed); the
+   staff API's permissions (PD-2); the data-report hand-off's source-constant key (D7); predictable default staff
+   passwords (D8); the fiber import's caller-named folder (FR-3, low); unaudited cashbook mutations (PD-13).
+3. **The repair key travels in the address,** so it reaches the web server's access log and the browser's history. A
+   tools/ home for the page, run over SSH, is the long-term shape.
+4. **drop_table still cannot drop anything:** its existence check leaves a cursor open, so SQLite answers "table is
+   locked". It fails safe; fixing it would make a destructive action work, which is the operator's decision.
+5. **Every request starts a session before the repair page's check,** the refusals included. Pre-existing.
+6. **SAFETY.md's v4.21.16 entry still names the old key,** as history; the 5.18.95 entry above it says it is
+   superseded and burned.
+7. **`tests/test_customer_pwa.php` still leaves `php -S … /tmp/dn_pwa_*` servers** after a suite run (5.18.94 Known
+   limits 6); stopped by hand before the rehearsals.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.95.sh --rollback` asks for `ROLLBACK`, puts 5.18.94 (`f4b4c96`) back through `deploy-hybrid.sh`,
+and checks it (RB): every changed file 5.18.94's, every defect back — **the four holes open again**, the repair page
+again on its built-in key when no key file exists. A key file written for 5.18.95 stays and keeps working with 5.18.94.
+Then run the quarantine's own `--check`. The summary prints the command, with its own log, on its own lines.
+
+### RESULT — DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no secret,
+and the terminal held none.
+
+- **The run.** Begun 15:04:28 UTC. `/opt/dishnet` fast-forwarded to `bda21f6`, and `release/5.18.95` (`098f6b3`) fetched.
+  Live before: `f4b4c96` (5.18.94), PHP 8.1.34 in the container. No tracked edits, nothing untracked under the plugin.
+- **Stage A passed.** A0, A7, the delta exactly the 21 files, no migration. **A22a–g:** every fix read in the pin, and each
+  control on `f4b4c96` gave exactly the defect verdict its check was written for. A2–A18, A21 as in 5.18.94; A14: the
+  quarantine holds, its `--check` of 14 Oct 03:14:46 UTC began after 5.18.94's copy. Backup in
+  `/root/dnb-5.18.95/backup-20261017T150428Z` (the database, the data folder without the repair key file, the installed
+  5.18.94, the stray folder as files, the vault, the event queue).
+- **The notes (6):**
+  - **A23a and R24, the repair key file: ABSENT.** So until this deploy the repair page opened, before any login, with
+    the key written in the code. It is now shut for everyone until the key file is written (Runbook 3).
+  - **A23b:** the Splynx key and secret are present in the settings. 5.18.94's code wrote the code's values there when
+    they were empty, so these are likely the public ones: replace them in Splynx (Runbook 5).
+  - **A17:** two installation requests pending under v1.0 keep v1.0, as in 5.18.94.
+  - **R3:** `migration.log` holds no line for 087; read from the store instead, as on every deploy since 5.18.89.
+  - **R19:** the quarantine holds; not yet conclusive (master's last run of the retry job, 15:05:07 UTC, was before the
+    copy). `--after-only` after 15:25:34 UTC.
+  - **A23c and R24b:** the `pdf_link_secret` is present.
+- **The copy:** 15:05:34 UTC, the container serving `098f6b3`. V1–V13 passed; V4: no fatal since 15:05:33 UTC.
+- **Stage R passed.** R1 the 21 files byte for byte, the manifest 5.18.95; R5 all 275 earlier files; R7 the migration
+  ledger's last row and the database's size the same as stage A's; **R23a–g every fix in the installed code, each
+  control exact**; R2–R22 as in 5.18.94 — every switch, setting, row, route, prompt and policy unchanged, South Sudan and
+  Domain B unchanged, the event queue's one waiting event still there.
+- **Still to come (at the time):** the repair key file; `--after-only` (R19 conclusive); the quarantine's `--check`;
+  the Splynx key replaced. The first three are done — AFTER-CHECKS below.
+
+### AFTER-CHECKS — 17 Oct 16:04 UTC: all three PASSED
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. None of the three
+commands prints a secret, and the terminal held none: the key file's content was never shown.
+
+- **The repair key file (Runbook 3).** Written by its own command: *"repair key written: 49 bytes, owner 1000:1000,
+  mode 600"* — 48 hex characters and the newline, owned by the plugin's PHP user. The deploy had found no file at that name
+  (A23a), so nothing was moved aside. The repair page now opens with that key and with nothing else.
+- **`--after-only`, begun 16:04:13 UTC: PASSED 68 ok / 0 failed / 1 note.**
+  - Live `098f6b3` (5.18.95), as the deploy left it. V1–V13 passed; V4: no fatal since 15:05:25 UTC (2,176 lines read).
+  - R1–R23g as at the deploy, each control exact. R7: the migration ledger's last row the same, the database 32,768
+    bytes larger since the deploy's stage A (a live plugin writes; no migration).
+  - **R19 is conclusive:** master ran the retry job at 16:00:06 UTC, after the copy (15:05:34 UTC). Nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - **R24: the repair key file is in place** (32–64 bytes, one line of the key's form, readable by the plugin's PHP
+    user; its content was not read). The summary says *"repair key — in place, nothing to do"*. R24b: the
+    `pdf_link_secret` is present.
+  - The one note: R3, `migration.log` holds no line for 087, as on every deploy since 5.18.89.
+- **The quarantine's `--check`, begun 16:04:56 UTC: PASSED 9 ok / 0 failed / 2 notes.** K3–K13 hold: the old name is
+  empty, the kept file is unchanged (key, one name, sha256, size, time, owner, mode), no process holds it, and the
+  installed gate still stops the retry job, which ran at 16:00:06 UTC with nothing made. The notes: K2, the container
+  serves `098f6b3` rather than the quarantine's `69c87a6` (the gate is the same); K7, `config.json` in `<plugin>/data`
+  removed and remade since the move — names only, another writer's file, not a database.
+- **Still to do:** replace the Splynx key and secret in Splynx itself, then enter the new ones under Settings → Splynx
+  (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
+  repository.

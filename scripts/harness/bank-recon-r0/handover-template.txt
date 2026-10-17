@@ -1,0 +1,11 @@
+# handover-template.txt — the R0 hand-over line of the specification's §6.1, with PLACEHOLDER pins (an all-zero
+# runner commit and an all-zero runner sha256). scripts/harness/bank-recon-r0/rehearse-run.sh reads it only while
+# docs/69 holds no R0 hand-over line, and only with PINS=placeholder; it substitutes the sandbox's pins. This line is
+# NOT for the server. With these pins it is refused at `git cat-file` (fatal: path 'scripts/bank-recon-r0-run.sh'
+# does not exist in '0000000000000000000000000000000000000000') after its fetch has run, and the sha256 check is never
+# reached; it leaves an empty /root/dnb-bank-recon/bank-recon-r0-run.sh behind, which a shell with noclobber set then
+# refuses to overwrite (cannot overwrite existing file) — delete it before the real line. rehearse-run.sh case H2 runs
+# this line as it stands and measures each of these. The real line, with the pins of the committed runner, belongs in
+# docs/69.
+
+    ( umask 077 && mkdir -p /root/dnb-bank-recon && chmod 700 /root/dnb-bank-recon && cd /opt/dishnet && git -c gc.auto=0 -c maintenance.auto=false -c core.hooksPath=/dev/null -c fetch.writeCommitGraph=false -c remote.origin.followRemoteHEAD=never fetch -q --no-tags --no-recurse-submodules --refmap= origin +refs/heads/claude/study-this-jhe2eg:refs/remotes/origin/claude/study-this-jhe2eg && git cat-file blob 0000000000000000000000000000000000000000:scripts/bank-recon-r0-run.sh > /root/dnb-bank-recon/bank-recon-r0-run.sh && echo "0000000000000000000000000000000000000000000000000000000000000000  /root/dnb-bank-recon/bank-recon-r0-run.sh" | sha256sum -c --quiet - && env -u BASH_ENV -u ENV -u UCRM_CONTAINER -u SHELLOPTS -u BASHOPTS bash /root/dnb-bank-recon/bank-recon-r0-run.sh 2>&1 | ( trap '' INT HUP TERM; exec tee /root/dnb-bank-recon/r0-$(date -u +%Y%m%dT%H%M%SZ).log ) )

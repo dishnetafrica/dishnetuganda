@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-Disallow: /demo/
 Sitemap: https://dishnetuganda.com/sitemap.xml
