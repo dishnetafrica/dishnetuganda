@@ -9,6 +9,16 @@
 - **R0 approved to be built.** It will be built, rehearsed and reviewed like P0, then handed over. You run it on the server; it changes nothing. **Built 16 Oct; its hand-over is Part 4.**
 - The other recommendations in §3.1 are taken as the direction. **Each production step still waits for its own go**, as §3.2 says, and the decisions that need evidence (D2, D3, D14, D23, D25, D26) wait for R0, P0's second run and your answers in §3.3.
 
+**Your decision of 17 October, after P0's second run** (§3.1 D2):
+- **D2 = A, in both currencies.** Cash in hand counts the entries with no account plus the cash and mobile-money
+  accounts, keeps the 12 Sep adjustment, and leaves bank, stock, asset, director and equity accounts out. Approved
+  entries only: there are no pending or rejected entries in either currency today, so that part changes nothing now.
+- **What it does to the figures** (given in the session, not here): the UGX figure moves by the net of the cash
+  accounts and the adjustment, which nearly cancel. **The USD figure will read below zero** until its entries with no
+  account are put on the accounts they belong to (R1, then R2/R3). You chose this over keeping USD on today's rule.
+- **It ships as step P3b**, its own build, release and deploy with its own go, and a physical cash count recorded
+  beside the new figure. Nothing has changed yet.
+
 **How to read the labels**
 - **[M]** Measured: read in the code or in the record. A `file:line` is given.
 - **[I]** Inferred from what was read. The code was not run to prove it.
@@ -757,7 +767,7 @@ Every other correction in the three critiques, and in the two checks of version 
 | # | Decision | Status | Recommendation |
 |---|---|---|---|
 | D1 | Reverse "cash in hand only" for bank money; bank balances on the Bank screen only (`docs/68:438`) | Open | Yes, on the Bank screen only. Needed before any Expected view is shown (S1a, P3a′) |
-| D2 | What cash in hand counts: hero, Balance column and export (`docs/68:439`) | Open; blocked on P0's second run | Bank and non-money accounts out. It **may** change today's figure, depending on whether the 12 Sep adjustment is left out too; P0's second run shows it [I]. **Accepted by a physical cash count**, not only by P0's arithmetic: at P3b the count and an itemised, explained difference are recorded; after P4, R2 and R3 a new count must equal the figure |
+| D2 | What cash in hand counts: hero, Balance column and export (`docs/68:439`) | **Decided 17 Oct: A, in both currencies** (unassigned entries plus cash and mobile-money accounts, the adjustment kept, approved entries only); USD reads below zero until its unassigned entries are placed. Ships as P3b | Bank and non-money accounts out. It **may** change today's figure, depending on whether the 12 Sep adjustment is left out too; P0's second run shows it [I]. **Accepted by a physical cash count**, not only by P0's arithmetic: at P3b the count and an itemised, explained difference are recorded; after P4, R2 and R3 a new count must equal the figure |
 | D3 | The past: one cut-off `ADJUSTMENT` (a) or a rebuild by review (b) (`docs/68:440`) | Open; after P0 | Your choice. **It also decides repairs:** under D3a, bank receipts before the cut-off stay voided, and past bank income never booked never reaches the P&L; cash rows dated before the cut-off stay voided too, except by a recorded attestation. Re-entering them needs D3b for those months |
 | D4 | Customer bank receipts: one writer (`docs/68:441`) | Refined by D13 | — |
 | D5 | Maker-checker and thresholds (`docs/68:442`) | **Proposed, not decided** | Also covers repairs and cost tags. If one person does everything, each act records the exception |
