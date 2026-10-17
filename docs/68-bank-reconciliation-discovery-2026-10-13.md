@@ -863,6 +863,18 @@ the repository.
 - **What the log shows.** The guide above holds. The adjustment line reads `named by --adjustment-id: id N, …`, and
   B and D are computed. The log stays confidential, as the first run's did.
 
+**Result of the second run — 17 Oct, begun 02:53:52 UTC: `RUNNER EXIT 0`.** Read from the terminal the operator
+pasted; the log file was not sent. No figure from it is recorded here.
+- **Every gate held.** The checkout (`a2c94fc`, on the branch) was clean. The two reviewed files came out of
+  `5954ede5` with their reviewed sha256s. The fetched branch held that commit, 23 commits on. The book was in the
+  expected folder, with the expected owner.
+- **The adjustment was named** by `--adjustment-id`: live, unassigned, dated 12 Sep, out, UGX, approved. It is in that
+  month's P&L.
+- **All four options were computed** in both currencies (B and D for the first time). The parts add up in both
+  currencies. The connections changed no row, the two immutable readings were identical, and no side file appeared.
+- **After P0**, the checkout was unchanged, and the P0 command had read the folder that was checked.
+- **D2 is now the operator's decision**, on these figures (given in the session, not here).
+
 ### P.1 The 5.18.94 after-checks — separately, each with its own log
 
 No evidence for any of them has reached this session. Each is reported only from its own log or screen. A check whose log
