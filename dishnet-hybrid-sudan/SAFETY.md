@@ -565,10 +565,11 @@ out of reach of a crafted address.
   Cashbook's chart offers (active, a bank, in a book currency), in the book's currency order (UGX first), each from that
   account's own latest kept line and profile: Ecobank's available balance after that line, dated by it, the account
   ending and the statement it was kept from. A card is headed *ECO BANK <CUR>* only where the book's name for the
-  account says Ecobank (`BankStatementStore::ecobankNamed()`); any other bank account keeps its own masked name. A book
-  currency with no active bank account gets a light-grey card saying so, so nothing goes missing silently. Each card
-  links to its own lines and has its own upload, which opens with that card's account chosen. UGX and USD are never
-  added together.
+  account says Ecobank (`BankStatementStore::ecobankNamed()`, "eco" starting a word); any other bank account keeps its
+  own masked name. A book currency with no active bank account gets a light-grey card saying so. An Ecobank account
+  switched off while another bank account in its currency stays active simply has no card: the placeholder is drawn
+  only for a currency with none. Each card links to its own lines and has its own upload, which opens with that card's
+  account chosen. UGX and USD are never added together.
 - **Upload, check, keep.** An Ecobank *Account Details* CSV, one account per file. `lib/EcobankDetailsCsv.php` checks
   the whole file (the 23 columns, dates, amounts in whole cents, the running-balance chain in the bank's line order, the
   closing balance); `lib/BankStatementStore.php` checks it against the chosen account (currency, last four digits, the
@@ -664,8 +665,9 @@ and entries not yet approved. The operator decided D2 = A for UGX and USD on 17 
 
 ### Operator action
 - Count the cash and compare it with the two CASH IN HAND cards. On 18 Oct the USD count was below the card. The
-  operator decided: D2 = A stays, the gap is entered as one cash-count difference not yet explained, and the
-  unapproved 5 Oct balancing entry, made under 5.18.95's rule, is voided so that nobody can approve it later.
+  operator decided that D2 = A stays, to enter the gap as one cash-count difference not yet explained, and to void the
+  unapproved 5 Oct balancing entry, made under 5.18.95's rule, so that nobody can approve it later; the steps were
+  handed over to the operator.
 
 ### SAFETY
 - Never count a bank, stock or supplier account, or an entry that is not approved, as cash in hand where the rule is

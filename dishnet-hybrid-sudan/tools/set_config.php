@@ -312,7 +312,7 @@ $FLAGS = [
         'Allow follow-ups on a salesperson\'s own number (docs/65 §AA item 6). Absent means OFF: the salesperson follows up personally, and the follow-up scan, drafts and sends leave those conversations alone'],
     // ── The Bank screen v1 (5.18.97, SPEC-bank) — Uganda only. Off after the deploy; turned on by its own command. ──
     'bank_screen_enabled' => ['bool',
-        'The Bank screen (Uganda): upload, check and keep Ecobank statements and see their lines. Posts nothing to the Cashbook. Off = no Bank screen'],
+        'ECO Bank (Uganda, administrators): upload, check and keep Ecobank statements; each account\'s own balance and lines, shown below Cashbook. Posts nothing to the Cashbook. Off = no ECO Bank and no link to it'],
     'sales_own_leads_only' => ['bool',
         'A salesperson sees only their own leads (assigned to them, created by them, or on their call list today) on Sales → Leads, in the quote picker, the status change and the call log (Uganda, D7). Admins and anyone granted All Leads see everything. Absent means OFF: every lead visible to every salesperson, as before'],
 ];

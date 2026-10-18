@@ -33,7 +33,8 @@ declare(strict_types=1);
  *      CashbookService::cashOnlyRuleInForce() on every book; files against a store copy that says the opposite, both
  *      ways; allows() on a read that throws, returns null, is inactive, is demoted inside the session window.
  *      5.18.97: showLink() — its truth table, a session with no id, a session that is not an admin's reading nothing,
- *      no write in a fresh process (a child) and under PRAGMA query_only; latestLine() directly; ecobankNamed()
+ *      no write in a fresh process (a child; each of its three measurements with a control that moves it) and under
+ *      PRAGMA query_only; latestLine() directly; ecobankNamed(), "eco" starting a word
  *   G  the trail: the events of each act, each with its actor; no check row, event, statement or profile holds the
  *      marker, the account number or the holder's name; no file but the database and the statement files does
  *   H  memory: check and keep at the caps (10,000 lines near BYTES_MAX over 9,800 kept) in children under
@@ -116,14 +117,20 @@ if ($mode === '--showlink-child') {
         foreach (['', '-wal'] as $x) $h[] = is_file($dir . '/plugin.sqlite3' . $x) ? hash_file('sha256', $dir . '/plugin.sqlite3' . $x) : '-';
         $o = new PDO('sqlite:' . $dir . '/plugin.sqlite3');
         $m = $o->query('SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name')->fetchAll(PDO::FETCH_ASSOC);
-        return [implode(' ', $h), hash('sha256', (string)json_encode($m))];
+        return [implode(' ', $h), hash('sha256', (string)json_encode($m)), $h[0] !== '-'];
     };
-    [$f0, $m0] = $snap(); $c0 = $tc();
+    [$f0, $m0, $main] = $snap(); $c0 = $tc();
     $r = BankGate::showLink($dir, $s, (array)$p['session']);
     $c1 = $tc(); [$f1, $m1] = $snap();
     $pdo->exec('CREATE TEMP TABLE rh_throwaway (x INTEGER)');         // the control: one planted INSERT moves total_changes()
     $pdo->exec('INSERT INTO rh_throwaway (x) VALUES (1)');
-    echo json_encode(['r' => $r, 'tc' => [$c0, $c1, $tc()], 'files' => [$f0, $f1], 'master' => [$m0, $m1]]), "\n";
+    $c2 = $tc();
+    // The control of the other two measurements: a write to the main schema of this throwaway book moves the files and
+    // sqlite_master as the second connection reads them (a TEMP table touches neither, so it cannot show that).
+    $pdo->exec('CREATE TABLE rh_ctl (x INTEGER)');
+    $pdo->exec('INSERT INTO rh_ctl (x) VALUES (1)');
+    [$f2, $m2] = $snap();
+    echo json_encode(['r' => $r, 'tc' => [$c0, $c1, $c2], 'files' => [$f0, $f1, $f2], 'master' => [$m0, $m1, $m2], 'main' => $main]), "\n";
     exit(0);
 }
 
@@ -1089,9 +1096,10 @@ $slChild = function (array $session) use ($SW, $root): array {
     return is_array($j) ? $j + ['rc' => $rc] : ['error' => trim($out . ' ' . $err), 'rc' => $rc];
 };
 $ch = $slChild($sessAdmin);
-t('showLink() in a fresh process, as an admin: true, and total_changes(), the database files and sqlite_master (read on a second connection) are the same after it; the control — one planted INSERT moves total_changes()',
+t('showLink() in a fresh process, as an admin: true, and total_changes(), the database files and sqlite_master (read on a second connection) are the same after it; the controls — one planted INSERT moves total_changes(), and a table planted in the main schema afterwards moves both the files and sqlite_master, the main file having been read (not absent)',
     [$ch['rc'] ?? null, $ch['r'] ?? null, ($ch['tc'][1] ?? -1) - ($ch['tc'][0] ?? -2), ($ch['tc'][2] ?? 0) - ($ch['tc'][1] ?? 0), ($ch['files'][0] ?? 'a') === ($ch['files'][1] ?? 'b'),
-     ($ch['master'][0] ?? 'a') === ($ch['master'][1] ?? 'b')], [0, true, 0, 1, true, true]);
+     ($ch['master'][0] ?? 'a') === ($ch['master'][1] ?? 'b'), $ch['main'] ?? null, ($ch['files'][1] ?? 'a') !== ($ch['files'][2] ?? 'a'),
+     ($ch['master'][1] ?? 'a') !== ($ch['master'][2] ?? 'a')], [0, true, 0, 1, true, true, true, true, true]);
 // Under PRAGMA query_only = ON, after one earlier read of the staff table in this process (its table check is done): a
 // write anywhere in showLink() would throw, allows() would answer null, and the link would be false.
 $QO = bk_gate_book($TPL, 'showlink-qo', BK_UG_CFG + [BankGate::SWITCH_KEY => true]);
@@ -1128,9 +1136,9 @@ t('control: the UGX account holds lines 1–30, and its last inserted line is li
     [30, (string)$HL[9]['Cheque Number']]);
 
 // ecobankNamed(): the cards' "ECO BANK <CUR>" heading only where the book's own name says Ecobank (invented names).
-t('ecobankNamed(): the book\'s name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank\'s name does not',
-    array_map(['BankStatementStore', 'ecobankNamed'], ['Ecobank Uganda – UGX', 'ECO BANK', 'Eco-Bank', 'RH-Ecobank Spare – USD', 'RH-Spare Bank 0123456789 – UGX', 'RH-Highland Bank – UGX', 'Economy Bank']),
-    [true, true, true, true, false, false, false]);
+t('ecobankNamed(): the book\'s name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank\'s name does not, nor "eco bank" inside a longer word',
+    array_map(['BankStatementStore', 'ecobankNamed'], ['Ecobank Uganda – UGX', 'ECO BANK', 'Eco-Bank', 'RH-Ecobank Spare – USD', 'RH-Spare Bank 0123456789 – UGX', 'RH-Highland Bank – UGX', 'Economy Bank', 'RH-Deco-Bank – UGX']),
+    [true, true, true, true, false, false, false, false]);
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nG. The trail, and no statement text anywhere but the lines and the kept file\n";
@@ -1402,8 +1410,15 @@ $MUTANTS = [
             "return self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;"]],
         "showLink(): of the 8 combinations of the session copy's is_admin (S), the switch (W) and the fresh record's is_admin (F), only all three is true"],
     ['BS2 ecobankNamed() without the i flag',
-        [[$ST, "return preg_match('/eco[\\s-]*bank/i', \$name) === 1;", "return preg_match('/eco[\\s-]*bank/', \$name) === 1;"]],
-        "ecobankNamed(): the book's name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank's name does not"],
+        [[$ST, "return preg_match('/\\beco[\\s-]*bank/i', \$name) === 1;", "return preg_match('/\\beco[\\s-]*bank/', \$name) === 1;"]],
+        "ecobankNamed(): the book's name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank's name does not, nor \"eco bank\" inside a longer word"],
+    ['BS3 showLink() writing a table to the book',
+        [[$GT, "return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;",
+            "try { if (is_object(\$store) && method_exists(\$store, 'getPdo')) \$store->getPdo()->exec('CREATE TABLE IF NOT EXISTS rh_link_mark (x INTEGER)'); } catch (\\Throwable \$e) { } return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;"]],
+        "showLink() in a fresh process, as an admin: true, and total_changes(), the database files and sqlite_master (read on a second connection) are the same after it; the controls — one planted INSERT moves total_changes(), and a table planted in the main schema afterwards moves both the files and sqlite_master, the main file having been read (not absent)"],
+    ['BS4 ecobankNamed() without the word boundary',
+        [[$ST, "return preg_match('/\\beco[\\s-]*bank/i', \$name) === 1;", "return preg_match('/eco[\\s-]*bank/i', \$name) === 1;"]],
+        "ecobankNamed(): the book's name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank's name does not, nor \"eco bank\" inside a longer word"],
     ['S15 a Remark written into the statement_kept event',
         [[$ST, "'sha8' => substr((string)\$chk['sha256'], 0, 8),", "'sha8' => substr((string)\$chk['sha256'], 0, 8), 'first' => (string)(\$new[0]['remarks'] ?? ''),"]],
         'trail: no check row, event, statement or profile holds the marker, the account or the holder'],
