@@ -12130,6 +12130,18 @@ the merchant ID (published on the website by design) — the last two are the op
 and park it"* — both are to be parked on Uganda (out of every menu, their jobs stopped, their pages closed; code, data and
 settings kept; one switch to bring them back), in the security release above. The South Sudan LTE / BlueCARD server that
 the two feed tokens open: **switched off** — so those tokens leave the code but need no rotation there.
+
+**The park, mapped on the live code (`e35eccee`), and four more answers (18 Oct).** Found: on Uganda the LTE feed job
+runs every 5 minutes against the switched-off South Sudan server — about 16 calls that fail, each allowed up to 10 s to
+connect — with token A taken from the code. Parked on Uganda by one switch per feature (`splynx_parked`, `lte_parked`;
+the country profile parks both, so the deploy writes no setting): Splynx NOC, My Install Jobs, the Splynx settings tab,
+the Splynx and Fiber Finance jobs, the 07:00 support summary built from Splynx tickets; the whole LTE Network menu
+section, the 4G tiles and cards, the LTE jobs. Commissions, Daily Report, Settlement and Sync Health also cover
+Starlink and collections, so they move to Accounts → Reports for the same people. Answers: *"Park them too"* — Fiber
+Pipeline, Fiber Costs and the hourly Fiber Finance sync park with Splynx; *"No new entries"* — nothing new can go into
+the Cashbook's 4G and BlueCARD books, and each tab shows only while its book holds an entry that is not voided (the
+deploy prints the counts only); *"No, Uganda only"* — **no South Sudan installation runs this plugin any more**;
+Splynx's server: *"Switched off"* — nothing to revoke.
 - **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
   (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
   assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.
