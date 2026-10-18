@@ -542,6 +542,139 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.97 (2026-10-18) — ECO Bank: Ecobank's own balances below the Cashbook, posted nowhere
+
+### Why
+Since 5.18.96 (P3b) cash in hand counts cash, mobile money and entries with no account, approved only: bank money is
+not in it. The operator asked to see the Ecobank statement the way the Cashbook shows cash, and on 18 Oct said where
+and how: *"down to cashbook show ECO Bank and then we have two hero section like ECO Bank UGX and ECO BANK USD"*. This
+is D1 as docs/69 recommends it: bank balances on ECO Bank only. Those words supersede 5.18.68's "the accounts/bank model
+is not shown" for ECO Bank's link only (and SPEC-bank's O9, "no menu link"); the 5.18.68 note still holds for Opening
+Balances. It ships after P3b, on its own, and after the 5.18.95 photo-route fix, which is what keeps a stored statement
+out of reach of a crafted address.
+
+### What
+- A new page, **ECO Bank**, Uganda only, at `?page=dashboard&tab=bank`. **ECO Bank below Cashbook**, gated by
+  `BankGate::showLink()` only: the menu item under Accounts → Company Books, between Cashbook and Revenue Ledger, shows
+  exactly when the page would open for that visitor (the session copy's admin flag, as the dispatcher's `*admin` reads
+  it, then `open()`, then `allows('bank.view')` on the fresh record), and a hidden item prints nothing. Its label is
+  fixed: no figure, count or badge. **On a phone**, where an administrator has no menu, the page is opened by its
+  address or from the CEO page's Quick Links, right after 📒 Cashbook (Q15), by the same gate. The phone's More menu is
+  unchanged.
+- **Every account's card at once, never a total; the lines one account at a time.** One card per bank account the
+  Cashbook's chart offers (active, a bank, in a book currency), in the book's currency order (UGX first), each from that
+  account's own latest kept line and profile: Ecobank's available balance after that line, dated by it, the account
+  ending and the statement it was kept from. A card is headed *ECO BANK <CUR>* only where the book's name for the
+  account says Ecobank (`BankStatementStore::ecobankNamed()`, "eco" starting a word); any other bank account keeps its
+  own masked name. A book currency with no active bank account gets a light-grey card saying so. An Ecobank account
+  switched off while another bank account in its currency stays active simply has no card: the placeholder is drawn
+  only for a currency with none. Each card links to its own lines and has its own upload, which opens with that card's
+  account chosen. UGX and USD are never added together.
+- **Upload, check, keep.** An Ecobank *Account Details* CSV, one account per file. `lib/EcobankDetailsCsv.php` checks
+  the whole file (the 23 columns, dates, amounts in whole cents, the running-balance chain in the bank's line order, the
+  closing balance); `lib/BankStatementStore.php` checks it against the chosen account (currency, last four digits, the
+  lines already kept). **If any check fails, nothing is kept**, and the screen says which check failed in one fixed
+  sentence. Keep adds only the lines not already kept. An account's first file asks once to link its last four digits.
+- **The lines:** newest first, with Ecobank's own running balance; a month filter with its opening, in, out and closing;
+  a CSV export of the lines on screen; a Statements tab with every check and kept file. The cards read *AS STATED BY
+  ECOBANK*, slate grey, so they are never taken for the green and blue CASH IN HAND cards; only the small currency tag
+  is coloured.
+- **Migration 088:** five new tables (`bank_account_profiles`, `bank_checks`, `bank_statements`,
+  `bank_statement_lines`, `bank_line_events`). No existing table changes. The emergency repair page refuses to drop any
+  of the five.
+- **The switch:** `bank_screen_enabled` (bool, `tools/set_config.php`). **Off after the deploy.** While it is off, and
+  on any install that is not Uganda or where SSP can be booked, the tab, the upload and the export each refuse with
+  fixed text and write nothing, and no link to ECO Bank is shown. `BankGate::open()` reads it through
+  `PluginConfig::read()`, never from public.php's store copy of the settings.
+- **Admins only.** `$_tabPerms['bank']` is `*admin`, and every page, upload and export re-reads the staff record
+  (`BankGate::allows()`), never the session copy: an admin whose right was just removed, or who was deactivated, is
+  refused on the next request, and loses the menu item on that page too. An upload needs the form token **and** a
+  request that shows it came from this site's own page (`BankGate::fromOwnPage()`: `Sec-Fetch-Site: same-origin`, or
+  else an Origin, or else a Referer, naming this host). A request that shows nothing, or shows another site, is
+  refused, because the token is the same for every user and is printed on the login page. The export refuses a request
+  another site started (a link or an image elsewhere), so no other site can write an export event in an admin's name.
+  A visitor who is not signed in is sent to the login page before anything else is decided, so nothing tells them
+  whether the screen is switched on.
+- **The private folder:** `data/bank_statements/<account id>/` holds each kept file byte for byte (folders 0700, files
+  0600). A checked file waiting to be kept sits in `data/bank_statements/.pending/` and is deleted on keep or discard,
+  or at the next upload once it is two hours old. **Not under `uploads/`**, so it is not in the Google Drive backup,
+  the admin backup download or the hourly local backup. No route serves it in v1. The lines themselves are in the
+  plugin database, so they travel with every database backup.
+- **Nothing posted.** No Cashbook entry is created, changed or deleted. The screen never reads `cb_ledger`; of the book
+  it reads only the account list (`cb_accounts`). Cash in hand and every Cashbook page, export and report are
+  unchanged. `lib/BankStatement.php`, `lib/BankImport.php` and `tools/bank_statement.php` are unchanged, and the screen
+  does not use them.
+- South Sudan: no screen and no link. 088's tables exist there and stay empty.
+
+### Operator action
+- None at the deploy: the switch stays off. Once the deploy has passed and the P3b cash count is recorded, the switch
+  is handed over as its own command (`--key bank_screen_enabled --value 1`, inside the container). It is turned off
+  with the same tool's `--clear`.
+- On a phone: bookmark `?page=dashboard&tab=bank` on the plugin's page, or open ECO Bank from the CEO page's Quick
+  Links.
+- Do not open the downloaded CSV in Excel and save it before uploading: Excel rewrites the dates.
+
+### SAFETY
+- Never post a bank line to the Cashbook from this screen, and never make it read `cb_ledger`. Matching lines to the
+  book is a later release of its own.
+- Never put statement content in a flash, a log, an event, a URL or an error message: no name, account number,
+  amount, description, reference or file name. A refusal says at most a line number, a date, a currency or the last
+  four digits.
+- Never move `bank_statements/` under `uploads/`, and never add a route that takes a path into it. A download route
+  is its own reviewed change, built on 5.18.95's rule: refuse the path, then contain the file by `realpath`.
+- Never widen `BankGate::GRANTS` (admins only) or read the switch from the store copy without an instruction. Widening
+  it (Q11) is three lines together: `GRANTS`, `$_tabPerms['bank']` and `showLink()`'s first term.
+- Never gate a link to ECO Bank by anything but `BankGate::showLink()`, called with its one call text, and never pass
+  it a page's own `$isAdmin` (`cashbook.php` widens that to accountants) or a flag of the caller's own.
+- Never put a figure, a count or a badge in the link: its label is fixed.
+- Never add the cards together, show a total, or group the cards per currency: one card per account.
+- Never read `cb_ledger` for a card: each card is its own account's `latestLine()` and `profile()`.
+- Head a card "ECO BANK" only when `ecobankNamed()` says so; any other bank account keeps its own masked name.
+- 088 is final as shipped: a change to it is a new migration.
+- Never use a real statement as a fixture. `tests/fixtures/bank_statement_gen.php` invents every value.
+
+## 5.18.96 (2026-10-17) — P3b: cash in hand counts cash only on the Uganda book (late entry)
+
+*A late entry, added with 5.18.97 on 18 Oct: 5.18.96 shipped without one. It is written from docs/07's record of
+5.18.96, and like that record it carries no figure.*
+
+### Why
+Under 5.18.95 cash in hand counted every entry not voided, on any account: bank, stock and supplier rows among them,
+and entries not yet approved. The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then
+*"yes do it i will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to
+5.18.96 when the security release went first.
+
+### What
+- Uganda only, and only where the rule is in force: the Uganda tenant with no SSP, read from the service's own
+  configuration (`StaffJobsGate::applies()` and no SSP). Everywhere else every page runs 5.18.95's code paths.
+- **Cash in hand** counts approved entries that sit on no account or on a cash or mobile-money account. Ecobank, the
+  other non-cash accounts, and pending and rejected entries are out; voided entries stay out. One predicate, in
+  `cashInHand()` and in both running-balance streams, so the Cashbook's CASH IN HAND cards, its Balance column and
+  CSV, the landing page and its project chips, the evening WhatsApp and `tools/cash_in_hand.php` all agree.
+- An entry the rule leaves out stays in the Cashbook's list and export; its Balance is "—" on the page and empty in
+  the CSV.
+- **X5:** the CEO page's "UGX Position" and "USD Position" become "UGX Cash in hand" and "USD Cash in hand", all
+  projects; "Today's Cash" becomes "Today's collections".
+- **D1:** under the rule the Cashbook's "Cash balance is NEGATIVE" alert gives way to one red alert per currency whose
+  cash in hand is below zero, in that currency's code; the Add Entry UGX pill shows UGX cash in hand.
+- **USD reads below zero** under the rule, accepted on 17 Oct: dollars that arrived in the bank no longer count. It
+  recovers as entries are put on their accounts.
+- No migration; no entry, setting or switch changed. South Sudan, a South Sudan tenant without SSP, a Uganda tenant
+  with SSP and a Uganda box whose gate fails run 5.18.95's SQL and pages verbatim.
+- Deployed 18 Oct (copy 04:44:18 UTC) and PASSED; both pairs of after-checks PASSED.
+
+### Operator action
+- Count the cash and compare it with the two CASH IN HAND cards. On 18 Oct the USD count was below the card. The
+  operator decided that D2 = A stays, to enter the gap as one cash-count difference not yet explained, and to void the
+  unapproved 5 Oct balancing entry, made under 5.18.95's rule, so that nobody can approve it later; the steps were
+  handed over to the operator.
+
+### SAFETY
+- Never count a bank, stock or supplier account, or an entry that is not approved, as cash in hand where the rule is
+  in force. One predicate serves every reader, so no page, export, message or tool can disagree.
+- Never change a book the rule does not cover: its pages stay 5.18.95's.
+- Never approve a balancing entry made under 5.18.95's rule: it cancelled bank rows that rule wrongly counted as cash.
+
 ## 5.18.95 (2026-10-17) — security: photo route, repair key, EFRIS links, Splynx credentials
 
 ### Why

@@ -321,6 +321,84 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     exit;
 }
 
+// ── The Bank screen's export (5.18.97; SPEC-bank §c.5, §d.4) — must run before the HTML buffer fills ─────────
+// Exactly the lines the screen's filter selects (one account; one month or all of them), every page, OLDEST first by
+// the bank's line number, each balance the bank's own, read through the same BankStatementStore::lines() the screen
+// uses. The sign-in first (so a visitor who is not signed in learns nothing about the switch), then BankGate (Uganda, no
+// SSP, the switch), then a request from this site's own page (BankGate::fromOwnPage: a link or an image on another site
+// must not write a lines_exported event in an admin's name, nor save the lines to their Downloads), then the FRESH staff
+// record (admins only), before anything is read.
+// A text cell a spreadsheet would read as a formula (= + - @, a tab, a CR) gets a ' in front; the amounts are numbers
+// and are not prefixed. The file name carries the currency and the month, never the account number or the account's
+// name. One lines_exported event (the count and the month) is the only write. No original-file route exists in v1.
+if (($tab ?? '') === 'bank' && ($_GET['bk_export'] ?? '') === 'csv') {
+    require_once dirname(__DIR__) . '/lib/BankGate.php';
+    $_bkxRefuse = function (int $code, string $msg): void {
+        if (ob_get_level() > 0) ob_end_clean();
+        http_response_code($code);
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        echo $msg, "\n";
+        exit;
+    };
+    $_bkxUser = $auth->requireLogin();
+    if (!BankGate::open($dataDir ?? null)) $_bkxRefuse(403, 'ECO Bank is not available on this installation.');
+    if (!BankGate::fromOwnPage('GET')) $_bkxRefuse(403, 'The security check failed, so nothing was sent. Open ECO Bank and export from there.');
+    $_bkxMe = BankGate::allows('bank.view', $store, is_array($_bkxUser) ? $_bkxUser : []);
+    if ($_bkxMe === null) $_bkxRefuse(403, 'Access denied.');
+    require_once dirname(__DIR__) . '/lib/currency.php';
+    require_once dirname(__DIR__) . '/lib/PluginConfig.php';
+    require_once dirname(__DIR__) . '/lib/EcobankDetailsCsv.php';
+    require_once dirname(__DIR__) . '/lib/BankStatementStore.php';
+    $_bkxStore = new BankStatementStore($store->getPdo(), (string)$dataDir,
+        dn_book_currencies(PluginConfig::read(dirname(__DIR__), (string)$dataDir)));
+    $_bkxQ = function (string $k): string { $v = $_GET[$k] ?? ''; return is_string($v) ? $v : ''; };
+    $_bkxAcct = ($_bkxStore->ready() && ctype_digit($_bkxQ('bk_acct'))) ? $_bkxStore->account((int)$_bkxQ('bk_acct')) : null;
+    if ($_bkxAcct === null) $_bkxRefuse(404, 'Choose an active Ecobank account of the book.');
+    $_bkxMonth = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $_bkxQ('bk_month')) ? $_bkxQ('bk_month') : '';
+    $_bkxRows = $_bkxStore->lines((int)$_bkxAcct['id'], $_bkxMonth, 'asc');
+    $_bkxProf = $_bkxStore->profile((int)$_bkxAcct['id']);
+    $_bkxCur = $_bkxProf !== null ? (string)$_bkxProf['currency'] : (string)$_bkxAcct['currency'];
+    try {
+        $_bkxStore->recordExport((int)$_bkxAcct['id'], count($_bkxRows), $_bkxMonth === '' ? 'all' : $_bkxMonth, $_bkxMe);
+    } catch (\Throwable $e) {
+        $_bkxRefuse(500, 'The export could not be recorded, so nothing was sent.');
+    }
+    // A text cell that starts like a formula is neutralised; '' stays ''.
+    $_bkxText = function ($v): string {
+        $s = (string)$v;
+        return ($s !== '' && strpos("=+-@\t\r", $s[0]) !== false) ? "'" . $s : $s;
+    };
+    // An amount from minor units, exactly: two decimals, no separator, a minus where the balance is below zero.
+    $_bkxAmt = function (int $u): string {
+        $a = $u < 0 ? -$u : $u;
+        return ($u < 0 ? '-' : '') . intdiv($a, 100) . '.' . sprintf('%02d', $a % 100);
+    };
+    $_bkxName = 'ecobank-' . $_bkxCur . '-' . ($_bkxMonth === '' ? 'all' : $_bkxMonth) . '-lines-' . date('Y-m-d') . '.csv';
+    if (ob_get_level() > 0) ob_end_clean();
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $_bkxName . '"');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('X-Content-Type-Options: nosniff');
+    $_bkxOut = fopen('php://output', 'w');
+    fputcsv($_bkxOut, ['Bank line no.', 'Posting date', 'Value date', 'Type code', 'Type', 'Transaction code', 'Particulars',
+        'Reference', 'In', 'Out', 'Balance', 'Currency', 'Statement', 'Status'], ',', '"', '');
+    foreach ($_bkxRows as $_bkxL) {
+        $_bkxIn = (string)$_bkxL['credit_text'] !== '';
+        fputcsv($_bkxOut, [
+            $_bkxText($_bkxL['cheque_number']), $_bkxText($_bkxL['posting_date']), $_bkxText($_bkxL['value_date']),
+            $_bkxText($_bkxL['type_code']), $_bkxText($_bkxL['type_desc']), $_bkxText($_bkxL['txn_code']),
+            $_bkxText($_bkxL['remarks']), $_bkxText($_bkxL['reference']),
+            $_bkxIn ? $_bkxAmt((int)$_bkxL['credit_units']) : '', $_bkxIn ? '' : $_bkxAmt((int)$_bkxL['debit_units']),
+            $_bkxAmt((int)$_bkxL['running_units']), $_bkxText($_bkxL['currency']),
+            $_bkxText(substr((string)$_bkxL['statement_sha256'], 0, 8)),
+            $_bkxText((string)$_bkxL['status'] === 'imported' ? 'Not compared' : 'Unknown status'),
+        ], ',', '"', '');
+    }
+    fclose($_bkxOut);
+    exit;
+}
 // ── Collections CSV export — must run before HTML buffer fills ────────────
 if (($tab ?? '') === 'all_collections' && !empty($_GET['col_export']) && $_GET['col_export'] === 'csv') {
     // 5.18.55 (docs/48 PD-1): this export runs at public.php:739, BEFORE the

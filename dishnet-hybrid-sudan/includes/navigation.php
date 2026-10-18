@@ -288,6 +288,15 @@ try {
 <a href="?page=dashboard&tab=cashbook" class="kyc-tab <?= $tab==='cashbook'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-journal-bookmark-fill"></i></span> Cashbook
 </a>
+<?php // 5.18.97 (the operator, 18 Oct): ECO Bank, directly below the Cashbook. Shown exactly when the screen would open
+      // for this visitor (BankGate::showLink). A fixed label: no figure, count or badge. The 5.18.68 note below still
+      // holds for Opening Balances: ECO Bank shows Ecobank's own statement, not the book's account model.
+      require_once dirname(__DIR__) . '/lib/BankGate.php';
+      if (BankGate::showLink($dataDir ?? null, $store ?? null, is_array($retailer ?? null) ? $retailer : [])): ?>
+<a href="?page=dashboard&tab=bank" class="kyc-tab <?= $tab==='bank'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-bank"></i></span> ECO Bank
+</a>
+<?php endif; ?>
 <a href="?page=dashboard&tab=accounts_ledger" class="kyc-tab <?= $tab==='accounts_ledger'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-journal-text"></i></span> Revenue Ledger
 </a>
