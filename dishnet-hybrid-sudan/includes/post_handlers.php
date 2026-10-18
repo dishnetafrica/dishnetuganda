@@ -127,3 +127,4 @@ require __DIR__ . '/post/post_leads.php';
 require __DIR__ . '/post/post_cashbook.php';
 require __DIR__ . '/post/post_field.php';
 require __DIR__ . '/post/post_distributors.php';   // WS-A P1a (docs/49): appoint an application as a local prospect partner. Admin + flag + Uganda gated.
+require __DIR__ . '/post/post_bank.php';           // 5.18.97 (SPEC-bank §d.2): the Bank screen's check / keep / discard. BankGate, CSRF and cross-site inside.

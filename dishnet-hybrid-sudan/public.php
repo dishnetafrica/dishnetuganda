@@ -326,6 +326,8 @@ if (($_GET['page'] ?? '') === 'emergency_repair') {
             'retailers', 'fin_audit', 'login_sessions', 'login_attempts', 'customer_identities', 'customer_sessions',
             'kyc_config', 'dpo_payments', 'dpo_payment_events', 'wallet_events', 'wallet_transactions',
             'job_photos', 'job_completion_gps', 'install_auth', 'install_auth_events', 'install_auth_activations',
+            // 5.18.97: the Bank screen's statements, their lines and their trail (SPEC-bank §d.5)
+            'bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events',
         ];
         if (in_array(strtolower($tName), $forbidden, true)) {
             echo "✗ REFUSED: '{$tName}' contains money/customer/audit data — never droppable here.\n";
@@ -2736,6 +2738,7 @@ $_tabFiles = [
     'ssp_overview'         => 'tabs/accounts/ssp_overview.php',
     'ssp_cashbook'         => 'tabs/accounts/ssp_cashbook.php',
     'opening_balances'     => 'tabs/accounts/opening_balances.php',   // Uganda books
+    'bank'                 => 'tabs/accounts/bank.php',               // 5.18.97 (SPEC-bank): Uganda; BankGate decides, no menu link
     'ssp_imprest'          => 'tabs/accounts/ssp_imprest.php',
     'collection_reconcile' => 'tabs/accounts/collection_reconcile.php',
     'commission_cleanup'   => 'tabs/accounts/commission_cleanup.php',
@@ -2863,6 +2866,7 @@ $_tabPerms = [
     'ssp_overview'         => ['accounts_dash', '*admin'],
     'ssp_cashbook'         => ['accounts_dash', '*admin'],
     'opening_balances'     => ['accounts_dash', '*admin'],
+    'bank'                 => '*admin',                               // 5.18.97: never absent (absent = any signed-in user)
     'ssp_imprest'          => ['accounts_dash', '*admin'],
     'collection_reconcile' => ['accounts_dash', '*admin'],
     'commission_cleanup'   => '*admin',
