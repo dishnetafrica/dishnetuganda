@@ -11874,7 +11874,7 @@ commands prints a secret, and the terminal held none: the key file's content was
   (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
   repository.
 
-## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — the Cashbook's NEGATIVE alert and the Add Entry pill show cash in hand with its own code; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — NOT YET PUSHED
+## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — on the Cashbook the NEGATIVE alert becomes one red alert per currency whose cash in hand is below zero, in that currency's code, and the Add Entry pill shows UGX cash in hand; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — `release/5.18.96` NOT YET PUSHED (the development branch, with the script, the rehearsal and this record, is on origin)
 
 **Request.** The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then *"yes do it i
 will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to 5.18.96 when
@@ -11888,16 +11888,23 @@ configuration (`StaffJobsGate::applies()` and no SSP). Everywhere else every pag
 - **Cash in hand** counts approved entries that sit on no account or on a cash or mobile-money account. Ecobank, the
   other non-cash accounts, and pending and rejected entries are out; voided entries stay out. One predicate, in
   `cashInHand()` and in both running-balance streams, so every reader below agrees:
-  - the Cashbook's CASH IN HAND cards, its Balance column and the CSV (a non-cash entry stays in the list and the
-    export; its Balance cell shows "—");
+  - the Cashbook's CASH IN HAND cards, its Balance column and the CSV (an entry the rule leaves out — on a non-cash
+    account, or pending or rejected — stays in the list and the export; its Balance is "—" on the page and empty in
+    the CSV, where the All layout's Balance Currency is empty too; under 5.18.95 a pending or rejected entry carried a
+    running balance);
   - the landing page and its three project chips;
   - the evening WhatsApp at 18:00 Kampala;
   - `tools/cash_in_hand.php`.
 - **X5 — the CEO page.** "UGX Position" and "USD Position" become "UGX Cash in hand" and "USD Cash in hand", all
   projects; the heading says which tiles are all projects and which are DishNet; "Today's Cash" becomes "Today's
   collections".
-- **D1 — the Cashbook.** The "Cash balance is NEGATIVE" alert and the Add Entry UGX pill show cash in hand, each with
-  its own currency code.
+- **D1 — the Cashbook.** Under the rule the "Cash balance is NEGATIVE" alert is not shown. In its place there is one
+  red alert for each currency whose cash in hand on the project is below zero, titled "<CUR> cash in hand is below
+  zero", in that currency's own code, saying that entries with no account, or on the wrong account, can cause it.
+  **A red USD alert is therefore expected** while USD reads below zero (next bullet). The Add Entry UGX pill shows UGX
+  cash in hand, with its code. The "No cash received in last 7 days" alert now tests UGX cash in hand instead of the
+  project balance before it can show; its receipt count and its wording are unchanged (every approved receipt of the
+  project in the last 7 days, on any account and in any currency). Where the rule is off, all three are 5.18.95's.
 - **USD reads below zero** under the rule: dollars that arrived in the bank no longer count, dollar spending on no
   account still does. Accepted on 17 Oct; it recovers as entries are put on their accounts (R1–R3).
 - **The one exception, in the UGX-only view:** an entry stored with no currency counts as UGX but is not listed there,
@@ -11928,11 +11935,15 @@ the development branch as `7925c587`.
 
 - **The release, the full suite twice:** 288 files, **14,569 passed, 0 failed**, in each of two runs, file by file
   identical (17 Oct): 5.18.95's 283 / 13,649 plus the five new files — T1 548, T2 145, T3 166, T4 34, the mutants 27.
-- **A first run 2 failed 3 checks in `test_receipts_once.php`, which P3b does not touch. Cause found and proved; the
-  run was repeated alone.**
+- **Run 2 took three attempts.** The first (17 Oct, 16:09–17:08 UTC) was stopped by the two-hour limit on the
+  background command that ran both passes, after 249 of 288 files, 0 failed (`test_staff_whatsapp.php` printed
+  `Terminated` and gave no summary). **The second (17:09–18:09 UTC) failed 3 checks in `test_receipts_once.php`, which
+  P3b does not touch. Cause found and proved; the run was repeated alone (21:04–22:02 UTC) and passed 14,569 / 0.**
   - It ran while the Bank screen's build was running tests in two other worktrees. Seventeen test files of the release
-    (twenty-two of the development tree) clean up with `glob(sys_get_temp_dir() . '/fake_evo_state_*.json')` and `/fake_ucrm_*.json` — every fake server's state
-    on the machine, not only their own. A file trace caught `test_image_media.php` in another tree unlinking exactly
+    (twenty-two of the development tree) clean up with wildcard globs over `sys_get_temp_dir()` — every such fake
+    server's state on the machine, not only their own; eight of them (thirteen of the development tree) use
+    `/fake_evo_state_*.json` or `/fake_ucrm_*.json`, the two that reach the receipt test's files. A file trace caught
+    `test_image_media.php` and `test_voice_media.php`, from both other trees, unlinking exactly
     the receipt test's `/tmp/fake_evo_state_<hash>.json` and `/tmp/fake_ucrm_notify_<port>.json` mid-test: its fake
     WhatsApp server forgot texts it had received and its fake uCRM the payments it was seeded with.
   - Reproduced: with those media tests replayed beside it, the receipt test failed 1 run in 4, 3 in 9 and 0 in 5;
@@ -11967,7 +11978,7 @@ adds:
   plus the entries not approved; the drift between them named by row id; rule A must be in force on this server's own
   configuration, or nothing is deployed.
 - **A14:** a passing quarantine `--check` begun after 5.18.95's copy (the operator's of 17 Oct, 16:04:56 UTC).
-- Nothing it runs in the container opens a socket. Not between 14:55 and 15:10 UTC (the evening WhatsApp).
+- Nothing it runs in the container opens a socket.
 
 ### The rehearsal — `scripts/harness/deploy-5.18.96/rehearse.sh` (1,223 lines, sha256 `68f30475165f0543…`)
 
@@ -11983,7 +11994,7 @@ printed, and weakened copies of the script each caught.
   - **Its audit took the adjustment lookup for a run of the cash tool.** `CIHJ_PHP` is a `php -r` reading of the copy
     with PDO, read-only, that loads no plugin code; its source names `tools/cash_in_hand.php` as a label of the cash
     sheet, and the audit searched the whole command, source included. So every reading of the book counted two "runs
-    on a copy without a vault of their own": 86 over the rehearsal (43 runs × `pre` and `final`), measured with the
+    on a copy without a vault of their own": 86 over the rehearsal (43 readings × `pre` and `final`, in 32 runs of the 5.18.96 script), measured with the
     audit made to write each one out, then put back. The source of a `php -r` is no longer read as a path; its
     arguments still are. A new control writes three calls as the fake docker records them — the lookup, the tool run
     from the plugin folder with no vault (4e's shape) and a code copy with no vault — and needs `copies=2 novault=2
@@ -11997,30 +12008,59 @@ printed, and weakened copies of the script each caught.
 
 ### Runbook
 
-1. **Say the word to push** `release/5.18.96` and the development branch, together.
-2. **The deploy**, its own command, outside 14:55–15:10 UTC; type `DEPLOY`; send back the **log file**:
+1. **Say the word to push** `release/5.18.96`. The development branch — `scripts/deploy-5.18.96.sh`, its rehearsal
+   and this record — is already on origin; step 2's `git fetch origin release/5.18.96` fails until the release branch
+   is pushed.
+2. **The deploy**, as root on the server, its own command, outside 14:55–15:10 UTC (the evening WhatsApp, 18:00
+   Kampala); type `DEPLOY`; send back **the log file** (never a copy of the terminal, never the cash sheet). While it
+   runs — and during every `--after-only` and a rollback — press nothing on the Salesperson numbers card, run no
+   `tools/set_config.php` and save nothing under Settings: a change made then fails the checks that compare before and
+   after.
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.96 && mkdir -p /root/dnb-5.18.96 && bash scripts/deploy-5.18.96.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.96/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
 
-3. **Read the figures on the server** with the `less` command the summary prints. Never paste, copy or send the sheet.
-4. **Count the cash** (root docs/69 Part 5): at the same minute, the landing page's figure per currency against the
-   drawer, the wallets and what staff collected and have not handed over; advances written down, not added; any
-   difference in words, never amounts.
-5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command, as
-   the summary prints them.
-6. **The next day after 15:00 UTC:** `--after-only` again.
-7. **Look at the screens:** the Cashbook (both currencies), the landing page, the CEO page.
+   Expected: PASSED, 0 failed, with notes. On this server most likely R3 (`migration.log` holds no line for 087, as
+   on every deploy since 5.18.89), A17 (installation requests still pending under v1.0), R19 (not yet conclusive: the
+   copy has just been made), and the book's own, depending on what it holds — A23.4 (rows not approved), A23.5 and
+   R23.9 (the 12 Sep adjustment not as R0 recorded it), A23.6 (counts for a person to look at), R23.10 (rows posted
+   between A23 and R23). Any failure, or a note you cannot place: send the log file and stop.
+3. **Read the figures on the server** with the `less` command the summary prints — each run has its own sheet. Never
+   paste, copy or send a sheet.
+4. **Right after PASSED, at a quiet moment — not between 14:55 and 15:10 UTC — look at the screens, then count the
+   cash.** The screens: the landing page (cash in hand per currency, all projects), the Cashbook (both currencies; on
+   its Alerts tab a red USD "cash in hand is below zero" alert is expected) and the CEO page (the "<CUR> Cash in hand"
+   tiles). The count (root docs/69 §1.4, the D2 row of §3.1 and the P3b row of §3.2; the count lines are on the cash
+   sheet): at the same minute, the landing page's figure per currency against the drawer, the wallets and what staff
+   collected and have not handed over; advances written down, not added; any difference in words, never amounts.
+5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command as
+   the summary prints it, each with its own log file to send. If R19 still says not yet conclusive, run `--after-only`
+   again after the time it prints.
+6. **The next day after 15:10 UTC** (18:10 Kampala, once the evening WhatsApp has arrived, so that it has run on the
+   new code; the script's summary says after 15:00): `--after-only` again.
 
 ### Rollback — its own command, never pasted with the deploy
 
-`scripts/deploy-5.18.96.sh --rollback` asks for `ROLLBACK` and puts 5.18.95 (`098f6b3`) back; cash in hand returns to
-5.18.95's rule and the CEO page shows positions again; 5.18.95's security fixes stay. Then the quarantine's `--check`.
-A count recorded under 5.18.96 will not match the screens after a rollback.
+Only if it is needed: a passing deploy prints it "only if it is ever needed"; on a failure, send the log file and do
+not roll back on your own unless staff or customers are affected. `--rollback` asks for `ROLLBACK` before it changes
+anything, puts 5.18.95 (`098f6b3`) back through `deploy-hybrid.sh` and checks it (RB): 5.18.95's files by sha256,
+today's rule on a copy of the book with its own cash sheet, and 5.18.95's security fixes still in place. Cash in hand
+returns to 5.18.95's rule and the CEO page shows positions again; 5.18.95's fixes, 5.18.94's documents and every switch
+stay as they are. A count recorded under 5.18.96 will not match the screens after a rollback. The command is the one
+the deploy's summary prints last, after the verdict; as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.96.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.96/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+Then the quarantine's own `--check`, its own command, as the rollback's summary prints it.
 
 ### Known limits
 
 1. **The test suite's machine-wide cleanups** (above): harmless in a sequential suite; any parallel run of tests from
    two trees can make either fail. Recorded; the cleanups are not changed by this release.
-2. **USD below zero** until R1–R3 put the dollar entries on their accounts.
+2. **USD below zero** — and the Cashbook's red USD alert with it — until R1–R3 put the dollar entries on their
+   accounts.
 3. **The staff app's Uganda cash tiles still read 0** (X4, with the API work).
 4. **The UGX-only view's top Balance** can be short by entries stored with no currency (above); the deploy counts them.
+5. **The evening WhatsApp's window is the operator's to keep.** The script does not check the clock: it does not
+   refuse to start between 14:55 and 15:10 UTC. Its header and the Runbook (step 2) ask that it not be started then.
+6. **The script's header comments cite "root docs/69 Part 5",** which does not exist; the passages are docs/69 §1.4,
+   §3.1 (D2) and §3.2 (P3b). Left in the comments rather than change the rehearsed bytes.
