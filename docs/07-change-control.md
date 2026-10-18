@@ -12040,6 +12040,36 @@ and no secret, and the terminal held none; the cash sheet stayed on the server.
   account rows still listed, with no balance, and counted nowhere — but the Cashbook still lists them among the cash
   rows. Answered and taken up as its own change.
 
+### AFTER-CHECKS — 18 Oct 04:55 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **`--after-only`, begun 04:54:58 UTC: PASSED 83 ok / 0 failed / 1 note**
+  (`/root/dnb-5.18.96/after-20261018T045458Z.log`).
+  - Live `e35ecce` (5.18.96), as the deploy left it; the checkout at `d47c81b`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them; 086 and 087 complete, their rows and trail unchanged.
+  - V1–V13 passed; V4: no fatal since the copy (355 lines read).
+  - **R19 is conclusive:** master ran the retry job at 04:46:24 UTC, after the copy (04:44:18 UTC). Nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - R7: the migration ledger's last row and the database's size the same as at this run's stage A and at the deploy's.
+  - **R23.1–R23.10 on a fresh copy of the book (04:55:48 UTC):** the installed figure equals D2 = A's SQL in all 8
+    cells; 5.18.95's code on the same copy equals today's SQL; the parts add up to the cent; P0's tool agrees; the
+    Balance column and the CSV 16 of 16; the installed tool's figures equal the code's; **no drift since the deploy's
+    A23 (04:43:37 UTC)**. R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault untouched since the
+    deploy's stage A; Z2 nothing left in `/tmp`.
+  - The one note: R3, `migration.log` holds no line for 087, as on every deploy since 5.18.89.
+  - The cash sheet: `/root/dnb-5.18.96/cash-after-20261018T045458Z.txt`, 253 lines, read on the server only.
+- **The quarantine's `--check`, begun 04:56:25 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261018T045625Z.log`). K3–K13 hold: the old name is empty, the kept file is
+  unchanged, no process holds it, and the installed gate still stops the retry job, which ran at 04:46:24 UTC with
+  nothing made. The notes, as on 17 Oct: K2, the container serves `e35ecce` rather than the quarantine's `69c87a6` (the
+  gate is the same); K7, `config.json` in `<plugin>/data` removed and remade since the move — names only, another
+  writer's file, not a database.
+- **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
+  (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
+  assumed a deploy later in the day); the screens and the physical count.
+
 ### Runbook
 
 1. **Say the word to push** `release/5.18.96`. The development branch — `scripts/deploy-5.18.96.sh`, its rehearsal
