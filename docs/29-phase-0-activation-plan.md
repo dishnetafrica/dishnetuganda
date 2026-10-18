@@ -65,8 +65,8 @@ You spotted the discrepancy correctly. Here is what each resolves to:
 
 | Number | Digits | National part | Verdict |
 |---|---|---|---|
-| `+21192797217` | 11 | `92797217` (8) | **Malformed.** SS needs 9. `significant()` returns `192797217`, eating a country-code digit |
-| `+211927797217` | 12 | `927797217` (9) | **Well-formed** |
+| the number as first typed | 11 | 8 digits | **Malformed.** SS needs 9. `significant()` returns nine digits, eating a country-code digit |
+| the corrected number | 12 | its national part (9) | **Well-formed** |
 
 So the corrected number is structurally valid. **But it should still not be
 used**, and the evidence is inside your own codebase.
@@ -74,7 +74,7 @@ used**, and the evidence is inside your own codebase.
 `tools/set_alert_number.php` — which exists specifically to set this value —
 names that exact number in its header as a documented past incident:
 
-> *"`+211927797217` — a South Sudan number inherited from the Sudan config, so
+> *"the corrected number — a South Sudan number inherited from the Sudan config, so
 > every Uganda handover was announced in another country. Five customers waited
 > while nobody here was told, and the alerts arriving on that handset were read
 > back as a customer wanting a Starlink quote — 24 messages of the assistant

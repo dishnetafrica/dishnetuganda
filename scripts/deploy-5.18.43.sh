@@ -4,7 +4,7 @@
 #
 #   5.18.43  the first row of an invoice's totals reads "Subtotal", not "Before tax", and a discount
 #            follows it directly. Measured on the live install after 5.18.42 (26 Sep): invoice 000005
-#            carries a 30 % discount and no tax, and the operator decided to keep prices as they are
+#            carries a discount (its rate on that live invoice not repeated here) and no tax, and the operator decided to keep prices as they are
 #            ("keep price as it is") — so "Before tax" read as a tax still to come. Nothing else changes.
 #
 # It carries everything 5.18.42 deployed (below), and stage V re-checks all of it:

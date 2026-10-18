@@ -56,7 +56,7 @@ not arrived yet, §H). Nothing PENDING is asserted.
 
 | System | Presence | Evidence |
 |---|---|---|
-| uCRM | client #1 (a company), 1 contact with e-mail and phone; 1 service, id 6, plan 3 "Residential (up to 400 Mbps)", UGX 329,000, status active since 20 Sep 2026, **service attribute `starlinkDetails` set** (value withheld); 1 unpaid invoice of 329,000, 0 payments, balance −329,000; **`isActive false`** on the client while its service is active (§I.4) | **MEASURED** live through the plugin's own uCRM client (§I.4) |
+| uCRM | client #1 (a company), 1 contact with e-mail and phone; 1 service, id 6, plan 3 "Residential (up to 400 Mbps)" at its listed price, status active since 20 Sep 2026, **service attribute `starlinkDetails` set** (value withheld); 1 unpaid invoice for that amount, 0 payments, a negative balance of the same amount; **`isActive false`** on the client while its service is active (§I.4) | **MEASURED** live through the plugin's own uCRM client (§I.4) |
 | Hybrid | in `client_search_index`: the 05:40 e-mail sign-in matched exactly one account, eligible, and resolved to it. **MEASURED 08:41: the phone route and the e-mail route both resolve to CRM #1 with one account and an identical fingerprint (§I.3)** | docs/35 §2; §I.3 |
 | Starlink Finance | **not among the three kits/customers it shows** (CRM #7, #47, #69) | operator's screenshot; **MEASURED** by `--siblings`: `sl_kits.json` holds exactly #7, #47, #69 (§I.1.1) |
 | Data Report | **not among its clients** (the same three, plus one kit with no client at all) | operator's screenshot; **MEASURED** by `--siblings`: `dr_kit_registry.json` = #7, #47, #69 and one unassigned kit (§I.1.1) |
@@ -171,7 +171,7 @@ the link answers 401 after logout).
 |---|---|---|
 | Login by WhatsApp/phone | **WORKING** | 1 account matched, eligible, "Code sent via WhatsApp", verified, HttpOnly · SameSite=Lax · Secure cookie, no token in the body |
 | Login by e-mail | **WORKING** | 1 account matched, "Code sent via Email", verified, same cookie |
-| Account | **WORKING** | id 1, service type `starlink`, 1 service, 1 account, not paused, unpaid 329,000; uCRM live and the caches agree (§I.4) |
+| Account | **WORKING** | id 1, service type `starlink`, 1 service, 1 account, not paused, one unpaid invoice (amount not repeated here); uCRM live and the caches agree (§I.4) |
 | Services / plan | **WORKING** | "Residential (up to 400 Mbps)", UGX 329,000, active — UGX shown, the USD fallback not hit |
 | Invoices / invoice detail | **WORKING** | 1 pending invoice, detail with 1 item |
 | Invoice PDF | **WORKING on the standard port** | 200, `application/pdf`, 5,976 bytes, `private, no-store`, no redirect; origin `https://crm.dishnetuganda.com` with no port; **401 after logout**. A browser on `:8443` warns (§I.2, §J.2); **the PDF document itself contains 2 links to `crm.dishnetuganda.com:8443` (§I.6, §J.2)** |
@@ -183,7 +183,7 @@ the link answers 401 after logout).
 | Data Report hand-off | **BROKEN** | token minted; the sibling answers 404 "Report not found" (docs/36) |
 | Support ("Help") | **WRONG TENANT** | 23 South Sudan literals, 0 Uganda contacts on the rendered tab (§J.1) |
 | Legal / consent | **WRONG TENANT**, and asked per identifier | Terms: South Sudan ×3, Juba ×3, `+211` ×2; the e-mail route was sent to consent although the phone route had accepted (§D.15) |
-| Branding | sign-in page **Uganda** (DishNet Africa, Kampala, Uganda, 256 705 993 348; no South Sudan); portal pages **`+211` ×6, `Juba` ×1** | `login_web.php` reads the profile; `portal.php` does not |
+| Branding | sign-in page **Uganda** (DishNet Africa, Kampala, Uganda, the Uganda support number; no South Sudan); portal pages **`+211` ×6, `Juba` ×1** | `login_web.php` reads the profile; `portal.php` does not |
 | Logout | **WORKING** | 200; the cookie and the PDF link both 401 afterwards |
 | Log hygiene | **WORKING** | neither the code nor the cookie appears in the container log |
 
@@ -476,15 +476,15 @@ previous build of the command and at 08:40–08:41 on the extended walk; the 08:
 **Hybrid (store copy).** Index row id 1, Family Shoppers, phone …217, e-mail b***@outlook.com, service
 "Residential (up to 400 Mbps)", not a lead, not archived, has a service and an invoice, **updated 08:40:06** —
 the 60-second delta keeps it fresh. `ucrm_clients_cache` present with 1 contact; `ucrm_services_cache` 1 service
-(id 6, price 329,000, status 1, plan 3); `ucrm_invoices_cache` 1 invoice, unpaid, outstanding 329,000; 0
+(id 6, price recorded, status 1, plan 3); `ucrm_invoices_cache` 1 invoice, unpaid, an amount outstanding; 0
 payments; **`equipment_assignments` 0 and `stock_units` 0 for this customer** (the tables hold 2 units and 2 live assignments for other customers — §I.6); `customer_identities` and `kyc_applications`
 tables absent; `customer_sessions` 5 rows, 0 live. Audit rows for this customer: consent 1, DPO initiate 1,
 **invoice PDF download 2** (the operator's own two opens — the reported issue), login 5, logout 4, code sent 5,
 one "WhatsApp not configured" from before the transport was set.
 
 **uCRM live** (GET through the plugin's own client, nothing written): client 1, Family Shoppers, a company
-(`clientType 2`), 1 contact, **`isActive false`**, not a lead, not archived, balance −329,000, outstanding
-329,000; no client custom attributes; **1 service: id 6, plan 3, UGX 329,000, status 1, active from 20 Sep 2026,
+(`clientType 2`), 1 contact, **`isActive false`**, not a lead, not archived, a negative balance equal to the unpaid invoice, outstanding
+the same amount; no client custom attributes; **1 service: id 6, plan 3, at the plan's listed price, status 1, active from 20 Sep 2026,
 attributes `starlinkDetails=<value>`**; 1 unpaid invoice; 0 payments.
 
 **Finance:** `sl_kits.json` 3 kits, none for #1; its own uCRM copy has #1; 1 of its 5 cached services is #1's;
@@ -514,11 +514,11 @@ their result. Points worth stating on their own:
   in both walks. The link the portal builds is origin-relative and carries no token. This settles §J.2's
   questions 1, 3, 8, 9 and 10 by measurement; question 7 is settled by §I.2.
 - **The Support tab, live** (phone walk, pages rendered because consent was on record): `+211` ×11,
-  `211921443002` ×10, the South Sudan domain ×2 — **23 South Sudan literals, 0 Uganda contacts**, exactly the
+  the South Sudan WhatsApp number ×10, the South Sudan domain ×2 — **23 South Sudan literals, 0 Uganda contacts**, exactly the
   sandbox count. The home page: `+211` ×6, `Juba` ×1. **The public Terms page:** South Sudan ×3, Juba ×3,
   `+211` ×2, the South Sudan domain ×3 (both walks).
 - **The sign-in page, live** (e-mail walk, read because every portal page redirected): DishNet Africa ×2,
-  Kampala ×1, Uganda ×2, 256705993348 ×1, no South Sudan wording — the tenant profile works where it is read.
+  Kampala ×1, Uganda ×2, the Uganda support number ×1, no South Sudan wording — the tenant profile works where it is read.
 - **Consent per identifier:** the e-mail route was sent to the consent step on all eight pages although the
   same customer had accepted by phone (§D.15). Not accepted by the audit.
 - **Data Report hand-off:** token minted; the sibling answered 404 "Report not found" — docs/36 §0 confirmed
@@ -534,7 +534,7 @@ their result. Points worth stating on their own:
 The kit chain for CRM #1, read only, serials masked (full record: docs/39 §2, §4, §8, §9, §13):
 
 - **uCRM:** service 6 carries `starlinkdetails` = **KIT…KWW** (16 characters, a KIT-pattern serial), and the
-  hybrid's intake extracts exactly that serial. Invoice **id 4, number 000003**, status 1, total 329,000, paid
+  hybrid's intake extracts exactly that serial. Invoice **id 4, number 000003**, status 1, total an amount withheld here, paid
   0; payments 0.
 - **The hybrid's register — a correction to §B, §C, §D.4, §E and §I.4 above:** `stock_units` holds **2 units**
   and `equipment_assignments` **2 live rows**, both for other customers; **0 for #1**, and KIT…KWW is in no
@@ -573,8 +573,8 @@ Nothing was changed; no fix is built.
 
 **What the customer sees.** The portal's bottom navigation has a **Support** tab (`portal.php:7734`,
 `7744`; the operator calls it Help). Its screen (`tabs/customer_app/portal.php:1062–1135`) is hard-coded:
-a WhatsApp card to `+211 921 443 002`; a "Call us" row that **displays `+211 921 443 005` and dials
-`+211 921 443 002`**; an e-mail row to the South Sudan address; two more WhatsApp rows to `+211 921 443 002`
+a WhatsApp card to the South Sudan support WhatsApp number; a "Call us" row that **displays a different South Sudan number and dials
+the South Sudan WhatsApp number**; an e-mail row to the South Sudan address; two more WhatsApp rows to the same WhatsApp number
 ("Internet slow or down", "Help paying invoice").
 
 **Root cause.** The post-login portal never consults the tenant profile. `tabs/customer_app/portal.php`
@@ -589,13 +589,13 @@ The Phase 2 work (docs/07, 5.18.38) re-pointed the readers it listed; the portal
 
 | File | Literal | Where |
 |---|---|---|
-| `portal.php` | `+211921443002` ×16 (WhatsApp) | support view 1073, 1104, 1119; plans 978; WiFi 1587, 5180; hotspot 3310; service status 5010; the generic helper and error paths 4200, 6805, 6947, 7228, 7282, 7296 |
-| `portal.php` | `+211 921 443 005` (displayed) | 1088 — in neither profile and not in `CustomerContact::DEFAULTS` |
+| `portal.php` | the South Sudan WhatsApp number ×16 (WhatsApp) | support view 1073, 1104, 1119; plans 978; WiFi 1587, 5180; hotspot 3310; service status 5010; the generic helper and error paths 4200, 6805, 6947, 7228, 7282, 7296 |
+| `portal.php` | a second South Sudan number (displayed) | 1088 — in neither profile and not in `CustomerContact::DEFAULTS` |
 | `portal.php` | the South Sudan e-mail ×2 | 1092, 1096 |
 | `portal.php` | `Juba` ×4: "Juba, South Sudan · Updated just now", "Juba metro areas", "Juba, Yei, Wau", "Location: Juba" | service-status view 4885, 4966, 4991, 5010 |
 | `portal_data.php` | `$portalLocation = 'Juba'`; city default `'Juba'` | 1020, 1024 |
 | `portal_data.php` | currency fallback `?? 'USD'` | 1031 (§D.9) |
-| `legal_page.php` | footer "DishNet Africa Ltd. · Juba, South Sudan"; WhatsApp `+211 921 443 002`; the South Sudan e-mail | 307, 334, 335 |
+| `legal_page.php` | footer "DishNet Africa Ltd. · Juba, South Sudan"; the South Sudan WhatsApp number; the South Sudan e-mail | 307, 334, 335 |
 | `lib/LegalContent.php` | Terms: "registered in South Sudan… customers in Juba" (37–38); "governed by the laws of the Republic of South Sudan… the courts of Juba" (116–118). Privacy: "South Sudan regulatory authorities" (174–175) | the consent step every customer must accept |
 
 **Measured in the sandbox against the real portal code:** the Support tab renders **23** South Sudan
@@ -606,7 +606,7 @@ L10).
 
 **The six questions.**
 1. The link and destination: the Support tab, `?page=customer_portal&view=support`, rendered with the
-   contacts above; WhatsApp opens `wa.me/211921443002`; "Call us" dials `+211921443002`.
+   contacts above; WhatsApp opens a `wa.me/` link to the South Sudan WhatsApp number; "Call us" dials the same number.
 2. Generated by `tabs/customer_app/portal.php` (the support view and the `openWhatsApp` helper); the legal
    pages by `tabs/customer_app/legal_page.php` and `lib/LegalContent.php`.
 3. Hard-coded. Not generated through `TenantProfile` or any configuration key.
@@ -617,12 +617,12 @@ L10).
 5. Yes: one plugin, two profiles; Uganda selects `uganda` through UGX. Sudan is unaffected by the literals
    only because they happen to be its values — except the displayed 005 number, which is in no profile.
 6. The correct destinations, changing neither:
-   - **Uganda** (`profiles/uganda.json`): WhatsApp `256705993348`; phone `+256 705 993 348`; e-mail
+   - **Uganda** (`profiles/uganda.json`): WhatsApp and phone: the Uganda support number (not repeated here); e-mail
      `accounts@dishnetuganda.com`; DishNet Africa Limited, Acacia Mall, Kampala; law: the Republic of
      Uganda; regulator: Uganda Communications Commission. **Courts: not in the repository**
      (`jurisdiction.courts` is null) and **no Uganda legal text exists** (`legal_texts` is null).
-   - **South Sudan** (`profiles/south-sudan.json`): WhatsApp `211921443002`; support phone
-     `+211 921 443 006` (the portal shows 005); e-mail `info@dishnetafrica.com`; DishNet Africa Ltd.,
+   - **South Sudan** (`profiles/south-sudan.json`): WhatsApp: the business's South Sudan WhatsApp number; support phone
+     a South Sudan number ending 006 (the portal shows 005); e-mail `info@dishnetafrica.com`; DishNet Africa Ltd.,
      Airport Road, Juba; law: the Republic of South Sudan; courts: Juba.
 
 **Recommendation.** Every customer-facing help and support value resolves from the tenant profile, in

@@ -5,7 +5,7 @@ the website `dishnet-web-uganda`. Not Domain B.
 
 The operator sent a photo of DishNet's Airtel Money sign: *"airtel money —
 ACCEPTED HERE"*, a QR code labelled **DISHNET AFRICA LTD**, *"FREE OF
-CHARGE"*, *"Dial \*185\*9#"*, **Merchant ID 4428146**, *"Airtel Money is
+CHARGE"*, *"Dial \*185\*9#"*, **the Merchant ID** (not repeated here), *"Airtel Money is
 regulated by Bank of Uganda."* They asked to study how people in Uganda pay
 with it, and to use it as a payment option in DishNet, on the website, and in
 the assistant.
@@ -17,7 +17,7 @@ Search results quoting Airtel Uganda's *Airtel Money Pay* page agree with
 the sign:
 
 1. Dial **\*185\*9#** (Airtel Money Pay).
-2. Enter the **merchant ID**, 4428146.
+2. Enter the **merchant ID**, as shown on DishNet's sign (not repeated here).
 3. Enter the **amount**. Some sources say the payer may add a note, such as
    an invoice number.
 4. Confirm with the **Airtel Money PIN**.
@@ -75,7 +75,7 @@ reaches every one of them.
 - New setting **`pay_airtel_merchant`**, digits only. Unset changes nothing
   — South Sudan has no Airtel Money.
   - The **quotation summary** on WhatsApp gets *"💳 Airtel Money: Merchant ID
-    4428146, dial \*185\*9#"*, then the old *"Cash / Transfer / Card"*.
+    (not repeated here), dial \*185\*9#"*, then the old *"Cash / Transfer / Card"*.
     Nothing offered before is taken away.
   - The e-mails' **How to pay** list Airtel Money first, then the bank.
   - `tools/ai_facts.php --uganda` adds it to the preset payment answer.
@@ -89,7 +89,7 @@ reaches every one of them.
     before.
 - **The assistant's answer is a setting, `ai_fact_payment`.** The new text
   names Airtel Money and keeps the Ecobank transfer exactly as it was. It
-  ends: send the transaction ID or the transfer confirmation here.
+  ends by asking the customer for proof of payment (the value itself is not repeated here).
   - The accounts rule already hands *"payments the customer says they
     already made"* to a person, so that is who matches the ID.
   - The reply guard lets the merchant ID and the code through: seven digits
@@ -121,8 +121,8 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && bash scripts/depl
 Then the two settings, as the plugin folder's owner:
 
 ```
-docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key pay_airtel_merchant --value 4428146
-docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value 'Pay by Airtel Money or by bank transfer. Airtel Money: dial *185*9#, enter Merchant ID 4428146, the amount and your Airtel Money PIN — it is free of charge for the customer. The merchant name is DISHNET AFRICA LTD, and at our office customers can also scan the Airtel Money QR code with the My Airtel app. Bank transfer: DishNet Africa Limited at Ecobank Uganda Limited, Head Office branch, Plot 4 Parliament Avenue, Kampala. UGX account number 7247510191. Enter the account name and number exactly as written, and use your own name or your quotation number as the payment reference. After paying either way, send the Airtel Money transaction ID or the transfer confirmation here so we can match it to your order.'
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key pay_airtel_merchant --value '<the Airtel Money merchant ID>'
+# docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value '<the agreed payment text: the Airtel Money steps and the Ecobank UGX transfer details, not repeated here>'
 ```
 
 - Both were rehearsed on a scratch copy. Each value landed in the settings
@@ -172,8 +172,8 @@ change, as for the shop on 16 September ([21](21-shop-on-the-website.md)).
 - The operator deployed `f3ab37e` over `723233a`; *"✓ container now serves
   f3ab37e"*.
 - Both settings were set straight after. The settings tool's listing reads
-  each back: `pay_airtel_merchant` "4428146", and `ai_fact_payment` starting
-  *"Pay by Airtel Money or by bank transfer."* The first listing, printed
+  each back: `pay_airtel_merchant` (the merchant ID, not repeated here), and `ai_fact_payment` starting
+  with the agreed payment text (not quoted here). The first listing, printed
   between the two commands, still showed the old payment text, as it
   should.
 - The standard note about account numbers was printed after the payment
@@ -194,7 +194,7 @@ The operator answered two open items: *"we dont have momo for now"* and
 | `pay.html` | Three cards: *In the app* (MTN MoMo or Airtel Money), the portal (*"pay by mobile money"*), and *MTN, bank or cash* | Two cards: the portal shows invoices and payment history — *"To pay, use Airtel Money above"*; and *Bank or cash*, ending *"We do not take MTN Mobile Money at the moment"* |
 | `faq.html` | *"use the DishNet app or the customer portal … to pay by mobile money in a few taps"* | The portal shows invoices and payments; pay with Airtel Money, then send the transaction ID. The mobile-money answer also says MTN is not taken. Visible text and structured data match |
 | `get-the-app.html` | *Download for Android*, a button to `dishnet-africa.apk` (never on the site), *"pay bills with mobile money"*, *"Pay in two taps … MTN MoMo or Airtel Money"* | *Coming soon for Android*, a WhatsApp *"Tell me when it is ready"* button; the bills card says to pay with Airtel Money and links to the steps |
-| `why-dishnet.html` | *Mobile money native — MTN MoMo and Airtel Money for everything* | *Pay with Airtel Money — dial \*185\*9# and pay Merchant ID 4428146* |
+| `why-dishnet.html` | *Mobile money native — MTN MoMo and Airtel Money for everything* | *Pay with Airtel Money — dial \*185\*9# and pay the Merchant ID (not repeated here)* |
 | `about.html`, `services.html`, `hotspot.html` (and its three descriptions), `blog-wifi-hotspot-business-uganda.html` | *MTN MoMo and Airtel Money* | *Airtel Money* |
 
 - `README-DEPLOY.md` now says the APK is not published, and what to put

@@ -1,7 +1,7 @@
 # EFRIS field mapping — uCRM → internal model → official EFRIS
 
 Status: **uCRM column FROZEN 2026-09-05 against live probe output (invoice
-#000001, Family Shoppers, Starlink Mini Kit). Official column stays TBC until
+#000001, a real customer whose name is withheld, Starlink Mini Kit). Official column stays TBC until
 the URA specification arrives (Phase 2).**
 
 ## Probe results (2026-09-05, live install)

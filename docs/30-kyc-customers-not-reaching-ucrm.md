@@ -204,7 +204,7 @@ disk, unused by the older code. Clients already created in uCRM stay created.
 - Measured the same day, read-only:
   - automatic quote: **on**; admin token: **not set**;
   - support-channel WhatsApp goes out through Evolution, `dishnet_ug`;
-  - the support number printed in messages is +256 705 993 348.
+  - the support number printed in messages is the Uganda support number (not repeated here).
 
 ## 8. What 5.18.29 changes
 

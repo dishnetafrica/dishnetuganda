@@ -9,7 +9,7 @@
 #            is inside the total, and what the plan costs after that:
 #               💰 One-time: UGX 2,399,000
 #               💰 First month: UGX 249,000 (then UGX 249,000 per month)
-#               🏷️ Total: UGX 2,648,000
+#               🏷️ Total: UGX <the one-time sum plus the first month>
 #            The monthly line is the one spelled like one of uCRM's service plans — the rule the price feed and the
 #            assistant already use — so an access point, cable, connectors or consultancy on a quote are one-time, not
 #            "Monthly" as before. South Sudan's summary is byte-identical, and its uCRM is asked nothing more.

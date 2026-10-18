@@ -16,7 +16,7 @@
 On order 000114 the WhatsApp quotation summary said:
 
 ```
-💰 Hardware: UGX 2,399,000
+💰 Hardware: the quotation's one-time amount (not repeated here)
 💰 Monthly: UGX 249,000
 🏷️ Total: UGX 2,648,000
 ```
@@ -62,7 +62,7 @@ numbers are right as well. §2.1 is what 5.18.46 sends for it.
 🏷️ Total: UGX 2,648,000
 ```
 
-This is order 000117, and 000114 too: the Mini Kit, the plan and the installation. The item lines above it, the
+This is order 000117, and 000114 too (their items are not repeated here). The item lines above it, the
 Total, the payment lines and everything else in the message are as before. The Total is still uCRM's.
 
 ### 2.2 How a line is sorted

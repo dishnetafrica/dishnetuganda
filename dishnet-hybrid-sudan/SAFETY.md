@@ -183,7 +183,7 @@ IF YOU SEE __DIR__ . '/data/' ANYWHERE OUTSIDE lib/bootstrap_data.php — IT IS 
 
 Added v4.20.3 after a real production bug.
 
-When an SSP advance is issued to a staff member (e.g. Rupesh gives Aida 600,000 SSP):
+When an SSP advance is issued to a staff member (e.g. Rupesh gives Aida an advance in SSP):
 - cb_ledger gets ONE OUT entry (category "SSP Advance" / "Staff Advance"). This
   represents physical SSP cash leaving the main till. Cash is gone, period.
 - cb_ssp_register gets a corresponding IN entry on the staff's side.
@@ -635,10 +635,10 @@ bridge call (real webhook or synthetic test) was returning
 clearly contained KIT serials.
 
 Specifically:
-- Ruach Diu Top Billiu (KIT4M03895652B2D)
-- African Guest House (KIT4M01903618JZH)
-- Archbishop Elias Taban Parangi (KIT4M0373843829H)
-- Maroun Deng Morwel
+- a real customer, by full name with their kit serial (not repeated here)
+- a real business customer (its kit serial, not repeated here)
+- a real customer, by full name with their kit serial (not repeated here)
+- a real customer, by full name (not repeated here)
 - All others on the audit list
 
 The audit endpoint correctly extracted these same KITs and showed
@@ -1023,18 +1023,18 @@ Production deploy of v4.21.27 surfaced two issues:
 
 1. **FTTH/LTE customers listed as "No KIT in title"**.
    The Cleanup Needed list had 9 customers but 7 were FTTH:
-   - Achok Jiel (000239) — `Service Plan FTTH100`
-   - Alexandar Taban James (000240) — `FTTH50`
-   - GEBRESLASSIE OGBAZGHI (000086) — `FTTH100`
-   - Just in Time — `FTTH-50` (×2 services)
-   - Maroun Deng Morwel (000136) — `FTTH100`
-   - Simon Mangong Bol (000089) — `FTTH75`
-   - Tedros leke (000097) — `FTTH50`
+   - a real customer, by full name and client number (not repeated here) — `Service Plan FTTH100`
+   - a real customer, by full name and client number (not repeated here) — `FTTH50`
+   - a real customer, by full name and client number (not repeated here) — `FTTH100`
+   - a real business customer (name not repeated here) — `FTTH-50` (×2 services)
+   - a real customer, by full name and client number (not repeated here) — `FTTH100`
+   - a real customer, by full name and client number (not repeated here) — `FTTH75`
+   - a real customer, by full name and client number (not repeated here) — `FTTH50`
 
    These should never appear in a Starlink tool — they're on
    different infrastructure (Splynx/MikroTik for FTTH; Magma for
    LTE). Only 2 were genuine Starlink cleanup cases:
-   Mr. Ocheng Kenneth Kaunda, Relief Pact.
+   a person and a business (real customers; names not repeated here).
 
 2. **Customers paused via Block Manager / WiFi tab showed as "Ready
    to block"** instead of "Already paused". The audit's
@@ -1673,7 +1673,7 @@ are actually in the cache.
 - Two voided statuses exist in cb_ledger: 'voided' and 'voided_reconcile'.
 - Dashboard balance always used status='approved' (correct, excludes both).
 - CSV/ledger running balance used status != 'voided_reconcile' (WRONG —
-  was counting 'voided' rows). Caused $50 drift visible to admins.
+  was counting 'voided' rows). Caused a USD drift visible to admins (the real amount is not repeated here).
 - Fixed: getEntries() and getLedger() now use
   status NOT IN ('voided','voided_reconcile') for running-balance math.
 - Voided rows REMAIN visible in row list (audit trail preserved).
@@ -1790,7 +1790,7 @@ are actually in the cache.
 - ROOT CAUSE: approveExpense() passed raw SSP value (e.g. 30,000) as `amount` to
   addEntryRaw() instead of the USD equivalent, AND never passed `ssp_amount` at all.
   This caused 12 expense_sync cb_ledger rows to show Payment SSP = 0, overstating
-  company SSP balance by at least 627,000 SSP (Diko alone, one month).
+  company SSP balance by at least a real SSP amount, not repeated here (Diko alone, one month).
   quick_approve in staff_cashbooks.php had NO cb_ledger write at all.
 - FIX 1 (lib/ExpenseAdvanceService.php): approveExpense() now computes
   _cbAmount = ssp_amount / rate for SSP expenses, passes ssp_amount + ssp_rate.
@@ -1807,8 +1807,8 @@ are actually in the cache.
 - ROOT CAUSE: Cash balances diverged across 5 data sources (payment_collections.json,
   cash_expenses.json, staff_expenses SQLite, cash_handovers.json, cash_advances SQLite,
   staff_transfers SQLite). StaffCashPositionService, SnapshotService, and SQLite VIEW
-  all computed slightly different numbers. Caused $45K bug (Bidal), $734 mismatch (Diko),
-  $0 vs $210 bug.
+  all computed slightly different numbers. Caused a USD balance bug (Bidal), a USD mismatch (Diko),
+  $0 vs a non-zero balance bug (amount not repeated here).
 - FIX: New `staff_ledger` SQLite table — one row per cash movement, one balance query.
   Balance = SUM(in) - SUM(out) WHERE status NOT IN ('voided','cancelled')
 - Migration 045: staff_ledger table with 8 indexes (idempotency, staff+currency, source,
@@ -1874,7 +1874,7 @@ are actually in the cache.
 - Profit leak plan flagging: is_leak if profit<0 or margin<threshold
 - DATA IMPORT: lib/fiber_data_import.php reads Fiber Finance JSON backup
   Tested: 198 services, 154 customers, 4 plans, 7 invoices, 225 status changes
-  Production P&L: $8,425/mo revenue, $5,224/mo cost, $3,202/mo profit (38% margin)
+  Production P&L: real monthly revenue, cost, profit and margin figures (not repeated here)
 - BACKGROUND CRON: cron_fiber_sync.php registered in master.php
   Splynx sync on configurable interval (default 60min), monthly snapshot on 1st,
   missing invoice alert on 10th, daily leakage + low margin WA alerts

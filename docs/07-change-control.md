@@ -330,7 +330,7 @@ reads it back ON. The KYC form reads the store's copy instead; a read-only
 check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-ucrm.md)
 §9). Live evidence of the messages waits for the next KYC registration.
 
-## 5.18.31 + website — Airtel Money, merchant ID 4428146
+## 5.18.31 + website — Airtel Money, by DishNet's merchant ID
 
 **25 September 2026** · `lib/PaymentOptions.php` (new), `webhook.php`,
 `lib/CustomerEmails.php`, `lib/DishNetAiBrain.php`, `tools/ai_facts.php`,
@@ -340,7 +340,7 @@ check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-uc
 
 DishNet's Airtel Money Pay merchant ID becomes a payment option everywhere
 the system tells a customer how to pay. A customer dials `*185*9#`, enters
-4428146, the amount and their PIN — free of charge to them — then sends the
+the merchant ID (not repeated here), the amount and their PIN — free of charge to them — then sends the
 transaction ID so billing can record it.
 
 - **Website:** `pay.html` leads with an Airtel Money section (steps, the app
@@ -365,8 +365,8 @@ lines, and a website redeploy in EasyPanel.
 code, the previous build for the website.
 **Status:** plugin deployed 25 September 2026 (`f3ab37e`, over `723233a`);
 the container serves `f3ab37e`. Both settings were set straight after, and
-the settings listing reads each back: `pay_airtel_merchant` "4428146", and
-`ai_fact_payment` starting *"Pay by Airtel Money or by bank transfer."*
+the settings listing reads each back: `pay_airtel_merchant` set to the merchant ID (not repeated here), and
+`ai_fact_payment` starting with its new Airtel Money and bank-transfer text (not quoted here).
 The website redeploy has not been reported yet; the entry below goes out
 with it.
 
@@ -1339,7 +1339,7 @@ closing lines; the header, every check and the summary above it are 5.18.42's (`
 **The tax probe, read-only, the same evening** (`tools/tax_probe.php`): uCRM defines **no tax rate**; the
 pricing-mode setting is not on the settings endpoint; `taxable` is empty on all 30 products and all 5 plans;
 **no product is a UCC or regulatory charge**; the five latest invoices (000001–000005) carry **no tax or levy
-line**, and 000005 carries a 30 % discount (2,498,000 − 749,400 = 1,748,600). **The operator's decision,
+line**, and 000005 carries a 30 % discount (a real customer's invoice amounts, not repeated here). **The operator's decision,
 verbatim: *"ok keep price as it is"* and *"its ohk the way it is"*.** Prices stay as they are and uCRM gets no
 tax configuration. The invoice screen therefore shows the total, and the discount where there is one. The
 per-tax lines 5.18.42 built stay dormant until uCRM carries a tax, and the AI's rule is unchanged. The
@@ -1356,7 +1356,7 @@ come. 5.18.42 also printed the discount after the tax lines.
 
 **What.** `tabs/customer_app/portal.php`: the first row reads **Subtotal**, and the **discount follows it
 directly**, before any tax line, then the total. For invoice 000005 the column now reads Subtotal
-2,498,000.00 · Discount −749,400.00 · Total 1,748,600.00, the invoice's own arithmetic. The explanation moved
+(its amount) · Discount (its amount) · Total (its amount), the invoice's own arithmetic. The explanation moved
 from an HTML comment into a PHP comment: an HTML comment is sent to the customer's browser, and the first draft's
 comment put the words "Before tax" back into the page, which the new test caught. `tools/tax_probe.php` section 5
 prints the same order. Nothing else changes: no tax is computed, the app API's fields are the same, A2 is
@@ -2581,7 +2581,7 @@ printed at the end of the deploy's log — never pasted together with the deploy
       && mkdir -p /root/dnb-5.18.56 \
       && bash scripts/deploy-5.18.56.sh 2>&1 | tee /root/dnb-5.18.56/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
 
-**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to `211927797217`
+**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to the operator's South Sudan number (not repeated here)
 in **Engage → WhatsApp** ("🔔 Admin Alert Number") — this resolves the R14 note from the 5.18.55
 deploy (the admin number was unset, so the watchdog/KYC/handover alerts reached only the plugin
 log). `+211` is the South Sudan code, consistent with that screen's existing `211…` examples.
@@ -2613,7 +2613,7 @@ Three notes (configuration, not errors), carried over from the 5.18.55 state:
   WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
 - **R14: `whatsapp_admin_phone` is still unset (store `empty`, files `unset`), so the
   notification watchdog's alerts reach only the plugin log (docs/46 E-11).** The requested
-  `211927797217` has NOT yet been entered — operator action in Engage → WhatsApp.
+  number (not repeated here) has NOT yet been entered — operator action in Engage → WhatsApp.
 - R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
 
 Rollback to 5.18.55 remains available on its own (docs/44 §16.9):
@@ -2682,7 +2682,7 @@ alone; the rollback prints separately at the end of its log — docs/44 §16.9):
 **Scope note:** this release fixes the **accounting plane** (seven screens). A follow-up **5.18.58**
 is offered for the same SSP-on-Uganda pattern on the sales/support plane (`my_account.php`,
 `wallet.php`, `field_expenses.php`) and the `fiber_costs.php:190` `$` USD-symbol leak. Still
-outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = `211927797217`**
+outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = the requested number (not repeated here)**
 in Engage → WhatsApp.
 
 ## 1 Oct — 5.18.58 BUILT (Uganda sales/support cash screens show UGX, not SSP); deploy script + rehearsal ready; NOT deployed
@@ -3533,13 +3533,13 @@ staff_ledger → Staff Cashbooks* existed and worked for South Sudan's literal `
 - `StaffCashPositionService::getUSDBalance()` (14 literal `'USD'` tests), `DualReadCashPosition` (`position($id,'USD')`),
   `staff_cashbooks.php` (`$uL = cur === 'USD'`), `my_account.php` and `wallet.php` **dropped every UGX row**. Elisha's
   eight approved field expenses had reached the staff ledger in UGX and were invisible too. From the export: five
-  advances (UGX 650,000, 23 Sep–3 Oct) against UGX 310,328 of expenses — a page that should read about UGX 339,672
+  advances (a UGX total, 23 Sep–3 Oct) against a UGX total of expenses — a page that should read the UGX difference (figures not repeated here)
   read nothing.
-- The Cashbook page's POSITION card (UGX −24,119,205) was the Phase-C account model: money accounts (Cash–Uganda
-  +29,137,000, Ecobank −24,922,777 — the statement import brought only card purchases) plus "unassigned rows"
-  −28,333,428, which includes the operator's **UGX 29,056,500 "ADJUSTMENT ENTRY" of 12 Sep** that zeroed the running
-  balance. The ledger's running balance (UGX 723,072) is right *because* the adjustment cancels the account rows; cash
-  rows alone, adjustment excluded, give exactly 723,072 as well. Two arithmetics on one table.
+- The Cashbook page's POSITION card (a UGX figure, not repeated here) was the Phase-C account model: money accounts (Cash–Uganda
+  and Ecobank balances, not repeated here — the statement import brought only card purchases) plus "unassigned rows"
+  (a UGX figure, not repeated here), which includes the operator's **"ADJUSTMENT ENTRY" of 12 Sep** (its amount not repeated here) that zeroed the running
+  balance. The ledger's running balance (the UGX cash in hand, not repeated here) is right *because* the adjustment cancels the account rows; cash
+  rows alone, adjustment excluded, give exactly the same figure as well. Two arithmetics on one table.
 
 **2. The principle (5.18.57's, applied to the money logic):** the code's "USD" bag is the BOOK's BASE bag. Every "is this
 the USD bag?" question became "is this the book's base bag?" — `dn_book_base()` — and every writer that said "amount only
@@ -3659,7 +3659,7 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 179 files from Release A through 5.18.67 intact; **R6
     the staff-cash chain is in place** beside the photo surface; **R7 the backfill's dry run on the live data: 5
     staff-advance OUT rows in UGX name a person, 8 cash-in records exist — plan: 0 to create, 5 to FIX, 0 skipped**, each
-    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX 50,000 + 250,000 + 100,000 + 100,000 + 150,000) matched to the
+    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX amounts given to staff, not repeated here) matched to the
     one staff member (#4) and each already carrying a cash-in with **amount 0** (cash-ins #1, #2, #6, #7, #8). **That is the
     diagnosis confirmed on production**: the 5.18.67 auto-link did fire for every advance and wrote 0. The photo tables and
     files read exactly as before (`present:3:1`, `files:3`) — the dry run touched no data.
@@ -3673,9 +3673,9 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
 ## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — DEPLOYED 06:26 UTC (PASSED 23/0/0)
 
 **Reported by the operator (a screenshot and an export of the technician's staff cashbook, after 5.18.68 and before the
-backfill's `APPLY`):** the page read **UGX 0.00** with UGX 310,328 out and a row *"USD Received … +UGX 0.00"*; the export
+backfill's `APPLY`):** the page read **UGX 0.00** with a UGX total paid out (not repeated here) and a row *"USD Received … +UGX 0.00"*; the export
 came down as `staff-cashbook-<staff>-USD-2026-09-04-to-2026-10-04.csv` with the columns `Received (USD)` / `Payment (USD)`
-and three rows of 25 Sep (Collection, 200,000 / 50,000 / 50,000, approved); *"I have never given USD to this technician,
+and three rows of 25 Sep (Collection, three amounts received by the technician, not repeated here, approved); *"I have never given USD to this technician,
 always UGX — something wrong"*. The `+UGX 0.00` row is the pre-backfill state the 5.18.68 deploy's R7 showed (the five
 cash-ins carry amount 0 until `--apply` is typed through; whether `APPLY` was typed is not yet confirmed). The rest is
 three more literal `'USD'` sources — measured on the code and on the export, not inferred from the words:
@@ -3684,16 +3684,16 @@ three more literal `'USD'` sources — measured on the code and on the export, n
    `man_currency` and then wrote `'currency' => 'USD'` on every non-SSP entry, so a hand-typed UGX entry left the UGX
    register (5.18.68 reads the base bag) and surfaced as dollars in the export. The three 25 Sep rows are exactly that
    shape: `source = manual_adjustment`, stamped USD, UGX amounts. Read against the main cashbook's export they are the same
-   money as the advances **CB-66 (50,000) and CB-72 (250,000)** of those days — 300,000 both ways — typed again by hand on
+   money as the advances **CB-66 and CB-72** of those days — the same UGX total both ways — typed again by hand on
    the staff page while the advance link wrote 0. The 5.18.68 backfill links those advances to the technician's ledger, so
    **counting both would double the money**: the tool's default repair is VOID, and RELABEL is offered only for a hand entry
    that is the only record of its money. **Void or keep is the operator's call; the deploy repairs nothing by itself.**
    **Verified line by line at 06:25 UTC**, when the operator re-sent the export (byte-identical to the 04:42 copy, so the
-   server was still on 5.18.68): CB-72 (24 Sep, 250,000) reads *"Paid for Buying Material and 50K UGx as Advance"* and the
-   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* 200,000 + *"Advance for other expenses"*
-   50,000; CB-66 (23 Sep, 50,000) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
-   (advance)"* 50,000. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
-   190,000, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
+   server was still on 5.18.68): CB-72 (24 Sep, amount not repeated here) reads *"Paid for Buying Material and [an advance amount] as Advance"* and the
+   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* the cable amount + *"Advance for other expenses"*
+   an amount not repeated here; CB-66 (23 Sep, the same amount) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
+   (advance)"* of the same amount. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
+   its amount not repeated here, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
 2. **The stored category `'USD Received'`.** The base-bag cash-in category is stored under South Sudan's name, and the
    Staff Cashbooks page, My Cash and the export printed it as stored. Each now prints it as **`<base> Received`** — "UGX
    Received" on Uganda; the stored value is unchanged (the ledger writer, the position service and the backfill key on it).
@@ -3769,9 +3769,9 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   *nothing to void*. The 5.18.68 `--after-only` is superseded: this deploy's R5 re-reads every file from Release A through
   5.18.68.
 - **Still open from 5.18.68:** the backfill's `--apply` log (not received; the screenshot shows the pre-backfill 0.00).
-  After it, the technician's page should read about UGX 339,672 (650,000 in, 310,328 out) — plus 300,000 if the three
-  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: UGX 339,672.00
-  (650,000 received, 310,328 out) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
+  After it, the technician's page should read the UGX difference between the advances in and the expenses out (figures not repeated here) — plus the rows' total if the three
+  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: that UGX figure
+  (the amount received and the amount paid out, not repeated here) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
   hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
 - **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
   own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
@@ -3795,7 +3795,7 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
     stamped in a currency other than UGX: 0.** The three "USD" rows the operator exported are **`cash_ins` records**, not
     Manual Entry collections — the export prints a cash-in's own category, and theirs is `Collection`. The tool counts and
     flags them, but its repair covers only `payment_collections` rows with `source = manual_adjustment`, so **it cannot void
-    them.** What they ARE (hand copies of CB-66 + CB-72, 300,000, UGX wearing a USD label) stands as verified above; what
+    them.** What they ARE (hand copies of CB-66 + CB-72, the same UGX total, UGX wearing a USD label) stands as verified above; what
     wrote them was a cash-in form, not the Manual Entry. The photo tables and files read exactly as before (`present:3:1`,
     `files:3`) — the LIST touched no data.
   - **The operator then ran the tool's `--void` command** (its own command, after the deploy, ~06:30 UTC): the same census,
@@ -3853,8 +3853,8 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   left; the filter button links `fr_curr=UGX`. B: the technician's cash-in, posted with what the page now submits, is stamped
   UGX, Collection, approved; the wallet's Collections line and the Staff Cashbooks UGX tile both read 20,000. C: production's
   shape planted — three USD-stamped Collection cash-ins and one `USD Received` with a live ledger row: the wallet's
-  Collections line counts the three (320,000: *the label lied and the figure followed*) while the UGX tile does not (the two
-  screens disagreed by 300,000); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
+  Collections line counts the three (*the label lied and the figure followed*) while the UGX tile does not (the two
+  screens disagreed by the three rows' total, not repeated here); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
   lists each cash-in with category, stamp, amount, status and description, writes nothing. D: VOID names each row, voids
   them the page's way (stamp untouched, nothing deleted), voids the ledger row `CIN-n`, writes four `void_cash_in` activity
   lines and its summary; the wallet is back to 20,000 and agrees with the tile; LIST reads *4 (0 not yet voided)*; a second
@@ -3876,7 +3876,7 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   F prints the rollback alone, then the tool's `--void` command as a third block, naming `--relabel` as the alternative.
 - **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.69 base
   holding a UGX book with the pilot *on* and **the three cash-ins the old pill stamped USD seeded — production's shape**
-  (Collection, 200,000 / 50,000 / 50,000, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
+  (Collection, three amounts copied from production and not repeated here, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
   copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST reads
   `cash_ins USD 3 ◄ not the base` and names each cash-in with its category, stamp, amount, status and description, and
   **the data digest of every table is unchanged across the deploy: the LIST wrote nothing, the three still approved and
@@ -3928,8 +3928,8 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     beside the 5.18.69 fixes, the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the live data,
     read-only:** `payment_collections UGX 1 · cash_ins UGX 5 · USD 3 ◄ not the base · cash_expenses 0 · cash_handovers 0 ·
     staff_expenses UGX 8 · cash_advances 0 · staff_transfers 0 · staff_ledger UGX 13` (the four empty tables now read `0`),
-    and **the three candidates, named: cash-in #3 (Collection, USD, 200,000.00, 25 Sep, "Outdoor ethernet cable roll
-    305 m"), #4 (50,000.00, "Advance for other expenses"), #5 (50,000.00, "6th street installation allowance
+    and **the three candidates, named: cash-in #3 (Collection, USD, its amount not repeated here, 25 Sep, "Outdoor ethernet cable roll
+    305 m"), #4 (an amount, "Advance for other expenses"), #5 (an amount, "6th street installation allowance
     (advance )")**, all approved, all the technician's (#4). The photo tables and files read exactly as before
     (`present:3:1`, `files:3`) — the LIST touched no data.
   - **The operator then ran the tool's `--void` command** (its own command, after the deploy): the same census, the three
@@ -3937,8 +3937,8 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     the prompt; whether VOID was typed is not yet known.** Nothing is written until it is.
   - **Not yet done:** the typed `VOID` and its records log (expected: three `cash-in #n voided (USD …, Collection, …)`
     lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
-    *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
-    the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+    *Collections* line afterwards (it counted the three — their total, not repeated here — whatever their stamp); the 5.18.68 backfill's result on
+    the Staff Cashbooks page (a UGX figure held by staff, not repeated here); `bash scripts/deploy-5.18.70.sh --after-only`.
   - **16 Oct 2026 — VOID was typed, measured by R0** (`docs/69` Part 4, read-only). Cash-ins #3, #4 and #5 are each
     voided, `voided_by` the 5.18.70 tool, `voided_at` 2026-10-04, category as recorded, not relabelled. None of the three
     has a `CIN-` row in the staff ledger, as expected for `Collection` cash-ins. The records log itself is still not on file.
@@ -3946,9 +3946,9 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
 ## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 
 **Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
-accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: UGX −24,119,205.00 / USD
-−139.37"** and the account tiles (Ecobank Uganda UGX −24,922,777, Cash Uganda 29,137,000, Airtel 0, MTN 0, Ecobank USD
-−1,039.37, Cash USD 0), beside the Cashbook page's card **UGX CASH IN HAND 723,072.00 / USD 10,871.37**. The 5.18.68
+accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: a UGX figure / a USD
+[figure not reproduced]"** and the account tiles (Ecobank Uganda, Cash Uganda, Airtel, MTN, Ecobank USD
+and Cash USD, their balances not repeated here), beside the Cashbook page's card **UGX CASH IN HAND / USD** (figures not repeated here). The 5.18.68
 decision ("I don't want working capital and bank amount to be shown in the plugin in Uganda — cash in hand only") had been
 applied to the Cashbook page; the landing hero still drew `currencyPositions()`, the Phase-C account model, on a book
 without SSP (`tabs/accounts/accounts_dashboard.php`: `$_dashSSP ? [] : $cbDash->currencyPositions()`), while South Sudan's
@@ -3957,12 +3957,12 @@ DishNet 4G / BlueCARD chips). Two more things on that page, read from the code: 
 **USD** stream (`getBalanceByCurrency($project, 'USD')`), so the Money Locations office figure on a UGX book was the dollar
 bag; and Money Locations lists staff by *collection exposure* (the `staff_cash_position` view), which reads 0 for a
 technician who only holds an advance — so the page said *"All cash is in office — no field holdings"* while the technician
-held about UGX 339,672.
+held a UGX amount (not repeated here).
 
 **What changed** (`72de8be` on the branch, release `b350192` on `cba7faf`), all on a book without
 SSP, South Sudan's branch untouched:
 - **The hero reads "Cash in hand — per currency"**: `CashbookService::cashInHand()` per book currency — the Cashbook card's
-  own figure (UGX 723,072.00 / USD 10,871.37 today) — and the base per project in the three chips (Fiber & Starlink /
+  own figure (the UGX and USD cash in hand, not repeated here) — and the base per project in the three chips (Fiber & Starlink /
   DishNet 4G / BlueCARD), the shape South Sudan's hero has. `currencyPositions()` is not called on the page any more; no
   bank balance, no unassigned stream, no "position".
 - **Money Locations**: the office figure is the base cash in hand (not the literal-USD project balances); the block lists
@@ -3975,7 +3975,7 @@ SSP, South Sudan's branch untouched:
 - `manifest.json` 5.18.71; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
 - Not changed, recorded: `getBothBalances()`'s literal USD (used by the South Sudan hero, the API balances and the evening
   summary's SSP branch) — identity on South Sudan, a latent base-currency item elsewhere; the Cashbook card's USD figure
-  (10,871.37) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
+  (not repeated here) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
 
 **Tests.**
 - `tests/test_accounts_dashboard_cash.php` — **30/0.** A: an empty Uganda book — the hero "Cash in hand — per currency",
@@ -4034,38 +4034,38 @@ SSP, South Sudan's branch untouched:
   - **R.** R1 all 9 files as `b350192` has them, manifest 5.18.71; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 193 files from Release A through 5.18.70 intact; **R6
     the cash-in-hand hero, no account position, the held-by-staff list and the tool are in place** beside the earlier
-    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND 723,072.00 · USD CASH
-    IN HAND 10,871.37`; Fiber & Starlink UGX 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — exactly the Cashbook card's
+    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND [a UGX live-book figure, not repeated here] · USD CASH
+    IN HAND [a USD live-book figure, not repeated here]`; the per-project figures for Fiber & Starlink, DishNet 4G and BlueCARD, not repeated here** — exactly the Cashbook card's
     figures of the morning's screenshot, now also the landing hero's. The photo tables and files read exactly as before
     (`present:3:1`, `files:3`) — the tool touched no data.
   - **Seen by the operator — 2026-10-04, 14:11 on the operator's screen (about 11:11 UTC; two screenshots of v5.18.71,
     no words):**
-    - **The technician's Staff Cashbooks page reads UGX 339,672.00** — *"Cash still with staff"*, **▲ UGX 650,000.00
-      received · ▼ UGX 310,328.00 out**; the tiles *UGX collected 650,000.00*, *Handed over 0.00*, *Cash with staff
-      339,672.00*, *Wallet balance 0.00*; the first row is the 03 Oct Staff Advance of UGX 150,000.00, IN, *UGX Received*,
-      approved. **That is the figure predicted since 5.18.68 (650,000 − 310,328), so the 5.18.68 backfill's `APPLY` ran**:
-      the `+UGX 0.00` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
+    - **The technician's Staff Cashbooks page reads a UGX figure held by staff, not repeated here** — *"Cash still with staff"*, **▲ a UGX figure
+      received · ▼ a UGX figure out, neither repeated here**; the tiles *UGX collected* (figure withheld), *Handed over* (figure withheld), *Cash with staff
+      (figure withheld)*, *Wallet balance (figure withheld)*; the first row is the 03 Oct Staff Advance (a UGX amount, not repeated here), IN, *UGX Received*,
+      approved. **That is the figure predicted since 5.18.68 (received less paid out), so the 5.18.68 backfill's `APPLY` ran**:
+      the zero-amount `+UGX` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
       had said as much; the page now says it. The backfill's own log was never received; the page is the outcome.
-    - **The landing page hero reads *Cash in hand — per currency*: UGX 723,072.00 · USD 10,871.37; Fiber & Starlink
-      UGX 723,072.00 · DishNet 4G UGX 0.00 · BlueCARD UGX 0.00** — R7's figures, and the Cashbook card's. No account
-      tiles, no negative position. *Today · 04 Oct UGX 0.00 · 0 payments · 0 new KYC*; the KPI row *Agent float UGX 0
-      (9 agents) · Field cash UGX 0 (0 collectors) · MTH recharge UGX 0 · KYC month 0* as before. The screenshot ends
+    - **The landing page hero reads *Cash in hand — per currency*: UGX and USD figures from the live book (not repeated here); Fiber & Starlink
+      · DishNet 4G · BlueCARD (live-book figures, not repeated here)** — R7's figures, and the Cashbook card's. No account
+      tiles, no negative position. The *Today · 04 Oct* line with its amount, payment and KYC figures; the KPI row *Agent float [amount withheld]
+      and its agent count · Field cash and its collector count · MTH recharge · KYC month* as before, their figures not repeated here. The screenshot ends
       above **Money Locations**, so the held-by-staff list itself has not been seen in a browser; the figure it lists for
-      the technician comes from the same balance call the Staff Cashbooks hero shows, 339,672.00.
+      the technician comes from the same balance call the Staff Cashbooks hero shows, the UGX amount held by staff.
     - **Two wording items noticed on the Staff Cashbooks page, not changed:** the tile says *UGX collected* and the
       balance says *Needs handover* — South Sudan's collections wording, while on Uganda this staff member's inflow is
       advances to be spent and accounted for, not collections to hand over. The figures are right; the words are a later
       instruction.
   - **Not yet done:** the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the
     prompt; if VOID was not typed, the three 25 Sep hand copies of CB-66/CB-72 still stand as `USD` cash-ins #3, #4, #5
-    and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
+    and the technician's My Wallet *Collections* line still counts their amount, not repeated here); Money Locations seen in a browser
     (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
 
 ## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — DEPLOYED 11:56 UTC (PASSED 23/0/0)
 
 **Reported by the operator (14:1x Kampala, after the 5.18.71 screenshots):** *"fix the collected and handover wording for
-uganda"*. On the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out) the tiles read
-**"UGX COLLECTED 650,000.00"** and **"CASH WITH STAFF 339,672.00 — Needs handover"**, beside *"Handed over 0.00 — Given to
+uganda"*. On the technician's Staff Cashbooks page (a UGX balance held by staff, with its received and paid-out figures, not repeated here) the tiles read
+**"UGX COLLECTED [figure withheld]"** and **"CASH WITH STAFF [figure withheld] — Needs handover"**, beside *"Handed over [figure withheld] — Given to
 accounts"*. That is South Sudan's collections wording, written when every staff member with a bag was a field collector who
 collects payments and hands them over to accounts. On Uganda this staff member's inflow is **advances** (and any
 collections) to be spent on approved expenses and accounted for; the hero's own pills already said *"received"* / *"out"*,
@@ -4166,8 +4166,8 @@ The rollback is printed by the script, alone, at the end of its log — never ha
   - **R.** R1 all 10 files as `88d8442` has them, manifest 5.18.72; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 196 files from Release A through 5.18.71 intact; **R6
     the 5.18.72 wording is in place and South Sudan's `collected` / `Needs handover` branch is still in the file**, beside
-    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber &
-    Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as at 10:59, no cash movement since; the
+    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND (figure not copied here) · USD (figure not copied here); Fiber &
+    Starlink, DishNet 4G and BlueCARD (live-book figures, not repeated here)** — the same figures as at 10:59, no cash movement since; the
     photo tables and files read exactly as before.
 - **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
   before); the 5.18.70 VOID's records log (still not
@@ -4477,7 +4477,7 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
     the hand-off is a tenant setting, the portal gates on it, the token is refused under empty inputs, zoom allowed, no
     invented uptime, no hard-coded version**, beside every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN
-    HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as
+    HAND and USD, and the per-project figures for Fiber & Starlink, DishNet 4G and BlueCARD (live-book figures, not repeated here)** — the same figures as
     at 10:59 and 11:56, no cash movement since; the photo tables and files read exactly as before.
 - **Not yet done:** a Uganda customer's look at the portal on 5.18.73 (home card without the *Usage details* link, a site
   page without the *Usage Details* tile, the Account footer at v5.18.73, *No outage reported*, the sign-in page zooming);
@@ -4547,7 +4547,7 @@ the one value no screen could set, and shows the configured payment instructions
   (`portal_data.php` `$portalPayText`). Uganda has it (Airtel Money merchant, Ecobank account, how to reference a
   payment — written for the assistant and the quotations); South Sudan has it unset and keeps its Bank transfer block
   from the profile. Walkthrough finding 3 (*a Uganda customer is not told how to pay*) is closed from configuration the
-  operator had already approved; the text ends *"send … the transfer confirmation here"*, which on this screen is the
+  operator had already approved; the text ends by asking the customer to send the payment confirmation (its wording not quoted here), which on this screen is the
   *I've paid this invoice* button below it — the operator can reword the setting if wanted.
 - **Kept from 5.18.73:** the tenant setting and `TenantProfile::dataReportHandoff()`; the mint's two refusals;
   `DishNet.openDataReport()` never navigating without a token; the Account footer reading the installed version; the
@@ -4641,8 +4641,8 @@ answered **200 with no token at all**.
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
     the hand-off ON in both profiles, the portal gates on it, the token refused under empty inputs, the secret generator
     present, "How to pay" present, zoom, no invented uptime, no hard-coded version**, beside every earlier marker; **R7**
-    (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G
-    0.00, BlueCARD 0.00** — the same figures as at 10:59, 11:56 and 16:24, no cash movement today; the photo tables and
+    (5.18.71's read-only tool) **UGX CASH IN HAND (figure withheld) · USD (figure withheld); Fiber & Starlink (figure withheld), DishNet 4G
+    and BlueCARD (live-book figures, not repeated here)** — the same figures as at 10:59, 11:56 and 16:24, no cash movement today; the photo tables and
     files read exactly as before.
 - **Step 2 — DONE, about 20:0x UTC.** `set_config.php --key webhook_secret --generate` answered *"webhook_secret generated
   and stored (32 characters). It is not shown here"*, and the listing that followed reads **`webhook_secret set (32
@@ -5752,8 +5752,8 @@ Results:
     *"OK: 086_install_authorisation.sql (19 stmts, 15ms)"* at 14:39:51 by its own clock (UTC+3): 11:39:51 UTC, the
     second of the copy. R3 084 still installed, `6:2` rows, untouched; R4 the pilot as before, the channel
     `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 206 files from Release A through 5.18.74 intact; R6
-    every earlier marker and 5.18.83's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00; Fiber & Starlink
-    591,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the book's own figures (5.18.83's changes touch no cash code); the
+    every earlier marker and 5.18.83's; **R7** (read-only) **UGX and USD cash in hand (not repeated here); Fiber & Starlink
+    / DishNet 4G / BlueCARD per project (live-book figures, not repeated here)** — the book's own figures (5.18.83's changes touch no cash code); the
     photo tables and files read exactly as before.
   - **What it meant at 11:39 UTC:** nothing changed for staff or customers. The switch was off, so no guard ran, the job
     page showed no panel and the customer page answered 404. Step 2 followed.
@@ -5930,7 +5930,7 @@ with 5.18.83: 30 rehearsed, 29 on the server.
     authorisation ON in both copies, and the installed `InstallScheduledWhatsApp` reads the new switch OFF in both; R3 086
     still applied and complete, `0:2:1:1:0` before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the
     channel `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 217 files from Release A through 5.18.83
-    intact; R6 every earlier marker and 5.18.84's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the
+    intact; R6 every earlier marker and 5.18.84's; **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the
     figures 5.18.83's deploy read; the photo tables and files read exactly as before.
 - **SWITCH-ON — 06 Oct, by 15:25 UTC, by the operator** (recorded from the terminal the operator pasted):
   - `set_config.php --key customer_wa_install_scheduled --value 1` printed *"customer_wa_install_scheduled = 1"*, the
@@ -6161,7 +6161,7 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
     before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI-layer file; R5 all 219 files from Release A through 5.18.84 intact; R6 every earlier marker and 5.18.85's;
-    **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.84's deploy read; the photo tables
+    **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.84's deploy read; the photo tables
     and files read exactly as before; **R8** the installed quotation reader read a 000181-shaped quotation as the form
     will (the kit, the plan, installation 150000, transport asked for).
   - **Not seen yet:** the form filled from a real quotation, and a booking WhatsApp naming its technician. Both wait for
@@ -6456,7 +6456,7 @@ the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.1
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
     before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI-layer file, none of the rest of Batch 1; R5 all 221 files from Release A through 5.18.85 intact; R6 every
-    earlier marker and 5.18.86's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.85's
+    earlier marker and 5.18.86's; **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.85's
     deploy read; the photo tables and files read exactly as before; R8 the quotation reader as at 5.18.85; **R9** the
     installed Inbox route on the server's own Inbox row: sales → the sales number, account → the account number,
     support, accounts and web → `sendVia()` as before, the registry dark.
@@ -6665,8 +6665,8 @@ word — done, 07 Oct 06:33 UTC: the server pulls both branches from GitHub, `cl
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `2:9:1:1:1`
     before and after; 084 `16:3` rows, 16 files; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI media-layer file, none of Batch 1, the AI worker Batch 0 alone; R5 all 225 files from Release A through
-    5.18.86 intact; R6 every earlier marker and Batch 0's pieces; **R7** (read-only) **UGX CASH IN HAND 591,072.00 ·
-    USD 0.00**, the figures 5.18.86's deploy read — and the photo comparison above; R8 the quotation reader as at
+    5.18.86 intact; R6 every earlier marker and Batch 0's pieces; **R7** (read-only) **UGX CASH IN HAND (figure withheld) ·
+    USD (a live-book figure, not repeated here)**, the figures 5.18.86's deploy read — and the photo comparison above; R8 the quotation reader as at
     5.18.85; R9 the Inbox route as at 5.18.86's deploy; **R10: the assistant is asked for a lead on the sales number and
     on the support/account number, `AiLeadService` records it in Sales → Leads, and nothing reaches uCRM.**
   - **Not seen yet:** a lead from a real conversation. It waits for the next customer who tells the assistant what they
@@ -7098,7 +7098,7 @@ same 54, one for one** (the rehearsed deploy's full output, captured afterwards,
   - **R3, the earlier migrations:** 086 complete, `2:12:1:1:1` before and after; 084 `16:3`, 16 files.
   - **R4:** no media-layer, portal or CSRF file. **R5:** all 230 files from Release A through 5.18.87 intact.
     **R6:** every earlier surface, and 5.18.88's Batch 1 pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.87's deploy read. The photos as
+  - **R7** (read-only): **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.87's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off, a lead carries
     no channel fields (S7).
@@ -7633,7 +7633,7 @@ same 62, one for one** (by check, against the rehearsed deploy's full output); t
     runbook above.
   - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 238 files from
     Release A through 5.18.88 intact. **R6:** every earlier surface, and 5.18.89's pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.88's deploy read. The photos as
+  - **R7** (read-only): **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.88's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off a lead is
     5.18.88's, field for field, and the uCRM write is OFF.
@@ -8272,7 +8272,7 @@ now serves 3d9cb5f"*, and the 29 files were stamped at 15:52:02 UTC.
     read from the store above, which is the verification"* — the case the rehearsal planted (4t), as on 07 Oct.
   - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 253 files
     from Release A through 5.18.89 intact. **R6:** every earlier surface, and 5.18.90's pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.89's deploy read. The photos as
+  - **R7** (read-only): **the landing page's cash in hand per currency, UGX and USD (the figures are not repeated here)**, the figures 5.18.89's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path, and the uCRM write OFF.
   - **R11:** the registry is dark — its switch OFF in both copies, `enabled()` and `forStore()` off, 0 statements on its
@@ -9667,12 +9667,12 @@ PASSED.**
   with its assistant on.
 - `multi_number_channels_enabled = 1` (step 2) was **refused, twice**: *"Not yet: the department numbers are not all
   verified (sales, support). Nothing was saved."* The card's **Verify number** on the Sales and Support rows (docs/66 step
-  1.5) came first: **sales verified 21:50:04 UTC (••••15), support 21:50:30 UTC (••••48)**, each read from Evolution's
+  1.5) came first: **sales verified 21:50:04 UTC (last two digits withheld), support 21:50:30 UTC (last two digits withheld)**, each read from Evolution's
   report for its instance; accounts is covered by the support number. Read back with a read-only page check the operator
   ran in the browser's console (no names, instance names or numbers printed beyond two digits).
 - **`multi_number_channels_enabled = 1` then accepted** (step 2): the registry is ON. Next, per docs/66: the department
   test, then sales-001's Verify number, Register webhook, Switch on with the assistant off, and the assistant on.
-- **sales-001 verified 22:00:32 UTC (••••57)**, read from Evolution's report for its instance; still `disabled`,
+- **sales-001 verified 22:00:32 UTC (its number's last two digits not repeated here)**, read from Evolution's report for its instance; still `disabled`,
   assistant off. The card's buttons seemed to do nothing in the browser — uCRM keeps the outer page scrolled while the
   plugin's page reloads, so the answer box at its top stays out of view — so the operator pressed it from the console with
   a script that sends exactly that button's request once, refuses a step out of order, and prints the plugin's answer

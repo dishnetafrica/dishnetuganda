@@ -140,14 +140,14 @@ The emails were clean; the WhatsApp messages were not. `NotificationService`,
 literal `$` in front of the figure and a `+211` number underneath it. A
 Ugandan customer's invoice notification read:
 
-> 💰 Amount: **$1,645,440.00**
-> ❓ Help: +211 921 443 002
+> 💰 Amount: **a real customer's invoice amount, prefixed `$` (not repeated here)**
+> ❓ Help: a South Sudan business number (not repeated here)
 
 Two changes fixed it:
 
 - `dn_money()` in `lib/currency.php` renders an amount with the install's own
   symbol. A sigil sits tight against the digits (`$1,234.00`) and an
-  alphabetic code takes a space (`UGX 1,645,440.00`), which is how each is
+  alphabetic code takes a space (`UGX 1,234.00`), which is how each is
   written — and which leaves every Sudan rendering byte-identical.
 - `lib/CustomerContact.php` holds the five distinct phone numbers and two
   links in one place. They stay distinct on purpose: routing a billing
@@ -217,7 +217,7 @@ webmail and nothing else.
 ## The quotation email, end to end — working 9 September 2026
 
 Verified by delivery, not by inference: `Quotation 000005 — DishNet Africa
-Limited`, with a 66 KB PDF, to both `bhavin.madlani@outlook.com` and
+Limited`, with a 66 KB PDF, to both the director's personal address (not repeated here) and
 `bhavin@dishnetafrica.com`, filed in "Sent Items".
 
 The chain, and what was broken in each link:

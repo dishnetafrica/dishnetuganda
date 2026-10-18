@@ -3,7 +3,7 @@
 # deploy-5.18.72.sh — the Staff Cashbooks tiles on Uganda read "received · Advances & collections" and "Still to account
 #            for", not "collected" and "Needs handover" (plugin 5.18.72) over 5.18.71, or roll it back to 5.18.71.
 #
-#   5.18.72  The operator, on the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out):
+#   5.18.72  The operator, on the technician's Staff Cashbooks page (the UGX balance the staff member held, with what was received and paid out — live figures, not repeated here):
 #            "fix the collected and handover wording for uganda". The tiles read "UGX collected" and "Needs handover" —
 #            South Sudan's collections wording, where field staff collect payments and hand them over to accounts. On
 #            Uganda the staff member's inflow is advances (and any collections) to be spent on approved expenses and
@@ -589,7 +589,7 @@ if [ "$MODE" != "rollback" ]; then
   echo "  what changed      Uganda: the Staff Cashbooks tiles (the accountant's view of one staff member) say what the money is — UGX RECEIVED with 'Advances & collections' beneath it, and 'Still to account for' under Cash with staff — instead of 'UGX collected' and 'Needs handover'. Wording only: every figure is unchanged. Nothing else changed"
   echo "  what did not      South Sudan (its Staff Cashbooks page is the same bytes as before — collected / Needs handover — proved on a South Sudan sandbox); every configuration value (V3/R2); uCRM; every cash record (nothing here writes one; R7 only reads); the photo tables and files (R3); the undeployed partner-portal and CSRF work on the branch (not in this release, R4)"
   echo "  migrations        none — 5.18.72 adds no migration; 084's two tables are unchanged (R3)"
-  echo "  try it            Staff Cashbooks, pick the technician: the first tile reads UGX RECEIVED with 'Advances & collections' beneath it, and Cash with staff reads 'Still to account for'. The figures are exactly as before (UGX 339,672.00 held)"
+  echo "  try it            Staff Cashbooks, pick the technician: the first tile reads UGX RECEIVED with 'Advances & collections' beneath it, and Cash with staff reads 'Still to account for'. The figures are exactly as before (the UGX balance held is unchanged)"
   echo "  later             cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --after-only"
 fi
 echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"

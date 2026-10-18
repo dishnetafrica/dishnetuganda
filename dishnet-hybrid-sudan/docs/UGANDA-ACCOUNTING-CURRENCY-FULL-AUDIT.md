@@ -567,7 +567,7 @@ currency parameter). **Fix window: C (new account-centric reader family + argume
 
 **C-4 · No report excludes by transaction type.** Even after C-3, `direction='in'` ≠ revenue:
 a funding event is TWO `in` legs (asset + liability) — today's summary logic would count an
-injection of USD 10,000 as **20,000 of cash received**; transfer receiving legs and opening
+injection of a USD director-funding amount as **twice that amount of cash received**; transfer receiving legs and opening
 balances also read as income. The type axis exists precisely so reports can exclude it —
 nothing does yet. **Fix window: C.**
 
@@ -1115,7 +1115,7 @@ plan, blocked on URA credentials — unchanged by this audit).
 18. **What must be fixed BEFORE real Uganda transactions?** (a) delete CB-1; (b) **Phase
     C0 in full** — otherwise staff collections mint USD payments and manual entries mint
     USD rows; (c) seed the six accounts + add Director Funding – USD + record the real
-    USD 10,000 via the Funding form; (d) enter opening balances as at 2026-09-06. Phase C
+    USD director-funding amount (not repeated here) via the Funding form; (d) enter opening balances as at 2026-09-06. Phase C
     is not a blocker for *entering* transactions — the capture layer is then correct — but
     until it ships, trust only the cashbook tab, not the summary cards, dashboards, CSV
     export or WhatsApp digests.

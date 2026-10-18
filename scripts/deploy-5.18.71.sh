@@ -6,7 +6,7 @@
 #   5.18.71  The operator's words at 5.18.68 — "I don't want working capital and bank amount to be shown in the plugin in
 #            Uganda" — were applied to the Cashbook page; the landing page's hero (tabs/accounts/accounts_dashboard.php,
 #            the admin's default page) still drew currencyPositions(): bank balances, the unassigned stream, a negative
-#            "position" beside the Cashbook's UGX 723,072. Now, on a book without SSP, the hero reads "Cash in hand — per
+#            "position" beside the Cashbook's own cash-in-hand figure (a live UGX amount, not repeated here). Now, on a book without SSP, the hero reads "Cash in hand — per
 #            currency" — CashbookService::cashInHand() per currency, the Cashbook card's own figure — with the base per
 #            project in the chips, the shape South Sudan's hero has; Money Locations' office figure is the base cash in hand
 #            (getBothBalances() reads the literal USD stream), and the block lists MONEY HELD BY STAFF — each person's base

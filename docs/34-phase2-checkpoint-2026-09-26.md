@@ -195,7 +195,7 @@ token if the sibling ignores it. Until then this is the only Phase 2 item marked
 5. **Verification** by canonical identifier + hash compare → `JwtAuth::forCustomers()` token, `customer_sessions` row, HttpOnly cookie (production L4).
 6. **Session** portal on the cookie only (production L6), logout revokes (L7).
 
-**Production**: exercised once, with the operator's own `+211927797217` (kept as typed, sent through
+**Production**: exercised once, with the operator's own South Sudan number (kept as typed, sent through
 Evolution, verified, cookie set, portal opened, logout revoked). A `+256` customer has not yet signed
 in on production; the `+256` completion rule is proved in the sandbox only.
 
@@ -232,7 +232,7 @@ controlled sign-in with a staff-owned e-mail on the customer's record would clos
 **Uganda values populated (49 of 53)**, all from repository sources: country UG/+256/9 digits,
 UGX, `Africa/Kampala`, legal entity *DishNet Africa Limited*, trading name, positioning, office
 (Acacia Mall, Kampala), website, e-mail `accounts@dishnetuganda.com`, the five contact numbers and
-three WhatsApp numbers (all `+256 705 993 348`), pay URL, **app URL `https://dishnetuganda.com/app`**
+three WhatsApp numbers (all the Uganda support number, not repeated here), pay URL, **app URL `https://dishnetuganda.com/app`**
 (a repository preset the plan flags as possibly premature — the APK is not published), e-mail brand
 (company, locality, website, support, reply-to, legal line TIN/Reg. No., badge line), dunning
 (from-name, phone, accounts e-mail, company line, website), login title/footer, jurisdiction law,
@@ -244,7 +244,7 @@ nothing.
 
 **Still hard-coded (not converted, by phase)**: `lib/currency.php` (USD/SSP book defaults, 3),
 `lib/PluginQuotePdf.php` FROM block (6), `tabs/customer_app/legal_page.php` (2), the customer portal's
-support buttons and coverage text (`+211921443002`, "Juba, South Sudan", ≈20 occurrences), AI
+support buttons and coverage text (the South Sudan WhatsApp number, "Juba, South Sudan", ≈20 occurrences), AI
 prompt facts. These are Phase 4 content by the plan's own phase table.
 
 **Readers converted**: `CustomerContact` (config → disk → profile → DEFAULTS), `EmailTemplate::brand()`,
