@@ -11874,7 +11874,7 @@ commands prints a secret, and the terminal held none: the key file's content was
   (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
   repository.
 
-## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — on the Cashbook the NEGATIVE alert becomes one red alert per currency whose cash in hand is below zero, in that currency's code, and the Add Entry pill shows UGX cash in hand; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — `release/5.18.96` NOT YET PUSHED (the development branch, with the script, the rehearsal and this record, is on origin)
+## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — on the Cashbook the NEGATIVE alert becomes one red alert per currency whose cash in hand is below zero, in that currency's code, and the Add Entry pill shows UGX cash in hand; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — PUSHED 18 Oct; DEPLOYED 18 Oct (copy 04:44:18 UTC): PASSED 124 ok / 0 failed / 3 notes — RESULT below
 
 **Request.** The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then *"yes do it i
 will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to 5.18.96 when
@@ -12005,6 +12005,40 @@ printed, and weakened copies of the script each caught.
 - **Trial 3 (18 Oct, 00:17–00:59 UTC): 553 passed, 0 failed** (165 runs of the deploy scripts, 12 of the quarantine).
 - **Trial 4 (18 Oct, 00:59–01:41 UTC): 553 passed, 0 failed, the same 165 and 12 runs.** 553 = the 548 plus the
   four observers' checks now passing and the new control.
+
+### RESULT — DEPLOYED 18 Oct (copy 04:44:18 UTC): PASSED 124 ok / 0 failed / 3 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **The run.** Begun 04:43:08 UTC. `/opt/dishnet` fast-forwarded `bda21f6..d47c81b`, `release/5.18.96` (`e35ecce`)
+  fetched. Live before: `098f6b3` (5.18.95), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 17 files, no migration. A22a–g and A22L: 5.18.95's seven fixes in
+  the pin and in the live code, each control exact. A2–A18, A21 as in 5.18.95; A14: the quarantine's `--check` of 17
+  Oct 16:04:56 UTC began after 5.18.95's copy. **A22-T1: 548 passed, 0 failed under the server's PHP.** **A23.1–A23.8:**
+  on a copy of the book, the live code's figure equals today's SQL and the pin's equals D2 = A's in all 8 cells; the
+  parts add up to the cent; P0's own tool agrees (no rows not approved, so P0's A is D2 = A exactly); the 12 Sep
+  adjustment found once, approved, on no account; no orphan, text id, mismatched currency or unknown kind; rule A in
+  force on the server's own configuration. **A24:** South Sudan and the two misconfigured books unchanged. Backup in
+  `/root/dnb-5.18.96/backup-20261018T044308Z`; the event queue held nothing not done.
+- **The copy:** 04:44:18 UTC, the container serving `e35ecce`. V1–V13 passed; V4: no fatal since the copy.
+- **Stage R passed.** R1 the 17 files byte for byte, the manifest 5.18.96; R5 all 287 earlier files; R7 the ledger and
+  the database's size unchanged; R23a–g the fixes installed; **R23.1–R23.10:** the installed figure equals D2 = A's SQL
+  in all 8 cells, 5.18.95's code on the same copy equals today's, the parts add up, P0 agrees, the Balance column and
+  the CSV keyed by their streams, the installed tool's figures equal the code's, no drift since A23; **R24** T4 20/0 on
+  the installed files; **R25** T1 548/0; **R26** South Sudan unchanged. Z1 the live vault untouched; Z2 nothing left in
+  `/tmp`.
+- **The notes (3):** A17, two installation requests pending under v1.0 keep v1.0; R3, `migration.log` holds no line for
+  087; **R19, not yet conclusive** (master's last run of the retry job, 04:35:04 UTC, was before the copy) —
+  `--after-only` after 05:04:18 UTC.
+- **The cash sheet:** `/root/dnb-5.18.96/cash-deploy-20261018T044308Z.txt`, 453 lines, read on the server only.
+- **Still to come:** `--after-only` (R19 conclusive) and the quarantine's `--check`; the next day's `--after-only`;
+  the screens and the physical count.
+- **The operator's first reaction (18 Oct, with the Cashbook's UGX and USD exports, which are not reproduced here):**
+  *"dont mix the bank with physical cash … keep it separate so we know exactly ECO BANK UGX balance then ECO BANK USD
+  balance not combine them keep physical cash as it is"*. The exports show 5.18.96 as designed — the Ecobank and other
+  account rows still listed, with no balance, and counted nowhere — but the Cashbook still lists them among the cash
+  rows. Answered and taken up as its own change.
 
 ### Runbook
 
