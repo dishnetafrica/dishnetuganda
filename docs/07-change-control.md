@@ -12125,6 +12125,11 @@ assertions):** customers' names, kit serials and service lines in comments, fixt
 figures in comments; the operator's own number as a South Sudan default and in tool examples; staff e-mail addresses
 mapped in code; the bank account numbers in the invoice and quotation templates (printed to customers by design) and
 the merchant ID (published on the website by design) — the last two are the operator's to decide.
+
+**The operator's answers (18 Oct).** Splynx and LTE / BlueCARD: *"currently we are not using this you can hide from menu
+and park it"* — both are to be parked on Uganda (out of every menu, their jobs stopped, their pages closed; code, data and
+settings kept; one switch to bring them back), in the security release above. The South Sudan LTE / BlueCARD server that
+the two feed tokens open: **switched off** — so those tokens leave the code but need no rotation there.
 - **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
   (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
   assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.
