@@ -203,7 +203,7 @@ nogo96() {   # nogo96 LABEL EXPECTED-TEXT OUTPUT [DATA-DIGEST] — refused with 
              # nothing deployed, backed up or changed
   check "$(has "$3" "$2")$(has "$3" 'Nothing was changed. Send the log file.')$(went96 "$3")|$(quiet96)" "yesyesnono|$P95|0|${4:-$D96}|$KEPT96|0" "$1"
 }
-trip96() { last96 >> "$R96/expected-trips"; }   # the last run trips an observer on purpose: left out of the observers' sweep (6)
+trip96() { printf '%s\n' "$(last96)" >> "$R96/expected-trips"; }   # the last run trips an observer on purpose: left out of the observers' sweep (6); one tag a line (last96 prints none)
 audit96() { python3 "$H96/rh96.py" audit "$R96/exec/run-$1.rec"; }   # audit96 TAG — copies=<n> novault=<n> plugin=<n> adj=<id|->
 hits96() { local n; n="$(grep -c . "$R96/scan/run-$1.hits" 2>/dev/null)"; echo "${n:-0}"; }   # hits96 TAG — what the /tmp observer found during that run
 vault96() { echo "$(cat "$R96/vault/run-$1.before")>$(cat "$R96/vault/run-$1.after")"; }   # vault96 TAG — the live vault before>after the run
@@ -399,7 +399,9 @@ if cmd == 'audit':                       # the docker record of one run: PHP run
         c = a[i + 1:]
         if not c: continue
         if not (c[0] == 'php' or (c[0] == 'sh' and len(c) > 2 and re.search(r'(?:^|[\s;&|(])php\s', c[2]))): continue
-        j = '\n'.join(c)
+        # The source of a php -r is text, not a path it runs: the adjustment lookup's source names the tool as a label of
+        # the cash sheet, and is a read-only PDO reading that loads no plugin code. Its arguments are still read.
+        j = '\n'.join(x for k, x in enumerate(c) if not (k > 0 and c[k - 1] == '-r'))
         tool = 'tools/cash_in_hand.php' in j; t1 = 'tests/test_cash_in_hand_p3b.php' in j
         if not ([x for x in c if root.match(x)] or tool or t1): continue
         copies += 1
@@ -572,6 +574,18 @@ env PATH="$SB/bin:$PATH" FAKE_EXEC_LOG="$SB/obs96.rec" FAKE_TMP_SCAN="$SB/obs96.
 check "$(grep -c '^value /tmp/dnb-5.18.96-cih-rhcontrol/webhook_secret$' "$SB/obs96.hits")$(grep -c '^file /tmp/dnb-5.18.96-cih-rhcontrol/webhook_secret$' "$SB/obs96.hits")|$(python3 "$H96/rh96.py" audit "$SB/obs96.rec")" "11|copies=1 novault=1 plugin=0 adj=-" \
   "control: the observers see — a planted value and a file named webhook_secret in a run's folder in /tmp, and a PHP process on a code copy without a vault of its own"
 rm -rf /tmp/dnb-5.18.96-cih-rhcontrol "$SB/obs96.pat" "$SB/obs96.rec" "$SB/obs96.hits"
+# …and the audit counts what runs code, not what a php -r's source says: three calls written as the fake docker records
+# them — the adjustment lookup (php -r, its source naming tools/cash_in_hand.php, its arguments a database and a hash),
+# the installed tool run from the plugin folder with no vault (4e's shape) and a code copy with no vault. Before 18 Oct the
+# audit counted the first too (copies=3 novault=3): every reading of the book read as two runs without a vault of their own.
+{ for c in \
+    "exec|-u|1000:1000|ucrm|php|-d|display_errors=stderr|-r|\$S[] = \"  tools/cash_in_hand.php, installed, run on a copy of its own\";|pre|db=/tmp/dnb-5.18.96-cih-x/a23-1/master/plugin.sqlite3|adjsha=0" \
+    "exec|-u|1000:1000|-e|DN_DATA_DIR=/tmp/dnb-5.18.96-cih-x/r23-1/tool-data|ucrm|sh|-c|php \"\$1/tools/cash_in_hand.php\" > \"\$2\" 2>&1; echo \"rc=\$?\"|_|/data/ucrm/data/plugins/dishnet-hybrid-sudan|/tmp/dnb-5.18.96-cih-x/r23-1/tool.txt" \
+    "exec|-u|1000:1000|-e|DN_DATA_DIR=/tmp/dnb-5.18.96-cih-x/a23-1/t-data|ucrm|php|-r|echo 1;|/tmp/dnb-5.18.96-cih-x/a23-1/t/dishnet-hybrid-sudan"; do
+    printf '%s' "$c" | tr '|' '\037'; printf '\037\036'; done; } > "$SB/obs96b.rec"
+check "$(python3 "$H96/rh96.py" audit "$SB/obs96b.rec")" "copies=2 novault=2 plugin=1 adj=-" \
+  "control: the audit counts a PHP process by what it runs — the adjustment lookup, whose php -r source names the tool, is not a code run; the tool run from the plugin folder with no vault and a code copy with no vault both are"
+rm -f "$SB/obs96b.rec"
 : > "$SB/trap96.control"
 env PATH="$SB/bin:$PATH" FAKE_LIVE_TRAP="$SB/trap96.control" bash "$SB/bin/docker" exec ucrm php -r 'exit(0); /* $want === "e17" */' >/dev/null 2>&1
 check "$(sq "SELECT COUNT(*) FROM cb_ledger WHERE sr = 'RH96-TRAP-1'")$( [ -e "$SB/trap96.control" ] && echo unspent || echo spent)$( [ -e "$SB/trap96.control.fired" ] && echo fired)" "1spentfired" \
