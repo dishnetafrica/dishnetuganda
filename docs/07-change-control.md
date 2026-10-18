@@ -12066,9 +12066,30 @@ prints a figure or a secret, and the terminal held none; the cash sheet stayed o
   nothing made. The notes, as on 17 Oct: K2, the container serves `e35ecce` rather than the quarantine's `69c87a6` (the
   gate is the same); K7, `config.json` in `<plugin>/data` removed and remade since the move — names only, another
   writer's file, not a database.
+- **A second pair at 05:19 UTC, both PASSED.** `--after-only` begun 05:19:40 UTC: 83 ok / 0 failed / 1 note (R3), the
+  retry job's latest run 05:15:05 UTC after the copy, a fresh copy at 05:20:18 UTC, no drift since A23; cash sheet
+  `/root/dnb-5.18.96/cash-after-20261018T051940Z.txt` (253 lines). The quarantine's `--check` begun 05:20:51 UTC: 9 ok /
+  0 failed / 2 notes (K2, K7), the retry job's 05:15:05 UTC run making nothing.
+- **The screens and the first count (18 Oct, about 05:24 UTC; the operator's screenshot, whose figures are not
+  reproduced here).** The Cashbook's two CASH IN HAND cards on project dishnet read under D2 = A. **The operator's
+  physical USD count is below the USD card**, and equals what 5.18.95's card showed. Measured on the operator's own USD
+  export, privately and to the cent: 5.18.95's rule (every entry not voided, any account) gave exactly the count, but only
+  because **one unapproved manual "Bank Transfer" entry of 5 Oct**, made as a balancing entry under that rule, cancelled
+  the bank and share-capital rows that rule wrongly counted as cash **and** a further, unexplained amount. D2 = A leaves
+  out the bank rows and the unapproved entry alike, so the unexplained amount shows again: the book holds USD from the
+  late-September loans that the drawer does not. **Not a software fault, and not a change to the book** (R23.10: no row
+  changed). Approving that entry as it stands would take the USD card far below zero.
+- **The operator's decision (18 Oct), asked and answered:** keep the bank out and fix the gap (the recommended option) — D2 = A stays;
+  the operator records the gap as one entry, a cash-count difference not yet explained (*"Not sure yet"*), and voids the
+  5 Oct balancing entry, so the card equals the drawer and nobody can approve that entry later. The steps are given to
+  the operator as checked against the live code (`e35ecce`), not by any change of code or data from here.
+- **And the bank, as the operator described it:** *"down to cashbook show ECO Bank and then we have two hero section like
+  ECO Bank UGX and ECO BANK USD"* — a menu item **ECO Bank** directly below Cashbook, with two cards, ECO BANK UGX and
+  ECO BANK USD, each the balance from Ecobank's own statement; the Cashbook keeps physical cash only. Taken up with the
+  Bank screen (5.18.97) and the Cashbook's physical-cash list as one change.
 - **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
   (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
-  assumed a deploy later in the day); the screens and the physical count.
+  assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.
 
 ### Runbook
 
