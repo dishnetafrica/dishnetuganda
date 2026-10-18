@@ -31,7 +31,9 @@ declare(strict_types=1);
  *      and no object outside bank_* in sqlite_master changed; the module's code names no ledger write
  *   F  the gate: open() and the halves on the books of SPEC.md §c.1, switch on and off; the halves equal
  *      CashbookService::cashOnlyRuleInForce() on every book; files against a store copy that says the opposite, both
- *      ways; allows() on a read that throws, returns null, is inactive, is demoted inside the session window
+ *      ways; allows() on a read that throws, returns null, is inactive, is demoted inside the session window.
+ *      5.18.97: showLink() — its truth table, a session with no id, a session that is not an admin's reading nothing,
+ *      no write in a fresh process (a child) and under PRAGMA query_only; latestLine() directly; ecobankNamed()
  *   G  the trail: the events of each act, each with its actor; no check row, event, statement or profile holds the
  *      marker, the account number or the holder's name; no file but the database and the statement files does
  *   H  memory: check and keep at the caps (10,000 lines near BYTES_MAX over 9,800 kept) in children under
@@ -40,8 +42,8 @@ declare(strict_types=1);
  *      an unchanged copy passes with the same tally                                (full run only)
  *   J  the end check: every vault written is this test's own; nothing is left behind
  *
- * Arguments: --root=<tree> judges that tree (a weakened copy); --cases-only runs A–G and J; --crash-child and
- * --memory-child are the children of C and H, which read their orders on STDIN.
+ * Arguments: --root=<tree> judges that tree (a weakened copy); --cases-only runs A–G and J; --crash-child,
+ * --race-child, --showlink-child and --memory-child are the children of C, F and H, which read their orders on STDIN.
  *
  *   php test_bank_store.php
  */
@@ -49,7 +51,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__); $mode = '';
 foreach (array_slice($argv, 1) as $a) {
     if (strncmp($a, '--root=', 7) === 0) $root = rtrim(substr($a, 7), '/');
-    elseif (in_array($a, ['--cases-only', '--crash-child', '--memory-child', '--race-child'], true)) $mode = $a;
+    elseif (in_array($a, ['--cases-only', '--crash-child', '--memory-child', '--race-child', '--showlink-child'], true)) $mode = $a;
     else { fwrite(STDERR, "test_bank_store.php: unknown argument\n"); exit(2); }
 }
 require_once $root . '/lib/StoreInterface.php';
@@ -97,6 +99,31 @@ if ($mode === '--race-child') {
     } catch (\Throwable $e) {
         echo 'threw ', $e->getMessage(), "\n";
     }
+    exit(0);
+}
+
+// ── F's child: showLink() in a process that has not yet read the staff table, as a request inside the 300-second
+//    sign-in window is (the session copy came without a store read): what the one call changes, measured around it ───
+if ($mode === '--showlink-child') {
+    $p = json_decode((string)stream_get_contents(STDIN), true);
+    if (!is_array($p)) { echo json_encode(['error' => 'no orders']), "\n"; exit(2); }
+    $dir = (string)$p['dir'];
+    $s = SqliteStore::create($dir);
+    $pdo = $s->getPdo();
+    $tc = function () use ($pdo): int { return (int)$pdo->query('SELECT total_changes()')->fetchColumn(); };
+    $snap = function () use ($dir): array {                         // the files, and sqlite_master read on a second connection
+        $h = [];
+        foreach (['', '-wal'] as $x) $h[] = is_file($dir . '/plugin.sqlite3' . $x) ? hash_file('sha256', $dir . '/plugin.sqlite3' . $x) : '-';
+        $o = new PDO('sqlite:' . $dir . '/plugin.sqlite3');
+        $m = $o->query('SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name')->fetchAll(PDO::FETCH_ASSOC);
+        return [implode(' ', $h), hash('sha256', (string)json_encode($m))];
+    };
+    [$f0, $m0] = $snap(); $c0 = $tc();
+    $r = BankGate::showLink($dir, $s, (array)$p['session']);
+    $c1 = $tc(); [$f1, $m1] = $snap();
+    $pdo->exec('CREATE TEMP TABLE rh_throwaway (x INTEGER)');         // the control: one planted INSERT moves total_changes()
+    $pdo->exec('INSERT INTO rh_throwaway (x) VALUES (1)');
+    echo json_encode(['r' => $r, 'tc' => [$c0, $c1, $tc()], 'files' => [$f0, $f1], 'master' => [$m0, $m1]]), "\n";
     exit(0);
 }
 
@@ -986,6 +1013,12 @@ final class BkFakeStore {
         return $this->mode === 'null' ? null : $this->rec;
     }
 }
+/** A store that counts its reads (5.18.97: what showLink() asks of the staff table). */
+final class BkCountingStore {
+    public $reads = 0; private $rec;
+    public function __construct(?array $rec) { $this->rec = $rec; }
+    public function findOne(string $file, string $key, $value): ?array { $this->reads++; return $file === 'retailers.json' && $key === 'id' ? $this->rec : null; }
+}
 $sessAdmin = ['id' => 7, 'name' => 'RH-Admin One (session copy)', 'is_admin' => 1, 'is_active' => 1];
 $freshAdmin = ['id' => 7, 'name' => 'RH-Admin One', 'is_admin' => 1, 'is_active' => 1, 'role' => 'admin'];
 t('allows: an active admin gets the FRESH record, for both keys', [BankGate::allows('bank.view', new BkFakeStore('ok', $freshAdmin), $sessAdmin),
@@ -1008,6 +1041,96 @@ t('allows: through a real store — the admin passes with the stored record, the
     [(string)(BankGate::allows('bank.import', $RS['store'], $sessAdmin)['name'] ?? ''), BankGate::allows('bank.import', $RS['store'], ['id' => 8, 'is_admin' => 1, 'is_active' => 1])],
     ['RH-Admin One', null]);
 t('gate: GRANTS is admins only for bank.view and bank.import', BankGate::GRANTS, ['bank.view' => 'admin', 'bank.import' => 'admin']);
+
+// 5.18.97 (the operator, 18 Oct): showLink(), the one gate of every link to ECO Bank. True exactly when the tab opens:
+// the session copy's is_admin (the dispatcher's '*admin'), then open() over the files, then allows('bank.view') fresh.
+$SL = bk_gate_book($TPL, 'showlink', BK_UG_CFG);
+$slAt = function (bool $switch) use ($SL): void {
+    file_put_contents($SL['dir'] . '/config.json', (string)json_encode($SL['cfg'] + [BankGate::SWITCH_KEY => $switch]));
+    bk_vault($SL['vault']); BankGate::reset(); StaffJobsGate::reset();
+};
+$notAdmin = ['is_admin' => 0] + $sessAdmin;
+$tt = [];
+foreach ([true, false] as $sess) foreach ([true, false] as $sw) foreach ([true, false] as $fr) {
+    $slAt($sw);
+    $tt[($sess ? 'S' : 's') . ($sw ? 'W' : 'w') . ($fr ? 'F' : 'f')] = BankGate::showLink($SL['dir'], new BkFakeStore('ok', $fr ? $freshAdmin : ['is_admin' => 0] + $freshAdmin), $sess ? $sessAdmin : $notAdmin);
+}
+t('showLink(): of the 8 combinations of the session copy\'s is_admin (S), the switch (W) and the fresh record\'s is_admin (F), only all three is true',
+    $tt, ['SWF' => true, 'SWf' => false, 'SwF' => false, 'Swf' => false, 'sWF' => false, 'sWf' => false, 'swF' => false, 'swf' => false]);
+$slAt(true);
+t('showLink(): a session copy with no id is false; the control — the same with its id is true',
+    [BankGate::showLink($SL['dir'], new BkFakeStore('ok', $freshAdmin), ['is_admin' => 1, 'is_active' => 1]), BankGate::showLink($SL['dir'], new BkFakeStore('ok', $freshAdmin), $sessAdmin)], [false, true]);
+// A session that is not an admin's reads nothing: no configuration (BankGate's memo stays empty: open() was never asked)
+// and no staff record — even where the data directory cannot be read at all (it does not exist).
+$memo = function (): array { $rp = new ReflectionProperty('BankGate', 'cfg'); $rp->setAccessible(true); return array_keys((array)$rp->getValue()); };
+$noDir = $T . '/books/no-such-book';
+BankGate::reset(); $cs1 = new BkCountingStore($freshAdmin);
+$r1 = BankGate::showLink($noDir, $cs1, $notAdmin); $mm1 = $memo();
+BankGate::reset(); $cs2 = new BkCountingStore($freshAdmin);
+$r2 = BankGate::showLink($noDir, $cs2, $sessAdmin); $mm2 = $memo();
+BankGate::reset(); $cs3 = new BkCountingStore($freshAdmin); $slAt(true);
+$r3 = BankGate::showLink($SL['dir'], $cs3, $sessAdmin);
+t('showLink(): a session that is not an admin\'s is false and reads nothing (no configuration, no staff record), even over an unreadable data directory; the controls — an admin\'s session asks open() of that directory (false, no record read), and on a readable book reads the record once (true)',
+    [$r1, $mm1, $cs1->reads, $r2, $mm2, $cs2->reads, $r3, $cs3->reads], [false, [], 0, false, [$noDir], 0, true, 1]);
+is_(!is_dir($noDir), 'showLink() made no folder for a data directory that does not exist');
+// No write, in a fresh process that has not read the staff table yet (the state of a request inside the sign-in window).
+$SW = bk_gate_book($TPL, 'showlink-child', BK_UG_CFG + [BankGate::SWITCH_KEY => true]);
+$SW['store']->save('retailers.json', [$freshAdmin]);
+$SW['pdo']->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+$slChild = function (array $session) use ($SW, $root): array {
+    bk_vault($SW['vault']);
+    $pr = proc_open(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__FILE__) . ' --showlink-child --root=' . escapeshellarg($root),
+        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    if (!is_resource($pr)) return ['error' => 'proc_open failed'];
+    fwrite($pipes[0], (string)json_encode(['dir' => $SW['dir'], 'session' => $session])); fclose($pipes[0]);
+    $out = (string)stream_get_contents($pipes[1]); $err = (string)stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]); $rc = proc_close($pr);
+    $j = json_decode(trim($out), true);
+    return is_array($j) ? $j + ['rc' => $rc] : ['error' => trim($out . ' ' . $err), 'rc' => $rc];
+};
+$ch = $slChild($sessAdmin);
+t('showLink() in a fresh process, as an admin: true, and total_changes(), the database files and sqlite_master (read on a second connection) are the same after it; the control — one planted INSERT moves total_changes()',
+    [$ch['rc'] ?? null, $ch['r'] ?? null, ($ch['tc'][1] ?? -1) - ($ch['tc'][0] ?? -2), ($ch['tc'][2] ?? 0) - ($ch['tc'][1] ?? 0), ($ch['files'][0] ?? 'a') === ($ch['files'][1] ?? 'b'),
+     ($ch['master'][0] ?? 'a') === ($ch['master'][1] ?? 'b')], [0, true, 0, 1, true, true]);
+// Under PRAGMA query_only = ON, after one earlier read of the staff table in this process (its table check is done): a
+// write anywhere in showLink() would throw, allows() would answer null, and the link would be false.
+$QO = bk_gate_book($TPL, 'showlink-qo', BK_UG_CFG + [BankGate::SWITCH_KEY => true]);
+$QO['store']->save('retailers.json', [$freshAdmin]);
+$QO['pdo']->exec('CREATE TABLE rh_qo_throwaway (x INTEGER)');
+$qoRead = (string)($QO['store']->findOne('retailers.json', 'id', 7)['name'] ?? '');
+$QO['pdo']->exec('PRAGMA query_only = ON');
+bk_vault($QO['vault']); BankGate::reset(); StaffJobsGate::reset();
+$qoLink = BankGate::showLink($QO['dir'], $QO['store'], $sessAdmin);
+try { $QO['pdo']->exec('INSERT INTO rh_qo_throwaway (x) VALUES (1)'); $qoCtl = 'ALLOWED'; } catch (PDOException $e) { $qoCtl = 'REFUSED'; }
+$QO['pdo']->exec('PRAGMA query_only = OFF');
+t('showLink() under PRAGMA query_only = ON (the staff table read once before): still true for the admin; the control on the control — an INSERT is refused under the same pragma',
+    [$qoRead, $qoLink, $qoCtl], ['RH-Admin One', true, 'REFUSED']);
+BankGate::reset(); StaffJobsGate::reset();
+
+// latestLine(): the cards' one read (5.18.97) — the account's kept line with the highest Cheque Number, never another's.
+$LL = bk_copy($UGT, 'latest'); $bsL = bk_bs($LL);
+t('latestLine(): null for each account before anything is kept', [$bsL->latestLine($UGX), $bsL->latestLine($USD)], [null, null]);
+$HL = g_history(30, 5);
+$HU = g_history(12, 6, 0, 9001);                                             // the USD account's numbers are all above every UGX one
+$keepIt = function (int $acct, string $csv, bool $link) use ($bsL, $ME): bool {
+    $c = bk_try(function () use ($bsL, $acct, $csv, $ME) { return $bsL->check($acct, $csv, $ME); });
+    $k = bk_try(function () use ($bsL, $c, $acct, $link, $ME) { return $bsL->keep((int)($c['check_id'] ?? 0), $acct, $link, $ME); });
+    return ($k['ok'] ?? false) === true;
+};
+$okL = [$keepIt($UGX, bk_slice($HL, 10, 20), true), $keepIt($UGX, bk_slice($HL, 0, 15), false), $keepIt($USD, bk_slice($HU, 0, 12, [], 'USD'), true)];
+$pickL = function (?array $r): ?array { return $r === null ? null : bk_pick($r, ['cheque_number', 'running_units', 'currency']); };
+t('latestLine(): the kept line with the highest Cheque Number — UGX\'s line 30 although lines 1–10 were kept after it; never the USD account\'s, whose numbers are all higher',
+    [$okL, $pickL($bsL->latestLine($UGX)), $pickL($bsL->latestLine($USD))],
+    [[true, true, true], ['cheque_number' => (string)$HL[29]['Cheque Number'], 'running_units' => $HL[29]['_run'], 'currency' => 'UGX'],
+     ['cheque_number' => (string)$HU[11]['Cheque Number'], 'running_units' => $HU[11]['_run'], 'currency' => 'USD']]);
+t('control: the UGX account holds lines 1–30, and its last inserted line is line 10, not its latest',
+    [bk_count($LL['pdo'], 'bank_statement_lines') - 12, (string)(bk_row($LL['pdo'], 'SELECT cheque_number FROM bank_statement_lines WHERE cb_account_id = ? ORDER BY id DESC LIMIT 1', [$UGX])['cheque_number'] ?? '')],
+    [30, (string)$HL[9]['Cheque Number']]);
+
+// ecobankNamed(): the cards' "ECO BANK <CUR>" heading only where the book's own name says Ecobank (invented names).
+t('ecobankNamed(): the book\'s name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank\'s name does not',
+    array_map(['BankStatementStore', 'ecobankNamed'], ['Ecobank Uganda – UGX', 'ECO BANK', 'Eco-Bank', 'RH-Ecobank Spare – USD', 'RH-Spare Bank 0123456789 – UGX', 'RH-Highland Bank – UGX', 'Economy Bank']),
+    [true, true, true, true, false, false, false]);
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nG. The trail, and no statement text anywhere but the lines and the kept file\n";
@@ -1274,6 +1397,13 @@ $MUTANTS = [
     ['S12 housekeeping deleting the held files of waiting checks',
         [[$ST, "if (!isset(\$waiting[self::DIR . '/' . self::PENDING . '/' . \$name])) \$remove[] = \$p;", '$remove[] = $p;']],
         "keep: two checks wait at once; the first one's held file survives the second check"],
+    ['BS1 showLink() without its session term',
+        [[$GT, "return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;",
+            "return self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;"]],
+        "showLink(): of the 8 combinations of the session copy's is_admin (S), the switch (W) and the fresh record's is_admin (F), only all three is true"],
+    ['BS2 ecobankNamed() without the i flag',
+        [[$ST, "return preg_match('/eco[\\s-]*bank/i', \$name) === 1;", "return preg_match('/eco[\\s-]*bank/', \$name) === 1;"]],
+        "ecobankNamed(): the book's name says Ecobank, in any case, with a space, a hyphen or nothing between; any other bank's name does not"],
     ['S15 a Remark written into the statement_kept event',
         [[$ST, "'sha8' => substr((string)\$chk['sha256'], 0, 8),", "'sha8' => substr((string)\$chk['sha256'], 0, 8), 'first' => (string)(\$new[0]['remarks'] ?? ''),"]],
         'trail: no check row, event, statement or profile holds the marker, the account or the holder'],

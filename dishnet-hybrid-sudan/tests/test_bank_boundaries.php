@@ -8,28 +8,32 @@ declare(strict_types=1);
  * includes/post/post_bank.php and the export hunk of includes/routes.php. The release's base is 419e2ffd (P3b, 5.18.96),
  * read from Git; when Git cannot supply it the comparisons are skips, never passes.
  *
- *   A  every file the release does not touch is byte-identical to 419e2ffd; the six shared files it edits (the sidebar
- *      and the CEO page among them, each with its one ECO Bank link) differ only by insertions, exactly the hunks it
- *      names (and the export hunk sits after the Cashbook export); manifest.json differs by one line, its version,
- *      5.18.96 → 5.18.97
+ *   A  every file the release does not touch is byte-identical to 419e2ffd (the phone's More menu among them); the six
+ *      shared files it edits (the sidebar and the CEO page among them, each with its one ECO Bank link) differ only by
+ *      insertions, exactly the hunks it names (and the export hunk sits after the Cashbook export); manifest.json
+ *      differs by one line, its version, 5.18.96 → 5.18.97
  *   B  nothing outside the module (and the $forbidden list, and migration 088) names the five bank_* tables
  *   C  the module writes no book and never reads cb_ledger: no Cashbook writer, no FinAudit, no BankImport, no
  *      BankStatement::, no "new CashbookService", no INSERT/UPDATE/DELETE on a cb_ table; its only SQL on an existing
  *      table is one SELECT … FROM cb_accounts; v1 never UPDATEs bank_statement_lines (a line's status stays free)
  *   D  the tab: no innerHTML (or outerHTML, insertAdjacentHTML, document.write), no json_encode in an onclick, no
- *      dn_cur(; every echo of a statement or account field passes h() or an (int) cast
+ *      dn_cur(; every echo of a statement or account field passes h() or an (int) cast, the cards' (5.18.97) among
+ *      them; the per-account reads behind the cards are never echoed
  *   E  the module: no strtotime(, no (float), every fgetcsv/fputcsv passes the escape '', no error_log(, no 'uploads/',
  *      no $_FILES[…]['name'] read; the Photo Manager's list does not name bank_statements
  *   F  the gate: each entry point (the tab, the POST handler, the export) calls BankGate::open( and then
  *      BankGate::allows( before it builds the store or draws anything; the POST handler acts on csrfCheck() AND
  *      crossSite() AND fromOwnPage('POST'); the export calls fromOwnPage('GET') before the store, the event and any
  *      line; the POST handler and the export sign the visitor in before they ask the gate; BankGate reads
- *      PluginConfig::read(, never a store copy
+ *      PluginConfig::read(, never a store copy. The menu links (5.18.97): inside the block A finds added to each menu
+ *      file, BankGate::showLink( once, with the one call text, as the if right before the one tab=bank link, and no
+ *      other gate of its own (no open(, allows(, switch, $config[ or $isAdmin); showLink()'s body is exactly the design's
  *   G  the backups: the statement folder is outside uploads/, so the Google Drive DATA zip (run, on a folder holding a
  *      kept and a held statement) carries neither, while it carries an upload (the control); the admin backup download
  *      and main.php's auto-backup name no bank folder
  *   H  the export's formula neutralising and amounts, run from the hunk's own code
- *   I  weakened copies: each fails this test; the unchanged copy passes                    (--no-mutants skips)
+ *   I  weakened copies: each fails this test (5.18.97's at each case it names); the unchanged copy passes
+ *                                                                                          (--no-mutants skips)
  *
  *   php test_bank_boundaries.php [--root=DIR] [--no-mutants]
  */
@@ -115,7 +119,8 @@ echo "A. The untouched files equal 419e2ffd; the shared files (the sidebar and t
 $UNTOUCHED = ['includes/styles.php', 'tabs/accounts/cashbook.php', 'lib/CashbookService.php', 'lib/BankStatement.php',
     'lib/BankImport.php', 'tools/bank_statement.php', 'tests/test_bank_statement.php', 'lib/GoogleDriveBackup.php', 'main.php', 'includes/post/post_sync.php',
     'lib/SqliteStore.php', 'lib/MigrationRunner.php', 'tabs/admin/photo_manager.php', 'includes/post/post_cashbook.php', 'lib/StaffJobsGate.php',
-    'lib/PluginConfig.php', 'lib/currency.php'];
+    'lib/PluginConfig.php', 'lib/currency.php',
+    'tabs/sales/more_menu.php'];   // 5.18.97: the phone's More menu gets no entry (SPEC §2.8.4: an admin has no menu there)
 $gitOk = base_of('manifest.json') !== null;
 if (!$gitOk) {
     $skip++;
@@ -132,6 +137,7 @@ if (!$gitOk) {
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
         [1, true, '5.18.97']);
     // The shared files: every line of the base is still there, in order; the extra lines are the release's, and only these.
+    $ADDED = [];                                                            // each shared file's added blocks, for F
     $SHARED = ['public.php' => 4, 'includes/routes.php' => 78, 'tools/set_config.php' => 3, 'includes/post_handlers.php' => 1,   // routes: +4 for BK-SEC-1/4
         'includes/navigation.php' => 9, 'tabs/admin/ceo_dashboard.php' => 6];   // 5.18.97 (the operator, 18 Oct; Q15): one ECO Bank link block each
     foreach ($SHARED as $rel => $want) {
@@ -143,6 +149,7 @@ if (!$gitOk) {
             $extra[] = $i; $block[] = $line;
         }
         if ($block) $blocks[] = $block;
+        $ADDED[$rel] = array_map(function (array $bl): string { return implode("\n", $bl); }, $blocks);
         $marked = count(array_filter($blocks, function ($bl) { $t = implode("\n", $bl); return strpos($t, '5.18.97') !== false || strpos($t, 'bank') !== false; }));
         t("{$rel}: every line of " . BK_BASE . " is kept, in order; {$want} line(s) added, in blocks that each name the Bank release",
             [$j === count($base), count($extra), $marked === count($blocks)], [true, $want, true]);
@@ -290,6 +297,28 @@ is_(strpos($pb, 'csrfCheck()') > strpos($pb, 'BankGate::allows(') && strpos($pb,
 $gate = src('lib/BankGate.php');
 is_(strpos(code_only($gate), 'PluginConfig::read(') !== false && preg_match('/->load\(|SqliteStore::|\$config\b/', code_only($gate)) === 0,
     'BankGate reads PluginConfig::read(), never a store copy');
+// 5.18.97 (the operator, 18 Oct; Q15): the menu links. Within the block A finds added to each menu file (5.18.98 adds the
+// Cashbook's "Bank & other accounts" tab to these): showLink() once, with the one call text, as the if right before the
+// one tab=bank link, and no gate of the block's own. Scoped to the block: navigation.php names $config[ elsewhere.
+const BK_LINK_CALL = 'BankGate::showLink($dataDir ?? null, $store ?? null, is_array($retailer ?? null) ? $retailer : [])';
+if (!isset($ADDED)) {
+    $skip++;
+    echo "  skip the menu links' blocks: Git cannot supply " . BK_BASE . ", so A found no block (a skip, not a pass)\n";
+} else {
+    foreach (['includes/navigation.php', 'tabs/admin/ceo_dashboard.php'] as $rel) {
+        $bl = $ADDED[$rel] ?? [];
+        $code = count($bl) === 1 ? code_only($bl[0]) : '';
+        t("{$rel}: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link",
+            [count($bl), substr_count($code, 'BankGate::showLink('), substr_count($code, BK_LINK_CALL), substr_count($code, 'href="?page=dashboard&tab=bank"'),
+             preg_match('/if \(' . preg_quote(BK_LINK_CALL, '/') . '\): \?>\n\s*<a href="\?page=dashboard&tab=bank"/', $code)], [1, 1, 1, 1, 1]);
+        t("{$rel}: the block has no gate of its own — no BankGate::open(, BankGate::allows(, bank_screen_enabled, \$config[ or \$isAdmin",
+            array_values(array_filter(['BankGate::open(', 'BankGate::allows(', 'bank_screen_enabled', '$config[', '$isAdmin'], function ($n) use ($code) { return strpos($code, $n) !== false; })), []);
+    }
+    is_(strpos(code_only(src('includes/navigation.php')), '$config[') !== false, 'control: navigation.php names $config[ outside the block, which is why the rule is scoped to it');
+}
+$showBody = preg_match('/    public static function showLink\(\?string \$dataDir, \$store, array \$sessionRetailer\): bool\n    \{\n(.*?)\n    \}\n/s', $gate, $sm) ? $sm[1] : null;
+t('showLink()\'s body is exactly the design\'s: the session copy\'s is_admin (the dispatcher\'s *admin), then open(), then allows(\'bank.view\')',
+    $showBody, "        return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;");
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nG. The backups\n";
@@ -354,12 +383,22 @@ if ($withMutants) {
     $TAB = 'tabs/accounts/bank.php'; $PB = 'includes/post/post_bank.php'; $RT = 'includes/routes.php'; $ST = 'lib/BankStatementStore.php'; $GT = 'lib/BankGate.php';
     // 5.18.97: the hero's one read per account, the anchor of the card copy (BW23 re-anchored as BC5b)
     $HERO = "\$_bkHero[\$_bkHid] = ['acct' => \$_bkA, 'eco' => \$_bkEco, 'head' => \$_bkHt, 'last' => \$_bkStore->latestLine(\$_bkHid), 'profile' => \$_bkStore->profile(\$_bkHid)];";
+    $NAV = 'includes/navigation.php'; $CEO = 'tabs/admin/ceo_dashboard.php'; $LINK_IF = 'if (' . BK_LINK_CALL . '): ?>';
     $MUTANTS = [
-        ['BW51 a menu link in the sidebar', ['includes/navigation.php', '<a href="?page=dashboard&tab=opening_balances" class="kyc-tab',
-            '<a href="?page=dashboard&tab=bank" class="kyc-tab">Bank</a>' . "\n" . '<a href="?page=dashboard&tab=opening_balances" class="kyc-tab']],
+        // 5.18.97: BW51 ("a menu link in the sidebar") is retired with the rule it guarded (O9); the menu links' copies replace it
+        ['BM1b the sidebar\'s link shown unconditionally', [$NAV, $LINK_IF, 'if (true): ?>'], ['includes/navigation.php: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link']],
+        ['BM2b the sidebar gated by the session\'s $isAdmin and the store copy\'s switch', [$NAV, $LINK_IF, "if (\$isAdmin && !empty(\$config['bank_screen_enabled'])): ?>"],
+            ['includes/navigation.php: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link', 'includes/navigation.php: the block has no gate of its own']],
+        ['BM10b the sidebar passing its own admin flag to showLink()', [$NAV, BK_LINK_CALL, "BankGate::showLink(\$dataDir ?? null, \$store ?? null, is_array(\$retailer ?? null) ? ['is_admin' => true] + \$retailer : [])"],
+            ['includes/navigation.php: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link']],
+        ['BM13 the sidebar asking open() and allows() itself', [$NAV, $LINK_IF,
+            "if (BankGate::open(\$dataDir ?? null) && BankGate::allows('bank.view', \$store ?? null, is_array(\$retailer ?? null) ? \$retailer : []) !== null): ?>"],
+            ['includes/navigation.php: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link', 'includes/navigation.php: the block has no gate of its own']],
+        ['BM11b the CEO page\'s Quick Link shown unconditionally', [$CEO, $LINK_IF, 'if (true): ?>'], ['tabs/admin/ceo_dashboard.php: its one added block calls BankGate::showLink( once, with the one call text, as the if right before its one tab=bank link']],
         ['BW24 a reader of bank_statement_lines in the Cashbook tab', ['tabs/accounts/cashbook.php', '$cb      = new CashbookService($store, $dataDir);',
             "\$cb      = new CashbookService(\$store, \$dataDir); \$_rhBank = \$store->getPdo()->query('SELECT COUNT(*) FROM bank_statement_lines')->fetchColumn();"]],
-        ['BC5b (BW23 re-anchored) a card read from cb_ledger', [$TAB, $HERO, $HERO . " \$_bkBook = \$store->getPdo()->query('SELECT SUM(amount) FROM cb_ledger')->fetchColumn();"]],
+        ['BC5b (BW23 re-anchored) a card read from cb_ledger', [$TAB, $HERO, $HERO . " \$_bkBook = \$store->getPdo()->query('SELECT SUM(amount) FROM cb_ledger')->fetchColumn();"],
+            ['tabs/accounts/bank.php: no cb_ledger, fin_audit, INSERT INTO cb_, UPDATE cb_ or DELETE FROM cb_ in its code']],
         ['the handler builds a CashbookService', [$PB, '    $_bkpSay = function', "    \$_bkpCb = new CashbookService(\$store, \$dataDir);\n    \$_bkpSay = function"]],
         ['BW42 v1 updates a line\'s status', [$ST, '    private function insertLines(int $statementId', "    private function markLines(): void { \$this->pdo->exec(\"UPDATE bank_statement_lines SET status = 'matched'\"); }\n\n    private function insertLines(int \$statementId"]],
         ['the store reads a second existing table', [$ST, '    private function tableExists(string $name): bool', "    private function rhBook(): int { return (int)\$this->pdo->query('SELECT COUNT(*) FROM cb_ledger')->fetchColumn(); }\n\n    private function tableExists(string \$name): bool"]],
@@ -368,6 +407,8 @@ if ($withMutants) {
         ['dn_cur( in the tab', [$TAB, "\$_bkSigned = function (string \$cur, int \$u, bool \$in) use (\$_bkMoney): string { return (\$in ? '+' : '−') . \$_bkMoney(\$cur, \$u); };",
             "\$_bkSigned = function (string \$cur, int \$u, bool \$in) use (\$_bkMoney, \$config): string { return (\$in ? '+' : '−') . dn_cur(\$config) . \$_bkMoney(\$cur, \$u); };"]],
         ['a Reference echoed without h()', [$TAB, "          <td><?= h((string)\$_bkL['reference']) ?></td>", "          <td><?= (string)\$_bkL['reference'] ?></td>"]],
+        ['BD1 a card\'s book name echoed without h()', [$TAB, "<div class=\"bk-card-n\"><?= h(\$_bkMask((string)\$_bkHc['acct']['name'])) ?></div>",
+            "<div class=\"bk-card-n\"><?= \$_bkMask((string)\$_bkHc['acct']['name']) ?></div>"], ['every echo of a line, check, statement or account field passes h() or (int)']],
         ['strtotime( in the tab', [$TAB, "        \$d = new \\DateTime(\$utc, new \\DateTimeZone('UTC'));", "        \$d = new \\DateTime('@' . strtotime(\$utc . ' UTC'));"]],
         ['(float) in the store', [$ST, "\$in = (int)\$r[3]; \$out = (int)\$r[4]; \$closing = (int)\$last['running_units'];", "\$in = (int)(float)\$r[3]; \$out = (int)\$r[4]; \$closing = (int)\$last['running_units'];"]],
         ['an fputcsv with the default escape', [$RT, "            \$_bkxText((string)\$_bkxL['status'] === 'imported' ? 'Not compared' : 'Unknown status'),\n        ], ',', '\"', '');",
@@ -403,7 +444,9 @@ if ($withMutants) {
         is_(false, 'the unchanged copy: its anchor occurs once', "found {$n} times");
     }
     exec('rm -rf ' . escapeshellarg($tmp));
-    foreach ($MUTANTS as [$label, [$rel, $old, $new]]) {
+    // A copy may name the cases it must fail (5.18.97's, from the design's table): each must be among its failures.
+    foreach ($MUTANTS as $mu) {
+        [$label, [$rel, $old, $new]] = $mu; $expect = $mu[2] ?? [];
         [$tmp, $n] = sj_weakened_copy($lib, $rel, $old, $new);
         $s = (string)@file_get_contents($tmp . '/' . $rel);
         $applied = $n === 1 && ($new === '' || strpos($s, $new) !== false);
@@ -414,7 +457,12 @@ if ($withMutants) {
             continue;
         }
         [$rc, $fails, $tally] = $child($tmp);
-        is_($rc !== 0 && $fails !== [], "caught: {$label}", 'exit ' . $rc . ', ' . count($fails) . ' failure(s)');
+        $missed = array_values(array_filter($expect, function (string $w) use ($fails): bool {
+            foreach ($fails as $l) if (strpos($l, '  FAIL ' . $w) === 0) return false;
+            return true;
+        }));
+        is_($rc !== 0 && $fails !== [] && $missed === [], "caught: {$label}" . ($expect ? ' — at each of its ' . count($expect) . ' named case(s)' : ''),
+            'exit ' . $rc . ', ' . count($fails) . ' failure(s)' . ($missed ? '; not failed: ' . implode(' | ', $missed) : ''));
         echo '         ' . count($fails) . ' assertion(s) failed' . ($tally ? " ({$tally[0]} passed)" : '') . ($fails ? '; first: ' . trim(substr($fails[0], 7, 110)) : '') . "\n";
         exec('rm -rf ' . escapeshellarg($tmp));
     }

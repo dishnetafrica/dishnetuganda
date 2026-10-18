@@ -10,22 +10,27 @@ declare(strict_types=1);
  * name is invented too. A real statement is never a fixture. The oracle is always THIS checkout's code (the fixed
  * sentences, the generator), so a weakened tree served by the sandbox is judged against the rule, never against itself.
  *
- *   A  a Uganda book with three Ecobank accounts (two UGX, one USD), a cash account and an inactive bank account; an
- *      admin, a second admin (demoted later), an accountant and a sales user; the pages "posts nothing" compares later
- *   B  the first visit: one chip per offered account, no All chip, a long number in an account name masked, the card
- *      empty, upload offered; the book's own figure for the account nowhere
+ *   A  a Uganda book with three bank accounts the screen offers (Ecobank UGX, a spare UGX account the book does not
+ *      name Ecobank, Ecobank USD), a cash account and an inactive bank account; an admin, a second admin (demoted
+ *      later), an accountant and a sales user; the pages "posts nothing" compares later
+ *   B  the first visit: one chip per offered account, no All chip, a long number in an account name masked; every
+ *      account's card at once, in the book's currency order (5.18.97, the operator, 18 Oct), each empty and headed
+ *      "ECO BANK <CUR>" only where the book names it Ecobank, each with its own upload and its own lines; every upload
+ *      button names its account; the book's own figure for the account nowhere
  *   C  upload → check → link-and-keep: the panel from the stored check, the link question, Keep refused without the
- *      link (link_required), then kept; the held file gone, the kept file 0600 outside uploads/
+ *      link (link_required), then kept; the held file gone, the kept file 0600 outside uploads/; then the UGX card
+ *      alone holds a figure, and the cards are the same whichever account's lines are in view
  *   D  the lines: newest first by bank line number; each Balance the stored running balance; the top row's Balance the
- *      card; the phone card's "Bal …" and the whole Remarks; the value date where it differs; "Not compared"
+ *      account's card; the phone card's "Bal …" and the whole Remarks; the value date where it differs; "Not compared"
  *   E  an overlapping, shuffled, re-padded second file adds only its new lines; the pager; the shuffled file in bank order
- *   F  the month filter and its strip (opening, in, out, closing, adds up), against the stored lines
+ *   F  the month filter and its strip (opening, in, out, closing, adds up), against the stored lines; every card the
+ *      same whatever the month and the page
  *   G  the export: the screen's lines over all pages, oldest first; headers; the file name; the lines_exported event;
  *      a request another site started (an <img>, a navigation, a sibling host, a foreign Origin or Referer) refused
  *      before the event and before any line, with the screen's own requests as the controls (BK-SEC-1)
  *   H  the USD account: a ranged first file, gap_before, a front join; escaping (<script>, "><img>, =HYPERLINK, @SUM);
  *      formula neutralising in the export, a negative balance unprefixed; a month whose lines are not consecutive;
- *      every account's card on both pages, never added (no figure equals UGX + USD)
+ *      on one page, the UGX and the USD card each its own account's last line, never added (no figure equals UGX + USD)
  *   I  every refusal and note the screen can reach, each panel sentence equal to this checkout's sentence for the
  *      stored code and parameter; the marker, the account and the holder never in the page or the flash; the keep-level
  *      codes (changed_since_check, already_kept on a second keep, check_expired); an expired check shown without a write;
@@ -36,21 +41,30 @@ declare(strict_types=1);
  *      login page's token alone, each refused; an older browser's own Origin or Referer accepted (the controls)
  *   K  the gating matrix: an accountant, a sales user, an admin demoted inside the session window, the switch off, a
  *      Uganda book with SSP — the tab, the POST and the export each refuse and write nothing; a visitor who is not
- *      signed in is sent to the login page by the export and the POST, the switch on or off (BK-SEC-4)
+ *      signed in is sent to the login page by the export and the POST, the switch on or off (BK-SEC-4). The menu item
+ *      ECO Bank (below Cashbook) and the CEO page's Quick Link (Q15), on every row and on an accountant made admin
+ *      inside the session window and on the files and the store copy disagreeing both ways: the link is shown exactly
+ *      when the tab opens (BankGate::showLink), with a fixed label; a hidden link prints nothing; the highlight
  *   L  the emergency repair page refuses drop_table for each bank_* table; an unlisted table still drops (the control)
  *   M  nothing from a statement in any flash, log, URL, session, data file or non-line table, after a marker file is
  *      refused at every rule and another is kept
+ *   M2 every account's card at once, with all three holding kept lines: each card's figure, date, account ending and
+ *      kept stamp its own account's; no figure in the cards equals a sum of cards; no total
  *   N  posts nothing: cb_ledger, cb_accounts and fin_audit byte for byte, cashInHand() per currency and project, every
  *      non-bank object in sqlite_master; the Cashbook (All, UGX, USD), its CSV, the landing and CEO pages identical
- *   O  088 not applied: "not ready", no upload, the POST refused
- *   P  South Sudan: no screen, the POST and the export refused, the five tables empty; a South Sudan book without SSP;
- *      the pages equal 5.18.96's (419e2ffd) once the per-run values and each tree's version label are normalised
- *                                                                                        (--no-compare skips)
- *   Q  weakened copies of the code each fail this test; the unchanged copy passes            (--no-mutants skips)
+ *   N2 (after N: it writes cb_accounts) Ecobank USD switched off in the chart: its card becomes the USD placeholder, and
+ *      comes back; a second account the book names Ecobank: two "ECO BANK UGX" cards, each with its masked book name
+ *   O  088 not applied: "not ready", no card, no upload, the POST refused
+ *   P  South Sudan: no screen, no ECO Bank link in the sidebar or the Quick Links, the POST and the export refused, the
+ *      five tables empty; a South Sudan book without SSP; the pages equal 5.18.96's (419e2ffd) once the per-run values
+ *      and each tree's version label are normalised                                    (--no-compare skips)
+ *   Q  weakened copies of the code each fail this test (5.18.97's at each case it names); the unchanged copy passes
+ *                                                                                          (--no-mutants skips;
+ *      --mutants=REGEX runs only the copies whose label matches, beside the unchanged copy)
  *
- *   php test_bank_screen.php [--root=DIR] [--base=DIR] [--no-compare] [--no-mutants]
+ *   php test_bank_screen.php [--root=DIR] [--base=DIR] [--no-compare] [--no-mutants] [--mutants=REGEX]
  */
-$opt  = getopt('', ['root:', 'base:', 'no-compare', 'no-mutants']);
+$opt  = getopt('', ['root:', 'base:', 'no-compare', 'no-mutants', 'mutants:']);
 $lib  = dirname(__DIR__);                                                   // the oracle: always this checkout's
 $root = isset($opt['root']) ? rtrim((string)$opt['root'], '/') : $lib;     // the tree the sandbox serves
 $withMutants = !isset($opt['no-mutants']);
@@ -128,6 +142,62 @@ function bk_seg(string $html): string
     if ($i === false) return '';
     $j = strpos($html, '</script>', $i);
     return substr($html, $i, ($j === false ? strlen($html) : $j + 9) - $i);
+}
+/** The tab's cards (5.18.97): between its two markers. '' when the page draws none. */
+function bk_hero(string $seg): string
+{
+    $a = strpos($seg, '<!-- bk-hero:start -->'); $b = strpos($seg, '<!-- bk-hero:end -->');
+    return ($a === false || $b === false || $b < $a) ? '' : substr($seg, $a, $b - $a);
+}
+/** The account cards, in page order: [account id, its markup]. A placeholder card ("none") is not one of them. */
+function bk_cards(string $seg): array
+{
+    $o = [];
+    foreach (preg_split('#(?=<div class="bk-card(?: on| none)?" data-bk-card)#', bk_hero($seg)) ?: [] as $p) {
+        if (preg_match('#^<div class="bk-card(?: on)?" data-bk-card="(\d+)">#', $p, $m)) $o[] = [(int)$m[1], $p];
+    }
+    return $o;
+}
+/** A card's heading and its currency tag: "<heading> | <CUR>", or ''. */
+function bk_card_head(string $card): string
+{
+    if (!preg_match('~<div class="bk-card-l">&#127974; (.*?) · AS STATED BY ECOBANK <span class="bk-ccy ([A-Z]{3})">\2</span></div>~', $card, $m)) return '';
+    return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8') . ' | ' . $m[2];
+}
+/** A card's book-name lines (shown only under a heading two cards share). */
+function bk_card_names(string $card): array
+{
+    preg_match_all('#<div class="bk-card-n">([^<]*)</div>#', $card, $m);
+    return array_map(function ($x) { return html_entity_decode($x, ENT_QUOTES | ENT_HTML5, 'UTF-8'); }, $m[1]);
+}
+/** Every button that opens the upload sheet, in page order: [its class, its data-bk-for, or null when it has none]. */
+function bk_opens(string $seg): array
+{
+    preg_match_all('#<button type="button" class="([a-z0-9 -]+)" data-bk-open="1"(?: data-bk-for="([^"]*)")?#', $seg, $m, PREG_SET_ORDER);
+    return array_map(function ($x) { return [$x[1], isset($x[2]) ? $x[2] : null]; }, $m);
+}
+/** The sidebar's Company Books (includes/navigation.php): from its heading to the next one, Cash Operations. */
+function bk_books(string $html): string
+{
+    $a = strpos($html, '<div class="nav-sub" style="border-color:#7c3aed;">Company Books</div>');
+    $b = $a === false ? false : strpos($html, '<div class="nav-sub" style="border-color:#16a34a;">Cash Operations</div>', $a);
+    return $b === false ? '' : substr($html, $a, $b - $a);
+}
+/** The links to ECO Bank outside the tab itself: the tab's own links are escaped (&amp;tab=bank), a menu's are not. */
+function bk_menu_links(string $html): int
+{
+    $g = bk_seg($html);
+    return substr_count($g === '' ? $html : str_replace($g, '', $html), 'href="?page=dashboard&tab=bank"');
+}
+/** The CEO page's Quick Links (tabs/admin/ceo_dashboard.php): its one cd-actions block. '' when the page has none. */
+function bk_quick(string $html): string
+{
+    return preg_match('#<div class="cd-actions">(.*?)</div>#s', $html, $m) ? $m[1] : '';
+}
+/** The class of a sidebar link to a tab, inside $books; null when there is none. */
+function bk_link_class(string $books, string $tab): ?string
+{
+    return preg_match('#<a href="\?page=dashboard&tab=' . preg_quote($tab, '#') . '" class="([^"]*)">#', $books, $m) ? trim($m[1]) : null;
 }
 /** The flash a page shows: "type: text", or ''. */
 function bk_flash_of(string $html): string
@@ -213,7 +283,7 @@ function bk_read_norm(SjSandbox $s, string $who, string $qs): string
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-echo "A. A Uganda book with three Ecobank accounts; four staff; the pages to compare later\n";
+echo "A. A Uganda book with three offered bank accounts; four staff; the pages to compare later\n";
 $UG = ['tenant_profile' => 'uganda', 'timezone' => 'Africa/Kampala', 'currency_symbol' => 'UGX', 'currency_code' => 'UGX',
        'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD', 'bank_screen_enabled' => '1'];
 $s = SjSandbox::start($root, $UG, 'bkt3');
@@ -311,6 +381,18 @@ $panel = function (string $html): array {
     if (preg_match_all('#<button type="submit" class="(?:bk-keep|cbv2-bcancel)">([^<]*)</button>#', $html, $m)) $o['buttons'] = $m[1];
     return $o;
 };
+// 5.18.97: every offered account's card at once. Each card's figure, by account id, read inside the hero only.
+$cardFigs = function (string $seg): array {
+    preg_match_all('#<div class="bk-card-v" id="bkCardFig-(\d+)">([^<]*)</div>#', bk_hero($seg), $m, PREG_SET_ORDER);
+    $o = [];
+    foreach ($m as $x) $o[(int)$x[1]] = html_entity_decode($x[2], ENT_QUOTES);
+    return $o;
+};
+/** The cards with the ring taken off: what must not change with the account in view. Nothing else is normalised. */
+$heroNorm = function (string $seg): string { return str_replace('class="bk-card on"', 'class="bk-card"', bk_hero($seg)); };
+/** The ringed card's account id, or 0. */
+$ringed = function (string $seg): int { return preg_match_all('#<div class="bk-card on" data-bk-card="(\d+)">#', bk_hero($seg), $m) === 1 ? (int)$m[1][0] : 0; };
+$cardOf = function (string $seg, int $id): string { foreach (bk_cards($seg) as [$cid, $p]) if ($cid === $id) return $p; return ''; };
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nB. The first visit\n";
@@ -324,9 +406,32 @@ is_(strpos($g0, '>All<') === false && stripos(implode(' ', array_column($cm, 3))
 is_(strpos($g0, '0123456789') === false && strpos($g0, "RH-Spare Bank \u{2022}\u{2022}\u{2022}\u{2022}6789 – UGX") !== false,
     'a run of digits in an account name is shown as •••• and its last four, never whole');
 is_(substr_count($g0, 'not linked') === 3, 'every account is marked not linked before its first file');
-is_(strpos($g0, 'No Ecobank statement kept yet') !== false && strpos($g0, 'Upload the Account Details CSV') !== false, 'the card says nothing is kept yet and offers the upload');
+// 5.18.97 (the operator, 18 Oct): every offered account's card at once — one per account, never one per currency.
+$C0 = bk_cards($g0);
+t('one card per offered account, in the book\'s currency order (UGX, then USD), each currency\'s accounts by id', array_column($C0, 0), [$U, $SP, $D]);
+t('each card\'s heading: "ECO BANK <CUR>" over an account the book names Ecobank, the masked book name over the spare (not named Ecobank)',
+    array_map('bk_card_head', array_column($C0, 1)), ['ECO BANK UGX | UGX', "RH-SPARE BANK \u{2022}\u{2022}\u{2022}\u{2022}6789 – UGX | UGX", 'ECO BANK USD | USD']);
+t('no card shows a book-name line: no two cards share a heading', array_map('bk_card_names', array_column($C0, 1)), [[], [], []]);
+t('each card says nothing is kept yet, offers an upload for its own account and links to its own lines',
+    array_map(function (array $c): array {
+        preg_match_all('#data-bk-open="1" data-bk-for="([^"]*)">&\#65291; Upload the Account Details CSV</button>#', $c[1], $um);
+        preg_match_all('#<a class="bk-card-a" href="([^"]*)">Show its lines</a>#', $c[1], $lm);
+        return [strpos($c[1], 'No Ecobank statement kept yet') !== false, $um[1], array_map(function ($u) { return html_entity_decode($u, ENT_QUOTES); }, $lm[1])];
+    }, $C0),
+    array_map(function (int $id): array { return [true, [(string)$id], ['?page=dashboard&tab=bank&bk_acct=' . $id]]; }, [$U, $SP, $D]));
+is_(strpos($g0, 'bkCardFig-') === false, 'no card shows a figure: nothing is kept yet');
+is_(strpos(bk_hero($g0), 'data-bk-card="' . $OLD . '"') === false && stripos($g0, 'Old Bank') === false && $OLD > 0,
+    'the inactive bank account (RH-Old Bank) has no card, and is nowhere on the screen');
 is_(strpos($g0, '123,456') === false, 'the book\'s own figure for the account (an opening of 123,456.00) is nowhere on the screen');
-is_(strpos($g0, 'AS STATED BY ECOBANK') !== false && strpos($g0, 'Not compared with the Cashbook yet') !== false, 'the card is the bank\'s, captioned so');
+t('every card is the bank\'s, captioned so: three "AS STATED BY ECOBANK" and three "Not compared with the Cashbook yet"',
+    [substr_count(bk_hero($g0), 'AS STATED BY ECOBANK'), substr_count(bk_hero($g0), '<span class="bk-pill">Not compared with the Cashbook yet</span>')], [3, 3]);
+// The upload sheet opens with the account of the button that opened it (data-bk-for): each card's own; the bar's and the
+// filter's the account in view.
+t('every button that opens the upload names its account: the bar and the filter the account in view, each card its own',
+    bk_opens($g0), [['cb3-fab', (string)$U], ['bk-up', (string)$U], ['bk-up', (string)$SP], ['bk-up', (string)$D], ['bk-up', (string)$U]]);
+t('the script chooses that account before it opens the sheet, once', substr_count($g0, 'sel.value = f'), 1);
+is_(strpos($g0, "<b>An account's first file:</b> any period that ends today, for example from the 1st of this month. <b>After that:</b> from the date on the account's card, or earlier.") !== false,
+    'the sheet\'s help states the first-file rule and the rule after it');
 is_(preg_match('/data-bk-cap="(\d+)"/', $g0, $mm) === 1 && ($cap = (int)$mm[1]) > 0, 'the upload form states its byte cap (' . $cap . ')');
 t('the cap is the reader\'s effective cap', $cap, min(EcobankDetailsCsv::BYTES_MAX, $cap));
 
@@ -366,6 +471,19 @@ t('the kept file is under bank_statements/<account>/, not uploads/, 0600, the sh
      is_file($kf) ? sprintf('%04o', fileperms($kf) & 0777) : 'absent', is_file($kf) ? hash_file('sha256', $kf) : '', count(glob($s->data . '/bank_statements/.pending/*.csv') ?: [])],
     [true, true, '0600', (string)($st1['sha256'] ?? '-'), 0]);
 t('no file at all exists under uploads/ for the statement', count(array_filter(glob($s->data . '/uploads/*') ?: [], function ($p) { return stripos($p, 'bank') !== false; })), 0);
+// 5.18.97: after the first keep, only the UGX card holds a figure, and the cards do not depend on the account in view.
+$topU = (int)($s->q('SELECT running_units FROM bank_statement_lines WHERE cb_account_id = ? ORDER BY cheque_number DESC LIMIT 1', [$U])[0]['running_units'] ?? 0);
+$gCU = bk_seg($page('boss', 'page=dashboard&tab=bank&bk_acct=' . $U));
+$gCD = bk_seg($page('boss', 'page=dashboard&tab=bank&bk_acct=' . $D));
+$gCS = bk_seg($page('boss', 'page=dashboard&tab=bank&bk_acct=' . $SP));
+t('after the first keep: the UGX card is that account\'s own last kept line; the spare and the USD cards stay empty',
+    [$cardFigs($gCU), strpos($cardOf($gCU, $SP), 'No Ecobank statement kept yet') !== false, strpos($cardOf($gCU, $D), 'No Ecobank statement kept yet') !== false],
+    [[$U => bk_money('UGX', $topU)], true, true]);
+t('the cards are byte for byte the same whichever account\'s lines are in view (UGX, USD, the spare): only the ring moves',
+    [bk_hero($gCU) !== '', $heroNorm($gCD) === $heroNorm($gCU), $heroNorm($gCS) === $heroNorm($gCU), $ringed($gCU), $ringed($gCD), $ringed($gCS)],
+    [true, true, true, $U, $D, $SP]);
+t('with the USD account in view, the bar\'s and the filter\'s upload name the USD account; each card still its own',
+    bk_opens($gCD), [['cb3-fab', (string)$D], ['bk-up', (string)$U], ['bk-up', (string)$SP], ['bk-up', (string)$D], ['bk-up', (string)$D]]);
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nD. The lines\n";
@@ -386,15 +504,6 @@ $cardsOf = function (string $seg): array {
     foreach ($m as $x) $o[] = ['chq' => $x[1], 'bal' => html_entity_decode($x[3], ENT_QUOTES), 'html' => $x[2]];
     return $o;
 };
-// 5.18.97: every offered account's card at once. Each card's figure, by account id, read inside the hero only.
-$cardFigs = function (string $seg): array {
-    $a = strpos($seg, '<!-- bk-hero:start -->'); $b = strpos($seg, '<!-- bk-hero:end -->');
-    if ($a === false || $b === false || $b < $a) return [];
-    preg_match_all('#<div class="bk-card-v" id="bkCardFig-(\d+)">([^<]*)</div>#', substr($seg, $a, $b - $a), $m, PREG_SET_ORDER);
-    $o = [];
-    foreach ($m as $x) $o[(int)$x[1]] = html_entity_decode($x[2], ENT_QUOTES);
-    return $o;
-};
 $hL = $page('boss', 'page=dashboard&tab=bank&bk_acct=' . $U);
 $gL = bk_seg($hL);
 $L = $dbLines($U);
@@ -403,8 +512,8 @@ t('rows newest first by bank line number, exactly the kept lines', array_column(
 t('each row\'s Balance is the stored running balance', array_column($rows, 'bal'), array_map(function ($l) { return bk_money('UGX', (int)$l['running_units']); }, $L));
 t('the card is the running balance of the kept line with the highest bank line number, and the top row\'s Balance',
     [$cardFigs($gL)[$U] ?? null, $rows[0]['bal'] ?? null], [bk_money('UGX', (int)$L[0]['running_units']), bk_money('UGX', (int)$L[0]['running_units'])]);
-is_(strpos($gL, 'account ending ' . "\u{2022}\u{2022}\u{2022}\u{2022}" . '0001') !== false && strpos($gL, 'after the last kept line, dated ') !== false,
-    'the card says which line it is after, and the account\'s last four');
+is_(strpos($cardOf($gL, $U), 'account ending ' . "\u{2022}\u{2022}\u{2022}\u{2022}" . '0001') !== false && strpos($cardOf($gL, $U), 'after the last kept line, dated ') !== false,
+    'the UGX card says which line it is after, and the account\'s last four');
 t('each phone card carries "Bal" and the stored running balance', array_column($cards, 'bal'), array_column($rows, 'bal'));
 $longL = array_values(array_filter($L, function ($l) { return strlen((string)$l['remarks']) > 65; }));
 $longChq = (string)($longL[0]['cheque_number'] ?? '');
@@ -467,7 +576,9 @@ foreach ($months as $mo) {
     is_(preg_match('#id="bkCsv" href="[^"]*bk_month=' . $mo . '&amp;bk_export=csv">&\#8595; ' . preg_quote(date('M Y', (int)strtotime($mo . '-01 12:00:00')), '#') . '</a>#', $gm) === 1,
         "{$mo}: the export button names the month and exports it");
     is_(($cardFigs($gm)[$U] ?? null) === bk_money('UGX', (int)$L[0]['running_units']), "{$mo}: the card ignores the month filter");
+    is_(bk_hero($gm) !== '' && bk_hero($gm) === bk_hero($g1), "{$mo}: every card is the same as without the filter, byte for byte");
 }
+is_(bk_hero($g2) !== '' && bk_hero($g2) === bk_hero($g1), 'page 2 of the lines: every card is the same as on page 1, byte for byte');
 $gEmpty = bk_seg($page('boss', "page=dashboard&tab=bank&bk_acct={$U}&bk_month=2025-01"));
 is_(strpos($gEmpty, 'No line in this month.') !== false && strpos($gEmpty, 'id="bkStrip"') === false, 'a month with no kept line says so and draws no strip');
 $gBad = bk_seg($page('boss', "page=dashboard&tab=bank&bk_acct={$U}&bk_month=2026-13"));
@@ -577,10 +688,11 @@ is_(strpos($gD, '=HYPERLINK(&quot;http://example.test/rh&quot;,&quot;RH&quot;)')
 is_(stripos($gD, 'innerHTML') === false && stripos($gD, 'outerHTML') === false && stripos($gD, 'insertAdjacentHTML') === false && stripos($gD, 'document.write') === false,
     'the tab emits no innerHTML, outerHTML, insertAdjacentHTML or document.write');
 $uFig = (int)$L[0]['running_units']; $dFig = (int)$LD[0]['running_units'];
-t('the USD card is the USD account\'s own last line', $cardFigs($gD)[$D] ?? null, bk_money('USD', $dFig));
+t('on one page, each card is its own account\'s last line: the USD card the USD account\'s, the UGX card the UGX account\'s',
+    [$cardFigs($gD)[$D] ?? null, $cardFigs($gD)[$U] ?? null], [bk_money('USD', $dFig), bk_money('UGX', $uFig)]);
 $sum = $uFig + $dFig;
-is_(strpos($gD, number_format($sum / 100, 2)) === false && strpos($g1, number_format($sum / 100, 2)) === false,
-    'the cards are never added: no figure on either page equals UGX + USD (' . number_format($sum / 100, 2) . ')');
+is_(strpos($gD, number_format($sum / 100, 2)) === false,
+    'the cards are never added: nothing on that page equals UGX + USD (' . number_format($sum / 100, 2) . ')');
 $negL = array_values(array_filter($LD, function ($l) { return (int)$l['running_units'] < 0; }));
 is_($negL !== [] && strpos($gD, bk_money('USD', (int)$negL[0]['running_units'])) !== false, 'a balance below zero is shown with its minus');
 $xD = bk_csv(bk_req($s, 'GET', "page=dashboard&tab=bank&bk_acct={$D}&bk_export=csv", 'boss')[1]);
@@ -859,20 +971,97 @@ $anon = function (SjSandbox $x, string $label, string $tok) use ($okFile): void 
         [$e[0], $e[2], strpos($e[1], 'not available') === false, $p[0], $p[2], bk_counts($x)], [302, '?page=login', true, 302, '?page=login', $cn]);
 };
 $anon($s, 'Uganda with the switch on', $loginTok);
+// 5.18.97 (the operator, 18 Oct; Q15): the menu item ECO Bank directly below Cashbook, and the CEO page's Quick Link right
+// after 📒 Cashbook, each shown by BankGate::showLink() alone. $menu reads the sidebar on the Cashbook and, when this
+// visitor reaches it, the CEO page ('ceo' is null where the page has no Quick Links). Every row: shown ⇔ the tab opens.
+$tabOpens = function (string $who) use ($page): bool { return bk_seg($page($who, 'page=dashboard&tab=bank')) !== ''; };
+$menu = function (string $who) use ($page): array {
+    $h = $page($who, 'page=dashboard&tab=cashbook');
+    $q = bk_quick($page($who, 'page=dashboard'));
+    return ['side' => bk_menu_links($h), 'books' => bk_books($h), 'cb' => strpos(bk_books($h), '<a href="?page=dashboard&tab=cashbook" class="kyc-tab') !== false,
+        'ceo' => $q === '' ? null : substr_count($q, 'href="?page=dashboard&tab=bank"'), 'quick' => $q, 'ceoCb' => strpos($q, '📒 Cashbook</a>') !== false];
+};
+$HIDDEN_SIDE = "</span> Cashbook\n</a>\n<a href=\"?page=dashboard&tab=accounts_ledger\"";   // what a hidden link leaves: nothing
+$HIDDEN_CEO  = "📒 Cashbook</a>\n    <a href=\"?page=dashboard&tab=all_collections\">";
+$mb = $menu('boss');
+preg_match_all('#<a href="\?page=dashboard&tab=([a-z_]+)" class="kyc-tab[^"]*">#', $mb['books'], $seq);
+$at = array_search('cashbook', $seq[1], true);
+$label = preg_match('#<a href="\?page=dashboard&tab=bank" class="kyc-tab[^"]*">(.*?)</a>#s', $mb['books'], $lm) ? trim(html_entity_decode(strip_tags($lm[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8')) : null;
+t('an admin, Uganda, the switch on: one ECO Bank link, in Company Books, directly below Cashbook and above Revenue Ledger; the tab opens',
+    [$mb['side'], substr_count($mb['books'], 'href="?page=dashboard&tab=bank"'), $at === false ? null : ($seq[1][$at + 1] ?? null), $at === false ? null : ($seq[1][$at + 2] ?? null), $tabOpens('boss')],
+    [1, 1, 'bank', 'accounts_ledger', true]);
+t('the link\'s label is exactly "ECO Bank": no figure, count or badge', [$label, preg_match('/\d/', (string)$label)], ['ECO Bank', 0]);
+t('Q15: one ECO Bank link on the CEO page\'s Quick Links, right after 📒 Cashbook, with a fixed label',
+    [$mb['ceo'], preg_match('#📒 Cashbook</a>\s*<a href="\?page=dashboard&tab=bank">🏦 ECO Bank</a>#u', $mb['quick'])], [1, 1]);
+$hb = $page('boss', 'page=dashboard&tab=bank');
+t('the highlight: on ECO Bank its link is the active one and Cashbook\'s is not; on the Cashbook the reverse',
+    [bk_link_class(bk_books($hb), 'bank'), bk_link_class(bk_books($hb), 'cashbook'), bk_link_class($mb['books'], 'bank'), bk_link_class($mb['books'], 'cashbook')],
+    ['kyc-tab active', 'kyc-tab', 'kyc-tab', 'kyc-tab active']);
 $matrix('an accountant', 'acc', '', 'danger: Access denied.', 'Access denied.');
+$ma = $menu('acc');
+t('an accountant: no ECO Bank link, and the tab refuses; the control — the Cashbook link is in Company Books (the block was drawn)',
+    [$ma['side'], $tabOpens('acc'), $ma['cb']], [0, false, true]);
+is_(strpos($ma['books'], $HIDDEN_SIDE) !== false, 'the hidden link prints nothing: the accountant\'s Company Books goes from Cashbook straight to Revenue Ledger');
 $matrix('a sales user', 'sal', '', 'danger: Access denied.', 'Access denied.');
+$ms = $menu('sal');
+if ($ms['books'] === '') echo "  note the sales user's sidebar draws no Company Books, so the next row is not a test of the gate\n";
+t('a sales user: no ECO Bank link, and the tab refuses' . ($ms['books'] === '' ? ' (not a test of the gate: no Company Books is drawn for this role)' : '; the Company Books block was drawn'),
+    [$ms['side'], $tabOpens('sal')], [0, false]);
 $s->login('boss2', 'rh-admin2@example.test', 'sj-password-1');                  // a fresh session copy: inside its 300-second window
 is_(bk_seg($page('boss2', 'page=dashboard&tab=bank')) !== '', 'control: the second admin sees the screen before the demotion');
+$m2 = $menu('boss2');
+t('control: the second admin has the link before the demotion, in the sidebar and on the Quick Links', [$m2['side'], $m2['ceo']], [1, 1]);
 $s->update($s->ids['boss2'], ['is_admin' => false, 'role' => 'accountant']);
 $matrix('an admin demoted inside the session window (the session copy still says admin)', 'boss2', $tabDeny, 'danger: Access denied.', 'Access denied.');
+$m2 = $menu('boss2');
+t('the admin demoted inside the session window: no link in the sidebar or on the CEO page, which still renders for the session copy; the tab refuses; the controls — the sidebar\'s Cashbook link and the Quick Links\' 📒 Cashbook',
+    [$m2['side'], $m2['ceo'], $tabOpens('boss2'), $m2['cb'], $m2['ceoCb']], [0, 0, false, true, true]);
+$s->update($s->ids['acc'], ['is_admin' => true, 'role' => 'admin']);           // the record says admin; acc's session copy does not
+$mp = $menu('acc');
+t('an accountant made admin inside the session window (the session copy still says not): no link, and the tab refuses at the dispatcher; the control — the Cashbook link is in Company Books',
+    [$mp['side'], $tabOpens('acc'), strpos($page('acc', 'page=dashboard&tab=bank'), 'Access denied.</div>') === false, $mp['cb']], [0, false, true, true]);
+$s->login('acc', 'rh-acc@example.test', 'sj-password-1');                        // a fresh sign-in: the session copy says admin
+t('after a fresh sign-in: the link is there, and the tab opens', [$menu('acc')['side'], $tabOpens('acc')], [1, true]);
+$s->update($s->ids['acc'], ['is_admin' => false, 'role' => 'accountant']);
+$s->login('acc', 'rh-acc@example.test', 'sj-password-1');
+t('reverted (the record, then a fresh sign-in): no link, the tab refuses', [$menu('acc')['side'], $tabOpens('acc')], [0, false]);
 $setCfg(['bank_screen_enabled' => '0']);
 $matrix('Uganda with the switch off', 'boss', $gateOff, 'danger: ECO Bank is not available on this installation.', 'ECO Bank is not available on this installation.');
+$mo = $menu('boss');
+t('the switch off: no link in the sidebar or on the CEO page, and the tab refuses; the control — the Cashbook link and the Quick Links\' 📒 Cashbook are there',
+    [$mo['side'], $mo['ceo'], $tabOpens('boss'), $mo['cb'], $mo['ceoCb']], [0, 0, false, true, true]);
+t('the hidden links print nothing: Company Books goes from Cashbook straight to Revenue Ledger, the Quick Links from 📒 Cashbook to 💰 Collections',
+    [strpos($mo['books'], $HIDDEN_SIDE) !== false, strpos($mo['quick'], $HIDDEN_CEO) !== false], [true, true]);
 $anon($s, 'Uganda with the switch off', $loginTok);
 $setCfg(['bank_screen_enabled' => '1', 'cashbook_currencies' => 'UGX,USD,SSP']);
 $matrix('a Uganda book where SSP is bookable', 'boss', $gateOff, 'danger: ECO Bank is not available on this installation.', 'ECO Bank is not available on this installation.');
+$mq = $menu('boss');
+t('a Uganda book where SSP is bookable: no link in the sidebar or on the CEO page, and the tab refuses; the control — the Cashbook link and the Quick Links\' 📒 Cashbook are there',
+    [$mq['side'], $mq['ceo'], $tabOpens('boss'), $mq['cb'], $mq['ceoCb']], [0, 0, false, true, true]);
 $anon($s, 'a Uganda book where SSP is bookable', $loginTok);
 $setCfg([]);
 is_(bk_seg($page('boss', 'page=dashboard&tab=bank')) !== '', 'control: the switch back on, the screen is back');
+t('control: the switch back on, the link is back in the sidebar and on the CEO page', [$menu('boss')['side'], $menu('boss')['ceo']], [1, 1]);
+// The files and the store copy disagreeing, both ways: the link follows the files, as the tab does (BankGate never reads
+// public.php's store copy). Each copy is read back after the pages, so the disagreement is shown, not assumed.
+$fileSwitch = function () use ($s): ?string {
+    $j = json_decode((string)@file_get_contents($s->data . '/kyc_config.json'), true);
+    return is_array($j) && array_key_exists('bank_screen_enabled', $j) ? (string)$j['bank_screen_enabled'] : null;
+};
+$storeSwitch = function () use ($s): ?string {
+    $j = json_decode((string)($s->q('SELECT data FROM kyc_config WHERE id = 0')[0]['data'] ?? ''), true);
+    return is_array($j) && array_key_exists('bank_screen_enabled', $j) ? (string)$j['bank_screen_enabled'] : null;
+};
+foreach ([['the files say on, the store copy says off', '1', '0', 1, true], ['the files say off, the store copy says on', '0', '1', 0, false]] as [$lbl, $fv, $sv, $want, $opens]) {
+    file_put_contents($s->data . '/kyc_config.json', json_encode(array_merge($s->cfg, ['bank_screen_enabled' => $fv])));
+    $s->store()->save('kyc_config.json', array_merge($s->cfg, ['bank_screen_enabled' => $sv]));
+    $md = $menu('boss');
+    $hd = $page('boss', 'page=dashboard&tab=bank');
+    t("{$lbl}: the link " . ($want ? 'is shown and the tab opens' : 'is hidden and the tab refuses with its own sentence') . ' (both follow the files); the control — the two copies read back and disagree',
+        [$md['side'], $md['ceo'], bk_seg($hd) !== '', $opens ? true : strpos($hd, $gateOff) !== false, $fileSwitch(), $storeSwitch()], [$want, $want, $opens, true, $fv, $sv]);
+}
+$setCfg([]);
+t('control: both copies agree again, on', [$fileSwitch(), $storeSwitch(), $menu('boss')['side']], ['1', '1', 1]);
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nL. The emergency repair page\n";
@@ -965,6 +1154,48 @@ is_(strpos($gSp, BK_MARK) !== false && strpos($gSp, BK_GEN_ACCOUNT) === false &&
     'the kept marker lines show their Remarks (what the screen is for), never the account number or the holder');
 
 // ═══════════════════════════════════════════════════════════════════════════
+echo "\nM2. Every account's card at once, each its own, never added\n";
+// All three accounts now hold kept lines: UGX from C, E and I; the spare M's 30 marker lines (account 0000000003); USD H's.
+$latest = function (int $id) use ($s): array {
+    return $s->q('SELECT l.posting_date, l.running_units, s.kept_at FROM bank_statement_lines l JOIN bank_statements s ON s.id = l.statement_id'
+        . ' WHERE l.cb_account_id = ? ORDER BY l.cheque_number DESC LIMIT 1', [$id])[0] ?? [];
+};
+$CUR = [$U => 'UGX', $SP => 'UGX', $D => 'USD']; $END = [$U => '0001', $SP => '0003', $D => '0001'];
+$LT = []; $fig = [];
+foreach ([$U, $SP, $D] as $id) { $LT[$id] = $latest($id); $fig[$id] = (int)($LT[$id]['running_units'] ?? 0); }
+$sums = [];
+foreach ([[$U, $SP], [$U, $D], [$SP, $D], [$U, $SP, $D]] as $ids) $sums[implode('+', $ids)] = array_sum(array_map(function ($i) use ($fig) { return $fig[$i]; }, $ids));
+$localDay = function (string $utc): string { $d = new \DateTime($utc, new \DateTimeZone('UTC')); $d->setTimezone(new \DateTimeZone(date_default_timezone_get())); return $d->format('Y-m-d'); };
+$pre = count(array_unique($fig)) === 3 && !in_array(0, $fig, true) && !array_intersect($fig, $sums)
+    && !array_filter($LT, function (array $r) use ($localDay) { return $r === [] || $r['posting_date'] === substr((string)$r['kept_at'], 0, 10) || $r['posting_date'] === $localDay((string)$r['kept_at']); });
+is_($pre, 'precondition: the three figures are distinct and non-zero, none equals a sum of cards, and each account\'s last line is dated other than the day it was kept',
+    (string)json_encode(['fig' => $fig, 'sums' => $sums, 'latest' => $LT]));
+$gM = bk_seg($page('boss', 'page=dashboard&tab=bank'));
+$hM = bk_hero($gM);
+$cardSays = function (string $card): array {
+    $d = preg_match('~available balance after the last kept line, dated ([0-9]{2} [A-Z][a-z]{2} [0-9]{4})(?: · account ending \x{2022}{4}([0-9]{4}))?</div>~u', $card, $m) ? [$m[1], $m[2] ?? ''] : ['', ''];
+    $k = preg_match('#from the statement kept on ([^<]*)</div>#', $card, $m2) ? $m2[1] : '';
+    return [$d[0], $d[1], $k];
+};
+$stampOf = function (string $utc): string { $d = new \DateTime($utc, new \DateTimeZone('UTC')); $d->setTimezone(new \DateTimeZone(date_default_timezone_get())); return $d->format('d M Y H:i'); };
+$figs = $cardFigs($gM);
+t('each card is its own account\'s: its figure, the date of its last kept line, its account ending and the statement it was kept from',
+    array_map(function (int $id) use ($figs, $cardOf, $gM, $cardSays) { return [$figs[$id] ?? null, $cardSays($cardOf($gM, $id))]; }, [$U, $SP, $D]),
+    array_map(function (int $id) use ($CUR, $END, $fig, $LT, $stampOf) {
+        return [bk_money($CUR[$id], $fig[$id]), [date('d M Y', (int)strtotime((string)($LT[$id]['posting_date'] ?? '') . ' 12:00:00')), $END[$id], $stampOf((string)($LT[$id]['kept_at'] ?? '1970-01-01 00:00:00'))]];
+    }, [$U, $SP, $D]));
+preg_match_all('/-?\d{1,3}(?:,\d{3})*\.\d{2}/', html_entity_decode(strip_tags($hM), ENT_QUOTES | ENT_HTML5, 'UTF-8'), $tk);
+$summed = [];
+foreach ($sums as $k => $sm) {
+    if (in_array(number_format($sm / 100, 2), $tk[0], true)) $summed[] = $k . ' as a number';
+    foreach (['UGX', 'USD'] as $c) if (strpos($hM, bk_money($c, $sm)) !== false) $summed[] = $k . ' as ' . $c;
+}
+t('no figure in the cards equals the sum of any two cards or of all three, as money or as a number', $summed, []);
+is_($hM !== '' && stripos($hM, 'total') === false, 'no "total" anywhere among the cards');
+t('control: each card\'s own figure appears among the cards exactly once, and the cards hold no other figure',
+    [array_map(function (int $id) use ($hM, $CUR, $fig) { return substr_count($hM, bk_money($CUR[$id], $fig[$id])); }, [$U, $SP, $D]), count($tk[0])], [[1, 1, 1], 3]);
+
+// ═══════════════════════════════════════════════════════════════════════════
 echo "\nN. Posts nothing\n";
 $digAfter = $dig();
 foreach (['cb_ledger', 'cb_accounts', 'fin_audit'] as $tb) t("{$tb}: the same rows, byte for byte (count and sha256 in rowid order)", $digAfter[$tb], $digBefore[$tb]);
@@ -979,6 +1210,33 @@ foreach ($PAGES as $lbl => $qs) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+echo "\nN2. An account switched off in the chart; a second account the book names Ecobank\n";
+// After N, because both write cb_accounts (N digests it byte for byte). Each is undone, and the undoing is checked too.
+$cb->setAccountActive($D, false);
+$gN = bk_seg($page('boss', 'page=dashboard&tab=bank')); $hN = bk_hero($gN);
+t('Ecobank USD switched off: the UGX cards stay; the USD card is replaced by the USD placeholder, and no USD card, figure or upload remains',
+    [(int)($s->q('SELECT active FROM cb_accounts WHERE id = ?', [$D])[0]['active'] ?? -1), array_column(bk_cards($gN), 0), substr_count($hN, 'data-bk-card-none="USD"'),
+     strpos($hN, 'data-bk-card="' . $D . '"') !== false, isset($cardFigs($gN)[$D]), preg_match('/USD -?\d/', strip_tags($hN)), strpos($gN, 'data-bk-for="' . $D . '"') !== false],
+    [0, [$U, $SP], 1, false, false, 0, false]);
+is_(strpos($hN, 'NO ACTIVE BANK ACCOUNT IN USD') !== false && strpos($hN, 'so no Ecobank statement can be kept or shown for USD.') !== false
+    && strpos($hN, '<div class="bk-card none" data-bk-card-none="USD">') !== false, 'the placeholder says so in words, on a light-grey card: nothing goes missing silently');
+$cb->setAccountActive($D, true);
+$gN = bk_seg($page('boss', 'page=dashboard&tab=bank'));
+t('switched back on: the USD card is back, with its figure, and no placeholder', [array_column(bk_cards($gN), 0), $cardFigs($gN)[$D] ?? null, substr_count(bk_hero($gN), 'data-bk-card-none')],
+    [[$U, $SP, $D], bk_money('USD', $fig[$D]), 0]);
+$ecoSpare = 'RH-Ecobank Spare 0123456789 – UGX';                                  // invented
+$s->q('UPDATE cb_accounts SET name = ? WHERE id = ?', [$ecoSpare, $SP]);
+$gR = bk_seg($page('boss', 'page=dashboard&tab=bank')); $CR = bk_cards($gR);
+t('the spare renamed to an Ecobank name (read back from cb_accounts): two cards are headed "ECO BANK UGX", and each shows its masked book name',
+    [(string)($s->q('SELECT name FROM cb_accounts WHERE id = ?', [$SP])[0]['name'] ?? ''), array_map('bk_card_head', array_column($CR, 1)), array_map('bk_card_names', array_column($CR, 1))],
+    [$ecoSpare, ['ECO BANK UGX | UGX', 'ECO BANK UGX | UGX', 'ECO BANK USD | USD'], [['Ecobank Uganda – UGX'], ["RH-Ecobank Spare \u{2022}\u{2022}\u{2022}\u{2022}6789 – UGX"], []]]);
+$s->q('UPDATE cb_accounts SET name = ? WHERE id = ?', [$spareName, $SP]);
+$gR = bk_seg($page('boss', 'page=dashboard&tab=bank')); $CR = bk_cards($gR);
+t('renamed back: the spare\'s own heading again, and both name lines are gone',
+    [(string)($s->q('SELECT name FROM cb_accounts WHERE id = ?', [$SP])[0]['name'] ?? ''), array_map('bk_card_head', array_column($CR, 1)), substr_count(bk_hero($gR), 'class="bk-card-n"')],
+    [$spareName, ['ECO BANK UGX | UGX', "RH-SPARE BANK \u{2022}\u{2022}\u{2022}\u{2022}6789 – UGX | UGX", 'ECO BANK USD | USD'], 0]);
+
+// ═══════════════════════════════════════════════════════════════════════════
 echo "\nO. Migration 088 not applied\n";
 try {
     $pdo = bk_pdo($s);
@@ -991,8 +1249,8 @@ try {
 $cnO = bk_n($s, 'SELECT COUNT(*) n FROM bank_checks');
 $hO = $page('boss', 'page=dashboard&tab=bank');
 $gO = bk_seg($hO);
-is_(strpos($gO, 'ECO Bank is not ready on this installation.') !== false && strpos($gO, 'data-bk-open') === false && strpos($gO, 'bk-chip') === false,
-    'the screen fails closed: "not ready", no account, no upload');
+is_(strpos($gO, 'ECO Bank is not ready on this installation.') !== false && strpos($gO, 'data-bk-open') === false && strpos($gO, 'bk-chip') === false
+    && strpos($gO, 'data-bk-card') === false, 'the screen fails closed: "not ready", no account, no card, no upload');
 $pO = $post('boss', ['bk_acct' => (string)$U], [g_file(array_slice($H, 0, 5)), BK_FNAME]);
 t('a check is refused and writes nothing', [$pO['flash'], bk_n($s, 'SELECT COUNT(*) n FROM bank_checks')], ['danger: ECO Bank is not ready on this installation. Nothing was kept.', $cnO]);
 try {
@@ -1067,6 +1325,12 @@ if ($withCompare) {
         $bs->stop();
     }
 }
+// 5.18.97: the menu item and the Quick Link never show on South Sudan — asserted directly, whatever --base says.
+$hsCb = $ss->page('boss', 'page=dashboard&tab=cashbook'); $hsCeo = $ss->page('boss', 'page=dashboard');
+t('South Sudan, the switch set: no ECO Bank link in the sidebar; the control — Company Books was drawn, with Opening Balances (non-Uganda)',
+    [bk_menu_links($hsCb), strpos(bk_books($hsCb), '<a href="?page=dashboard&tab=cashbook" class="kyc-tab') !== false, strpos(bk_books($hsCb), 'Opening Balances') !== false], [0, true, true]);
+t('South Sudan: no ECO Bank link on the CEO page (its sidebar or its Quick Links); the control — the Quick Links hold 📒 Cashbook',
+    [bk_menu_links($hsCeo), substr_count(bk_quick($hsCeo), 'href="?page=dashboard&tab=bank"'), strpos(bk_quick($hsCeo), '📒 Cashbook</a>') !== false], [0, 0, true]);
 $ss->stop();
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1085,6 +1349,15 @@ if ($withMutants) {
     $TAB = 'tabs/accounts/bank.php'; $PB = 'includes/post/post_bank.php'; $RT = 'includes/routes.php'; $GT = 'lib/BankGate.php'; $PUB = 'public.php';
     // 5.18.97: the hero's one read per account, the anchor of the card copies (BW32 and BW33 re-anchored as BC5 and BC1)
     $HERO = "\$_bkHero[\$_bkHid] = ['acct' => \$_bkA, 'eco' => \$_bkEco, 'head' => \$_bkHt, 'last' => \$_bkStore->latestLine(\$_bkHid), 'profile' => \$_bkStore->profile(\$_bkHid)];";
+    // 5.18.97: the menu item (the sidebar), the Quick Link (the CEO page) and their one gate (BankGate::showLink)
+    $NAV = 'includes/navigation.php'; $CEO = 'tabs/admin/ceo_dashboard.php';
+    $LINK_ARGS = "BankGate::showLink(\$dataDir ?? null, \$store ?? null, is_array(\$retailer ?? null) ? \$retailer : [])";
+    $LINK_IF = 'if (' . $LINK_ARGS . '): ?>';
+    $SHOW = "return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;";
+    $NAV_CB = "<a href=\"?page=dashboard&tab=cashbook\" class=\"kyc-tab <?= \$tab==='cashbook'?'active':'' ?>\">\n"
+        . "    <span class=\"nav-icon\"><i class=\"bi bi-journal-bookmark-fill\"></i></span> Cashbook\n</a>\n";
+    $NAV_BLOCK = preg_match("#<\?php // 5\.18\.97 \(the operator, 18 Oct\): ECO Bank, directly below the Cashbook\..*?\n<\?php endif; \?>\n#s",
+        (string)file_get_contents($lib . '/' . $NAV), $nbm) ? $nbm[0] : "\0no ECO Bank block in {$NAV}\0";
     $MUTANTS = [
         ['BW25 BankGate::open() without the switch', [[$GT, 'return self::halves($cfg, (string)$dataDir) && self::switchOn($cfg);', 'return self::halves($cfg, (string)$dataDir);']]],
         ['BW26a BankGate without the Uganda half', [[$GT, 'return StaffJobsGate::applies($cfg, $dataDir) && !dn_ssp_selectable($cfg);', 'return !dn_ssp_selectable($cfg);']]],
@@ -1106,9 +1379,9 @@ if ($withMutants) {
             "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]]],
         ['BW31 $_tabPerms[\'bank\'] left out', [[$PUB, "    'bank'                 => '*admin',                               // 5.18.97: never absent (absent = any signed-in user)\n", '']]],
         ['BC5 (BW32 re-anchored) a card\'s figure read from cb_ledger', [[$TAB, $HERO,
-            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { \$_bkHero[\$_bkHid]['last']['running_units'] = (int)round(100 * (float)\$store->getPdo()->query('SELECT COALESCE(SUM(CASE WHEN direction = \\'in\\' THEN amount ELSE -amount END), 0) FROM cb_ledger WHERE account_id = ' . \$_bkHid)->fetchColumn()); }"]]],
+            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { \$_bkHero[\$_bkHid]['last']['running_units'] = (int)round(100 * (float)\$store->getPdo()->query('SELECT COALESCE(SUM(CASE WHEN direction = \\'in\\' THEN amount ELSE -amount END), 0) FROM cb_ledger WHERE account_id = ' . \$_bkHid)->fetchColumn()); }"]], ['the card is the running balance of the kept line with the highest bank line number', 'each card is its own account\'s']],
         ['BC1 (BW33 re-anchored) each card plus the other accounts\' latest lines', [[$TAB, $HERO,
-            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { foreach (\$_bkAccts as \$_bkO) { if ((int)\$_bkO['id'] !== \$_bkHid && (\$_bkOL = \$_bkStore->latestLine((int)\$_bkO['id'])) !== null) \$_bkHero[\$_bkHid]['last']['running_units'] += (int)\$_bkOL['running_units']; } }"]]],
+            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { foreach (\$_bkAccts as \$_bkO) { if ((int)\$_bkO['id'] !== \$_bkHid && (\$_bkOL = \$_bkStore->latestLine((int)\$_bkO['id'])) !== null) \$_bkHero[\$_bkHid]['last']['running_units'] += (int)\$_bkOL['running_units']; } }"]], ['on one page, each card is its own account', 'no figure in the cards equals the sum']],
         ['BW35 innerHTML in the tab', [[$TAB, "name.textContent = file.files && file.files[0] ? file.files[0].name : '';", "name.innerHTML = file.files && file.files[0] ? file.files[0].name : '';"]]],
         ['BW36 a free-text bk_q search box', [[$TAB, '<button type="submit" class="cb3-filter-btn">Show</button>', '<input type="search" name="bk_q" placeholder="Search"><button type="submit" class="cb3-filter-btn">Show</button>']]],
         ['BW37 the file\'s name in the flash', [[$PB, "flash('The file passed every check. Nothing is kept until you press Keep.', 'success');",
@@ -1125,8 +1398,44 @@ if ($withMutants) {
         ['the rows oldest first', [[$TAB, "\$_bkStore->lines(\$_bkId, \$_bkMonth, 'desc', \$_bkPer", "\$_bkStore->lines(\$_bkId, \$_bkMonth, 'asc', \$_bkPer"]]],
         ['the month strip\'s opening without the first line\'s own amount', [['lib/BankStatementStore.php',
             "\$opening = (int)\$first['running_units'] - (int)\$first['credit_units'] + (int)\$first['debit_units'];", "\$opening = (int)\$first['running_units'];"]]],
+        // 5.18.97 (the operator, 18 Oct; Q15): the menu item and the Quick Link, one gate (BankGate::showLink), one label
+        ['BM1 the sidebar\'s link shown unconditionally', [[$NAV, $LINK_IF, 'if (true): ?>']], ['an accountant: no ECO Bank link', 'the switch off: no link in the sidebar or on the CEO page', 'a Uganda book where SSP is bookable: no link', 'South Sudan, the switch set: no ECO Bank link in the sidebar']],
+        ['BM2 the sidebar gated by the session\'s $isAdmin and the store copy\'s switch', [[$NAV, $LINK_IF, "if (\$isAdmin && !empty(\$config['bank_screen_enabled'])): ?>"]], ['the files say on, the store copy says off', 'the files say off, the store copy says on']],
+        ['BM3 showLink() without allows()', [[$GT, $SHOW, "return !empty(\$sessionRetailer['is_admin']) && self::open(\$dataDir);"]], ['the admin demoted inside the session window: no link']],
+        ['BM4 showLink() without its session term', [[$GT, $SHOW, "return self::open(\$dataDir) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;"]], ['an accountant made admin inside the session window']],
+        ['BM5 showLink() without open()', [[$GT, $SHOW, "return !empty(\$sessionRetailer['is_admin']) && self::allows('bank.view', \$store, \$sessionRetailer) !== null;"]], ['the switch off: no link in the sidebar or on the CEO page', 'South Sudan, the switch set: no ECO Bank link in the sidebar']],
+        ['BM6 ECO Bank above the Cashbook', [[$NAV, $NAV_CB . $NAV_BLOCK, $NAV_BLOCK . $NAV_CB]], ['an admin, Uganda, the switch on: one ECO Bank link']],
+        ['BM7 the highlight keyed to the Cashbook', [[$NAV, "<a href=\"?page=dashboard&tab=bank\" class=\"kyc-tab <?= \$tab==='bank'?'active':'' ?>\">",
+            "<a href=\"?page=dashboard&tab=bank\" class=\"kyc-tab <?= \$tab==='cashbook'?'active':'' ?>\">"]], ['the highlight']],
+        ['BM8 a count badge in the label', [[$NAV, "</span> ECO Bank\n</a>", "</span> ECO Bank <span class=\"nav-badge\">3</span>\n</a>"]], ['the link\'s label is exactly "ECO Bank"']],
+        ['BM10 the sidebar passing its own admin flag to showLink()', [[$NAV, $LINK_ARGS, "BankGate::showLink(\$dataDir ?? null, \$store ?? null, is_array(\$retailer ?? null) ? ['is_admin' => true] + \$retailer : [])"]], ['an accountant made admin inside the session window']],
+        ['BM11 the CEO page\'s Quick Link shown unconditionally', [[$CEO, $LINK_IF, 'if (true): ?>']], ['the admin demoted inside the session window: no link', 'the switch off: no link in the sidebar or on the CEO page', 'South Sudan: no ECO Bank link on the CEO page']],
+        ['BM12 the menu block\'s first line indented by four spaces', [[$NAV, "\n<?php // 5.18.97 (the operator, 18 Oct): ECO Bank, directly below the Cashbook.",
+            "\n    <?php // 5.18.97 (the operator, 18 Oct): ECO Bank, directly below the Cashbook."]], ['the hidden link prints nothing', 'the hidden links print nothing']],
+        // 5.18.97: the cards — one per offered account, each its own latestLine() and profile(), never added, never per currency
+        ['BC2 a total card after the cards', [[$TAB, "<?php endforeach; endif; endforeach; ?>\n  </div><!-- bk-hero:end -->",
+            "<?php endforeach; endif; endforeach; ?>\n  <div class=\"bk-card\"><div class=\"bk-card-l\">&#127974; TOTAL</div><div class=\"bk-card-v\"><?= h(number_format(array_sum(array_map(function (array \$x): int { return \$x['last'] === null ? 0 : (int)\$x['last']['running_units']; }, \$_bkHero)) / 100, 2)) ?></div></div>\n  </div><!-- bk-hero:end -->"]], ['no "total" anywhere among the cards', 'no figure in the cards equals the sum']],
+        ['BC3 every card reading the account in view\'s last line', [[$TAB, "'last' => \$_bkStore->latestLine(\$_bkHid)", "'last' => \$_bkStore->latestLine(\$_bkId)"]], ['after the first keep: the UGX card is that account\'s own last kept line', 'the cards are byte for byte the same whichever account']],
+        ['BC4 one card per currency, its accounts summed', [[$TAB, "    \$_bkHeads[\$_bkHt] = (\$_bkHeads[\$_bkHt] ?? 0) + 1;\n}\n",
+            "    \$_bkHeads[\$_bkHt] = (\$_bkHeads[\$_bkHt] ?? 0) + 1;\n}\n\$_rhFirst = []; foreach (\$_bkHero as \$_rhK => \$_rhX) { \$_rhC = \$_rhX['acct']['currency']; if (!isset(\$_rhFirst[\$_rhC])) { \$_rhFirst[\$_rhC] = \$_rhK; continue; } if (\$_rhX['last'] !== null) { if (\$_bkHero[\$_rhFirst[\$_rhC]]['last'] === null) \$_bkHero[\$_rhFirst[\$_rhC]]['last'] = \$_rhX['last']; else \$_bkHero[\$_rhFirst[\$_rhC]]['last']['running_units'] += (int)\$_rhX['last']['running_units']; } unset(\$_bkHero[\$_rhK]); }\n"]], ['one card per offered account', 'each card is its own account\'s']],
+        ['BC6 the cards only for the account in view (v1)', [[$TAB, "foreach (\$_bkAccts as \$_bkA) {\n    \$_bkHid = (int)\$_bkA['id'];", "foreach ([\$_bkAcct] as \$_bkA) {\n    \$_bkHid = (int)\$_bkA['id'];"]], ['one card per offered account', 'the cards are byte for byte the same whichever account']],
+        ['BC7 a card dated by the day its statement was kept', [[$TAB, "dated <?= h(\$_bkDate((string)\$_bkHc['last']['posting_date'])) ?>", "dated <?= h(\$_bkDate(substr((string)\$_bkHc['last']['kept_at'], 0, 10))) ?>"]], ['each card is its own account\'s']],
+        ['BC8 a card\'s account ending from the profile of the account in view', [[$TAB, "h((string)\$_bkHc['profile']['acct_last4'])", "h((string)(\$_bkProfile['acct_last4'] ?? ''))"]], ['each card is its own account\'s']],
+        ['BC9a the cards\' upload buttons without their account', [[$TAB, " data-bk-for=\"<?= (int)\$_bkHid ?>\"", '']], ['every button that opens the upload names its account']],
+        ['BC9b the script not choosing the button\'s account', [[$TAB, "    var sel = document.getElementById('bkAcctSel'), f = b.getAttribute('data-bk-for'); if (sel && f) sel.value = f;   // 5.18.97: the button's own account\n", '']], ['the script chooses that account before it opens the sheet, once']],
+        ['BC10 the placeholder dropped', [[$TAB, "  <div class=\"bk-card none\" data-bk-card-none=\"<?= h(\$_bkNc) ?>\">\n    <div class=\"bk-card-l\">&#127974; NO ACTIVE BANK ACCOUNT IN <?= h(\$_bkNc) ?></div>\n    <div class=\"bk-card-s\">The Cashbook's chart of accounts has no active bank account in <?= h(\$_bkNc) ?>, so no Ecobank statement can be kept or shown for <?= h(\$_bkNc) ?>.</div>\n  </div>\n", '']], ['Ecobank USD switched off']],
+        ['BC11 the cards over every bank account, inactive ones included', [[$TAB, "foreach (\$_bkAccts as \$_bkA) {\n    \$_bkHid = (int)\$_bkA['id'];",
+            "foreach (array_merge(\$_bkAccts, array_map(function (array \$r): array { return ['id' => (int)\$r['id'], 'name' => (string)\$r['name'], 'currency' => strtoupper((string)\$r['currency'])]; }, \$store->getPdo()->query(\"SELECT id, name, currency FROM cb_accounts WHERE kind = 'bank' AND active = 0\")->fetchAll(\\PDO::FETCH_ASSOC))) as \$_bkA) {\n    \$_bkHid = (int)\$_bkA['id'];"]], ['the inactive bank account (RH-Old Bank) has no card']],
+        ['BC12 ecobankNamed() always true', [['lib/BankStatementStore.php', 'return preg_match(\'/eco[\s-]*bank/i\', $name) === 1;', 'return true;']], ['each card\'s heading']],
+        ['BC13 the bar\'s upload carrying $_bkId (not yet set there)', [[$TAB, "data-bk-for=\"<?= (int)\$_bkAcct['id'] ?>\"", "data-bk-for=\"<?= \$_bkId ?>\""]], ['every button that opens the upload names its account']],
     ];
     $mainPass = $pass + 1;                                                  // the child runs A–P and the end check R
+    if (isset($opt['mutants'])) {                                           // a part of Q only: the unchanged copy still runs
+        $only = '#' . str_replace('#', '\\#', (string)$opt['mutants']) . '#';
+        $MUTANTS = array_values(array_filter($MUTANTS, function (array $m) use ($only) { return preg_match($only, $m[0]) === 1; }));
+        echo '  (--mutants: ' . count($MUTANTS) . " weakened copies of this run's Q)\n";
+        if ($MUTANTS === []) is_(false, 'the --mutants pattern names at least one weakened copy');
+    }
     [$tmp, $n] = sj_weakened_copy($lib, $TAB, '$_bkPer   = 50;', '$_bkPer   = 50;');
     if ($n === 1) {
         [$rc, $fails, $tally] = $child($tmp, $withCompare);
@@ -1136,7 +1445,10 @@ if ($withMutants) {
         is_(false, 'the unchanged copy: its anchor occurs once', "found {$n} times");
     }
     exec('rm -rf ' . escapeshellarg($tmp));
-    foreach ($MUTANTS as [$label, $edits]) {
+    // A copy may name the cases it must fail (5.18.97's, from the design's table): each must be among its failures, so a
+    // copy caught by something else is not counted as caught by the rule it weakens.
+    foreach ($MUTANTS as $mu) {
+        [$label, $edits] = $mu; $expect = $mu[2] ?? [];
         [$rel0, $old0, $new0] = $edits[0];
         [$tmp, $n] = sj_weakened_copy($lib, $rel0, $old0, $new0);
         $src = (string)@file_get_contents($tmp . '/' . $rel0);
@@ -1149,7 +1461,12 @@ if ($withMutants) {
             continue;
         }
         [$rc, $fails, $tally] = $child($tmp, strpos($label, 'BW26') === 0);
-        is_($rc !== 0 && $fails !== [], "caught: {$label}", 'exit ' . $rc . ', ' . count($fails) . ' failure(s)');
+        $missed = array_values(array_filter($expect, function (string $w) use ($fails): bool {
+            foreach ($fails as $l) if (strpos($l, '  FAIL ' . $w) === 0) return false;
+            return true;
+        }));
+        is_($rc !== 0 && $fails !== [] && $missed === [], "caught: {$label}" . ($expect ? ' — at each of its ' . count($expect) . ' named case(s)' : ''),
+            'exit ' . $rc . ', ' . count($fails) . ' failure(s)' . ($missed ? '; not failed: ' . implode(' | ', $missed) : ''));
         echo '         ' . count($fails) . ' assertion(s) failed' . ($tally ? " ({$tally[0]} passed)" : '') . ($fails ? '; first: ' . trim(substr($fails[0], 7, 110)) : '') . "\n";
         exec('rm -rf ' . escapeshellarg($tmp));
     }
