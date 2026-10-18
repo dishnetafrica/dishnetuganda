@@ -366,7 +366,7 @@ code, the previous build for the website.
 **Status:** plugin deployed 25 September 2026 (`f3ab37e`, over `723233a`);
 the container serves `f3ab37e`. Both settings were set straight after, and
 the settings listing reads each back: `pay_airtel_merchant` set to the merchant ID (not repeated here), and
-`ai_fact_payment` starting with its new Airtel Money and bank-transfer text (not quoted here).
+`ai_fact_payment` starting *"Pay by Airtel Money or by bank transfer."*
 The website redeploy has not been reported yet; the entry below goes out
 with it.
 
@@ -3535,9 +3535,9 @@ staff_ledger → Staff Cashbooks* existed and worked for South Sudan's literal `
   eight approved field expenses had reached the staff ledger in UGX and were invisible too. From the export: five
   advances (a UGX total, 23 Sep–3 Oct) against a UGX total of expenses — a page that should read the UGX difference (figures not repeated here)
   read nothing.
-- The Cashbook page's POSITION card (a UGX figure, not repeated here) was the Phase-C account model: money accounts (Cash–Uganda
-  and Ecobank balances, not repeated here — the statement import brought only card purchases) plus "unassigned rows"
-  (a UGX figure, not repeated here), which includes the operator's **"ADJUSTMENT ENTRY" of 12 Sep** (its amount not repeated here) that zeroed the running
+- The Cashbook page's POSITION card (a large negative UGX figure, not repeated here) was the Phase-C account model: money accounts (Cash–Uganda
+  positive and Ecobank negative, figures not repeated here — the statement import brought only card purchases) plus "unassigned rows"
+  (a negative UGX figure, not repeated here), which includes the operator's **"ADJUSTMENT ENTRY" of 12 Sep** (its amount not repeated here) that zeroed the running
   balance. The ledger's running balance (the UGX cash in hand, not repeated here) is right *because* the adjustment cancels the account rows; cash
   rows alone, adjustment excluded, give exactly the same figure as well. Two arithmetics on one table.
 
@@ -3946,7 +3946,7 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
 ## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 
 **Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
-accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: a UGX figure / a USD
+accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: a negative UGX figure / a negative USD
 [figure not reproduced]"** and the account tiles (Ecobank Uganda, Cash Uganda, Airtel, MTN, Ecobank USD
 and Cash USD, their balances not repeated here), beside the Cashbook page's card **UGX CASH IN HAND / USD** (figures not repeated here). The 5.18.68
 decision ("I don't want working capital and bank amount to be shown in the plugin in Uganda — cash in hand only") had been
@@ -12096,6 +12096,35 @@ prints a figure or a secret, and the terminal held none; the cash sheet stayed o
   administrator's only menu on a phone; **Q1** *"Leave them, count them"* — bank money recorded with no account stays
   on the cash list and in cash in hand, the deploy printing counts only; **Q2** *"ECO Bank first"* — 5.18.98's deploy
   refuses until both ECO Bank cards show a figure.
+
+### 18 Oct — privacy redaction of the current files, and what it found
+
+On the operator's answer *"Redact in current files (Recommended)"*: real book figures, customers' names and kit serials,
+uCRM client numbers, a person's phone number, the Airtel Money merchant ID and a messaging credential were replaced by
+words in **203 lines of 35 files** (`c60f5176`), each line replaced only where its sha256 still matched what the sweep
+read; every changed shell script passes `bash -n`. Left on purpose: the business's public contact number inside the
+code of historical deploy scripts and rehearsals, and a public algorithm author's credit in the pinned R0 tool. An
+independent check of the diff found no private value left on a changed line; twelve lines that had lost meaning (a
+sign, a garbled sentence, a runbook line commented out, a public list price) were corrected afterwards. **The values
+remain in Git history, which is public.**
+
+**Found by the same check — credentials in public source, to rotate (values never written here):**
+- the WASender (WhatsML) shared auth key — in text since 2 Sep (`09b40728`), removed from `MANIFEST.md` by `c60f5176`;
+- the WhatsApp feed/webhook shared secret — a hard-coded fallback in `cron_wa_sync.php`, `dishnet_wa_pusher.php` and
+  `includes/api/api_whatsapp.php`;
+- two LTE / BlueCARD feed tokens (South Sudan) — hard-coded fallbacks in `cron_lte_sync.php`, `api_cron_debug.php`,
+  `api_lte_admin.php`, `lib/BlueCardDb.php`, `tabs/admin/settings.php`, `tabs/lte/lte_bluecard.php`, `tabs/lte/bc_portal.php`;
+- the Splynx key and secret (already known; removed from the text tree by 5.18.95) — still inside the tracked archive;
+- **`dishnet-hybrid-sudan.zip`**, a tracked snapshot of the plugin from 2 Sep (`b384d44e`), holds every one of the above
+  and the unredacted text;
+- **`includes/post/post_sync.php:349`**: the default password of a retailer account created from uCRM is a fixed formula
+  of the CRM id, so an unchanged account's password can be computed by anyone who reads this public source.
+Each needs a code change (read from the settings, refuse when unset) together with the rotation — the next security
+release. **Still in code and tests (a later clean-up release, synthetic values changed together with their
+assertions):** customers' names, kit serials and service lines in comments, fixtures and examples; staff members' real
+figures in comments; the operator's own number as a South Sudan default and in tool examples; staff e-mail addresses
+mapped in code; the bank account numbers in the invoice and quotation templates (printed to customers by design) and
+the merchant ID (published on the website by design) — the last two are the operator's to decide.
 - **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
   (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
   assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.

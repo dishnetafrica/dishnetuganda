@@ -145,7 +145,7 @@ in `EvolutionApiService`, `EventBus` or `ConversationService`; only non-empty ch
 in `evo_webhook.php:96` and `AiReplyWorker.php:82`; two wording-only branches in the
 brain. Neither number appears in runtime code.
 
-- the sales number's Evolution instance (name not repeated here) / **the business's sales number (not repeated here)** → `evo_instance_sales` → channel `sales`
+- the sales instance (named as in `tools/wa_connect.php:9`) / **the business's sales number (not repeated here)** → `evo_instance_sales` → channel `sales`
 - `dishnet_ug` / **the business's support number (not repeated here)** → `evo_instance_support` → channel `support`
 
 The sales number carries ~8× the traffic and answers ~124 of 127 messages a day.

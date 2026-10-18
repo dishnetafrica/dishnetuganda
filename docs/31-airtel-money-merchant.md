@@ -89,7 +89,7 @@ reaches every one of them.
     before.
 - **The assistant's answer is a setting, `ai_fact_payment`.** The new text
   names Airtel Money and keeps the Ecobank transfer exactly as it was. It
-  ends by asking the customer for proof of payment (the value itself is not repeated here).
+  ends by asking the customer to send the transaction ID or the transfer confirmation here.
   - The accounts rule already hands *"payments the customer says they
     already made"* to a person, so that is who matches the ID.
   - The reply guard lets the merchant ID and the code through: seven digits
@@ -122,7 +122,7 @@ Then the two settings, as the plugin folder's owner:
 
 ```
 docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key pay_airtel_merchant --value '<the Airtel Money merchant ID>'
-# docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value '<the agreed payment text: the Airtel Money steps and the Ecobank UGX transfer details, not repeated here>'
+docker exec -u $(stat -c %u:%g /home/unms/data/ucrm/ucrm/data/plugins/dishnet-hybrid-sudan) -w /data/ucrm/data/plugins/dishnet-hybrid-sudan ucrm php tools/set_config.php --key ai_fact_payment --value '<the agreed payment text: the Airtel Money steps and the Ecobank UGX transfer details, not repeated here>'
 ```
 
 - Both were rehearsed on a scratch copy. Each value landed in the settings

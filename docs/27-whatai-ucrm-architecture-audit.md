@@ -252,8 +252,8 @@ this worker runs under two timezones (UTC from the webhook spawn, Africa/Kampala
 from cron) and `strtotime()` made the pause silently fail on the scheduled path.
 
 **Staff-number protection exists** — the plugin will not auto-reply into its own
-numbers, and the n8n README warns that an alert sent to one of the plugin's own numbers or
-the other arrives as a customer message, gets answered, and the answer lands
+numbers, and the n8n README warns that an alert sent to either of the plugin's own numbers
+arrives as a customer message, gets answered, and the answer lands
 back on the sender.
 
 ---
