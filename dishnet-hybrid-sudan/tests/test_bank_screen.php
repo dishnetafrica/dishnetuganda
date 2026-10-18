@@ -25,7 +25,7 @@ declare(strict_types=1);
  *      before the event and before any line, with the screen's own requests as the controls (BK-SEC-1)
  *   H  the USD account: a ranged first file, gap_before, a front join; escaping (<script>, "><img>, =HYPERLINK, @SUM);
  *      formula neutralising in the export, a negative balance unprefixed; a month whose lines are not consecutive;
- *      one account per view (no figure equals UGX + USD)
+ *      every account's card on both pages, never added (no figure equals UGX + USD)
  *   I  every refusal and note the screen can reach, each panel sentence equal to this checkout's sentence for the
  *      stored code and parameter; the marker, the account and the holder never in the page or the flash; the keep-level
  *      codes (changed_since_check, already_kept on a second keep, check_expired); an expired check shown without a write;
@@ -386,7 +386,15 @@ $cardsOf = function (string $seg): array {
     foreach ($m as $x) $o[] = ['chq' => $x[1], 'bal' => html_entity_decode($x[3], ENT_QUOTES), 'html' => $x[2]];
     return $o;
 };
-$cardFig = function (string $seg): ?string { return preg_match('#<div class="bk-card-v" id="bkCardFig">([^<]*)</div>#', $seg, $m) ? html_entity_decode($m[1], ENT_QUOTES) : null; };
+// 5.18.97: every offered account's card at once. Each card's figure, by account id, read inside the hero only.
+$cardFigs = function (string $seg): array {
+    $a = strpos($seg, '<!-- bk-hero:start -->'); $b = strpos($seg, '<!-- bk-hero:end -->');
+    if ($a === false || $b === false || $b < $a) return [];
+    preg_match_all('#<div class="bk-card-v" id="bkCardFig-(\d+)">([^<]*)</div>#', substr($seg, $a, $b - $a), $m, PREG_SET_ORDER);
+    $o = [];
+    foreach ($m as $x) $o[(int)$x[1]] = html_entity_decode($x[2], ENT_QUOTES);
+    return $o;
+};
 $hL = $page('boss', 'page=dashboard&tab=bank&bk_acct=' . $U);
 $gL = bk_seg($hL);
 $L = $dbLines($U);
@@ -394,7 +402,7 @@ $rows = $rowsOf($gL); $cards = $cardsOf($gL);
 t('rows newest first by bank line number, exactly the kept lines', array_column($rows, 'chq'), array_column($L, 'cheque_number'));
 t('each row\'s Balance is the stored running balance', array_column($rows, 'bal'), array_map(function ($l) { return bk_money('UGX', (int)$l['running_units']); }, $L));
 t('the card is the running balance of the kept line with the highest bank line number, and the top row\'s Balance',
-    [$cardFig($gL), $rows[0]['bal'] ?? null], [bk_money('UGX', (int)$L[0]['running_units']), bk_money('UGX', (int)$L[0]['running_units'])]);
+    [$cardFigs($gL)[$U] ?? null, $rows[0]['bal'] ?? null], [bk_money('UGX', (int)$L[0]['running_units']), bk_money('UGX', (int)$L[0]['running_units'])]);
 is_(strpos($gL, 'account ending ' . "\u{2022}\u{2022}\u{2022}\u{2022}" . '0001') !== false && strpos($gL, 'after the last kept line, dated ') !== false,
     'the card says which line it is after, and the account\'s last four');
 t('each phone card carries "Bal" and the stored running balance', array_column($cards, 'bal'), array_column($rows, 'bal'));
@@ -434,7 +442,7 @@ $r1 = $rowsOf($g1); $r2 = $rowsOf($g2);
 t('50 a page, in bank order, the shuffled file\'s lines too', [count($r1), count($r2), array_merge(array_column($r1, 'chq'), array_column($r2, 'chq'))],
     [50, 10, array_column($L, 'cheque_number')]);
 is_(strpos($g1, '1–50 of 60') !== false && strpos($g2, '51–60 of 60') !== false, 'the pager counts the kept lines');
-t('the card moved to the new last line', $cardFig($g1), bk_money('UGX', (int)$L[0]['running_units']));
+t('the card moved to the new last line', $cardFigs($g1)[$U] ?? null, bk_money('UGX', (int)$L[0]['running_units']));
 t('the balances are the bank\'s own, whatever padding the second file used', array_column($r1, 'bal'),
     array_map(function ($l) { return bk_money('UGX', (int)$l['running_units']); }, array_slice($L, 0, 50)));
 
@@ -458,7 +466,7 @@ foreach ($months as $mo) {
     is_($open + $in - $out === $close && strpos($gm, '&#10003; adds up') !== false, "{$mo}: opening + in − out = closing, and the strip says it adds up");
     is_(preg_match('#id="bkCsv" href="[^"]*bk_month=' . $mo . '&amp;bk_export=csv">&\#8595; ' . preg_quote(date('M Y', (int)strtotime($mo . '-01 12:00:00')), '#') . '</a>#', $gm) === 1,
         "{$mo}: the export button names the month and exports it");
-    is_($cardFig($gm) === bk_money('UGX', (int)$L[0]['running_units']), "{$mo}: the card ignores the month filter");
+    is_(($cardFigs($gm)[$U] ?? null) === bk_money('UGX', (int)$L[0]['running_units']), "{$mo}: the card ignores the month filter");
 }
 $gEmpty = bk_seg($page('boss', "page=dashboard&tab=bank&bk_acct={$U}&bk_month=2025-01"));
 is_(strpos($gEmpty, 'No line in this month.') !== false && strpos($gEmpty, 'id="bkStrip"') === false, 'a month with no kept line says so and draws no strip');
@@ -523,7 +531,7 @@ foreach ([['from the screen itself (Sec-Fetch-Site same-origin)', ['Sec-Fetch-Si
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-echo "\nH. The USD account: a ranged first file, the front join, escaping, formulas, a negative balance, one account per view\n";
+echo "\nH. The USD account: a ranged first file, the front join, escaping, formulas, a negative balance, the cards never added\n";
 $HD = g_history(50, 21, 0, 501, [2026, 8, 25]);
 $set = function (int $i, string $col, string $v) use (&$HD) {
     $HD[$i][$col] = $v;
@@ -569,10 +577,10 @@ is_(strpos($gD, '=HYPERLINK(&quot;http://example.test/rh&quot;,&quot;RH&quot;)')
 is_(stripos($gD, 'innerHTML') === false && stripos($gD, 'outerHTML') === false && stripos($gD, 'insertAdjacentHTML') === false && stripos($gD, 'document.write') === false,
     'the tab emits no innerHTML, outerHTML, insertAdjacentHTML or document.write');
 $uFig = (int)$L[0]['running_units']; $dFig = (int)$LD[0]['running_units'];
-t('the USD card is the USD account\'s own last line', $cardFig($gD), bk_money('USD', $dFig));
+t('the USD card is the USD account\'s own last line', $cardFigs($gD)[$D] ?? null, bk_money('USD', $dFig));
 $sum = $uFig + $dFig;
 is_(strpos($gD, number_format($sum / 100, 2)) === false && strpos($g1, number_format($sum / 100, 2)) === false,
-    'one account per view: no figure on either page equals UGX + USD (' . number_format($sum / 100, 2) . ')');
+    'the cards are never added: no figure on either page equals UGX + USD (' . number_format($sum / 100, 2) . ')');
 $negL = array_values(array_filter($LD, function ($l) { return (int)$l['running_units'] < 0; }));
 is_($negL !== [] && strpos($gD, bk_money('USD', (int)$negL[0]['running_units'])) !== false, 'a balance below zero is shown with its minus');
 $xD = bk_csv(bk_req($s, 'GET', "page=dashboard&tab=bank&bk_acct={$D}&bk_export=csv", 'boss')[1]);
@@ -1075,6 +1083,8 @@ if ($withMutants) {
         return [$rc, $fails, $tally];
     };
     $TAB = 'tabs/accounts/bank.php'; $PB = 'includes/post/post_bank.php'; $RT = 'includes/routes.php'; $GT = 'lib/BankGate.php'; $PUB = 'public.php';
+    // 5.18.97: the hero's one read per account, the anchor of the card copies (BW32 and BW33 re-anchored as BC5 and BC1)
+    $HERO = "\$_bkHero[\$_bkHid] = ['acct' => \$_bkA, 'eco' => \$_bkEco, 'head' => \$_bkHt, 'last' => \$_bkStore->latestLine(\$_bkHid), 'profile' => \$_bkStore->profile(\$_bkHid)];";
     $MUTANTS = [
         ['BW25 BankGate::open() without the switch', [[$GT, 'return self::halves($cfg, (string)$dataDir) && self::switchOn($cfg);', 'return self::halves($cfg, (string)$dataDir);']]],
         ['BW26a BankGate without the Uganda half', [[$GT, 'return StaffJobsGate::applies($cfg, $dataDir) && !dn_ssp_selectable($cfg);', 'return !dn_ssp_selectable($cfg);']]],
@@ -1095,10 +1105,10 @@ if ($withMutants) {
         ['the handler\'s gate before the sign-in (BK-SEC-4)', [[$PB, "    \$_bkpUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n",
             "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]]],
         ['BW31 $_tabPerms[\'bank\'] left out', [[$PUB, "    'bank'                 => '*admin',                               // 5.18.97: never absent (absent = any signed-in user)\n", '']]],
-        ['BW32 the card read from cb_ledger', [[$TAB, '$_bkLast = $_bkStore->latestLine($_bkId);',
-            "\$_bkLast = \$_bkStore->latestLine(\$_bkId); if (\$_bkLast !== null) { \$_bkLast['running_units'] = (int)round(100 * (float)\$store->getPdo()->query('SELECT COALESCE(SUM(CASE WHEN direction = \\'in\\' THEN amount ELSE -amount END), 0) FROM cb_ledger WHERE account_id = ' . \$_bkId)->fetchColumn()); }"]]],
-        ['BW33 the two accounts summed on the card', [[$TAB, '$_bkLast = $_bkStore->latestLine($_bkId);',
-            "\$_bkLast = \$_bkStore->latestLine(\$_bkId); if (\$_bkLast !== null) { foreach (\$_bkAccts as \$_bkO) { if ((int)\$_bkO['id'] !== \$_bkId && (\$_bkOL = \$_bkStore->latestLine((int)\$_bkO['id'])) !== null) \$_bkLast['running_units'] += (int)\$_bkOL['running_units']; } }"]]],
+        ['BC5 (BW32 re-anchored) a card\'s figure read from cb_ledger', [[$TAB, $HERO,
+            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { \$_bkHero[\$_bkHid]['last']['running_units'] = (int)round(100 * (float)\$store->getPdo()->query('SELECT COALESCE(SUM(CASE WHEN direction = \\'in\\' THEN amount ELSE -amount END), 0) FROM cb_ledger WHERE account_id = ' . \$_bkHid)->fetchColumn()); }"]]],
+        ['BC1 (BW33 re-anchored) each card plus the other accounts\' latest lines', [[$TAB, $HERO,
+            $HERO . " if (\$_bkHero[\$_bkHid]['last'] !== null) { foreach (\$_bkAccts as \$_bkO) { if ((int)\$_bkO['id'] !== \$_bkHid && (\$_bkOL = \$_bkStore->latestLine((int)\$_bkO['id'])) !== null) \$_bkHero[\$_bkHid]['last']['running_units'] += (int)\$_bkOL['running_units']; } }"]]],
         ['BW35 innerHTML in the tab', [[$TAB, "name.textContent = file.files && file.files[0] ? file.files[0].name : '';", "name.innerHTML = file.files && file.files[0] ? file.files[0].name : '';"]]],
         ['BW36 a free-text bk_q search box', [[$TAB, '<button type="submit" class="cb3-filter-btn">Show</button>', '<input type="search" name="bk_q" placeholder="Search"><button type="submit" class="cb3-filter-btn">Show</button>']]],
         ['BW37 the file\'s name in the flash', [[$PB, "flash('The file passed every check. Nothing is kept until you press Keep.', 'success');",

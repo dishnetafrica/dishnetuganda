@@ -220,8 +220,10 @@ t('no innerHTML, outerHTML, insertAdjacentHTML or document.write', array_values(
 t('no json_encode inside an onclick (and no inline handler carrying PHP output)', preg_match('/\bon[a-z]+="[^"]*(json_encode|<\?)/i', $tab), 0);
 t('no dn_cur(: a USD line never wears the base currency\'s sign', substr_count($tab, 'dn_cur('), 0);
 // Every echo (an echo tag, or an echo statement) of a record the tab reads passes h() or an (int) cast.
-$WATCH = ['$_bkL', '$_bkC', '$_bkChk', '$_bkLast', '$_bkSt', '$_bkA', '$_bkProfile', '$_bkAcct', '$_bkName', '$_bkStrip', '$_bkRange'];
-$bad = []; $seen = 0; $inEcho = false; $stack = []; $prev = null;
+// 5.18.97: the hero's card ($_bkHc, its currency $_bkHcur, its account id $_bkHid) and the placeholder's currency ($_bkNc)
+// replace v1's one card ($_bkLast); the per-account reads ($_bkHero) are never echoed at all.
+$WATCH = ['$_bkL', '$_bkC', '$_bkChk', '$_bkHc', '$_bkHcur', '$_bkHid', '$_bkNc', '$_bkSt', '$_bkA', '$_bkProfile', '$_bkAcct', '$_bkName', '$_bkStrip', '$_bkRange'];
+$bad = []; $seen = 0; $seenBy = []; $heroEchoed = []; $inEcho = false; $stack = []; $prev = null;
 foreach (token_get_all($tab) as $tk) {
     $id = is_array($tk) ? $tk[0] : null;
     if ($id === T_OPEN_TAG_WITH_ECHO || $id === T_ECHO) { $inEcho = true; $stack = []; $prev = $tk; continue; }
@@ -229,8 +231,9 @@ foreach (token_get_all($tab) as $tk) {
     if (!$inEcho || $id === T_WHITESPACE) { if ($id !== T_WHITESPACE) $prev = $tk; continue; }
     if ($tk === '(') { $stack[] = (is_array($prev) && $prev[0] === T_STRING) ? $prev[1] : ''; }
     elseif ($tk === ')') { array_pop($stack); }
+    elseif ($id === T_VARIABLE && $tk[1] === '$_bkHero') { $heroEchoed[] = 'line ' . $tk[2]; }
     elseif ($id === T_VARIABLE && in_array($tk[1], $WATCH, true)) {
-        $seen++;
+        $seen++; $seenBy[$tk[1]] = ($seenBy[$tk[1]] ?? 0) + 1;
         $cast = is_array($prev) && $prev[0] === T_INT_CAST;
         if (!$cast && !in_array('h', $stack, true)) $bad[] = $tk[1] . ' at line ' . $tk[2];
     }
@@ -238,6 +241,9 @@ foreach (token_get_all($tab) as $tk) {
 }
 t('every echo of a line, check, statement or account field passes h() or (int)', $bad, []);
 is_($seen > 60, "control: {$seen} echoed field(s) were checked");
+t('control: each of the hero\'s four is seen in an echo, so the guard still covers the cards', array_values(array_filter(['$_bkHc', '$_bkHcur', '$_bkHid', '$_bkNc'],
+    function ($v) use ($seenBy) { return ($seenBy[$v] ?? 0) === 0; })), []);
+t('the per-account reads ($_bkHero) are never echoed at all', $heroEchoed, []);
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nE. The module's code: dates, numbers, CSV, logs, folders, file names\n";
@@ -346,12 +352,14 @@ if ($withMutants) {
         return [$rc, $fails, $tally];
     };
     $TAB = 'tabs/accounts/bank.php'; $PB = 'includes/post/post_bank.php'; $RT = 'includes/routes.php'; $ST = 'lib/BankStatementStore.php'; $GT = 'lib/BankGate.php';
+    // 5.18.97: the hero's one read per account, the anchor of the card copy (BW23 re-anchored as BC5b)
+    $HERO = "\$_bkHero[\$_bkHid] = ['acct' => \$_bkA, 'eco' => \$_bkEco, 'head' => \$_bkHt, 'last' => \$_bkStore->latestLine(\$_bkHid), 'profile' => \$_bkStore->profile(\$_bkHid)];";
     $MUTANTS = [
         ['BW51 a menu link in the sidebar', ['includes/navigation.php', '<a href="?page=dashboard&tab=opening_balances" class="kyc-tab',
             '<a href="?page=dashboard&tab=bank" class="kyc-tab">Bank</a>' . "\n" . '<a href="?page=dashboard&tab=opening_balances" class="kyc-tab']],
         ['BW24 a reader of bank_statement_lines in the Cashbook tab', ['tabs/accounts/cashbook.php', '$cb      = new CashbookService($store, $dataDir);',
             "\$cb      = new CashbookService(\$store, \$dataDir); \$_rhBank = \$store->getPdo()->query('SELECT COUNT(*) FROM bank_statement_lines')->fetchColumn();"]],
-        ['BW23 the tab reads cb_ledger', [$TAB, '$_bkLast = $_bkStore->latestLine($_bkId);', "\$_bkLast = \$_bkStore->latestLine(\$_bkId); \$_bkBook = \$store->getPdo()->query('SELECT SUM(amount) FROM cb_ledger')->fetchColumn();"]],
+        ['BC5b (BW23 re-anchored) a card read from cb_ledger', [$TAB, $HERO, $HERO . " \$_bkBook = \$store->getPdo()->query('SELECT SUM(amount) FROM cb_ledger')->fetchColumn();"]],
         ['the handler builds a CashbookService', [$PB, '    $_bkpSay = function', "    \$_bkpCb = new CashbookService(\$store, \$dataDir);\n    \$_bkpSay = function"]],
         ['BW42 v1 updates a line\'s status', [$ST, '    private function insertLines(int $statementId', "    private function markLines(): void { \$this->pdo->exec(\"UPDATE bank_statement_lines SET status = 'matched'\"); }\n\n    private function insertLines(int \$statementId"]],
         ['the store reads a second existing table', [$ST, '    private function tableExists(string $name): bool', "    private function rhBook(): int { return (int)\$this->pdo->query('SELECT COUNT(*) FROM cb_ledger')->fetchColumn(); }\n\n    private function tableExists(string \$name): bool"]],

@@ -7,9 +7,12 @@
  *
  *   one account at a time   a chip per active Ecobank account of the book (lib/BankStatementStore::offeredAccounts()),
  *                           never an "All": UGX and USD are never added together
- *   the card                the bank's OWN balance — the running balance of the kept line with the highest bank line
- *                           number — "as stated by Ecobank", slate grey so it can never read as cash in hand. Nothing
- *                           from the Cashbook is shown beside it in v1 (O6), and cb_ledger is never read
+ *   the cards               every offered account's card at once, UGX first (5.18.97, the operator, 18 Oct: "two hero
+ *                           section like ECO Bank UGX and ECO BANK USD"): each the bank's OWN balance for that account —
+ *                           the running balance of its kept line with the highest bank line number — "as stated by
+ *                           Ecobank", slate grey so it can never read as cash in hand. One card per account, never per
+ *                           currency; never added together, and no total. Nothing from the Cashbook is shown beside
+ *                           them (O6), and cb_ledger is never read
  *   the lines               newest first by Cheque Number, 50 a page, each with the bank's own running balance; a
  *                           month filter with its opening / in / out / closing strip; the export (includes/routes.php)
  *   Statements              every check of the account: refused, waiting, kept, discarded, expired
@@ -21,7 +24,8 @@
  * Every value from a statement goes through h() on every render. The page writes nothing (a GET never writes: an expired
  * check is shown as expired, and the next POST expires it). No GET parameter carries statement text: bk_acct, bk_view,
  * bk_month, bk_page and bk_check are an id, a word, a month, a number and an id. The tab's script writes no HTML: it opens
- * and closes the upload sheet, checks the file's size, and echoes the chosen file's name with textContent.
+ * and closes the upload sheet (choosing the account of the button that opened it, its data-bk-for), checks the file's
+ * size, and echoes the chosen file's name with textContent.
  *
  * In scope from public.php: $store, $dataDir, $retailer, csrfField(), h(). Every variable here starts with $_bk, so the
  * page's own ($page, $tab, $config, …) are never touched.
@@ -92,6 +96,7 @@ $_bkStamp = function (?string $utc): string {                       // a stored 
 $_bkMask = function (string $name): string {                        // a run of 5+ digits shows as •••• and its last four
     return (string)preg_replace_callback('/\d{5,}/', function (array $m): string { return "\u{2022}\u{2022}\u{2022}\u{2022}" . substr($m[0], -4); }, $name);
 };
+$_bkUpper = function (string $s): string { return function_exists('mb_strtoupper') ? mb_strtoupper($s, 'UTF-8') : strtoupper($s); };
 $_bkCut = function (string $t, int $n): string { return preg_match('/^.{' . $n . '}(?=.)/su', $t, $m) ? $m[0] . '…' : $t; };
 $_bkFlag = function (string $cur): string {
     $map = ['USD' => "\u{1F4B5}", 'SSP' => "\u{1F1F8}\u{1F1F8}", 'UGX' => "\u{1F1FA}\u{1F1EC}"];   // the Cashbook's $_cbFlagMap
@@ -172,6 +177,16 @@ $_bkCapMb = EcobankDetailsCsv::capMb($_bkCap);
 .bk-card-v{font-size:clamp(26px,9vw,42px);font-weight:900;letter-spacing:-1.5px;line-height:1.05;word-break:break-word;}   /* 42 px as the Cashbook's card, smaller only where a phone needs it */
 .bk-card-s{font-size:11px;color:rgba(255,255,255,.5);margin-top:6px;}
 .bk-pill{display:inline-block;margin-top:10px;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;}
+/* 5.18.97: every offered account's card at once, stacked as the Cashbook stacks its two; the account in view ringed */
+.bk-hero{display:flex;flex-direction:column;}
+.bk-card.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #334155;}
+.bk-card-n{font-size:11px;font-weight:600;color:rgba(255,255,255,.7);margin:-2px 0 6px;}
+.bk-card-e{font-size:22px;letter-spacing:-.5px;}
+.bk-card-f{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+.bk-card-f .bk-pill{margin-top:0;}
+.bk-card-a{font-size:11px;font-weight:700;color:#cbd5e1;}
+.bk-card.none{background:#e2e8f0;color:#475569;}
+.bk-card.none .bk-card-l,.bk-card.none .bk-card-s{color:#475569;}
 .bk-panel{margin:12px 14px 4px;border-radius:12px;padding:14px 16px;border:1.5px solid;}
 .bk-panel.g{background:#f0fdf4;border-color:#bbf7d0;color:#14532d;}
 .bk-panel.b{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;}
@@ -231,8 +246,8 @@ $_bkCapMb = EcobankDetailsCsv::capMb($_bkCap);
 <div class="cb3-wrap bk-wrap">
   <div class="cb3-bar">
     <a class="cb3-back" href="?page=dashboard" aria-label="Back">&#8592;</a>
-    <div class="cb3-title">Bank</div>
-    <?php if ($_bkImport && $_bkReady && $_bkAcct !== null): ?><button type="button" class="cb3-fab" data-bk-open="1">&#65291; Statement</button><?php endif; ?>
+    <div class="cb3-title">ECO Bank</div>
+    <?php if ($_bkImport && $_bkReady && $_bkAcct !== null): ?><button type="button" class="cb3-fab" data-bk-open="1" data-bk-for="<?= (int)$_bkAcct['id'] ?>">&#65291; Statement</button><?php endif; ?>
   </div>
 <?php
 if (!$_bkReady) {
@@ -300,29 +315,59 @@ if ($_bkChk !== null):
     <?php endif; ?>
   </div>
 <?php endif; ?>
-  <div class="bk-head">&#127974; Bank · Ecobank statements</div>
+<?php
+// 5.18.97 (the operator, 18 Oct: "two hero section like ECO Bank UGX and ECO BANK USD"). One card per OFFERED account,
+// never per currency: each card is that account's own latestLine() and profile(). Nothing is added to anything, and no
+// total exists. "ECO BANK <CUR>" heads a card only when the book's name says Ecobank (ecobankNamed); any other bank
+// account keeps its own masked name, as v1's card did.
+$_bkHero = []; $_bkHeads = [];
+foreach ($_bkAccts as $_bkA) {
+    $_bkHid = (int)$_bkA['id'];
+    $_bkEco = BankStatementStore::ecobankNamed((string)$_bkA['name']);
+    $_bkHt  = $_bkEco ? 'ECO BANK ' . (string)$_bkA['currency'] : $_bkUpper($_bkMask((string)$_bkA['name']));
+    $_bkHero[$_bkHid] = ['acct' => $_bkA, 'eco' => $_bkEco, 'head' => $_bkHt, 'last' => $_bkStore->latestLine($_bkHid), 'profile' => $_bkStore->profile($_bkHid)];
+    $_bkHeads[$_bkHt] = ($_bkHeads[$_bkHt] ?? 0) + 1;
+}
+?>
+  <div class="bk-head">&#127974; ECO Bank · Ecobank's own balances, each account on its own</div>
+  <!-- bk-hero:start --><div class="bk-hero">
+<?php foreach ($_bkCurrs as $_bkNc):                                // the book's currency order (UGX first); each currency's accounts in id order
+    $_bkOfNc = array_filter($_bkHero, function (array $x) use ($_bkNc): bool { return $x['acct']['currency'] === $_bkNc; });
+    if (!$_bkOfNc): ?>
+  <div class="bk-card none" data-bk-card-none="<?= h($_bkNc) ?>">
+    <div class="bk-card-l">&#127974; NO ACTIVE BANK ACCOUNT IN <?= h($_bkNc) ?></div>
+    <div class="bk-card-s">The Cashbook's chart of accounts has no active bank account in <?= h($_bkNc) ?>, so no Ecobank statement can be kept or shown for <?= h($_bkNc) ?>.</div>
+  </div>
+<?php else: foreach ($_bkOfNc as $_bkHid => $_bkHc):
+        $_bkHcur = (string)$_bkHc['acct']['currency']; $_bkHon = (int)$_bkHid === $_bkId; ?>
+  <div class="bk-card<?= $_bkHon ? ' on' : '' ?>" data-bk-card="<?= (int)$_bkHid ?>">
+    <div class="bk-card-o"></div>
+    <div class="bk-card-l">&#127974; <?= h($_bkHc['head']) ?> · AS STATED BY ECOBANK <span class="bk-ccy <?= h($_bkHcur) ?>"><?= h($_bkHcur) ?></span></div>
+<?php if ($_bkHc['eco'] && $_bkHeads[$_bkHc['head']] > 1): ?>
+    <div class="bk-card-n"><?= h($_bkMask((string)$_bkHc['acct']['name'])) ?></div>
+<?php endif; ?>
+<?php if ($_bkHc['last'] === null): ?>
+    <div class="bk-card-v bk-card-e">No Ecobank statement kept yet</div>
+    <div class="bk-card-s">Upload this account's Account Details CSV to see Ecobank's own lines and balance here.</div>
+<?php else: ?>
+    <div class="bk-card-v" id="bkCardFig-<?= (int)$_bkHid ?>"><?= h($_bkMoney($_bkHcur, (int)$_bkHc['last']['running_units'])) ?></div>
+    <div class="bk-card-s">available balance after the last kept line, dated <?= h($_bkDate((string)$_bkHc['last']['posting_date'])) ?><?php if ($_bkHc['profile'] !== null): ?> · account ending <?= "\u{2022}\u{2022}\u{2022}\u{2022}" . h((string)$_bkHc['profile']['acct_last4']) ?><?php endif; ?></div>
+    <div class="bk-card-s">from the statement kept on <?= h($_bkStamp((string)$_bkHc['last']['kept_at'])) ?></div>
+<?php endif; ?>
+    <div class="bk-card-f">
+      <span class="bk-pill">Not compared with the Cashbook yet</span>
+      <a class="bk-card-a" href="<?= h($_bkUrl(['bk_acct' => (int)$_bkHid])) ?>">Show its lines</a>
+      <?php if ($_bkImport): ?><button type="button" class="bk-up" data-bk-open="1" data-bk-for="<?= (int)$_bkHid ?>">&#65291; <?= h($_bkHc['last'] === null ? 'Upload the Account Details CSV' : 'Upload a newer statement') ?></button><?php endif; ?>
+    </div>
+  </div>
+<?php endforeach; endif; endforeach; ?>
+  </div><!-- bk-hero:end -->
+  <div class="bk-head">Statement lines · one account at a time</div>
   <div class="bk-chips">
 <?php foreach ($_bkAccts as $_bkA):
-    $_bkLinked = $_bkStore->profile((int)$_bkA['id']) !== null; ?>
+    $_bkLinked = $_bkHero[(int)$_bkA['id']]['profile'] !== null; ?>
     <a class="bk-chip<?= (int)$_bkA['id'] === $_bkId ? ' on' : '' ?>" data-bk-acct="<?= (int)$_bkA['id'] ?>" href="<?= h($_bkUrl(['bk_acct' => (int)$_bkA['id'], 'bk_view' => $_bkView === 'lines' ? '' : $_bkView])) ?>"><?= h($_bkFlag((string)$_bkA['currency'])) ?> <?= h($_bkMask((string)$_bkA['name'])) ?><?php if (!$_bkLinked): ?> <span class="bk-chip-nl">not linked</span><?php endif; ?></a>
 <?php endforeach; ?>
-  </div>
-<?php
-$_bkLast = $_bkStore->latestLine($_bkId);
-?>
-  <div class="bk-card" id="bkCard">
-    <div class="bk-card-o"></div>
-    <div class="bk-card-l">&#127974; <?= h(function_exists('mb_strtoupper') ? mb_strtoupper($_bkName, 'UTF-8') : strtoupper($_bkName)) ?> · AS STATED BY ECOBANK <span class="bk-ccy <?= h($_bkCur) ?>"><?= h($_bkCur) ?></span></div>
-<?php if ($_bkLast === null): ?>
-    <div class="bk-card-v" style="font-size:22px;letter-spacing:-.5px;">No Ecobank statement kept yet</div>
-    <div class="bk-card-s">Upload this account's Account Details CSV to see Ecobank's own lines and balance here.</div>
-    <?php if ($_bkImport): ?><button type="button" class="bk-up" style="margin-top:12px;" data-bk-open="1">&#65291; Upload the Account Details CSV</button><?php endif; ?>
-<?php else: ?>
-    <div class="bk-card-v" id="bkCardFig"><?= h($_bkMoney($_bkCur, (int)$_bkLast['running_units'])) ?></div>
-    <div class="bk-card-s">available balance after the last kept line, dated <?= h($_bkDate((string)$_bkLast['posting_date'])) ?><?php if ($_bkProfile !== null): ?> · account ending <?= "\u{2022}\u{2022}\u{2022}\u{2022}" . h((string)$_bkProfile['acct_last4']) ?><?php endif; ?></div>
-    <div class="bk-card-s">from the statement kept on <?= h($_bkStamp((string)$_bkLast['kept_at'])) ?></div>
-<?php endif; ?>
-    <span class="bk-pill">Not compared with the Cashbook yet</span>
   </div>
 <?php
 $_bkWait = $_bkStore->waitingCount($_bkId);
@@ -344,7 +389,7 @@ $_bkWait = $_bkStore->waitingCount($_bkId);
     <button type="submit" class="cb3-filter-btn">Show</button>
     <?php if ($_bkMonth !== ''): ?><a class="cb3-filter-btn" href="<?= h($_bkUrl(['bk_acct' => $_bkId])) ?>" aria-label="All months">&#10005;</a><?php endif; ?>
     <?php if ($_bkRange !== null): ?><a class="bk-csv" id="bkCsv" href="<?= h($_bkUrl(['bk_acct' => $_bkId, 'bk_month' => $_bkMonth, 'bk_export' => 'csv'])) ?>">&#8595; <?= $_bkMonth === '' ? 'CSV' : h($_bkMonthName($_bkMonth)) ?></a><?php endif; ?>
-    <?php if ($_bkImport): ?><button type="button" class="bk-up" data-bk-open="1">&#65291; Upload</button><?php endif; ?>
+    <?php if ($_bkImport): ?><button type="button" class="bk-up" data-bk-open="1" data-bk-for="<?= $_bkId ?>">&#65291; Upload</button><?php endif; ?>
   </form>
 <?php if ($_bkMonth !== '' && ($_bkStrip = $_bkStore->monthStrip($_bkId, $_bkMonth)) !== null): ?>
   <?php if ($_bkStrip['consecutive']): ?>
@@ -474,7 +519,7 @@ $_bkWait = $_bkStore->waitingCount($_bkId);
           <div class="bk-fg"><label class="bk-fl" for="bkFile">2. The file</label>
             <input type="file" name="bk_file" id="bkFile" accept=".csv,text/csv" required>
             <div class="bk-fname" id="bkFileName"></div></div>
-          <div class="bk-help">In Ecobank online banking, open the account and download <b>Account Details</b> as <b>CSV</b> — one account per file. Download Account Details from the date of the last kept line, or earlier. Nothing is kept until you press Keep.</div>
+          <div class="bk-help">In Ecobank online banking, open the account and download <b>Account Details</b> as <b>CSV</b> — one account per file. <b>An account's first file:</b> any period that ends today, for example from the 1st of this month. <b>After that:</b> from the date on the account's card, or earlier. Nothing is kept until you press Keep.</div>
           <div class="bk-warn">Not the account summary, and not the PDF. Do not open the file in Excel and save it before uploading: Excel rewrites the dates. The largest file this installation can receive is <?= h($_bkCapMb) ?> MB.</div>
           <div class="bk-err" id="bkSizeMsg" hidden></div>
         </div>
@@ -488,7 +533,10 @@ $_bkWait = $_bkStore->waitingCount($_bkId);
 (function () {
   var sheet = document.getElementById('bkSheet');
   var each = function (sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); };
-  each('[data-bk-open]', function (b) { b.addEventListener('click', function () { if (sheet) { sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false'); } }); });
+  each('[data-bk-open]', function (b) { b.addEventListener('click', function () {
+    var sel = document.getElementById('bkAcctSel'), f = b.getAttribute('data-bk-for'); if (sel && f) sel.value = f;   // 5.18.97: the button's own account
+    if (sheet) { sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false'); }
+  }); });
   each('[data-bk-close]', function (b) { b.addEventListener('click', function () { if (sheet) { sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true'); } }); });
   each('[data-bk-submit]', function (i) { i.addEventListener('change', function () { if (i.form) i.form.submit(); }); });
   var form = document.getElementById('bkUpForm'), file = document.getElementById('bkFile');
