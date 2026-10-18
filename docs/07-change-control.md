@@ -11873,3 +11873,154 @@ commands prints a secret, and the terminal held none: the key file's content was
 - **Still to do:** replace the Splynx key and secret in Splynx itself, then enter the new ones under Settings → Splynx
   (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
   repository.
+
+## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — the Cashbook's NEGATIVE alert and the Add Entry pill show cash in hand with its own code; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — NOT YET PUSHED
+
+**Request.** The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then *"yes do it i
+will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to 5.18.96 when
+the security release went first (*"ok go ahed fix secruitry first"*).
+
+### Release notes
+
+Uganda only, and only where the rule is in force: the Uganda tenant with no SSP, read from the service's own
+configuration (`StaffJobsGate::applies()` and no SSP). Everywhere else every page runs 5.18.95's code paths.
+
+- **Cash in hand** counts approved entries that sit on no account or on a cash or mobile-money account. Ecobank, the
+  other non-cash accounts, and pending and rejected entries are out; voided entries stay out. One predicate, in
+  `cashInHand()` and in both running-balance streams, so every reader below agrees:
+  - the Cashbook's CASH IN HAND cards, its Balance column and the CSV (a non-cash entry stays in the list and the
+    export; its Balance cell shows "—");
+  - the landing page and its three project chips;
+  - the evening WhatsApp at 18:00 Kampala;
+  - `tools/cash_in_hand.php`.
+- **X5 — the CEO page.** "UGX Position" and "USD Position" become "UGX Cash in hand" and "USD Cash in hand", all
+  projects; the heading says which tiles are all projects and which are DishNet; "Today's Cash" becomes "Today's
+  collections".
+- **D1 — the Cashbook.** The "Cash balance is NEGATIVE" alert and the Add Entry UGX pill show cash in hand, each with
+  its own currency code.
+- **USD reads below zero** under the rule: dollars that arrived in the bank no longer count, dollar spending on no
+  account still does. Accepted on 17 Oct; it recovers as entries are put on their accounts (R1–R3).
+- **The one exception, in the UGX-only view:** an entry stored with no currency counts as UGX but is not listed there,
+  so when it is newer than the newest UGX entry the top Balance of that view is short by it. The All view lists it.
+- **Not changed:** every entry, setting and switch; the P&L; staff cash and the staff app (whose Uganda cash tiles read
+  0 today and still will: X4); the Opening Balances screen; South Sudan, a South Sudan tenant without SSP, a Uganda
+  tenant with SSP and a Uganda box whose gate fails — 5.18.95's SQL and pages verbatim. No migration.
+
+### Files — 17 against `098f6b3`: 5 added, 12 changed, none removed
+
+- **Added (5):** `tests/test_cash_in_hand_p3b.php` (T1), `tests/test_cash_in_hand_p3b_screens.php` (T2),
+  `tests/test_cash_in_hand_p3b_south_sudan.php` (T3), `tests/test_d1_bank_balance_readers.php` (T4),
+  `tests/test_cash_in_hand_p3b_mutants.php` (T1's weakened copies).
+- **Changed (6), taken whole from the development tip `c4f03dca`, each identical at `098f6b3` and `423ff052` before the
+  change:** `lib/CashbookService.php`, `tabs/accounts/cashbook.php`, `tabs/accounts/accounts_dashboard.php`,
+  `tabs/admin/ceo_dashboard.php`, `cron/cashbook_summary.php`, `tools/cash_in_hand.php`.
+- **The version alone (6):** `manifest.json` (5.18.96) and the pins in the five `tests/test_distributor_*.php`.
+- 17 files changed, 3,352 insertions(+), 33 deletions(-).
+
+### Ancestry
+
+`e35ecce` (5.18.96, release) ← `098f6b3` (5.18.95, release, live) ← `f4b4c96` (5.18.94). The development commits are
+`47445eea` (the change), `35268147` (the review's nine findings) and `c4f03dca` (the move to 5.18.96), on `423ff052`;
+the script and the rehearsal `419e2ffd`; T1's count `30798cf2`; the rehearsal's two fixes `f0cd656d`; merged into
+the development branch as `7925c587`.
+
+### Tests
+
+- **The release, the full suite twice:** 288 files, **14,569 passed, 0 failed**, in each of two runs, file by file
+  identical (17 Oct): 5.18.95's 283 / 13,649 plus the five new files — T1 548, T2 145, T3 166, T4 34, the mutants 27.
+- **A first run 2 failed 3 checks in `test_receipts_once.php`, which P3b does not touch. Cause found and proved; the
+  run was repeated alone.**
+  - It ran while the Bank screen's build was running tests in two other worktrees. Seventeen test files of the release
+    (twenty-two of the development tree) clean up with `glob(sys_get_temp_dir() . '/fake_evo_state_*.json')` and `/fake_ucrm_*.json` — every fake server's state
+    on the machine, not only their own. A file trace caught `test_image_media.php` in another tree unlinking exactly
+    the receipt test's `/tmp/fake_evo_state_<hash>.json` and `/tmp/fake_ucrm_notify_<port>.json` mid-test: its fake
+    WhatsApp server forgot texts it had received and its fake uCRM the payments it was seeded with.
+  - Reproduced: with those media tests replayed beside it, the receipt test failed 1 run in 4, 3 in 9 and 0 in 5;
+    alone it passed 5 of 5, and under six CPU hogs 6 of 6, on 5.18.95 and 5.18.96 alike; no port was shared and
+    no connection refused in any traced run. **The control:** deleting the two
+    files every 7 seconds while it runs alone fails it 2 of 2, and the next clean run passes 23/0.
+  - Not a product fault and not P3b's: a sequential suite never runs two such tests at once. The rule *never run two
+    suites or rehearsals at once* now covers any tests at all, from any worktree.
+- **The development branch with P3b merged (`7925c587`), the full suite twice:** 300 files, **15,491 passed, 0 failed**,
+  in each of two runs, file by file identical (18 Oct, 01:42–02:45 and 02:45–03:48 UTC). That is 5.18.95's 295 / 14,569 plus the five new files
+  (920) and two checks of `test_quote_tax_line.php` that 5.18.95's development tree skipped (its comparison with
+  `4c01d1c` needs the repository beside the plugin, which that worktree lacked); in this checkout both run and pass.
+
+### `scripts/deploy-5.18.96.sh` — 4,787 lines, sha256 `24b2f8b6aae48bfc…`
+
+Derived from `deploy-5.18.95.sh`; it keeps 5.18.95's checks as regressions — its seven security fixes read as text
+in the pin, the live code and the installed code, each with its control on `f4b4c96` (A22a–g, A22L, R23a–g) — and
+adds:
+
+- **The figures go to a cash sheet, never to the terminal or the log:** `/root/dnb-5.18.96/cash-<mode>-<stamp>.txt`,
+  mode 0600 in a folder of mode 700. The terminal and the log carry its path, its line count, the first 16 hex of its
+  sha256 and the `less` command.
+- **On copies, never on the live book:** every reading of the book is of a `VACUUM INTO` copy with copies of the three
+  configuration files and a vault holding only the book's own keys; every PHP process on a copy has its own
+  `DN_VAULT_FILE`; the live vault's sha256 and time are read around every batch (Z1); nothing of it is left in `/tmp`
+  (Z2).
+- **A22-T1 / R25:** T1 under the server's own PHP from a code copy, at its pinned count (548 passed, 0 failed).
+  **R24:** T4 against the installed files. **A24 / R26:** South Sudan, a South Sudan tenant without SSP and a Uganda
+  tenant with SSP unchanged through the library, with a Uganda book as the control.
+- **A23 / R23:** cash in hand of this server's book before and after, on copies; P0's own tool (at `5954ede5`, its
+  sha256 checked) on the same copy — its "today" must equal the live code's figure and its option A must equal D2 = A
+  plus the entries not approved; the drift between them named by row id; rule A must be in force on this server's own
+  configuration, or nothing is deployed.
+- **A14:** a passing quarantine `--check` begun after 5.18.95's copy (the operator's of 17 Oct, 16:04:56 UTC).
+- Nothing it runs in the container opens a socket. Not between 14:55 and 15:10 UTC (the evening WhatsApp).
+
+### The rehearsal — `scripts/harness/deploy-5.18.96/rehearse.sh` (1,223 lines, sha256 `68f30475165f0543…`)
+
+It builds the sandbox with 5.18.95's own rehearsal up to its rollback, so 5.18.95 is live and its `--after-only` and
+the quarantine's `--check` have passed, as on the server. On it: a synthetic book from P0's own builder, a webhook
+secret and a vault credential planted, a stand-in posting a receipt during the run, and three observers on every run.
+It proves the pin, A14's refusals, six faulty pins each refused at A22-T1 and again by the check written for it, the
+copies as the evidence, the deploy PASSING with the receipt as its drift, `--after-only` and the rollback run as
+printed, and weakened copies of the script each caught.
+
+- **Its first run — two trials, 17 Oct 22:03–23:27 UTC: 548 passed, 4 failed, identical.** All four were the
+  observers' checks, and the deploy script was right both times; the rehearsal was wrong twice (`f0cd656d`):
+  - **Its audit took the adjustment lookup for a run of the cash tool.** `CIHJ_PHP` is a `php -r` reading of the copy
+    with PDO, read-only, that loads no plugin code; its source names `tools/cash_in_hand.php` as a label of the cash
+    sheet, and the audit searched the whole command, source included. So every reading of the book counted two "runs
+    on a copy without a vault of their own": 86 over the rehearsal (43 runs × `pre` and `final`), measured with the
+    audit made to write each one out, then put back. The source of a `php -r` is no longer read as a path; its
+    arguments still are. A new control writes three calls as the fake docker records them — the lookup, the tool run
+    from the plugin folder with no vault (4e's shape) and a code copy with no vault — and needs `copies=2 novault=2
+    plugin=1`; against the old audit it reads `copies=3 novault=3` and fails.
+  - **The deliberate trips were recorded on one line.** `trip96` appended the run's tag with no newline, so 2h, 2i
+    and 4e read as one line and none was left out of the final sweep. One tag a line: on three tags the fixed helper
+    gives 3 lines with `012` found, the old 1 line and none.
+- **Trial 3 (18 Oct, 00:17–00:59 UTC): 553 passed, 0 failed** (165 runs of the deploy scripts, 12 of the quarantine).
+- **Trial 4 (18 Oct, 00:59–01:41 UTC): 553 passed, 0 failed, the same 165 and 12 runs.** 553 = the 548 plus the
+  four observers' checks now passing and the new control.
+
+### Runbook
+
+1. **Say the word to push** `release/5.18.96` and the development branch, together.
+2. **The deploy**, its own command, outside 14:55–15:10 UTC; type `DEPLOY`; send back the **log file**:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.96 && mkdir -p /root/dnb-5.18.96 && bash scripts/deploy-5.18.96.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.96/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **Read the figures on the server** with the `less` command the summary prints. Never paste, copy or send the sheet.
+4. **Count the cash** (root docs/69 Part 5): at the same minute, the landing page's figure per currency against the
+   drawer, the wallets and what staff collected and have not handed over; advances written down, not added; any
+   difference in words, never amounts.
+5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command, as
+   the summary prints them.
+6. **The next day after 15:00 UTC:** `--after-only` again.
+7. **Look at the screens:** the Cashbook (both currencies), the landing page, the CEO page.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.96.sh --rollback` asks for `ROLLBACK` and puts 5.18.95 (`098f6b3`) back; cash in hand returns to
+5.18.95's rule and the CEO page shows positions again; 5.18.95's security fixes stay. Then the quarantine's `--check`.
+A count recorded under 5.18.96 will not match the screens after a rollback.
+
+### Known limits
+
+1. **The test suite's machine-wide cleanups** (above): harmless in a sequential suite; any parallel run of tests from
+   two trees can make either fail. Recorded; the cleanups are not changed by this release.
+2. **USD below zero** until R1–R3 put the dollar entries on their accounts.
+3. **The staff app's Uganda cash tiles still read 0** (X4, with the API work).
+4. **The UGX-only view's top Balance** can be short by entries stored with no currency (above); the deploy counts them.
