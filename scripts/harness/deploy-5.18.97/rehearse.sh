@@ -339,7 +339,7 @@ port97() {   # port97 FILE — the release's change to it is the development cha
   python3 - <(git -C "$REPO" diff -U0 "$P96" "$P97" -- "$P/$1") <(git -C "$REPO" diff -U0 "$DEV97_BASE" "$FIX97" -- "$P/$1") <<'PY'
 import sys
 def ch(p):
-    return sorted(l for l in open(p).read().split('\n') if l[:1] in '+-' and not l.startswith(('+++', '---')))
+    return sorted(l for l in open(p).read().split('\n') if l[:1] in ('+', '-') and not l.startswith(('+++', '---')))   # '' is in '+-': no empty line counted
 a, b = ch(sys.argv[1]), ch(sys.argv[2])
 print('%d:%s' % (len(a), 'same' if a == b and a else 'differs'))
 PY
@@ -398,7 +398,7 @@ elif cmd == 'ecotermexp':                # the same from the oracle: each last k
 '''
 open(sys.argv[2], 'w').write(s)
 PY
-check "$(python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read()); print("parses")' "$H97/rh97.py" 2>&1)$(for f in "$H97"/rh97-*.php; do php -l "$f" 2>&1 | grep -c '^No syntax errors'; done | paste -sd'' -)" "parses111" \
+check "$(python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read()); print("parses")' "$H97/rh97.py" 2>&1)$(for f in "$H97"/rh97-*.php; do php -l "$f" 2>&1 | grep -c '^No syntax errors'; done | tr -d '\n')" "parses111" \
   "control: this rehearsal's readers (5.18.96's, derived) and its three PHP helpers parse"
 
 echo; echo "== 97-pre. the sandbox as production will be: 5.18.96 live; ECO Bank's ground; the observers taught this release's folders =="
@@ -589,7 +589,8 @@ for name in ('BANK_PHP', 'BANKK_PHP'):
 PY
 bk97() { php -d display_errors=stderr -r "$(cat "$K97/bank_php.txt")" "$1" "$K97/pin/$P" "rh97-instrument-control-key-0123456789abcdef" "bank_account_profiles bank_checks bank_statements bank_statement_lines bank_line_events" 2>/dev/null; }
 LED97_0="$(ledger95)"
-php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec("VACUUM INTO " . $p->quote($argv[2]));' "$DATA/plugin.sqlite3" "$K97/copy.sqlite3"
+[ -d "$K97" ] && [ -d "$K97/m" ] || echo "  diag 0-k: the instrument folder is missing before the copy ($(ls -ld "$SB" 2>&1 | cut -c1-60); uid $(id -u))"
+php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec("VACUUM INTO " . $p->quote($argv[2]));' "$DATA/plugin.sqlite3" "$K97/copy.sqlite3" || echo "  diag 0-k: the copy failed ($(ls -ld "$K97" 2>&1 | cut -c1-60); $(ls -l "$DATA/plugin.sqlite3" 2>&1 | cut -c1-40); free $(df -Pk "$SB" | awk 'NR==2{print $4}')k)"
 B0="$(bk97 "$K97/copy.sqlite3")"
 cp "$K97/pin/$P/$MIG97" "$K97/m/"
 php -r 'require $argv[1] . "/lib/MigrationRunner.php"; (new MigrationRunner(new PDO("sqlite:" . $argv[2]), $argv[3], $argv[4]))->run(); echo "ran";' "$K97/pin/$P" "$K97/copy.sqlite3" "$K97/m" "$K97/m.log" >/dev/null 2>&1
@@ -868,12 +869,12 @@ EOF
 )"
 V97_STORE="$(release_variant97 lib/BankGate.php "$V_OPEN_OLD" "$V_OPEN_NEW")"
 S="$(pinned_copy v97store "$V97_STORE" "$DEPLOY97")"
-fresh97; OUT="$(run97 --check --script "$S")"
+fresh97; OUT="$(run97 --script "$S" --check)"
 nogo97 "2i' a gate that also reads the store row, over the planted switch: NO-GO at BK2 — off, the administrator shown ECO Bank — what K2 must never be" \
   "NO-GO (BK2): ECO Bank's gate on the copy is not as it must be (off:switch=absent,halves=yes,open=yes,shown=1,stale=0)" "$OUT" "$D97S"
 db_back
 check "$(both_copies "$BK97")|$(data94)" "-|$D97" "…the planted row taken out (the book put back byte for byte): the switch in neither place"
-fresh97; S0="$(states97)"; OUT="$(run97 --check --script "$S")"; rm -f "$S"
+fresh97; S0="$(states97)"; OUT="$(run97 --script "$S" --check)"; rm -f "$S"
 check "$(checkgo97 "$OUT")|$(okline "$OUT" BK2 'off — no one of the 1 active administrator(s) is shown ECO Bank')" "yesyesnono0|0|$S0|yes" \
   "2i'' control: the same gate, the plant taken out, is GO — only the plant shows it; what reaches the store alone must be planted to be seen"
 check "$(quiet97 | cut -d'|' -f1,3-)|$(sha256sum "$QREC" | cut -c1-16)|$(vt_host)" "$P96|$D97|$KEPT97|0|$QREC97|$VT97_0" "…after section 2: 5.18.96 live, the data, the quarantine and the live vault as before"
@@ -1198,7 +1199,7 @@ check "$(has "$OUT" 'after the newest passing --check of the quarantine, begun')
   "…naming the rollback's own record, and printing the quarantine's --check on its own line, with its own log"
 A14OWN_OLD97='for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do'
 M="$(mutant a14own97 "$DEPLOY97" "$A14OWN_OLD97" 'for f in /rh97-none; do')"
-fresh97; S0="$(states97)"; OUT="$(run97 --check --redeploy --script "$M")"; rm -f "$M"
+fresh97; S0="$(states97)"; OUT="$(run97 --script "$M" --check --redeploy)"; rm -f "$M"
 check "$(checkgo97 "$OUT")" "yesyesnono0|0|$S0" "6a'' a copy blind to this script's own copies says GO over the same rollback (caught)"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after the rollback, as RB asks: PASSED"
@@ -1271,7 +1272,7 @@ nogo97 "8d one of 088's triggers dropped: --redeploy refuses at BR2 — 088 on t
 check "$(has "$OUT" 'triggers 10/11')$(has "$OUT" 'missing: bank_lines_no_delete')" "yesyes" "…naming what is missing, by name and count"
 BR2P_OLD='      stop "NO-GO (BR2): 088 is on this server'"'"'s book only in part'
 M="$(mutant br2part97 "$DEPLOY97" "$BR2P_OLD" '      true || stop "NO-GO (BR2): 088 is on this server'"'"'s book only in part')"
-fresh97; S0="$(states97)"; OUT="$(run97 --check --redeploy --script "$M")"; rm -f "$M"
+fresh97; S0="$(states97)"; OUT="$(run97 --script "$M" --check --redeploy)"; rm -f "$M"
 check "$(checkgo97 "$OUT")" "yesyesnono0|0|$S0" "8d' a copy that accepts 088 in part says GO over the dropped trigger (caught)"
 db_back
 check "$(oj "$(o97)" triggers)|$(data94)" "11/11|$D97" "…the book put back: 088's eleven triggers, every kept row"
