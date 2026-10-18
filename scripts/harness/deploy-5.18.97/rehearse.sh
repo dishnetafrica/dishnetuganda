@@ -579,6 +579,7 @@ check "$(git -C "$REPO" log -1 --format=%h "$P97" -- $P)|$(git -C "$REPO" log -1
 # alone; one trigger dropped; an index added — and the gate's refusal of a path that is not a copy. The live book untouched.
 K97="$SB/k97"; rm -rf "$K97"; mkdir -p "$K97/pin" "$K97/m"
 git -C "$REPO" archive "$P97" "$P/lib/MigrationRunner.php" "$P/$MIG97" | tar -x -C "$K97/pin"
+chown -R 1000:1000 "$K97"   # the harness's php() runs as the store's user (the quarantine rehearsal's, setpriv 1000): its copy and the runner's log are written here
 python3 - "$DEPLOY97" "$K97" <<'PY' || echo "instrument:bank97" >> "$SB/anchor-missing"
 import sys, re
 s = open(sys.argv[1]).read()
