@@ -38,33 +38,39 @@
 #     staff planted it says GO — the gate's three states exact, BN5's note, the deploy printed alone, nothing backed up or
 #     written but its sheet; with no active non-administrator, BK2's note (the stale-session check not exercised); option
 #     errors; --check-bank before the deploy refused (c);
-#   · A14 reads 5.18.96's, 5.18.95's and 5.18.94's state files and 5.18.96's copy time, each blind copy caught (1); A22L,
+#   · A14 reads 5.18.96's, 5.18.95's and 5.18.94's state files and 5.18.96's copy time, each blind copy caught (1) — and
+#     this script's own copies: a --check --redeploy before the quarantine's --check after a rollback refuses (6); A22L,
 #     a part-way copy, an installed file not 5.18.96's (BASE_DIFFERS) and BR1 — every tracked file — refuse, a copy blind to
 #     BR1 caught (1b);
 #   · six faulty pins of the cash library are refused first at A0 (a file 5.18.97 must not ship), then — each refusal taken
 #     out of a copy in turn — by the pin's own T1 and by the check written for it, and a pin that counts bank rows by BK1;
 #     a gate that trusts the session is refused at BK3 and, BK3 taken out, at BK2 by the stale session (stale=3); a menu link
-#     not under the gate at BK3; the switch in the store copy alone keeps the gate closed (K2 false: GO, BR3's note), and a
-#     gate that reads the store is refused at BK2 by that plant and by nothing without it (2);
+#     not under the gate at BK3, and a CEO Quick Link not under it; a phone More menu that links to ECO Bank at A0 and, A0
+#     taken out, at BK3; a gate that does not parse at A2 (K3's php -l) and, A2 taken out, at BK3; the switch in the store
+#     copy alone keeps the gate closed (K2 false: GO, BR3's note), and a gate that reads the store is refused at BK2 by that
+#     plant and by nothing without it (2);
 #   · the copies are the evidence: the live-book trap, a copy reading the live store (A23.1 and the observer), a copy with
-#     no vault — the cash code's and ECO Bank's gate processes' — caught by the observers; the parts; the adjustment (2b);
+#     no vault — the cash code's and ECO Bank's gate processes' — caught by the observers, the live book put back after the
+#     copy that reads it (its code's runner applies 088 there); the parts; the adjustment (2b);
 #   · the deploy PASSES with a receipt posted between A23 and R23: every check of 5.18.96's and ECO Bank's (BR1–BR3, BN5,
 #     BK1–BK3, BA1, BA2, BA4, V3j, R7's one row) with its fixed words; 088 applied by the plugin's own runner, empty; the
 #     sheet's figures and its ECO Bank lines (row ids, no date) this rehearsal's own; no figure, secret, account name or
 #     number anywhere else; the switch, --check-bank, the two rollback steps and the put-back printed alone, in that order,
 #     after the verdict (3);
 #   · --after-only as printed, then its weakened copies, each caught; R7 refuses a ledger row that is not 088's, and a copy
-#     that takes any one row is caught; BA1 refuses 088 with a trigger dropped; --check-bank before any statement (4);
+#     that takes any one row is caught; BA1 refuses 088 with a trigger dropped, and so does --check-bank's CB; BA4 refuses
+#     ECO Bank's screen answering a visitor with no session; --check-bank before any statement (4);
 #   · the switch command, run as printed: the one line it set, in its own 0600 log, both copies set, the vault untouched;
-#     --after-only then says it, and prints no switch command (5);
+#     --after-only then says it, and prints no switch command; V3j FAILS the switch cleared while a run goes on (5);
 #   · the rollback with the switch left on: RB says it and prints --redeploy; 5.18.96's tool refuses the key; a deploy
 #     refuses at BR3 and names --redeploy; --check --redeploy is GO with BR3's note; --redeploy PASSES (6);
 #   · statements kept on both cards: --after-only's BA1 sees them, --check-bank PASSES with both cards a figure — the
 #     terminal's lines and the sheet's ids and dates this rehearsal's own (7);
 #   · the rollback's two steps as printed: the switch cleared, 088's kept rows untouched; a deploy refuses at BR2 and names
 #     --redeploy; a trigger dropped makes --redeploy refuse, and a copy that accepts it is caught; --redeploy PASSES with
-#     every kept row unchanged (8);
-#   · a rollback whose copy leaves 5.18.97's menu behind FAILS RB twice, a copy blind to it is caught; deployed again (9);
+#     every kept row unchanged; an --after-only FAILS BA1 over a kept line lost since the deploy (8);
+#   · a rollback whose copy leaves 5.18.97's menu behind FAILS RB twice, a copy blind to it is caught; a --redeploy FAILS
+#     BA1 over a kept line deleted while it runs, then rolled back; deployed again (9);
 #   · nothing reaches Evolution; every observer quiet but on the weakened copies that trip one on purpose; no figure,
 #     secret or ECO Bank name, number or ending in any output, log or state file (each sweep with its control); /tmp, the
 #     host and the checkout as found (10).
@@ -233,9 +239,10 @@ audit97() { python3 "$H97/rh97.py" audit "$R97/exec/run-$1.rec"; }  # audit97 TA
 hits97() { local n; n="$(grep -c . "$R97/scan/run-$1.hits" 2>/dev/null)"; echo "${n:-0}"; }
 vault97() { echo "$(cat "$R97/vault/run-$1.before")>$(cat "$R97/vault/run-$1.after")"; }
 printed97() {   # printed97 OUTPUT — the summary's commands: how many | how many without their own log wrapper | how many lines of
-                # the whole output hold two commands
+                # the whole output hold two commands — by their command forms (bash scripts/…, php tools/set_config.php), never
+                # by a name in words: R6's ok line names set_config.php three times
   local s; s="$(sed -n '/^== F\. Summary/,$p' <<<"$1")"
-  echo "$(grep -cE '^      (cd |\( |docker exec )' <<<"$s")|$(grep -E '^      (cd |\( |docker exec )' <<<"$s" | grep -vcE ' \| \( umask 077; exec tee | \| tee ')|$(grep -cE '(deploy-5\.18\.97\.sh|quarantine-stray-store\.sh|set_config\.php).*(deploy-5\.18\.97\.sh|quarantine-stray-store\.sh|set_config\.php)' <<<"$1")"
+  echo "$(grep -cE '^      (cd |\( |docker exec )' <<<"$s")|$(grep -E '^      (cd |\( |docker exec )' <<<"$s" | grep -vcE ' \| \( umask 077; exec tee | \| tee ')|$(grep -cE '(bash scripts/deploy-5\.18\.97\.sh|bash scripts/quarantine-stray-store\.sh|php tools/set_config\.php).*(bash scripts/deploy-5\.18\.97\.sh|bash scripts/quarantine-stray-store\.sh|php tools/set_config\.php)' <<<"$1")"
 }
 rb_where97() {   # rb_where97 OUTPUT — each line naming the rollback command: before or after the run's verdict
   awk '/^  5\.18\.97 \((deploy|after)\): / { v = 1 } index($0, "deploy-5.18.97.sh --rollback") { print (v ? "after" : "before") }' <<<"$1" | paste -sd, -
@@ -440,22 +447,26 @@ check "$(grep -c '^value /tmp/dnb-5.18.97-cih-rhcontrol/webhook_secret$' "$SB/ob
 rm -rf /tmp/dnb-5.18.97-cih-rhcontrol "$SB/obs97.pat" "$SB/obs97.rec" "$SB/obs97.hits"
 # …and the audit counts what runs code on this release's copies, not 5.18.96's paths and not a command in the plugin folder:
 # a gate process with a vault of its own, one without, a 5.18.96 copy, 088's reading through the pin's copy, the switch
-# command (-w takes a value) — written as the fake docker records them.
+# command (-w takes a value), and a gate process with no vault run with -w — counted only when -w is read as taking a
+# value (the control on that edit) — written as the fake docker records them.
 { for c in \
     "exec|-u|1000:1000|-e|DN_VAULT_FILE=/tmp/dnb-5.18.97-cih-x/a23-1/k-found-vault.json|-e|DN_DATA_DIR=/tmp/dnb-5.18.97-cih-x/a23-1/k-found-data|ucrm|php|-d|display_errors=stderr|-r|echo 1;|found|/tmp/dnb-5.18.97-cih-x/a23-1/k-found/dishnet-hybrid-sudan|/tmp/dnb-5.18.97-cih-x/a23-1/k-found-data|/tmp/dnb-5.18.97-cih-x/" \
     "exec|-u|1000:1000|-e|DN_DATA_DIR=/tmp/dnb-5.18.97-cih-x/a23-1/k-on-data|ucrm|php|-d|display_errors=stderr|-r|echo 1;|on|/tmp/dnb-5.18.97-cih-x/a23-1/k-on/dishnet-hybrid-sudan|/tmp/dnb-5.18.97-cih-x/a23-1/k-on-data|/tmp/dnb-5.18.97-cih-x/" \
     "exec|-u|1000:1000|-e|DN_VAULT_FILE=/tmp/dnb-5.18.96-cih-x/a23-1/t-vault.json|ucrm|php|-r|echo 1;|/tmp/dnb-5.18.96-cih-x/a23-1/t/dishnet-hybrid-sudan" \
     "exec|-u|1000:1000|-e|DN_VAULT_FILE=/tmp/dnb-5.18.97-code-x/bank-vault-none.json|ucrm|php|-d|display_errors=stderr|-r|echo 1;|/data/ucrm/data/plugins/.$P-data/plugin.sqlite3|/tmp/dnb-5.18.97-code-x/p3b/pin/dishnet-hybrid-sudan|salt|tables" \
-    "exec|-u|1000:1000|-e|DN_DATA_DIR=$PDD97|-w|$IN_CONTAINER|ucrm|php|tools/set_config.php|--key|bank_screen_enabled|--value|1"; do
+    "exec|-u|1000:1000|-e|DN_DATA_DIR=$PDD97|-w|$IN_CONTAINER|ucrm|php|tools/set_config.php|--key|bank_screen_enabled|--value|1" \
+    "exec|-u|1000:1000|-w|$IN_CONTAINER|ucrm|php|-r|echo 1;|/tmp/dnb-5.18.97-cih-x/a23-1/k-on/dishnet-hybrid-sudan"; do
     printf '%s' "$c" | tr '|' '\037'; printf '\037\036'; done; } > "$SB/obs97b.rec"
-check "$(python3 "$H97/rh97.py" audit "$SB/obs97b.rec")" "copies=3 novault=1 plugin=0 adj=-" \
-  "control: the audit counts the gate processes on ECO Bank's code copies and 088's reading through the pin's copy (one of them without a vault), and neither a 5.18.96 path nor the switch command run in the plugin folder"
+check "$(python3 "$H97/rh97.py" audit "$SB/obs97b.rec")" "copies=4 novault=2 plugin=0 adj=-" \
+  "control: the audit counts the gate processes on ECO Bank's code copies and 088's reading through the pin's copy (two of them without a vault — one run with -w, seen only because -w is read as taking a value), and neither a 5.18.96 path nor the switch command run in the plugin folder"
 rm -f "$SB/obs97b.rec"
 
-# ── The stand-in public.php learns two more triggers, each spent once: a receipt posted through the INSTALLED code's own
+# ── The stand-in public.php learns four more triggers, each spent once: a receipt posted through the INSTALLED code's own
 # writer while a run goes on (.add_receipt97) — at the first request, which in a deploy is V's, after A23 and before R23;
-# and 5.18.97's menu left behind by a rollback's copy (.left97, naming the file to copy) — at the first request once
-# 5.18.96's manifest is installed again (9). Asserted, as every edit here. ─────────────────────────────────────────────
+# 5.18.97's menu left behind by a rollback's copy (.left97, naming the file to copy) — at the first request once
+# 5.18.96's manifest is installed again (9); ECO Bank's screen answering a visitor with no session with a card
+# (.leak_bank97, BA4: 4); and a kept statement line deleted while a run goes on, its no-delete trigger dropped and put
+# back with its own SQL text (.del_line97, BA1: 9). Asserted, as every edit here. ─────────────────────────────────────────────
 python3 - "$SB/web/public.php" <<'PY' || echo "standin:triggers97" >> "$SB/anchor-missing"
 import sys
 p = sys.argv[1]; s = open(p).read()
@@ -474,13 +485,23 @@ $left97 = is_file($web . '/.left97') ? trim((string)file_get_contents($web . '/.
 if ($left97 !== '' && strpos((string)@file_get_contents($root . '/manifest.json'), '"5.18.96"') !== false && $spend('.left97')) {
     copy($left97, $root . '/includes/navigation.php');   // 5.18.97's rehearsal: 5.18.97's menu left behind by a rollback's copy (RB)
 }
+if (($_GET['page'] ?? '') === 'dashboard' && ($_GET['tab'] ?? '') === 'bank' && !isset($_GET['bk_export']) && $spend('.leak_bank97')) {
+    echo '<html><body><div class="bk-card">leaked</div></body></html>'; exit;   // 5.18.97's rehearsal: ECO Bank's screen to a visitor with no session (BA4)
+}
+if ($spend('.del_line97')) {   // 5.18.97's rehearsal: a kept statement line deleted while a run goes on, its no-delete trigger put back as it was (BA1)
+    $t97 = (string)$pdo->query("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'bank_lines_no_delete'")->fetchColumn();
+    $pdo->exec('DROP TRIGGER bank_lines_no_delete');
+    $pdo->exec('DELETE FROM bank_statement_lines WHERE rowid = (SELECT MAX(rowid) FROM bank_statement_lines)');
+    $pdo->exec($t97);
+}
 """ + old
 s = s.replace(old, new, 1)
 assert s.count("'.add_receipt97'") == 1 and s.count("'.left97'") == 1 and s.count('rh97_probe') == 1 and s.count(old) == 1
+assert s.count("'.leak_bank97'") == 1 and s.count("'.del_line97'") == 1 and s.count('bank_lines_no_delete') == 2
 open(p, 'w').write(s)
 PY
 for i in $(seq 1 60); do pubget page=rh97_probe | grep -q 'rh97-triggers-ready' && break; sleep 0.1; done   # PHP re-reads the edited file
-check "$(pubget page=rh97_probe)$(ls -A "$SB/web" | grep -c '^\.add_receipt97$\|^\.left97$')" "rh97-triggers-ready0" "control: the stand-in carries the two triggers, unspent and unset"
+check "$(pubget page=rh97_probe)$(ls -A "$SB/web" | grep -c '^\.add_receipt97$\|^\.left97$\|^\.leak_bank97$\|^\.del_line97$')" "rh97-triggers-ready0" "control: the stand-in carries the four triggers, unspent and unset"
 printf '%s\n' 314159.27 > "$SB/seed97.amounts"   # the stand-in's receipt; the statements' amounts are added when they are made (7)
 O_G="$(o97)"
 check "$(oj "$O_G" admins)|$(oj "$O_G" nonadmins)|$(oj "$O_G" curs)|$(oj "$O_G" offered)|$(oj "$O_G" tables)|$(oj "$O_G" ledger)|$(oj "$O_G" rows)|$(both_copies "$BK97")" \
@@ -531,12 +552,16 @@ M="$(mutant hdrrb97 "$DEPLOY97" "$HDR_DEPLOY_LINE97" "$HDR_DEPLOY_LINE97
 #   cd /opt/dishnet && docker exec -u 1000:1000 ucrm php tools/set_config.php --key bank_screen_enabled --clear && bash scripts/deploy-5.18.97.sh --rollback")"
 check "$(hdr97 "$M")" "111" "0-hdr' a copy whose header carries the switch's clearing and the rollback inside the deploy command's block is caught by the same count"
 rm -f "$M"
-check "$(cmds97 "$DEPLOY97")" "111111111|11|10|20|1" \
-  "every command the script prints for a later step is defined with its own log wrapper — the --after-only, the rollback, the deploy, the put-back, the quarantine's --check with its tee, --redeploy, --check-bank, the switch and its clearing — and each of the twenty-one lines that print one names one of them, or carries the wrapper itself"
+check "$(cmds97 "$DEPLOY97")" "111111111|12|10|21|1" \
+  "every command the script prints for a later step is defined with its own log wrapper — the --after-only, the rollback, the deploy, the put-back, the quarantine's --check with its tee, --redeploy, --check-bank, the switch and its clearing — and each of the twenty-two lines that print one names one of them, or carries the wrapper itself"
 SWON_DEF97="$(sed -n 8p "$DEFS97")"   # the switch's definition, as the quoted block above holds it
 M="$(mutant fnowrap97s "$DEPLOY97" "$SWON_DEF97" 'SWITCH_ON_CMD="docker exec -u $DB_OWNER -e DN_DATA_DIR=$PDD_IN -w $IN_CONTAINER $CONTAINER php tools/set_config.php --key $BK_KEY --value 1"')"
-check "$(cmds97 "$M")" "111111101|11|10|20|1" "0-cmd' a copy that defines the switch without its log wrapper (and without cutting the settings listing) is caught by the same reading"
+check "$(cmds97 "$M")" "111111101|12|10|21|1" "0-cmd' a copy that defines the switch without its log wrapper (and without cutting the settings listing) is caught by the same reading"
 rm -f "$M"
+PR97_TWO="$(printf '%s\n' '== F. Summary ==' "      $EXP_DEPLOY97; $EXP_SWON97")"
+PR97_R6="  ok    R6 every earlier surface is installed as before (… the registry's switch in set_config.php … the three switches in set_config.php … set_config.php refusing the registry …)"
+check "$(printed97 "$PR97_TWO" | cut -d'|' -f3)|$(printed97 "$PR97_R6" | cut -d'|' -f3)" "1|0" \
+  "control: printed97's third count sees a line holding two commands (the deploy and the switch pasted together) and not R6's ok line, which names set_config.php three times in words"
 check "$(grep -cE '(>|>>) *"?\$(VAULT_HOST|VAULT)"?( |$)' "$DEPLOY97")$(grep -cE '(mv|rm|touch|chmod|chown|tee) [^|;]*"\$(VAULT_HOST|VAULT)"' "$DEPLOY97")$(grep -E 'cp [^|;]*"\$VAULT"' "$DEPLOY97" | grep -vcF 'cp -p "$VAULT" "$BK/config-vault.json"')" "000" \
   "the script never writes, moves or touches the live vault — it copies it only into its own backup"
 check "$(grep -cE '(cat|head|tail|more|less|awk|sed|grep)( -[^ ]+)* +"\$SHEET"' "$DEPLOY97")$(grep -cF 'echo "      less $SHEET"' "$DEPLOY97")" "03" \
@@ -599,7 +624,9 @@ rm -f "$H97/v/staff-vault.json"
 D97="$(data94)"; DX97="$(data97x)"
 fresh97; S0="$(states97)"; OUT="$(run97 --check)"; T="$(last97)"; SHC="$(sheet_of "$OUT")"
 check "$(checkgo97 "$OUT")" "yesyesnono0|0|$S0" "c2 with the staff planted, --check is GO: stage A held — nothing asked, nothing backed up, no state file written"
-check "$(grep -cxF '  the gate        as found: switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0 ready=no offered=UGX:2:1:0,USD:1:1:0 both=no' <<<"$OUT")$(grep -cxF '                  off:      switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0' <<<"$OUT")$(grep -cxF '                  on:       switch=on halves=yes open=yes admins=1 shown=1 nonadmins=3 stale=0' <<<"$OUT")" "111" \
+# ready=yes: the found process opens its copy through the pin's own store, whose runner applies the pin's 088 to that copy
+# before BankStatementStore::ready() is asked — BR2 read the copy before it, and says 088 absent.
+check "$(grep -cxF '  the gate        as found: switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0 ready=yes offered=UGX:2:1:0,USD:1:1:0 both=no' <<<"$OUT")$(grep -cxF '                  off:      switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0' <<<"$OUT")$(grep -cxF '                  on:       switch=on halves=yes open=yes admins=1 shown=1 nonadmins=3 stale=0' <<<"$OUT")" "111" \
   "…the gate's three states, each in its own process: as found closed, off shown to nobody, on shown to the one administrator and to none of the three others handed a session copy that says is_admin — the stale session refused by the fresh record (stale=0)"
 check "$(okline "$OUT" BK2 "off — no one of the 1 active administrator(s) is shown ECO Bank; on (written into the copy's kyc_config.json only, never the live one) — all 1 are, and none of the 3 active non-administrator(s)")$(noteline "$OUT" BN5 'the offered bank accounts are not one per currency named Ecobank — UGX: 2 offered, 1 named Ecobank, 0 of them with a statement kept; USD: 1 offered, 1 named Ecobank, 0 of them with a statement kept (counts only;')$(has "$OUT" 'BK2 the copy holds no active staff record')" "yesyesno" \
   "…BK2 holds; BN5's note counts the book's offered accounts per currency — this rehearsal's own count — and names none"
@@ -796,6 +823,31 @@ S="$(pinned_copy v97nav "$V" "$DEPLOY97")"
 fresh97; OUT="$(run97 --answer NO --script "$S")"; rm -f "$S"
 nogo97 "2h a menu whose ECO Bank link is not under the pinned showLink() call: NO-GO at BK3, naming the file and what it lacks" \
   "NO-GO (BK3): ECO Bank's links in the pin are not as they were reviewed: navigation.php:gate-calls-0 navigation.php:link-not-under-the-pinned-gate" "$OUT"
+# The CEO page's Quick Link (Q15), the phone's More menu and php -l (SPEC §2.10b K3), each made to refuse.
+V="$(release_variant97 tabs/admin/ceo_dashboard.php "$V_NAV_OLD" "      if (!empty(\$retailer['is_admin'])): ?>")"
+S="$(pinned_copy v97ceo "$V" "$DEPLOY97")"
+fresh97; OUT="$(run97 --answer NO --script "$S")"; rm -f "$S"
+nogo97 "2h' a CEO page whose ECO Bank Quick Link is not under the pinned showLink() call (Q15): NO-GO at BK3, naming the file and what it lacks" \
+  "NO-GO (BK3): ECO Bank's links in the pin are not as they were reviewed: ceo_dashboard.php:gate-calls-0 ceo_dashboard.php:link-not-under-the-pinned-gate" "$OUT"
+V="$(release_variant97 tabs/sales/more_menu.php 'href="?page=dashboard&tab=bulk_dispatch"' 'href="?page=dashboard&tab=bank"')"
+S="$(pinned_copy v97more "$V" "$DEPLOY97")"
+fresh97; OUT="$(run97 --answer NO --script "$S")"
+nogo97 "2h'' a pin whose phone More menu links to ECO Bank — a file 5.18.97 must not ship: refused at A0" \
+  "the pin carries files that are not 5.18.97's, which this release must not ship: tabs/sales/more_menu.php" "$OUT"
+M="$(mutant v97morem "$S" "$A0_OLD" "$A0_NEW")"; rm -f "$S"
+fresh97; OUT="$(run97 --answer NO --script "$M")"; rm -f "$M"
+nogo97 "2h''' …and with A0's refusal taken out of a copy, BK3 refuses it: the More menu not 5.18.96's byte for byte, and a link to ECO Bank in it (SPEC §2.8.4)" \
+  "NO-GO (BK3): ECO Bank's links in the pin are not as they were reviewed: more_menu:changed more_menu:links-to-ECO-Bank" "$OUT"
+V="$(release_variant97 lib/BankGate.php "    public const SWITCH_KEY = 'bank_screen_enabled';" "    public const SWITCH_KEY = 'bank_screen_enabled'")"
+S="$(pinned_copy v97lint "$V" "$DEPLOY97")"
+fresh97; OUT="$(run97 --answer NO --script "$S")"
+nogo97 "2h4 a pin whose ECO Bank gate does not parse: NO-GO at A2 (K3's php -l) — the server's own PHP rejects it before a byte is copied, naming the file" \
+  "in the container rejects: lib/BankGate.php" "$OUT"
+A2_OLD97='[ -z "$L_BAD" ] || stop "NO-GO: PHP $PHPV in the container rejects:$L_BAD"'
+M="$(mutant v97lintm "$S" "$A2_OLD97" 'true || stop "NO-GO: PHP $PHPV in the container rejects:$L_BAD"')"; rm -f "$S"
+fresh97; OUT="$(run97 --answer NO --script "$M")"; rm -f "$M"
+nogo97 "2h4' …and with A2's refusal taken out of a copy, BK3 refuses the same gate by its text: its switch's key line is not the reviewed one" \
+  "NO-GO (BK3): ECO Bank's links in the pin are not as they were reviewed: gate:switch-key" "$OUT"
 # The switch in the store copy alone (SPEC §2.10b: K2 must stay false). The real pin: GO, BR3 says it, the gate closed as
 # found. A gate that also reads the store row: refused at BK2 by that plant — off, ECO Bank shown to the administrator —
 # and, the plant taken out, GO: only the plant shows it.
@@ -803,7 +855,7 @@ db_keep
 row_set "$BK97" 1; D97S="$(data94)"
 check "$(both_copies "$BK97")" "1-" "2i the switch planted in the store row alone (set_config.php writes both; the row is what public.php reads, BankGate never)"
 fresh97; S0="$(states97)"; OUT="$(run97 --check)"
-check "$(checkgo97 "$OUT")|$(okline "$OUT" BR3 "ECO Bank's switch, $BK97, is absent from the configuration files" '(bk=absent/on; files/store)')$(noteline "$OUT" BR3 "$BK97 is in the store row alone (on): BankGate reads the configuration files, never the row, so ECO Bank stays closed")$(grep -cxF '  the gate        as found: switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0 ready=no offered=UGX:2:1:0,USD:1:1:0 both=no' <<<"$OUT")$(okline "$OUT" BK2 'off — no one of the 1 active administrator(s) is shown ECO Bank')" \
+check "$(checkgo97 "$OUT")|$(okline "$OUT" BR3 "ECO Bank's switch, $BK97, is absent from the configuration files" '(bk=absent/on; files/store)')$(noteline "$OUT" BR3 "$BK97 is in the store row alone (on): BankGate reads the configuration files, never the row, so ECO Bank stays closed")$(grep -cxF '  the gate        as found: switch=absent halves=yes open=no admins=1 shown=0 nonadmins=3 stale=0 ready=yes offered=UGX:2:1:0,USD:1:1:0 both=no' <<<"$OUT")$(okline "$OUT" BK2 'off — no one of the 1 active administrator(s) is shown ECO Bank')" \
       "yesyesnono0|0|$S0|yesyes1yes" \
   "…the real pin: --check GO — BR3 ok and its note (the row alone), the gate closed as found, BK2's off-process shows ECO Bank to nobody: K2 stays false"
 V_OPEN_OLD="$(cat <<'EOF'
@@ -837,13 +889,21 @@ check "$(data94)|$(hits97 "$T")|$(audit97 "$T" | sed -E 's/^copies=[0-9]+ //; s/
 LIVE_READ_OLD97='-e DN_DATA_DIR="$sub/$nm-data" "$CONTAINER" php -d display_errors=stderr -r "$CIHC_PHP" "$sub/$nm/$PLUGIN" "$sub/$nm-data" "$sub/$nm.json" "$want"'
 LIVE_READ_NEW97='-e DN_DATA_DIR="$PDD_IN" "$CONTAINER" php -d display_errors=stderr -r "$CIHC_PHP" "$sub/$nm/$PLUGIN" "$PDD_IN" "$sub/$nm.json" "$want"'
 PHPERR0="$( [ -e "$DATA/php_error.log" ] && echo present || echo absent)"
+# That copy's code opens the LIVE store through the pin's own SqliteStore::create(), whose runner applies the pin's
+# migrations — 088 among them — to the sandbox's live book and writes its migration.log: both are kept first and put
+# back after, so that the deploy (3) still finds 088 absent and applies it itself (the review of 18 Oct).
+db_keep; MIGLOG97=absent; [ -f "$DATA/migration.log" ] && { cp -p "$DATA/migration.log" "$SB/miglog97.kept"; MIGLOG97=present; }
 M="$(mutant livestore97 "$DEPLOY97" "$LIVE_READ_OLD97" "$LIVE_READ_NEW97")"
 : > "$SB/trap96"
 fresh97; OUT="$(run97 --answer NO --script "$M" --env FAKE_LIVE_TRAP="$SB/trap96")"; T="$(last97)"; trip97; rm -f "$M"
 check "$( [ -e "$SB/trap96.fired" ] && echo fired)$(grep -c '^value ' "$R97/scan/run-$T.hits" | sed 's/^[1-9][0-9]*$/found/')" "firedfound" \
   "2k a copy whose code reads the LIVE store, the trap planted: the trap fires, and the live data folder's webhook secret turns up in /tmp — the observer finds it"
-sqx "DELETE FROM cb_ledger WHERE sr = 'RH96-TRAP-1'" >/dev/null; rm -f "$SB/trap96.fired"
+db_back; if [ "$MIGLOG97" = present ]; then cp -p "$SB/miglog97.kept" "$DATA/migration.log"; else rm -f "$DATA/migration.log"; fi
+rm -f "$SB/miglog97.kept" "$SB/trap96.fired"
 [ "$PHPERR0" = absent ] && rm -f "$DATA/php_error.log"
+O_K297="$(o97)"
+check "$(oj "$O_K297" tables)|$(oj "$O_K297" ledger)|$(data94)" "0/5|absent|$D97" \
+  "…the live book put back as it was before that run — the trap's row, and 088, which the pin's code applied to the LIVE store through its own runner, taken out: 088 absent, its ledger row too, every table as before"
 nogo97 "2k' …and the script refuses it by itself, at A23.1: the live code's figure is not D2 = A's SQL on the copy (caught; the trap's row taken out)" \
   "NO-GO (A23.1): the live code's cash in hand is not D2 = A's SQL on the same copy" "$OUT"
 NOVAULT_OLD97='-e DN_VAULT_FILE="$sub/$nm-vault.json" -e DN_DATA_DIR="$sub/$nm-data"'
@@ -1051,8 +1111,14 @@ sqx "DROP TRIGGER bank_lines_no_delete" >/dev/null
 base_log; OUT="$(run97 --after-only)"
 check "$(failline "$OUT" BA1 "migration 088 is on the live database, but not as the release's 088_bank_statements.sql makes it:" 'triggers 10/11' 'missing: bank_lines_no_delete')$(has "$OUT" '5.18.97 (after): PASSED')" "yesno" \
   "4h one of 088's triggers dropped on the live book: BA1 FAILS, naming it — the runner never applies a recorded migration again"
+OUT="$(run97 --check-bank)"
+check "$(failline "$OUT" CB "088 is on this book, but not as the release's 088 makes it:" 'triggers 10/11' 'missing: bank_lines_no_delete')$(has "$OUT" '5.18.97 (check-bank): PASSED')" "yesno" \
+  "4h' …and --check-bank over the same book FAILS CB, naming the trigger missing — 088 on the book only in part (its FAIL path)"
 db_back
 check "$(oj "$(o97)" triggers)|$(data94)" "11/11|$D97H" "…the book put back: 088's eleven triggers, every row as before"
+touch "$SB/web/.leak_bank97"; base_log; OUT="$(run97 --after-only)"
+check "$(failline "$OUT" BA4 'does not answer with the sign-in page as it must: the screen 200|other|1|00, the export 302|login|0|00')$( [ -e "$SB/web/.leak_bank97" ] && echo unspent || echo spent)$(has "$OUT" '5.18.97 (after): PASSED')" "yesspentno" \
+  "4h'' ECO Bank's screen answering a visitor with no session with a card (the stand-in's .leak_bank97): BA4 FAILS, naming each answer — the export's still the sign-in page"
 fresh97; OUT="$(run97 --check)"
 nogo97 "4i --check with 5.18.97 live: refused — it is stage A before a deploy — and the --after-only printed instead, alone" \
   "--check is stage A before a deploy, and the container already serves $P97 (5.18.97) — run --after-only instead, its own command, alone:" "$OUT" "$(data94)" "$P97"
@@ -1084,6 +1150,13 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.97 (after): PASSED')|$(noteline "$OUT" 
   "5b the --after-only after it PASSES: V3j says the switch is not as the deploy found it — the operator's, never this script's — and that this run left it as it was; the gate again on a new copy"
 check "$(printed97 "$OUT")|$(order97 "$OUT")|$(grep -c "set_config.php --key $BK97 --value 1" <<<"$OUT")|$(figs97 "$R97/line-$T.txt")|$(hits97 "$T")|$(vault97 "$T")" "6|0|0|verdict<check-bank<clear<rollback<putback|0|0|0|$VT97_0>$VT97_0" \
   "…its summary no longer prints the switch command — the switch is on — and the rest as before, in order"
+cfg_keep; D97W="$(data94)"
+printf '%s' "$BK97" > "$SB/web/.flip_switch"
+base_log; OUT="$(run97 --after-only)"
+check "$(failline "$OUT" V3j "ECO Bank's switch, $BK97, CHANGED across this run (before=bk=on/on, after=bk=absent/absent; files/store)")$( [ -e "$SB/web/.flip_switch" ] && echo unspent || echo spent)$(has "$OUT" '5.18.97 (after): PASSED')" "yesspentno" \
+  "5c the switch cleared in both places while an --after-only runs, after its stage A read it (the stand-in's .flip_switch): V3j FAILS, naming both readings — this script never sets it"
+cfg_back
+check "$(both_copies "$BK97")|$(data94)" "11|$D97W" "…the switch put back in both places, as the switch command left it: every table and file as before"
 
 echo; echo "== 97-6. the rollback, run as printed — the switch left on (step 1 skipped); refusals; --check --redeploy; --redeploy =="
 RLINE="$(printed "$OUT97A2" "cd $REPO && bash scripts/deploy-5.18.97.sh --rollback")"
@@ -1095,7 +1168,7 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.97 (rollback): PASSED')$(live)" "0yes$P
 check "$(has "$OUT" "  note  ECO Bank's switch is still set (bk=on/on; files/store): step 1 of the rollback clears it with 5.18.97's own tool, which 5.18.96's refuses")$(sed -n '/^== B\./,/^== V\./p' <<<"$OUT" | grep -cxF "      $EXP_SWCLR97")" "yes1" \
   "…before its question it says the switch is still set and prints step 1, alone, with its own log"
 for l in "ok    container serves $P96 (5.18.96)" "ok    RB the installed manifest says 5.18.96" \
-         "ok    RB all 14 files 5.18.97 changed are 5.18.96's again, byte for byte (sha256); the 11 files it added — ECO Bank's library, screen, post handler, migration 088, a fixture and four tests — stay on disk, reached by nothing" \
+         "ok    RB all 14 files 5.18.97 changed are 5.18.96's again, byte for byte (sha256); the 11 files it added — ECO Bank's library, screen, post handler, migration 088, a fixture and four tests — stay on disk; of them 5.18.96 reads only migrations/088_bank_statements.sql" \
          "ok    RB ECO Bank is gone from the code: no BankGate in the menu, the CEO page, public.php, the post handlers or the routes" \
          "ok    RB 5.18.95's seven fixes are still installed after the rollback" \
          "ok    RB cash in hand reads exactly as before the deploy on a copy of the book" \
@@ -1113,11 +1186,20 @@ check "$(grep -cxF "      $EXP_QCHECK" <<<"$OUT")$(grep -cxF "      $EXP_REDEPLO
   "…it prints the quarantine's --check and --redeploy (RB's note and the summary), each alone with its own log, never the plain deploy or a rollback"
 check "$(python3 "$H97/rh97.py" sheet "$SHEETR" "$O_RB" RB | cut -d/ -f1)|$(stat -c %a "$SHEETR")" "8|600" "…the rollback's own cash sheet, 0600: D2 = A on a copy, this rehearsal's own SQL in every cell"
 check "$(installed97 "$P96")$(inst_ver)$(for f in $ADDED97; do [ -f "$PD/$f" ] && echo kept; done | grep -c kept)" "05.18.9611" "every changed file as 5.18.96 has it, manifest 5.18.96; the eleven added files stay on disk"
-check "$(printf '%s\n' "$RLOG" | grep -c .)|$(stat -c %a "$RLOG" 2>/dev/null)|$(grep -c '5.18.97 (rollback): PASSED' "$RLOG" 2>/dev/null)|$(sha256sum "$STATE97" | cut -c1-64)|$(ls "$OUT97"/rollback-state-*.env 2>/dev/null | grep -c .)" "1|600|1|$S97SHA|1" \
-  "…its own log, 0600; the deploy's state file untouched — the rollback's record is a file of its own"
+check "$(printf '%s\n' "$RLOG" | grep -c .)|$(stat -c %a "$RLOG" 2>/dev/null)|$(grep -c '5.18.97 (rollback): PASSED' "$RLOG" 2>/dev/null)|$(sha256sum "$STATE97" | cut -c1-64)|$(ls "$OUT97"/rollback-state-*.env 2>/dev/null | grep -c .)|$(grep -c "^RB_COPY_AT=$(stat -c %Y "$PD/public.php")\$" "$OUT97"/rollback-state-*.env 2>/dev/null)" "1|600|1|$S97SHA|1|1" \
+  "…its own log, 0600; the deploy's state file untouched — the rollback's record is a file of its own, holding its copy's time (RB_COPY_AT, as stamp_copy gave public.php) for A14 of a later deploy"
 check "$(data94)$(ledger95)$(kept_state)$(oldname)$(sha256sum "$QREC" | cut -c1-16)$(host_code97)$(left_tmp97)|$(figs97 "$R97/line-$TR.txt" "$RLOG")|$(bankhits97 "$R97/line-$TR.txt" "$RLOG")|$(hits97 "$TR")|$(vault97 "$TR")|$(both_copies "$BK97")" \
       "$DR0$LEDGER97R${KEPT97}0${QREC97}0${TMP97}|0|0|0|$VT97_0>$VT97_0|11" \
   "the rollback changed no data — 088's tables stay, the switch stays set — not the ledger and not the quarantine; no copy left, no figure printed; the observers quiet"
+fresh97; OUT="$(run97 --check --redeploy)"
+nogo97 "6a' --check --redeploy right after the rollback, before the quarantine's --check its runbook asks for: NO-GO at A14 — the rollback's own copy came after the newest passing --check (rule 3)" \
+  "NO-GO (A14): a rollback of 5.18.97 by this script copied the plugin at" "$OUT" "$DR0"
+check "$(has "$OUT" 'after the newest passing --check of the quarantine, begun')$(has "$OUT" "($(basename "$OUT97")/rollback-state-")$(grep -cxF "      $EXP_QCHECK" <<<"$OUT")" "yesyes1" \
+  "…naming the rollback's own record, and printing the quarantine's --check on its own line, with its own log"
+A14OWN_OLD97='for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do'
+M="$(mutant a14own97 "$DEPLOY97" "$A14OWN_OLD97" 'for f in /rh97-none; do')"
+fresh97; S0="$(states97)"; OUT="$(run97 --check --redeploy --script "$M")"; rm -f "$M"
+check "$(checkgo97 "$OUT")" "yesyesnono0|0|$S0" "6a'' a copy blind to this script's own copies says GO over the same rollback (caught)"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after the rollback, as RB asks: PASSED"
 QREC97="$(sha256sum "$QREC" | cut -c1-16)"; KEPT97="$(kept_state)"
@@ -1198,6 +1280,17 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.97 (deploy): PASSED')$(live)|$(okline "
       "0yes${P97}|yesyesyes|$(oj "$O_KR" rows)" \
   "8e --redeploy, DEPLOY typed: PASSED — BR2 088 intact and its NOTE with the rows kept; BA1 every kept row unchanged by the deploy"
 check "$(order97 "$OUT")|$(grep -cxF "      $EXP_SWON97" <<<"$OUT")" "verdict<switch-on<check-bank<clear<rollback<putback|1" "…the switch off again: its command printed once more, in order"
+D97L="$(data94)"; db_keep
+TRG97="$(sq "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'bank_lines_no_delete'")"
+sqx "DROP TRIGGER bank_lines_no_delete" >/dev/null; sqx "DELETE FROM bank_statement_lines WHERE rowid = (SELECT MAX(rowid) FROM bank_statement_lines)" >/dev/null; sqx "$TRG97" >/dev/null
+O_L97="$(o97)"; LN_KR97="$(oj "$O_KR" rows | cut -d: -f4)"
+check "$(oj "$O_L97" triggers)|$(oj "$O_L97" trigmissing)|$(oj "$O_L97" rows | cut -d: -f4)" "11/11|-|$(( LN_KR97 - 1 ))" \
+  "8f one kept statement line deleted on the live book, its no-delete trigger dropped and put back with its own SQL text: 088 whole, one line fewer"
+base_log; OUT="$(run97 --after-only)"
+check "$(failline "$OUT" BA1 'migration 088 is recorded but not as it must be:' "fewer-rows-than-the-deploy-found($(oj "$O_KR" rows)→$(oj "$O_L97" rows))")$(has "$OUT" '5.18.97 (after): PASSED')" "yesno" \
+  "…an --after-only over it FAILS BA1: fewer rows than the deploy's stage A found — a kept statement is never lost"
+db_back
+check "$(oj "$(o97)" rows)|$(oj "$(o97)" triggers)|$(data94)" "$(oj "$O_KR" rows)|11/11|$D97L" "…the book put back: every kept line, 088's eleven triggers, every table as before"
 
 echo; echo "== 97-9. a rollback whose copy leaves 5.18.97's menu behind; a copy blind to it; deployed again =="
 git -C "$REPO" show "$P97:$P/includes/navigation.php" > "$SB/nav97.left"; chmod 644 "$SB/nav97.left"
@@ -1220,6 +1313,18 @@ check "$(installed97 "$P96")$(stat -c '%u:%g' "$PD/includes/navigation.php")" "0
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check: PASSED"
 QREC97="$(sha256sum "$QREC" | cut -c1-16)"; KEPT97="$(kept_state)"
+D97P="$(data94)"; O_P97="$(o97)"; db_keep
+touch "$SB/web/.del_line97"
+fresh97; OUT="$(run97 --answer DEPLOY --redeploy)"
+check "$( [ -e "$SB/web/.del_line97" ] && echo unspent || echo spent)|$(live)|$(failline "$OUT" BA1 'migration 088 is recorded but not as it must be:' "kept-rows-changed($(oj "$O_P97" rows)→")$(has "$OUT" '5.18.97 (deploy): PASSED')" "spent|$P97|yesno" \
+  "9c' a kept statement line deleted while a --redeploy runs, after its stage A, its no-delete trigger dropped and put back as it was (the stand-in's .del_line97): BA1 FAILS — the kept rows changed by the deploy"
+fresh97; OUT="$(run97 --answer ROLLBACK --rollback)"
+check "$(live)|$(has "$OUT" '5.18.97 (rollback): PASSED')" "$P96|yes" "…rolled back again: 5.18.96 serving"
+OUT="$(qrun -- --check)"
+check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after that rollback: PASSED"
+QREC97="$(sha256sum "$QREC" | cut -c1-16)"; KEPT97="$(kept_state)"
+db_back
+check "$(oj "$(o97)" rows)|$(data94)" "$(oj "$O_P97" rows)|$D97P" "…the book put back as before that --redeploy: every kept line, every table as before"
 fresh97; OUT="$(run97 --answer DEPLOY --redeploy)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.97 (deploy): PASSED')$(live)$(installed97 "$P97")$(inst_ver)|$(oj "$(o97)" rows)" "0yes${P97}05.18.97|$(oj "$O_KR" rows)" "9c deployed again with --redeploy: PASSED, $P97 serving, every file as the pin has it, every kept row unchanged"
 
@@ -1236,7 +1341,7 @@ check "$( [ -f "$SB/bad-runs" ] && tr '\n' ' ' < "$SB/bad-runs" )" "" "every run
 OUT="$(run97 --after-only --rehearsal-unknown-option)"
 check "$(has "$OUT" 'unknown option: --rehearsal-unknown-option')$( [ -s "$SB/bad-runs" ] && echo recorded)" "yesrecorded" "control on the control: a run given an option the script does not know is recorded as such"
 rm -f "$SB/bad-runs"
-check "$(ls -A "$SB/web" | grep -c '^\.add_receipt97$\|^\.left97$\|^\.add_ledger$\|^\.add_receipt$\|^\.left96$')$(ls "$SB"/trap96* 2>/dev/null | grep -c .)" "00" "every trigger and trap the rehearsal planted was spent"
+check "$(ls -A "$SB/web" | grep -c '^\.add_receipt97$\|^\.left97$\|^\.add_ledger$\|^\.add_receipt$\|^\.left96$\|^\.leak_bank97$\|^\.del_line97$\|^\.flip_switch$')$(ls "$SB"/trap96* 2>/dev/null | grep -c .)" "00" "every trigger and trap the rehearsal planted was spent"
 # The observers over every run of the 5.18.97 script, but those that trip one on purpose (recorded as they ran).
 OBS_BAD=0; OBS_N=0
 for rec in "$R97"/exec/run-*.rec; do
