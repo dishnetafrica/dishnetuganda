@@ -12087,6 +12087,15 @@ prints a figure or a secret, and the terminal held none; the cash sheet stayed o
   ECO Bank UGX and ECO BANK USD"* — a menu item **ECO Bank** directly below Cashbook, with two cards, ECO BANK UGX and
   ECO BANK USD, each the balance from Ecobank's own statement; the Cashbook keeps physical cash only. Taken up with the
   Bank screen (5.18.97) and the Cashbook's physical-cash list as one change.
+- **The design that follows (18 Oct, v2), and the operator's three answers.** Two releases: **5.18.97 — ECO Bank**, a
+  menu item directly below Cashbook (administrators, Uganda, once switched on), two dark-grey cards ECO BANK UGX and
+  ECO BANK USD each showing Ecobank's own available balance after its last kept statement line, with its own date and
+  no total, the statement lines below, nothing on the Cashbook changed; then **5.18.98 — the Cashbook physical cash
+  only**, the Ecobank, stock and supplier rows moved to a read-only tab "🏦 Bank & other accounts", cash in hand
+  unchanged. Answers: **Q15** *"Yes, add it"* — ECO Bank also on the CEO page's Quick Links after Cashbook, an
+  administrator's only menu on a phone; **Q1** *"Leave them, count them"* — bank money recorded with no account stays
+  on the cash list and in cash in hand, the deploy printing counts only; **Q2** *"ECO Bank first"* — 5.18.98's deploy
+  refuses until both ECO Bank cards show a figure.
 - **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
   (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
   assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.
