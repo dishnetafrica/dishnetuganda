@@ -26,14 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bk_action'])) {
     $_bkpBack = '?page=dashboard&tab=bank';
     $_bkpAct = is_string($_POST['bk_action']) ? $_POST['bk_action'] : '';
     if (!in_array($_bkpAct, ['check', 'keep', 'discard'], true)) {
-        flash('That is not an action of the Bank screen. Nothing was changed.', 'danger');
+        flash('That is not an action of ECO Bank. Nothing was changed.', 'danger');
         redirect($_bkpBack);
     }
 
     require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
     $_bkpUser = $auth->requireLogin();
     if (!BankGate::open($dataDir ?? null)) {
-        flash('The Bank screen is not available on this installation.', 'danger');
+        flash('ECO Bank is not available on this installation.', 'danger');
         redirect('?page=dashboard');
     }
     $_bkpMe = BankGate::allows('bank.import', $store, is_array($_bkpUser) ? $_bkpUser : []);
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bk_action'])) {
 
     require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
     if (!csrfCheck() || CustomerSession::crossSite() || !BankGate::fromOwnPage('POST')) {
-        flash('The security check failed, so nothing was changed. Open the Bank screen again and retry.', 'danger');
+        flash('The security check failed, so nothing was changed. Open ECO Bank again and retry.', 'danger');
         redirect($_bkpBack);
     }
 
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bk_action'])) {
         $_bkpStore = new BankStatementStore($store->getPdo(), (string)$dataDir,
             dn_book_currencies(PluginConfig::read(dirname(__DIR__, 2), (string)$dataDir)));
         if (!$_bkpStore->ready()) {
-            flash('The Bank screen is not ready on this installation. Nothing was kept.', 'danger');
+            flash('ECO Bank is not ready on this installation. Nothing was kept.', 'danger');
             redirect($_bkpBack);
         }
         $_bkpAcct = $_bkpNum('bk_acct');
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bk_action'])) {
         }
         redirect($_bkpTo . '&bk_check=' . $_bkpChk);
     } catch (\Throwable $_bkpE) {
-        flash('The Bank screen could not finish this. Nothing was kept. Report it.', 'danger');
+        flash('ECO Bank could not finish this. Nothing was kept. Report it.', 'danger');
         redirect($_bkpBack);
     }
 }

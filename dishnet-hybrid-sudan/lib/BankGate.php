@@ -14,6 +14,9 @@ declare(strict_types=1);
  *                         or a null read is a refusal.
  *   fromOwnPage($method)  true only when the browser shows the request came from this site's own page: positive
  *                         evidence, never the mere absence of a cross-site sign (BK-SEC-1, BK-SEC-2).
+ *   showLink($dataDir, …) whether a link to ECO Bank is shown (5.18.97, the operator, 18 Oct): true exactly when the tab
+ *                         would open for this visitor — the dispatcher's '*admin' on the session copy, then open(), then
+ *                         allows('bank.view'). Every link calls it with the same text and decides nothing of its own.
  *
  * Why PluginConfig::read() and not public.php's $config: that one is the store copy, which lib/PluginConfig.php documents
  * can silently diverge from the files. read() is "the same configuration load() returns, without load()'s side effects":
@@ -23,10 +26,12 @@ declare(strict_types=1);
  * Every Bank entry point signs the visitor in, then calls open() and then allows(), before anything else: the tab, the
  * POST handler, the export (the sign-in first, so a visitor who is not signed in learns nothing about the switch or the
  * tenant: BK-SEC-4). The POST handler and the export also require fromOwnPage() before they read or write anything.
- * GRANTS is the whole permission model of v1 — admins only (SPEC-bank O1). Widening it later is one entry here plus an
- * audited grant list, not a change at any caller. RBAC ($can) is not used: its fixed list maps no bank.* key.
+ * GRANTS is the whole permission model of v1 — admins only (SPEC-bank O1). Widening it later (Q11) is three lines — the
+ * entry here, public.php's $_tabPerms['bank'] = '*admin' and showLink()'s first term — plus an audited grant list, not a
+ * change at any caller. RBAC ($can) is not used: its fixed list maps no bank.* key.
  *
- * PHP 7.4. Pure reads: nothing here writes a file, a row or a log line.
+ * PHP 7.4. Pure reads: nothing here writes a file or a row. PluginConfig::read() may write one log line per request for an
+ * unreadable configuration file, and ConfigVault::fill one on an exception.
  */
 final class BankGate
 {
@@ -89,6 +94,19 @@ final class BankGate
         if (empty($fresh['is_active'])) return null;
         if (self::GRANTS[$key] === 'admin' && empty($fresh['is_admin'])) return null;
         return $fresh;
+    }
+
+    /**
+     * Whether a link to ECO Bank is shown: the sidebar, the CEO page's Quick Links (Q15) and the Cashbook's "Bank & other
+     * accounts" tab (5.18.98). True exactly when the tab would open for this visitor:
+     *   - the dispatcher's own check, $_tabPerms['bank'] = '*admin', against the SESSION copy's is_admin — what
+     *     public.php:2216 reads into $isAdmin. Never a page's own $isAdmin: cashbook.php:7 widens it to accountants;
+     *   - then the tab's two: open() over the configuration FILES, and allows('bank.view') on the FRESH staff record.
+     * Never the store copy of the settings. Cheapest first: a session that is not an administrator's reads nothing.
+     */
+    public static function showLink(?string $dataDir, $store, array $sessionRetailer): bool
+    {
+        return !empty($sessionRetailer['is_admin']) && self::open($dataDir) && self::allows('bank.view', $store, $sessionRetailer) !== null;
     }
 
     /**

@@ -161,6 +161,12 @@ final class BankStatementStore
         return null;
     }
 
+    /** Whether the book's name for an account says Ecobank: the cards' "ECO BANK <CUR>" heading, and 5.18.98's R3. */
+    public static function ecobankNamed(string $name): bool
+    {
+        return preg_match('/eco[\s-]*bank/i', $name) === 1;
+    }
+
     /** The account's confirmed Ecobank link, or null before its first kept file. */
     public function profile(int $accountId): ?array
     {

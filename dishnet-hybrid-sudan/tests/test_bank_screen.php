@@ -500,7 +500,7 @@ t("the month's file name", (string)($x2[3]['content-disposition'] ?? ''), 'attac
 // attachment, and the staff cookie is SameSite=None. A request another site started must be refused before either.
 $expN = function () use ($s): int { return bk_n($s, "SELECT COUNT(*) n FROM bank_line_events WHERE event = 'lines_exported'"); };
 $xq = "page=dashboard&tab=bank&bk_acct={$U}&bk_export=csv";
-$xSec = 'The security check failed, so nothing was sent. Open the Bank screen and export from there.';
+$xSec = 'The security check failed, so nothing was sent. Open ECO Bank and export from there.';
 foreach ([['an <img> on another site', ['Sec-Fetch-Site: cross-site', 'Sec-Fetch-Mode: no-cors', 'Sec-Fetch-Dest: image', 'Referer: https://rh-attacker.example.test/page']],
           ['a top-level navigation from another site', ['Sec-Fetch-Site: cross-site', 'Sec-Fetch-Mode: navigate', 'Sec-Fetch-Dest: document']],
           ['a sibling host (Sec-Fetch-Site same-site)', ['Sec-Fetch-Site: same-site']],
@@ -781,7 +781,7 @@ echo "\nJ. CSRF and cross-site posts\n";
 $okFile = [g_file(array_map(function ($l) { $l['Account'] = '0000000003'; return $l; }, array_slice($HM, 0, 12))), BK_FNAME];
 $host = (string)parse_url($s->base, PHP_URL_HOST) . ':' . (string)parse_url($s->base, PHP_URL_PORT);
 $cn = bk_counts($s);
-$sec = 'danger: The security check failed, so nothing was changed. Open the Bank screen again and retry.';
+$sec = 'danger: The security check failed, so nothing was changed. Open ECO Bank again and retry.';
 $f = $post('boss', ['_csrf' => null, 'cb_action' => 'x', 'bk_acct' => (string)$SP], $okFile);
 t('no token, with cb_action=x (the global gate skips it): refused by the handler, nothing written', [$f['flash'], bk_counts($s)], [$sec, $cn]);
 $f = $post('boss', ['bk_acct' => (string)$SP], $okFile, ['Sec-Fetch-Site: cross-site']);
@@ -818,7 +818,7 @@ foreach ([['an older browser\'s own Origin', ['Origin: http://' . $host]], ['an 
         ['success: The file passed every check. Nothing is kept until you press Keep.', 1, 'success: Discarded. Nothing was kept from this file.']);
 }
 $bad = $post('boss', ['bk_action' => 'erase', 'bk_acct' => (string)$SP]);
-t('an action that is not the screen\'s is refused', $bad['flash'], 'danger: That is not an action of the Bank screen. Nothing was changed.');
+t('an action that is not the screen\'s is refused', $bad['flash'], 'danger: That is not an action of ECO Bank. Nothing was changed.');
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nK. The gating matrix\n";
@@ -828,7 +828,7 @@ $setCfg = function (array $over) use ($s): void {
     $s->store()->save('kyc_config.json', $cfg);
 };
 $tabDeny = '<div style="color:#b91c1c;padding:24px;font-weight:600;">Access denied.</div>';
-$gateOff = '<div style="padding:24px;color:#6b7280;">The Bank screen is not available on this installation.</div>';
+$gateOff = '<div style="padding:24px;color:#6b7280;">ECO Bank is not available on this installation.</div>';
 $matrix = function (string $label, string $who, string $tabWant, string $flashWant, string $exportWant) use ($s, $page, $post, $okFile, $SP, $U): void {
     $cn = bk_counts($s);
     $h = $page($who, 'page=dashboard&tab=bank&bk_acct=' . $U);
@@ -858,10 +858,10 @@ is_(bk_seg($page('boss2', 'page=dashboard&tab=bank')) !== '', 'control: the seco
 $s->update($s->ids['boss2'], ['is_admin' => false, 'role' => 'accountant']);
 $matrix('an admin demoted inside the session window (the session copy still says admin)', 'boss2', $tabDeny, 'danger: Access denied.', 'Access denied.');
 $setCfg(['bank_screen_enabled' => '0']);
-$matrix('Uganda with the switch off', 'boss', $gateOff, 'danger: The Bank screen is not available on this installation.', 'The Bank screen is not available on this installation.');
+$matrix('Uganda with the switch off', 'boss', $gateOff, 'danger: ECO Bank is not available on this installation.', 'ECO Bank is not available on this installation.');
 $anon($s, 'Uganda with the switch off', $loginTok);
 $setCfg(['bank_screen_enabled' => '1', 'cashbook_currencies' => 'UGX,USD,SSP']);
-$matrix('a Uganda book where SSP is bookable', 'boss', $gateOff, 'danger: The Bank screen is not available on this installation.', 'The Bank screen is not available on this installation.');
+$matrix('a Uganda book where SSP is bookable', 'boss', $gateOff, 'danger: ECO Bank is not available on this installation.', 'ECO Bank is not available on this installation.');
 $anon($s, 'a Uganda book where SSP is bookable', $loginTok);
 $setCfg([]);
 is_(bk_seg($page('boss', 'page=dashboard&tab=bank')) !== '', 'control: the switch back on, the screen is back');
@@ -983,10 +983,10 @@ try {
 $cnO = bk_n($s, 'SELECT COUNT(*) n FROM bank_checks');
 $hO = $page('boss', 'page=dashboard&tab=bank');
 $gO = bk_seg($hO);
-is_(strpos($gO, 'The Bank screen is not ready on this installation.') !== false && strpos($gO, 'data-bk-open') === false && strpos($gO, 'bk-chip') === false,
+is_(strpos($gO, 'ECO Bank is not ready on this installation.') !== false && strpos($gO, 'data-bk-open') === false && strpos($gO, 'bk-chip') === false,
     'the screen fails closed: "not ready", no account, no upload');
 $pO = $post('boss', ['bk_acct' => (string)$U], [g_file(array_slice($H, 0, 5)), BK_FNAME]);
-t('a check is refused and writes nothing', [$pO['flash'], bk_n($s, 'SELECT COUNT(*) n FROM bank_checks')], ['danger: The Bank screen is not ready on this installation. Nothing was kept.', $cnO]);
+t('a check is refused and writes nothing', [$pO['flash'], bk_n($s, 'SELECT COUNT(*) n FROM bank_checks')], ['danger: ECO Bank is not ready on this installation. Nothing was kept.', $cnO]);
 try {
     $pdo = bk_pdo($s);
     $pdo->exec('PRAGMA legacy_alter_table = ON');
@@ -1018,9 +1018,9 @@ $ssCsrf = preg_match('/name="_csrf" value="([^"]+)"/', $ss->page('boss', 'page=d
 $hs = $ss->page('boss', 'page=dashboard&tab=bank');
 is_(bk_seg($hs) === '' && strpos($hs, $gateOff) !== false, 'an admin on South Sudan (the switch set) gets the fixed refusal and no screen');
 $r = bk_req($ss, 'POST', 'page=dashboard&tab=bank', 'boss', ['_csrf' => $ssCsrf, 'bk_action' => 'check', 'bk_acct' => '1'], [], [g_file(array_slice($H, 0, 5)), BK_FNAME]);
-t('a POST is refused with fixed text', bk_flash_of($ss->page('boss', ltrim($r[2], '?'))), 'danger: The Bank screen is not available on this installation.');
+t('a POST is refused with fixed text', bk_flash_of($ss->page('boss', ltrim($r[2], '?'))), 'danger: ECO Bank is not available on this installation.');
 $x = bk_req($ss, 'GET', 'page=dashboard&tab=bank&bk_acct=1&bk_export=csv', 'boss');
-t('the export is refused', [$x[0], trim($x[1])], [403, 'The Bank screen is not available on this installation.']);
+t('the export is refused', [$x[0], trim($x[1])], [403, 'ECO Bank is not available on this installation.']);
 $anon($ss, 'South Sudan', $ssCsrf);
 t('088\'s five tables exist on South Sudan and stay empty', bk_counts($ss), ['bank_account_profiles' => 0, 'bank_checks' => 0, 'bank_statements' => 0, 'bank_statement_lines' => 0, 'bank_line_events' => 0]);
 is_(!is_dir($ss->data . '/bank_statements'), 'no statement folder was made on South Sudan');
@@ -1089,11 +1089,11 @@ if ($withMutants) {
         ['fromOwnPage() passing a POST that shows nothing', [[$GT, "        return \$get;\n", "        return true;\n"]]],
         ['fromOwnPage() passing a sibling host (same-site)', [[$GT, "if (\$sfs !== '') return \$sfs === 'same-origin' || (\$get && \$sfs === 'none');",
             "if (\$sfs !== '') return \$sfs === 'same-origin' || \$sfs === 'same-site' || (\$get && \$sfs === 'none');"]]],
-        ['the export without fromOwnPage() (BK-SEC-1)', [[$RT, "    if (!BankGate::fromOwnPage('GET')) \$_bkxRefuse(403, 'The security check failed, so nothing was sent. Open the Bank screen and export from there.');\n", '']]],
-        ['the export\'s gate before the sign-in (BK-SEC-4)', [[$RT, "    \$_bkxUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'The Bank screen is not available on this installation.');\n",
-            "    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'The Bank screen is not available on this installation.');\n    \$_bkxUser = \$auth->requireLogin();\n"]]],
-        ['the handler\'s gate before the sign-in (BK-SEC-4)', [[$PB, "    \$_bkpUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('The Bank screen is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n",
-            "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('The Bank screen is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]]],
+        ['the export without fromOwnPage() (BK-SEC-1)', [[$RT, "    if (!BankGate::fromOwnPage('GET')) \$_bkxRefuse(403, 'The security check failed, so nothing was sent. Open ECO Bank and export from there.');\n", '']]],
+        ['the export\'s gate before the sign-in (BK-SEC-4)', [[$RT, "    \$_bkxUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'ECO Bank is not available on this installation.');\n",
+            "    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'ECO Bank is not available on this installation.');\n    \$_bkxUser = \$auth->requireLogin();\n"]]],
+        ['the handler\'s gate before the sign-in (BK-SEC-4)', [[$PB, "    \$_bkpUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n",
+            "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]]],
         ['BW31 $_tabPerms[\'bank\'] left out', [[$PUB, "    'bank'                 => '*admin',                               // 5.18.97: never absent (absent = any signed-in user)\n", '']]],
         ['BW32 the card read from cb_ledger', [[$TAB, '$_bkLast = $_bkStore->latestLine($_bkId);',
             "\$_bkLast = \$_bkStore->latestLine(\$_bkId); if (\$_bkLast !== null) { \$_bkLast['running_units'] = (int)round(100 * (float)\$store->getPdo()->query('SELECT COALESCE(SUM(CASE WHEN direction = \\'in\\' THEN amount ELSE -amount END), 0) FROM cb_ledger WHERE account_id = ' . \$_bkId)->fetchColumn()); }"]]],

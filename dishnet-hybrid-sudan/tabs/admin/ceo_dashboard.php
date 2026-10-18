@@ -500,6 +500,12 @@ if($fieldExposure>2000)   $alerts[]=['💼',dn_cur($config) . number_format($fie
     <a href="?page=dashboard&tab=handover_queue">💸 Handover Queue</a>
     <a href="?page=dashboard&tab=field_handover">⛓ Field Chain</a>
     <a href="?page=dashboard&tab=cashbook">📒 Cashbook</a>
+<?php // 5.18.97 (Q15): ECO Bank right after the Cashbook, by the sidebar's one gate (BankGate::showLink). On a phone this
+      // is an administrator's only menu. A fixed label: no figure.
+      require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
+      if (BankGate::showLink($dataDir ?? null, $store ?? null, is_array($retailer ?? null) ? $retailer : [])): ?>
+    <a href="?page=dashboard&tab=bank">🏦 ECO Bank</a>
+<?php endif; ?>
     <a href="?page=dashboard&tab=all_collections">💰 Collections</a>
     <a href="?page=dashboard&tab=all_leads">🎯 Leads</a>
     <a href="?page=dashboard&tab=fiber_pipeline">🔌 Fiber</a>

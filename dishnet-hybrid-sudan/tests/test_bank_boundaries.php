@@ -8,9 +8,10 @@ declare(strict_types=1);
  * includes/post/post_bank.php and the export hunk of includes/routes.php. The release's base is 419e2ffd (P3b, 5.18.96),
  * read from Git; when Git cannot supply it the comparisons are skips, never passes.
  *
- *   A  the sidebar and every file the release does not touch are byte-identical to 419e2ffd; the four shared files it
- *      edits differ only by insertions, exactly the hunks it names (and the export hunk sits after the Cashbook export);
- *      manifest.json differs by one line, its version, 5.18.96 → 5.18.97
+ *   A  every file the release does not touch is byte-identical to 419e2ffd; the six shared files it edits (the sidebar
+ *      and the CEO page among them, each with its one ECO Bank link) differ only by insertions, exactly the hunks it
+ *      names (and the export hunk sits after the Cashbook export); manifest.json differs by one line, its version,
+ *      5.18.96 → 5.18.97
  *   B  nothing outside the module (and the $forbidden list, and migration 088) names the five bank_* tables
  *   C  the module writes no book and never reads cb_ledger: no Cashbook writer, no FinAudit, no BankImport, no
  *      BankStatement::, no "new CashbookService", no INSERT/UPDATE/DELETE on a cb_ table; its only SQL on an existing
@@ -110,8 +111,8 @@ function idents_of(array $toks): array
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-echo "A. The sidebar and the untouched files equal 419e2ffd; the shared files differ only by the release's hunks\n";
-$UNTOUCHED = ['includes/navigation.php', 'includes/styles.php', 'tabs/accounts/cashbook.php', 'lib/CashbookService.php', 'lib/BankStatement.php',
+echo "A. The untouched files equal 419e2ffd; the shared files (the sidebar and the CEO page among them) differ only by the release's hunks\n";
+$UNTOUCHED = ['includes/styles.php', 'tabs/accounts/cashbook.php', 'lib/CashbookService.php', 'lib/BankStatement.php',
     'lib/BankImport.php', 'tools/bank_statement.php', 'tests/test_bank_statement.php', 'lib/GoogleDriveBackup.php', 'main.php', 'includes/post/post_sync.php',
     'lib/SqliteStore.php', 'lib/MigrationRunner.php', 'tabs/admin/photo_manager.php', 'includes/post/post_cashbook.php', 'lib/StaffJobsGate.php',
     'lib/PluginConfig.php', 'lib/currency.php'];
@@ -122,7 +123,7 @@ if (!$gitOk) {
 } else {
     foreach ($UNTOUCHED as $rel) {
         $b = base_of($rel);
-        is_($b !== null && hash('sha256', $b) === hash('sha256', src($rel)), "{$rel} is byte-identical to " . BK_BASE . ($rel === 'includes/navigation.php' ? ' (the sidebar: no menu link, O9)' : ''));
+        is_($b !== null && hash('sha256', $b) === hash('sha256', src($rel)), "{$rel} is byte-identical to " . BK_BASE);
     }
     // manifest.json: the release's version and nothing else — 419e2ffd's bytes with the one version line moved to 5.18.97.
     $mb = (string)base_of('manifest.json');
@@ -131,7 +132,8 @@ if (!$gitOk) {
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
         [1, true, '5.18.97']);
     // The shared files: every line of the base is still there, in order; the extra lines are the release's, and only these.
-    $SHARED = ['public.php' => 4, 'includes/routes.php' => 78, 'tools/set_config.php' => 3, 'includes/post_handlers.php' => 1];   // routes: +4 for BK-SEC-1/4
+    $SHARED = ['public.php' => 4, 'includes/routes.php' => 78, 'tools/set_config.php' => 3, 'includes/post_handlers.php' => 1,   // routes: +4 for BK-SEC-1/4
+        'includes/navigation.php' => 9, 'tabs/admin/ceo_dashboard.php' => 6];   // 5.18.97 (the operator, 18 Oct; Q15): one ECO Bank link block each
     foreach ($SHARED as $rel => $want) {
         $base = explode("\n", (string)base_of($rel));
         $cur  = explode("\n", src($rel));
@@ -362,20 +364,20 @@ if ($withMutants) {
         ['(float) in the store', [$ST, "\$in = (int)\$r[3]; \$out = (int)\$r[4]; \$closing = (int)\$last['running_units'];", "\$in = (int)(float)\$r[3]; \$out = (int)\$r[4]; \$closing = (int)\$last['running_units'];"]],
         ['an fputcsv with the default escape', [$RT, "            \$_bkxText((string)\$_bkxL['status'] === 'imported' ? 'Not compared' : 'Unknown status'),\n        ], ',', '\"', '');",
             "            \$_bkxText((string)\$_bkxL['status'] === 'imported' ? 'Not compared' : 'Unknown status'),\n        ]);"]],
-        ['error_log( in the handler', [$PB, "        flash('The Bank screen could not finish this. Nothing was kept. Report it.', 'danger');",
-            "        error_log('bank: ' . \$_bkpE->getMessage());\n        flash('The Bank screen could not finish this. Nothing was kept. Report it.', 'danger');"]],
+        ['error_log( in the handler', [$PB, "        flash('ECO Bank could not finish this. Nothing was kept. Report it.', 'danger');",
+            "        error_log('bank: ' . \$_bkpE->getMessage());\n        flash('ECO Bank could not finish this. Nothing was kept. Report it.', 'danger');"]],
         ['BW21 the folder under uploads/', [$ST, "public const DIR       = 'bank_statements';", "public const DIR       = 'uploads/bank_statements';"]],
         ['the handler reads the file\'s name', [$PB, "            \$_bkpUp = BankStatementStore::uploaded(", "            \$_bkpName = (string)(\$_FILES['bk_file']['name'] ?? '');\n            \$_bkpUp = BankStatementStore::uploaded("]],
-        ['the tab without BankGate::open()', [$TAB, "if (!BankGate::open(\$dataDir ?? null)) {\n    echo '<div style=\"padding:24px;color:#6b7280;\">The Bank screen is not available on this installation.</div>';",
-            "if (false) {\n    echo '<div style=\"padding:24px;color:#6b7280;\">The Bank screen is not available on this installation.</div>';"]],
+        ['the tab without BankGate::open()', [$TAB, "if (!BankGate::open(\$dataDir ?? null)) {\n    echo '<div style=\"padding:24px;color:#6b7280;\">ECO Bank is not available on this installation.</div>';",
+            "if (false) {\n    echo '<div style=\"padding:24px;color:#6b7280;\">ECO Bank is not available on this installation.</div>';"]],
         ['the export without BankGate::allows()', [$RT, "    \$_bkxMe = BankGate::allows('bank.view', \$store, is_array(\$_bkxUser) ? \$_bkxUser : []);", '    $_bkxMe = $_bkxUser;']],
         ['the handler without crossSite()', [$PB, "if (!csrfCheck() || CustomerSession::crossSite() || !BankGate::fromOwnPage('POST')) {", "if (!csrfCheck() || !BankGate::fromOwnPage('POST')) {"]],
         ['the handler without fromOwnPage()', [$PB, "if (!csrfCheck() || CustomerSession::crossSite() || !BankGate::fromOwnPage('POST')) {", 'if (!csrfCheck() || CustomerSession::crossSite()) {']],
-        ['the export without fromOwnPage()', [$RT, "    if (!BankGate::fromOwnPage('GET')) \$_bkxRefuse(403, 'The security check failed, so nothing was sent. Open the Bank screen and export from there.');\n", '']],
-        ['the export asking the gate before the sign-in', [$RT, "    \$_bkxUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'The Bank screen is not available on this installation.');\n",
-            "    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'The Bank screen is not available on this installation.');\n    \$_bkxUser = \$auth->requireLogin();\n"]],
-        ['the handler asking the gate before the sign-in', [$PB, "    \$_bkpUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('The Bank screen is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n",
-            "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('The Bank screen is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]],
+        ['the export without fromOwnPage()', [$RT, "    if (!BankGate::fromOwnPage('GET')) \$_bkxRefuse(403, 'The security check failed, so nothing was sent. Open ECO Bank and export from there.');\n", '']],
+        ['the export asking the gate before the sign-in', [$RT, "    \$_bkxUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'ECO Bank is not available on this installation.');\n",
+            "    if (!BankGate::open(\$dataDir ?? null)) \$_bkxRefuse(403, 'ECO Bank is not available on this installation.');\n    \$_bkxUser = \$auth->requireLogin();\n"]],
+        ['the handler asking the gate before the sign-in', [$PB, "    \$_bkpUser = \$auth->requireLogin();\n    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n",
+            "    if (!BankGate::open(\$dataDir ?? null)) {\n        flash('ECO Bank is not available on this installation.', 'danger');\n        redirect('?page=dashboard');\n    }\n    \$_bkpUser = \$auth->requireLogin();\n"]],
         ['BW34 BankGate on the store copy', [$GT, 'self::$cfg[$dataDir] = PluginConfig::read(dirname(__DIR__), $dataDir);', "self::\$cfg[\$dataDir] = SqliteStore::create(\$dataDir)->load('kyc_config.json');"]],
         ['the neutraliser without @', [$RT, "strpos(\"=+-@\\t\\r\", \$s[0])", "strpos(\"=+-\\t\\r\", \$s[0])"]],
         ['a changed line in public.php beside the hunks', ['public.php', "    'distributors' => '*admin',", "    'distributors' => null,"]],

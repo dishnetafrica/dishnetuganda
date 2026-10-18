@@ -343,8 +343,8 @@ if (($tab ?? '') === 'bank' && ($_GET['bk_export'] ?? '') === 'csv') {
         exit;
     };
     $_bkxUser = $auth->requireLogin();
-    if (!BankGate::open($dataDir ?? null)) $_bkxRefuse(403, 'The Bank screen is not available on this installation.');
-    if (!BankGate::fromOwnPage('GET')) $_bkxRefuse(403, 'The security check failed, so nothing was sent. Open the Bank screen and export from there.');
+    if (!BankGate::open($dataDir ?? null)) $_bkxRefuse(403, 'ECO Bank is not available on this installation.');
+    if (!BankGate::fromOwnPage('GET')) $_bkxRefuse(403, 'The security check failed, so nothing was sent. Open ECO Bank and export from there.');
     $_bkxMe = BankGate::allows('bank.view', $store, is_array($_bkxUser) ? $_bkxUser : []);
     if ($_bkxMe === null) $_bkxRefuse(403, 'Access denied.');
     require_once dirname(__DIR__) . '/lib/currency.php';

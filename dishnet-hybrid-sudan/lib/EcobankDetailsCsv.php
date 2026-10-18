@@ -83,7 +83,7 @@ final class EcobankDetailsCsv
         'header'                   => ['', "The columns are not those of Ecobank's Account Details export.", 'Download it again, without opening and saving it in Excel.'],
         'columns'                  => ['row', 'Row {p} of the file does not have 23 columns.', 'Download it again, without opening and saving it in Excel.'],
         'too_many_lines'           => ['n', 'This file has more than {p} lines.', 'Download a shorter period.'],
-        'field_too_long'           => ['row', 'Row {p} holds a field longer than the Bank screen keeps.', 'Report it.'],
+        'field_too_long'           => ['row', 'Row {p} holds a field longer than ECO Bank keeps.', 'Report it.'],
         'account_mixed'            => ['', 'The file holds more than one account, or an account number that is not 10 digits.', 'Download one account per file.'],
         'currency_form'            => ['', 'The opening and closing balances are not in one currency on every line, or cannot be read.', 'Download it again.'],
         'currency_mismatch'        => ['pair', 'This file is in {a}; the chosen account books {b}.', 'Choose the other account.'],

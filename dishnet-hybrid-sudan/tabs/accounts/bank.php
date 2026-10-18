@@ -1,7 +1,9 @@
 <?php
 /**
  * tabs/accounts/bank.php — the Bank screen v1 (5.18.97; SPEC-bank §c): Ecobank statements, shown the way the Cashbook
- * shows cash, posted nowhere. Uganda only; reached by its address (?page=dashboard&tab=bank), with no menu link (O9).
+ * shows cash, posted nowhere. Uganda only; reached from the menu item ECO Bank, directly below Cashbook, and from the CEO
+ * page's Quick Links, each shown by BankGate::showLink() alone (the operator, 18 Oct: it supersedes O9's "no menu link"),
+ * or by its address (?page=dashboard&tab=bank).
  *
  *   one account at a time   a chip per active Ecobank account of the book (lib/BankStatementStore::offeredAccounts()),
  *                           never an "All": UGX and USD are never added together
@@ -26,7 +28,7 @@
  */
 require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
 if (!BankGate::open($dataDir ?? null)) {
-    echo '<div style="padding:24px;color:#6b7280;">The Bank screen is not available on this installation.</div>';
+    echo '<div style="padding:24px;color:#6b7280;">ECO Bank is not available on this installation.</div>';
     return;
 }
 $_bkMe = BankGate::allows('bank.view', $store ?? null, is_array($retailer ?? null) ? $retailer : []);
@@ -234,7 +236,7 @@ $_bkCapMb = EcobankDetailsCsv::capMb($_bkCap);
   </div>
 <?php
 if (!$_bkReady) {
-    echo '<div class="cbv2-noseed">The Bank screen is not ready on this installation.</div></div>';
+    echo '<div class="cbv2-noseed">ECO Bank is not ready on this installation.</div></div>';
     return;
 }
 if ($_bkAcct === null) {
