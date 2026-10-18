@@ -83,7 +83,9 @@
 #            5.18.95's or 5.18.94's (STRAY_Q_FAILED in /root/dnb-5.18.97/state-5.18.97.env*,
 #            /root/dnb-5.18.96/state-5.18.96.env*, /root/dnb-5.18.95/state-5.18.95.env* or
 #            /root/dnb-5.18.94/state-5.18.94.env*) is newer than the newest passing --check; and unless that --check began
-#            after 5.18.96's own copy (COPY_AT in its state files: the quarantine's rule 3). Nothing here opens, moves,
+#            after 5.18.96's own copy (COPY_AT in its state files: the quarantine's rule 3) and after this script's own
+#            latest copy — a deploy of 5.18.97 (COPY_AT) or a rollback of it (RB_COPY_AT, in its rollback-state-*.env),
+#            so that a --redeploy after a rollback waits for a --check after it. Nothing here opens, moves,
 #            copies or writes the kept file or anything at the old name. R19 after the copy, RB after a rollback; a failure
 #            is recorded in this script's state file (STRAY_Q_FAILED).
 #
@@ -1842,7 +1844,7 @@ cih_vault() { dxo sh -c '[ ! -f "$1" ] || cp "$1" "$2"' _ "$CIH_BASE/vault.json"
 CIH_T=""; CIH_D=""; CIH_K=""; CIH_AT=""; CIH_ROWS=""; CIH_ERR=""; CIH_COPY=""; CIH_CONF=""; CIH_ADJ=""; CIH_P0RC=""; CIH_TOOLRC=""
 cih_run() {
   local kind="$1" r1="${2:-}" r2="${3:-}" sub o size free need adjid="" nm root want label tl dl
-  CIH_T=""; CIH_D=""; CIH_K=""; CIH_AT=""; CIH_ROWS=""; CIH_ERR=""; CIH_COPY=""; CIH_CONF=""; CIH_ADJ=""; CIH_P0RC=""; CIH_TOOLRC=""
+  CIH_T=""; CIH_D=""; CIH_K=""; CIH_AT=""; CIH_ROWS=""; CIH_ERR=""; CIH_COPY=""; CIH_CONF=""; CIH_ADJ=""; CIH_P0RC=""; CIH_TOOLRC=""; CIH_BANK_ERR=""
   [ -n "$SHEET" ] || { CIH_ERR="the run's cash sheet is not open"; return 1; }
   cih_init || { CIH_ERR="the run's folder in the container's /tmp, or its copy of the vault, could not be made (${CIH_VAULT_SAYS:-?})"; return 1; }
   size="$(db_state | sed -nE 's/^size=([0-9]+) .*/\1/p')"; free="$(dxo php -r 'echo (int)@disk_free_space($argv[1]);' /tmp)"
@@ -1898,11 +1900,15 @@ cih_run() {
   docker exec -u "$DB_OWNER" "$CONTAINER" cat "$sub/sheet.txt" >> "$SHEET" 2>/dev/null </dev/null || { CIH_ERR="the figures could not be put on the cash sheet"; cih_drop "$sub"; return 1; }
   # 5.18.97: ECO Bank on the same copy — 088 as it holds it and the gate's three states, through the second code root (the
   # pin's in A23, the installed in R23), each on a copy of the master of its own (bank_phase); its lines after the cash's.
+  # 5.18.97 (its review): in R23 a fault of ECO Bank's reading is ECO Bank's alone — CIH_BANK_ERR, which BA2 FAILS on —
+  # and the cash judgement above stands; in A23 it stops the run, as every fault of stage A does.
   if [ "$kind" = "a23" ] || [ "$kind" = "r23" ]; then
-    BANK_LABEL="$label" bank_phase "$sub" "$r2" "found off on" || { cih_drop "$sub"; return 1; }
-    docker exec -u "$DB_OWNER" "$CONTAINER" cat "$sub/bank.txt" >> "$SHEET" 2>/dev/null </dev/null || { CIH_ERR="ECO Bank's lines could not be put on the cash sheet"; cih_drop "$sub"; return 1; }
+    if BANK_LABEL="$label" bank_phase "$sub" "$r2" "found off on"; then
+      docker exec -u "$DB_OWNER" "$CONTAINER" cat "$sub/bank.txt" >> "$SHEET" 2>/dev/null </dev/null || { CIH_ERR="ECO Bank's lines could not be put on the cash sheet"; cih_drop "$sub"; return 1; }
+    elif [ "$kind" = "r23" ]; then CIH_BANK_ERR="${CIH_ERR:-?}"; CIH_ERR=""
+    else cih_drop "$sub"; return 1; fi
   fi
-  CIH_ROWS="$OUT/cih-rows-$MODE-$TS-$CIH_N.txt"
+  CIH_ROWS="$OUT/cih-rows-$( [ -n "${CHECK_ONLY:-}" ] && echo check || echo "$MODE")-$TS-$CIH_N.txt"   # 5.18.97 (its review): a --check's is named as its sheet is
   docker exec -u "$DB_OWNER" "$CONTAINER" cat "$sub/rows.txt" > "$CIH_ROWS" 2>/dev/null </dev/null || { CIH_ERR="the row digest could not be kept"; CIH_ROWS=""; cih_drop "$sub"; return 1; }
   chmod 600 "$CIH_ROWS" 2>/dev/null || true
   cih_drop "$sub"
@@ -2107,7 +2113,7 @@ try {
 PHP
 )"
 MIG88_OBJECTS=27                                   # 088's objects: 5 tables, 11 indexes, 11 triggers
-BANK_LIVE_A=""; CIH_BANK=""; CIH_KF=""; CIH_K0=""; CIH_K1=""
+BANK_LIVE_A=""; CIH_BANK=""; CIH_KF=""; CIH_K0=""; CIH_K1=""; CIH_BANK_ERR=""
 bank_live() {   # 088 on the LIVE database, read-only as its owner — the expected objects from the pin's own 088 (P3B_PIN)
   [ -n "$DB_OWNER" ] || { echo "?noowner"; return; }
   [ -n "$P3B_PIN" ] || { echo "?nocode"; return; }
@@ -2259,7 +2265,7 @@ hdr "Z. The live vault and this run's copies (read-only)"
 # ════════════════════════════════════════════════════════
 # Z1 — the live vault from this run's start to its end. Every batch of runs on copies was watched on its own above, and a
 # move inside one fails there. The whole run also holds the plugin's own readings of its configuration this script makes
-# on the live folder — tools/set_distributors.php --show, as root — and the pages and cron jobs the plugin serves
+# on the live folder — tools/set_distributors.php --show, as root (never in --check-bank) — and the pages and cron jobs the plugin serves
 # meanwhile; each refreshes the vault when its content differs. So a move between the batches is said, never failed.
 # Z2 — nothing of the vault, no webhook_secret and no copy of the book left under this run's folders in the container's
 # /tmp: the cash folders and the synthetic books are gone, and what is left — the release code, removed when the run
@@ -2269,7 +2275,7 @@ cih_done
 VT_END="$(vt_now)"
 if [ "${VT_START:-?}" = "?" ] || [ "$VT_END" = "?" ]; then note "Z1 the live vault could not be read at the start and the end of this run (${VAULT_IN:-?}${VAULT_WHY:+ — $VAULT_WHY}) — what each batch of runs on copies did to it is said above, batch by batch"
 elif [ "$VT_END" = "$VT_START" ]; then ok "Z1 the live vault ($VAULT_IN) is as this run found it: $(vt_say "$VT_END") — no run on a copy wrote it, nor anything else while this run went on"
-else note "Z1 the live vault ($VAULT_IN) changed while this run went on ($(vt_say "$VT_START") → $(vt_say "$VT_END")), outside every batch of runs on copies — each watched on its own above: the plugin refreshes it when its content differs (a page, a cron job, or this script's read of the distributor switch, as root); a run on a copy never wrote it"; fi
+else note "Z1 the live vault ($VAULT_IN) changed while this run went on ($(vt_say "$VT_START") → $(vt_say "$VT_END")), outside every batch of runs on copies — each watched on its own above: the plugin refreshes it when its content differs $( [ "$MODE" = "checkbank" ] && echo "(a page or a cron job — --check-bank runs no tool of the plugin's)" || echo "(a page, a cron job, or this script's read of the distributor switch, as root)"); a run on a copy never wrote it"; fi
 # Z1 again, against the deploy's own reading (VAULT_A in its state file), in an --after-only run and after a rollback: said,
 # never failed — between runs the plugin itself refreshes the vault when its settings change.
 if [ "$MODE" != "deploy" ]; then
@@ -2708,7 +2714,8 @@ esac
 # Since 5.18.91: with the container's record on the rollback target (5.18.92 here), every file this release changes
 # that the target has must be the target's byte for byte. A copy that stopped part-way may have replaced some of them,
 # manifest.json or not; the deploy and the rollback each refuse then, and print the put-back (the tenth and eleventh
-# reviews). Files the release adds are not asked about: a rollback leaves them on disk, reached by nothing.
+# reviews). Files the release adds are not asked about: a rollback leaves them on disk, and of them the rollback
+# target reads only migrations/088_bank_statements.sql, through its migration runner, as it reads every migration.
 if [ "$LIVE_BEFORE" = "$BASELINE_COMMIT" ] && [ "$MODE" != "after" ]; then
   BASE_DIFFERS=""
   for bf in $CHANGED; do
@@ -2830,8 +2837,13 @@ switch_state() {  # prints "pilot=<on|off>"
   docker exec "$CONTAINER" php "$IN_CONTAINER/$TOOL" --show 2>/dev/null \
     | awk '/distributors_enabled/ { print "pilot=" (toupper($2)=="ON"?"on":"off"); exit }'
 }
+# 5.18.97 (its review): not in --check-bank, which runs no tool of the plugin's on the live folder — its reading is the
+# copy's alone, and the distributor pilot is not its question.
+if [ "$MODE" = "checkbank" ]; then SW_BEFORE=""
+else
 SW_BEFORE="$(switch_state)"
 echo "  distributors    ${SW_BEFORE:-pilot=?}   (distributors_enabled, the distributor pilot's switch — not the salesperson pilot's; the operator's setting; this deploy never changes it)"
+fi
 
 # A switch, in BOTH places the plugin keeps it, judged as the plugin's own flagOn() judges it:
 #   files — the configuration files, through the installed plugin's own read-only path (PluginConfig::read reads them in
@@ -3408,6 +3420,19 @@ for f in "$PREV_STATE" "$PREV_STATE".prev-*; do
     if [ -z "$PREV_COPY" ] || [ "$v" -gt "$PREV_COPY" ]; then PREV_COPY="$v"; PREV_COPY_IN="$(basename "$(dirname "$f")")/${f##*/}"; fi
   done < <(sed -n 's/^COPY_AT=//p' "$f" 2>/dev/null)
 done
+# 5.18.97 (its review): and after this script's own latest copy of the plugin — a deploy of 5.18.97 (COPY_AT in its state
+# file, or in one a later deploy kept beside it) or a rollback of it (RB_COPY_AT, which do_rollback records after its copy:
+# in the rollback's own record, rollback-state-*.env, or in the deploy's state file when a deploy rolled itself back). The
+# quarantine's rule 3 asks for a --check after every plugin upload, rollback or restore: a --redeploy after a rollback, or a
+# deploy over a rolled-back 5.18.97, goes on only once a --check that began after that rollback has PASSED.
+OWN_COPY=""; OWN_COPY_IN=""; OWN_COPY_WHAT=""
+for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do
+  [ -f "$f" ] || continue
+  while IFS=' ' read -r k v || [ -n "$k" ]; do
+    case "$v" in ''|*[!0-9]*) continue ;; esac
+    if [ -z "$OWN_COPY" ] || [ "$v" -gt "$OWN_COPY" ]; then OWN_COPY="$v"; OWN_COPY_IN="${f##*/}"; OWN_COPY_WHAT="$k"; fi
+  done < <(sed -n -e 's/^COPY_AT=/deploy /p' -e 's/^RB_COPY_AT=/rollback /p' "$f" 2>/dev/null)
+done
 Q_JUDGE="$( [ "$MODE" = "rollback" ] && echo RB || echo R19 )"   # what judges the quarantine after this run: a rollback runs RB, not R19
 if [ "$MODE" = "deploy" ]; then
   [ "$Q_LOCK" = "free" ] || stop "NO-GO (A14): $( [ "$Q_LOCK" = "held" ] && echo "a run of scripts/quarantine-stray-store.sh is going on this server — it holds its folder's lock" || echo "whether a run of scripts/quarantine-stray-store.sh is going cannot be told ($Q_DIR cannot be opened, or this host has no flock)") — wait until it has ended and a --check of it has PASSED, then run this again"
@@ -3420,7 +3445,10 @@ if [ "$MODE" = "deploy" ]; then
   if [ -n "$PREV_COPY" ]; then
     [ "$QCL_T" -gt "$PREV_COPY" ] || stop "NO-GO (A14): $BASELINE_VERSION's copy at $(utc_of "$PREV_COPY") ($PREV_COPY_IN) came after the newest passing --check of the quarantine, begun $(utc_of "$QCL_T") — its runbook asks for a --check after every plugin upload, rollback or restore (rule 3), and none has passed since that copy: run it, its own command; send its log; then run this again:$(printf '\n      %s' "$QCHECK_CMD")"
   else note "A14 no copy time of $BASELINE_VERSION's deploy is recorded in $PREV_STATE or beside it: whether the quarantine's --check began after that deploy cannot be told here — its runbook asks for one after every plugin upload"; fi
-  ok "A14 the stray store is quarantined and the quarantine holds: its record says done, moved at $(utc_of "$(q_get Q_AT)"), no failure, no put-back; <plugin>/data is the folder of the move, nothing at the old name, nothing a new store makes; the kept file is the same, unchanged, no side file; its --check begun $(utc_of "$QCL_T") PASSED; no run of it is going; no failure recorded by this script's runs, $BASELINE_VERSION's, $PREV2_VERSION's or $PREV3_VERSION's after it$( [ -n "$PREV_COPY" ] && echo "; it began after $BASELINE_VERSION's copy ($(utc_of "$PREV_COPY"))")"
+  if [ -n "$OWN_COPY" ]; then
+    [ "$QCL_T" -gt "$OWN_COPY" ] || stop "NO-GO (A14): a $OWN_COPY_WHAT of $EXPECTED_VERSION by this script copied the plugin at $(utc_of "$OWN_COPY") ($(basename "$OUT")/$OWN_COPY_IN), after the newest passing --check of the quarantine, begun $(utc_of "$QCL_T") — its runbook asks for a --check after every plugin upload, rollback or restore (rule 3), and none has passed since that copy: run it, its own command; send its log; then run this again:$(printf '\n      %s' "$QCHECK_CMD")"
+  fi
+  ok "A14 the stray store is quarantined and the quarantine holds: its record says done, moved at $(utc_of "$(q_get Q_AT)"), no failure, no put-back; <plugin>/data is the folder of the move, nothing at the old name, nothing a new store makes; the kept file is the same, unchanged, no side file; its --check begun $(utc_of "$QCL_T") PASSED; no run of it is going; no failure recorded by this script's runs, $BASELINE_VERSION's, $PREV2_VERSION's or $PREV3_VERSION's after it$( [ -n "$PREV_COPY" ] && echo "; it began after $BASELINE_VERSION's copy ($(utc_of "$PREV_COPY"))")$( [ -n "$OWN_COPY" ] && echo "; and after this script's own latest copy, a $OWN_COPY_WHAT of $EXPECTED_VERSION ($(utc_of "$OWN_COPY"))")"
   [ -z "$Q_FAIL_IN" ] || note "A14 a run of this script, of $BASELINE_VERSION's, of $PREV2_VERSION's or of $PREV3_VERSION's found the quarantine broken at $(utc_of "$Q_FAIL_LAST") (STRAY_Q_FAILED in${Q_FAIL_IN}); the quarantine's --check begun $(utc_of "$QCL_T"), after it, PASSED — so this deploy goes on. Send that run's log file with this one"
   [ -z "$Q_K12" ] || note "A14 a state file records an R19 failure after the move (${Q_K12# }): a run of that release's deploy script in a mode the quarantine's runbook forbids after the move (its R19 fails for good once the file is gone) — not evidence of an opener (the quarantine's K12). Say which run it was"
 elif [ "$Q_HOLDS" = "yes" ]; then echo "  quarantine      holds as its record says ($Q_JUDGE judges it after this run's checks)"
@@ -3698,9 +3726,9 @@ if [ "$MODE" = "deploy" ]; then
     ok "BR3 ECO Bank's switch, $BK_KEY, is absent from the configuration files — as PluginConfig::read() reads them on the copy, with a vault of its own, and as the live files read ($BK_BEFORE; files/store)"
     case "$BK_SW_S" in absent|nodb) ;; *) note "BR3 $BK_KEY is in the store row alone ($BK_SW_S): BankGate reads the configuration files, never the row, so ECO Bank stays closed (BK2 proves it on the copy); $EXPECTED_VERSION's tools/set_config.php --clear removes it from both" ;; esac
   elif [ -n "$REDEPLOY" ]; then
-    note "BR3 --redeploy: $BK_KEY is present in the configuration files ($BK_SW_C on the copy; $BK_BEFORE, files/store) — left by a rollback done without clearing it. ECO Bank shows to administrators as soon as the files are in place"
+    note "BR3 --redeploy: $BK_KEY is present in the configuration files ($BK_SW_C on the copy; $BK_BEFORE, files/store) — left by a rollback done without clearing it. $( [ "$BK_SW_C" = "on" ] && echo "ECO Bank shows to administrators as soon as the files are in place" || echo "It reads off, so ECO Bank stays closed until its own command switches it on")"
   else
-    stop "NO-GO (BR3): $BK_KEY is present in the configuration files ($BK_SW_C on the copy; $BK_BEFORE, files/store), although $BASELINE_VERSION is live — left by an earlier $EXPECTED_VERSION whose rollback did not clear it; deployed, ECO Bank would show to administrators at once. Nothing was changed. If that is so, deploy with --redeploy, its own command, alone:$(printf '\n      %s' "$REDEPLOY_CMD")"
+    stop "NO-GO (BR3): $BK_KEY is present in the configuration files ($BK_SW_C on the copy; $BK_BEFORE, files/store), although $BASELINE_VERSION is live — left by an earlier $EXPECTED_VERSION whose rollback did not clear it; $( [ "$BK_SW_C" = "on" ] && echo "deployed, ECO Bank would show to administrators at once" || echo "it reads off, so ECO Bank would stay closed, but a switch a rollback left behind is what --redeploy is for"). Nothing was changed. If that is so, deploy with --redeploy, its own command, alone:$(printf '\n      %s' "$REDEPLOY_CMD")"
   fi
   # BN5 — the offered accounts per currency, and how many the book names Ecobank (counts only; a note when the book's
   # standard chart — one of each per currency — is not what the cards will find).
@@ -3712,7 +3740,11 @@ if [ "$MODE" = "deploy" ]; then
   [ "$BK2_A" = "ok" ] || stop "NO-GO (BK2): ECO Bank's gate on the copy is not as it must be ($BK2_A) — with the switch off it must show ECO Bank to nobody; with it on, to every active administrator and to no active non-administrator whose session copy says is_admin. Nothing was changed. Send the log file"
   [ "$(kv "$BK_A_KF" switch)|$(kv "$BK_A_KF" open)" = "absent|no" ] || [ "$BK_SW_C" != "absent" ] \
     || stop "NO-GO (BK2): with the switch absent, the copy's gate reads open ($(printf '%s' "$BK_A_KF" | sed -E 's/ list=[^ ]*//')). Nothing was changed. Send the log file"
-  ok "BK2 BankGate::showLink(), through the pin's code on copies of this book, each switch state in a PHP process of its own: off — no one of the $(kv "$BK_A_K0" admins) active administrator(s) is shown ECO Bank; on (written into the copy's kyc_config.json only, never the live one) — all $(kv "$BK_A_K1" admins) are, and none of the $(kv "$BK_A_K1" nonadmins) active non-administrator(s) handed a session copy that says is_admin: the fresh record decides; both halves hold (Uganda, no SSP)"
+  # 5.18.97 (its review): with no active non-administrator on the copy the stale-session refusal is not exercised — the
+  # note below says so, and the pass line claims nothing of it (SPEC §2.10b: a NOTE, never a PASS).
+  if [ "$(kv "$BK_A_K1" nonadmins)" != "0" ]; then BK2_STALE=", and none of the $(kv "$BK_A_K1" nonadmins) active non-administrator(s) handed a session copy that says is_admin: the fresh record decides"
+  else BK2_STALE=" — with no active non-administrator on this copy, the stale-session refusal is not exercised (the note below)"; fi
+  ok "BK2 BankGate::showLink(), through the pin's code on copies of this book, each switch state in a PHP process of its own: off — no one of the $(kv "$BK_A_K0" admins) active administrator(s) is shown ECO Bank; on (written into the copy's kyc_config.json only, never the live one) — all $(kv "$BK_A_K1" admins) are$BK2_STALE; both halves hold (Uganda, no SSP)"
   [ "$(kv "$BK_A_K0" nonadmins)" != "0" ] || note "BK2 the copy holds no active staff record that is not an administrator's, so the stale-session refusal had no one to refuse on this book — the release suite proves it on synthetic records"
   [ "$(bank_state_of "$BANK_LIVE_A")" = "$BK_A_ST" ] || note "BR2 088 read on the live database ($(bank_state_of "$BANK_LIVE_A")) is not as on the copy ($BK_A_ST) — the copy was made after the live read; the plugin's runner may have run between them. The copy decided"
 fi
@@ -3862,6 +3894,10 @@ do_rollback() {
   if [ "$rc" = "2" ]; then note "the container was still restarting; waiting for it"; local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 10; if [ "$(live_commit)" = "$BASELINE_COMMIT" ]; then rc=0; break; fi; done; fi
   git -C "$REPO" checkout -q "$ref" || bad "could not return the checkout to $ref — run: cd $REPO && git checkout $ref"
   stamp_copy
+  # 5.18.97 (its review): the rollback's own copy time, as stamp_copy gave public.php — for A14 of a later deploy (the
+  # quarantine's rule 3 asks for a --check after every rollback too). Under its own key, never COPY_AT, which R19 and V4
+  # read; in the rollback's own record (STATE_W), or in the deploy's state file when a deploy rolls itself back.
+  printf 'RB_COPY_AT=%s\n' "$(stat -c %Y "$DEST/$COPY_MARK" 2>/dev/null || date -u +%s)" >> "${STATE_W:-$STATE}"
   local live; live="$(live_commit)"; echo "  the container now serves ${live:-?}; the checkout is back on $ref"
   [ "$rc" = "0" ] && [ "$live" = "$BASELINE_COMMIT" ]
 }
@@ -3926,8 +3962,8 @@ if [ -n "$PLUGIN_BASE" ]; then
   http GET "$PLUGIN_BASE?page=customer_login" -L
   if [ "$HTTP_CODE" = "000" ]; then
     case "$PLUGIN_BASE" in
-      *:8443*) note "V1/V2/V5/V7 could not probe the public address: the derived address is $PLUGIN_BASE and the server cannot reach its own :8443 public port from inside the host (curl 000 — hairpin). This says nothing about whether the pages work; the code is verified by R1–R6 below and by V4 (no fatal). To confirm the pages themselves, open $PLUGIN_BASE?page=customer_login in a browser, or re-run it with an address the server can reach in place of the one in angle brackets, its own command:$(printf '\n      %s' "cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --after-only --plugin-base <an address the server can reach> $(LOGW after)")" ;;
-      *) note "V1/V2/V5/V7 could not probe the public address: $PLUGIN_BASE is not reachable from the server (curl 000). This says nothing about the pages; R1–R6 and V4 verify the code. Open the sign-in page in a browser, or re-run with --plugin-base <a reachable address>" ;;
+      *:8443*) note "V1/V2/V5/V7$( [ "$MODE" != "rollback" ] && echo " and BA4 (ECO Bank and its export)") could not probe the public address: the derived address is $PLUGIN_BASE and the server cannot reach its own :8443 public port from inside the host (curl 000 — hairpin). This says nothing about whether the pages work; the code is verified by R1–R6 below and by V4 (no fatal). To confirm the pages themselves, open $PLUGIN_BASE?page=customer_login in a browser, or re-run it with an address the server can reach in place of the one in angle brackets, its own command:$(printf '\n      %s' "cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --after-only --plugin-base <an address the server can reach> $(LOGW after)")" ;;
+      *) note "V1/V2/V5/V7$( [ "$MODE" != "rollback" ] && echo " and BA4 (ECO Bank and its export)") could not probe the public address: $PLUGIN_BASE is not reachable from the server (curl 000). This says nothing about the pages; R1–R6 and V4 verify the code. Open the sign-in page in a browser, or re-run with --plugin-base <a reachable address>" ;;
     esac
   else
     if [ "$HTTP_CODE" = "200" ] && [ "$HTTP_REDIRECTS" = "0" ]; then ok "V1 the sign-in page on the public address answers 200 with zero redirects (no loop)"
@@ -3994,7 +4030,7 @@ if [ -n "$PLUGIN_BASE" ]; then
       else bad "BA4 ECO Bank or its export without a session does not answer with the sign-in page as it must: the screen $BA4_P, the export $BA4_X (code|where|screen-or-file|fatals; expected 302|login|0|00)"; fi
     fi
   fi
-else note "V1/V2/V5/V7 skipped — the plugin's public URL could not be derived (re-run with --plugin-base); the R checks below read the install directly"; fi
+else note "V1/V2/V5/V7$( [ "$MODE" != "rollback" ] && echo " and BA4 (ECO Bank and its export)") skipped — the plugin's public URL could not be derived (re-run with --plugin-base); the R checks below read the install directly"; fi
 
 # V3 — the distributor pilot's switch (distributors_enabled) is UNCHANGED by the deploy: whatever state the operator left it
 # in, it stays. It is not the salesperson numbers' switches — those are V3f and V3h.
@@ -5076,13 +5112,17 @@ else
   # BA2 — 5.18.97 (SPEC §2.10b A2): BK2 again on this new copy, through the INSTALLED code, each switch state in a PHP
   # process of its own, the switch written only into the copy's configuration file; with BK1 above (the two codes the same
   # to the last digit) and, said, 088 as the copy holds it and the offered accounts (BN5).
+  if [ -n "$CIH_BANK_ERR" ]; then bad "BA2 ECO Bank could not be read on the new copy through the installed code — $CIH_BANK_ERR. The cash in hand checks above (R23, BA2's BK1) stand on their own; every copy is removed"
+  else
   R23_DB="$CIH_BANK"; R23_KF="$CIH_KF"; R23_K0="$CIH_K0"; R23_K1="$CIH_K1"
   echo "  088 on the copy $(bank_show "$R23_DB")"
   echo "  the gate        as found: $(printf '%s' "$R23_KF" | sed -E 's/ list=[^ ]*//')"
   echo "                  off:      $R23_K0"
   echo "                  on:       $R23_K1"
   R23_BK2="$(bk2_judge "$R23_K0" "$R23_K1")"
-  if [ "$R23_BK2" = "ok" ]; then ok "BA2 BK2 again, through the installed code on a new copy, each switch state in its own PHP process: off — none of the $(kv "$R23_K0" admins) active administrator(s) is shown ECO Bank; on (the copy's kyc_config.json only) — all $(kv "$R23_K1" admins) are, and none of the $(kv "$R23_K1" nonadmins) active non-administrator(s) handed a session copy that says is_admin"
+  if [ "$(kv "$R23_K1" nonadmins)" != "0" ]; then BA2_STALE=", and none of the $(kv "$R23_K1" nonadmins) active non-administrator(s) handed a session copy that says is_admin"
+  else BA2_STALE=" — with no active non-administrator on this copy, the stale-session refusal is not exercised (the note below)"; fi
+  if [ "$R23_BK2" = "ok" ]; then ok "BA2 BK2 again, through the installed code on a new copy, each switch state in its own PHP process: off — none of the $(kv "$R23_K0" admins) active administrator(s) is shown ECO Bank; on (the copy's kyc_config.json only) — all $(kv "$R23_K1" admins) are$BA2_STALE"
   else bad "BA2 BK2 through the installed code is not as it must be ($R23_BK2) — with the switch off it must show ECO Bank to nobody; with it on, to every active administrator and to no active non-administrator whose session copy says is_admin"; fi
   [ "$(kv "$R23_K0" nonadmins)" != "0" ] || note "BA2 the copy holds no active staff record that is not an administrator's, so the stale-session refusal had no one to refuse — the release suite proves it on synthetic records"
   case "$(kv "$R23_KF" switch)|${BK_AFTER#bk=}" in
@@ -5097,6 +5137,7 @@ else
   R23_OFF="$(kv "$R23_KF" offered)"
   if bn5_one "$R23_OFF"; then echo "  offered         $(bn5_say "$R23_OFF") (BN5)"
   else note "BN5 the offered bank accounts are not one per currency named Ecobank — $(bn5_say "$R23_OFF") (counts only; which is which is on the sheet)"; fi
+  fi   # 5.18.97 (its review): the end of what needs ECO Bank's reading of the new copy
   sheet_count
   echo "  cash sheet      $(sheet_say) — the figures, for you alone; never shown here"
 fi
@@ -5316,7 +5357,7 @@ for f in $CHANGED; do
   RB_SHA_N=$((RB_SHA_N+1))
   [ "$(git -C "$REPO" show "$BASELINE_COMMIT:$f" 2>/dev/null | sha256sum | cut -c1-64)" = "$(sha256sum "$DEST/${f#"$PLUGIN"/}" 2>/dev/null | cut -c1-64)" ] || RB_SHA_BAD="$RB_SHA_BAD ${f#"$PLUGIN"/}"
 done
-if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte (sha256); the $N_ADDED files it added — ECO Bank's library, screen, post handler, migration 088, a fixture and four tests — stay on disk, reached by nothing"
+if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte (sha256); the $N_ADDED files it added — ECO Bank's library, screen, post handler, migration 088, a fixture and four tests — stay on disk; of them $BASELINE_VERSION reads only migrations/088_bank_statements.sql, through its migration runner, as it reads every migration (RB reads 088 below)"
 else bad "RB installed files that are not $BASELINE_VERSION's after the rollback:${RB_SHA_BAD:- none could be compared}"; fi
 RB_BK=""
 for f in "$BK_NAV" "$BK_CEO" public.php includes/post_handlers.php includes/routes.php; do grep -qF 'BankGate' "$DEST/$f" 2>/dev/null && RB_BK="$RB_BK ${f##*/}:BankGate"; done
@@ -5428,7 +5469,7 @@ grep -qF 'Cash in hand — per currency' "$DEST/tabs/accounts/accounts_dashboard
 grep -qF 'var _fr3Base' "$DEST/tabs/sales/wallet.php" 2>/dev/null && grep -qF '(5.18.70)' "$DEST/$RECORDS_TOOL" 2>/dev/null && grep -qF "'currency'        => \$manCur," "$DEST/tabs/accounts/staff_cashbooks.php" 2>/dev/null && ok "RB the 5.18.70 Field Register fix and records tool and the 5.18.69 Manual Entry stamp are still there" || bad "RB the installed plugin lost 5.18.69/5.18.70 code"
 grep -qF 'CASH IN HAND</div>' "$DEST/tabs/accounts/cashbook.php" 2>/dev/null && grep -qF "dn_book_base(null)" "$DEST/lib/StaffCashPositionService.php" 2>/dev/null && ok "RB the 5.18.68 staff-cash chain and card are still there" || bad "RB the installed plugin lost 5.18.68 code"
 grep -qF 'var UG_PHOTOS' "$DEST/tabs/support/scheduling.php" 2>/dev/null && grep -qF -- "$LAYOUT_MARK" "$DEST/tabs/support/scheduling.php" 2>/dev/null && ok "RB the 5.18.66 photo surface and the 5.18.67 card are still there" || bad "RB the installed job page lost 5.18.66/5.18.67 code"
-note "RB the code is $BASELINE_VERSION again. The rollback restores code only. The files $EXPECTED_VERSION added stay on disk, reached by nothing (deploy-hybrid.sh never deletes) — ECO Bank's library, screen, post handler, migration 088 and its tests, never run on the server: $(printf '%s ' $EXPECTED_ADDED). 088's tables stay, with every statement kept (RB above), read by nothing. 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
+note "RB the code is $BASELINE_VERSION again. The rollback restores code only. The files $EXPECTED_VERSION added stay on disk (deploy-hybrid.sh never deletes) — ECO Bank's library, screen, post handler, migration 088 and its tests, never run on the server: $(printf '%s ' $EXPECTED_ADDED); of them $BASELINE_VERSION reads only migrations/088_bank_statements.sql, through its migration runner, as it reads every migration. 088's tables stay, with every statement kept (RB above), read by nothing. 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
 fi
 
 # 5.18.93: the salesperson pilot against the deploy's own record of it. A run compares the pilot only with what it read
@@ -5470,10 +5511,11 @@ z_stage   # Z1, Z2 — defined with the helpers, so that --check-bank closes wit
 hdr "F. Summary"
 # ════════════════════════════════════════════════════════
 # 5.18.97: --check ends here — stage A alone, as a deploy runs it, and no further: no backup, no copy, no deploy, nothing
-# written but its own cash sheet. Its verdict is GO or NO-GO; the deploy itself is its own command, run when chosen.
+# written but its own cash sheet and its row digest (0600, ids and hashes, no figure). Its verdict is GO or NO-GO; the deploy itself is its own command, run when chosen.
 if [ -n "$CHECK_ONLY" ]; then
-  echo "  --check           stage A alone, every refusal and note of a deploy$( [ -n "$REDEPLOY" ] && echo " with --redeploy"): nothing was backed up, copied, deployed or switched — nothing was changed"
+  echo "  --check           stage A alone, every refusal and note of a deploy$( [ -n "$REDEPLOY" ] && echo " with --redeploy"): nothing was backed up, copied, deployed or switched — nothing was changed; it wrote only its own cash sheet and row digest, below"
   echo "  cash sheet        $(sheet_say)"
+  [ -n "${CIH_ROWS:-}" ] && [ -f "$CIH_ROWS" ] && echo "  row digest        $CIH_ROWS — 0600: each row's id and a 16-hex hash of it, no figure; this script's own record, as the sheet is"
   if [ -n "$SHEET" ] && [ -f "$SHEET" ]; then
     echo "                    the figures of the book as stage A read them, and ECO Bank's offered accounts — for you alone; never paste it. To read it:"
     echo "      less $SHEET"
@@ -5496,12 +5538,23 @@ case "$MODE" in
 esac
 [ -n "$BK" ] && echo "  backup            $BK"
 if [ "$MODE" != "rollback" ]; then
-  echo "  what changed      ECO Bank, for administrators on this Uganda book with no SSP: a menu item directly below Cashbook, and a Quick Link on the CEO page right after Cashbook (Q15) — each shown only once $BK_KEY is switched on, and only to a signed-in administrator, as BankGate::showLink() decides (BK2, BA2, BK3); its screen, one card per offered bank account — Ecobank's own available balance after its last kept statement line, with its date, never added together and never added to cash — the lines of one account at a time, and each card's Account Details CSV: upload, check, Link and keep. Migration 088 — five tables, 11 indexes, 11 triggers — applied by the plugin's own runner, empty (BA1). The switch is OFF until its own command below (V3j). No Cashbook file, no entry, no other setting changed"
+  # 5.18.97 (its review): 088 and the switch as this run found them — a --redeploy keeps 088 as it was; the switch may be on.
+  if [ "$MODE" = "after" ]; then F_M88="applied by the plugin's own runner after the deploy's copy, its rows as BA1 reads them"
+  elif [ -n "$REDEPLOY" ]; then F_M88="recorded before the rollback and kept as it was, every row unchanged (--redeploy)"
+  else F_M88="applied by the plugin's own runner, empty"; fi
+  case "${BK_AFTER#bk=}" in
+    on/*)  F_SW="The switch is ON in the configuration files, as the operator left it: ECO Bank shows to administrators" ;;
+    off/*) F_SW="The switch reads off in the configuration files until its own command below" ;;
+    *)     F_SW="The switch is OFF until its own command below" ;;
+  esac
+  echo "  what changed      ECO Bank, for administrators on this Uganda book with no SSP: a menu item directly below Cashbook, and a Quick Link on the CEO page right after Cashbook (Q15) — each shown only once $BK_KEY is switched on, and only to a signed-in administrator, as BankGate::showLink() decides (BK2, BA2, BK3); its screen, one card per offered bank account — Ecobank's own available balance after its last kept statement line, with its date, never added together and never added to cash — the lines of one account at a time, and each card's Account Details CSV: upload, check, Link and keep. Migration 088 — five tables, 11 indexes, 11 triggers — $F_M88 (BA1). $F_SW (V3j). No Cashbook file, no entry, no other setting changed"
   if [ "$MN_BEFORE|$OL_BEFORE|$FH_BEFORE|$HC_BEFORE" = "${MN_AFTER:-}|${OL_AFTER:-}|${FH_AFTER:-}|${HC_AFTER:-}" ]; then F_PILOT="as the operator left them, unchanged by this run"; else F_PILOT="CHANGED during this run, or not read"; fi
   echo "  the pilot         $MN_FLAG ${MN_AFTER#mn=}, $OL_KEY ${OL_AFTER#ol=}, $FH_KEY ${FH_AFTER#fh=}, $HC_KEY ${HC_AFTER#hc=} (files/store) — the salesperson pilot's switches, $F_PILOT (A5, A5b, V3f, V3h): the registry $(sw_both_on "$MN_AFTER" && echo "ON" || { sw_off "$MN_AFTER" && echo "OFF" || echo "with its two copies disagreeing"; }); 087's rows and trail, the registry, 5.18.89's rules, the routing and the automated-send policy as the code reads them, compared before and after (A8, R3, R11, R2b, R12, R2c)"
   echo "  the switches      $LC_KEY ${LC_AFTER#lc=}, $LS_KEY ${LS_AFTER#ls=}, $QU_KEY ${QU_AFTER#qu=}, $SA_KEY ${SA_AFTER#sa=}; install_auth_enabled ${IA_AFTER#ia=}, $WA_KEY ${WA_AFTER#wa=}; $BK_KEY ${BK_AFTER#bk=} — as the operator left them (V3b–V3e, V3j, R2)"
   echo "  what did not      cash in hand — $BASELINE_VERSION's D2 = A, read by both codes on the same copy and the same to the last digit in every currency and project (BK1, A23, R23, BA2): the Cashbook, the landing page, the CEO page's tiles, the evening WhatsApp and tools/cash_in_hand.php as before; the phone's More menu, byte for byte (BK3); 5.18.95's security fixes — the photo route, the repair page, the EFRIS links, the Splynx credentials — in the pin, the live code and the installed code alike (A22, A22L, R23a–R23g); the quarantine — the kept file and the stray store's old name, never opened, moved or written by this run: ${R19_SUM:-?} (A14, R19); the database — 088's tables and its ledger row the only things added, by the plugin's own runner, nothing else written (R7, BA1); every figure of the book read on copies only, the live vault never written by a run on a copy (A23, R23, Z1, Z2); 5.18.94's documents and every authorisation record (A17, R22, V13); the operator's three settings and the recordings' retention, read and said only (A18, A21); South Sudan (A6, A13, A17, A24, R13, R15, R17, R18, R22, R26); Domain B (A7, R14); every switch and AI setting (V3–V3j); every number's routing — the three departments' and any salesperson's (A9, R12); the assistant's prompt (A10, R16); the registry, 5.18.89's rules and the automated-send policy as the code judges them on this server's own configuration, the pilot as the operator left it (A11, R2b, R2c, R11); 087's rows and trail (A8, R3); cliDataDir() and getDataDir()'s rescue copy; Evolution, WhatsApp, uCRM, Splynx: nothing called or sent by this run — no number verified, switched or messaged"
-  echo "  migrations        088 (${MIG88#migrations/}), applied by the plugin's own runner after the copy — every object exactly as the reviewed file makes it, its tables empty$( [ -n "$REDEPLOY" ] && echo " or as kept before the rollback (--redeploy)") (BA1); the ledger gained 088's row and nothing else (R7); 087 (5.18.88's) complete before and after (A8, R3); 086 still complete"
+  if [ "$MODE" = "after" ]; then echo "  migrations        088 (${MIG88#migrations/}), applied by the plugin's own runner after the deploy's copy — every object exactly as the reviewed file makes it, its rows none fewer than the deploy found (BA1); the ledger as R7 reads it; 087 (5.18.88's) complete (A8, R3); 086 still complete"
+  elif [ -n "$REDEPLOY" ]; then echo "  migrations        088 (${MIG88#migrations/}), recorded before the rollback and kept — every object exactly as the reviewed file makes it, every row kept unchanged (BR2, BA1); the ledger the same (R7); 087 (5.18.88's) complete before and after (A8, R3); 086 still complete"
+  else echo "  migrations        088 (${MIG88#migrations/}), applied by the plugin's own runner after the copy — every object exactly as the reviewed file makes it, its tables empty (BA1); the ledger gained 088's row and nothing else (R7); 087 (5.18.88's) complete before and after (A8, R3); 086 still complete"; fi
 fi
 echo
 # The cash sheet: its path, its line count and the first 16 hex of its sha256, and the command to read it — never a
