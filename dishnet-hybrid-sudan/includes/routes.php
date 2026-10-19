@@ -245,12 +245,23 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     $_csvCurrs2 = dn_book_currencies($config ?? null);
     $_csvBase2  = $_csvCurrs2[0];
     $_hasSSP2   = in_array('SSP', $_csvCurrs2, true);
+    $_csvRule2 = !$_hasSSP2 && $cb2csv->cashOnlyRuleInForce();   // 5.18.98
+    if ($_csvRule2) require_once dirname(__DIR__) . '/lib/CashbookNonCashView.php';
     $_csvCurr2  = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_csvCurrs2, true) ? strtoupper($_GET['cb_curr']) : '';
     // Field agents export only their own rows — same rule as the on-screen book.
     $_csvIsField2 = in_array($csvUser['role'] ?? '', ['sales','sales_staff','field_agent','collection'], true)
                     && empty($csvUser['is_admin']);
     $_csvPerson2  = ($_csvIsField2 && !empty($csvUser['name'])) ? $csvUser['name'] : '';
+    // 5.18.98 (SPEC-separate-v2 §2.6): the read-only "Bank & other accounts" tab's own export, under the page's gate; refused to
+    // the page's field agents (its list, cashbook.php:43-44, and public.php's default role 'sales' for a record with none), who
+    // get the cash export below. Like that export it does not ask the Cashbook tab's permission ($can): SPEC §2.12.
+    if ($_csvRule2 && ($_GET['cb_book'] ?? '') === 'noncash'
+        && !(in_array((string)($csvUser['role'] ?? (empty($csvUser['is_admin']) ? 'sales' : 'admin')), ['sales','sales_staff','field_agent','field_accountant','collection'], true)
+             && empty($csvUser['is_admin']))) {
+        require __DIR__ . '/cashbook_noncash_csv.php'; exit;
+    }
     $csvF2 = array_filter(['project'=>$proj2, 'date_from'=>$_GET['cb_from']??'', 'date_to'=>$_GET['cb_to']??'', 'person'=>$_csvPerson2, 'currency'=>$_csvCurr2, 'limit'=>9999, 'offset'=>0]);
+    if ($_csvRule2) $csvF2['book'] = 'cash';   // 5.18.98: the Cashbook list's rows, physical cash only
     $rows2  = $cb2csv->getEntries($csvF2);
     $_isSSP2 = ($_csvCurr2 === 'SSP');
     $_isAll2 = ($_csvCurr2 === '');
@@ -258,7 +269,11 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     $_acctNames2 = [];
     if (!$_hasSSP2) {
         try {
-            foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+            if ($_csvRule2) {   // 5.18.98: a Uganda export reads the names with a SELECT only, so it runs no DDL
+                foreach ($cb2csv->accountLabels() as $_a2id => $_a2l) { $_acctNames2[(int)$_a2id] = $_a2l['name']; }
+            } else {
+                foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+            }
         } catch (\Throwable $e) {}
     }
     $fname2 = 'cashbook-'.strtoupper($proj2).'-'.($_csvCurr2 ?: 'ALL').'-'.date('Y-m-d').'.csv';
@@ -272,13 +287,13 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     } elseif ($_isAll2) {
         // Multi-currency book without SSP columns: every amount sits next to
         // its own currency and the balance names the stream it belongs to.
-        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
     } elseif ($_isSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
     } elseif ($_hasSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
     } else {
-        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
     }
     foreach ($rows2 as $e2) {
         $isIn2 = $e2['direction'] === 'in';
@@ -294,12 +309,12 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
                 ($_isSspRow2&&$isIn2)?$sA2:'', ($_isSspRow2&&!$isIn2)?$sA2:'', ($_isSspRow2)?$bl2:'',
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } elseif ($_isAll2) {
-            fputcsv($out2, [$e2['sr'],$e2['date'],
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
                 $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
                 $e2['txn_type'] ?? '',
                 $e2['description'],$e2['category'],$e2['person'],
                 $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
-                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
         } elseif ($_isSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$sA2:'', $isIn2?'':$sA2, $bl2,
@@ -309,12 +324,12 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
                 $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } else {
-            fputcsv($out2, [$e2['sr'],$e2['date'],
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
                 $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
                 $e2['txn_type'] ?? '',
                 $e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
-                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
         }
     }
     fclose($out2);
