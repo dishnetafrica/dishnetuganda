@@ -8,7 +8,9 @@
 //               bank account (kind exactly 'bank') / an account of another kind / a whole id above 0 naming no account /
 //               any other id (negative, text, real); in the form the script's note prints, before its "; " joins
 //   noncash     the same rows' totals for all, dishnet, 4g and bluecard — "all:N,dishnet:N,4g:N,bluecard:N"
-//   n2          approved, no account, listed, looking like bank money — "crm:N,btin:N,btout:N,charges:N"
+//   n2          approved, no account, listed, looking like bank money — "crm:N,btin:N,btout:N,charges:N"; crm the rows
+//               online whose source is one of uCRM's writers: crm_sync, crm_api_sync, crm_webhook and the gap-fill's
+//               crm_gap_fill (cron_crm_payment_gap.php)
 //   n3          listed rows with no currency, and how many of them are on the cash side — "blank:N,cash:N"
 //   n4          bank accounts ECO Bank does not offer (inactive, or a currency the book does not list) holding listed rows —
 //               "accounts:N,rows:N"; n4ids their row ids, for the SHEET's own check alone (never the terminal's)
@@ -72,7 +74,7 @@ while (($r = $q->fetch(PDO::FETCH_ASSOC)) !== false) {
         else $k = 'x';
         $n1[$pj][$k]++; $n1['all'][$k]++;
     } elseif ($noAcct && (string)$r['status'] === 'approved') {
-        if (in_array((string)$r['source'], ['crm_sync', 'crm_api_sync', 'crm_webhook'], true) && (string)$r['validation_status'] === 'online') $n2['crm']++;
+        if (in_array((string)$r['source'], ['crm_sync', 'crm_api_sync', 'crm_webhook', 'crm_gap_fill'], true) && (string)$r['validation_status'] === 'online') $n2['crm']++;
         if ((string)$r['category'] === 'Bank Transfer' && (string)$r['direction'] === 'in') $n2['btin']++;
         if ((string)$r['category'] === 'Bank Transfer' && (string)$r['direction'] === 'out') $n2['btout']++;
         if ((string)$r['category'] === 'Bank Charges') $n2['charges']++;

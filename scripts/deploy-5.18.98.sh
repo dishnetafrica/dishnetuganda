@@ -155,10 +155,12 @@
 #                        disk, are expected there (BR1's note)
 #   --check              stage A alone — every refusal and note of the deploy, its cash, bank and copy readings on copies
 #                        — and stop before the backup: nothing is backed up, copied or deployed. With --redeploy or
-#                        --without-bank-balance, as the deploy would run with it
+#                        --without-bank-balance, as the deploy would run with it (the latter kept in the deploy command
+#                        it prints only where G3 needed it)
 #   --without-bank-balance  with a deploy, or with --check: G3 — both ECO Bank cards show a figure — becomes a note, the
-#                        operator's explicit choice (SPEC Q2), printed as such; V3j then accepts the switch off. Without it
-#                        G3 refuses
+#                        operator's explicit choice (SPEC Q2), printed as such; V3j and BA2 then accept a card without a
+#                        figure, and a later --after-only too. Without it G3 refuses. Typed over cards that both show a
+#                        figure it changes nothing: it is not recorded, relaxes nothing, and --check's command drops it
 #   --check-bank         read-only, after the deploy: one line per offered account — its row id, its currency, whether the
 #                        book names it Ecobank, whether a statement is kept, whether it is linked and how many days old its
 #                        last kept line is (that line's date on the sheet only) — and whether both ECO BANK cards show a
@@ -554,6 +556,7 @@ ap_installed_root() {   # prints a code root made of the INSTALLED main.php, lib
 AP_OUT=""; AP_RESULT=""
 
 MODE="deploy"; PLUGIN_BASE="${PLUGIN_BASE:-}"; REDEPLOY=""; CHECK_ONLY=""; WITHOUT_BANK=""; MODE_N=0
+G3_NOTED=""   # 5.18.98: 1 only when G3 went to its note under --without-bank-balance — what the flag did, not that it was typed
 while [ $# -gt 0 ]; do
   case "$1" in
     --after-only) MODE="after"; MODE_N=$((MODE_N + 1)) ;;
@@ -2472,10 +2475,13 @@ PHP
 # Listed rows are the list's: no ghost row (amount 0 and no SR) and no voided_reconcile. N1 the listed rows not on the
 # cash side, per project: on a bank account (kind exactly 'bank'), on an account of another kind, on a whole id above 0
 # that names no account, on any other id (negative, text, real). N2 the listed rows that stay — approved, no account —
-# and look like bank money: uCRM's own rows (crm_sync, crm_api_sync, crm_webhook — the code's own set) online; Bank Transfer in; Bank Transfer out;
-# Bank Charges — each counted on its own, so they may overlap. N3 the listed rows with no currency, and how many of them
-# are on the cash side. N4 the bank accounts ECO Bank does not offer — inactive, or in a currency the book does not list
-# (offeredAccounts()'s rule) — that hold listed rows. Prints counts; the N4 accounts' row ids go to the sheet file named.
+# and look like bank money: uCRM's payments online — the rows whose source is crm_sync, crm_api_sync, crm_webhook or
+# crm_gap_fill (cron_crm_payment_gap.php's, in webhook.php's format: approved, no account, 'online' for every non-cash
+# method). That list is this script's own, not a set the code keeps (CashbookService's dedup list names collect_payment
+# and leaves out crm_gap_fill); Bank Transfer in; Bank Transfer out; Bank Charges — each counted on its own, so they
+# may overlap. N3 the listed rows with no currency, and how many of them are on the cash side. N4 the bank accounts
+# ECO Bank does not offer — inactive, or in a currency the book does not list (offeredAccounts()'s rule) — that hold
+# listed rows. Prints counts; the N4 accounts' row ids go to the sheet file named.
 NOTES_PHP="$(cat <<'PHP'
 [$db, $curs, $sheet] = array_slice($argv, 1, 3) + [null, "", "", ""];
 if (strpos((string)$db, "/tmp/") !== 0 || strpos((string)$sheet, "/tmp/") !== 0 || !is_file((string)$db)) { echo "?notacopy"; exit(2); }
@@ -2496,7 +2502,7 @@ try {
         $n1[(string)$r["pj"]][(string)$r["k"]] += (int)$r["n"]; $n1["all"][(string)$r["k"]] += (int)$r["n"];
     }
     $cashA = "$listed AND status = 'approved' AND COALESCE(account_id, 0) = 0";
-    $n2 = ["crm"     => $n("SELECT COUNT(*) AS n FROM cb_ledger WHERE $cashA AND source IN ('crm_sync', 'crm_api_sync', 'crm_webhook') AND validation_status = 'online'"),
+    $n2 = ["crm"     => $n("SELECT COUNT(*) AS n FROM cb_ledger WHERE $cashA AND source IN ('crm_sync', 'crm_api_sync', 'crm_webhook', 'crm_gap_fill') AND validation_status = 'online'"),
            "btin"    => $n("SELECT COUNT(*) AS n FROM cb_ledger WHERE $cashA AND category = 'Bank Transfer' AND direction = 'in'"),
            "btout"   => $n("SELECT COUNT(*) AS n FROM cb_ledger WHERE $cashA AND category = 'Bank Transfer' AND direction = 'out'"),
            "charges" => $n("SELECT COUNT(*) AS n FROM cb_ledger WHERE $cashA AND category = 'Bank Charges'")];
@@ -4162,8 +4168,10 @@ if [ "$MODE" = "deploy" ]; then
   # PluginConfig::read(), which has no side effects; for each of UGX and USD at least one account of
   # BankStatementStore::offeredAccounts() that ecobankNamed() names, every one of them with a latestLine(). One line per
   # offered account, its row id and yes/no only. An offered account not named Ecobank and without a statement is a NOTE.
-  # --without-bank-balance makes G3 a NOTE: the operator's explicit choice, printed as such.
-  G3_OFF="$(kv "$BK_A_KI" offered)"; G3_LIST="$(kv "$BK_A_KI" list)"; G3_WHY=""; G3_I=0; G3_NN=0
+  # --without-bank-balance makes G3 a NOTE: the operator's explicit choice, printed as such. Only when it did (G3_NOTED)
+  # is it recorded, relaxes V3j and BA2, and is carried into --check's deploy command: typed over cards that both show a
+  # figure, it changed nothing, and a later card without one is BA2's FAIL, as without it.
+  G3_OFF="$(kv "$BK_A_KI" offered)"; G3_LIST="$(kv "$BK_A_KI" list)"; G3_WHY=""; G3_I=0; G3_NN=0; G3_NOTED=""
   [ "$(kv "$BK_A_KI" open)" = "yes" ] || G3_WHY="$G3_WHY ECO-Bank-closed(switch:$BK_SW_C,uganda-without-ssp:$(kv "$BK_A_KI" halves))"
   for g3c in UGX USD; do
     g3v="$(printf '%s' "$G3_OFF" | tr ',' '\n' | sed -n "s/^$g3c://p" | head -1)"
@@ -4186,6 +4194,7 @@ if [ "$MODE" = "deploy" ]; then
   if [ -z "$G3_WHY" ]; then
     ok "G3 both ECO BANK cards show a figure, through the live $BASELINE_VERSION classes on the copy: BankGate::open() true (PluginConfig::read(), the switch ON, Uganda without SSP), and for UGX and for USD an offered account named Ecobank, each with its last statement line kept ($(bn5_say "$G3_OFF")) — the bank money leaving the Cashbook's list is shown on ECO Bank"
   elif [ -n "$WITHOUT_BANK" ]; then
+    G3_NOTED=1
     note "G3 --without-bank-balance, the operator's explicit choice: not both ECO BANK cards show a figure ($(printf '%s' "$G3_WHY" | sed 's/^ //')) — the bank rows still leave the Cashbook's list, to the tab \"Bank & other accounts\", and ECO Bank shows no balance for$( [ "$(kv "$BK_A_KI" open)" = "yes" ] && echo " the account(s) above" || echo " anyone until its switch is ON")"
   else
     stop "NO-GO (G3): not both ECO BANK cards show a figure ($(printf '%s' "$G3_WHY" | sed 's/^ //')) — $EXPECTED_VERSION moves the bank rows off the Cashbook's list, so each currency's Ecobank balance must be on ECO Bank first: keep each card's Account Details CSV there (and its switch ON), then run this again. Nothing was changed. To deploy without it — the operator's explicit choice, said as such in the log — its own command, alone:$(printf '\n      %s' "cd $REPO && bash scripts/deploy-$EXPECTED_VERSION.sh --without-bank-balance$( [ -n "$REDEPLOY" ] && echo " --redeploy") $(LOGW deploy)")"
@@ -4358,8 +4367,10 @@ PHP
   printf 'REG_BEFORE=%s\nB2C_BEFORE=%s\nPOL_BEFORE=%s\n' "$REG_A" "$B2C_A" "${POL_A%%|*}" >> "$STATE_W"
   printf 'DB_BEFORE=%s\n' "$DBS_A" >> "$STATE_W"   # 5.18.95: the database before anything changed (R7 of a later --after-only)
   # Since 5.18.97: ECO Bank's switch and 088 as stage A read them — states and counts, no HMAC, no row (V3j and BA1 of a
-  # later --after-only); whether this deploy was a --redeploy; and (5.18.98) whether it went with --without-bank-balance.
-  printf 'BK_BEFORE=%s\nBANK_BEFORE=%s\nREDEPLOY=%s\nWITHOUT_BANK=%s\n' "${BK_BEFORE:-}" "$(bank_show "${BANK_LIVE_A:-}")" "${REDEPLOY:-}" "${WITHOUT_BANK:-}" >> "$STATE_W"
+  # later --after-only); whether this deploy was a --redeploy; and (5.18.98) whether G3 went to its note under
+  # --without-bank-balance (G3_NOTED) — never merely that the flag was typed: over cards that both showed a figure it
+  # changed nothing, and a later --after-only must not relax V3j or BA2 on it.
+  printf 'BK_BEFORE=%s\nBANK_BEFORE=%s\nREDEPLOY=%s\nWITHOUT_BANK=%s\n' "${BK_BEFORE:-}" "$(bank_show "${BANK_LIVE_A:-}")" "${REDEPLOY:-}" "${G3_NOTED:-}" >> "$STATE_W"
   # 5.18.96: A23's reading of the book, for R23's drift in a later --after-only — its time, the cash sheet's path and the
   # first 16 hex of its sha256 as A23 left it (R23 adds its own reading to the same sheet later in this run, so F's hash
   # of the finished sheet differs), the row digest (a count, the highest id and a sha256) and the 0600 file of each row's
@@ -4382,7 +4393,8 @@ do_rollback() {
   if [ "$rc" = "2" ]; then note "the container was still restarting; waiting for it"; local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 10; if [ "$(live_commit)" = "$BASELINE_COMMIT" ]; then rc=0; break; fi; done; fi
   git -C "$REPO" checkout -q "$ref" || bad "could not return the checkout to $ref — run: cd $REPO && git checkout $ref"
   stamp_copy
-  # 5.18.97 (its review): the rollback's own copy time, as stamp_copy gave public.php — for A14 of a later deploy (the
+  # 5.18.97 (its review): the rollback's own copy time, as stamp_copy gave lib/CashbookService.php (COPY_MARK; 5.18.97
+  # read it off public.php) — for A14 of a later deploy (the
   # quarantine's rule 3 asks for a --check after every rollback too). Under its own key, never COPY_AT, which R19 and V4
   # read; in the rollback's own record (STATE_W), or in the deploy's state file when a deploy rolls itself back.
   printf 'RB_COPY_AT=%s\n' "$(stat -c %Y "$DEST/$COPY_MARK" 2>/dev/null || date -u +%s)" >> "${STATE_W:-$STATE}"
@@ -4415,7 +4427,8 @@ if [ "$MODE" = "deploy" ]; then
   elif [ "$RC" = "2" ]; then note "the container was still restarting; waiting for it"; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do sleep 10; if [ "$(live_commit)" = "$EXPECTED_PLUGIN_COMMIT" ]; then RC=0; break; fi; done; fi
   if [ -n "$DEPLOY_REF" ]; then git -C "$REPO" checkout -q "$DEPLOY_REF" && echo "  the checkout is back on $DEPLOY_REF" || bad "could not return the checkout to $DEPLOY_REF — run: cd $REPO && git checkout $DEPLOY_REF"; fi
   stamp_copy
-  # The copy's own time, as stamp_copy gave public.php (a file 5.18.97 changes; 5.18.96 read it off lib/CashbookService.php):
+  # The copy's own time, as stamp_copy gave lib/CashbookService.php (COPY_MARK, a file 5.18.98 changes; 5.18.97 read it
+  # off public.php, which 5.18.98 does not change):
   # R19 and V4 judge from it, never from the file's time later, which a rollback attempt's stamp_copy would move even
   # when it copied nothing (the eighth review).
   COPY_AT="$(stat -c %Y "$DEST/$COPY_MARK" 2>/dev/null || true)"
@@ -4629,10 +4642,11 @@ fi
 # V3j — since 5.18.97: ECO Bank's switch, bank_screen_enabled, is UNCHANGED by this run in both places, read as before
 # (stage A, BR3); and (5.18.98) ON — the operator's, switched on after 5.18.97, and what G3 needed. This script never sets
 # it, and no mode of it clears it — the rollback included. Not ON is a FAIL but where it is said: after a rollback (the
-# same as before it is all a rollback asks), after a deploy with --without-bank-balance (this run's, or the deploy's
-# recorded in its state file), or in an --after-only run when the operator has switched it since the deploy.
+# same as before it is all a rollback asks), after a deploy whose G3 went to its note under --without-bank-balance (this
+# run's G3_NOTED, or the deploy's recorded in its state file — never the flag merely typed over cards that both showed a
+# figure), or in an --after-only run when the operator has switched it since the deploy.
 BK_AFTER="$(cfg_switch "$BK_KEY" bk)"
-V3J_REC=""; V3J_WBB="${WITHOUT_BANK:-}"
+V3J_REC=""; V3J_WBB="${G3_NOTED:-}"
 if [ "$MODE" = "after" ]; then
   V3J_REC="$(sed -n 's/^BK_BEFORE=//p' "$STATE" 2>/dev/null | tail -n1)"
   [ -n "$V3J_WBB" ] || V3J_WBB="$(sed -n 's/^WITHOUT_BANK=//p' "$STATE" 2>/dev/null | tail -n1)"
@@ -5658,7 +5672,7 @@ else
   if [ "$(kv "$R23_KF" open)|$(kv "$R23_KF" both)" = "yes|yes" ]; then
     ok "BA2 G3 again, through the installed code on the new copy: ECO Bank open, and both ECO BANK cards show a figure ($(bn5_say "$R23_OFF")) — the bank money the Cashbook's list no longer carries is on ECO Bank"
   else
-    BA2_WBB="${WITHOUT_BANK:-}"; [ "$MODE" = "after" ] && [ -z "$BA2_WBB" ] && BA2_WBB="$(sed -n 's/^WITHOUT_BANK=//p' "$STATE" 2>/dev/null | tail -n1)"
+    BA2_WBB="${G3_NOTED:-}"; [ "$MODE" = "after" ] && [ -z "$BA2_WBB" ] && BA2_WBB="$(sed -n 's/^WITHOUT_BANK=//p' "$STATE" 2>/dev/null | tail -n1)"
     if [ -n "$BA2_WBB" ]; then note "BA2 G3 again: not both ECO BANK cards show a figure (open $(kv "$R23_KF" open), both $(kv "$R23_KF" both); $(bn5_say "$R23_OFF")) — the deploy went with --without-bank-balance, the operator's explicit choice"
     elif [ "$MODE" = "after" ] && [ -n "${V3J_REC:-}" ] && [ "$V3J_REC" != "${BK_AFTER:-}" ]; then note "BA2 G3 again: not both ECO BANK cards show a figure (open $(kv "$R23_KF" open), both $(kv "$R23_KF" both); $(bn5_say "$R23_OFF")) — ECO Bank's switch was changed since the deploy (V3j): the operator's"
     else bad "BA2 G3 again: not both ECO BANK cards show a figure through the installed code (open $(kv "$R23_KF" open), both $(kv "$R23_KF" both); $(bn5_say "$R23_OFF")) — stage A found both; the bank money the Cashbook's list no longer carries is not all on ECO Bank"; fi
@@ -5697,7 +5711,7 @@ if [ -n "$ICODE_R" ]; then t1_run "$ICODE_R"; T1_R="$T1_RESULT"; else T1_R="?noc
 if [ "$T1_R" = "$T1_SIGNATURE" ]; then ok "R25 under this server's own PHP the installed T1 passes ($T1_R), from a copy of the installed files with a vault of its own"
 else bad "R25 under this server's own PHP the installed T1 does not pass: $T1_R (expected $T1_SIGNATURE)"; [ "$T1_R" = "?nocopy" ] || t1_why; fi
 vt_same "$VT_B" || bad "R25 the live vault (${VAULT_IN:-its path not known}) could not be shown unchanged while the installed T1 ran on a vault of its own ($(vt_say "$VT_B") → $(vt_say "$(vt_now)"))"
-# R26 — South Sudan through the INSTALLED library, as A24: the installed code against 5.18.96's (from Git), on the same
+# R26 — South Sudan through the INSTALLED library, as A24: the installed code against 5.18.97's (from Git), on the same
 # synthetic books — and the Uganda control, so that this cannot pass on a copy without profiles/ (the gate would read
 # every book as rule-off, and the control would fail).
 VT_B="$(vt_now)"
@@ -6067,9 +6081,10 @@ echo "                    they cannot be taken for this script's own R1–R26 an
 # Since 5.18.97: --check ends here — stage A alone, as a deploy runs it, and no further: no backup, no copy, no deploy,
 # nothing written but its own cash sheet and its row digest (0600, ids and hashes, no figure). Its verdict is GO or NO-GO;
 # the deploy itself is its own command, run when chosen — 5.18.98: the runbook's, the branch pulled and the release
-# fetched first, with the flags this --check ran with.
+# fetched first, with the flags this --check ran with — --without-bank-balance only where G3 went to its note under it
+# (G3_NOTED): over cards that both show a figure it is not needed, and the command below is printed without it.
 if [ -n "$CHECK_ONLY" ]; then
-  echo "  --check           stage A alone, every refusal and note of a deploy$( [ -n "$REDEPLOY" ] && echo " with --redeploy")$( [ -n "$WITHOUT_BANK" ] && echo " with --without-bank-balance"): nothing was backed up, copied, deployed or switched — nothing was changed; it wrote only its own cash sheet and row digest, below"
+  echo "  --check           stage A alone, every refusal and note of a deploy$( [ -n "$REDEPLOY" ] && echo " with --redeploy")$( [ -n "$WITHOUT_BANK" ] && echo " with --without-bank-balance$( [ -z "${G3_NOTED:-}" ] && echo " (not needed: G3 held, both ECO BANK cards show a figure — the deploy below is printed without it)")"): nothing was backed up, copied, deployed or switched — nothing was changed; it wrote only its own cash sheet and row digest, below"
   echo "  cash sheet        $(sheet_say)"
   [ -n "${CIH_ROWS:-}" ] && [ -f "$CIH_ROWS" ] && echo "  row digest        $CIH_ROWS — 0600: each row's id and a 16-hex hash of it, no figure; this script's own record, as the sheet is"
   if [ -n "$SHEET" ] && [ -f "$SHEET" ]; then
@@ -6079,8 +6094,8 @@ if [ -n "$CHECK_ONLY" ]; then
   fi
   echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
   if [ "$FAIL" = "0" ]; then
-    if [ -z "$REDEPLOY$WITHOUT_BANK" ]; then F_RUN_CMD="$RUNBOOK_CMD"
-    else F_RUN_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh$( [ -n "$REDEPLOY" ] && printf ' --redeploy')$( [ -n "$WITHOUT_BANK" ] && printf ' --without-bank-balance') $(LOGW "$( [ -n "$REDEPLOY" ] && echo redeploy || echo deploy)")"; fi
+    if [ -z "$REDEPLOY${G3_NOTED:-}" ]; then F_RUN_CMD="$RUNBOOK_CMD"
+    else F_RUN_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh$( [ -n "$REDEPLOY" ] && printf ' --redeploy')$( [ -n "${G3_NOTED:-}" ] && printf ' --without-bank-balance') $(LOGW "$( [ -n "$REDEPLOY" ] && echo redeploy || echo deploy)")"; fi
     echo; echo "  $EXPECTED_VERSION (check): GO — stage A holds. Send this LOG FILE back (not a copy of the terminal, and never the cash sheet)."
     echo "  The deploy itself, when you choose to run it — its own command, alone; it runs stage A again before it asks you to type DEPLOY:"
     echo "      $F_RUN_CMD"
@@ -6146,10 +6161,10 @@ fi
 echo "  checks            $PASS ok, $FAIL failed, $NOTE notes"
 if [ "$FAIL" = "0" ]; then echo; echo "  $EXPECTED_VERSION ($MODE): PASSED. Send this LOG FILE back (not a copy of the terminal, and never the cash sheet)."
 else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi
-# 5.18.98 — after a PASSED deploy or --after-only that went with --without-bank-balance (this run's, or the deploy's
-# recorded), ECO Bank's own read-only check, alone in its own block with its own log: whether both cards show a figure
-# now. No switch command: the switch is the operator's, ON, and no mode of this script prints or runs one. Then the
-# rollback, last, in its own block: one step — 5.18.97 put back; ECO Bank and its switch stay as they are.
+# 5.18.98 — after a PASSED deploy or --after-only whose G3 went to its note under --without-bank-balance (this run's, or
+# the deploy's recorded), ECO Bank's own read-only check, alone in its own block with its own log: whether both cards
+# show a figure now. No switch command: the switch is the operator's, ON, and no mode of this script prints or runs
+# one. Then the rollback, last, in its own block: one step — 5.18.97 put back; ECO Bank and its switch stay as they are.
 if [ "$MODE" != "rollback" ] && [ "$FAIL" = "0" ] && [ -n "${V3J_WBB:-}" ]; then
   echo
   echo "  ECO Bank's own check, read-only, once a statement is kept on each card — its own command, alone: one line per"

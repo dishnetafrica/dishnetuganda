@@ -34,22 +34,32 @@
 #     every bank-module file, the menu, the CEO page, the More menu, the styles and the Cashbook's post handler (SPEC §2.9 M)
 #     among the files 5.18.98 leaves alone; no migration; T1 and T4 pinned as 5.18.97 pinned them; the header's deploy
 #     command alone; every later command defined with its own log wrapper; no switch command left; the live vault never
-#     written, the sheet never read out; the instruments — C5's digests see a row, an account and a schema change, C5's
-#     judge names C5 (and a copy without that line is blind), N1–N4's own SQL counts what this rehearsal counts (0);
+#     written, the sheet never read out; the instruments — C5's digests see a row, an account and a schema change; the
+#     judge names every term — C1, C2, C3's four, C4, C5, rule A — and a copy without any one line is blind; CPJ_PHP's
+#     comparison counts a changed cell short and never calls readings that hold nothing whole; N1–N4's own SQL counts
+#     what this rehearsal counts on a copy that holds a row of each class N2 counts (uCRM's gap-fill among them) and an
+#     account N4 counts — never 0 against 0 — and a copy with N2's literal or the gap-fill's source taken out is caught;
+#     printed98 sees a line holding two commands;
 #   · --check is GO on 5.18.97 as production has it: G1–G3 hold, G3's lines are the book's offered accounts by row id
 #     (this rehearsal's own reading), the offered account not named Ecobank with no statement a NOTE; C1–C5 hold; N1–N4
 #     the counts this rehearsal counts; its summary prints the runbook's command alone. With that account made inactive
-#     — the control — no G3 note and BN5 ok. Option errors; --check-bank and --after-only before the deploy refused (c);
+#     — the control, holding a row, with N2's plant — no G3 note and BN5 ok, N2 and N4 counting it. Option errors;
+#     --check-bank and --after-only before the deploy refused (c);
 #   · the refusals before anything changes: the live install not 5.18.97 (e35ecce serving), a part-way copy, another
 #     manifest, a file 5.18.98 changes not 5.18.97's, a bank-module file edited by hand — at BR1, then (BR1 taken out of a
 #     copy) at G1, and a copy without both reaches the question (caught); A14 over a failure 5.18.97 and 5.18.94 recorded
-#     and over 5.18.97's copy after the newest --check, each copy blind to it caught (1);
+#     and over 5.18.97's copy after the newest --check, each copy blind to it caught; rule A off (SSP among the book's
+#     currencies) refused at A23.7 by the pin's reading, then by the live code's (G2), and a copy without both no longer
+#     names the rule (caught) (1);
 #   · G3 both ways: a card that shows no figure (an offered account named Ecobank with no statement) refuses — nothing
 #     changed, the --without-bank-balance command printed alone with its own log — and a copy without the refusal says
-#     GO over it (caught); --check --without-bank-balance is GO with G3 a NOTE in the operator's words (2);
+#     GO over it (caught); --check --without-bank-balance is GO with G3 a NOTE in the operator's words; over cards that
+#     both show a figure the flag does nothing, and the deploy command is printed without it; ECO Bank's switch cleared
+#     refuses at G3 on the switch alone, and a copy without BankGate::open() says GO over it (caught) (2);
 #   · C5 against a planted write: a release whose library writes on a read path is refused first at A0 by the sha256 this
 #     script pins; pinned to it, the copy checks refuse at C5; a copy without C5's judgement says GO over it (caught); a
-#     copy whose copy checks run without a vault is caught by the observers (3);
+#     copy whose copy checks run without a vault is caught by the observers; a release whose countEntries() counts one
+#     more is refused at C4 alone, and a copy without C4's judgement says GO over it (caught) (3);
 #   · the deploy, DEPLOY typed, PASSES with a non-cash row arriving between the before-copy and the after-copy: CA3 says it
 #     as a NOTE (one row added, its id on the sheet only), every other check holds; the notes are exactly the ones named;
 #     the sheet's figures, ECO Bank lines, copy checks and N4 this rehearsal's own; nothing printed but counts and hashes;
@@ -57,7 +67,10 @@
 #   · --after-only as printed PASSES (R19 conclusive, CA3 the row again, V3j ON and unchanged); a copy whose CA3 FAILs on
 #     drift is caught; CA4 FAILs over the Cashbook's tab answering a visitor with no session, and a copy blind to it is
 #     caught; a write planted in the INSTALLED library FAILs CA2 at C5 (and R1, CA1 by bytes), and a copy without C5's
-#     judgement passes CA2 over it (caught); V3j FAILs the switch cleared while a run goes on; --check refused with 5.18.98
+#     judgement passes CA2 over it (caught); a card with no statement added after the deploy FAILs BA2's G3 again, and a
+#     copy turning that FAIL into an ok is caught; CA4 FAILs over the tab's export answering with a file, naming it alone,
+#     and a copy that never asks for it is caught; CA1 FAILs over a kept file edited and a page that no longer parses; V3j
+#     FAILs the switch cleared while a run goes on, BA2 saying it as the switch changed; --check refused with 5.18.98
 #     live; --check-bank PASSES, its lines this rehearsal's own (5);
 #   · the rollback as printed, ROLLBACK typed: PASSED — 5.18.97's twelve files by sha256, the split gone, ECO Bank, its
 #     switch, 088 and every kept row unchanged, both cards still a figure, cash in hand on a copy; a --redeploy before the
@@ -66,7 +79,8 @@
 #     --without-bank-balance PASSED, G3 and BA2 notes in the operator's words, --check-bank printed in its own block; its
 #     --after-only and that --check-bank as printed PASS once the card is gone (7);
 #   · a rollback whose copy leaves 5.18.98's routes.php behind FAILS RB twice; put back; --redeploy PASSES clean, CA3 ok —
-#     the control for CA3's note (8);
+#     the control for CA3's note — typed with --without-bank-balance over cards that both show a figure, which is
+#     recorded as nothing, so that its --after-only FAILs BA2 over a card added since without a statement (8);
 #   · nothing reaches Evolution; every observer quiet but on the one copy that trips it on purpose; no figure, secret, or
 #     ECO Bank name, number or ending in any output, log or state file (each sweep with its control); /tmp, the host and
 #     the checkout as found (10).
@@ -89,7 +103,7 @@ T1_EARLY98="$(sed -n 's/^T1_SIGNATURE="\([^"]*\)".*/\1/p' "$H98_ROOT/$F98" 2>/de
 case "$P98_EARLY" in __*|'') echo "refusing: $F98 is not pinned to a release commit (${P98_EARLY:-none})"; exit 2;; esac
 case "$P98F_EARLY" in "$P98_EARLY"*) [ "${#P98F_EARLY}" = "40" ] || { echo "refusing: $F98 does not pin its release commit in full"; exit 2; } ;; *) echo "refusing: $F98's full pin does not begin with its short one"; exit 2;; esac
 case "$T1_EARLY98" in [1-9]*' passed, 0 failed rc=0') ;; *) echo "refusing: $F98 does not pin T1's count (T1_SIGNATURE=${T1_EARLY98:-none})"; exit 2;; esac
-for h in rh98-oracle.php rh98-account.php; do
+for h in rh98-oracle.php rh98-account.php rh98-rows.php; do
   [ -f "$H98_DIR/$h" ] || { echo "refusing: this rehearsal's helper $h is not beside it"; exit 2; }
 done
 H97_HARNESS="$H98_DIR/../deploy-5.18.97/rehearse.sh"
@@ -156,7 +170,7 @@ MIG88_SHA98="$(sed -n 's/^MIG88_SHA256="\([0-9a-f]*\)".*/\1/p' "$DEPLOY98")"; MI
 OUT98="$SB/out98"; mkdir -p "$OUT98"; STATE98="$OUT98/state-5.18.98.env"
 R98="$SB/r98"; mkdir -p "$R98/logs" "$R98/mutants" "$R98/sheets" "$R98/exec" "$R98/scan" "$R98/vault"   # the sweeps' material (10)
 : > "$R98/expected-trips"                            # the tags of the runs that trip an observer on purpose (weakened copies)
-H98="$SB/rh98"; mkdir -p "$H98/v"; cp "$H98_DIR"/rh98-oracle.php "$H98_DIR"/rh98-account.php "$H98/"
+H98="$SB/rh98"; mkdir -p "$H98/v"; cp "$H98_DIR"/rh98-oracle.php "$H98_DIR"/rh98-account.php "$H98_DIR"/rh98-rows.php "$H98/"
 chmod 644 "$H98"/rh98-*.php; chown 1000:1000 "$H98/v"; chmod 700 "$H98/v"   # the helpers' own vaults, the store's user's
 DATE_TS98='$(date -u +%Y%m%dT%H%M%SZ)'
 LOGW98() { printf '2>&1 | ( umask 077; exec tee %s/%s-%s.log )' "$OUT98" "$1" "$DATE_TS98"; }   # the script's LOGW, as it prints it
@@ -174,7 +188,19 @@ BANKU98="$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["bankU"])
 BANKD98="$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["bankD"])' "$BOOKIDS")"
 BANK298="$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["bank2"])' "$BOOKIDS")"
 ACCNAME98="RH98 Ecobank USD Reserve"                 # the plant for G3: an offered account the book names Ecobank, no statement
+ACCNAME98N="RH98 Inactive USD Account"               # the plant for N4: a bank account ECO Bank does not offer, holding a row
 NC_DESC98="RH98 non-cash row posted while the deploy ran"
+# The plant for N2 (the fourth review, RH-1): one approved row on no account of each class N2 counts — uCRM's online rows
+# from its webhook and from the gap-fill (cron_crm_payment_gap.php's crm_gap_fill), a Bank Transfer in, a Bank Transfer
+# out and a Bank Charges row — added through the INSTALLED code's own addEntryRaw() (rh98-rows.php). Amounts invented.
+N2ROWS98='[{"project":"dishnet","date":"2026-09-01","direction":"in","amount":314159.26,"currency":"UGX","category":"Receipt","category_raw":"Receipt","description":"RH98 N2 a uCRM webhook payment, online","status":"approved","approved_by":"RH98 Approver","source":"crm_webhook","validation_status":"online","account_id":0},
+ {"project":"dishnet","date":"2026-09-01","direction":"in","amount":161803.39,"currency":"UGX","category":"Receipt","category_raw":"Receipt","description":"RH98 N2 a uCRM payment filled in by the gap-fill, online","status":"approved","approved_by":"RH98 Approver","source":"crm_gap_fill","validation_status":"online","account_id":0},
+ {"project":"dishnet","date":"2026-09-01","direction":"in","amount":141421.35,"currency":"UGX","category":"Bank Transfer","category_raw":"Bank Transfer","description":"RH98 N2 a Bank Transfer in","status":"approved","approved_by":"RH98 Approver","source":"manual","account_id":0},
+ {"project":"dishnet","date":"2026-09-01","direction":"out","amount":173205.08,"currency":"UGX","category":"Bank Transfer","category_raw":"Bank Transfer","description":"RH98 N2 a Bank Transfer out","status":"approved","approved_by":"RH98 Approver","source":"manual","account_id":0},
+ {"project":"dishnet","date":"2026-09-01","direction":"out","amount":223606.79,"currency":"UGX","category":"Bank Charges","category_raw":"Bank Charges","description":"RH98 N2 a Bank Charges row","status":"approved","approved_by":"RH98 Approver","source":"manual","account_id":0}]'
+acct_row98() {   # acct_row98 ACCOUNT-ID CUR AMOUNT DESCRIPTION — one listed row on that account, as rh98-rows.php takes it (JSON)
+  printf '[{"project":"dishnet","date":"2026-09-01","direction":"in","amount":%s,"currency":"%s","category":"Receipt","category_raw":"Receipt","description":"%s","status":"approved","approved_by":"RH98 Approver","source":"manual","account_id":%s}]' "$3" "$2" "$4" "$1"
+}
 
 left_tmp98() { ls -d /tmp/dnb-5.18.98-* /tmp/dn-master-lock-* /tmp/dn_autopull_* 2>/dev/null | wc -l | tr -d ' '; }
 TMP98="$(left_tmp98)"
@@ -337,11 +363,12 @@ o98() { local f="$H98/o98-$(date +%s%N).json"; oracle98 > "$f"; printf '%s' "$f"
 cash98() { local f="$H98/cash-$1.json"; oracle96 > "$f"; printf '%s' "$f"; }   # the cash cells as 5.18.96's rehearsal reads them
 kv98() { printf '%s' "$1" | sed -nE "s/^(.* )?$2=([^ ]*).*\$/\2/p" | head -1; }   # the script's kv, for this rehearsal's own lines
 sub98() { printf '%s' "$1" | tr ',' '\n' | sed -n "s/^$2://p" | head -1; }        # one field of a "key:value,…" list
-printf '%s\n' 271828.18 > "$SB/seed98.amounts"       # the stand-in's non-cash row; nothing else this rehearsal seeds is a figure
+# the stand-in's non-cash row, N2's five planted rows and N4's two (RH-1); nothing else this rehearsal seeds is a figure
+printf '%s\n' 271828.18 314159.26 161803.39 141421.35 173205.08 223606.79 57721.56 69314.72 > "$SB/seed98.amounts"
 forms98() { python3 "$H98/rh98.py" forms "$SB/forms98.txt" "$SB/seed96.amounts" "$SB/seed97.amounts" "$SB/stmt97.amounts" "$SB/seed98.amounts" "$H97"/cash-*.json "$H98"/cash-*.json "$R97"/sheets/cash-*.txt "$R98"/sheets/cash-*.txt "$OUT97"/cash-*.txt "$OUT98"/cash-*.txt >/dev/null 2>&1; }
 figs98() { forms98; python3 "$H98/rh98.py" hits "$SB/forms98.txt" "$@"; }   # figs98 FILE… — how many hold a figure, in any printed form
 BANKPAT98="$SB/bank98.pat"   # what the script must never print of ECO Bank: 5.18.97's list, and this rehearsal's account
-{ cat "$BANKPAT97"; printf '%s\n' "$ACCNAME98"; } > "$BANKPAT98"
+{ cat "$BANKPAT97"; printf '%s\n' "$ACCNAME98" "$ACCNAME98N"; } > "$BANKPAT98"
 bankhits98() { local n=0 f; for f in "$@"; do [ -f "$f" ] && grep -qF -f "$BANKPAT98" -- "$f" && n=$((n+1)); done; echo "$n"; }
 noids98() {   # noids98 OUTPUT — lines holding a row id ("#<digits>") that are neither G3's nor --check-bank's own per-account lines
   grep -E '#[0-9]+' <<<"$1" | grep -vcE '^  G3              account #[0-9]+ [A-Z]{3} ecobank-named=(yes|no) statement-kept=(yes|no)$|^  account [0-9]+ of [0-9]+  account #[0-9]+ [A-Z]{3}  named Ecobank: '
@@ -350,6 +377,16 @@ acct_add98() {   # acct_add98 NAME CUR — an account added through the INSTALLE
   local o; o="$(cd "$H98/v" && setpriv --reuid 1000 --regid 1000 --clear-groups -- env DN_VAULT_FILE="$H98/v/acct-vault.json" "$PHPBIN" "$H98/rh98-account.php" "$PD" "$DATA" "$1" "$2" 2>"$H98/v/acct.err")"
   rm -f "$H98/v/acct-vault.json"
   python3 -c 'import json, sys; print(json.loads(sys.argv[1])["id"])' "$o" 2>/dev/null || echo "none($(head -c 120 "$H98/v/acct.err"))"
+}
+rows_add98() {   # rows_add98 JSON — listed rows added through the INSTALLED code's own addEntryRaw(), as the store's user, with a
+                 # vault of its own; {"rows":N}, or none(<why>)
+  local o; o="$(cd "$H98/v" && setpriv --reuid 1000 --regid 1000 --clear-groups -- env DN_VAULT_FILE="$H98/v/rows-vault.json" "$PHPBIN" "$H98/rh98-rows.php" "$PD" "$DATA" "$1" 2>"$H98/v/rows.err")"
+  rm -f "$H98/v/rows-vault.json"
+  case "$o" in '{"rows":'*) printf '%s' "$o" ;; *) echo "none($(head -c 120 "$H98/v/rows.err"))" ;; esac
+}
+n2ok98() {   # n2ok98 ORACLE-FILE — 1112 when the oracle's N2 counts every class: Bank Transfer in, out, Bank Charges, uCRM two or more
+  local k o=""; for k in btin btout charges; do [ "$(sub98 "$(oj "$1" n2)" "$k")" -ge 1 ] 2>/dev/null && o="${o}1" || o="${o}0"; done
+  [ "$(sub98 "$(oj "$1" n2)" crm)" -ge 2 ] 2>/dev/null && o="${o}2" || o="${o}0"; echo "$o"
 }
 g3say98() { python3 "$H98/rh98.py" g3term "$1"; }   # G3's lines on a run's terminal file: id:CUR/named/kept
 n1say98() { printf '%s' "$1" | sed 's/,/; /g'; }   # N1's counts in the note's form
@@ -418,8 +455,8 @@ elif cmd == 'nblocks':                   # how many notes blocks a sheet holds
 '''
 open(sys.argv[2], 'w').write(s)
 PY
-check "$(python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read()); print("parses")' "$H98/rh98.py" 2>&1)$(for f in "$H98"/rh98-*.php; do php -l "$f" 2>&1 | grep -c '^No syntax errors'; done | tr -d '\n')" "parses11" \
-  "control: this rehearsal's readers (5.18.97's, derived) and its two PHP helpers parse"
+check "$(python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read()); print("parses")' "$H98/rh98.py" 2>&1)$(for f in "$H98"/rh98-*.php; do php -l "$f" 2>&1 | grep -c '^No syntax errors'; done | tr -d '\n')" "parses111" \
+  "control: this rehearsal's readers (5.18.97's, derived) and its three PHP helpers parse"
 
 echo; echo "== 98-pre. the sandbox as production is: 5.18.97 live, ECO Bank on, both statements kept; the observers taught this release's folders =="
 O97_0="$(o97)"
@@ -464,10 +501,11 @@ check "$(python3 "$H98/rh98.py" audit "$SB/obs98b.rec")" "copies=3 novault=1 plu
   "control: the audit counts the copy checks' processes on their code copies (c-new, c-old) and a gate process on ECO Bank's — one without a vault — and neither a 5.18.97 path nor the digest and notes readers, which run no plugin code"
 rm -f "$SB/obs98b.rec"
 
-# ── The stand-in public.php learns three more triggers, each spent once: a non-cash row — on the account the trigger names,
+# ── The stand-in public.php learns four more triggers, each spent once: a non-cash row — on the account the trigger names,
 # through the INSTALLED code's own writer — posted while a run goes on (.add_noncash98), at the first request, which in a
 # deploy is V's: after the before-copy (A23) and before the after-copy (R23); the Cashbook's tab "Bank & other accounts"
-# answering a visitor with no session with the page (.leak_cb98, CA4); and 5.18.98's routes.php left behind by a
+# answering a visitor with no session with the page (.leak_cb98, CA4); the tab's own export (cb_book=noncash) answering
+# one with a file — 200, a Content-Disposition, no redirect (.leak_cbx98, CA4); and 5.18.98's routes.php left behind by a
 # rollback's copy (.left98, naming the file to copy) — at the first request once 5.18.97's manifest is installed again
 # (8). Asserted, as every edit here. ─────────────────────────────────────────────────────────────────────────────────────
 python3 - "$SB/web/public.php" <<'PY' || echo "standin:triggers98" >> "$SB/anchor-missing"
@@ -488,17 +526,21 @@ if ($nc98 > 0 && $spend('.add_noncash98')) {   // 5.18.98's rehearsal: a non-cas
 if (($_GET['page'] ?? '') === 'dashboard' && ($_GET['tab'] ?? '') === 'cashbook' && ($_GET['cb_view'] ?? '') === 'noncash' && !isset($_GET['cb_export']) && $spend('.leak_cb98')) {
     echo '<html><body><div class="cb3-hero">CASH IN HAND</div></body></html>'; exit;   // 5.18.98's rehearsal: the tab to a visitor with no session (CA4)
 }
+if (($_GET['page'] ?? '') === 'dashboard' && ($_GET['tab'] ?? '') === 'cashbook' && isset($_GET['cb_export']) && ($_GET['cb_book'] ?? '') === 'noncash' && $spend('.leak_cbx98')) {
+    header('Content-Type: text/csv'); header('Content-Disposition: attachment; filename="rh98-noncash.csv"');   // 5.18.98's rehearsal: the tab's
+    echo "id,date\\n"; exit;                                                                                       // export, a file, to a visitor with no session (CA4)
+}
 $left98 = is_file($web . '/.left98') ? trim((string)file_get_contents($web . '/.left98')) : '';
 if ($left98 !== '' && strpos((string)@file_get_contents($root . '/manifest.json'), '"5.18.97"') !== false && $spend('.left98')) {
     copy($left98, $root . '/includes/routes.php');   // 5.18.98's rehearsal: 5.18.98's routes.php left behind by a rollback's copy (RB)
 }
 """ + old
 s = s.replace(old, new, 1)
-assert s.count("'.add_noncash98'") == 1 and s.count("'.leak_cb98'") == 1 and s.count("'.left98'") == 1 and s.count('rh98_probe') == 1 and s.count(old) == 1
+assert s.count("'.add_noncash98'") == 1 and s.count("'.leak_cb98'") == 1 and s.count("'.leak_cbx98'") == 1 and s.count("'.left98'") == 1 and s.count('rh98_probe') == 1 and s.count(old) == 1
 open(p, 'w').write(s)
 PY
 for i in $(seq 1 60); do pubget page=rh98_probe | grep -q 'rh98-triggers-ready' && break; sleep 0.1; done   # PHP re-reads the edited file
-check "$(pubget page=rh98_probe)$(ls -A "$SB/web" | grep -c '^\.add_noncash98$\|^\.leak_cb98$\|^\.left98$')" "rh98-triggers-ready0" "control: the stand-in carries the three triggers, unspent and unset"
+check "$(pubget page=rh98_probe)$(ls -A "$SB/web" | grep -c '^\.add_noncash98$\|^\.leak_cb98$\|^\.leak_cbx98$\|^\.left98$')" "rh98-triggers-ready0" "control: the stand-in carries the four triggers, unspent and unset"
 VT98_0="$(vt_host)"; D98="$(data94)"; DX98="$(data98x)"; O98_0="$(o98)"
 check "$VT98_0" "$VT97_0" "pre-d the live vault as 5.18.97's rehearsal settled it (its fixed point), holding the planted webhook secret and credential"
 check "$(oj "$O98_0" curs)|$( [ "$(oj "$O98_0" listed)" -gt 0 ] 2>/dev/null && echo listed)|$( [ "$(sub98 "$(oj "$O98_0" noncash)" all)" -gt 0 ] 2>/dev/null && echo moves)|$(sub98 "$(oj "$O98_0" n1)" all | awk -F/ '$1 > 0 { print "bank" }')" "UGX,USD|listed|moves|bank" \
@@ -555,6 +597,13 @@ RB_DEF98="$(sed -n 8p "$DEFS98")"
 M="$(mutant fnowrap98 "$DEPLOY98" "$RB_DEF98" 'RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh"')"
 check "$(cmds98 "$M" | cut -d'|' -f1)" "11111110" "0-cmd' a copy that defines the runbook's deploy without its log wrapper is caught by the same reading"
 rm -f "$M"
+# printed98's third count — the lines that hold two commands (root docs/44 §16.9) — is asserted 0 on every run below; its
+# control, as 5.18.97's rehearsal carried one (RH-6): a summary line holding the --after-only and the rollback pasted
+# together reads 1, and an ok line that names the script twice in words, never in a command's form, reads 0.
+PR98_TWO="$(printf '%s\n' '== F. Summary ==' "      $EXP_AFTER98; $EXP_ROLLBACK98")"
+PR98_WORDS="  ok    R26 deploy-5.18.98.sh's South Sudan check, as deploy-5.18.98.sh's A24 reads it — the script named twice, in words"
+check "$(printed98 "$PR98_TWO")|$(printed98 "$PR98_WORDS" | cut -d'|' -f3)" "1|0|1|0" \
+  "control: printed98 sees a summary line holding two commands — the --after-only and the rollback pasted together: one command line, its log wrapper on it, and one line holding two — and not an ok line that names deploy-5.18.98.sh twice in words"
 check "$(grep -cE '(>|>>) *"?\$(VAULT_HOST|VAULT)"?( |$)' "$DEPLOY98")$(grep -cE '(mv|rm|touch|chmod|chown|tee) [^|;]*"\$(VAULT_HOST|VAULT)"' "$DEPLOY98")$(grep -E 'cp [^|;]*"\$VAULT"' "$DEPLOY98" | grep -vcF 'cp -p "$VAULT" "$BK/config-vault.json"')" "000" \
   "the script never writes, moves or touches the live vault — it copies it only into its own backup"
 check "$(grep -cE '(cat|head|tail|more|less|awk|sed|grep)( -[^ ]+)* +"\$SHEET"' "$DEPLOY98")$(grep -cF 'echo "      less $SHEET"' "$DEPLOY98")" "03" \
@@ -590,7 +639,25 @@ open(sys.argv[2] + '/cj.sh', 'w').write('\n'.join(out) + '\n')
 PY
 chown -R 1000:1000 "$K98"
 php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec("VACUUM INTO " . $p->quote($argv[2]));' "$DATA/plugin.sqlite3" "$K98/copy.sqlite3" || echo "  diag 0-k98: the copy failed ($(ls -ld "$K98" 2>&1 | cut -c1-60))"
-NT98="$(php -r "$(cat "$K98/notes_php.txt")" "$K98/copy.sqlite3" "$(oj "$O98_0" curs)" "$K98/notes.txt" 2>/dev/null)"
+# N1–N4's own SQL is read on a book that holds what N2 and N4 count, never 0 against 0 (the fourth review, RH-1): the plant
+# of N2 (N2ROWS98: a row of each class it counts, uCRM's webhook and gap-fill rows among them) and N4's account — USD,
+# made inactive, so ECO Bank does not offer it — holding one listed row, through the installed code's own writers, in the
+# live book only for as long as a copy of it takes (db_keep/db_back). The notes are read on that copy (notes.sqlite3); the
+# oracle reads the planted book before it is put back.
+db_keep
+ACC98N="$(acct_add98 "$ACCNAME98N" USD)"
+RW98N="$(rows_add98 "$N2ROWS98")"
+case "$ACC98N" in
+  [1-9]*) RW98NI="$(rows_add98 "$(acct_row98 "$ACC98N" USD 57721.56 'RH98 N4 a row on a bank account ECO Bank does not offer')")"
+          sqx "UPDATE cb_accounts SET active = 0 WHERE id = $ACC98N" >/dev/null ;;
+  *) RW98NI="none(no account)" ;;
+esac
+php -r '$p = new PDO("sqlite:" . $argv[1]); $p->exec("VACUUM INTO " . $p->quote($argv[2]));' "$DATA/plugin.sqlite3" "$K98/notes.sqlite3" || echo "  diag 0-k98: the notes' copy failed"
+O98_K="$(o98)"
+db_back
+check "$(case "$ACC98N" in [1-9]*) echo added ;; *) echo "$ACC98N" ;; esac)|$RW98N|$RW98NI|$(data94)|$(vt_host)" "added|{\"rows\":5}|{\"rows\":1}|$D98|$VT98_0" \
+  "0-k98 the notes' plant: an inactive USD bank account and six listed rows, through the installed code's own addAccount() and addEntryRaw(), copied — and the live book put back byte for byte, the live vault untouched"
+NT98="$(php -r "$(cat "$K98/notes_php.txt")" "$K98/notes.sqlite3" "$(oj "$O98_K" curs)" "$K98/notes.txt" 2>/dev/null)"
 cpd98() { php -r "$(cat "$K98/cpd_php.txt")" "$K98/copy.sqlite3" 2>/dev/null; }
 cmpd98() { local w="" k; for k in rows acc master; do [ "$(kv98 "$1" "$k")" = "$(kv98 "$2" "$k")" ] || w="$w,$k"; done; w="${w#,}"; echo "${w:--}"; }
 C5D0="$(cpd98)"; C5D0B="$(cpd98)"
@@ -612,9 +679,63 @@ assert s.count(old) == 1, s.count(old)
 open(sys.argv[2], 'w').write(s.replace(old, ''))
 PY
 check "$(cj98 "${CJ_GOOD/c5=same/c5=differs}" "$K98/cjw.sh")" "ok" "0-k'' control on the control: the judge without its C5 line calls the moved digest ok — what the weakened copies of 3 and 5 are, and must be seen to be"
+# …and every other term of the judge (the fourth review, RH-2): C1, C2, C4 and C3's counts, nulls and chips, each short of
+# full, named in its own words; each line taken out of a copy of the judge, that copy calls the same short count ok.
+check "$(cj98 "${CJ_GOOD/c1=8\/8/c1=7/8}" "$K98/cj.sh")|$(cj98 "${CJ_GOOD/c2=12\/12/c2=11/12}" "$K98/cj.sh")|$(cj98 "${CJ_GOOD/counts:12\/12/counts:11/12}" "$K98/cj.sh")|$(cj98 "${CJ_GOOD/nulls:12\/12/nulls:11/12}" "$K98/cj.sh")|$(cj98 "${CJ_GOOD/chips:3\/3/chips:2/3}" "$K98/cj.sh")|$(cj98 "${CJ_GOOD/c4=12\/12/c4=11/12}" "$K98/cj.sh")" \
+      "C1:cash-in-hand(7/8)|C2:the-list-with-no-key(11/12)|C3:counts(11/12)|C3:nulls(11/12)|C3:chips(2/3)|C4:counts-pending-pl(11/12)" \
+  "0-k' …and every other term: cash in hand (C1), the list with no key (C2), C3's counts, nulls and chips, and the counts, pending and P&L (C4), each short of full, named in the judge's own words"
+python3 - "$K98/cj.sh" "$K98" <<'PY' || echo "instrument:cj-weak98b" >> "$SB/anchor-missing"
+import sys
+s = open(sys.argv[1]).read(); d = sys.argv[2]
+loop = 'for x in parts counts nulls chips; do'
+cuts = (('cjw-c1', '  c_full "$(kv "$l" c1)" || w="$w C1:cash-in-hand($(kv "$l" c1))"\n', ''),
+        ('cjw-c2', '  c_full "$(kv "$l" c2)" || w="$w C2:the-list-with-no-key($(kv "$l" c2))"\n', ''),
+        ('cjw-c4', '  c_full "$(kv "$l" c4)" || w="$w C4:counts-pending-pl($(kv "$l" c4))"\n', ''),
+        ('cjw-counts', loop, 'for x in parts nulls chips; do'),
+        ('cjw-nulls', loop, 'for x in parts counts chips; do'),
+        ('cjw-chips', loop, 'for x in parts counts nulls; do'))
+for name, old, new in cuts:
+    assert s.count(old) == 1, (name, s.count(old))
+    t = s.replace(old, new, 1)
+    assert t != s and t.count(old) == 0 and (new == '' or t.count(new) == 1), name
+    open(d + '/' + name + '.sh', 'w').write(t)
+PY
+check "$(cj98 "${CJ_GOOD/c1=8\/8/c1=7/8}" "$K98/cjw-c1.sh")|$(cj98 "${CJ_GOOD/c2=12\/12/c2=11/12}" "$K98/cjw-c2.sh")|$(cj98 "${CJ_GOOD/counts:12\/12/counts:11/12}" "$K98/cjw-counts.sh")|$(cj98 "${CJ_GOOD/nulls:12\/12/nulls:11/12}" "$K98/cjw-nulls.sh")|$(cj98 "${CJ_GOOD/chips:3\/3/chips:2/3}" "$K98/cjw-chips.sh")|$(cj98 "${CJ_GOOD/c4=12\/12/c4=11/12}" "$K98/cjw-c4.sh")" \
+      "ok|ok|ok|ok|ok|ok" \
+  "0-k'' controls on the control: a judge without its C1 line, its C2 line, its C4 line, or with counts, nulls or chips dropped from C3's terms, calls that same short count ok — each of those lines is what stands between a defect and GO (caught)"
+# CPJ_PHP — the copy checks' own comparison — on synthetic readings in this rehearsal's folder: two the same; one cell of C1,
+# of C2 and of C4 changed; and two that hold nothing, as a CP_PHP that compared nothing would leave. Counts only, no book.
+printf '%s' '{"role":"old","rule":1,"c1":{"UGX|":"a","UGX|dishnet":"b"},"c2":{"|":[1,"x"],"dishnet|":[2,"y"]},"c4":{"count|":"p","pl|":"q"}}' > "$K98/cpj-o.json"
+printf '%s' '{"role":"new","rule":1,"c1":{"UGX|":"a","UGX|dishnet":"b"},"c2":{"|":[1,"x"],"dishnet|":[2,"y"]},"c4":{"count|":"p","pl|":"q"},"c3":{"views":2,"parts":2,"counts":2,"nulls":2,"chips":3,"rows":{"|":[3,2,1]},"chipd":{}}}' > "$K98/cpj-same.json"
+printf '%s' '{"role":"new","rule":1,"c1":{"UGX|":"a","UGX|dishnet":"B"},"c2":{"|":[1,"x"],"dishnet|":[2,"Y"]},"c4":{"count|":"P","pl|":"q"},"c3":{"views":2,"parts":2,"counts":2,"nulls":2,"chips":3,"rows":{"|":[3,2,1]},"chipd":{}}}' > "$K98/cpj-diff.json"
+printf '%s' '{"role":"old","rule":1}' > "$K98/cpj-oe.json"; printf '%s' '{"role":"new","rule":1}' > "$K98/cpj-ne.json"
+CPJD98="rows=0123456789abcdef:1 acc=0123456789abcdef:1 master=0123456789abcdef:1"
+cpj98() { php -r "$(cat "$K98/cpj_php.txt")" "$K98/$1" "$K98/$2" "$K98/cpj-sheet.txt" rh98 "$CPJD98" "$CPJD98" "$CPJD98" 2>/dev/null; }
+CPJS98="$(cpj98 cpj-o.json cpj-same.json)"; CPJX98="$(cpj98 cpj-o.json cpj-diff.json)"; CPJE98="$(cpj98 cpj-oe.json cpj-ne.json)"
+check "$(kv98 "$CPJS98" c1)/$(kv98 "$CPJS98" c2)/$(kv98 "$CPJS98" c4)|$(cj98 "$CPJS98" "$K98/cj.sh")|$(kv98 "$CPJX98" c1)/$(kv98 "$CPJX98" c2)/$(kv98 "$CPJX98" c4)|$(cj98 "$CPJX98" "$K98/cj.sh")|$(cj98 "$CPJE98" "$K98/cj.sh")" \
+      "2/2/2/2/2/2|ok|1/2/1/2/1/2|C1:cash-in-hand(1/2) C2:the-list-with-no-key(1/2) C4:counts-pending-pl(1/2)|C1:cash-in-hand(0/0) C2:the-list-with-no-key(0/0) C3:parts(0/0) C3:counts(0/0) C3:nulls(0/0) C3:chips(0/3) C4:counts-pending-pl(0/0)" \
+  "0-k'c the copy checks' comparison (CPJ_PHP), as the script carries it, then its judge: two readings the same, every term full — ok; one cell of C1, of C2 and of C4 changed, each counted short and named; two readings that hold nothing — what a CP_PHP that compared nothing would leave — never ok: every term 0/0, named"
+check "$(n2ok98 "$O98_K")|$( [ "$(sub98 "$(oj "$O98_K" n4)" accounts)" -ge 1 ] 2>/dev/null && echo n4)|$(case ",$(oj "$O98_K" n4ids)," in *",$ACC98N,"*) echo listed ;; *) echo "not-listed($(oj "$O98_K" n4ids))" ;; esac)|$(python3 "$H98/rh98.py" n4sheet "$K98/notes.txt" | tr ',' '\n' | grep -c .)" \
+      "1112|n4|listed|$(oj "$O98_K" n4ids | tr ',' '\n' | grep -c .)" \
+  "0-k''' control: the reading the notes are set against is not vacuous — this rehearsal's own reading counts every class of N2 on the planted copy (uCRM's two, its webhook's and its gap-fill's), N4 the inactive USD account by its row id; and the notes' sheet names as many accounts as that reading does"
 check "$(kv98 "$NT98" n1)|$(kv98 "$NT98" n2)|$(kv98 "$NT98" n3)|$(kv98 "$NT98" n4)|$(kv98 "$NT98" acc)|$(stat -c %a "$K98/notes.txt" 2>/dev/null)|$(python3 "$H98/rh98.py" n4sheet "$K98/notes.txt")|$(bankhits98 "$K98/notes.txt")" \
-      "$(oj "$O98_0" n1)|$(oj "$O98_0" n2)|$(oj "$O98_0" n3)|$(oj "$O98_0" n4)|yes|600|$(oj "$O98_0" n4ids)|0" \
-  "0-k''' N1–N4's own SQL, as the script carries it, on a copy of the book: every count this rehearsal counts from the design, row by row in PHP — N1 per project and kind, N2, N3, N4 — and its sheet lines 0600, N4's accounts by row id, no name"
+      "$(oj "$O98_K" n1)|$(oj "$O98_K" n2)|$(oj "$O98_K" n3)|$(oj "$O98_K" n4)|yes|600|$(oj "$O98_K" n4ids)|0" \
+  "0-k''' N1–N4's own SQL, as the script carries it, on a copy of the book that holds what N2 and N4 count: every count this rehearsal counts from the design, row by row in PHP — N1 per project and kind, N2, N3, N4 — and its sheet lines 0600, N4's accounts by row id, no name"
+python3 - "$K98/notes_php.txt" "$K98" <<'PY' || echo "instrument:notes-weak98" >> "$SB/anchor-missing"
+import sys
+s = open(sys.argv[1]).read(); d = sys.argv[2]
+for name, old, new in (('notes_w1', "category = 'Bank Charges'", "category = 'Bank Charge'"),
+                       ('notes_w2', "source IN ('crm_sync', 'crm_api_sync', 'crm_webhook', 'crm_gap_fill')", "source IN ('crm_sync', 'crm_api_sync', 'crm_webhook')")):
+    assert s.count(old) == 1, (name, s.count(old))
+    t = s.replace(old, new, 1)
+    assert t != s and t.count(old) == 0 and t.count(new) == 1, name
+    open(d + '/' + name + '.txt', 'w').write(t)
+PY
+NTW198="$(php -r "$(cat "$K98/notes_w1.txt")" "$K98/notes.sqlite3" "$(oj "$O98_K" curs)" "$K98/notes-w1.txt" 2>/dev/null)"
+NTW298="$(php -r "$(cat "$K98/notes_w2.txt")" "$K98/notes.sqlite3" "$(oj "$O98_K" curs)" "$K98/notes-w2.txt" 2>/dev/null)"
+CRMK98="$(sub98 "$(oj "$O98_K" n2)" crm)"; CRMW98="$(sub98 "$(kv98 "$NTW298" n2)" crm)"
+check "$( [ "$(kv98 "$NTW198" n2)" = "$(oj "$O98_K" n2)" ] && echo blind || echo caught)|$(sub98 "$(kv98 "$NTW198" n2)" charges)|$( [ "$(kv98 "$NTW298" n2)" = "$(oj "$O98_K" n2)" ] && echo blind || echo caught)|$(( ${CRMK98:-0} - ${CRMW98:-0} ))" "caught|0|caught|1" \
+  "0-k''' controls on the control: N2's SQL with its Bank Charges literal misspelt counts none and no longer agrees — the comparison above FAILS on it (caught); without the gap-fill's source (crm_gap_fill) it counts one uCRM row fewer — the row SPEC §2.10 N2 counts and the script's first copy left out (caught)"
 check "$(php -r "$(cat "$K98/cp_php.txt")" ctor "/var/x/c-new/$P" /var/x/c-data none new 2>/dev/null)|$(php -r "$(cat "$K98/cpj_php.txt")" /var/x/o.json /var/x/n.json /var/x/sheet.txt x d0 d1 d2 2>/dev/null)|$(php -r "$(cat "$K98/notes_php.txt")" "$K98/copy.sqlite3" UGX /var/x/n2.txt 2>/dev/null)|$( [ -e /var/x ] && echo made || echo none)" \
       "?notacopy|?notacopy|?notacopy|none" \
   "0-k'''' the copy checks' code, their judge and the notes' SQL each refuse to start on a path outside the container's /tmp — a code root, the judge's sheet, the notes' sheet (on a book under /tmp) — before they read or write anything"
@@ -645,15 +766,22 @@ check "$(python3 "$H98/rh98.py" ecosheet "$SHC")|$(python3 "$H98/rh98.py" cpshee
   "…the sheet: ECO Bank's offered accounts twice (the live classes, then the pin's), by row id — this rehearsal's own reading; the copy checks' rows listed / cash / not cash for all projects, this rehearsal's own count; N4's accounts by row id"
 check "$(noids98 "$OUT")|$(figs98 "$R98/run-$T.txt")|$(bankhits98 "$R98/run-$T.txt" "$SHC")|$(quietobs98 "$T")" "0|0|0|0|novault=0 plugin=0|$VT98_0>$VT98_0" \
   "…no row id in the terminal but G3's own lines, no figure, no account name or number (nor a name on the sheet); the observers quiet — every process on a copy, the copy checks' two codes among them, with a vault of its own — the live vault untouched"
-# The control for G3's note: the second UGX account switched off (inactive), so every offered account is named Ecobank.
+# The control for G3's note: the second UGX account switched off (inactive), so every offered account is named Ecobank —
+# and, so that a run's N2 and N4 notes count something rather than 0 against 0 (the fourth review, RH-1), a listed row on
+# that account before it is switched off (N4's: an account ECO Bank does not offer, holding rows) and N2's plant, a row of
+# each class it counts, through the installed code's own writer.
 db_keep
+RW98C2="$(rows_add98 "$N2ROWS98")|$(rows_add98 "$(acct_row98 "$BANK298" UGX 69314.72 'RH98 N4 a row on the second UGX account')")"
 sqx "UPDATE cb_accounts SET active = 0 WHERE id = $BANK298" >/dev/null
 OC2="$(o97)"; NC2="$(o98)"; D98C2="$(data94)"
-fresh98; OUT="$(run98 --check)"; T="$(last98)"
+fresh98; OUT="$(run98 --check)"; T="$(last98)"; SHC2="$(sheet_of "$OUT")"
 check "$(oj "$OC2" offered)|$(checkgo98 "$OUT" | cut -d'|' -f1)|$(noteline "$OUT" G3 'not named Ecobank hold no statement')$(okline "$OUT" BN5 "the book offers one bank account per currency, each named Ecobank — $(oj "$OC2" bn5): ECO BANK UGX/USD each have their account")|$(g3say98 "$R98/run-$T.txt")" \
       "UGX:1:1:1,USD:1:1:1|yesyesnono0|noyes|$(python3 "$H98/rh98.py" g3exp "$OC2")" \
   "c2 control: that account made inactive — no longer offered — and --check is GO with no G3 note, BN5 ok, G3's lines the two Ecobank accounts alone"
-check "$(noteline "$OUT" N4 "that hold rows: $(sub98 "$(oj "$NC2" n4)" accounts), with $(sub98 "$(oj "$NC2" n4)" rows) row(s)")|$(data94)" "yes|$D98C2" "…N4 still this rehearsal's own count — an inactive bank account holding rows is one ECO Bank does not offer; the data as the plant left it"
+check "$RW98C2|$(n2ok98 "$NC2")|$( [ "$(sub98 "$(oj "$NC2" n4)" accounts)" -ge 1 ] 2>/dev/null && echo n4)|$(case ",$(oj "$NC2" n4ids)," in *",$BANK298,"*) echo listed ;; *) echo "not-listed($(oj "$NC2" n4ids))" ;; esac)" '{"rows":5}|{"rows":1}|1112|n4|listed' \
+  "c2' the plant is not vacuous: five rows of N2's classes and one on the second UGX account, through the installed code's own writer — this rehearsal's own reading counts every class of N2 (uCRM's two) and that account under N4, by its row id"
+check "$(noteline "$OUT" N2 "uCRM's online $(sub98 "$(oj "$NC2" n2)" crm), Bank Transfer in $(sub98 "$(oj "$NC2" n2)" btin), Bank Transfer out (cash really banked) $(sub98 "$(oj "$NC2" n2)" btout), Bank Charges $(sub98 "$(oj "$NC2" n2)" charges)")$(noteline "$OUT" N4 "that hold rows: $(sub98 "$(oj "$NC2" n4)" accounts), with $(sub98 "$(oj "$NC2" n4)" rows) row(s)")|$(python3 "$H98/rh98.py" nblocks "$SHC2"):$(python3 "$H98/rh98.py" n4sheet "$SHC2")|$(data94)" "yesyes|1:$(oj "$NC2" n4ids)|$D98C2" \
+  "…N2 and N4 still this rehearsal's own counts, now of something — N2 every class it counts, N4 an inactive bank account holding a row, one ECO Bank does not offer, by its row id on the sheet alone; the data as the plant left it"
 db_back
 check "$(data94)|$(oj "$(o97)" offered)" "$D98|UGX:2:1:1,USD:1:1:1" "…the book put back, byte for byte"
 fresh98; OUT="$(run98 --after-only --without-bank-balance)"
@@ -733,6 +861,26 @@ M="$(mutant a14copy98 "$DEPLOY98" '[ "$QCL_T" -gt "$PREV_COPY" ] || stop' 'true 
 fresh98; OUT="$(run98 --answer NO --script "$M")"; rm -f "$M"
 check "$(went98 "$OUT")$(has "$OUT" 'STOP: not confirmed')" "yesyesyes" "1h' a copy blind to 5.18.97's copy time reaches the question over it (caught)"
 rm -f "$STATE97.prev-20261019T020000Z"
+# G2 (SPEC-separate-v2 §2.10 R2, the fourth review RH-3): rule A read through the installed code. SSP added to the book's
+# currencies in both copies of the configuration — the file and the store row, so that the pages and the service still
+# agree (A23.8) — turns rule A off for both codes: the pin's reading refuses first; with that line taken out of a copy,
+# the LIVE code's reading — G2's own — refuses; with both taken out, the refusal no longer names the rule (caught).
+cfg_keep
+file_set cashbook_currencies UGX,USD,SSP; row_set cashbook_currencies UGX,USD,SSP; D98S="$(data94)"
+fresh98; OUT="$(run98 --check)"
+nogo98 "1i SSP among the book's currencies, in both copies of the configuration: rule A off — NO-GO at A23.7 on the pin's reading, before anything changes" \
+  "NO-GO (A23.7): rule A is NOT in force on this server's own configuration, as the pin's code reads it" "$OUT" "$D98S"
+G2PIN_OLD98='  [ "$(kv "$CIH_D" rule)" = "1" ] || stop "NO-GO (A23.7)'; G2LIVE_OLD98='  [ "$(kv "$CIH_T" rule)" = "1" ] || stop "NO-GO (A23.7)'
+M="$(mutant g2pin98 "$DEPLOY98" "$G2PIN_OLD98" '  true || stop "NO-GO (A23.7)')"
+fresh98; OUT="$(run98 --script "$M" --check)"; rm -f "$M"
+nogo98 "1i' …and with the pin's line taken out of a copy, G2 itself refuses: rule A as the LIVE code reads it, through the installed code" \
+  "NO-GO (A23.7): rule A is NOT in force on this server's own configuration as the LIVE code reads it" "$OUT" "$D98S"
+M="$(mutant g2blind98 "$DEPLOY98" "$G2PIN_OLD98" '  true || stop "NO-GO (A23.7)' "$G2LIVE_OLD98" '  true || stop "NO-GO (A23.7)')"
+fresh98; OUT="$(run98 --script "$M" --check)"; rm -f "$M"
+check "$(has "$OUT" 'NO-GO (A23.7)')$(has "$OUT" 'rule A is NOT in force')|$(quiet98)" "nono|$P97|0|$D98S|$KEPT98|0" \
+  "1i'' a copy without both — G2's weakened copy — no longer refuses on the rule: whatever stops it next, rule A is never named (caught); nothing changed"
+cfg_back
+check "$(data94)|$(oj "$(o98)" curs)" "$D98|UGX,USD" "…both copies of the configuration put back: the book's currencies UGX and USD again, every table as before"
 check "$(grep -c '^STRAY_Q_FAILED=' "$STATE97" "$STATE96" "$STATE95" "$STATE94" | awk -F: '{s += $2} END {print s}')|$(quiet98 | cut -d'|' -f1,3-)|$(sha256sum "$QREC" | cut -c1-16)" "0|$P97|$D98|$KEPT98|0|$QREC98" \
   "…every planted line taken out: 5.18.97 live, the data, the quarantine and its record as before — the script read the record, never wrote it"
 
@@ -760,6 +908,28 @@ check "$(has "$OUT" '  --check           stage A alone, every refusal and note o
   "…its summary says so and prints the runbook's deploy WITH --without-bank-balance, alone, with its own log — never without it"
 db_back
 check "$(data94)|$(oj "$(o97)" offered)" "$D98|UGX:2:1:1,USD:1:1:1" "…the account taken out (the book put back byte for byte): both cards a figure again"
+# --without-bank-balance typed over cards that both show a figure (the fourth review, conf-2/OPS-1): G3 holds, so the
+# flag changes nothing — and the deploy command --check hands over is the runbook's, without it.
+fresh98; S0="$(states98)"; OUT="$(run98 --check --without-bank-balance)"
+check "$(checkgo98 "$OUT")|$(okline "$OUT" G3 'both ECO BANK cards show a figure')$(noteline "$OUT" G3 '--without-bank-balance')|$(has "$OUT" ' with --without-bank-balance (not needed: G3 held, both ECO BANK cards show a figure — the deploy below is printed without it)')$(grep -cxF "      $EXP_RUNBOOK98" <<<"$OUT")$(grep -cxF "      $EXP_RUNBOOK98W" <<<"$OUT")" "yesyesnono0|0|$S0|yesno|yes10" \
+  "2d --check --without-bank-balance over cards that both show a figure: GO, G3 ok and no note — the flag did nothing; the summary says it is not needed and prints the runbook's deploy WITHOUT it, never carrying the choice where it changed nothing"
+# G3's first condition, BankGate::open(), on its own (the fourth review, RH-4): ECO Bank's switch cleared in both copies of
+# the configuration, every card's statement still kept — G3 refuses on the switch alone; a copy without that line says GO
+# over a closed ECO Bank (caught).
+cfg_keep
+cfg_set "$BK97" off; D98O="$(data94)"
+fresh98; OUT="$(run98 --check)"
+nogo98 "2e ECO Bank's switch cleared in both copies, both cards' statements kept: NO-GO at G3 — ECO Bank closed — nothing changed" \
+  "NO-GO (G3): not both ECO BANK cards show a figure (ECO-Bank-closed(switch:absent," "$OUT" "$D98O"
+check "$(noteline "$OUT" BR3 "ECO Bank's switch, $BK97, is absent in the configuration files")|$(both_copies "$BK97")" "yes|-" \
+  "…BR3 says the switch is not ON, as a note; G3 decides, on the switch alone — the offered accounts, named and kept, are as before"
+G3OPEN_OLD98='  [ "$(kv "$BK_A_KI" open)" = "yes" ] || G3_WHY='
+M="$(mutant g3open98 "$DEPLOY98" "$G3OPEN_OLD98" '  true || G3_WHY=')"
+fresh98; S0="$(states98)"; OUT="$(run98 --script "$M" --check)"; rm -f "$M"
+check "$(checkgo98 "$OUT")|$(okline "$OUT" G3 'both ECO BANK cards show a figure' 'BankGate::open() true')" "yesyesnono0|0|$S0|yes" \
+  "2f a copy without G3's first condition — BankGate::open() — says GO over a closed ECO Bank, and calls it open (caught)"
+cfg_back
+check "$(both_copies "$BK97")|$(data94)" "11|$D98" "…the switch put back in both copies: every table and file as before"
 
 echo; echo "== 98-3. C5 against a planted write: a release whose library writes on a read path; the copy checks without a vault =="
 # The plant sits inside listLocationWhere()'s own "cb_accounts exists" branch — the only place the split reads the chart of
@@ -799,6 +969,34 @@ fresh98; OUT="$(run98 --script "$M" --check)"; T="$(last98)"; trip98; rm -f "$M"
 check "$(checkgo98 "$OUT" | cut -d'|' -f1)|$(audit98 "$T" | sed -E 's/.* novault=([0-9]+) .*/\1/' | awk '{print ($1 >= 2 ? "two-or-more" : "only-" $1)}')|$(vault98 "$T")|$(data94)" \
       "yesyesnono0|two-or-more|$VT98_0>$VT98_0|$D98" \
   "3d a copy whose copy checks start each code without a vault of its own says GO — caught by the observers' record: two PHP processes or more on the copy checks' code copies (c-old, c-new) with no DN_VAULT_FILE of their own; the live vault and the data untouched"
+# C4 against a release that counts differently (the fourth review, RH-2): countEntries() one more for all projects — a
+# read that neither T1, A24 nor cash in hand makes, so only the copy checks can see it. Pinned to it, its sha256 re-pinned
+# as 3b's, the copy checks refuse at C4 alone; a copy without C4's judgement says GO over it (caught). C1's and C2's
+# defects are refused before the copy checks — cash in hand by A22-T1, A23.2 and BK1, the list with no key by T1 — so
+# their judge lines are shown above on the judge itself (0-k', 0-k'', 0-k'c).
+V_C4_OLD98="$(cat <<'EOF'
+            $r = $this->dbq("SELECT COUNT(*) as n FROM cb_ledger WHERE NOT(amount=0 AND sr='')");
+EOF
+)"
+V_C4_NEW98="$(cat <<'EOF'
+            $r = $this->dbq("SELECT COUNT(*) + 1 as n FROM cb_ledger WHERE NOT(amount=0 AND sr='')");   // RH98: countEntries() one more for all projects
+EOF
+)"
+V98C4="$(release_variant98 lib/CashbookService.php "$V_C4_OLD98" "$V_C4_NEW98")"
+V98C4_SHA="$(git -C "$REPO" show "$V98C4:$P/lib/CashbookService.php" | sha256sum | cut -c1-64)"
+check "$(git -C "$REPO" diff --name-only "$P98" "$V98C4" | paste -sd' ' -)|$(git -C "$REPO" rev-parse --short "$V98C4^")|$(git -C "$REPO" show "$V98C4:$P/lib/CashbookService.php" | grep -c 'RH98: countEntries() one more for all projects')" "$P/lib/CashbookService.php|$P97|1" \
+  "3e the variant: the release commit with countEntries()'s count for all projects one more — cut on $P97"
+S="$(pinned_copy98 v98c4 "$V98C4" "$DEPLOY98" lib/CashbookService.php "$V98C4_SHA")"
+fresh98; OUT="$(run98 --script "$S" --check)"
+nogo98 "3f a copy pinned to it, that file's sha256 re-pinned: the copy checks refuse it at C4 — countEntries() not the same under both codes for all projects" \
+  "NO-GO (C1–C5): the copy checks do not hold on this book — C4:counts-pending-pl(11/12)" "$OUT"
+check "$(okline "$OUT" A22-T1 "under this server's own PHP")$(okline "$OUT" BK1 'the same to the last digit')$(has "$OUT" 'C1:')$(has "$OUT" 'C2:')$(has "$OUT" 'C3:')$(has "$OUT" 'C5:')" "yesyesnononono" \
+  "…every check before it held — T1 and cash in hand never ask countEntries() — and C1, C2, C3 and C5 too: C4 alone sees it"
+C4J_OLD98='  c_full "$(kv "$l" c4)" || w="$w C4:counts-pending-pl($(kv "$l" c4))"'
+M="$(mutant c4blind98 "$S" "$C4J_OLD98" '  true')"; rm -f "$S"
+fresh98; S0="$(states98)"; OUT="$(run98 --script "$M" --check)"; rm -f "$M"
+check "$(checkgo98 "$OUT")|$(okline "$OUT" C4 'the same under both codes, 11/12 cells')" "yesyesnono0|0|$S0|yes" \
+  "3g a copy without C4's judgement — C4's weakened copy — says GO over it, and calls 11 of 12 cells the same (caught)"
 check "$(quiet98 | cut -d'|' -f1,3-)|$(sha256sum "$QREC" | cut -c1-16)|$(vt_host)" "$P97|$D98|$KEPT98|0|$QREC98|$VT98_0" "…after sections 1–3: 5.18.97 live, the data, the quarantine and the live vault as before"
 
 echo; echo "== 98-4. the deploy, as the operator runs it — DEPLOY typed; a non-cash row posted between the before-copy and the after-copy =="
@@ -930,19 +1128,46 @@ check "$(printed98 "$OUT")|$(order98 "$OUT")|$(grep -cxF "      $EXP_AFTER98" <<
 check "$(printf '%s\n' "$ALOG" | grep -c .)|$(stat -c %a "$ALOG" 2>/dev/null)|$(grep -c '5.18.98 (after): PASSED' "$ALOG" 2>/dev/null)|$(figs98 "$R98/line-$TA.txt" "$ALOG")|$(bankhits98 "$R98/line-$TA.txt" "$ALOG")|$(noids98 "$OUT")|$(quietobs98 "$TA")" \
       "1|600|1|0|0|0|0|novault=0 plugin=0|$VT98_0>$VT98_0" \
   "…its own log, 0600, holds the run; no figure, account name, number or row id in the terminal or the log; the observers quiet; the live vault untouched"
+# BA2's G3 again, the FAIL (the fourth review, RH-4): an account the book names Ecobank, USD, with no statement, added after
+# the deploy, whose stage A found both cards a figure and which went without --without-bank-balance — the after-check
+# FAILS, never a note; a copy whose FAIL is turned into an ok passes over it (caught). The book put back afterwards.
+D98B5="$(data94)"; db_keep
+ACC98B="$(acct_add98 "$ACCNAME98" USD)"
+base_log; OUT="$(run98 --after-only)"; FB98="$(fails "$OUT")"
+check "$(case "$ACC98B" in [1-9]*) echo added ;; *) echo "$ACC98B" ;; esac)|$(failline "$OUT" BA2 'G3 again: not both ECO BANK cards show a figure through the installed code' 'stage A found both')$(noteline "$OUT" BA2 'G3 again')$(has "$OUT" '5.18.98 (after): PASSED')" "added|yesnono" \
+  "5a' a card with no statement added after the deploy: BA2's G3 again FAILS through the installed code — stage A found both, and the deploy went without --without-bank-balance — never a note"
+BA2G3_OLD98='    else bad "BA2 G3 again: not both ECO BANK cards show a figure through the installed code'
+M="$(mutant ba2g3ok98 "$DEPLOY98" "$BA2G3_OLD98" '    else ok "BA2 G3 again: not both ECO BANK cards show a figure through the installed code')"
+base_log; OUT="$(run98 --script "$M" --after-only)"; rm -f "$M"
+check "$(okline "$OUT" BA2 'G3 again: not both ECO BANK cards show a figure through the installed code')$(failline "$OUT" BA2 'G3 again')|$(( ${FB98:-0} - $(fails "$OUT") ))" "yesno|1" \
+  "5a'' a copy whose BA2 says ok where it must FAIL — BA2's weakened copy — counts the same card one failure fewer, as an ok (caught)"
+db_back
+check "$(data94)|$(oj "$(o97)" offered)" "$D98B5|UGX:2:1:1,USD:1:1:1" "…the account taken out: the book put back byte for byte, both cards a figure again"
 CA3_OLD98='    else note "CA3 the book moved since A23'
 M="$(mutant ca3fail98 "$DEPLOY98" "$CA3_OLD98" '    else bad "CA3 the book moved since A23')"
 base_log; OUT="$(run98 --script "$M" --after-only)"; rm -f "$M"
 check "$(failline "$OUT" CA3 'the book moved since A23' '1 row(s) added')$(has "$OUT" '5.18.98 (after): PASSED')$(fails "$OUT")" "yesno1" \
   "5b a copy whose CA3 FAILs on the drift — A3-as-a-note's weakened copy — FAILs the same --after-only on the non-cash row the real script says as a NOTE (caught): the book moves all the time, and C5 has proved the code writes nothing"
-touch "$SB/web/.leak_cb98"; base_log; OUT="$(run98 --after-only)"
-check "$(failline "$OUT" CA4 'does not answer with the sign-in page as it must:' 'the tab=200|other|11|0|00;')$( [ -e "$SB/web/.leak_cb98" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')$(fails "$OUT")" "yesspentno1" \
-  "5c the Cashbook's tab \"Bank & other accounts\" answering a visitor with no session with the page (the stand-in's .leak_cb98): CA4 FAILS, naming that answer alone — the page, the cash export and the tab's export still the sign-in page"
+touch "$SB/web/.leak_cb98"; base_log; OUT="$(run98 --after-only)"; CA4L98="$(grep -E '^  FAIL  CA4 ' <<<"$OUT" | head -1)"
+check "$(failline "$OUT" CA4 'does not answer with the sign-in page as it must:' 'the tab=200|other|11|0|00;')$( [ -e "$SB/web/.leak_cb98" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')$(fails "$OUT")|$(has "$CA4L98" 'the page=')$(has "$CA4L98" 'the cash export=')$(has "$CA4L98" "the tab's export=")" "yesspentno1|nonono" \
+  "5c the Cashbook's tab \"Bank & other accounts\" answering a visitor with no session with the page (the stand-in's .leak_cb98): CA4 FAILS, naming that answer alone — the page, the cash export and the tab's export still the sign-in page, none of them named"
 CA4_OLD98='        [ "$ca4v" = "302|login|00|0|00" ] || CA4_R="$CA4_R ${ca4%%:*}=$ca4v;"'
 M="$(mutant ca4blind98 "$DEPLOY98" "$CA4_OLD98" '        true || CA4_R="$CA4_R ${ca4%%:*}=$ca4v;"')"
 touch "$SB/web/.leak_cb98"; base_log; OUT="$(run98 --script "$M" --after-only)"; rm -f "$M"
 check "$(okline "$OUT" CA4 'without a session each send the visitor to the sign-in page (302)')$( [ -e "$SB/web/.leak_cb98" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')" "yesspentyes" \
   "5c' a copy whose CA4 does not judge the answers — CA4's weakened copy — PASSES over the same leak (caught)"
+# The tab's own export (cb_book=noncash) answering a visitor with no session with a file — 200, a Content-Disposition,
+# no redirect (the stand-in's .leak_cbx98; the fourth review, RH-5): CA4 FAILS naming that answer alone; a copy whose
+# CA4 never asks for that export passes over the same leak (caught).
+touch "$SB/web/.leak_cbx98"; base_log; OUT="$(run98 --after-only)"; CA4L98="$(grep -E '^  FAIL  CA4 ' <<<"$OUT" | head -1)"
+check "$(failline "$OUT" CA4 'does not answer with the sign-in page as it must:' "the tab's export=200|other|00|1|00;")$( [ -e "$SB/web/.leak_cbx98" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')$(fails "$OUT")|$(has "$CA4L98" 'the page=')$(has "$CA4L98" 'the tab=')$(has "$CA4L98" 'the cash export=')" "yesspentno1|nonono" \
+  "5c'' the tab's own export answering a visitor with no session with a file (the stand-in's .leak_cbx98): CA4 FAILS, naming that answer alone — 200, no redirect, one Content-Disposition — the page, the tab and the cash export still the sign-in page"
+CA4X_OLD98=' "the cash export:tab=cashbook&cb_export=csv&cb_proj=dishnet" "the tab'"'"'s export:tab=cashbook&cb_export=csv&cb_proj=dishnet&cb_book=noncash&cb_acct=other"; do'
+M="$(mutant ca4noexp98 "$DEPLOY98" "$CA4X_OLD98" ' "the cash export:tab=cashbook&cb_export=csv&cb_proj=dishnet"; do')"
+touch "$SB/web/.leak_cbx98"; base_log; OUT="$(run98 --script "$M" --after-only)"; rm -f "$M"
+check "$(okline "$OUT" CA4 'without a session each send the visitor to the sign-in page (302)')$( [ -e "$SB/web/.leak_cbx98" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')" "yesunspentyes" \
+  "5c''' a copy whose CA4 probes the page, the tab and the cash export but not the tab's own export — CA4's weakened copy — PASSES over the same leak, never asking for it (caught)"
+rm -f "$SB/web/.leak_cbx98"
 cp -p "$PD/lib/CashbookService.php" "$SB/cbsvc98.kept"
 edit_installed lib/CashbookService.php "$V_W_OLD98" "$V_W_NEW98"
 base_log; OUT="$(run98 --after-only)"
@@ -954,11 +1179,24 @@ check "$(okline "$OUT" CA2 'C1–C5 again, on a NEW copy')$(failline "$OUT" CA2 
   "5d' a copy without C5's judgement passes CA2 over the same write (caught) — only R1's bytes still see it"
 cat "$SB/cbsvc98.kept" > "$PD/lib/CashbookService.php"; touch -r "$SB/cbsvc98.kept" "$PD/lib/CashbookService.php"
 check "$(installed98 "$P98")$(stat -c '%u:%g' "$PD/lib/CashbookService.php")|$(sed -n 's/^COPY_AT=//p' "$STATE98" | tail -1)" "01000:1000|$(stat -c %Y "$PD/lib/CashbookService.php")" "…the installed library put back: every file as the pin has it, its time the copy's"
+# CA1's other two clauses (the fourth review, RH-7): a file of 5.18.97's that this release keeps, edited after the deploy
+# (ECO Bank's gate, one byte longer), and a changed PHP file that no longer parses (the tab's page): CA1 FAILS naming each
+# — the kept file as not 5.18.97's by the sha256 this script pins, the page by php -l under the container's PHP. Each put
+# back afterwards as it was, its owner the store's user.
+cp -p "$PD/lib/BankGate.php" "$SB/bankgate98a.kept"; cp -p "$PD/tabs/accounts/cashbook_noncash.php" "$SB/cbnc98.kept"
+printf '\n' >> "$PD/lib/BankGate.php"; printf '\n<?php rh98 planted parse error (\n' >> "$PD/tabs/accounts/cashbook_noncash.php"
+base_log; OUT="$(run98 --after-only)"
+check "$(failline "$OUT" CA1 'the installed files are not as the release' "lib/BankGate.php(not-5.18.97's)" 'php-l:tabs/accounts/cashbook_noncash.php')$(has "$OUT" '5.18.98 (after): PASSED')" "yesno" \
+  "5d'' after the deploy, ECO Bank's gate one byte longer and the tab's page no longer parsing: CA1 FAILS naming both — the kept file not 5.18.97's by the sha256 this script pins, the page by php -l"
+cat "$SB/bankgate98a.kept" > "$PD/lib/BankGate.php"; touch -r "$SB/bankgate98a.kept" "$PD/lib/BankGate.php"
+cat "$SB/cbnc98.kept" > "$PD/tabs/accounts/cashbook_noncash.php"; touch -r "$SB/cbnc98.kept" "$PD/tabs/accounts/cashbook_noncash.php"
+check "$(installed98 "$P98")|$(stat -c '%u:%g' "$PD/lib/BankGate.php" "$PD/tabs/accounts/cashbook_noncash.php" | paste -sd, -)|$(sha256sum "$PD/lib/BankGate.php" | cut -c1-64)" \
+      "0|1000:1000,1000:1000|$(git -C "$REPO" show "$P97:$P/lib/BankGate.php" | sha256sum | cut -c1-64)" "…both put back: every file as the pin has it, ECO Bank's gate 5.18.97's, each owned by the store's user"
 cfg_keep; D98W="$(data94)"
 printf '%s' "$BK97" > "$SB/web/.flip_switch"
 base_log; OUT="$(run98 --after-only)"
-check "$(failline "$OUT" V3j "ECO Bank's switch, $BK97, CHANGED across this run (before=bk=on/on, after=bk=absent/absent; files/store)")$( [ -e "$SB/web/.flip_switch" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')" "yesspentno" \
-  "5e the switch cleared in both places while an --after-only runs, after its stage A read it (the stand-in's .flip_switch): V3j FAILS, naming both readings — this script never sets it"
+check "$(failline "$OUT" V3j "ECO Bank's switch, $BK97, CHANGED across this run (before=bk=on/on, after=bk=absent/absent; files/store)")$( [ -e "$SB/web/.flip_switch" ] && echo unspent || echo spent)$(has "$OUT" '5.18.98 (after): PASSED')|$(noteline "$OUT" BA2 'G3 again: not both ECO BANK cards show a figure' "ECO Bank's switch was changed since the deploy (V3j)")$(noteline "$OUT" BA2 'the deploy went with --without-bank-balance')$(failline "$OUT" BA2 'G3 again')" "yesspentno|yesnono" \
+  "5e the switch cleared in both places while an --after-only runs, after its stage A read it (the stand-in's .flip_switch): V3j FAILS, naming both readings — this script never sets it; BA2's G3 again, on the new copy closed, says it as the switch changed since the deploy — V3j's to judge — never the --without-bank-balance note, never a second failure (the fourth review, RH-4)"
 cfg_back
 check "$(both_copies "$BK97")|$(data94)" "11|$D98W" "…the switch put back in both places: every table and file as before"
 fresh98; OUT="$(run98 --check)"
@@ -1065,11 +1303,22 @@ OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after that rollback: PASSED"
 QREC98="$(sha256sum "$QREC" | cut -c1-16)"; KEPT98="$(kept_state)"
 OB_F="$(o97)"
-fresh98; OUT="$(run98 --answer DEPLOY --redeploy)"; T="$(last98)"
+# Deployed again with --without-bank-balance typed over cards that both show a figure (the fourth review, conf-2/OPS-1):
+# G3 holds, so the flag does nothing — and is recorded as nothing, so that a later --after-only relaxes nothing on it.
+fresh98; OUT="$(run98 --answer DEPLOY --redeploy --without-bank-balance)"; T="$(last98)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.98 (deploy): PASSED')$(live)$(installed98 "$P98")$(inst_ver)|$(okline "$OUT" CA3 'no drift since A23')$(okline "$OUT" G3 'both ECO BANK cards show a figure')$(okline "$OUT" BR1 "5 of the 5 files 5.18.98 adds are already on disk")|$(oj "$(o97)" rows)|$(both_copies "$BK97")" \
       "0yes${P98}05.18.98|yesyesyes|$(oj "$OB_F" rows)|11" \
-  "8b deployed again with --redeploy: PASSED, $P98 serving; CA3 ok — no drift: the control for its NOTE — G3 ok, BR1 the five files on disk; every kept row and the switch unchanged"
-check "$(noteids98 "$OUT")|$(order98 "$OUT")" "A17 A23.4 A23.5 A23.6 BN5 G3 N1 N2 N3 N4 R19 R23.9|verdict<rollback<putback" "…its notes are the clean deploy's without CA3's; its summary's order as before"
+  "8b deployed again with --redeploy (and --without-bank-balance, over cards that both show a figure): PASSED, $P98 serving; CA3 ok — no drift: the control for its NOTE — G3 ok, BR1 the five files on disk; every kept row and the switch unchanged"
+check "$(noteids98 "$OUT")|$(order98 "$OUT")" "A17 A23.4 A23.5 A23.6 BN5 G3 N1 N2 N3 N4 R19 R23.9|verdict<rollback<putback" "…its notes are the clean deploy's without CA3's; its summary's order as before — no --check-bank block: the flag did nothing"
+check "$(sed -n 's/^WITHOUT_BANK=//p' "$STATE98" | tail -1)|$(sed -n 's/^REDEPLOY=//p' "$STATE98" | tail -1)|$(noteline "$OUT" G3 '--without-bank-balance')$(has "$OUT" '— or, with --without-bank-balance, said otherwise')$(grep -cxF "      $EXP_CHECKBANK98" <<<"$OUT")" "|1|nono0" \
+  "8c …and the flag typed over cards that both show a figure is recorded as what it did, nothing: the state file's WITHOUT_BANK empty, REDEPLOY 1; no G3 note in the operator's words, no \"said otherwise\", no --check-bank"
+D98F="$(data94)"; db_keep
+ACC98C="$(acct_add98 "$ACCNAME98" USD)"
+base_log; OUT="$(run98 --after-only)"
+check "$(case "$ACC98C" in [1-9]*) echo added ;; *) echo "$ACC98C" ;; esac)|$(failline "$OUT" BA2 'G3 again: not both ECO BANK cards show a figure through the installed code' 'stage A found both')$(noteline "$OUT" BA2 'the deploy went with --without-bank-balance')$(has "$OUT" '5.18.98 (after): PASSED')" "added|yesnono" \
+  "8d its --after-only over a card with no statement added since: BA2's G3 again FAILS — the flag typed at that deploy changed nothing there, so it relaxes nothing here: the state file's reading, never the typed flag"
+db_back
+check "$(data94)|$(oj "$(o97)" offered)" "$D98F|UGX:2:1:1,USD:1:1:1" "…the account taken out: the book put back byte for byte, both cards a figure again"
 
 echo; echo "== 98-10. what the rehearsal left behind, and what it never reached =="
 fresh98   # the last logs and sheets into the sweeps' folders
@@ -1087,7 +1336,7 @@ check "$( [ -f "$SB/bad-runs" ] && tr '\n' ' ' < "$SB/bad-runs" )" "" "every run
 OUT="$(run98 --after-only --rehearsal-unknown-option)"
 check "$(has "$OUT" 'unknown option: --rehearsal-unknown-option')$( [ -s "$SB/bad-runs" ] && echo recorded)" "yesrecorded" "control on the control: a run given an option the script does not know is recorded as such"
 rm -f "$SB/bad-runs"
-check "$(ls -A "$SB/web" | grep -c '^\.add_noncash98$\|^\.leak_cb98$\|^\.left98$\|^\.flip_switch$\|^\.add_receipt97$\|^\.left97$\|^\.leak_bank97$\|^\.del_line97$\|^\.add_ledger$\|^\.add_receipt$\|^\.left96$')$(ls "$SB"/trap96* 2>/dev/null | grep -c .)" "00" "every trigger and trap the rehearsal planted was spent"
+check "$(ls -A "$SB/web" | grep -c '^\.add_noncash98$\|^\.leak_cb98$\|^\.leak_cbx98$\|^\.left98$\|^\.flip_switch$\|^\.add_receipt97$\|^\.left97$\|^\.leak_bank97$\|^\.del_line97$\|^\.add_ledger$\|^\.add_receipt$\|^\.left96$')$(ls "$SB"/trap96* 2>/dev/null | grep -c .)" "00" "every trigger and trap the rehearsal planted was spent"
 # The observers over every run of the 5.18.98 script, but those that trip one on purpose (recorded as they ran).
 OBS_BAD=0; OBS_N=0
 for rec in "$R98"/exec/run-*.rec; do
