@@ -5,13 +5,17 @@ declare(strict_types=1);
  * read from the code (and, for the backups and the export's cells, run).
  *
  * The module is lib/BankGate.php, lib/BankStatementStore.php, lib/EcobankDetailsCsv.php, tabs/accounts/bank.php,
- * includes/post/post_bank.php and the export hunk of includes/routes.php. The release's base is e35eccee (P3b, 5.18.96),
- * read from Git; when Git cannot supply it the comparisons are skips, never passes.
+ * includes/post/post_bank.php and the export hunk of includes/routes.php. The base is ec0accd4, the 5.18.97 release
+ * commit (5.18.98 moved it there, on purpose: SPEC-separate-v2 §2.9), read from Git; when Git cannot supply it the
+ * comparisons are skips, never passes.
  *
- *   A  every file the release does not touch is byte-identical to e35eccee (the phone's More menu among them); the six
- *      shared files it edits (the sidebar and the CEO page among them, each with its one ECO Bank link) differ only by
- *      insertions, exactly the hunks it names (and the export hunk sits after the Cashbook export); manifest.json
- *      differs by one line, its version, 5.18.96 → 5.18.97
+ *   A  (rewritten for 5.18.98) every file 5.18.98 leaves alone is byte-identical to ec0accd4: the module's shared files
+ *      (the sidebar and the CEO page with their ECO Bank links, public.php, tools/set_config.php,
+ *      includes/post_handlers.php), the phone's More menu and the Cashbook's POST handler among them; includes/routes.php
+ *      is ec0accd4's with 5.18.98's declared changed lines (the Uganda export's account names, and its two non-SSP
+ *      layouts with Entry state last) and insertions only, each block naming 5.18.98 (and the export hunk sits after the
+ *      Cashbook export); manifest.json differs by one line, its version, 5.18.97 → 5.18.98. The two menu-link blocks F
+ *      reads are measured against e35eccee (5.18.96), the base of the release that added them
  *   B  nothing outside the module (and the $forbidden list, and migration 088) names the five bank_* tables
  *   C  the module writes no book and never reads cb_ledger: no Cashbook writer, no FinAudit, no BankImport, no
  *      BankStatement::, no "new CashbookService", no INSERT/UPDATE/DELETE on a cb_ table; its only SQL on an existing
@@ -41,9 +45,78 @@ $opt  = getopt('', ['root:', 'no-mutants']);
 $lib  = dirname(__DIR__);
 $root = isset($opt['root']) ? rtrim((string)$opt['root'], '/') : $lib;
 $withMutants = !isset($opt['no-mutants']);
-const BK_BASE = 'e35eccee';
+const BK_BASE = 'ec0accd4';         // 5.18.98: the 5.18.97 release commit (SPEC-separate-v2 §2.9)
+const BK_LINKS_BASE = 'e35eccee';   // 5.18.96: what the 5.18.97 menu-link blocks are measured against (A, F)
 const BK_TABLES = ['bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events'];
 const BK_MODULE = ['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php'];
+// 5.18.98 (SPEC-separate-v2 §2.6): the lines of includes/routes.php it CHANGES rather than adds — the account names read
+// with a SELECT only under rule A, and the two non-SSP layouts' header and row with Entry state appended — each as
+// [5.18.97's text, 5.18.98's text]. A rewrites the base with them before it asks that everything else be insertions.
+const BK_R98_CHANGED = [
+    [<<<'R98'
+            foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+R98
+    . "\n", <<<'R98'
+            if ($_csvRule2) {   // 5.18.98: a Uganda export reads the names with a SELECT only, so it runs no DDL
+                foreach ($cb2csv->accountLabels() as $_a2id => $_a2l) { $_acctNames2[(int)$_a2id] = $_a2l['name']; }
+            } else {
+                foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+            }
+R98
+    . "\n"],
+    [<<<'R98'
+        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
+R98
+    . "\n", <<<'R98'
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
+R98
+    . "\n"],
+    [<<<'R98'
+        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
+R98
+    . "\n", <<<'R98'
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
+R98
+    . "\n"],
+    [<<<'R98'
+        } elseif ($_isAll2) {
+            fputcsv($out2, [$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
+                $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+R98
+    . "\n", <<<'R98'
+        } elseif ($_isAll2) {
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
+                $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
+R98
+    . "\n"],
+    [<<<'R98'
+        } else {
+            fputcsv($out2, [$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
+                $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+R98
+    . "\n", <<<'R98'
+        } else {
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
+                $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
+                $e2['txn_type'] ?? '',
+                $e2['description'],$e2['category'],$e2['person'],
+                $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
+R98
+    . "\n"],
+];
 
 $pass = 0; $fail = 0; $skip = 0;
 function is_(bool $c, string $m, string $d = ''): void {
@@ -56,14 +129,25 @@ function t(string $m, $got, $want): void {
         . "\n       want " . substr((string)json_encode($want, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 400));
 }
 function src(string $rel): string { global $root; return (string)@file_get_contents($root . '/' . $rel); }
-/** A file as e35eccee holds it, from this checkout's Git; null when Git cannot supply it. */
-function base_of(string $rel): ?string
+/** A file as BK_BASE (or $rev) holds it, from this checkout's Git; null when Git cannot supply it. */
+function base_of(string $rel, string $rev = BK_BASE): ?string
 {
     global $lib;
-    $o = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' show ' . escapeshellarg(BK_BASE . ':dishnet-hybrid-sudan/' . $rel)
+    $o = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' show ' . escapeshellarg($rev . ':dishnet-hybrid-sudan/' . $rel)
         . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
     if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
     return substr($o, 0, -strlen($m[0]));
+}
+/** Every line of $base kept in $cur, in order, and the lines $cur adds: [all kept, how many added, the added blocks]. */
+function bk_insertions(array $base, array $cur): array
+{
+    $j = 0; $n = 0; $block = []; $blocks = [];
+    foreach ($cur as $line) {
+        if ($j < count($base) && $line === $base[$j]) { $j++; if ($block) { $blocks[] = $block; $block = []; } continue; }
+        $n++; $block[] = $line;
+    }
+    if ($block) $blocks[] = $block;
+    return [$j === count($base), $n, $blocks];
 }
 /** The export hunk of includes/routes.php, from its first comment line to the closing brace before the next export. */
 function routes_hunk(): string
@@ -115,12 +199,17 @@ function idents_of(array $toks): array
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-echo "A. The untouched files equal e35eccee; the shared files (the sidebar and the CEO page among them) differ only by the release's hunks\n";
-$UNTOUCHED = ['includes/styles.php', 'tabs/accounts/cashbook.php', 'lib/CashbookService.php', 'lib/BankStatement.php',
+echo "A. (5.18.98) The untouched files equal " . BK_BASE . " (5.18.97); includes/routes.php differs only by 5.18.98's declared lines\n";
+// 5.18.98 (SPEC-separate-v2 §2.9, rewritten on purpose). The base is the 5.18.97 release commit. 5.18.98 edits the Cashbook
+// list (tabs/accounts/cashbook.php, lib/CashbookService.php), so those two leave this list and are held by
+// tests/test_cashbook_physical_list.php M instead; the module's shared files, which 5.18.98 leaves alone, join it, and
+// includes/post/post_cashbook.php stays. includes/routes.php is the one shared file 5.18.98 edits.
+$UNTOUCHED = ['includes/styles.php', 'lib/BankStatement.php',
     'lib/BankImport.php', 'tools/bank_statement.php', 'tests/test_bank_statement.php', 'lib/GoogleDriveBackup.php', 'main.php', 'includes/post/post_sync.php',
     'lib/SqliteStore.php', 'lib/MigrationRunner.php', 'tabs/admin/photo_manager.php', 'includes/post/post_cashbook.php', 'lib/StaffJobsGate.php',
     'lib/PluginConfig.php', 'lib/currency.php',
-    'tabs/sales/more_menu.php'];   // 5.18.97: the phone's More menu gets no entry (SPEC §2.8.4: an admin has no menu there)
+    'tabs/sales/more_menu.php',   // 5.18.97: the phone's More menu gets no entry (SPEC §2.8.4: an admin has no menu there)
+    'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'public.php', 'tools/set_config.php', 'includes/post_handlers.php'];   // 5.18.98: as 5.18.97 left them
 $gitOk = base_of('manifest.json') !== null;
 if (!$gitOk) {
     $skip++;
@@ -130,29 +219,31 @@ if (!$gitOk) {
         $b = base_of($rel);
         is_($b !== null && hash('sha256', $b) === hash('sha256', src($rel)), "{$rel} is byte-identical to " . BK_BASE);
     }
-    // manifest.json: the release's version and nothing else — e35eccee's bytes with the one version line moved to 5.18.97.
+    // manifest.json: the release's version and nothing else — ec0accd4's bytes with the one version line moved to 5.18.98.
     $mb = (string)base_of('manifest.json');
-    $mw = str_replace('    "version": "5.18.96",', '    "version": "5.18.97",', $mb, $mn);
-    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.96 → 5.18.97',
+    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.98",', $mb, $mn);
+    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.98',
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
-        [1, true, '5.18.97']);
-    // The shared files: every line of the base is still there, in order; the extra lines are the release's, and only these.
-    $ADDED = [];                                                            // each shared file's added blocks, for F
-    $SHARED = ['public.php' => 4, 'includes/routes.php' => 78, 'tools/set_config.php' => 3, 'includes/post_handlers.php' => 1,   // routes: +4 for BK-SEC-1/4
-        'includes/navigation.php' => 9, 'tabs/admin/ceo_dashboard.php' => 6];   // 5.18.97 (the operator, 18 Oct; Q15): one ECO Bank link block each
-    foreach ($SHARED as $rel => $want) {
-        $base = explode("\n", (string)base_of($rel));
-        $cur  = explode("\n", src($rel));
-        $j = 0; $extra = []; $block = []; $blocks = [];
-        foreach ($cur as $i => $line) {
-            if ($j < count($base) && $line === $base[$j]) { $j++; if ($block) { $blocks[] = $block; $block = []; } continue; }
-            $extra[] = $i; $block[] = $line;
-        }
-        if ($block) $blocks[] = $block;
+        [1, true, '5.18.98']);
+    // includes/routes.php: the base with 5.18.98's changed lines put in their place; then every line of it is still there, in
+    // order, and the extra lines are 5.18.98's, in blocks that each name it, and only these.
+    $rb = (string)base_of('includes/routes.php'); $chg = [];
+    foreach (BK_R98_CHANGED as [$old, $new]) { $chg[] = [substr_count($rb, $old), strpos($new, '5.18.98') !== false]; $rb = str_replace($old, $new, $rb); }
+    t('includes/routes.php: each of the ' . count(BK_R98_CHANGED) . ' lines or rows 5.18.98 changes is ' . BK_BASE . '\'s text exactly once, and its new text names 5.18.98',
+        $chg, array_fill(0, count(BK_R98_CHANGED), [1, true]));
+    [$kept, $extra, $blocks] = bk_insertions(explode("\n", $rb), explode("\n", src('includes/routes.php')));
+    $marked = count(array_filter($blocks, function ($bl) { return strpos(implode("\n", $bl), '5.18.98') !== false; }));
+    t('includes/routes.php: with those in place, every line of ' . BK_BASE . ' is kept, in order; 11 line(s) added, in blocks that each name 5.18.98',
+        [$kept, $extra, $marked === count($blocks)], [true, 11, true]);
+    // The menu-link blocks that F reads (5.18.97): measured against the base of the release that added them.
+    $ADDED = [];
+    foreach (['includes/navigation.php' => 9, 'tabs/admin/ceo_dashboard.php' => 6] as $rel => $want) {
+        $lb = base_of($rel, BK_LINKS_BASE);
+        [$kept, $extra, $blocks] = bk_insertions(explode("\n", (string)$lb), explode("\n", src($rel)));
         $ADDED[$rel] = array_map(function (array $bl): string { return implode("\n", $bl); }, $blocks);
         $marked = count(array_filter($blocks, function ($bl) { $t = implode("\n", $bl); return strpos($t, '5.18.97') !== false || strpos($t, 'bank') !== false; }));
-        t("{$rel}: every line of " . BK_BASE . " is kept, in order; {$want} line(s) added, in blocks that each name the Bank release",
-            [$j === count($base), count($extra), $marked === count($blocks)], [true, $want, true]);
+        t("{$rel}: against " . BK_LINKS_BASE . " (5.18.96) every line is kept, in order; {$want} line(s) added, the ECO Bank link, in blocks that each name the Bank release",
+            [$lb !== null && $kept, $extra, $marked === count($blocks)], [true, $want, true]);
     }
     $r = src('includes/routes.php');
     $hunkAt = strpos($r, "// ── The Bank screen's export (5.18.97");
@@ -431,7 +522,7 @@ if ($withMutants) {
         ['the neutraliser without @', [$RT, "strpos(\"=+-@\\t\\r\", \$s[0])", "strpos(\"=+-\\t\\r\", \$s[0])"]],
         ['a changed line in public.php beside the hunks', ['public.php', "    'distributors' => '*admin',", "    'distributors' => null,"]],
         ['the forbidden hunk missing', ['public.php', "            'bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events',\n", '']],
-        ['manifest.json left at 5.18.96', ['manifest.json', '    "version": "5.18.97",', '    "version": "5.18.96",']],
+        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.98",', '    "version": "5.18.97",']],   // 5.18.98
         ['manifest.json changed beside its version', ['manifest.json', '    "url": "https://dishnetafrica.com",', '    "url": "https://example.test",']],
     ];
     $mainPass = $pass;                                                      // the child runs sections A–H, exactly what this run passed

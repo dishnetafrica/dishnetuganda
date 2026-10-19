@@ -139,6 +139,11 @@ $inRule = function (array $r) use (&$kinds): bool {                         // D
          : ((is_int($aid) || ctype_digit((string)$aid)) && in_array($kinds[(int)$aid] ?? '', ['cash', 'momo'], true));
     return (string)$r['status'] === 'approved' && $loc;
 };
+$cashLoc = function (array $r) use (&$kinds): bool {                        // 5.18.98: the location half of $inRule alone
+    $aid = $r['account_id'];
+    return ($aid === null || (string)$aid === '0') ? true
+         : ((is_int($aid) || ctype_digit((string)$aid)) && in_array($kinds[(int)$aid] ?? '', ['cash', 'momo'], true));
+};
 $rows = function () use ($cb): array { return $cb->query('SELECT id, project, currency, status, account_id, direction, amount FROM cb_ledger ORDER BY id'); };
 $cls = [];
 foreach ($rows() as $r) {
@@ -309,6 +314,7 @@ foreach ($snap0 as $k => $meta) {
 }
 // the Balance column follows the rule row by row: a value exactly where the row is inside the rule
 $byId = $rowsById();
+$leftOut = 0;                                                               // 5.18.98: not-cash rows the Ledger leaves out
 foreach ($PROJ as $p) {
     foreach ($VIEWS as $vw => $lbl) {
         $bad = []; $n = 0; $ids = [];
@@ -318,12 +324,30 @@ foreach ($PROJ as $p) {
             $n++;
             if ($inRule($byId[$id]) !== ($cell !== '—')) $bad[] = "#{$id} " . ($inRule($byId[$id]) ? 'in' : 'out') . " '{$cell}'";
         }
-        $listed = array_map(function ($r) { return (int)$r['id']; }, $svc()->getEntries(array_filter(['project' => $p, 'currency' => $vw, 'limit' => 50])));
+        // 5.18.98 (SPEC-separate-v2 §2.9; rewritten on purpose): on a Uganda book the Ledger lists physical cash only, so
+        // the page's rows are getEntries() with book=cash. The control: the no-key list holds them in its own order, and
+        // every row it holds among them that the page leaves out is not cash, by this test's own reading of the location.
+        $listed = array_map(function ($r) { return (int)$r['id']; }, $svc()->getEntries(array_filter(['project' => $p, 'currency' => $vw, 'book' => 'cash', 'limit' => 50])));
+        $noKey  = array_map(function ($r) { return (int)$r['id']; }, $svc()->getEntries(array_filter(['project' => $p, 'currency' => $vw, 'limit' => 9999])));
         $nr = count($listed) . ' row' . (count($listed) === 1 ? '' : 's');
-        is_($ids === $listed && $bad === [], "Balance column, {$p}, {$lbl} view: the {$nr} getEntries() lists, in its order, each with a Balance exactly when it is inside the rule (others \"—\")",
+        is_($ids === $listed && $bad === [], "Balance column, {$p}, {$lbl} view: the {$nr} getEntries(book=cash) lists, in its order, each with a Balance exactly when it is inside the rule (others \"—\")",
             implode('; ', $bad) . ' listed ' . json_encode($ids) . ' expected ' . json_encode($listed));
+        // 5.18.98's review (TS-2): a page shorter than 50 rows holds the whole cash list, so EVERY no-key row it leaves out
+        // must be not cash, not only those up to its last row; only a full page (50) limits the check to its own span.
+        $full = count($listed) >= 50;
+        $end  = ($listed === [] || !$full) ? false : array_search(end($listed), $noKey, true);
+        $span = $end === false ? $noKey : array_slice($noKey, 0, (int)$end + 1);
+        $left = array_values(array_diff($span, $listed));
+        $offL = array_values(array_filter($listed, function ($id) use ($byId, $cashLoc) { return !isset($byId[$id]) || !$cashLoc($byId[$id]); }));
+        $offM = array_values(array_filter($left, function ($id) use ($byId, $cashLoc) { return !isset($byId[$id]) || $cashLoc($byId[$id]); }));
+        $leftOut += count($left);
+        is_(array_values(array_intersect($noKey, $listed)) === $listed && $offL === [] && $offM === [],
+            "control, {$p}, {$lbl} view: the no-key list holds those rows in its order, and the " . count($left) . ' it holds '
+            . ($full ? 'among them' : 'in all (the page holds the whole cash list)') . ' that the page leaves out are not cash',
+            'not cash on the page ' . json_encode($offL) . '; cash left out ' . json_encode($offM));
     }
 }
+is_($leftOut > 0, "control: the Ledger pages above leave out {$leftOut} not-cash row(s) the no-key list holds, so the split was exercised");
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\nC. The CEO page: cash in hand, all projects, under its own heading\n";

@@ -747,6 +747,92 @@ class CashbookService
     }
 
     /**
+     * 5.18.98 (SPEC-separate-v2 §2.1) — where a LISTED row is, for the Cashbook list's split, under rule A only
+     * (buildWhere() asks for it only then). Physical cash ($inHand true): no account (NULL or 0), or an account whose
+     * kind is exactly one of CASH_IN_HAND_KINDS, active or not. Not cash ($inHand false): the exact complement, so
+     * every listed row is on exactly one side. No status term (a row awaiting approval, rejected or voided stays where
+     * its location puts it), no cast (a text id never reads as a number), and no DDL: without cb_accounts only rows
+     * with no account are cash. "a.id IS NOT NULL" keeps a hand-made table's NULL id from leaving a row on neither
+     * side. Among listed rows, the cash side's approved rows are exactly the rows cash in hand counts.
+     */
+    private function listLocationWhere(bool $inHand): string
+    {
+        $loc = 'COALESCE(account_id, 0) = 0';
+        if ($this->accountsTableExists()) {
+            $cashKinds = implode(', ', array_map([$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));
+            $loc .= " OR account_id IN (SELECT a.id FROM cb_accounts a WHERE a.id IS NOT NULL AND a.kind IN ({$cashKinds}))";
+        }
+        return $inHand ? "({$loc})" : "NOT ({$loc})";
+    }
+
+    /**
+     * 5.18.98 (the review of 5.18.98: SQL-1, SQL-2) — the bank accounts that get a button of their own on the "Bank &
+     * other accounts" tab, as one SQL condition on cb_accounts b: kind exactly 'bank' and an id, as stored, that is a
+     * whole number above 0 (an integer, or text of digits only), the only ids buildWhere() selects a button by.
+     * nonCashAccounts() lists exactly these and the "Other accounts" button leaves out exactly these, so the buttons
+     * hold every not-cash row exactly once: a row on a bank account whose id is 0, negative, text such as 'x9' or a real
+     * number (possible only in a hand-made table) has no button of its own and is under Other accounts.
+     */
+    private const BANK_BUTTON_IDS = "b.id IS NOT NULL AND b.kind = 'bank' AND typeof(b.id) IN ('integer', 'text')"
+        . " AND CAST(b.id AS TEXT) NOT GLOB '*[^0-9]*' AND CAST(b.id AS INTEGER) > 0";
+
+    /**
+     * 5.18.98 (SPEC-separate-v2 §2.2) — every account of kind exactly 'bank', active or not, whose id can have a button
+     * (BANK_BUTTON_IDS), as {id, name, currency, active}: the buttons of the Cashbook's read-only "Bank & other
+     * accounts" tab. In the book's currency order (a currency the book does not list goes last), then by id. Each id
+     * once: a hand-made table without a primary key may hold two records with one id, and the first is kept. A SELECT
+     * only: [] when cb_accounts is absent, and the table is never created here.
+     */
+    public function nonCashAccounts(): array
+    {
+        if (!$this->accountsTableExists()) return [];
+        require_once __DIR__ . '/currency.php';
+        $order = array_flip(dn_book_currencies($this->bookConfig()));
+        $out = [];
+        foreach ($this->dbq('SELECT b.id, b.name, b.currency, b.active FROM cb_accounts b WHERE ' . self::BANK_BUTTON_IDS . ' ORDER BY b.id') as $r) {
+            $id = $r['id'];
+            if (!is_int($id) && !(is_string($id) && ctype_digit($id))) continue;
+            $id = (int)$id;
+            if ($id <= 0 || isset($out[$id])) continue;
+            $out[$id] = [
+                'id'       => $id,
+                'name'     => (string)($r['name'] ?? ''),
+                'currency' => (string)($r['currency'] ?? ''),
+                'active'   => (int)($r['active'] ?? 0) === 1,
+            ];
+        }
+        $out = array_values($out);
+        $rank = function (array $a) use ($order): int {
+            $c = strtoupper(trim($a['currency']));
+            return isset($order[$c]) ? (int)$order[$c] : count($order);
+        };
+        usort($out, function (array $x, array $y) use ($rank): int {
+            return [$rank($x), $x['id']] <=> [$rank($y), $y['id']];
+        });
+        return $out;
+    }
+
+    /**
+     * 5.18.98 (SPEC-separate-v2 §2.2) — id => {name, kind, currency} for every account: the names the tab and the
+     * Uganda export print. A SELECT only: [] when cb_accounts is absent, and the table is never created here.
+     */
+    public function accountLabels(): array
+    {
+        if (!$this->accountsTableExists()) return [];
+        $out = [];
+        foreach ($this->dbq('SELECT id, name, kind, currency FROM cb_accounts WHERE id IS NOT NULL ORDER BY id') as $r) {
+            $id = $r['id'];
+            if (!is_int($id) && !(is_string($id) && ctype_digit($id))) continue;
+            $out[(int)$id] = [
+                'name'     => (string)($r['name'] ?? ''),
+                'kind'     => (string)($r['kind'] ?? ''),
+                'currency' => (string)($r['currency'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * What the ledger itself says is in hand, per currency, within the given
      * project ('' = all projects): the running balance the Balance column reaches
      * on the latest row of that currency's stream. getEntries()' streams use the
@@ -2160,6 +2246,20 @@ class CashbookService
             $w[] = '(description LIKE ? OR sr LIKE ? OR person LIKE ? OR validation_ref LIKE ?)';
             $s = '%'.$f['search'].'%';
             $p = array_merge($p, [$s,$s,$s,$s]);
+        }
+        // 5.18.98 — the list split (SPEC-separate-v2 §2.1). Honoured only under rule A; elsewhere ignored.
+        $bk = $f['book'] ?? '';
+        if (($bk === 'cash' || $bk === 'noncash') && $this->cashOnlyRuleInForce()) {
+            $w[] = $this->listLocationWhere($bk === 'cash');
+            if ($bk === 'noncash' && array_key_exists('book_account', $f)) {
+                $ba = $f['book_account'];
+                if (is_int($ba) && $ba > 0) {
+                    $w[] = 'account_id = ?'; $p[] = $ba;
+                } elseif ($ba === 'other' && $this->accountsTableExists()) {
+                    // every not-cash row no button holds: only the bank accounts that have a button are left out
+                    $w[] = 'NOT (account_id IN (SELECT b.id FROM cb_accounts b WHERE ' . self::BANK_BUTTON_IDS . '))';
+                }
+            }
         }
         return [implode(' AND ', $w), $p];
     }

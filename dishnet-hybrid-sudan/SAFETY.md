@@ -542,6 +542,82 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.98 (2026-10-19) — the Cashbook list shows physical cash only (Uganda); Ecobank and other accounts on their own read-only tab
+
+### Why
+The operator, 18 Oct: *"dont mix the bank with physical cash"*, *"keep physical cash as it is"*. Since 5.18.96 cash in
+hand counts physical cash only, but the Cashbook's list and its export still listed the Ecobank, stock, supplier and
+other non-cash entries beside the cash ones, each with an empty Balance. 5.18.97 put Ecobank's own balances on ECO
+Bank. This release takes the non-cash entries off the cash list and keeps them, unchanged, on a tab of their own. The
+physical cashbook stays: it is the Ledger, with cash, mobile money and entries with no account. Q1 (bank money recorded
+with no account stays on the cash list) and Q2 (ECO Bank first) were confirmed; Q3–Q7 as the design recommends.
+
+### What
+- **Uganda only (rule A):** `CashbookService::cashOnlyRuleInForce()` and no SSP, the 5.18.96 gate, read once by the
+  page (`$_cbRuleA`, now set above `$filters`) and once by the export (`$_csvRule2 = !$_hasSSP2 && rule`). On South
+  Sudan, on any book that is not Uganda and on a Uganda book with SSP, every page, query and export is 5.18.97's.
+- **The split is by location only.** `buildWhere()` honours two opt-in keys, `book` (`cash` / `noncash`) and
+  `book_account`, only under rule A, appended last. Physical cash is a row with no account (NULL or 0) or on an account
+  whose kind is exactly `cash` or `momo` (`CASH_IN_HAND_KINDS`), active or not; not cash is its exact complement, so
+  every listed row is on exactly one side. No status term (rows awaiting approval, rejected or voided stay where their
+  location puts them), no cast (a text id never reads as a number), no DDL on any read. `cashOnlyWhere()`,
+  `cashInHand()` and the Balance streams are unchanged: every Balance figure is 5.18.97's, and cash in hand does not
+  move anywhere.
+- **The Ledger** lists `book=cash` (its counter, pager and rows one predicate), with a slate note *"Physical cash only:
+  cash, mobile money and entries with no account. Ecobank and other accounts are under 🏦 Bank & other accounts."*, a
+  line when a search also matches entries on the other tab, and a grey *awaiting approval* / *rejected* tag on cash
+  entries that have no Balance for that reason. The hero, its "N entries in the book" and the Pending tab are
+  unchanged.
+- **🏦 Bank & other accounts**, a new tab after Ledger for the Ledger's audience (never a field agent, who still gets
+  the Field Register): one button per bank account (active, or with entries in the project), then *Other accounts*
+  (stock, supplier, director, share capital, payable, receivable, and ids naming no account, shown as *account not
+  found*). No *All* button. Each button carries its count under the search and dates. Date, SR, particulars, account
+  (digit runs masked), category, in and out in the row's own currency, ref, state (approved / awaiting approval /
+  rejected / voided, voided struck through), source. **Read-only:** no menu, no selection, no bulk tools, no handover
+  banner, no entry form. **No Balance column and no total**: the book holds only part of Ecobank's history. Its note
+  links to ECO Bank only when `BankGate::showLink()` is true, adding `bk_acct` only for an account ECO Bank offers;
+  anyone else reads that an administrator can see Ecobank's balances there.
+- **Exports:** the cash export (↓ CSV, ↓ UGX only, ↓ USD only) lists `book=cash` under rule A, keeps its name, its
+  layout and its Balance cells, reads account names with a SELECT only (`accountLabels()`), and gains one last column,
+  **Entry state**. The new tab has its own export, one button at a time, `cashbook-other-accounts-<PROJ>-<ACCOUNT<id>|
+  OTHER>-<date>.csv`, with no Balance column, formula-like text cells neutralised and never an account name or number
+  in the file name; a field agent or field accountant asking for it gets their cash export. The three SSP layouts are
+  untouched.
+- **Nothing written.** No entry is created, changed, moved or deleted; no table or column is added; no write path,
+  void path or approval changes. Files: `lib/CashbookService.php` (read-only additions), `tabs/accounts/cashbook.php`,
+  `includes/routes.php`, and the new `lib/CashbookNonCashView.php`, `tabs/accounts/cashbook_noncash.php`,
+  `includes/cashbook_noncash_csv.php`. ECO Bank, the sidebar, the CEO page and every bank-module file are 5.18.97's.
+
+### Operator action
+- None in the book. Bank money recorded with no account (customer payments by bank transfer, online or card, staff-app
+  *Bank* payments) stays on the cash list and in cash in hand, as since 5.18.96 (Q1); it is moved one entry at a time
+  with the bank-book work.
+- To correct an entry on the new tab, ask: the tab is read-only, and a correction is its own reviewed step.
+
+### SAFETY
+- Uganda only: never let `book` or `book_account` change the SQL, a page or an export where rule A is off, and never
+  gate the list, the tab or the export by anything but `$_cbRuleA` / `$_csvRule2`.
+- Split the list by location only: never add a status term, a cast, `MONEY_KINDS` or DDL to `listLocationWhere()`, and
+  never let the split reach `cashOnlyWhere()`, `cashInHand()` or a Balance stream.
+- Keep the new tab read-only, with no Balance column and no total of any kind: no menu, selection, bulk form, void,
+  delete or entry form on it, and never `currencyPositions`, `balancesByAccount`, `accountBalance` or `accountLedger`
+  in it.
+- Never gate the tab's ECO Bank link by anything but `BankGate::showLink()`, with its one call text; never by the
+  page's own `$isAdmin`, which `cashbook.php` widens to accountants.
+- The cash export keeps its Balance column and its Balance values; Entry state is appended last, on Uganda only.
+- Nothing written: a read of the list, the tab or either export never writes a row, a table or a file.
+- The tab's buttons hold every not-cash row exactly once: which bank accounts get a button is one rule,
+  `CashbookService::BANK_BUTTON_IDS`, read by both `nonCashAccounts()` and the Other accounts clause. Never give either
+  its own test of an id.
+
+### Review (19 Oct), recorded and not changed here
+- Neither Cashbook export asks the Cashbook tab's own permission (`$can('cashbook')`): a role refused the tab can still
+  download the cash export, and under rule A the Bank & other accounts export. Not wider than 5.18.97, whose cash
+  export already held every row. Its own step.
+- `includes/routes.php`'s `$proj2` is NULL when a request carries no `cb_proj`, so the cash export then lists every
+  project; and its field-agent line reads a record with no role as `''` where the page reads `'sales'`. Both lines are
+  5.18.97's. The new export reads the project and the role the page's way.
+
 ## 5.18.97 (2026-10-18) — ECO Bank: Ecobank's own balances below the Cashbook, posted nowhere
 
 ### Why

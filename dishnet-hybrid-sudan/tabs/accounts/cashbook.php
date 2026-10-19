@@ -53,6 +53,14 @@ $dnBal  = $bal['dishnet']['balance'];
 $g4Bal  = $bal['4g']['balance'];
 $bcBal  = $bal['bluecard']['balance'] ?? 0;
 
+// 5.18.98 (SPEC-separate-v2 §2.4): the one gate of the list, its "Bank & other accounts" tab and its export, set here,
+// above $filters, so that the list's split and every cash-in-hand reader below follow the same flag. Under it the list
+// shows physical cash only (book=cash), and the new tab the other rows (book=noncash); a field agent never gets the tab.
+// Where it is off, 'book' is '' and array_filter drops it, so the SQL run is 5.18.97's.
+$_cbRuleA = !$_cbSSP && $cb->cashOnlyRuleInForce();
+$_cbBook = $_cbRuleA ? (($view === 'noncash' && !$isFieldAgent) ? 'noncash' : 'cash') : '';
+if ($_cbRuleA) require_once __DIR__ . '/../../lib/CashbookNonCashView.php';
+
 $filters = array_filter([
     'project'           => $proj,
     'category'          => $filterCat,
@@ -63,7 +71,18 @@ $filters = array_filter([
     'date_to'           => $dateTo,
     'search'            => $search,
     'person'            => $agentPersonFilter, // scopes field agents to own entries
+    'book'              => $_cbBook,
 ]);
+if ($_cbBook === 'noncash') {
+    unset($filters['category'], $filters['validation_status'], $filters['direction'], $filters['currency']);
+    $_cbNcChips = CashbookNonCashView::chips($cb, $proj, $search, $dateFrom, $dateTo);
+    $_cbNcSel   = CashbookNonCashView::selected($_cbNcChips, $_GET, $search !== '');
+    $filters['book_account'] = $_cbNcSel;          // int id or 'other'
+}
+$_cbNcHits = ($_cbBook === 'cash' && $search !== '')
+    ? $cb->countFiltered(array_filter(['project' => $proj, 'search' => $search, 'date_from' => $dateFrom,
+                                       'date_to' => $dateTo, 'book' => 'noncash']))
+    : 0;
 $totalRows  = $cb->countFiltered($filters);
 $totalPages = (int)ceil($totalRows / $perPage);
 $filters['limit']  = $perPage;
@@ -80,7 +99,7 @@ $projBal      = $proj === '4g' ? $g4Bal : ($proj === 'bluecard' ? $bcBal : $dnBa
 // Add Entry base pill read cash in hand per currency, this project, instead of $projBal —
 // approved USD rows on every account, bank included, printed under the base symbol. A book
 // with SSP never asks; on every book where the rule is off they keep $projBal, verbatim.
-$_cbRuleA = !$_cbSSP && $cb->cashOnlyRuleInForce();
+// 5.18.98: $_cbRuleA itself is set above $filters (its text unchanged), the one gate of the list and its tab.
 $_cbCih   = [];
 if ($_cbRuleA) {
     foreach ($_cbCurrs as $_cbCihCur) $_cbCih[$_cbCihCur] = $cb->cashInHand($_cbCihCur, $proj);
@@ -1281,6 +1300,7 @@ $navItems=[['ledger','📋 Ledger',''],['pending','⏳ Pending',$pendingCount>0?
     ['payroll','💼 Payroll',''],['sites','📡 Sites (4G)',''],
     ['interco','🔄 Inter-co',''],['summary','📊 Summary',''],
     ['alerts','🚦 Alerts',$alertCount>0?(string)$alertCount:'']];
+if ($_cbRuleA) array_splice($navItems, 1, 0, [['noncash', "\u{1F3E6} Bank & other accounts", '']]);
 foreach($navItems as $ni):
     list($nv,$lbl,$badge)=$ni;
     $href='?'.http_build_query(array_merge($_GET,['cb_view'=>$nv,'cb_page'=>1]));
@@ -1298,6 +1318,9 @@ foreach($navItems as $ni):
 </div>
 
 <?php if ($view === 'ledger'): ?>
+<?php if ($_cbRuleA): // 5.18.98 (SPEC-separate-v2 §2.4): the list is physical cash only; the other rows are one tab along ?>
+<div style="margin:12px 14px 0;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;padding:10px 14px;font-size:12px;color:#334155;">Physical cash only: cash, mobile money and entries with no account. Ecobank and other accounts are under <a href="?<?php echo http_build_query(['page'=>'dashboard','tab'=>'cashbook','cb_proj'=>$proj,'cb_view'=>'noncash']); ?>" style="color:#334155;font-weight:700;">🏦 Bank &amp; other accounts</a>.</div>
+<?php endif; ?>
 
 <?php
 // ── Detect handover double-count entries ─────────────────────────────────
@@ -1513,6 +1536,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </form>
 <?php endif; ?>
 
+<?php if ($_cbNcHits > 0): // 5.18.98 (SPEC-separate-v2 §2.4): the search also matches rows that are on the other tab ?>
+<div style="margin:10px 14px 0;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;padding:9px 14px;font-size:12px;color:#334155;"><a href="?<?php echo http_build_query(array_filter(['page'=>'dashboard','tab'=>'cashbook','cb_proj'=>$proj,'cb_view'=>'noncash','cb_q'=>$search,'cb_from'=>$dateFrom,'cb_to'=>$dateTo])); ?>" style="color:#334155;font-weight:700;text-decoration:none;"><?php echo number_format($_cbNcHits); ?> entr<?php echo $_cbNcHits === 1 ? 'y' : 'ies'; ?> matching &quot;<?php echo htmlspecialchars($search); ?>&quot; <?php echo $_cbNcHits === 1 ? 'is' : 'are'; ?> under Bank &amp; other accounts &rarr;</a></div>
+<?php endif; ?>
 <?php if(empty($ledger)): ?>
 <div class="cb3-empty"><?php echo $seeded?'No entries match your filters.':'Import Excel data first.'; ?></div>
 <?php else: ?>
@@ -1550,7 +1576,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <?php if($e['person']): ?><span class="cb3-card-cat"><?php echo htmlspecialchars(mb_strimwidth($e['person'],0,15,'…')); ?></span><?php endif; ?>
       <?php if(($e['currency']??'USD')==='SSP'): ?><span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;">SSP</span><?php endif; ?>
       <?php echo $srcBadge; ?>
-      <?php echo cbValBadge($e['validation_status']); ?>
+      <?php echo cbValBadge($e['validation_status']); ?><?php if ($_cbRuleA && in_array($e['status'] ?? '', ['pending_approval','rejected'], true)) echo '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#f1f5f9;color:#64748b;white-space:nowrap;margin-left:4px;">' . htmlspecialchars(CashbookNonCashView::state((string)$e['status'])) . '</span>'; ?>
       <?php $_cw = $e['cash_with'] ?? ''; if ($_cw && $_cw !== 'Office' && $isIn): ?>
         <span style="background:#fef2f2;color:#dc2626;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:800;">💰 <?= htmlspecialchars($_cw) ?></span>
       <?php elseif ($_cw === 'Office' && $isIn): ?>
@@ -1609,7 +1635,7 @@ document.addEventListener('DOMContentLoaded', function() {
       } else { echo '—'; }
     ?></td>
     <td style="font-size:10px;color:#94a3b8;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?php echo htmlspecialchars(mb_strimwidth($e['validation_ref'],0,20,'…')); ?></td>
-    <td><?php echo cbValBadge($e['validation_status']); ?></td>
+    <td><?php echo cbValBadge($e['validation_status']); ?><?php if ($_cbRuleA && in_array($e['status'] ?? '', ['pending_approval','rejected'], true)) echo '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:#f1f5f9;color:#64748b;white-space:nowrap;margin-left:4px;">' . htmlspecialchars(CashbookNonCashView::state((string)$e['status'])) . '</span>'; ?></td>
     <td><?php if($src==='crm_api_sync'||$src==='crm_webhook') echo '<span style="background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:800;">🌐CRM</span>';
       elseif($src==='collect_payment'||$src==='crm_sync') echo '<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:800;">📱PWA</span>';
       elseif($src==='field_exchange') echo '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:800;" title="Auto-recorded by staff via exchange form — do NOT enter manually">💱Auto</span>';
@@ -1650,6 +1676,8 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<?php elseif ($view === 'noncash' && $_cbRuleA): ?>
+<?php require __DIR__ . '/cashbook_noncash.php'; ?>
 <?php elseif($view==='pending'): ?>
 <div class="cbv2-panel">
   <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
