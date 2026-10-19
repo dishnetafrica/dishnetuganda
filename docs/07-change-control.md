@@ -12402,6 +12402,13 @@ and no secret, and the terminal held none; the cash sheet stayed on the server.
 - **Still to come, each its own command:** the screens with the switch off; `--after-only` (R19 conclusive) and the
   quarantine's `--check`; the switch, once the P3b count is on paper; both statements kept; `--check-bank`;
   `--after-only` again; the next day's `--after-only` after 15:10 UTC.
+- **Then, before the after-checks (19 Oct):** the operator switched ECO Bank on — the switch's log was not sent — and
+  kept both statements, at 03:39 and 03:40 UTC (06:39 and 06:40 Kampala), seen in two screenshots of the screen: both
+  cards show a figure, each with its account ending, its last line's date and the time it was kept, every line *"Not
+  compared"*. The screenshots' figures, account endings and lines are not reproduced here. Runbook step 5 (`--after-only`
+  and the quarantine's `--check` with the switch off) was therefore not run; `--check-bank` comes first now, then
+  `--after-only` (which accepts the switch on and the kept rows: unchanged during its own run, no fewer than the deploy
+  recorded) and the quarantine's `--check`.
 
 ### Runbook
 
