@@ -12441,6 +12441,9 @@ Ecobank, each with a statement kept), which is the question `--check-bank` asks.
   (`/root/dnb-stray-quarantine/check-20261019T035356Z.log`). K3–K6, K8–K11 ok; **K13:** the retry job ran at 03:50:04
   UTC, after the move, and made nothing in `<plugin>/data`. Notes: K2 (the container serves `ec0accd`, not `69c87a6`)
   and K7 (`config.json` re-made in `<plugin>/data` by other writers — not a database).
+- **A second `--after-only`, begun 04:04:28 UTC: PASSED 90 ok / 0 failed / 2 notes** — the same two notes, the same
+  readings (R19 conclusive again, master's run at 04:00:12 UTC; no drift since the deploy's A23; 088's rows unchanged).
+  It ran in the morning, so it is not yet the evening check.
 - **Still to come:** `--after-only` after 15:10 UTC today, once the evening WhatsApp (18:00 Kampala) has run on
   5.18.97; it also stands in for 5.18.96's evening check, which can no longer run now that 5.18.97 is live.
 
