@@ -882,7 +882,9 @@ rm -f "$STATE97.prev-20261019T020000Z"
 # script's header and Z1 say so; SPEC-separate-v2 §2.10, review 0-3). So the plugin boots once on the planted
 # configuration before anything is measured — as the server's own crons would within minutes — and the vault is kept and
 # put back with the configuration, bytes and time (5.18.93's lesson, its rehearsal trial 4 of 11 Oct; trial 1 of this
-# rehearsal measured without either, and its "nothing changed" saw the plugin's own refresh).
+# rehearsal measured without either: the script's own read of the distributor switch, as root, rewrote the live vault
+# while that refused run still printed "Nothing was changed" — the refresh the design accepts and Z1 reports, which on
+# the server's own configuration rewrites nothing, its vault already agreeing with it).
 cfg_keep; cp -p "$VAULT" "$SB/vault98s.kept"
 file_set cashbook_currencies UGX,USD,SSP; row_set cashbook_currencies UGX,USD,SSP
 settle96; VT98S="$(vt_host)"; sleep 1; settle96
