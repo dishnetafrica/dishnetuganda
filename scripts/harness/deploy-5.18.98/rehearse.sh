@@ -317,6 +317,18 @@ cmds98() {   # cmds98 SCRIPT — each of the eight definitions once (1 each) | t
     "$(grep -F "printf '\n      %s'" "$f" | grep -cF '$(LOGW ')" "$(grep -cE 'SWITCH_ON_CMD|SWITCH_CLEAR_CMD' "$f")"
 }
 noteids98() { grep -E '^  note  ' <<<"$1" | awk '{print $2}' | LC_ALL=C sort -u | paste -sd' ' -; }
+ctl98() {   # ctl98 OUTPUT A22|R23 — 5.18.97's ctl97 in this release's words: the script says "kept by $EXPECTED_VERSION",
+            # so A22 and R23 read "kept by 5.18.98" here (ctl97 counts 5.18.97's words, and its own sections need it)
+  local out="$1" n=0 x
+  for x in a b c d e f g; do
+    case "$2" in
+      A22) grep -qxF -- "$(printf '  %-15s the pin: %s   ·   %s (%s, the control): %s' "fix A22$x" ok "$P94" 5.18.94 "${CTL95[$x]}")" <<<"$out" \
+             && [ "$(okline "$out" "A22$x" "— in the pin, kept by 5.18.98; 5.18.94's copy, the control, fails the same check (${CTL95[$x]})")" = yes ] && n=$((n+1)) ;;
+      R23) [ "$(okline "$out" "R23$x" 'installed, kept by 5.18.98:' "— 5.18.94's copy, the control, fails the same check (${CTL95[$x]})")" = yes ] && n=$((n+1)) ;;
+    esac
+  done
+  echo "$n"
+}
 copy_back98() {   # the 5.18.98 copy N minutes ago: lib/CashbookService.php's time (its stamp_copy, COPY_MARK), the recorded copy
                   # time, the start before it
   touch -d "-$1 minutes" "$PD/lib/CashbookService.php"; local t; t="$(stat -c %Y "$PD/lib/CashbookService.php")"
@@ -394,12 +406,12 @@ n1say98() { printf '%s' "$1" | sed 's/,/; /g'; }   # N1's counts in the note's f
 # ── This rehearsal's readers: 5.18.97's, derived by asserted replacements — its audit taught this release's folders and the
 # copy checks' two code copies (c-old, c-new) — and readers of G3's lines, --check-bank's, the copy checks' and N4's sheet
 # blocks added. ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-python3 - "$H97/rh97.py" "$H98/rh98.py" <<'PY' || echo "readers:rh98" >> "$SB/anchor-missing"
+python3 - "$H97/rh97.py" "$H98/rh98.py" <<'PY' || { echo "readers:rh98" >> "$SB/anchor-missing"; echo "refusing: this rehearsal's readers could not be derived from 5.18.97's (rh97.py) — every reader would print nothing, and every check reading one would compare nothing with nothing"; exit 2; }
 import sys
 s = open(sys.argv[1]).read()
 reps = [
     ("# 5.18.97's rehearsal (the previous release's readers, by asserted replacements): readers of what the runs leave",
-     "# 5.18.98's rehearsal (5.18.97's readers, by asserted replacements): readers of what the runs leave"),
+     "# 5.18.98's rehearsal (the previous release's readers, by asserted replacements): readers of what the runs leave"),
     ("root = re.compile(r'^/tmp/dnb-5\\.18\\.97-(?:cih-[^/]+/[^/]+/(?:t|d|p0root|k-(?:found|off|on))/dishnet-hybrid-sudan|code-[^/]+/p3b/[^/]+/dishnet-hybrid-sudan)(?:/|$)')",
      "root = re.compile(r'^/tmp/dnb-5\\.18\\.98-(?:cih-[^/]+/[^/]+/(?:t|d|p0root|k-(?:found|off|on)|c-(?:old|new))/dishnet-hybrid-sudan|code-[^/]+/p3b/[^/]+/dishnet-hybrid-sudan)(?:/|$)')"),
     ("if not env.get('DN_VAULT_FILE', '').startswith('/tmp/dnb-5.18.97-'): novault += 1",
@@ -865,8 +877,18 @@ rm -f "$STATE97.prev-20261019T020000Z"
 # currencies in both copies of the configuration — the file and the store row, so that the pages and the service still
 # agree (A23.8) — turns rule A off for both codes: the pin's reading refuses first; with that line taken out of a copy,
 # the LIVE code's reading — G2's own — refuses; with both taken out, the refusal no longer names the rule (caught).
-cfg_keep
-file_set cashbook_currencies UGX,USD,SSP; row_set cashbook_currencies UGX,USD,SSP; D98S="$(data94)"
+# cashbook_currencies is one of the vault's keys (ConfigVault::VAULT_KEYS), and every stage A reads the configuration
+# through the installed plugin (switch_state: set_distributors.php --show, whose load refreshes the live vault — the
+# script's header and Z1 say so; SPEC-separate-v2 §2.10, review 0-3). So the plugin boots once on the planted
+# configuration before anything is measured — as the server's own crons would within minutes — and the vault is kept and
+# put back with the configuration, bytes and time (5.18.93's lesson, its rehearsal trial 4 of 11 Oct; trial 1 of this
+# rehearsal measured without either, and its "nothing changed" saw the plugin's own refresh).
+cfg_keep; cp -p "$VAULT" "$SB/vault98s.kept"
+file_set cashbook_currencies UGX,USD,SSP; row_set cashbook_currencies UGX,USD,SSP
+settle96; VT98S="$(vt_host)"; sleep 1; settle96
+check "$( [ "${VT98S%%:*}" != "${VT98_0%%:*}" ] && echo moved)|$(vt_host)|$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("config", {}).get("cashbook_currencies", "-"))' "$VAULT" 2>&1)" "moved|$VT98S|UGX,USD,SSP" \
+  "1i-pre control: the plugin booted once on the planted configuration — the live vault learned SSP (its bytes moved), and a second boot leaves it as it is (bytes and time): 1i's \"nothing changed\" measures the script, not the plugin's own refresh"
+D98S="$(data94)"
 fresh98; OUT="$(run98 --check)"
 nogo98 "1i SSP among the book's currencies, in both copies of the configuration: rule A off — NO-GO at A23.7 on the pin's reading, before anything changes" \
   "NO-GO (A23.7): rule A is NOT in force on this server's own configuration, as the pin's code reads it" "$OUT" "$D98S"
@@ -879,8 +901,8 @@ M="$(mutant g2blind98 "$DEPLOY98" "$G2PIN_OLD98" '  true || stop "NO-GO (A23.7)'
 fresh98; OUT="$(run98 --script "$M" --check)"; rm -f "$M"
 check "$(has "$OUT" 'NO-GO (A23.7)')$(has "$OUT" 'rule A is NOT in force')|$(quiet98)" "nono|$P97|0|$D98S|$KEPT98|0" \
   "1i'' a copy without both — G2's weakened copy — no longer refuses on the rule: whatever stops it next, rule A is never named (caught); nothing changed"
-cfg_back
-check "$(data94)|$(oj "$(o98)" curs)" "$D98|UGX,USD" "…both copies of the configuration put back: the book's currencies UGX and USD again, every table as before"
+cfg_back; cp -p "$SB/vault98s.kept" "$VAULT"; rm -f "$SB/vault98s.kept"
+check "$(data94)|$(oj "$(o98)" curs)|$(vt_host)" "$D98|UGX,USD|$VT98_0" "…both copies of the configuration put back: the book's currencies UGX and USD again, every table as before — and the live vault put back with them: bytes and time as before"
 check "$(grep -c '^STRAY_Q_FAILED=' "$STATE97" "$STATE96" "$STATE95" "$STATE94" | awk -F: '{s += $2} END {print s}')|$(quiet98 | cut -d'|' -f1,3-)|$(sha256sum "$QREC" | cut -c1-16)" "0|$P97|$D98|$KEPT98|0|$QREC98" \
   "…every planted line taken out: 5.18.97 live, the data, the quarantine and its record as before — the script read the record, never wrote it"
 
@@ -1066,7 +1088,9 @@ for l in "ok    A0 the release delta is exactly 5.18.98's $N98 files — 5 added
          "  migrations        none added (A0, R7): the ledger the same before and after"; do
   check "$(has "$OUT" "$l")" "yes" "4: ${l:0:110}"
 done
-check "$(ctl97 "$OUT" A22)$(ctl97 "$OUT" R23)" "77" "5.18.95's seven fixes read with their controls, before (A22, the pin) and after (R23, the installed code): each control names 5.18.94's defects exactly"
+check "$(ctl98 "$OUT" A22)$(ctl98 "$OUT" R23)" "77" "5.18.95's seven fixes read with their controls, before (A22, the pin) and after (R23, the installed code): each control names 5.18.94's defects exactly"
+check "$(ctl97 "$OUT" A22)$(ctl97 "$OUT" R23)|$(ctl98 "$OUT97D" A22)$(ctl98 "$OUT97D" R23)|$(ctl97 "$OUT97D" A22)$(ctl97 "$OUT97D" R23)" "00|00|77" \
+  "control: the reader counts this release's words — 5.18.97's reader finds none of them on this deploy, this release's finds none on 5.18.97's deploy (97-3), and 5.18.97's still finds all fourteen there"
 check "$(noteids98 "$OUT")" "A17 A23.4 A23.5 A23.6 BN5 CA3 G3 N1 N2 N3 N4 R19 R23.9" \
   "its notes are exactly 5.18.97's on this book (A17, A23.4–A23.6, R19, R23.9), BN5's, G3's (the account not named Ecobank), N1–N4 and CA3's — the non-cash row"
 check "$(noteline "$OUT" N1 "$(n1say98 "$(oj "$NP_PRE" n1)") (the same totals as C3's")$(noteline "$OUT" N4 "that hold rows: $(sub98 "$(oj "$NP_PRE" n4)" accounts), with $(sub98 "$(oj "$NP_PRE" n4)" rows) row(s)")|$(g3say98 "$R98/run-$T98D.txt")" "yesyes|$(python3 "$H98/rh98.py" g3exp "$OB_PRE")" \
@@ -1119,7 +1143,7 @@ check "$(fails "$OUT")$(has "$OUT" '5.18.98 (after): PASSED')$(okline "$OUT" R19
   "5a master's run of the job since the copy: R19 conclusive — the quarantine holds — PASSED"
 check "$(noteline "$OUT" CA3 'the book moved since A23' '1 row(s) added, 0 changed, 0 removed')$(okline "$OUT" CA2 'C1–C5 again, on a NEW copy')$(okline "$OUT" CA1 "installed = 5.18.98's release")$(okline "$OUT" CA4 'without a session each send the visitor to the sign-in page (302)')$(okline "$OUT" R7 "the database since the deploy's stage A (its state file): the migration ledger's last row the same (")$(okline "$OUT" Z1 "the live vault is as the deploy's stage A found it")" "yesyesyesyesyesyes" \
   "…CA3 against the deploy's own A23 reading names the non-cash row again, as a NOTE; CA1, CA2, CA4; R7 against the deploy's reading; Z1 against the deploy's"
-check "$(okline "$OUT" BA1 "migration 088 is applied exactly as the release's 088_bank_statements.sql makes it" "none fewer than the deploy's stage A recorded")$(okline "$OUT" V3j "is unchanged by this run and ON (before=bk=on/on, after=bk=on/on; files/store)")$(okline "$OUT" BA2 'G3 again')$(okline "$OUT" BA2 'BK2 again')$(ctl97 "$OUT" R23)" "yesyesyesyes7" \
+check "$(okline "$OUT" BA1 "migration 088 is applied exactly as the release's 088_bank_statements.sql makes it" "none fewer than the deploy's stage A recorded")$(okline "$OUT" V3j "is unchanged by this run and ON (before=bk=on/on, after=bk=on/on; files/store)")$(okline "$OUT" BA2 'G3 again')$(okline "$OUT" BA2 'BK2 again')$(ctl98 "$OUT" R23)" "yesyesyesyes7" \
   "…BA1 holds 088 as the deploy left it; V3j the switch ON and unchanged; BA2 the gate and both cards again on a new copy; R23a–g with their controls"
 check "$(python3 "$H98/rh98.py" sheet "$SHEETA" "$O_A" R23)|$(stat -c %a "$SHEETA")|$(grep -cxF "      less $SHEETA" <<<"$OUT")|$(python3 "$H98/rh98.py" drift "$SHEETA")|$(python3 "$H98/rh98.py" ecosheet "$SHEETA")" "8/8|600|1|1:$RID98|$(python3 "$H98/rh98.py" ecoexp "$OB_A" 1)" \
   "…its own cash sheet, 0600: its figures this rehearsal's own SQL on the book now, its drift the non-cash row by its id, ECO Bank's offered accounts once"
@@ -1298,6 +1322,16 @@ check "$(live)|$( [ -e "$SB/web/.left98" ] && echo unspent || echo spent)|$(cmp 
 check "$(failline "$OUT" RB "installed files that are not 5.18.97's after the rollback: includes/routes.php")$(failline "$OUT" RB "the installed code after the rollback is not 5.18.97's as it must be:" 'includes/routes.php:cashbook_noncash_csv.php')" "yesyes" \
   "…RB FAILS by sha256, naming the file, and by the non-cash export still routed"
 git -C "$REPO" show "$P97:$P/includes/routes.php" > "$PD/includes/routes.php"
+# The control on 8a's second FAIL, as 5.18.97's 9b is on its own: a copy whose RB content check reads nothing, over the same
+# routes left behind (the trigger planted again; 5.18.97 already serving, so the run checks what it finds) — it calls the
+# split gone, and only the sha256 still sees the file: 8a's second FAIL is the content check's, not an echo of the first.
+printf '%s\n' "$SB/routes98.left" > "$SB/web/.left98"
+RBM98_OLD='  grep -qF -- "${rbm#*|}" "$DEST/${rbm%%|*}" 2>/dev/null && RB_BK="$RB_BK ${rbm%%|*}:${rbm#*|}"'
+M="$(mutant rbblind98 "$DEPLOY98" "$RBM98_OLD" '  true')"
+fresh98; OUT="$(run98 --answer ROLLBACK --script "$M" --rollback)"; rm -f "$M"
+check "$(live)|$( [ -e "$SB/web/.left98" ] && echo unspent || echo spent)|$(cmp -s "$PD/includes/routes.php" "$SB/routes98.left" && echo left)|$(okline "$OUT" RB "the Cashbook's split is gone from the code")$(failline "$OUT" RB "installed files that are not 5.18.97's after the rollback: includes/routes.php")|$(fails "$OUT")" "$P97|spent|left|yesyes|1" \
+  "8a' a copy whose RB content check is blind to the split — RB's weakened copy — over the same routes left behind (5.18.97 already serving): it calls the split gone (caught); only the sha256 still sees the file"
+git -C "$REPO" show "$P97:$P/includes/routes.php" > "$PD/includes/routes.php"
 check "$(installed98 "$P97")$(stat -c '%u:%g' "$PD/includes/routes.php")" "01000:1000" "…the routes put back as 5.18.97's: every file 5.18.97's again"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after that rollback: PASSED"
@@ -1362,6 +1396,15 @@ printf 'planted %s, %s and %s; and #%s\n' "$(grep -m1 '^2:' "$SB/forms98.txt" | 
 check "$(figs98 "$R98/zz-sweep-control.txt")$(grep -lF -f "$SCAN96" "$R98/zz-sweep-control.txt" | grep -c .)$(bankhits98 "$R98/zz-sweep-control.txt")$(noids98 "$(cat "$R98/zz-sweep-control.txt")")" "1111" \
   "control on the sweeps: a file holding one figure form, the planted secret, this rehearsal's account's name and a row id is found by all four"
 rm -f "$R98/zz-sweep-control.txt" "$SB/sec98.pat"
+rterr98() {   # rterr98 FILE… — how many of the files hold a bash runtime error of a script ("<x>.sh: line N: …")
+  [ "$#" -gt 0 ] || { echo none; return; }
+  grep -lE '\.sh: line [0-9]+: .*(bad substitution|unbound variable|syntax error|command not found)' "$@" 2>/dev/null | grep -c .
+}
+printf '%s\n' 'X=1; Y=2' 'echo "a:${X:+ the copy'"'"'s:$X}${Y:+ the base'"'"'s:$Y} end"' > "$SB/rterr98.sh"
+bash "$SB/rterr98.sh" > "$R98/zz-rterr-control.txt" 2>&1
+check "$(rterr98 $(sweep_files98))|$(rterr98 "$R98/zz-rterr-control.txt")" "0|1" \
+  "10d no terminal or log of any run of the 5.18.98 script holds a bash runtime error — bad substitution, unbound variable, syntax error, command not found: a line that cannot run counts nothing (trial 1, 8a: RB's FAIL never counted); control: a script with an apostrophe inside \${…:+…}, as RB's line had, is caught"
+rm -f "$SB/rterr98.sh" "$R98/zz-rterr-control.txt"
 check "$(left_tmp98)$(host_code98)$(ls -d /tmp/dnb-backup-* /tmp/rh98-k.* 2>/dev/null | grep -c .)" "${TMP98}00" "no copy of the book or the code, no vault, no synthetic book and no backup copy is left in /tmp or on the host"
 check "$(grep -c 'Fatal\|Parse error' "$SB/web.log")" "0" "the stand-in served every request without a PHP fatal"
 check "$(checkout_state)" "$CHECKOUT0" "this checkout is as the rehearsal found it: same commit, same tracked files"

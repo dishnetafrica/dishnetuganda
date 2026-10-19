@@ -5564,8 +5564,8 @@ fi
 [ "$LG_RT" = "$LEGAL_TEST_SIGNATURE" ] || R22_BAD="$R22_BAD test($LG_RT)"
 if [ -z "$R22_BAD" ]; then ok "R22 the installed documents are $BASELINE_VERSION's, unchanged by $EXPECTED_VERSION: South Sudan's byte for byte the golden; Uganda's version $UG_LEGAL_VERSION, dated $UG_LEGAL_DATED, every override (terms/privacy $(lfield "$LG_R" over)), no \"UCC\"; $TERMS_V11 current, $TERMS_V10 kept; all $(lfield "$IA_R" rows) authorisation record(s) match their terms ($(lfield "$IA_R" versions)); the installed test of the overrides passes ($LG_RT)"
 else bad "R22 the installed documents are not $BASELINE_VERSION's:$R22_BAD ($LG_R)"; [ "$LG_RT" = "$LEGAL_TEST_SIGNATURE" ] || legal_test_why; fi
-# R23a–R23g — 5.18.95's fixes as INSTALLED, read as text, as A22 read the pin's — a regression: 5.18.97 changes two of
-# the files they live in (public.php, includes/routes.php), and must leave all seven in place. Each check on the installed file, and the same check on 5.18.94's
+# R23a–R23g — 5.18.95's fixes as INSTALLED, read as text, as A22 read the pin's — a regression: 5.18.98 changes one of
+# the files they live in (includes/routes.php), and must leave all seven in place. Each check on the installed file, and the same check on 5.18.94's
 # copy from Git (f4b4c96) again — the control, which must show exactly its defects, or the check sees nothing. The
 # verdicts are fixed words; no line of either is printed. (Their sandbox tests never run on the server.)
 for r23c in $SEC_CHECKS; do
@@ -5926,7 +5926,15 @@ RB_CEO_N="$(grep -cF '_ceoRuleA' "$DEST/$BK_CEO" 2>/dev/null || true)"
 [ "${RB_CEO_N:-0}" != "0" ] && grep -qF 'function cashOnlyRuleInForce()' "$DEST/lib/CashbookService.php" 2>/dev/null || RB_BK="$RB_BK p3b:not-in-place"
 if [ -z "$RB_BK$RB_KEEP" ] && [ "$RB_KEEP_N" = "$PREV_KEPT_N" ]; then
   ok "RB the Cashbook's split is gone from the code — no CashbookNonCashView, no tab page, no non-cash export, no split in the library: $BASELINE_VERSION's; ECO Bank stays exactly as it was — all $RB_KEEP_N of $BASELINE_VERSION's files it keeps by their pinned sha256, its two links as reviewed (BK3), its switch in tools/set_config.php; and $BASELINE_VERSION's own P3b stays: the CEO page's rule-A branch, the library's cash-in-hand gate"
-else bad "RB the installed code after the rollback is not $BASELINE_VERSION's as it must be:${RB_BK:+ $EXPECTED_VERSION's split still there or P3b lost:$RB_BK}${RB_KEEP:+ ECO Bank or a file it keeps is not $BASELINE_VERSION's:$RB_KEEP} (kept files $RB_KEEP_N/$PREV_KEPT_N)"; fi
+else
+  # The reasons are built outside any ${…:+…}: inside double quotes, an apostrophe in such a word opens a quoted string
+  # (bash 5.2), so "$EXPECTED_VERSION's" there paired with "$BASELINE_VERSION's" and the line could not be expanded at
+  # all — "bad substitution", the FAIL never counted (this rehearsal's trial 1, 19 Oct, 8a).
+  RB_WHY=""
+  [ -z "$RB_BK" ] || RB_WHY="$RB_WHY $EXPECTED_VERSION's split still there or P3b lost:$RB_BK"
+  [ -z "$RB_KEEP" ] || RB_WHY="$RB_WHY ECO Bank or a file it keeps is not $BASELINE_VERSION's:$RB_KEEP"
+  bad "RB the installed code after the rollback is not $BASELINE_VERSION's as it must be:$RB_WHY (kept files $RB_KEEP_N/$PREV_KEPT_N)"
+fi
 # 5.18.95's fixes stay with the rollback — they are $BASELINE_VERSION's own: each check of A22 reads the installed code as
 # it read the pin, ok, and 5.18.94's copy, the control, with exactly its defects.
 RB_SEC_BAD=""
