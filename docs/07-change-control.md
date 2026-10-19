@@ -12205,7 +12205,7 @@ Then the quarantine's own `--check`, its own command, as the rollback's summary 
 6. **The script's header comments cite "root docs/69 Part 5",** which does not exist; the passages are docs/69 §1.4,
    §3.1 (D2) and §3.2 (P3b). Left in the comments rather than change the rehearsed bytes.
 
-## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — NOT YET PUSHED OR DEPLOYED
+## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 19 Oct; DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes — RESULT below; ECO Bank's switch still off
 
 **Request.** After the Cashbook exports of 18 Oct the operator asked: *"dont mix the bank with physical cash … so we know
 exacely ECO BANK UGX balance then ECO BANK USD balanace not combine them keep physical cash as it is"*, chose *"Both
@@ -12355,6 +12355,53 @@ no figure of the book or of a statement, no account name, number or ending and n
   failed** (258 runs of the deploy scripts, 16 of the quarantine, 3 printed switch commands).
 - **Trial 4 (18 Oct 23:35 – 19 Oct 00:49 UTC, started again after a container restart cut its first attempt at 23:33
   with 728 checks passed and none failed): 839 passed, 0 failed**, the same 258, 16 and 3 runs.
+
+### RESULT — DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **The run.** Begun 03:27:51 UTC, the release branch pushed at the operator's word shortly before (`ec0accd`).
+  `/opt/dishnet` fast-forwarded `d47c81b..e8c43aa`, `release/5.18.97` fetched as a new branch. Live before: `e35ecce`
+  (5.18.96), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 25 files (11 added, 14 changed), one migration, 088, the reviewed
+  file (sha256 `a72fd46e31ca2480…`); 087 unchanged; Domain B's trees the live release's. **BR1:** the installed plugin
+  is live 5.18.96, all 1,465 tracked files byte for byte. A22a–g and A22L: 5.18.95's seven fixes in the pin and in the
+  live code, each control exact. A2: the 11 changed PHP files and 11 test files accepted by the server's PHP. **BK3:**
+  the two links, as text, each under the pinned `BankGate::showLink()` call; the phone's More menu 5.18.96's byte for
+  byte. A3–A18 and A21 as in 5.18.96; A14: the quarantine's `--check` of 18 Oct 05:20:51 UTC began after 5.18.96's
+  copy. A15 78/0, A16 47/0, A17's test 80/0, **A22-T1 548/0** under the server's PHP. **A23.1–A23.8:** on a copy of
+  the book, the live code's figure and the pin's each equal D2 = A's SQL in all 8 cells; the parts add up to the cent;
+  P0's own tool agrees; the 12 Sep adjustment found once, approved, on no account; rule A in force. **BK1:** cash in hand
+  under 5.18.96's code and 5.18.97's, on the same copy, the same to the last digit in all 8 cells. **BR2:** 088's
+  tables and ledger row absent on the copy, the read seeing `cb_ledger` (the control). **BR3:** the switch absent.
+  **BN5:** one offered bank account per currency, each named Ecobank, none with a statement kept. **BK2:** with the
+  switch off no active administrator is shown ECO Bank; with it on (on the copy only) every one is, and no active
+  non-administrator handed a session copy that says `is_admin`. A24: South Sudan and the two misconfigured books
+  unchanged. Backup in `/root/dnb-5.18.97/backup-20261019T032751Z`; the event queue held nothing not done.
+- **The copy:** 03:29:26 UTC, the container serving `ec0accd`. V1–V13 passed; **BA4:** ECO Bank and its export without
+  a session each send the visitor to the sign-in page; **V3j:** the switch unchanged, absent in both copies; V4: no
+  fatal since the copy (142 lines read).
+- **Stage R passed.** R1 the 25 files byte for byte (11 new), the manifest 5.18.97. **BA1:** 088 applied by the
+  plugin's own runner exactly as the release's file makes it — the ledger row with the reviewed checksum
+  (`42036d6d967521b4…`), all 27 objects by name, table and SQL text (5 tables, 11 indexes, 11 triggers), its 16 CHECKs,
+  nothing else on its tables, all five empty; `migration.log` holds its line (27 statements, 19 ms); the whole of ECO
+  Bank installed, and the repair page refusing to drop its tables. BK3 again on the installed files. R5 all 293 earlier
+  files; **R7** the ledger gained 088's row and nothing else; R13 the event queue lost nothing; R14 Domain B's 363
+  files; R23a–g the fixes installed; **R23.1–R23.10:** the installed figure equals D2 = A's SQL in all 8 cells, 5.18.96's
+  code on the same copy says the same, the parts add up, P0 agrees, the Balance column and the CSV 16 of 16, the
+  installed tool's figures equal the code's, no drift since A23 (03:28:27 UTC); **BA2:** BK1 and BK2 again on a new copy
+  through the installed code — cash in hand identical under both codes, ECO Bank shown to administrators only when the
+  switch is on; **R24** T4 20/0; **R25** T1 548/0; **R26** South Sudan unchanged. Z1 the live vault untouched; Z2
+  nothing left in `/tmp`.
+- **The notes (3), each expected:** A17, two installation requests pending under v1.0 keep v1.0; R3, `migration.log`
+  holds no line for 087; **R19, not yet conclusive** (master's last run of the retry job, 03:25:05 UTC, was before the
+  copy) — `--after-only` after 03:49:26 UTC.
+- **The cash sheet:** `/root/dnb-5.18.97/cash-deploy-20261019T032751Z.txt`, 481 lines, read on the server only.
+- **ECO Bank's switch is off**, as designed: no menu item, no Quick Link, the screen refused, until its own command.
+- **Still to come, each its own command:** the screens with the switch off; `--after-only` (R19 conclusive) and the
+  quarantine's `--check`; the switch, once the P3b count is on paper; both statements kept; `--check-bank`;
+  `--after-only` again; the next day's `--after-only` after 15:10 UTC.
 
 ### Runbook
 
