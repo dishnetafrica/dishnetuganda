@@ -12205,7 +12205,7 @@ Then the quarantine's own `--check`, its own command, as the rollback's summary 
 6. **The script's header comments cite "root docs/69 Part 5",** which does not exist; the passages are docs/69 §1.4,
    §3.1 (D2) and §3.2 (P3b). Left in the comments rather than change the rehearsed bytes.
 
-## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 19 Oct; DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes — RESULT below; ECO Bank's switch still off
+## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 19 Oct; DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes — RESULT below; ECO Bank switched on and both statements kept 03:39–03:40 UTC; AFTER-CHECKS 19 Oct 03:52 UTC: `--after-only` PASSED 90 ok / 0 failed / 2 notes (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
 
 **Request.** After the Cashbook exports of 18 Oct the operator asked: *"dont mix the bank with physical cash … so we know
 exacely ECO BANK UGX balance then ECO BANK USD balanace not combine them keep physical cash as it is"*, chose *"Both
@@ -12409,6 +12409,40 @@ and no secret, and the terminal held none; the cash sheet stayed on the server.
   and the quarantine's `--check` with the switch off) was therefore not run; `--check-bank` comes first now, then
   `--after-only` (which accepts the switch on and the kept rows: unchanged during its own run, no fewer than the deploy
   recorded) and the quarantine's `--check`.
+
+### AFTER-CHECKS — 19 Oct 03:52 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server. `--check-bank` was not
+run: this `--after-only` read the same gate and printed `both=yes` (one offered account per currency, each named
+Ecobank, each with a statement kept), which is the question `--check-bank` asks.
+
+- **`--after-only`, begun 03:52:21 UTC: PASSED 90 ok / 0 failed / 2 notes**
+  (`/root/dnb-5.18.97/after-20261019T035221Z.log`).
+  - Live `ec0accd` (5.18.97), as the deploy left it; the checkout at `e8c43aa`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them but `bank_screen_enabled`, now `on/on` (files/store) — **V3j**
+    unchanged during this run, and a note that it changed since the deploy: the operator's own command.
+  - V1–V13 and BA4 passed; V4: no fatal since the copy (697 lines read).
+  - **BA1:** 088 exactly as the reviewed file makes it; its tables now hold the two kept statements, one per account,
+    their lines and events — none lost since the deploy's stage A, none changed while this run read them.
+  - **R19 is conclusive:** master ran the retry job at 03:50:04 UTC, after the copy (03:29:26 UTC); nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - R7: the ledger's last row 088's, the database the same size, since this run's stage A and since the deploy's.
+  - **R23.1–R23.10 on a fresh copy (03:52:55 UTC):** the installed figure equals D2 = A's SQL in all 8 cells, 5.18.96's
+    code says the same, the parts add up, P0 agrees, the Balance column and the CSV 16 of 16, the installed tool's
+    figures equal the code's; **no drift since the deploy's A23**. **BA2:** cash in hand the same under both codes; the
+    gate as found `switch=on open=yes both=yes`, ECO Bank shown to the administrator and to no non-administrator. R24
+    T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault untouched since the deploy's stage A; Z2 nothing
+    left in `/tmp`.
+  - **The notes (2):** V3j, the switch changed since the deploy (the operator's); R3, `migration.log` holds no line for
+    087.
+  - The cash sheet: `/root/dnb-5.18.97/cash-after-20261019T035221Z.txt`, 267 lines, read on the server only.
+- **The quarantine's `--check`, begun 03:53:56 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261019T035356Z.log`). K3–K6, K8–K11 ok; **K13:** the retry job ran at 03:50:04
+  UTC, after the move, and made nothing in `<plugin>/data`. Notes: K2 (the container serves `ec0accd`, not `69c87a6`)
+  and K7 (`config.json` re-made in `<plugin>/data` by other writers — not a database).
+- **Still to come:** `--after-only` after 15:10 UTC today, once the evening WhatsApp (18:00 Kampala) has run on
+  5.18.97; it also stands in for 5.18.96's evening check, which can no longer run now that 5.18.97 is live.
 
 ### Runbook
 
