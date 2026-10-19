@@ -12204,3 +12204,248 @@ Then the quarantine's own `--check`, its own command, as the rollback's summary 
    refuse to start between 14:55 and 15:10 UTC. Its header and the Runbook (step 2) ask that it not be started then.
 6. **The script's header comments cite "root docs/69 Part 5",** which does not exist; the passages are docs/69 §1.4,
    §3.1 (D2) and §3.2 (P3b). Left in the comments rather than change the rehearsed bytes.
+
+## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — NOT YET PUSHED OR DEPLOYED
+
+**Request.** After the Cashbook exports of 18 Oct the operator asked: *"dont mix the bank with physical cash … so we know
+exacely ECO BANK UGX balance then ECO BANK USD balanace not combine them keep physical cash as it is"*, chose *"Both
+(Recommended)"*, and then described the screen: *"provide serpate view screen for bank. down to cashbook show ECO Bank
+and then we have two hero section like ECO Bank UGX and ECO BANK USD"*. Design v2 (18 Oct, above): two releases —
+this one, then 5.18.98 (the Cashbook physical cash only). Answers: Q15 *"Yes, add it"* (the CEO Quick Link), Q1
+*"Leave them, count them"*, Q2 *"ECO Bank first"*.
+
+### Release notes
+
+On the Uganda tenant with no SSP (`BankGate::ugandaWithoutSsp()`: `StaffJobsGate::applies()` and no SSP, read from the
+configuration files, as 5.18.96's rule), to administrators only, and only once switched on (`bank_screen_enabled`, off
+after the deploy). South Sudan, a Uganda tenant with SSP and every other reader: unchanged; 088's five tables are
+created on every install and stay empty wherever ECO Bank is closed.
+
+- **ECO Bank** — a menu item under Accounts → Company Books, directly below Cashbook; also on the CEO page's Quick Links
+  after 📒 Cashbook, an administrator's only menu on a phone. Both links follow one gate, `BankGate::showLink()`, true
+  exactly when the screen would open for that visitor (the dispatcher's `*admin` on the session copy, then
+  `BankGate::open()`, then `allows('bank.view')` on the fresh staff record — the screen's own checks); the link carries
+  no figure, count or badge.
+- **One card per active bank account in UGX or USD**, UGX first — on this book two, "ECO BANK UGX" and "ECO BANK USD" —
+  dark slate grey, never green or blue like the CASH IN HAND cards (only the small UGX / USD tag is coloured). Each
+  shows **Ecobank's own available balance after the latest kept statement line of that account** — the Running Balance
+  on Ecobank's highest line number — with that line's date, the account ending and when its statement was kept (*"from
+  the statement kept on …"*); every card also carries the pill *"Not compared with the Cashbook yet"* and *Show its
+  lines*, and the card whose lines are shown is ringed. **No total, no sum, no grouping per currency, and no Cashbook
+  entry read for a card.** A card with no statement kept reads "No Ecobank statement kept yet" and offers the upload to
+  an administrator, with that card's account already chosen. Only an account the book names Ecobank is headed "ECO
+  BANK"; another bank account keeps its own name. A book currency with no active bank account gets a light-grey card,
+  "NO ACTIVE BANK ACCOUNT IN <CUR>" (an Ecobank account switched off while another bank account in its currency stays
+  active simply has no card: Known limits, 4); with none in either currency the screen says only "The book has no
+  active bank account in UGX or USD."
+- **Below the cards:** the statement lines, one account at a time (Lines, Statements, the month filter, the export),
+  as the Bank screen v1 built them (`8684e9c5`).
+- **Keeping a statement:** Ecobank online banking → Account Details CSV for that account. The first file of an account
+  links it once ("Link and keep" — check the account ending first); afterwards a file must reach back to the card's
+  date. Every file is checked to end on Ecobank's own *Closing Available*.
+- **Migration 088** — five tables (`bank_account_profiles`, `bank_checks`, `bank_statements`, `bank_statement_lines`,
+  `bank_line_events`), eleven indexes, eleven triggers (kept lines can be neither changed nor deleted). Empty after
+  the deploy.
+- **Not changed:** the Cashbook (5.18.98 makes it physical cash only), cash in hand everywhere (D2 = A, 5.18.96), every
+  entry, the staff app, the landing page's figures, the evening WhatsApp, the daily e-mail, Opening Balances, South
+  Sudan, Domain B.
+
+### Files — 25 against `e35ecce`: 11 added, 14 changed, none removed
+
+- **Added (11):** `lib/BankGate.php`, `lib/BankStatementStore.php`, `lib/EcobankDetailsCsv.php`,
+  `tabs/accounts/bank.php`, `includes/post/post_bank.php`, `migrations/088_bank_statements.sql` (sha256
+  `a72fd46e31ca2480…`), `tests/fixtures/bank_statement_gen.php` (synthetic statements only) and
+  `tests/test_bank_{boundaries,reader,screen,store}.php`.
+- **Changed, taken whole from the development branch (`213c5ce0`) (5):** `includes/navigation.php` (+9, the menu
+  item), `tabs/admin/ceo_dashboard.php` (+6, the Quick Link), `includes/post_handlers.php` (+1) and
+  `tests/test_links_without_port.php` (+3), each identical at `e35eccee` and `fae07c61` before the change; and
+  `SAFETY.md` (+151 −18: its 5.18.97 entry and a late 5.18.96 entry, 5.18.96 having shipped without one), which differs
+  between `e35eccee` and `fae07c61` only by the privacy redaction of 18 Oct (`c60f5176`, 18 lines), so the release
+  carries that redaction too — the only file of it the release carries.
+- **Ported (3), 5.18.96's file with exactly the development change's lines:** `public.php` (+4: the five tables on
+  the repair page's protected list, the tab and its admin-only permission), `includes/routes.php` (+78: the export),
+  `tools/set_config.php` (+3: the switch).
+- **The version alone (6):** `manifest.json` (5.18.97) and the pins in the five `tests/test_distributor_*.php`.
+- **In the release only:** `test_bank_boundaries.php` and `test_bank_screen.php` compare with `e35eccee` (the live
+  commit) where the development branch compares with `419e2ffd`; nothing else differs.
+- **Not carried:** the ten development-only version pins (in test files the release does not have); the rest of the
+  privacy redaction — the release's `MANIFEST.md` and the plugin's `docs/` are 5.18.96's bytes, unredacted, and the
+  deploy installs them as today (`MANIFEST.md` still holds the WASender key that `c60f5176` removed on the development
+  branch: to rotate, above); Domain B.
+- 25 files changed, 7,429 insertions(+), 24 deletions(-).
+
+### Ancestry
+
+`ec0accd` (5.18.97, release) ← `e35ecce` (5.18.96, release, live) ← `098f6b3` (5.18.95). It carries the development
+change `fae07c61..213c5ce0`, seven commits: `8684e9c5` (the Bank screen v1, on `419e2ffd` — why the development branch's
+two bank tests compare with it), merged onto `fae07c61` as `752b23d0`; `1d4e1742` (the menu item, the Quick Link, one
+gate, one name), `6351f779` (every account's card at once, upload from a card), `3464d4fa` (the tests of the menu item,
+the Quick Link and the cards; SAFETY.md's 5.18.97 entry rewritten, a late 5.18.96 entry), `19c91db5`
+(`test_links_without_port` allows BankGate's same-origin comparison of the request host), `213c5ce0` (the review's
+findings); merged into the development branch as `b32dad87`. The script `5d77096f` and `f1152343`; the rehearsal
+`53c47f11`, `5011014f`, `1f29bc4b` (trial 1's findings) and `0e97c2d5` (trial 2's).
+
+### Tests
+
+- **The development branch (`b32dad87`), the full suite twice** (Sunday 18 Oct, 10:16–12:57 UTC, by a resumable
+  equivalent of `tests/run.sh`; pass B resumed at 12:17 after its two-hour limit, `test_job_notifications_day.php` run
+  again from scratch): 304 files, **16,498 passed, 8 failed**, in each run, file by file identical — the branch with
+  P3b merged (`7925c587`, 300 / 15,491) plus the four bank tests (1,043), less 28 checks a Sunday run between 07:00 and
+  19:00 UTC does not reach. The 8 failures are `test_pilot_safety.php`'s own: its "NOT RUN: it is Sunday between 07:00
+  and 19:00 UTC" check, one follow-up case and six weakened copies not run (173 checks instead of 185). Skipped, not
+  failed: `test_sales_pilot.php` 119 instead of 125, `test_multi_number_routing.php` 85 instead of 90,
+  `test_notify_evo_retry.php` 20 instead of 23, and two checks of `test_quote_tax_line.php` ("the repository is not
+  beside this copy of the plugin"). `test_pilot_safety.php` is unchanged by this work. **Run alone after 19:00 UTC:
+  185 passed, 0 failed**; the other three were not run again.
+- **The release (`ec0accd`), the full suite twice** (18 Oct, 14:21–15:37 and 15:37–16:54 UTC, the same runner; pass B
+  resumed at 16:21 after its two-hour limit, `test_kyc_crm_create.php` run again from scratch): 292 files, **15,578
+  passed, 8 failed**, in each run, file by file identical — 5.18.96's 288 / 14,569 plus the four bank tests
+  (`test_bank_screen` 341, `test_bank_store` 255, `test_bank_reader` 289, `test_bank_boundaries` 158, each 0 failed),
+  less the same 26 Sunday checks: the same 8 failures (`test_pilot_safety.php` 165 checks instead of 177) and the
+  same three files skipping (119, 79 and 20 instead of 125, 84 and 23). **`test_pilot_safety.php` run alone after
+  19:00 UTC: 177 passed, 0 failed**, as in 5.18.96's release suite.
+- **Weakened copies:** 57 of the screen test (the menu link shown always, on South Sudan, to a non-administrator, by a
+  page's own `$isAdmin`, above Cashbook, with a badge; the cards added into a total, grouped per currency, read from
+  `cb_ledger`, dated by the kept time, the wrong account preselected …), 34 of the boundaries test, 34 of the store's
+  and 35 of the reader's — each caught at the cases it names; the unchanged copy passes.
+
+### `scripts/deploy-5.18.97.sh` — 5,627 lines, sha256 `6d61b0d2f100b6ad…`
+
+Derived from `deploy-5.18.96.sh` by 109 asserted edits plus the reviews' fixes; every 5.18.96 check kept (5.18.95's
+security fixes, the quarantine, the pilot's switches, 086/087, routing and policy, Domain B, documents, cash in hand
+under D2 = A on copies with its 0600 sheet). Its own checks, named with a B so they never read as the R or A checks:
+
+- **BR1–BR3** refuse unless the installed files are live 5.18.96's, the five tables are absent (or present and empty),
+  and `bank_screen_enabled` is absent; `--redeploy` (after this release's own rollback) turns kept rows and a switch
+  left on into notes, and refuses unless 088's 27 objects are intact.
+- **BN5** counts offered accounts per currency (counts only). **BK1** cash in hand old = new on one copy. **BK2** the
+  gate per switch state, each in its own PHP process, the switch written only into the copy's configuration. **BK3**
+  the two links as text — each exactly one `href="?page=dashboard&tab=bank"`, under the pinned `showLink()` call, at
+  column 0 — and the phone's More menu 5.18.96's byte for byte (the `php -l` of every changed file is A2's).
+- After the copy: **BA1** the release installed, 088 applied exactly and empty; **BA2** BK1/BK2 again; **BA4** the
+  screen and its export answer a visitor with no session with the sign-in page.
+- New modes: `--check` (stage A only, GO / NO-GO), `--redeploy`, and the read-only `--check-bank` (one line per
+  offered account: currency, named Ecobank, a statement kept, linked, days since its last kept line; then whether both
+  ECO BANK cards show a figure — 5.18.98's R3, asked early; row ids and dates on the 0600 sheet only).
+- It prints counts, hashes and PASS/FAIL/NOTE only — no amount, no account name, number or ending.
+
+### The rehearsal — `scripts/harness/deploy-5.18.97/rehearse.sh` (1,376 lines, sha256 `6e73e9a891ae59a9…`, with three PHP helpers, `rh97-{keep,oracle,staff}.php`)
+
+It builds the sandbox with 5.18.96's own rehearsal up to just before its rollback, so 5.18.96 is live on a synthetic
+book and its `--after-only` and the quarantine's `--check` have passed, as on the server. On it, synthetic only: three
+staff records (an active administrator, an inactive one, and a former administrator still active as an accountant —
+the stale session) and a statement from `tests/fixtures/bank_statement_gen.php` kept on each Ecobank account. Then this
+release's sections: every refusal, `--check`, the deploy through a pseudo-terminal, `--after-only`, the switch,
+`--check-bank`, the two-step rollback, then `--redeploy`; and the design's plants, each with the outcome it must have:
+the switch in the store copy alone keeps the gate closed (GO, BR3's note), while a gate that read the store would show
+ECO Bank (NO-GO at BK2); a stale-session non-administrator is refused by the fresh record; kept rows and a switch left
+on through a rollback each refuse a plain deploy (BR2, BR3) and are notes with `--redeploy`; one of 088's triggers
+dropped makes `--redeploy` refuse (BR2). It proves the delta file by file (`SAFETY.md` `213c5ce0`'s, with the
+redaction; `MANIFEST.md`, the plugin's `docs/` and Domain B 5.18.96's) and sweeps every terminal, log and state file:
+no figure of the book or of a statement, no account name, number or ending and no staff member outside the cash sheets
+(10a–10c, each with its control).
+
+- **Trial 1 (18 Oct 16:54–18:16 UTC): 830 passed, 9 failed** — every failure the harness's own: four runs passed
+  `--check` before `--script`, so the script rightly answered "unknown option" (five failures); the port counter
+  counted each diff's empty last line; a `paste` quirk; the instrument 0-k could not create its copy (two).
+- **Trial 2 (18 Oct 18:22–19:45 UTC): 837 passed, 2 failed** — 0-k only: the base sandbox runs its PHP as uid 1000
+  (`setpriv`), and the instrument's folder was root's; reproduced exactly on a scratch folder and fixed by handing the
+  folder to uid 1000.
+- **Trial 3 (18 Oct 21:11–22:33 UTC, started again after a container restart cut its first attempt): 839 passed, 0
+  failed** (258 runs of the deploy scripts, 16 of the quarantine, 3 printed switch commands).
+- **Trial 4 (18 Oct 23:35 – 19 Oct 00:49 UTC, started again after a container restart cut its first attempt at 23:33
+  with 728 checks passed and none failed): 839 passed, 0 failed**, the same 258, 16 and 3 runs.
+
+### Runbook
+
+1. **Say the word to push** `release/5.18.97`. The development branch — the script, its rehearsal and this record — is
+   already on origin; step 2's `git fetch origin release/5.18.97` fails until the release branch is pushed.
+2. **The deploy**, as root on the server, its own command, outside 14:55–15:10 UTC (the evening WhatsApp, 18:00
+   Kampala); type `DEPLOY`; send back **the log file** (never a copy of the terminal, never the cash sheet). While it
+   runs — and during every `--after-only` and the rollback — press nothing on the Salesperson numbers card, use nothing
+   on ECO Bank, run no `tools/set_config.php` and save nothing under Settings: a change made then fails the checks that
+   compare before and after.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.97 && mkdir -p /root/dnb-5.18.97 && bash scripts/deploy-5.18.97.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.97/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes — A17, R19 (not yet conclusive right after the copy), on this server most
+   likely R3 (`migration.log` holds no line for 087, as on every deploy since 5.18.89) and, for the same reason, possibly
+   BA1's "no line for 088", and the book's own (A23.4–A23.6, R23.9, R23.10). BN5 is an ok line when the book offers one
+   bank account per currency, each named Ecobank, and a note (counts only) otherwise; BK2 and BA2 note it when the book
+   has no active staff record that is not an administrator's. Any failure, or a note you cannot place: send the log
+   file and stop.
+3. **Read the figures on the server** with the `less` command the summary prints — each run has its own sheet (cash in
+   hand before and after, the lines of the physical count; each offered bank account's row id and its last kept line's
+   date). Never paste, copy or send a sheet.
+4. **Right after PASSED, with the switch still off, at a quiet moment — not between 14:55 and 15:10 UTC — look at the
+   screens**, signed in as an administrator: no ECO Bank in the menu and no ECO Bank Quick Link on the CEO page; cash in
+   hand as before on the landing page, the Cashbook (project dishnet) and the CEO page's tiles. Then the physical count,
+   on paper, as the sheet lists it — never in the chat.
+5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command as the
+   summary prints it, each with its own log file to send. If R19 still says not yet conclusive, run `--after-only` again
+   after the time it prints.
+6. **Switch ECO Bank on, once the P3b cash count is recorded** (SAFETY.md's operator action for 5.18.97) — the command
+   the summary prints under *"ECO Bank's switch — its own command, alone"*, the one ending `--value 1`, never the
+   rollback's step 1, which ends `--clear`. It runs the installed `tools/set_config.php` in the container as the
+   database's owner and sets `bank_screen_enabled` alone. Send its log file.
+7. **Keep both statements:** in Ecobank online banking download each account's **Account Details** as **CSV** (an
+   account's first file: any period that ends today) and upload it as Ecobank gave it — never open it in Excel and save
+   it (Excel rewrites the dates). Signed in as an administrator, open **ECO Bank** below Cashbook (on a phone, from the
+   CEO page's Quick Links). On the ECO BANK UGX card press **＋ Upload the Account Details CSV** — the form opens with that
+   account chosen — choose the file and press **Check this file**; check the account ending it shows, then press **Link
+   and keep** within two hours (the link can never be changed: 088 refuses to change or delete it). The same on the ECO
+   BANK USD card. Both cards then show a figure; report only that — never the figure, the CSV or a picture of a card.
+8. **`--check-bank`**, its own command as the summary prints it: one line per offered account and whether both ECO BANK
+   cards show a figure (what 5.18.98's deploy will require), no figure. Send its log file.
+9. **Then `--after-only` again**, and the quarantine's `--check`, as in step 5.
+10. **The next day after 15:10 UTC** (18:10 Kampala, once the evening WhatsApp has run on the new code; the script's
+    summary says after 15:00): `--after-only` again.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed: a passing run prints it "only if it is ever needed"; on a failure, send the log file and do not
+roll back on your own unless staff or customers are affected. Two steps, in this order, each its own command, as the
+summary of the deploy (or of an `--after-only`) prints them last, after the verdict:
+
+1. Clear the switch with **5.18.97's** own `tools/set_config.php` — the printed line ending `--key bank_screen_enabled
+   --clear` (5.18.96's tool refuses the key). Wait until it says *"bank_screen_enabled cleared"*.
+2. `--rollback`, which asks for `ROLLBACK` before it changes anything, puts 5.18.96 (`e35ecce`) back through
+   `deploy-hybrid.sh` and checks it (RB). If step 1 was skipped it says so before its question: type anything but
+   `ROLLBACK`, run step 1, then this again. As root on the server, on its own:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.97.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.97/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+ECO Bank goes — its menu item, its Quick Link, its screen and its export; cash in hand stays D2 = A, so the screens and a
+count recorded under 5.18.97 still match; 5.18.95's fixes, 5.18.94's documents and every other switch stay as they
+are. 088's tables and every kept statement stay, untouched and read by nothing (there is no down migration), but
+5.18.96's emergency repair page does not list the five tables among those it refuses to drop (RB notes it). Then the
+quarantine's own `--check`, its own command, as the rollback's summary prints it. A later deploy of 5.18.97 uses
+`--redeploy`, and A14 refuses it until a quarantine `--check` begun after the rollback's copy has passed. If the script
+cannot run, the deploy's summary also prints the by-hand put-back.
+
+### Known limits
+
+1. **The switch is the operator's:** the deploy never sets it; until it is switched on nobody sees ECO Bank, and its
+   address answers "ECO Bank is not available on this installation."
+2. **A card is as fresh as the last statement kept** — its date is the last movement kept, not the day of the upload.
+3. **No phone menu link for administrators** other than the CEO page's Quick Links (the More menu is not shown to
+   administrators); the address works too.
+4. **If the Ecobank UGX account is switched off while another UGX bank account is active,** the other account's card is
+   shown under its own name and no placeholder is drawn (recorded in SAFETY.md).
+5. **The Cashbook still lists the Ecobank entries** (with "—" as their Balance, not counted) until 5.18.98.
+6. **Accountants who are not administrators** cannot open ECO Bank (Q11, later).
+7. **Bank and cash still meet elsewhere** (unchanged by 5.18.97 and 5.18.98; Q10): the staff app's Full Cashbook lists
+   Ecobank entries and its positions add bank, cash and mobile money; the daily e-mail's Cash In / Cash Out add every
+   entry of the day; the evening WhatsApp's IN/OUT lines and entry count include bank entries; Opening Balances (off the
+   menu) prints the book's own Ecobank figure, which is not Ecobank's balance.
+8. **Kept statement files are in no uploads backup:** `data/bank_statements/` is not under `uploads/`, so the Google
+   Drive backup, the admin backup download and the hourly local backup do not hold them; the kept lines are in the
+   plugin database and travel with every database backup. No route serves a kept file.
+9. **A newly made administrator** sees ECO Bank once the session's cached copy of their record refreshes (within five
+   minutes, or at once on signing in again); one whose right is removed loses it on the next page.
+10. **The evening WhatsApp's window is the operator's to keep**, as in 5.18.96: the script does not refuse to start
+    between 14:55 and 15:10 UTC.
+11. **Defects found nearby, recorded, not fixed:** the cash export's field-agent list lacks `field_accountant`
+    (`includes/routes.php:250` against `cashbook.php:44`); `includes/routes.php:228` requires
+    `includes/cashbook_web.php`, which does not exist; the existing cash export neutralises no formula cells (the new
+    export does).
