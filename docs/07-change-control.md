@@ -13200,9 +13200,12 @@ claims confirmed, 5 corrected; the scratchpad keeps the full report):**
 **The operator's decisions (20 Oct):**
 - **"Always company 1":** every new app customer is filed under organization 1; a customer filed under another
   organization is not quoted from the app — the salesperson is told to move the customer to company 1 first.
-- The operator makes template 1006 organization 1's default quote template in uCRM and moves the customers filed under
-  the wrong organization back to organization 1. No release sends a template id until uCRM 4.5.33's acceptance of it is
-  measured.
+- Organization 1's quote template was **already** the one the business uses: the operator's screenshot of
+  organization 1's edit page (20 Oct, 10:31 Kampala) shows *Quote template: V5* (the operator's template 1006). So a quote
+  for a client filed under organization 1 already carries it, from the app or from uCRM; the wrong quotes came from
+  clients filed under the other organization, with its own template and company details. The operator moves those
+  clients back to organization 1; until 5.18.99 is live, a client registered from the app is moved by hand and its
+  quote made again from uCRM. No release sends a template id until uCRM 4.5.33's acceptance of it is measured.
 - **uCRM Products are the true price list** — a later release makes them the only one.
 - **Plan approved:** first a small Uganda-only release, 5.18.99 (the configured quoting organization, the refusal before
   any quote under another, the WhatsApp and fallback PDF naming the client's own company, *Sync All* admin-only, a
