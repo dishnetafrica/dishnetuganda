@@ -12553,7 +12553,7 @@ cannot run, the deploy's summary also prints the by-hand put-back.
     `includes/cashbook_web.php`, which does not exist; the existing cash export neutralises no formula cells (the new
     export does).
 
-## 19 Oct — 5.18.98: the Cashbook's list shows physical cash only (Uganda) — cash, mobile money and entries with no account; Ecobank and every other non-cash entry move, unchanged, to a read-only tab of their own, "🏦 Bank & other accounts": one button per bank account plus Other accounts, no Balance, no total, its own export; the cash export gains an Entry state column; cash in hand, every Balance figure and ECO Bank unchanged; no switch; no migration; South Sudan and Domain B unchanged. `release/5.18.98` = `ce7ac38`, cut on live 5.18.97 (`ec0accd`); `scripts/deploy-5.18.98.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — NOT YET PUSHED OR DEPLOYED
+## 19 Oct — 5.18.98: the Cashbook's list shows physical cash only (Uganda) — cash, mobile money and entries with no account; Ecobank and every other non-cash entry move, unchanged, to a read-only tab of their own, "🏦 Bank & other accounts": one button per bank account plus Other accounts, no Balance, no total, its own export; the cash export gains an Entry state column; cash in hand, every Balance figure and ECO Bank unchanged; no switch; no migration; South Sudan and Domain B unchanged. `release/5.18.98` = `ce7ac38`, cut on live 5.18.97 (`ec0accd`); `scripts/deploy-5.18.98.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 20 Oct; DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes — RESULT below
 
 **Request.** The operator's words of 18 Oct, *"dont mix the bank with physical cash"* and *"keep physical cash as it
 is"*, gave one design and two releases (SPEC-separate-v2 §2.11): 5.18.97, ECO Bank, live since 19 Oct, and then this
@@ -12933,6 +12933,55 @@ below):
 - **Trial 4 (19 Oct 21:11–22:50 UTC, with `REHEARSE_KEEP`): 1,105 passed, 0 failed** (307 runs of the deploy scripts,
   18 of the quarantine), 95-5f among them. Trials 3 and 4 are the two clean runs in a row, on the committed script
   (sha256 `6b412e0e3ad421e7…`) and rehearsal (sha256 `7814dd06cabcf007…`) at `9d1f0de9`.
+
+### RESULT — DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **Before it:** 5.18.97's evening `--after-only` (05:38:55 UTC) PASSED, its AFTER-CHECKS above; then `release/5.18.98`
+  was pushed at the operator's word (05:36 UTC).
+- **The run.** Begun 05:41:18 UTC. `/opt/dishnet` fast-forwarded `e8c43aa..401acac`, `release/5.18.98` fetched as a new
+  branch. Live before: `ec0accd` (5.18.97), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 17 files, each by its pinned sha256, no migration; 5.18.97's 15 kept
+  files the same pinned sha256 in both release commits; Domain B's trees the live release's. A22a–g and A22L with their
+  controls. **BR1:** the installed plugin is live 5.18.97, all 1,476 tracked files byte for byte. **G1:** installed is
+  5.18.97, its manifest and the 15 kept files by their pinned sha256. A2: the 6 changed PHP files and 9 test files
+  accepted by the server's PHP. BK3 the two ECO Bank links as text. A3–A18 and A21 as in 5.18.97; A14: the
+  quarantine's `--check` of 19 Oct 03:53:56 UTC began after 5.18.97's copy. A15 78/0, A16 47/0, A17's test 80/0,
+  **A22-T1 548/0**. **A23.1–A23.8:** on a copy of the book, both codes' figures equal D2 = A's SQL in all 8 cells; the
+  parts add up; P0 agrees; the 12 Sep adjustment once, on no account. **BK1:** cash in hand under 5.18.97 and 5.18.98
+  the same to the last digit in all 8 cells. **G2:** rule A on through the installed code. **BR2:** 088 intact on the
+  copy, its rows ECO Bank's two kept statements. **BR3:** the switch ON in both copies. **G3:** both ECO BANK cards
+  show a figure through the live 5.18.97 classes — one line per offered account, one per currency, each named Ecobank,
+  each with a statement kept. BN5 ok. BK2 ok.
+- **The copy checks, on one copy, each code in its own process with its own vault:** **C1** cash in hand 8/8 the same;
+  **C2** the list with no key 12/12 the same (ids, Balance, stream currency); **C3** the split apart and whole 12/12,
+  `countFiltered` agreeing 12/12, every non-cash row without a Balance 12/12, the tab's buttons holding each non-cash
+  row once 3/3; **C4** counts, pending disbursements and P&L 12/12; **C5** the copy's row, account and schema digests
+  unchanged by every read of 5.18.98's code (127 rows).
+- **The notes before the deploy (counts only):** **N1** 47 rows leave the list for the tab — 29 on bank accounts, 18 on
+  accounts of another kind, none naming no account, none with a negative or text id — all in project dishnet. **N2**
+  (Q1) approved rows with no account that look like bank money and stay on the list: uCRM's online 4; Bank Transfer in
+  0, out 0; Bank Charges 0. **N3** no row without a currency. **N4** no bank account ECO Bank does not offer holds a
+  row. A24 South Sudan and the two misconfigured books unchanged. Backup in
+  `/root/dnb-5.18.98/backup-20261020T054118Z`; the event queue held nothing not done.
+- **The copy:** 05:42:47 UTC, the container serving `ce7ac38`. V1–V13, BA4 and **CA4** (the Cashbook, the tab, the cash
+  export and the tab's export each send a visitor without a session to the sign-in page, no fatal) passed; **V3j** the
+  switch ON and unchanged; V4: no fatal since the copy.
+- **Stage R passed.** R1 the 17 files byte for byte (5 new), the manifest 5.18.98; **CA1** the 17 by their pinned
+  sha256, the 15 kept files still 5.18.97's, the changed and new PHP accepted by the container's PHP; **BA1** 088 and
+  every kept row exactly as stage A read them; BK3; R5 all 305 earlier files; **R7** the ledger and the file's size
+  unchanged — 5.18.98 writes nothing; R13 the event queue lost nothing; R14 Domain B; R23a–g; **R23.1–R23.9** on a new
+  copy; **CA3** no drift since A23 (05:41:55 UTC); **BA2** cash in hand the same under both codes, the gate, and G3
+  again through the installed code; **CA2** C1–C5 again on a new copy with the installed code, all held; R24 T4 20/0;
+  R25 T1 548/0; R26 South Sudan unchanged. Z1 the live vault untouched; Z2 nothing left in `/tmp`.
+- **The notes (7), each expected:** A17 (two installation requests pending under v1.0); N1–N4 (above, counts only); R3
+  (`migration.log` holds no line for 087); **R19, not yet conclusive** (master's last run of the retry job, 05:30:07
+  UTC, before the copy) — `--after-only` after 06:02:47 UTC.
+- **The cash sheet:** `/root/dnb-5.18.98/cash-deploy-20261020T054118Z.txt`, 538 lines, read on the server only.
+- **Still to come, each its own command:** the screens; `--after-only` (R19 conclusive) and the quarantine's `--check`;
+  the next day's `--after-only` after 15:10 UTC.
 
 ### Runbook
 
