@@ -12444,8 +12444,20 @@ Ecobank, each with a statement kept), which is the question `--check-bank` asks.
 - **A second `--after-only`, begun 04:04:28 UTC: PASSED 90 ok / 0 failed / 2 notes** — the same two notes, the same
   readings (R19 conclusive again, master's run at 04:00:12 UTC; no drift since the deploy's A23; 088's rows unchanged).
   It ran in the morning, so it is not yet the evening check.
-- **Still to come:** `--after-only` after 15:10 UTC today, once the evening WhatsApp (18:00 Kampala) has run on
-  5.18.97; it also stands in for 5.18.96's evening check, which can no longer run now that 5.18.97 is live.
+- **The evening `--after-only`, begun 20 Oct 05:38:55 UTC: PASSED 90 ok / 0 failed / 3 notes**
+  (`/root/dnb-5.18.97/after-20261020T053855Z.log`) — after the evening WhatsApp of 19 Oct (15:00 UTC) ran on 5.18.97,
+  so it is the evening check, and it stands in for 5.18.96's.
+  - Live `ec0accd`, the checkout at `e8c43aa`, no tracked edits; every switch and setting as before, the ECO Bank switch
+    `on/on`. V1–V13 and BA4 passed; **V4: no fatal or parse error since the copy**, 66,820 lines of the container log read.
+  - **R19 conclusive** again (master's run of the retry job at 05:30:07 UTC); R7 the ledger's last row 088's, the file
+    larger, as a live plugin writes; R13 the event queue lost nothing; BA1 088's rows as kept.
+  - **R23.1–R23.10** on a fresh copy (05:39:34 UTC): D2 = A in all 8 cells under both codes, **no drift since the
+    deploy's A23**; BA2 the gate and both cards (`both=yes`); R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged; Z1
+    the live vault untouched since the deploy's stage A; Z2 nothing left in `/tmp`.
+  - **The notes (3):** V3j (the switch changed since the deploy, the operator's); R3 (no `migration.log` line for 087);
+    BA1 (no `migration.log` line for 088 any more — rotated away; every object read from the database instead).
+  - The cash sheet: `/root/dnb-5.18.97/cash-after-20261020T053855Z.txt`, 267 lines, read on the server only.
+  - Nothing else is owed for 5.18.97: 5.18.98's deploy follows.
 
 ### Runbook
 
