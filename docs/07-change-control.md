@@ -12553,7 +12553,7 @@ cannot run, the deploy's summary also prints the by-hand put-back.
     `includes/cashbook_web.php`, which does not exist; the existing cash export neutralises no formula cells (the new
     export does).
 
-## 19 Oct — 5.18.98: the Cashbook's list shows physical cash only (Uganda) — cash, mobile money and entries with no account; Ecobank and every other non-cash entry move, unchanged, to a read-only tab of their own, "🏦 Bank & other accounts": one button per bank account plus Other accounts, no Balance, no total, its own export; the cash export gains an Entry state column; cash in hand, every Balance figure and ECO Bank unchanged; no switch; no migration; South Sudan and Domain B unchanged. `release/5.18.98` = `ce7ac38`, cut on live 5.18.97 (`ec0accd`); `scripts/deploy-5.18.98.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 20 Oct; DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes — RESULT below
+## 19 Oct — 5.18.98: the Cashbook's list shows physical cash only (Uganda) — cash, mobile money and entries with no account; Ecobank and every other non-cash entry move, unchanged, to a read-only tab of their own, "🏦 Bank & other accounts": one button per bank account plus Other accounts, no Balance, no total, its own export; the cash export gains an Entry state column; cash in hand, every Balance figure and ECO Bank unchanged; no switch; no migration; South Sudan and Domain B unchanged. `release/5.18.98` = `ce7ac38`, cut on live 5.18.97 (`ec0accd`); `scripts/deploy-5.18.98.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 20 Oct; DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes — RESULT below; AFTER-CHECKS 20 Oct 06:22 UTC: `--after-only` PASSED 94 ok / 0 failed / 1 note (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
 
 **Request.** The operator's words of 18 Oct, *"dont mix the bank with physical cash"* and *"keep physical cash as it
 is"*, gave one design and two releases (SPEC-separate-v2 §2.11): 5.18.97, ECO Bank, live since 19 Oct, and then this
@@ -12982,6 +12982,34 @@ and no secret, and the terminal held none; the cash sheet stayed on the server.
 - **The cash sheet:** `/root/dnb-5.18.98/cash-deploy-20261020T054118Z.txt`, 538 lines, read on the server only.
 - **Still to come, each its own command:** the screens; `--after-only` (R19 conclusive) and the quarantine's `--check`;
   the next day's `--after-only` after 15:10 UTC.
+
+### AFTER-CHECKS — 20 Oct 06:22 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **`--after-only`, begun 06:22:50 UTC: PASSED 94 ok / 0 failed / 1 note**
+  (`/root/dnb-5.18.98/after-20261020T062250Z.log`).
+  - Live `ce7ac38` (5.18.98), as the deploy left it; the checkout at `401acac`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them, the ECO Bank switch `on/on`; 086, 087 and 088 complete, their
+    rows unchanged.
+  - V1–V13, BA4 and **CA4** passed; **V4: no fatal or parse error since the copy** (1,917 lines read).
+  - **R19 is conclusive:** master ran the retry job at 06:15:04 UTC, after the copy (05:42:47 UTC); nothing at the stray
+    store's old name, the kept file unchanged.
+  - **CA1** the installed files the release's and the kept files 5.18.97's; R7 the ledger the same, the file larger as a
+    live plugin writes; R13 the event queue lost nothing.
+  - **On a fresh copy (06:23:26 UTC):** R23.1–R23.9 D2 = A in all 8 cells under both codes; **CA3 no drift since the
+    deploy's A23**; **BA2** cash in hand the same, the gate, and G3 again — both ECO BANK cards a figure; **CA2** C1–C5
+    again with the installed code, all held. R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault
+    untouched since the deploy's stage A; Z2 nothing left in `/tmp`.
+  - **The note (1):** R3 (no `migration.log` line for 087).
+  - The cash sheet: `/root/dnb-5.18.98/cash-after-20261020T062250Z.txt`, 287 lines, read on the server only.
+- **The quarantine's `--check`, begun 06:24:22 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261020T062422Z.log`). K3–K6, K8–K11 ok; **K13** the retry job ran at 06:15:04
+  UTC, after the move, and made nothing in `<plugin>/data`. Notes: K2 (the container serves `ce7ac38`, not `69c87a6`)
+  and K7 (`config.json` re-made by other writers — not a database).
+- **Still to come:** the operator's look at the screens; `--after-only` after 15:10 UTC today, once the evening WhatsApp
+  (18:00 Kampala) has run on 5.18.98.
 
 ### Runbook
 
