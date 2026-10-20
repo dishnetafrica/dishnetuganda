@@ -13175,3 +13175,35 @@ Afterwards:
 14. **5.18.97's own `--after-only` cannot run once 5.18.98 is live**, because it requires the container to serve
     `ec0accd`. Its evening check comes first (Runbook step 2); otherwise 5.18.98's next-day `--after-only` covers the
     evening's run on the new code.
+
+## 20 Oct — quotations from the staff app land on another company, and the app's plans differ from uCRM's: findings and decisions
+
+**The operator's report (20 Oct):** a quotation made from the staff app is not on the company the business uses —
+uCRM organization 1, quote template 1006 — and the plans in the app are not the plans in uCRM. Asked: either way,
+app or CRM, they must stay in sync.
+
+**Findings (read-only, live code `ce7ac388`; four tracers, a synthesis and an adversarial verification — 19 of 24
+claims confirmed, 5 corrected; the scratchpad keeps the full report):**
+- **No quote the plugin creates names an organization or a quote template.** uCRM gives a quote its client's
+  organization and that organization's default quote template; template 1006 is named nowhere in the plugin.
+- **The KYC registration form files every new uCRM client under "organization 2 if it exists, else the only one"**
+  (`UcrmClientTarget`, written for South Sudan, not tenant-gated; the retry job the same). The operator confirmed that
+  Uganda's uCRM now holds a second organization and that the wrong quote came from the KYC form: the cause.
+- Leads choose their organization by another rule (`ucrm_lead_organization_id`, else the commonest of 50 clients); the
+  WhatsApp quotation names the organization marked *selected*, never the client's; the plugin's fallback quote PDF can
+  print South Sudan's address on the `quote.add` e-mail path.
+- **Plans are three lists:** the plugin's own tables (what the app quotes, at the plugin's price), uCRM Products
+  (pushed one way from the plugin when an admin saves or anyone presses *Sync All*, never pulled back) and uCRM Service
+  Plans (read by the AI, the website and the WhatsApp summary, never written). Send Quotation lines are free text with
+  no uCRM item. *Sync All* (`push_products_to_ucrm`) is not admin-gated.
+
+**The operator's decisions (20 Oct):**
+- **"Always company 1":** every new app customer is filed under organization 1; a customer filed under another
+  organization is not quoted from the app — the salesperson is told to move the customer to company 1 first.
+- The operator makes template 1006 organization 1's default quote template in uCRM and moves the customers filed under
+  the wrong organization back to organization 1. No release sends a template id until uCRM 4.5.33's acceptance of it is
+  measured.
+- **uCRM Products are the true price list** — a later release makes them the only one.
+- **Plan approved:** first a small Uganda-only release, 5.18.99 (the configured quoting organization, the refusal before
+  any quote under another, the WhatsApp and fallback PDF naming the client's own company, *Sync All* admin-only, a
+  failed uCRM quote shown to the salesperson); then the price-list release. South Sudan unchanged in both.
