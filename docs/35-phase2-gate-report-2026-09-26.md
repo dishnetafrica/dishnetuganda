@@ -157,7 +157,7 @@ Phase 2 gate, awaiting the operator's approval of docs/36 §J.
 
 ## 2. Production e-mail sign-in — PASSED (26 Sep 05:40 UTC)
 
-`--email` on `bhavin.madlani@outlook.com` (an address on a customer record): **16 ok, 0 failed.**
+`--email` on the operator's own e-mail address (an address on a customer record): **16 ok, 0 failed.**
 E1 matched one account, eligible; E2 `app_send_otp` → 200 "Code sent via Email."; E3 the code arrived;
 E4 verify → 200, cookie **HttpOnly · SameSite=Lax · Secure**, JSON body carried no token; E5 `app_me`
 on the cookie → 200 (login_mode e-mail), the portal recognised the session and asked for consent first;
@@ -167,7 +167,7 @@ line, and in no notification, queue, conversation, pending or audit row. Audit f
 
 ## 3. Production eligibility refusal — the GUARD is proven; the refusal path still PENDING
 
-`--lead +211927797217` (Bhavin's own number) read `eligible=true, is_lead=0` and the command
+`--lead` with Bhavin's own number (not repeated here) read `eligible=true, is_lead=0` and the command
 **STOPPED at L1** — *"this number is NOT a refused lead … a code would reach a real customer; nothing
 was sent."* That is the guard doing its job: it refuses to run the test against a real customer. To
 exercise the *refusal* path (a lead is offered the door and the gate turns it away with the uniform

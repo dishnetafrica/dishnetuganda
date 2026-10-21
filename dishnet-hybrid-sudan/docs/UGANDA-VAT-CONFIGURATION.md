@@ -11,7 +11,7 @@ needs in order to model it; your accountant decides the treatment.
 ## What the invoice establishes
 
 A URA e-invoice from **Starlink Global Internet Services Ltd** (a Ugandan TIN)
-to **DishNet Africa Limited**, fiscal document `126764694721`, 10/09/2026.
+to **DishNet Africa Limited**, fiscal document (number not repeated here), 10/09/2026.
 
 Two facts matter for configuration, and one of them answers a question
 `tax_probe.php` could not:
@@ -20,13 +20,13 @@ Two facts matter for configuration, and one of them answers a question
 amount, not the net:
 
 ```
-line totals        1,859,519
-gross on invoice   1,859,519   ← identical
-net                1,575,863.56
-VAT                  283,655.44   (18.00% of net)
+line totals        (a real UGX figure, not repeated here)
+gross on invoice   (the same real figure)   ← identical
+net                (a real UGX figure, not repeated here)
+VAT                  (a real UGX figure, not repeated here)   (18.00% of net)
 ```
 
-Had the lines been exclusive, they would have summed to 1,575,863.56. They do
+Had the lines been exclusive, they would have summed to the net figure. They do
 not. **Starlink bills DishNet tax-inclusive at the standard rate**, which is the
 ordinary Ugandan retail convention and is almost certainly how DishNet's own
 published prices work too.

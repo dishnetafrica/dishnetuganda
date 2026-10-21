@@ -662,14 +662,14 @@ cron/job_assignment_notify.php             ← unchanged mechanism, ONE link cha
 `cron/job_assignment_notify.php` sends Ugandan technicians a **South Sudan support number**:
 
 ```
-:175   $msg .= "📞 +211 921 443 002\n";     // on the job-accepted message
-:196   $msg .= "📞 +211 921 443 002\n";     // on the new-job message
+:175   $msg .= "📞 <a South Sudan business number, not repeated here>\n";     // on the job-accepted message
+:196   $msg .= "📞 <a South Sudan business number, not repeated here>\n";     // on the new-job message
 ```
 
 and `cron/staff_jobs_summary.php:192` does the same:
 
 ```
-:192   $msg .= "Need support? 📞 +211 921 443 002\n";
+:192   $msg .= "Need support? 📞 <a South Sudan business number, not repeated here>\n";
 ```
 
 **[CODE]** These are live outbound WhatsApp messages to staff, not documentation. A technician on a

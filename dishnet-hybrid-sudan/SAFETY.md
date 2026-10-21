@@ -183,7 +183,7 @@ IF YOU SEE __DIR__ . '/data/' ANYWHERE OUTSIDE lib/bootstrap_data.php — IT IS 
 
 Added v4.20.3 after a real production bug.
 
-When an SSP advance is issued to a staff member (e.g. Rupesh gives Aida 600,000 SSP):
+When an SSP advance is issued to a staff member (e.g. Rupesh gives Aida an advance in SSP):
 - cb_ledger gets ONE OUT entry (category "SSP Advance" / "Staff Advance"). This
   represents physical SSP cash leaving the main till. Cash is gone, period.
 - cb_ssp_register gets a corresponding IN entry on the staff's side.
@@ -542,6 +542,258 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.98 (2026-10-19) — the Cashbook list shows physical cash only (Uganda); Ecobank and other accounts on their own read-only tab
+
+### Why
+The operator, 18 Oct: *"dont mix the bank with physical cash"*, *"keep physical cash as it is"*. Since 5.18.96 cash in
+hand counts physical cash only, but the Cashbook's list and its export still listed the Ecobank, stock, supplier and
+other non-cash entries beside the cash ones, each with an empty Balance. 5.18.97 put Ecobank's own balances on ECO
+Bank. This release takes the non-cash entries off the cash list and keeps them, unchanged, on a tab of their own. The
+physical cashbook stays: it is the Ledger, with cash, mobile money and entries with no account. Q1 (bank money recorded
+with no account stays on the cash list) and Q2 (ECO Bank first) were confirmed; Q3–Q7 as the design recommends.
+
+### What
+- **Uganda only (rule A):** `CashbookService::cashOnlyRuleInForce()` and no SSP, the 5.18.96 gate, read once by the
+  page (`$_cbRuleA`, now set above `$filters`) and once by the export (`$_csvRule2 = !$_hasSSP2 && rule`). On South
+  Sudan, on any book that is not Uganda and on a Uganda book with SSP, every page, query and export is 5.18.97's.
+- **The split is by location only.** `buildWhere()` honours two opt-in keys, `book` (`cash` / `noncash`) and
+  `book_account`, only under rule A, appended last. Physical cash is a row with no account (NULL or 0) or on an account
+  whose kind is exactly `cash` or `momo` (`CASH_IN_HAND_KINDS`), active or not; not cash is its exact complement, so
+  every listed row is on exactly one side. No status term (rows awaiting approval, rejected or voided stay where their
+  location puts them), no cast (a text id never reads as a number), no DDL on any read. `cashOnlyWhere()`,
+  `cashInHand()` and the Balance streams are unchanged: every Balance figure is 5.18.97's, and cash in hand does not
+  move anywhere.
+- **The Ledger** lists `book=cash` (its counter, pager and rows one predicate), with a slate note *"Physical cash only:
+  cash, mobile money and entries with no account. Ecobank and other accounts are under 🏦 Bank & other accounts."*, a
+  line when a search also matches entries on the other tab, and a grey *awaiting approval* / *rejected* tag on cash
+  entries that have no Balance for that reason. The hero, its "N entries in the book" and the Pending tab are
+  unchanged.
+- **🏦 Bank & other accounts**, a new tab after Ledger for the Ledger's audience (never a field agent, who still gets
+  the Field Register): one button per bank account (active, or with entries in the project), then *Other accounts*
+  (stock, supplier, director, share capital, payable, receivable, and ids naming no account, shown as *account not
+  found*). No *All* button. Each button carries its count under the search and dates. Date, SR, particulars, account
+  (digit runs masked), category, in and out in the row's own currency, ref, state (approved / awaiting approval /
+  rejected / voided, voided struck through), source. **Read-only:** no menu, no selection, no bulk tools, no handover
+  banner, no entry form. **No Balance column and no total**: the book holds only part of Ecobank's history. Its note
+  links to ECO Bank only when `BankGate::showLink()` is true, adding `bk_acct` only for an account ECO Bank offers;
+  anyone else reads that an administrator can see Ecobank's balances there.
+- **Exports:** the cash export (↓ CSV, ↓ UGX only, ↓ USD only) lists `book=cash` under rule A, keeps its name, its
+  layout and its Balance cells, reads account names with a SELECT only (`accountLabels()`), and gains one last column,
+  **Entry state**. The new tab has its own export, one button at a time, `cashbook-other-accounts-<PROJ>-<ACCOUNT<id>|
+  OTHER>-<date>.csv`, with no Balance column, formula-like text cells neutralised and never an account name or number
+  in the file name; a field agent or field accountant asking for it gets their cash export. The three SSP layouts are
+  untouched.
+- **Nothing written.** No entry is created, changed, moved or deleted; no table or column is added; no write path,
+  void path or approval changes. Files: `lib/CashbookService.php` (read-only additions), `tabs/accounts/cashbook.php`,
+  `includes/routes.php`, and the new `lib/CashbookNonCashView.php`, `tabs/accounts/cashbook_noncash.php`,
+  `includes/cashbook_noncash_csv.php`. ECO Bank, the sidebar, the CEO page and every bank-module file are 5.18.97's.
+
+### Operator action
+- None in the book. Bank money recorded with no account (customer payments by bank transfer, online or card, staff-app
+  *Bank* payments) stays on the cash list and in cash in hand, as since 5.18.96 (Q1); it is moved one entry at a time
+  with the bank-book work.
+- To correct an entry on the new tab, ask: the tab is read-only, and a correction is its own reviewed step.
+
+### SAFETY
+- Uganda only: never let `book` or `book_account` change the SQL, a page or an export where rule A is off, and never
+  gate the list, the tab or the export by anything but `$_cbRuleA` / `$_csvRule2`.
+- Split the list by location only: never add a status term, a cast, `MONEY_KINDS` or DDL to `listLocationWhere()`, and
+  never let the split reach `cashOnlyWhere()`, `cashInHand()` or a Balance stream.
+- Keep the new tab read-only, with no Balance column and no total of any kind: no menu, selection, bulk form, void,
+  delete or entry form on it, and never `currencyPositions`, `balancesByAccount`, `accountBalance` or `accountLedger`
+  in it.
+- Never gate the tab's ECO Bank link by anything but `BankGate::showLink()`, with its one call text; never by the
+  page's own `$isAdmin`, which `cashbook.php` widens to accountants.
+- The cash export keeps its Balance column and its Balance values; Entry state is appended last, on Uganda only.
+- Nothing written: a read of the list, the tab or either export never writes a row, a table or a file.
+- The tab's buttons hold every not-cash row exactly once: which bank accounts get a button is one rule,
+  `CashbookService::BANK_BUTTON_IDS`, read by both `nonCashAccounts()` and the Other accounts clause. Never give either
+  its own test of an id.
+
+### Review (19 Oct), recorded and not changed here
+- Neither Cashbook export asks the Cashbook tab's own permission (`$can('cashbook')`): a role refused the tab can still
+  download the cash export, and under rule A the Bank & other accounts export. Not wider than 5.18.97, whose cash
+  export already held every row. Its own step.
+- `includes/routes.php`'s `$proj2` is NULL when a request carries no `cb_proj`, so the cash export then lists every
+  project; and its field-agent line reads a record with no role as `''` where the page reads `'sales'`. Both lines are
+  5.18.97's. The new export reads the project and the role the page's way.
+
+## 5.18.97 (2026-10-18) — ECO Bank: Ecobank's own balances below the Cashbook, posted nowhere
+
+### Why
+Since 5.18.96 (P3b) cash in hand counts cash, mobile money and entries with no account, approved only: bank money is
+not in it. The operator asked to see the Ecobank statement the way the Cashbook shows cash, and on 18 Oct said where
+and how: *"down to cashbook show ECO Bank and then we have two hero section like ECO Bank UGX and ECO BANK USD"*. This
+is D1 as docs/69 recommends it: bank balances on ECO Bank only. Those words supersede 5.18.68's "the accounts/bank model
+is not shown" for ECO Bank's link only (and SPEC-bank's O9, "no menu link"); the 5.18.68 note still holds for Opening
+Balances. It ships after P3b, on its own, and after the 5.18.95 photo-route fix, which is what keeps a stored statement
+out of reach of a crafted address.
+
+### What
+- A new page, **ECO Bank**, Uganda only, at `?page=dashboard&tab=bank`. **ECO Bank below Cashbook**, gated by
+  `BankGate::showLink()` only: the menu item under Accounts → Company Books, between Cashbook and Revenue Ledger, shows
+  exactly when the page would open for that visitor (the session copy's admin flag, as the dispatcher's `*admin` reads
+  it, then `open()`, then `allows('bank.view')` on the fresh record), and a hidden item prints nothing. Its label is
+  fixed: no figure, count or badge. **On a phone**, where an administrator has no menu, the page is opened by its
+  address or from the CEO page's Quick Links, right after 📒 Cashbook (Q15), by the same gate. The phone's More menu is
+  unchanged.
+- **Every account's card at once, never a total; the lines one account at a time.** One card per bank account the
+  Cashbook's chart offers (active, a bank, in a book currency), in the book's currency order (UGX first), each from that
+  account's own latest kept line and profile: Ecobank's available balance after that line, dated by it, the account
+  ending and the statement it was kept from. A card is headed *ECO BANK <CUR>* only where the book's name for the
+  account says Ecobank (`BankStatementStore::ecobankNamed()`, "eco" starting a word); any other bank account keeps its
+  own masked name. A book currency with no active bank account gets a light-grey card saying so. An Ecobank account
+  switched off while another bank account in its currency stays active simply has no card: the placeholder is drawn
+  only for a currency with none. Each card links to its own lines and has its own upload, which opens with that card's
+  account chosen. UGX and USD are never added together.
+- **Upload, check, keep.** An Ecobank *Account Details* CSV, one account per file. `lib/EcobankDetailsCsv.php` checks
+  the whole file (the 23 columns, dates, amounts in whole cents, the running-balance chain in the bank's line order, the
+  closing balance); `lib/BankStatementStore.php` checks it against the chosen account (currency, last four digits, the
+  lines already kept). **If any check fails, nothing is kept**, and the screen says which check failed in one fixed
+  sentence. Keep adds only the lines not already kept. An account's first file asks once to link its last four digits.
+- **The lines:** newest first, with Ecobank's own running balance; a month filter with its opening, in, out and closing;
+  a CSV export of the lines on screen; a Statements tab with every check and kept file. The cards read *AS STATED BY
+  ECOBANK*, slate grey, so they are never taken for the green and blue CASH IN HAND cards; only the small currency tag
+  is coloured.
+- **Migration 088:** five new tables (`bank_account_profiles`, `bank_checks`, `bank_statements`,
+  `bank_statement_lines`, `bank_line_events`). No existing table changes. The emergency repair page refuses to drop any
+  of the five.
+- **The switch:** `bank_screen_enabled` (bool, `tools/set_config.php`). **Off after the deploy.** While it is off, and
+  on any install that is not Uganda or where SSP can be booked, the tab, the upload and the export each refuse with
+  fixed text and write nothing, and no link to ECO Bank is shown. `BankGate::open()` reads it through
+  `PluginConfig::read()`, never from public.php's store copy of the settings.
+- **Admins only.** `$_tabPerms['bank']` is `*admin`, and every page, upload and export re-reads the staff record
+  (`BankGate::allows()`), never the session copy: an admin whose right was just removed, or who was deactivated, is
+  refused on the next request, and loses the menu item on that page too. An upload needs the form token **and** a
+  request that shows it came from this site's own page (`BankGate::fromOwnPage()`: `Sec-Fetch-Site: same-origin`, or
+  else an Origin, or else a Referer, naming this host). A request that shows nothing, or shows another site, is
+  refused, because the token is the same for every user and is printed on the login page. The export refuses a request
+  another site started (a link or an image elsewhere), so no other site can write an export event in an admin's name.
+  A visitor who is not signed in is sent to the login page before anything else is decided, so nothing tells them
+  whether the screen is switched on.
+- **The private folder:** `data/bank_statements/<account id>/` holds each kept file byte for byte (folders 0700, files
+  0600). A checked file waiting to be kept sits in `data/bank_statements/.pending/` and is deleted on keep or discard,
+  or at the next upload once it is two hours old. **Not under `uploads/`**, so it is not in the Google Drive backup,
+  the admin backup download or the hourly local backup. No route serves it in v1. The lines themselves are in the
+  plugin database, so they travel with every database backup.
+- **Nothing posted.** No Cashbook entry is created, changed or deleted. The screen never reads `cb_ledger`; of the book
+  it reads only the account list (`cb_accounts`). Cash in hand and every Cashbook page, export and report are
+  unchanged. `lib/BankStatement.php`, `lib/BankImport.php` and `tools/bank_statement.php` are unchanged, and the screen
+  does not use them.
+- South Sudan: no screen and no link. 088's tables exist there and stay empty.
+
+### Operator action
+- None at the deploy: the switch stays off. Once the deploy has passed and the P3b cash count is recorded, the switch
+  is handed over as its own command (`--key bank_screen_enabled --value 1`, inside the container). It is turned off
+  with the same tool's `--clear`.
+- On a phone: bookmark `?page=dashboard&tab=bank` on the plugin's page, or open ECO Bank from the CEO page's Quick
+  Links.
+- Do not open the downloaded CSV in Excel and save it before uploading: Excel rewrites the dates.
+
+### SAFETY
+- Never post a bank line to the Cashbook from this screen, and never make it read `cb_ledger`. Matching lines to the
+  book is a later release of its own.
+- Never put statement content in a flash, a log, an event, a URL or an error message: no name, account number,
+  amount, description, reference or file name. A refusal says at most a line number, a date, a currency or the last
+  four digits.
+- Never move `bank_statements/` under `uploads/`, and never add a route that takes a path into it. A download route
+  is its own reviewed change, built on 5.18.95's rule: refuse the path, then contain the file by `realpath`.
+- Never widen `BankGate::GRANTS` (admins only) or read the switch from the store copy without an instruction. Widening
+  it (Q11) is three lines together: `GRANTS`, `$_tabPerms['bank']` and `showLink()`'s first term.
+- Never gate a link to ECO Bank by anything but `BankGate::showLink()`, called with its one call text, and never pass
+  it a page's own `$isAdmin` (`cashbook.php` widens that to accountants) or a flag of the caller's own.
+- Never put a figure, a count or a badge in the link: its label is fixed.
+- Never add the cards together, show a total, or group the cards per currency: one card per account.
+- Never read `cb_ledger` for a card: each card is its own account's `latestLine()` and `profile()`.
+- Head a card "ECO BANK" only when `ecobankNamed()` says so; any other bank account keeps its own masked name.
+- 088 is final as shipped: a change to it is a new migration.
+- Never use a real statement as a fixture. `tests/fixtures/bank_statement_gen.php` invents every value.
+
+## 5.18.96 (2026-10-17) — P3b: cash in hand counts cash only on the Uganda book (late entry)
+
+*A late entry, added with 5.18.97 on 18 Oct: 5.18.96 shipped without one. It is written from docs/07's record of
+5.18.96, and like that record it carries no figure.*
+
+### Why
+Under 5.18.95 cash in hand counted every entry not voided, on any account: bank, stock and supplier rows among them,
+and entries not yet approved. The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then
+*"yes do it i will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to
+5.18.96 when the security release went first.
+
+### What
+- Uganda only, and only where the rule is in force: the Uganda tenant with no SSP, read from the service's own
+  configuration (`StaffJobsGate::applies()` and no SSP). Everywhere else every page runs 5.18.95's code paths.
+- **Cash in hand** counts approved entries that sit on no account or on a cash or mobile-money account. Ecobank, the
+  other non-cash accounts, and pending and rejected entries are out; voided entries stay out. One predicate, in
+  `cashInHand()` and in both running-balance streams, so the Cashbook's CASH IN HAND cards, its Balance column and
+  CSV, the landing page and its project chips, the evening WhatsApp and `tools/cash_in_hand.php` all agree.
+- An entry the rule leaves out stays in the Cashbook's list and export; its Balance is "—" on the page and empty in
+  the CSV.
+- **X5:** the CEO page's "UGX Position" and "USD Position" become "UGX Cash in hand" and "USD Cash in hand", all
+  projects; "Today's Cash" becomes "Today's collections".
+- **D1:** under the rule the Cashbook's "Cash balance is NEGATIVE" alert gives way to one red alert per currency whose
+  cash in hand is below zero, in that currency's code; the Add Entry UGX pill shows UGX cash in hand.
+- **USD reads below zero** under the rule, accepted on 17 Oct: dollars that arrived in the bank no longer count. It
+  recovers as entries are put on their accounts.
+- No migration; no entry, setting or switch changed. South Sudan, a South Sudan tenant without SSP, a Uganda tenant
+  with SSP and a Uganda box whose gate fails run 5.18.95's SQL and pages verbatim.
+- Deployed 18 Oct (copy 04:44:18 UTC) and PASSED; both pairs of after-checks PASSED.
+
+### Operator action
+- Count the cash and compare it with the two CASH IN HAND cards. On 18 Oct the USD count was below the card. The
+  operator decided that D2 = A stays, to enter the gap as one cash-count difference not yet explained, and to void the
+  unapproved 5 Oct balancing entry, made under 5.18.95's rule, so that nobody can approve it later; the steps were
+  handed over to the operator.
+
+### SAFETY
+- Never count a bank, stock or supplier account, or an entry that is not approved, as cash in hand where the rule is
+  in force. One predicate serves every reader, so no page, export, message or tool can disagree.
+- Never change a book the rule does not cover: its pages stay 5.18.95's.
+- Never approve a balancing entry made under 5.18.95's rule: it cancelled bank rows that rule wrongly counted as cash.
+
+## 5.18.95 (2026-10-17) — security: photo route, repair key, EFRIS links, Splynx credentials
+
+### Why
+A design review of the Bank screen and a sweep that followed found four holes in the live code (5.18.94), on both
+tenants. The repository is public, so anything written in the code is known to anyone.
+- **K1** `?page=kyc_photo`: the path was cleaned with `str_replace(['..', '\\', NUL], '')`, which a dot, backslash,
+  dot sequence survives, and the file was read with no containment. An admin, accountant, support leader or field
+  accountant could read any file the web server can open, the database and the settings among them.
+- **K2** `?page=emergency_repair` (before login): with no `data/emergency_repair_key.txt`, or an empty one, it fell
+  back to a key printed in the Runbook, the Starlink Suspensions error box and EMERGENCY_RECOVERY.md (root docs/48
+  PD-11), and offered drop_table, vacuum and clear_wal.
+- **A2/D1** `?page=efris_pdf` (before login): the link token fell back to a key written in the code when
+  `webhook_secret` was unset.
+- **D5** the Splynx API key and secret were written in the code (public.php, cron_splynx_sync.php and the admin page
+  `?page=splynx_patch`, which also printed them).
+
+### What
+- **K1:** the path is refused (400), never cleaned, when it is not a string, is empty, starts with `/`, holds a
+  backslash or a NUL, or has an empty, `.` or `..` segment. The file served is the one `realpath()` finds inside the
+  allow-listed folder it names, and a file; otherwise 404. Roles and the own-expense-photo rule are unchanged.
+- **K2:** the key file is REQUIRED: at least 32 printable characters, no spaces, never containing the old built-in
+  key. A disabled page and a wrong key get one and the same 403. `hash_equals`; a non-string key is refused. No
+  answer prints the stored key: the action lines show `key=YOUR-KEY`. The Runbook and the Suspensions box no longer
+  show a key. drop_table also refuses staff logins, sessions, the financial audit trail, customer identities,
+  payment, photo and installation-authorisation tables, whatever the name's case.
+- **A2/D1:** EFRIS links are minted and checked with `PdfLinkToken` under the install's own `pdf_link_secret`, from
+  the store copy of kyc_config.json on both sides. No fallback key. A bad token and a missing file get the same 404.
+  A link made before the deploy stops opening; it is made again from the EFRIS tab.
+- **D5:** no Splynx key or secret in the code; they come only from Settings → Splynx. `?page=splynx_patch` answers
+  410 and changes nothing.
+- Unchanged: everything a legitimate user does, on both tenants. No migration, no setting, no switch.
+
+### Operator action
+- Put a repair key in `data/emergency_repair_key.txt` on the server **before** you need the page (e.g. the output
+  of `openssl rand -hex 24`, written there on the server, never pasted anywhere).
+- Replace the Splynx API key in Splynx and enter the new one under Settings → Splynx: the old values are public.
+
+### SAFETY
+- Never clean a path from a request; refuse it, then contain the file by `realpath`.
+- Never add a fallback key, and never print a key in a page, a link, a doc or an error message.
+- Never write a credential in the code: the repository is public.
+- The v4.21.16 note below records the old repair default. It is history, superseded by this note.
+
 ## v4.21.114 (2026-06-19) — Emergency "Route all via Accounts" toggle
 
 ### Why
@@ -592,10 +844,10 @@ bridge call (real webhook or synthetic test) was returning
 clearly contained KIT serials.
 
 Specifically:
-- Ruach Diu Top Billiu (KIT4M03895652B2D)
-- African Guest House (KIT4M01903618JZH)
-- Archbishop Elias Taban Parangi (KIT4M0373843829H)
-- Maroun Deng Morwel
+- a real customer, by full name with their kit serial (not repeated here)
+- a real business customer (its kit serial, not repeated here)
+- a real customer, by full name with their kit serial (not repeated here)
+- a real customer, by full name (not repeated here)
 - All others on the audit list
 
 The audit endpoint correctly extracted these same KITs and showed
@@ -980,18 +1232,18 @@ Production deploy of v4.21.27 surfaced two issues:
 
 1. **FTTH/LTE customers listed as "No KIT in title"**.
    The Cleanup Needed list had 9 customers but 7 were FTTH:
-   - Achok Jiel (000239) — `Service Plan FTTH100`
-   - Alexandar Taban James (000240) — `FTTH50`
-   - GEBRESLASSIE OGBAZGHI (000086) — `FTTH100`
-   - Just in Time — `FTTH-50` (×2 services)
-   - Maroun Deng Morwel (000136) — `FTTH100`
-   - Simon Mangong Bol (000089) — `FTTH75`
-   - Tedros leke (000097) — `FTTH50`
+   - a real customer, by full name and client number (not repeated here) — `Service Plan FTTH100`
+   - a real customer, by full name and client number (not repeated here) — `FTTH50`
+   - a real customer, by full name and client number (not repeated here) — `FTTH100`
+   - a real business customer (name not repeated here) — `FTTH-50` (×2 services)
+   - a real customer, by full name and client number (not repeated here) — `FTTH100`
+   - a real customer, by full name and client number (not repeated here) — `FTTH75`
+   - a real customer, by full name and client number (not repeated here) — `FTTH50`
 
    These should never appear in a Starlink tool — they're on
    different infrastructure (Splynx/MikroTik for FTTH; Magma for
    LTE). Only 2 were genuine Starlink cleanup cases:
-   Mr. Ocheng Kenneth Kaunda, Relief Pact.
+   a person and a business (real customers; names not repeated here).
 
 2. **Customers paused via Block Manager / WiFi tab showed as "Ready
    to block"** instead of "Already paused". The audit's
@@ -1630,7 +1882,7 @@ are actually in the cache.
 - Two voided statuses exist in cb_ledger: 'voided' and 'voided_reconcile'.
 - Dashboard balance always used status='approved' (correct, excludes both).
 - CSV/ledger running balance used status != 'voided_reconcile' (WRONG —
-  was counting 'voided' rows). Caused $50 drift visible to admins.
+  was counting 'voided' rows). Caused a USD drift visible to admins (the real amount is not repeated here).
 - Fixed: getEntries() and getLedger() now use
   status NOT IN ('voided','voided_reconcile') for running-balance math.
 - Voided rows REMAIN visible in row list (audit trail preserved).
@@ -1747,7 +1999,7 @@ are actually in the cache.
 - ROOT CAUSE: approveExpense() passed raw SSP value (e.g. 30,000) as `amount` to
   addEntryRaw() instead of the USD equivalent, AND never passed `ssp_amount` at all.
   This caused 12 expense_sync cb_ledger rows to show Payment SSP = 0, overstating
-  company SSP balance by at least 627,000 SSP (Diko alone, one month).
+  company SSP balance by at least a real SSP amount, not repeated here (Diko alone, one month).
   quick_approve in staff_cashbooks.php had NO cb_ledger write at all.
 - FIX 1 (lib/ExpenseAdvanceService.php): approveExpense() now computes
   _cbAmount = ssp_amount / rate for SSP expenses, passes ssp_amount + ssp_rate.
@@ -1764,8 +2016,8 @@ are actually in the cache.
 - ROOT CAUSE: Cash balances diverged across 5 data sources (payment_collections.json,
   cash_expenses.json, staff_expenses SQLite, cash_handovers.json, cash_advances SQLite,
   staff_transfers SQLite). StaffCashPositionService, SnapshotService, and SQLite VIEW
-  all computed slightly different numbers. Caused $45K bug (Bidal), $734 mismatch (Diko),
-  $0 vs $210 bug.
+  all computed slightly different numbers. Caused a USD balance bug (Bidal), a USD mismatch (Diko),
+  $0 vs a non-zero balance bug (amount not repeated here).
 - FIX: New `staff_ledger` SQLite table — one row per cash movement, one balance query.
   Balance = SUM(in) - SUM(out) WHERE status NOT IN ('voided','cancelled')
 - Migration 045: staff_ledger table with 8 indexes (idempotency, staff+currency, source,
@@ -1831,7 +2083,7 @@ are actually in the cache.
 - Profit leak plan flagging: is_leak if profit<0 or margin<threshold
 - DATA IMPORT: lib/fiber_data_import.php reads Fiber Finance JSON backup
   Tested: 198 services, 154 customers, 4 plans, 7 invoices, 225 status changes
-  Production P&L: $8,425/mo revenue, $5,224/mo cost, $3,202/mo profit (38% margin)
+  Production P&L: real monthly revenue, cost, profit and margin figures (not repeated here)
 - BACKGROUND CRON: cron_fiber_sync.php registered in master.php
   Splynx sync on configurable interval (default 60min), monthly snapshot on 1st,
   missing invoice alert on 10th, daily leakage + low margin WA alerts

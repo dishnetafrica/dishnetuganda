@@ -69,7 +69,7 @@ LTE SIM: $25 (Silver), $40 (Gold), $80 (Platinum), $110–$120 (Diamond), $200�
 
 Data caps and prices are repeated at `:472-473`. And `:519` deflects the sales
 case to a human: *"Our sales team handles new connections — call or WhatsApp
-them on +211 923 400 000."*
+them on [the South Sudan sales number]."*
 
 There is **no product lookup anywhere in the WhatsApp path.** `service-plans`
 is called in exactly two places, both admin/diagnostic

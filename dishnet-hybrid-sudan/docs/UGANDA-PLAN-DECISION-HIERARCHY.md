@@ -119,7 +119,7 @@ Full suite: **78 files, 2428 assertions, green.**
 
 ---
 
-## 5. +256 705 993 348 — unchanged
+## 5. The support number — unchanged
 
 Nothing in this change is channel-specific. `qualification()` emits the same
 block for any number that sells, decided by `ai_sales_on_all_numbers`, which was
@@ -129,7 +129,7 @@ or lifecycle code was touched.
 
 Verifiable: `tools/wa_compare.php` reports both numbers side by side.
 
-## 6. +256 703 834 115 — same lifecycle
+## 6. The sales number — same lifecycle
 
 Same webhook, same `EventBus`, same `AiReplyWorker`, same `ConversationService`,
 same prompt builder. The only difference between the two numbers remains which

@@ -371,20 +371,20 @@ question. Escalating those trains the team to ignore alerts, which is the failur
 
 ---
 
-## I. THE +21192797217 ALERT SYSTEM
+## I. THE PROPOSED-NUMBER ALERT SYSTEM
 
 ### I.1 First — the number you gave me is not valid, and I would not configure it
 
 ```
-+21192797217  →  digits: 21192797217  (11)
+the number as typed  →  digits: not repeated here  (11)
 country code 211 = South Sudan
-national part    = 92797217  (8 digits)
-South Sudan mobile numbers carry 9 digits after 211  (e.g. 921443009)
+national part    = 8 digits (not repeated here)
+South Sudan mobile numbers carry 9 digits after 211  (as the business's own South Sudan numbers do)
 ```
 
 **It is one digit short.** Worse, it fails silently rather than loudly:
 `CustomerIdentity::significant()` takes the last nine digits and returns
-`'192797217'` — **eating a digit of the country code** and producing a plausible
+a nine-digit string that begins with the country code's last digit — **eating a digit of the country code** and producing a plausible
 but wrong national number. `MIN_SIGNIFICANT` is 9, so the value passes the length
 check while meaning something different from what you intended.
 
@@ -395,7 +395,7 @@ check while meaning something different from what you intended.
   been going to a +211 number for weeks because the alert number was inherited
   from the Sudan config."* The n8n node comment expects `2567XXXXXXXX`.
 - **It must not be one of the plugin's own WhatsApp numbers.** The README again:
-  an alert sent to `256703834115` or `256705993348` *"arrives as a customer
+  an alert sent to either of the plugin's own numbers *"arrives as a customer
   message, gets answered, and the answer lands back on the sender."*
 
 **Action: confirm the full, correct number before anything is configured.** If

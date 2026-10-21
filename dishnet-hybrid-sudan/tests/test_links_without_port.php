@@ -308,6 +308,9 @@ $ALLOW = [
     // Phase 2: the customer session compares the Origin header with the request host before a cookie may
     // authenticate a POST. A comparison, not an address: no link is built from it.
     'lib/CustomerSession.php'       => ["\$reqHost = strtolower((string)(\$_SERVER['HTTP_HOST']" => 'same-origin check on the Origin header of a cookie-authenticated request; no link is built'],
+    // 5.18.97: ECO Bank's BankGate::fromOwnPage() compares an Origin or Referer with the request host, the comparison
+    // CustomerSession::crossSite() makes. A comparison, not an address: no link is built from it.
+    'lib/BankGate.php'              => ["\$req = strtolower(trim((string)(\$_SERVER['HTTP_HOST']" => 'same-origin check on the Origin or Referer of an ECO Bank request; no link is built'],
     'production-preflight.php'     => ["\$ucrmJson['pluginPublicUrl']" => 'probes the internal port on purpose'],
     'tabs/admin/settings.php'      => ["\$_emUcrm['ucrmPublicUrl']" => 'API base for the e-mail settings read'],
     'tabs/engage/wa_ai_setup.php'  => ["\$_ucrmJson['pluginPublicUrl']" => 'shown as a hint beside its port-less form'],

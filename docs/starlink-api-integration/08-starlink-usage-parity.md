@@ -36,7 +36,7 @@ API account's 4 SLs present in sl_usage.json raw text:   ABSENT (0 of 4)
 total_gb    {API-ONLY: 4}      priority_gb {API-ONLY: 4}      standard_gb {API-ONLY: 4}
 SLs with API usage: 4     matched to cookie: 0
 ```
-- **The API returns usage cleanly** for all 4 SLs: one at **79.22 GB (64.11 priority + 15.11 standard)**,
+- **The API returns usage cleanly** for all 4 SLs: one with **real usage, split between priority and standard (the figures are not repeated here)**,
   three at 0 — exactly the `totalPriorityGB`/`totalStandardGB` per-billing-cycle shape (`servicePlan`,
   `lastUpdated` also present).
 - **Operator ground truth [CURRENT]: only ONE line is active in this account.** So the three 0-GB lines
@@ -87,7 +87,7 @@ API SL strings present in sl_usage.json = 0 of 4 (ABSENT) → confirms not-a-bug
 1. **Usage parity: NOT COMPARABLE for this account** (not a failure). The API returns usage; the cookie
    `sl_usage.json` retains usage for only 5 of 27 SLs and **none** of this account's 4 — so there is no
    cookie baseline to value-compare. Per the operator's rule, this is reported as not-comparable, not
-   forced. The API's result is **coherent with ground truth** (operator: 1 active line → 79.22 GB; 3
+   forced. The API's result is **coherent with ground truth** (operator: 1 active line → real usage, not repeated here; 3
    inactive → 0).
 2. **Exact matching fields:** none at value level (no overlapping cookie record). Field *shape* maps
    cleanly (totalPriorityGB→local_priority_used_gb, totalStandardGB→other_data_gb, sum→total_gb).

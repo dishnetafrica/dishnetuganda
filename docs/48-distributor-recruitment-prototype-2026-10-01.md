@@ -37,7 +37,7 @@ into the website as-is, or (for integration) refactored onto the shared `styles.
 **It reuses the live DishNet design system**, read from `dishnet-web-uganda/site/styles.css` and the
 existing pages: the red accent `#C8102E`, `Outfit`/`DM Sans`, the `DishNet`+`UGANDA` wordmark lockup (the
 site uses a text wordmark — there is no logo image file yet), the Uganda flag strip, the header/nav/mobile
-menu, the dark footer, the floating WhatsApp button, and the `wa.me/256705993348` contact pattern. It does
+menu, the dark footer, the floating WhatsApp button, and the `wa.me/` contact pattern to the Uganda support number. It does
 **not** add a new website, replace the homepage, or change any existing page.
 
 > **It deliberately does *not* repeat the claims on the existing `reseller.html`.** That page promises

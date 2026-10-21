@@ -114,7 +114,7 @@ printf '%s\n' 'UNMS_HTTP_PORT="8080"' 'UNMS_HTTPS_PORT=8443' 'UNMS_WS_PORT=' 'UN
   'UNMS_SECURE_LINK_SECRET=LINKSECRET-XYZ-987' 'UNMS_SUPPORT="hunter2secret"' 'UNMS_TOKEN=TOKSECRET-555' > "$F/unms.conf"
 printf '%s' '<html><h1>Pay invoice</h1><form action="/crm/online-payment/pay/x"></form><p>endpoint table-striped</p></html>' > "$F/page_body"
 echo 200 > "$F/page_code"
-printf '%s' '<html><h1>Pay your bill</h1><p>Airtel Money · Merchant ID 4428146</p></html>' > "$F/pay_body"
+printf '%s' '<html><h1>Pay your bill</h1><p>Airtel Money · Merchant ID (the real merchant id, replaced by words)</p></html>' > "$F/pay_body"
 echo 200 > "$F/pay_code"
 
 echo "S1 --before: the address with :8443, a PDF with :8443, routers connected"

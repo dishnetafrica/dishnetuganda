@@ -364,15 +364,15 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
 ### Rows 21, 22 and 39: no South Sudan content in Uganda's messages and screens (C8, C4, N-10)
 
 - **The quote resend (row 21).** The staff action that sends a quote again by WhatsApp (`wa_send_quote_pdf`) said
-  "Total: $1600000" and "call +211 921 443 006" when uCRM had no PDF, "— $2500000" in the PDF's caption, and
+  "Total: $1600000" and "call" with the South Sudan support number when uCRM had no PDF, "— $2500000" in the PDF's caption, and
   "Amount: $…" in the administrator's copy. On Uganda: the total in the tenant's currency (`UGX 1,600,000.00`), the
   tenant's support number (`CustomerContact`, which falls back to the tenant profile), and the same currency in both
   administrator copies. A total uCRM does not give is left out, not printed as a bare "$".
 - **The app pushes (row 21).** "Invoice … for $1600000 USD" and "Your payment of $250000 USD": the callers pass no
   currency, so it was always USD. On Uganda: `UGX 1,600,000.00`. They go only where an FCM key is set.
-- **The ladder's WhatsApp (row 21).** All nine stages were signed "— DishNet Accounts · +211 921 443 009". On Uganda
+- **The ladder's WhatsApp (row 21).** All nine stages were signed "— DishNet Accounts · (the South Sudan accounts number)". On Uganda
   they carry the accounts name and number the ladder's e-mails already print: `overdue_email_from_name` and
-  `overdue_email_phone` when set, otherwise the tenant profile (`+256 705 993 348`). The ladder runs only where billing
+  `overdue_email_phone` when set, otherwise the tenant profile (the Uganda support number). The ladder runs only where billing
   is postpaid. The credit note of row 21 was fixed with row 12.
 - **The settings screen (row 22, C4).** The e-mail card labelled uCRM's mailer "RECOMMENDED" and the plugin's own SMTP
   "FALLBACK", on an install whose setup uses its own SMTP (`tools/email_setup.php` writes `use_ucrm_email=false`) and
@@ -383,7 +383,7 @@ Every change below applies only where `NotifyGate` says Uganda; everywhere else 
   the Juba number into Uganda's configuration, where it outranks the tenant profile in every ladder e-mail, and now in
   the ladder's WhatsApp too. On Uganda an unset field shows this install's value from the tenant profile, as the
   e-mail builder already did. The preview (`overdue_email_preview`) filled its phone the same way and printed its own
-  Juba lines ("Call +211 921 443 002", "DishNet Africa Ltd · South Sudan", `www.dishnetafrica.com`); on Uganda it prints
+  Juba lines ("Call" followed by the Juba number, "DishNet Africa Ltd · South Sudan", `www.dishnetafrica.com`); on Uganda it prints
   the settings' or the profile's.
 - **Measured, not changed:** the screen's reply-to field (`overdue_email_reply_to`) is stored but read by no sender; the
   ladder's Reply-To comes from the SMTP settings. Its default on Uganda is the accounts address, for consistency only.

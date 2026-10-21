@@ -197,7 +197,7 @@ residential plan is still the preferred answer for heavy use; CCTV is still
 asked about rather than assumed.
 
 **Neither number changes.** No routing, webhook, instance mapping, `EventBus`,
-or lifecycle code is touched. 705 993 348 and 703 834 115 continue on the same
+or lifecycle code is touched. The support and sales numbers (not repeated here) continue on the same
 path they use today, which `wa_compare.php` reports side by side. Lead capture
 hangs off the reply path *after* the customer has been answered — a CRM failure
 cannot cost anyone a reply.

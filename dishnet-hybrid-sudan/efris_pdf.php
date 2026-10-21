@@ -5,17 +5,20 @@ declare(strict_types=1);
  * efris_pdf.php — serve one generated fiscal e-invoice PDF.
  * Routed via public.php?page=efris_pdf&file=…&token=…
  *
- * Same pattern as the quote-PDF serving: an HMAC token derived from the
- * filename, the webhook secret and the current day. Links are only ever
- * rendered inside the authenticated EFRIS admin tab; the token merely keeps
- * the URL unguessable and short-lived. Path traversal is impossible —
- * basename() plus a strict filename allowlist.
+ * The link carries PdfLinkToken's day token for the filename (5.18.95), under
+ * the install's own pdf_link_secret, the key receipt and delivery links use.
+ * Links are only ever rendered inside the authenticated EFRIS admin tab; the
+ * token keeps the URL unguessable and short-lived. It used to fall back to a
+ * key written in the (public) source when webhook_secret was unset; there is
+ * no fallback now: without a secret no token verifies. Path traversal is
+ * impossible — basename() plus a strict filename allowlist.
  */
 
 require_once __DIR__ . '/lib/bootstrap_data.php';
 require_once __DIR__ . '/lib/StoreInterface.php';
 require_once __DIR__ . '/lib/SqliteStore.php';
 require_once __DIR__ . '/lib/PluginConfig.php';
+require_once __DIR__ . '/lib/PdfLinkToken.php';
 
 $dataDir = $GLOBALS['dataDir'] ?? getDataDir(__DIR__);
 $config  = PluginConfig::load(__DIR__, $dataDir);
@@ -27,15 +30,14 @@ if (!preg_match('/^einv_[A-Za-z0-9_-]+\.pdf$/', $file)) {
     http_response_code(400);
     exit('Bad file name');
 }
-$secret = (string)($config['webhook_secret'] ?? ($config['evo_webhook_secret'] ?? 'dishnet'));
-$want   = hash_hmac('sha256', $file . gmdate('Ymd'), $secret);
-if (!hash_equals($want, $token)) {
-    http_response_code(403);
-    exit('Invalid or expired token');
-}
+// The key is read from the store copy of kyc_config.json, where PdfLinkToken::ensureSecret() keeps it and where the
+// EFRIS tab mints with it (tabs/admin/efris.php), so the two sides always use the same key.
+$linkStore = (isset($store) && is_object($store)) ? $store : SqliteStore::create($dataDir);
+$linkCfg   = (array)($linkStore->load('kyc_config.json') ?: []);
 
+// A bad or expired token and a missing file get the same answer.
 $path = $dataDir . '/efris_pdf/' . $file;
-if (!is_file($path)) {
+if (!PdfLinkToken::verify($file, $token, $linkCfg) || !is_file($path)) {
     http_response_code(404);
     exit('Not found');
 }

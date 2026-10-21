@@ -145,8 +145,8 @@ in `EvolutionApiService`, `EventBus` or `ConversationService`; only non-empty ch
 in `evo_webhook.php:96` and `AiReplyWorker.php:82`; two wording-only branches in the
 brain. Neither number appears in runtime code.
 
-- `dishnet_richard` / **256703834115** → `evo_instance_sales` → channel `sales`
-- `dishnet_ug` / **256705993348** → `evo_instance_support` → channel `support`
+- the sales instance (named as in `tools/wa_connect.php:9`) / **the business's sales number (not repeated here)** → `evo_instance_sales` → channel `sales`
+- `dishnet_ug` / **the business's support number (not repeated here)** → `evo_instance_support` → channel `support`
 
 The sales number carries ~8× the traffic and answers ~124 of 127 messages a day.
 **The quality problem is not configuration and never was.**
@@ -342,6 +342,6 @@ A second pricing store, a second AI platform, an n8n rebuild, any routing change
 
 ## Note on the flyer
 
-One thing to note: the flyer advertises **+256 705 993 348** (support), while
-Facebook advertises **256 703 834 115** (sales). Both answer, so nothing is broken
+One thing to note: the flyer advertises **the support number** (not repeated here), while
+Facebook advertises **the sales number** (not repeated here). Both answer, so nothing is broken
 — but the flyer sends your print and social traffic to the smaller-volume number.

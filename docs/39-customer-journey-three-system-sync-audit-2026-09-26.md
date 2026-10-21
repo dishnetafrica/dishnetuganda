@@ -68,8 +68,8 @@ Family Shoppers (§4, §9).
 | uCRM client id | **1** — a company (`clientType 2`), 1 contact, not a lead, not archived, `isActive false` | uCRM | hybrid: webhook + 60 s delta into `client_search_index` (row updated 08:40:06) and `ucrm_clients_cache`; Finance: its own `crm_clients_cache.json` (id 1 present), refreshed at render; Data Report: **none** — it knows customers only through the CRM id on a kit, and #1 has no kit |
 | uCRM service id | **6** — plan **3** "Residential (up to 400 Mbps)", UGX 329,000, status 1 (active) since 20 Sep 2026, period 13 | uCRM | hybrid `ucrm_services_cache` (webhook `service.*`, staff sync, cron); Finance `crm_services_cache.json` (1 of 5 is #1's); Data Report reads `clients/services?limit=5000` in its sync cron and every 2 h in the auto-block cron (§I.1.3 of docs/37) |
 | Starlink service attribute | **`starlinkDetails` = KIT…KWW** on service 6 (16 characters, a KIT-pattern serial; the hybrid's intake extracts exactly that serial — MEASURED `--chain 1`) | uCRM, typed by staff | hybrid: `KitAttributeIntake` reads it on the review screen (accepted keys `starlinkdetails`, `kitnumber`, `starlinkkit`, `kitno`, `kit` — "verbatim from dishnet-data-report"); Data Report: the same extraction in its sync |
-| Invoice | **1** — uCRM invoice **id 4, number 000003**, status 1 (unpaid), total 329,000, paid 0 (`--chain 1`; the walks opened it by id and streamed its PDF, 5,976 bytes) | uCRM | hybrid `ucrm_invoices_cache` (webhook `invoice.add`/`payment.add` → surgical refresh; on demand when stale); `app_account` live |
-| Payment | **0**; balance −329,000, outstanding 329,000 | uCRM | hybrid live on account open (+ payments cache) |
+| Invoice | **1** — uCRM invoice **id 4, number 000003**, status 1 (unpaid), total the plan's monthly price, paid 0 (`--chain 1`; the walks opened it by id and streamed its PDF, 5,976 bytes) | uCRM | hybrid `ucrm_invoices_cache` (webhook `invoice.add`/`payment.add` → surgical refresh; on demand when stale); `app_account` live |
+| Payment | **0**; a negative balance equal to the unpaid invoice, the same amount outstanding | uCRM | hybrid live on account open (+ payments cache) |
 | Kit id / serial | **KIT…KWW, in uCRM only.** Hybrid: `stock_units` 2 units and `equipment_assignments` 2 live rows, **both other customers'**, 0 for #1, the serial absent from stock; Finance `sl_kits.json` 3 kits (CRM #7, #47, #69), the serial absent; Data Report registry 4 kits, the serial absent, 0 for #1 — **but `wifi_router_map.json` names the serial on 2 routers** (no CRM id on any router) | uCRM (typed by staff) | nothing carries it onward: the intake would refuse it (`not_in_stock`), Finance and Data Report's registry never receive it; only Data Report's router map was typed to it by hand |
 | Starlink account id | **none** for #1 in any system (Data Report `dr_accounts.json` 5 accounts, its registry 0 kits carrying an account; Finance `sl_accounts.json` 5, 0 kit rows naming an account or a service line; the hybrid's own session store holds **one** account, ACC…-43, imported 2026-09-13 06:18:12, state **`expired`**, last checked 2026-09-26 09:40:04, 0 failures — bound to no kit and no customer; `kit_sl_map.json` absent) | Data Report sessions / Finance billing days / the hybrid's session store | — |
 | Data Report client identifier | **none** (the registry's `crm_client_id` / `crm_service_id` come from Finance's kits; `sl_svc_cache` 19 lines, 2 with a kit number, 0 with a CRM id; the router map carries no CRM id) | — | — |
@@ -92,8 +92,8 @@ index or a second client: the index still holds one row for #1 and the account s
 | Phone | uCRM contact | hybrid index (sign-in key) | webhook + delta | 60 s | …217 / …217 | MATCH |
 | E-mail | uCRM contact | hybrid index (sign-in key) | webhook + delta | 60 s | b***@outlook.com / same | MATCH |
 | Service, plan, price | uCRM service | hybrid `ucrm_services_cache` + `ucrm_plans_cache`; Finance `crm_services_cache`; Data Report | webhook `service.*`, staff sync, cron; Finance render; Data Report sync + 2 h | 60 s–2 h | id 6 · plan 3 · 329,000 UGX / same / same | MATCH |
-| Invoice | uCRM | hybrid cache; `app_account` live | webhook `invoice.add` → `ClientInvoiceCacheRefresher`; on demand when stale | event + on open | 1 unpaid, 329,000 / same | MATCH |
-| Payment state | uCRM | hybrid live + payments cache | live GET on account open; webhook `payment.add` | on open | 0 payments, outstanding 329,000 / same | MATCH |
+| Invoice | uCRM | hybrid cache; `app_account` live | webhook `invoice.add` → `ClientInvoiceCacheRefresher`; on demand when stale | event + on open | 1 unpaid, for the plan's monthly price / same | MATCH |
+| Payment state | uCRM | hybrid live + payments cache | live GET on account open; webhook `payment.add` | on open | 0 payments, the invoice amount outstanding / same | MATCH |
 | Starlink attribute | uCRM service attribute (typed) | hybrid `KitAttributeIntake` (review screen, on demand); Data Report sync | manual entry; on-demand read | — | set on service 6 / not reflected anywhere | **only uCRM has it** |
 | Kit | **DISPUTED** — hybrid `equipment_assignments` (authority by code), Finance `sl_kits.json` (typed), Data Report registry (generated from Finance) | portal + block workflow (hybrid); Finance screens; Data Report fleet | Finance: staff forms; Data Report: `KitRegistryWriter` regenerates from Finance; hybrid: review-screen binding | manual / registry regenerated on the sync cadence (generated 05:30:27 at the 06:25 run, 08:00:27 at 09:44, by "2.8.73") | uCRM says KIT…KWW; hybrid 0 for #1 (2 units, 2 live rows, others'); Finance 0 for #1 (3); Data Report 0 for #1 (4) | **DIFFER — the source names a kit no register holds** |
 | Starlink account | Data Report sessions (`dr_accounts.json`) / Finance `sl_accounts.json` / hybrid assignment | Data Report crons; Finance invoices; hybrid | Data Report cron (dead sessions); Finance manual; the hybrid's one-time session import | — | none for #1 (the hybrid's imported account ACC…-43 is bound to no kit and is expired) | n/a |
@@ -145,7 +145,7 @@ the portal, and Family Shoppers is not deactivated.**
 |---|---|---|
 | Login by phone/WhatsApp | **WORKING** | 1 account matched, eligible, "Code sent via WhatsApp", verified, HttpOnly · SameSite=Lax · Secure cookie, no token in the body |
 | Login by e-mail | **WORKING** | same, "Code sent via Email" |
-| Account | **WORKING** | id 1, service type `starlink`, 1 service, 1 account, not paused, unpaid 329,000; uCRM live and caches agree |
+| Account | **WORKING** | id 1, service type `starlink`, 1 service, 1 account, not paused, an unpaid balance (amount not repeated here); uCRM live and caches agree |
 | Services | **WORKING** | "Residential (up to 400 Mbps)", UGX 329,000, active (UGX shown; the `USD` fallback not hit) |
 | Sites | **N/A** (no kit) — the screen exists and asks for a kit | `app_site_diagnostics` 400 "kit or router_id required" |
 | Starlink | **N/A** (no kit) | same |
@@ -164,20 +164,20 @@ the portal, and Family Shoppers is not deactivated.**
 
 | Where | What | Live |
 |---|---|---|
-| Support tab (`portal.php` 1062–1135) | WhatsApp `+211 921 443 002` ×3 rows; "Call us" displays `+211 921 443 005`, dials `002`; the South Sudan e-mail | `+211` ×11, `211921443002` ×10, domain ×2; Uganda 0 |
+| Support tab (`portal.php` 1062–1135) | WhatsApp to the South Sudan WhatsApp number ×3 rows; "Call us" displays a second South Sudan number but dials the WhatsApp one; the South Sudan e-mail | `+211` ×11, the South Sudan WhatsApp number ×10, domain ×2; Uganda 0 |
 | Every portal page's script (`portal.php` 4200, 6805, 6947, 7228, 7282, 7296) | the WhatsApp helper's number | `+211` ×6 on every page |
-| Plans (978), WiFi (1587, 5180–5182), hotspot (3310), status (5010) | WhatsApp `+211 921 443 002` | in the 16 |
+| Plans (978), WiFi (1587, 5180–5182), hotspot (3310), status (5010) | WhatsApp to the South Sudan WhatsApp number | in the 16 |
 | Status view (`portal.php` 4885, 4966, 4991) | "Juba, South Sudan · Updated just now", "Juba metro areas", "Juba, Yei, Wau" | — |
 | `portal_data.php` 1020, 1024 | location default `Juba` | `Juba` ×1 on the home page |
 | `portal_data.php` 1031; `api_customer_app.php` | currency fallback `USD` | not hit for #1 (UGX shown) |
 | Terms and Privacy (`lib/LegalContent.php` 37–38, 116–118, 174–175) | registered in South Sudan; laws of South Sudan; courts of Juba; South Sudan regulators | South Sudan ×3, Juba ×3 |
-| Legal page footer (`legal_page.php` 307, 334, 335) | DishNet Africa Ltd. · Juba, South Sudan; WhatsApp `+211 921 443 002`; South Sudan e-mail | `+211` ×2, domain ×3 |
-| Company address | the sign-in page and every e-mail are Uganda (`login_web.php`, `EmailTemplate`); the portal shows no address of its own | sign-in page: Kampala ×1, Uganda ×2, 256705993348 ×1 |
+| Legal page footer (`legal_page.php` 307, 334, 335) | DishNet Africa Ltd. · Juba, South Sudan; WhatsApp (the business's South Sudan number); South Sudan e-mail | `+211` ×2, domain ×3 |
+| Company address | the sign-in page and every e-mail are Uganda (`login_web.php`, `EmailTemplate`); the portal shows no address of its own | sign-in page: Kampala ×1, Uganda ×2, the Uganda support number ×1 |
 | Data Report | heading "DISHNET AFRICA · JUBA, SOUTH SUDAN"; Back-to-Portal to the telecom path | docs/36 §I |
 
 Root cause (CODE): `portal.php` and `portal_data.php` contain **zero** references to `TenantProfile` or
 `CustomerContact`; the sign-in page and every e-mail do read the profile. Correct Uganda values exist in
-`profiles/uganda.json` (WhatsApp 256705993348, phone +256 705 993 348, accounts@dishnetuganda.com, DishNet
+`profiles/uganda.json` (WhatsApp and phone: the Uganda support number, accounts@dishnetuganda.com, DishNet
 Africa Limited, Kampala, law: the Republic of Uganda, regulator: UCC); **courts and legal texts are null** —
 a business input, not a code fact.
 

@@ -59,13 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ef_action'])) {
                 if (isset($out['error'])) {
                     $_efMsg = ['ok' => false, 'text' => $out['error']];
                 } else {
+                    // 5.18.95: PdfLinkToken under the install's pdf_link_secret, from the store copy efris_pdf.php
+                    // verifies against; never a key written in the code. No secret, no link.
+                    require_once dirname(__DIR__, 2) . '/lib/PdfLinkToken.php';
                     $f = basename($out['pdf_path']);
-                    $sec = (string)($_efCfg['webhook_secret'] ?? ($_efCfg['evo_webhook_secret'] ?? 'dishnet'));
-                    $tok = hash_hmac('sha256', $f . gmdate('Ymd'), $sec);
-                    $url = '?page=efris_pdf&file=' . rawurlencode($f) . '&token=' . rawurlencode($tok);
-                    $_efMsg = ['ok' => true,
-                        'text' => 'PDF ready: <a href="' . htmlspecialchars($url) . '" target="_blank">'
-                                . htmlspecialchars($out['filename']) . '</a>'];
+                    $_efLinkCfg = (array)($store->load('kyc_config.json') ?: []);
+                    PdfLinkToken::ensureSecret($store, $_efLinkCfg);
+                    $tok = PdfLinkToken::mint($f, $_efLinkCfg);
+                    if ($tok === '') {
+                        $_efMsg = ['ok' => false, 'text' => 'PDF made, but no link could be signed: the PDF link key could not be stored.'];
+                    } else {
+                        $url = '?page=efris_pdf&file=' . rawurlencode($f) . '&token=' . rawurlencode($tok);
+                        $_efMsg = ['ok' => true,
+                            'text' => 'PDF ready: <a href="' . htmlspecialchars($url) . '" target="_blank">'
+                                    . htmlspecialchars($out['filename']) . '</a>'];
+                    }
                 }
             }
         } elseif ($act === 'goods_save') {

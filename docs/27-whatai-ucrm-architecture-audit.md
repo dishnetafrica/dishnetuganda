@@ -140,8 +140,8 @@ Verified by source inspection. This is what is actually deployed.
   Customer (WhatsApp)
         │
         ▼
-  Evolution API  ── instances: dishnet_ug (+256 705 993 348, sales)
-        │                      dishnet_richard (+256 703 834 115)
+  Evolution API  ── instances: dishnet_ug (the Uganda sales number, not repeated here)
+        │                      dishnet_richard (its own number, not repeated here)
         ▼
   public.php?page=evo_webhook  →  evo_webhook.php
         │                          · EvoWebhookGuard (auth)
@@ -252,8 +252,8 @@ this worker runs under two timezones (UTC from the webhook spawn, Africa/Kampala
 from cron) and `strtotime()` made the pause silently fail on the scheduled path.
 
 **Staff-number protection exists** — the plugin will not auto-reply into its own
-numbers, and the n8n README warns that an alert sent to `256703834115` or
-`256705993348` arrives as a customer message, gets answered, and the answer lands
+numbers, and the n8n README warns that an alert sent to either of the plugin's own numbers
+arrives as a customer message, gets answered, and the answer lands
 back on the sender.
 
 ---

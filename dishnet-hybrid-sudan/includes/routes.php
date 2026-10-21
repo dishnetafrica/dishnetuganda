@@ -57,9 +57,21 @@ if ($page === 'kyc_photo') {
     // Other staff can only view expense photos (their own uploads are filename-matched)
     $allowedRoles = ['admin','accountant','support_leader','field_accountant'];
     $isPrivileged = !empty($retailer['is_admin']) || in_array($retailer['role'] ?? '', $allowedRoles, true);
-    $f = trim($_GET['f'] ?? '');
-    $f = str_replace(['..', chr(92), chr(0)], '', $f);
-    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f)) {
+    // ── K1 (5.18.95): refuse, then contain — never strip ──
+    // The strip that stood here removed '..', backslashes and NULs, so '.\.' became '..' once its
+    // backslash was gone. A path with any of those shapes is now refused whole, and the file served
+    // is the one realpath() finds inside its own allow-listed folder, so a symlink that leaves the
+    // folder is refused too (the shape of JobPhotos::path). Every writer stores folder/…/name with
+    // no empty, '.' or '..' segment, so no stored path is refused.
+    $f = $_GET['f'] ?? '';
+    if (!is_string($f)) { http_response_code(400); exit('Invalid path'); }
+    $f    = trim($f);
+    $fSeg = explode('/', $f);
+    if ($f === '' || $f[0] === '/' || strpos($f, chr(92)) !== false || strpos($f, chr(0)) !== false
+        || in_array('', $fSeg, true) || in_array('.', $fSeg, true) || in_array('..', $fSeg, true)) {
+        http_response_code(400); exit('Invalid path');
+    }
+    if (!preg_match('/^(kyc_(photos|uploads)|uploads\/(expenses|expense_receipts|install_photos|job_photos|proof[^\/]*))\/[\w\-\/\.]+$/', $f, $fDir)) {
         http_response_code(400); exit('Invalid path');
     }
     // KYC photos: privileged only. Expense photos: privileged or own upload (exp-{rid}-*.ext)
@@ -73,8 +85,13 @@ if ($page === 'kyc_photo') {
     if (!$isPrivileged && !$isOwnPhoto) {
         http_response_code(403); exit('Access denied');
     }
-    $full = $dataDir . '/' . $f;
-    if (!file_exists($full)) { http_response_code(404); exit('Not found'); }
+    // The base is the folder the allow-list matched (kyc_photos, kyc_uploads or uploads/<folder>). The
+    // file must resolve inside it and be a file, else 404; what is served is the resolved path.
+    $fBase = realpath($dataDir . '/' . $fDir[1]);
+    $full  = realpath($dataDir . '/' . $f);
+    if ($fBase === false || $full === false || strpos($full, $fBase . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+        http_response_code(404); exit('Not found');
+    }
     $mime = mime_content_type($full) ?: 'application/octet-stream';
     $inline = in_array($mime, ['image/jpeg','image/png','image/gif','image/webp']);
     header('Content-Type: ' . $mime);
@@ -228,12 +245,23 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     $_csvCurrs2 = dn_book_currencies($config ?? null);
     $_csvBase2  = $_csvCurrs2[0];
     $_hasSSP2   = in_array('SSP', $_csvCurrs2, true);
+    $_csvRule2 = !$_hasSSP2 && $cb2csv->cashOnlyRuleInForce();   // 5.18.98
+    if ($_csvRule2) require_once dirname(__DIR__) . '/lib/CashbookNonCashView.php';
     $_csvCurr2  = in_array(strtoupper($_GET['cb_curr'] ?? ''), $_csvCurrs2, true) ? strtoupper($_GET['cb_curr']) : '';
     // Field agents export only their own rows — same rule as the on-screen book.
     $_csvIsField2 = in_array($csvUser['role'] ?? '', ['sales','sales_staff','field_agent','collection'], true)
                     && empty($csvUser['is_admin']);
     $_csvPerson2  = ($_csvIsField2 && !empty($csvUser['name'])) ? $csvUser['name'] : '';
+    // 5.18.98 (SPEC-separate-v2 §2.6): the read-only "Bank & other accounts" tab's own export, under the page's gate; refused to
+    // the page's field agents (its list, cashbook.php:43-44, and public.php's default role 'sales' for a record with none), who
+    // get the cash export below. Like that export it does not ask the Cashbook tab's permission ($can): SPEC §2.12.
+    if ($_csvRule2 && ($_GET['cb_book'] ?? '') === 'noncash'
+        && !(in_array((string)($csvUser['role'] ?? (empty($csvUser['is_admin']) ? 'sales' : 'admin')), ['sales','sales_staff','field_agent','field_accountant','collection'], true)
+             && empty($csvUser['is_admin']))) {
+        require __DIR__ . '/cashbook_noncash_csv.php'; exit;
+    }
     $csvF2 = array_filter(['project'=>$proj2, 'date_from'=>$_GET['cb_from']??'', 'date_to'=>$_GET['cb_to']??'', 'person'=>$_csvPerson2, 'currency'=>$_csvCurr2, 'limit'=>9999, 'offset'=>0]);
+    if ($_csvRule2) $csvF2['book'] = 'cash';   // 5.18.98: the Cashbook list's rows, physical cash only
     $rows2  = $cb2csv->getEntries($csvF2);
     $_isSSP2 = ($_csvCurr2 === 'SSP');
     $_isAll2 = ($_csvCurr2 === '');
@@ -241,7 +269,11 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     $_acctNames2 = [];
     if (!$_hasSSP2) {
         try {
-            foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+            if ($_csvRule2) {   // 5.18.98: a Uganda export reads the names with a SELECT only, so it runs no DDL
+                foreach ($cb2csv->accountLabels() as $_a2id => $_a2l) { $_acctNames2[(int)$_a2id] = $_a2l['name']; }
+            } else {
+                foreach ($cb2csv->accounts() as $_a2) { $_acctNames2[(int)$_a2['id']] = $_a2['name']; }
+            }
         } catch (\Throwable $e) {}
     }
     $fname2 = 'cashbook-'.strtoupper($proj2).'-'.($_csvCurr2 ?: 'ALL').'-'.date('Y-m-d').'.csv';
@@ -255,13 +287,13 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
     } elseif ($_isAll2) {
         // Multi-currency book without SSP columns: every amount sits next to
         // its own currency and the balance names the stream it belongs to.
-        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source']);
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Currency','Received','Payment','Balance','Balance Currency','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
     } elseif ($_isSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received SSP','Payment SSP','SSP Balance','Ref','Status','Source']);
     } elseif ($_hasSSP2) {
         fputcsv($out2, ['SR No.','Date','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
     } else {
-        fputcsv($out2, ['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source']);
+        fputcsv($out2, array_merge(['SR No.','Date','Account','Type','Particulars','Category','Person','Received '.$_csvCurr2,'Payment '.$_csvCurr2,$_csvCurr2.' Balance','Ref','Status','Source'], $_csvRule2 ? ['Entry state'] : []));   // 5.18.98: Entry state last
     }
     foreach ($rows2 as $e2) {
         $isIn2 = $e2['direction'] === 'in';
@@ -277,12 +309,12 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
                 ($_isSspRow2&&$isIn2)?$sA2:'', ($_isSspRow2&&!$isIn2)?$sA2:'', ($_isSspRow2)?$bl2:'',
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } elseif ($_isAll2) {
-            fputcsv($out2, [$e2['sr'],$e2['date'],
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
                 $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
                 $e2['txn_type'] ?? '',
                 $e2['description'],$e2['category'],$e2['person'],
                 $rowCur2, $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2, ($bl2===''?'':$blCur2),
-                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
         } elseif ($_isSSP2) {
             fputcsv($out2, [$e2['sr'],$e2['date'],$e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$sA2:'', $isIn2?'':$sA2, $bl2,
@@ -292,18 +324,96 @@ if (($tab ?? '') === 'cashbook' && !empty($_GET['cb_export']) && $_GET['cb_expor
                 $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
                 $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
         } else {
-            fputcsv($out2, [$e2['sr'],$e2['date'],
+            fputcsv($out2, array_merge([$e2['sr'],$e2['date'],
                 $_acctNames2[(int)($e2['account_id'] ?? 0)] ?? '',
                 $e2['txn_type'] ?? '',
                 $e2['description'],$e2['category'],$e2['person'],
                 $isIn2?$uA2:'', $isIn2?'':$uA2, $bl2,
-                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual']);
+                $e2['validation_ref'],$e2['validation_status'],$e2['source']??'manual'], $_csvRule2 ? [CashbookNonCashView::state((string)($e2['status'] ?? ''))] : []));   // 5.18.98
         }
     }
     fclose($out2);
     exit;
 }
 
+// ── The Bank screen's export (5.18.97; SPEC-bank §c.5, §d.4) — must run before the HTML buffer fills ─────────
+// Exactly the lines the screen's filter selects (one account; one month or all of them), every page, OLDEST first by
+// the bank's line number, each balance the bank's own, read through the same BankStatementStore::lines() the screen
+// uses. The sign-in first (so a visitor who is not signed in learns nothing about the switch), then BankGate (Uganda, no
+// SSP, the switch), then a request from this site's own page (BankGate::fromOwnPage: a link or an image on another site
+// must not write a lines_exported event in an admin's name, nor save the lines to their Downloads), then the FRESH staff
+// record (admins only), before anything is read.
+// A text cell a spreadsheet would read as a formula (= + - @, a tab, a CR) gets a ' in front; the amounts are numbers
+// and are not prefixed. The file name carries the currency and the month, never the account number or the account's
+// name. One lines_exported event (the count and the month) is the only write. No original-file route exists in v1.
+if (($tab ?? '') === 'bank' && ($_GET['bk_export'] ?? '') === 'csv') {
+    require_once dirname(__DIR__) . '/lib/BankGate.php';
+    $_bkxRefuse = function (int $code, string $msg): void {
+        if (ob_get_level() > 0) ob_end_clean();
+        http_response_code($code);
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        echo $msg, "\n";
+        exit;
+    };
+    $_bkxUser = $auth->requireLogin();
+    if (!BankGate::open($dataDir ?? null)) $_bkxRefuse(403, 'ECO Bank is not available on this installation.');
+    if (!BankGate::fromOwnPage('GET')) $_bkxRefuse(403, 'The security check failed, so nothing was sent. Open ECO Bank and export from there.');
+    $_bkxMe = BankGate::allows('bank.view', $store, is_array($_bkxUser) ? $_bkxUser : []);
+    if ($_bkxMe === null) $_bkxRefuse(403, 'Access denied.');
+    require_once dirname(__DIR__) . '/lib/currency.php';
+    require_once dirname(__DIR__) . '/lib/PluginConfig.php';
+    require_once dirname(__DIR__) . '/lib/EcobankDetailsCsv.php';
+    require_once dirname(__DIR__) . '/lib/BankStatementStore.php';
+    $_bkxStore = new BankStatementStore($store->getPdo(), (string)$dataDir,
+        dn_book_currencies(PluginConfig::read(dirname(__DIR__), (string)$dataDir)));
+    $_bkxQ = function (string $k): string { $v = $_GET[$k] ?? ''; return is_string($v) ? $v : ''; };
+    $_bkxAcct = ($_bkxStore->ready() && ctype_digit($_bkxQ('bk_acct'))) ? $_bkxStore->account((int)$_bkxQ('bk_acct')) : null;
+    if ($_bkxAcct === null) $_bkxRefuse(404, 'Choose an active Ecobank account of the book.');
+    $_bkxMonth = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $_bkxQ('bk_month')) ? $_bkxQ('bk_month') : '';
+    $_bkxRows = $_bkxStore->lines((int)$_bkxAcct['id'], $_bkxMonth, 'asc');
+    $_bkxProf = $_bkxStore->profile((int)$_bkxAcct['id']);
+    $_bkxCur = $_bkxProf !== null ? (string)$_bkxProf['currency'] : (string)$_bkxAcct['currency'];
+    try {
+        $_bkxStore->recordExport((int)$_bkxAcct['id'], count($_bkxRows), $_bkxMonth === '' ? 'all' : $_bkxMonth, $_bkxMe);
+    } catch (\Throwable $e) {
+        $_bkxRefuse(500, 'The export could not be recorded, so nothing was sent.');
+    }
+    // A text cell that starts like a formula is neutralised; '' stays ''.
+    $_bkxText = function ($v): string {
+        $s = (string)$v;
+        return ($s !== '' && strpos("=+-@\t\r", $s[0]) !== false) ? "'" . $s : $s;
+    };
+    // An amount from minor units, exactly: two decimals, no separator, a minus where the balance is below zero.
+    $_bkxAmt = function (int $u): string {
+        $a = $u < 0 ? -$u : $u;
+        return ($u < 0 ? '-' : '') . intdiv($a, 100) . '.' . sprintf('%02d', $a % 100);
+    };
+    $_bkxName = 'ecobank-' . $_bkxCur . '-' . ($_bkxMonth === '' ? 'all' : $_bkxMonth) . '-lines-' . date('Y-m-d') . '.csv';
+    if (ob_get_level() > 0) ob_end_clean();
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $_bkxName . '"');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('X-Content-Type-Options: nosniff');
+    $_bkxOut = fopen('php://output', 'w');
+    fputcsv($_bkxOut, ['Bank line no.', 'Posting date', 'Value date', 'Type code', 'Type', 'Transaction code', 'Particulars',
+        'Reference', 'In', 'Out', 'Balance', 'Currency', 'Statement', 'Status'], ',', '"', '');
+    foreach ($_bkxRows as $_bkxL) {
+        $_bkxIn = (string)$_bkxL['credit_text'] !== '';
+        fputcsv($_bkxOut, [
+            $_bkxText($_bkxL['cheque_number']), $_bkxText($_bkxL['posting_date']), $_bkxText($_bkxL['value_date']),
+            $_bkxText($_bkxL['type_code']), $_bkxText($_bkxL['type_desc']), $_bkxText($_bkxL['txn_code']),
+            $_bkxText($_bkxL['remarks']), $_bkxText($_bkxL['reference']),
+            $_bkxIn ? $_bkxAmt((int)$_bkxL['credit_units']) : '', $_bkxIn ? '' : $_bkxAmt((int)$_bkxL['debit_units']),
+            $_bkxAmt((int)$_bkxL['running_units']), $_bkxText($_bkxL['currency']),
+            $_bkxText(substr((string)$_bkxL['statement_sha256'], 0, 8)),
+            $_bkxText((string)$_bkxL['status'] === 'imported' ? 'Not compared' : 'Unknown status'),
+        ], ',', '"', '');
+    }
+    fclose($_bkxOut);
+    exit;
+}
 // ── Collections CSV export — must run before HTML buffer fills ────────────
 if (($tab ?? '') === 'all_collections' && !empty($_GET['col_export']) && $_GET['col_export'] === 'csv') {
     // 5.18.55 (docs/48 PD-1): this export runs at public.php:739, BEFORE the
@@ -519,48 +629,16 @@ if (($tab ?? '') === 'wallet' && !empty($_GET['fr_export']) && $_GET['fr_export'
     exit;
 }
 
-// ── Splynx config patch — admin only, run once ────────────────────────────────
+// ── Splynx config patch — RETIRED (5.18.95) ───────────────────────────────────
+// It wrote a Splynx key and secret held in the code into kyc_config.json and printed them. The repository is public,
+// so those values are known; they must be replaced in Splynx and entered under Settings → Splynx. The page now only
+// says so, and changes nothing.
 if ($page === 'splynx_patch') {
     $r = $auth->requireLogin();
     if (!($r['is_admin'] ?? false)) { http_response_code(403); exit('Admin only.'); }
-
-    $cfgFile = $dataDir . '/kyc_config.json';
-    $cfg     = json_decode(file_get_contents($cfgFile), true) ?: [];
-    $cfg['splynx_url']    = 'https://my.dishnetafrica.com';
-    $cfg['splynx_key']    = '2b10a77dd91668b95b4355200689b0bc';
-    $cfg['splynx_secret'] = '9174fd8da2d4b7bf35a369cd1a020d45';
-    file_put_contents($cfgFile, json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-    $key   = $cfg['splynx_key'];
-    $sec   = $cfg['splynx_secret'];
-    $base  = rtrim($cfg['splynx_url'], '/');
-    $basic = 'Authorization: Basic ' . base64_encode($key . ':' . $sec);
-
-    header('Content-Type: text/html; charset=UTF-8');
-    echo '<pre style="font-family:monospace;font-size:13px;padding:20px;background:#0f172a;color:#e2e8f0;">';
-    echo "✅ Credentials saved\n";
-    echo "URL:    {$base}\n";
-    echo "Basic:  " . base64_encode($key . ':' . $sec) . "\n\n";
-
-    foreach (['/api/2.0/admin/administrators','/api/2.0/admin/customers/customer','/api/2.0/admin/tariffs/internet'] as $path) {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $base . $path,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HTTPHEADER     => [$basic, 'Accept: application/json'],
-        ]);
-        $raw  = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $icon = ($code >= 200 && $code < 300) ? '✅' : ($code === 401 ? '🔑 BAD CREDS' : '❌');
-        echo "{$icon} HTTP {$code} — {$path}\n";
-        echo "   " . htmlspecialchars(substr((string)$raw, 0, 300)) . "\n\n";
-        if ($code >= 200 && $code < 300) { echo "✅ SPLYNX CONNECTED — NOC tab will work now\n"; break; }
-    }
-    echo '</pre>';
-    exit;
+    http_response_code(410);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit("This page is retired. Enter the Splynx API key and secret under Settings → Splynx.\n");
 }
 
 // ── I-04 FIX: Serve proof image by recharge request ID ───────────────────

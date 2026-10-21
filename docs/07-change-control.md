@@ -330,7 +330,7 @@ reads it back ON. The KYC form reads the store's copy instead; a read-only
 check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-ucrm.md)
 §9). Live evidence of the messages waits for the next KYC registration.
 
-## 5.18.31 + website — Airtel Money, merchant ID 4428146
+## 5.18.31 + website — Airtel Money, by DishNet's merchant ID
 
 **25 September 2026** · `lib/PaymentOptions.php` (new), `webhook.php`,
 `lib/CustomerEmails.php`, `lib/DishNetAiBrain.php`, `tools/ai_facts.php`,
@@ -340,7 +340,7 @@ check of that copy showed `'1'` there too ([30](30-kyc-customers-not-reaching-uc
 
 DishNet's Airtel Money Pay merchant ID becomes a payment option everywhere
 the system tells a customer how to pay. A customer dials `*185*9#`, enters
-4428146, the amount and their PIN — free of charge to them — then sends the
+the merchant ID (not repeated here), the amount and their PIN — free of charge to them — then sends the
 transaction ID so billing can record it.
 
 - **Website:** `pay.html` leads with an Airtel Money section (steps, the app
@@ -365,7 +365,7 @@ lines, and a website redeploy in EasyPanel.
 code, the previous build for the website.
 **Status:** plugin deployed 25 September 2026 (`f3ab37e`, over `723233a`);
 the container serves `f3ab37e`. Both settings were set straight after, and
-the settings listing reads each back: `pay_airtel_merchant` "4428146", and
+the settings listing reads each back: `pay_airtel_merchant` set to the merchant ID (not repeated here), and
 `ai_fact_payment` starting *"Pay by Airtel Money or by bank transfer."*
 The website redeploy has not been reported yet; the entry below goes out
 with it.
@@ -1339,7 +1339,7 @@ closing lines; the header, every check and the summary above it are 5.18.42's (`
 **The tax probe, read-only, the same evening** (`tools/tax_probe.php`): uCRM defines **no tax rate**; the
 pricing-mode setting is not on the settings endpoint; `taxable` is empty on all 30 products and all 5 plans;
 **no product is a UCC or regulatory charge**; the five latest invoices (000001–000005) carry **no tax or levy
-line**, and 000005 carries a 30 % discount (2,498,000 − 749,400 = 1,748,600). **The operator's decision,
+line**, and 000005 carries a 30 % discount (a real customer's invoice amounts, not repeated here). **The operator's decision,
 verbatim: *"ok keep price as it is"* and *"its ohk the way it is"*.** Prices stay as they are and uCRM gets no
 tax configuration. The invoice screen therefore shows the total, and the discount where there is one. The
 per-tax lines 5.18.42 built stay dormant until uCRM carries a tax, and the AI's rule is unchanged. The
@@ -1356,7 +1356,7 @@ come. 5.18.42 also printed the discount after the tax lines.
 
 **What.** `tabs/customer_app/portal.php`: the first row reads **Subtotal**, and the **discount follows it
 directly**, before any tax line, then the total. For invoice 000005 the column now reads Subtotal
-2,498,000.00 · Discount −749,400.00 · Total 1,748,600.00, the invoice's own arithmetic. The explanation moved
+(its amount) · Discount (its amount) · Total (its amount), the invoice's own arithmetic. The explanation moved
 from an HTML comment into a PHP comment: an HTML comment is sent to the customer's browser, and the first draft's
 comment put the words "Before tax" back into the page, which the new test caught. `tools/tax_probe.php` section 5
 prints the same order. Nothing else changes: no tax is computed, the app API's fields are the same, A2 is
@@ -2581,7 +2581,7 @@ printed at the end of the deploy's log — never pasted together with the deploy
       && mkdir -p /root/dnb-5.18.56 \
       && bash scripts/deploy-5.18.56.sh 2>&1 | tee /root/dnb-5.18.56/deploy-$(date -u +%Y%m%dT%H%M%SZ).log
 
-**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to `211927797217`
+**Also (operator action, unrelated to the code):** set `whatsapp_admin_phone` to the operator's South Sudan number (not repeated here)
 in **Engage → WhatsApp** ("🔔 Admin Alert Number") — this resolves the R14 note from the 5.18.55
 deploy (the admin number was unset, so the watchdog/KYC/handover alerts reached only the plugin
 log). `+211` is the South Sudan code, consistent with that screen's existing `211…` examples.
@@ -2613,7 +2613,7 @@ Three notes (configuration, not errors), carried over from the 5.18.55 state:
   WhatsApps until an admin saves their uCRM user (Staff → edit → uCRM user).
 - **R14: `whatsapp_admin_phone` is still unset (store `empty`, files `unset`), so the
   notification watchdog's alerts reach only the plugin log (docs/46 E-11).** The requested
-  `211927797217` has NOT yet been entered — operator action in Engage → WhatsApp.
+  number (not repeated here) has NOT yet been entered — operator action in Engage → WhatsApp.
 - R11: the engineer's job e-mail goes through the plugin's own SMTP settings.
 
 Rollback to 5.18.55 remains available on its own (docs/44 §16.9):
@@ -2682,7 +2682,7 @@ alone; the rollback prints separately at the end of its log — docs/44 §16.9):
 **Scope note:** this release fixes the **accounting plane** (seven screens). A follow-up **5.18.58**
 is offered for the same SSP-on-Uganda pattern on the sales/support plane (`my_account.php`,
 `wallet.php`, `field_expenses.php`) and the `fiber_costs.php:190` `$` USD-symbol leak. Still
-outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = `211927797217`**
+outstanding from 5.18.56 (operator action, not code): **`whatsapp_admin_phone` = the requested number (not repeated here)**
 in Engage → WhatsApp.
 
 ## 1 Oct — 5.18.58 BUILT (Uganda sales/support cash screens show UGX, not SSP); deploy script + rehearsal ready; NOT deployed
@@ -3533,13 +3533,13 @@ staff_ledger → Staff Cashbooks* existed and worked for South Sudan's literal `
 - `StaffCashPositionService::getUSDBalance()` (14 literal `'USD'` tests), `DualReadCashPosition` (`position($id,'USD')`),
   `staff_cashbooks.php` (`$uL = cur === 'USD'`), `my_account.php` and `wallet.php` **dropped every UGX row**. Elisha's
   eight approved field expenses had reached the staff ledger in UGX and were invisible too. From the export: five
-  advances (UGX 650,000, 23 Sep–3 Oct) against UGX 310,328 of expenses — a page that should read about UGX 339,672
+  advances (a UGX total, 23 Sep–3 Oct) against a UGX total of expenses — a page that should read the UGX difference (figures not repeated here)
   read nothing.
-- The Cashbook page's POSITION card (UGX −24,119,205) was the Phase-C account model: money accounts (Cash–Uganda
-  +29,137,000, Ecobank −24,922,777 — the statement import brought only card purchases) plus "unassigned rows"
-  −28,333,428, which includes the operator's **UGX 29,056,500 "ADJUSTMENT ENTRY" of 12 Sep** that zeroed the running
-  balance. The ledger's running balance (UGX 723,072) is right *because* the adjustment cancels the account rows; cash
-  rows alone, adjustment excluded, give exactly 723,072 as well. Two arithmetics on one table.
+- The Cashbook page's POSITION card (a large negative UGX figure, not repeated here) was the Phase-C account model: money accounts (Cash–Uganda
+  positive and Ecobank negative, figures not repeated here — the statement import brought only card purchases) plus "unassigned rows"
+  (a negative UGX figure, not repeated here), which includes the operator's **"ADJUSTMENT ENTRY" of 12 Sep** (its amount not repeated here) that zeroed the running
+  balance. The ledger's running balance (the UGX cash in hand, not repeated here) is right *because* the adjustment cancels the account rows; cash
+  rows alone, adjustment excluded, give exactly the same figure as well. Two arithmetics on one table.
 
 **2. The principle (5.18.57's, applied to the money logic):** the code's "USD" bag is the BOOK's BASE bag. Every "is this
 the USD bag?" question became "is this the book's base bag?" — `dn_book_base()` — and every writer that said "amount only
@@ -3659,7 +3659,7 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 179 files from Release A through 5.18.67 intact; **R6
     the staff-cash chain is in place** beside the photo surface; **R7 the backfill's dry run on the live data: 5
     staff-advance OUT rows in UGX name a person, 8 cash-in records exist — plan: 0 to create, 5 to FIX, 0 skipped**, each
-    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX 50,000 + 250,000 + 100,000 + 100,000 + 150,000) matched to the
+    of the five (CB-66, CB-72, CB-83, CB-90, CB-95; UGX amounts given to staff, not repeated here) matched to the
     one staff member (#4) and each already carrying a cash-in with **amount 0** (cash-ins #1, #2, #6, #7, #8). **That is the
     diagnosis confirmed on production**: the 5.18.67 auto-link did fire for every advance and wrote 0. The photo tables and
     files read exactly as before (`present:3:1`, `files:3`) — the dry run touched no data.
@@ -3673,9 +3673,9 @@ hits). On the release tree itself: `test_staff_cash_chain` 73/0, `test_cashbook_
 ## 04 Oct — 5.18.69: the last three "USD" labels on the Uganda staff cash screens; a staff-records currency tool — DEPLOYED 06:26 UTC (PASSED 23/0/0)
 
 **Reported by the operator (a screenshot and an export of the technician's staff cashbook, after 5.18.68 and before the
-backfill's `APPLY`):** the page read **UGX 0.00** with UGX 310,328 out and a row *"USD Received … +UGX 0.00"*; the export
+backfill's `APPLY`):** the page read **UGX 0.00** with a UGX total paid out (not repeated here) and a row *"USD Received … +UGX 0.00"*; the export
 came down as `staff-cashbook-<staff>-USD-2026-09-04-to-2026-10-04.csv` with the columns `Received (USD)` / `Payment (USD)`
-and three rows of 25 Sep (Collection, 200,000 / 50,000 / 50,000, approved); *"I have never given USD to this technician,
+and three rows of 25 Sep (Collection, three amounts received by the technician, not repeated here, approved); *"I have never given USD to this technician,
 always UGX — something wrong"*. The `+UGX 0.00` row is the pre-backfill state the 5.18.68 deploy's R7 showed (the five
 cash-ins carry amount 0 until `--apply` is typed through; whether `APPLY` was typed is not yet confirmed). The rest is
 three more literal `'USD'` sources — measured on the code and on the export, not inferred from the words:
@@ -3684,16 +3684,16 @@ three more literal `'USD'` sources — measured on the code and on the export, n
    `man_currency` and then wrote `'currency' => 'USD'` on every non-SSP entry, so a hand-typed UGX entry left the UGX
    register (5.18.68 reads the base bag) and surfaced as dollars in the export. The three 25 Sep rows are exactly that
    shape: `source = manual_adjustment`, stamped USD, UGX amounts. Read against the main cashbook's export they are the same
-   money as the advances **CB-66 (50,000) and CB-72 (250,000)** of those days — 300,000 both ways — typed again by hand on
+   money as the advances **CB-66 and CB-72** of those days — the same UGX total both ways — typed again by hand on
    the staff page while the advance link wrote 0. The 5.18.68 backfill links those advances to the technician's ledger, so
    **counting both would double the money**: the tool's default repair is VOID, and RELABEL is offered only for a hand entry
    that is the only record of its money. **Void or keep is the operator's call; the deploy repairs nothing by itself.**
    **Verified line by line at 06:25 UTC**, when the operator re-sent the export (byte-identical to the 04:42 copy, so the
-   server was still on 5.18.68): CB-72 (24 Sep, 250,000) reads *"Paid for Buying Material and 50K UGx as Advance"* and the
-   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* 200,000 + *"Advance for other expenses"*
-   50,000; CB-66 (23 Sep, 50,000) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
-   (advance)"* 50,000. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
-   190,000, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
+   server was still on 5.18.68): CB-72 (24 Sep, amount not repeated here) reads *"Paid for Buying Material and [an advance amount] as Advance"* and the
+   two 25 Sep rows split exactly so — *"Outdoor ethernet cable roll 305 m"* the cable amount + *"Advance for other expenses"*
+   an amount not repeated here; CB-66 (23 Sep, the same amount) *"Paid Advance Against Installation work"* is the *"6th street installation allowance
+   (advance)"* of the same amount. The cable itself already sits on the OUT side as field expense EXP-202609-002 (CB-77, 25 Sep,
+   its amount not repeated here, `expense_sync`), so the IN side is the only thing the hand copies add — and the backfill adds it properly.
 2. **The stored category `'USD Received'`.** The base-bag cash-in category is stored under South Sudan's name, and the
    Staff Cashbooks page, My Cash and the export printed it as stored. Each now prints it as **`<base> Received`** — "UGX
    Received" on Uganda; the stored value is unchanged (the ledger writer, the position service and the backfill key on it).
@@ -3769,9 +3769,9 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
   *nothing to void*. The 5.18.68 `--after-only` is superseded: this deploy's R5 re-reads every file from Release A through
   5.18.68.
 - **Still open from 5.18.68:** the backfill's `--apply` log (not received; the screenshot shows the pre-backfill 0.00).
-  After it, the technician's page should read about UGX 339,672 (650,000 in, 310,328 out) — plus 300,000 if the three
-  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: UGX 339,672.00
-  (650,000 received, 310,328 out) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
+  After it, the technician's page should read the UGX difference between the advances in and the expenses out (figures not repeated here) — plus the rows' total if the three
+  hand-typed rows are relabelled rather than voided. **Confirmed on the page 2026-10-04, about 11:11 UTC: that UGX figure
+  (the amount received and the amount paid out, not repeated here) — recorded under 5.18.71.** **Open here:** the operator's answer — void the three 25 Sep
   hand-typed entries (recommended: they duplicate CB-66/CB-72) or keep them (relabel).
 - **Follow-ups noted, not built:** a USD staff bag on Uganda (the operator does sometimes hand out USD — a second tab, its
   own instruction); the passbook's `fr_curr=USD` filter; the cashbook's `collection`-named ledger category;
@@ -3795,7 +3795,7 @@ write, no message, no setting.** South Sudan (base USD): `dn_entry_currency` yie
     stamped in a currency other than UGX: 0.** The three "USD" rows the operator exported are **`cash_ins` records**, not
     Manual Entry collections — the export prints a cash-in's own category, and theirs is `Collection`. The tool counts and
     flags them, but its repair covers only `payment_collections` rows with `source = manual_adjustment`, so **it cannot void
-    them.** What they ARE (hand copies of CB-66 + CB-72, 300,000, UGX wearing a USD label) stands as verified above; what
+    them.** What they ARE (hand copies of CB-66 + CB-72, the same UGX total, UGX wearing a USD label) stands as verified above; what
     wrote them was a cash-in form, not the Manual Entry. The photo tables and files read exactly as before (`present:3:1`,
     `files:3`) — the LIST touched no data.
   - **The operator then ran the tool's `--void` command** (its own command, after the deploy, ~06:30 UTC): the same census,
@@ -3853,8 +3853,8 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   left; the filter button links `fr_curr=UGX`. B: the technician's cash-in, posted with what the page now submits, is stamped
   UGX, Collection, approved; the wallet's Collections line and the Staff Cashbooks UGX tile both read 20,000. C: production's
   shape planted — three USD-stamped Collection cash-ins and one `USD Received` with a live ledger row: the wallet's
-  Collections line counts the three (320,000: *the label lied and the figure followed*) while the UGX tile does not (the two
-  screens disagreed by 300,000); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
+  Collections line counts the three (*the label lied and the figure followed*) while the UGX tile does not (the two
+  screens disagreed by the three rows' total, not repeated here); LIST exits 0, reads `cash_ins UGX 1 · USD 4 ◄ not the base`, prints `0` for an empty table,
   lists each cash-in with category, stamp, amount, status and description, writes nothing. D: VOID names each row, voids
   them the page's way (stamp untouched, nothing deleted), voids the ledger row `CIN-n`, writes four `void_cash_in` activity
   lines and its summary; the wallet is back to 20,000 and agrees with the tile; LIST reads *4 (0 not yet voided)*; a second
@@ -3876,7 +3876,7 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
   F prints the rollback alone, then the tool's `--void` command as a third block, naming `--relabel` as the alternative.
 - **Rehearsal `scripts/harness/deploy-5.18.70/rehearse.sh`: 129/0 over 18 runs of the script**, against a 5.18.69 base
   holding a UGX book with the pilot *on* and **the three cash-ins the old pill stamped USD seeded — production's shape**
-  (Collection, 200,000 / 50,000 / 50,000, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
+  (Collection, three amounts copied from production and not repeated here, approved, 25 Sep): the three NO-GO gates (a 5.18.68 server, a placeholder pin, a
   copy pinned to the branch tip refused before any live read); the deploy as the operator runs it (R7's LIST reads
   `cash_ins USD 3 ◄ not the base` and names each cash-in with its category, stamp, amount, status and description, and
   **the data digest of every table is unchanged across the deploy: the LIST wrote nothing, the three still approved and
@@ -3928,8 +3928,8 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     beside the 5.18.69 fixes, the 5.18.68 chain and the photo surface. **R7 — the records tool's LIST on the live data,
     read-only:** `payment_collections UGX 1 · cash_ins UGX 5 · USD 3 ◄ not the base · cash_expenses 0 · cash_handovers 0 ·
     staff_expenses UGX 8 · cash_advances 0 · staff_transfers 0 · staff_ledger UGX 13` (the four empty tables now read `0`),
-    and **the three candidates, named: cash-in #3 (Collection, USD, 200,000.00, 25 Sep, "Outdoor ethernet cable roll
-    305 m"), #4 (50,000.00, "Advance for other expenses"), #5 (50,000.00, "6th street installation allowance
+    and **the three candidates, named: cash-in #3 (Collection, USD, its amount not repeated here, 25 Sep, "Outdoor ethernet cable roll
+    305 m"), #4 (an amount, "Advance for other expenses"), #5 (an amount, "6th street installation allowance
     (advance )")**, all approved, all the technician's (#4). The photo tables and files read exactly as before
     (`present:3:1`, `files:3`) — the LIST touched no data.
   - **The operator then ran the tool's `--void` command** (its own command, after the deploy): the same census, the three
@@ -3937,15 +3937,18 @@ whitelist, its two sums, its pending-row label, its filter button, and the Field
     the prompt; whether VOID was typed is not yet known.** Nothing is written until it is.
   - **Not yet done:** the typed `VOID` and its records log (expected: three `cash-in #n voided (USD …, Collection, …)`
     lines, no ledger row to void since `Collection` cash-ins have none, four activity lines); the technician's My Wallet
-    *Collections* line afterwards (it counted the three — 300,000 — whatever their stamp); the 5.18.68 backfill's result on
-    the Staff Cashbooks page (about UGX 339,672); `bash scripts/deploy-5.18.70.sh --after-only`.
+    *Collections* line afterwards (it counted the three — their total, not repeated here — whatever their stamp); the 5.18.68 backfill's result on
+    the Staff Cashbooks page (a UGX figure held by staff, not repeated here); `bash scripts/deploy-5.18.70.sh --after-only`.
+  - **16 Oct 2026 — VOID was typed, measured by R0** (`docs/69` Part 4, read-only). Cash-ins #3, #4 and #5 are each
+    voided, `voided_by` the 5.18.70 tool, `voided_at` 2026-10-04, category as recorded, not relabelled. None of the three
+    has a `CIN-` row in the staff ledger, as expected for `Collection` cash-ins. The records log itself is still not on file.
 
 ## 04 Oct — 5.18.71: the landing page shows cash in hand, not the account position; money held by staff — DEPLOYED 10:59 UTC (PASSED 23/0/0)
 
 **Reported by the operator (two screenshots on v5.18.70, 11:45 Kampala, no words):** the plugin's landing page — the
-accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: UGX −24,119,205.00 / USD
-−139.37"** and the account tiles (Ecobank Uganda UGX −24,922,777, Cash Uganda 29,137,000, Airtel 0, MTN 0, Ecobank USD
-−1,039.37, Cash USD 0), beside the Cashbook page's card **UGX CASH IN HAND 723,072.00 / USD 10,871.37**. The 5.18.68
+accounts dashboard, the admin's default tab — with its hero **"CASH POSITION — PER CURRENCY: a negative UGX figure / a negative USD
+[figure not reproduced]"** and the account tiles (Ecobank Uganda, Cash Uganda, Airtel, MTN, Ecobank USD
+and Cash USD, their balances not repeated here), beside the Cashbook page's card **UGX CASH IN HAND / USD** (figures not repeated here). The 5.18.68
 decision ("I don't want working capital and bank amount to be shown in the plugin in Uganda — cash in hand only") had been
 applied to the Cashbook page; the landing hero still drew `currencyPositions()`, the Phase-C account model, on a book
 without SSP (`tabs/accounts/accounts_dashboard.php`: `$_dashSSP ? [] : $cbDash->currencyPositions()`), while South Sudan's
@@ -3954,12 +3957,12 @@ DishNet 4G / BlueCARD chips). Two more things on that page, read from the code: 
 **USD** stream (`getBalanceByCurrency($project, 'USD')`), so the Money Locations office figure on a UGX book was the dollar
 bag; and Money Locations lists staff by *collection exposure* (the `staff_cash_position` view), which reads 0 for a
 technician who only holds an advance — so the page said *"All cash is in office — no field holdings"* while the technician
-held about UGX 339,672.
+held a UGX amount (not repeated here).
 
 **What changed** (`72de8be` on the branch, release `b350192` on `cba7faf`), all on a book without
 SSP, South Sudan's branch untouched:
 - **The hero reads "Cash in hand — per currency"**: `CashbookService::cashInHand()` per book currency — the Cashbook card's
-  own figure (UGX 723,072.00 / USD 10,871.37 today) — and the base per project in the three chips (Fiber & Starlink /
+  own figure (the UGX and USD cash in hand, not repeated here) — and the base per project in the three chips (Fiber & Starlink /
   DishNet 4G / BlueCARD), the shape South Sudan's hero has. `currencyPositions()` is not called on the page any more; no
   bank balance, no unassigned stream, no "position".
 - **Money Locations**: the office figure is the base cash in hand (not the literal-USD project balances); the block lists
@@ -3972,7 +3975,7 @@ SSP, South Sudan's branch untouched:
 - `manifest.json` 5.18.71; the nine pins. **No migration, no new table, no uCRM write, no message, no setting.**
 - Not changed, recorded: `getBothBalances()`'s literal USD (used by the South Sudan hero, the API balances and the evening
   summary's SSP branch) — identity on South Sudan, a latent base-currency item elsewhere; the Cashbook card's USD figure
-  (10,871.37) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
+  (not repeated here) is the USD stream's running balance including bank rows, as 5.18.68 defined it.
 
 **Tests.**
 - `tests/test_accounts_dashboard_cash.php` — **30/0.** A: an empty Uganda book — the hero "Cash in hand — per currency",
@@ -4031,38 +4034,38 @@ SSP, South Sudan's branch untouched:
   - **R.** R1 all 9 files as `b350192` has them, manifest 5.18.71; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 193 files from Release A through 5.18.70 intact; **R6
     the cash-in-hand hero, no account position, the held-by-staff list and the tool are in place** beside the earlier
-    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND 723,072.00 · USD CASH
-    IN HAND 10,871.37`; Fiber & Starlink UGX 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — exactly the Cashbook card's
+    fixes and the photo surface. **R7 — cash in hand on the live book, read-only: `UGX CASH IN HAND [a UGX live-book figure, not repeated here] · USD CASH
+    IN HAND [a USD live-book figure, not repeated here]`; the per-project figures for Fiber & Starlink, DishNet 4G and BlueCARD, not repeated here** — exactly the Cashbook card's
     figures of the morning's screenshot, now also the landing hero's. The photo tables and files read exactly as before
     (`present:3:1`, `files:3`) — the tool touched no data.
   - **Seen by the operator — 2026-10-04, 14:11 on the operator's screen (about 11:11 UTC; two screenshots of v5.18.71,
     no words):**
-    - **The technician's Staff Cashbooks page reads UGX 339,672.00** — *"Cash still with staff"*, **▲ UGX 650,000.00
-      received · ▼ UGX 310,328.00 out**; the tiles *UGX collected 650,000.00*, *Handed over 0.00*, *Cash with staff
-      339,672.00*, *Wallet balance 0.00*; the first row is the 03 Oct Staff Advance of UGX 150,000.00, IN, *UGX Received*,
-      approved. **That is the figure predicted since 5.18.68 (650,000 − 310,328), so the 5.18.68 backfill's `APPLY` ran**:
-      the `+UGX 0.00` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
+    - **The technician's Staff Cashbooks page reads a UGX figure held by staff, not repeated here** — *"Cash still with staff"*, **▲ a UGX figure
+      received · ▼ a UGX figure out, neither repeated here**; the tiles *UGX collected* (figure withheld), *Handed over* (figure withheld), *Cash with staff
+      (figure withheld)*, *Wallet balance (figure withheld)*; the first row is the 03 Oct Staff Advance (a UGX amount, not repeated here), IN, *UGX Received*,
+      approved. **That is the figure predicted since 5.18.68 (received less paid out), so the 5.18.68 backfill's `APPLY` ran**:
+      the zero-amount `+UGX` row of the 5.18.69 screenshot is gone. The 5.18.69 deploy's ledger census (`staff_ledger UGX 13`)
       had said as much; the page now says it. The backfill's own log was never received; the page is the outcome.
-    - **The landing page hero reads *Cash in hand — per currency*: UGX 723,072.00 · USD 10,871.37; Fiber & Starlink
-      UGX 723,072.00 · DishNet 4G UGX 0.00 · BlueCARD UGX 0.00** — R7's figures, and the Cashbook card's. No account
-      tiles, no negative position. *Today · 04 Oct UGX 0.00 · 0 payments · 0 new KYC*; the KPI row *Agent float UGX 0
-      (9 agents) · Field cash UGX 0 (0 collectors) · MTH recharge UGX 0 · KYC month 0* as before. The screenshot ends
+    - **The landing page hero reads *Cash in hand — per currency*: UGX and USD figures from the live book (not repeated here); Fiber & Starlink
+      · DishNet 4G · BlueCARD (live-book figures, not repeated here)** — R7's figures, and the Cashbook card's. No account
+      tiles, no negative position. The *Today · 04 Oct* line with its amount, payment and KYC figures; the KPI row *Agent float [amount withheld]
+      and its agent count · Field cash and its collector count · MTH recharge · KYC month* as before, their figures not repeated here. The screenshot ends
       above **Money Locations**, so the held-by-staff list itself has not been seen in a browser; the figure it lists for
-      the technician comes from the same balance call the Staff Cashbooks hero shows, 339,672.00.
+      the technician comes from the same balance call the Staff Cashbooks hero shows, the UGX amount held by staff.
     - **Two wording items noticed on the Staff Cashbooks page, not changed:** the tile says *UGX collected* and the
       balance says *Needs handover* — South Sudan's collections wording, while on Uganda this staff member's inflow is
       advances to be spent and accounted for, not collections to hand over. The figures are right; the words are a later
       instruction.
   - **Not yet done:** the 5.18.70 VOID's records log (still not received — the operator's terminal had stopped at the
     prompt; if VOID was not typed, the three 25 Sep hand copies of CB-66/CB-72 still stand as `USD` cash-ins #3, #4, #5
-    and the technician's My Wallet *Collections* line still counts their 300,000); Money Locations seen in a browser
+    and the technician's My Wallet *Collections* line still counts their amount, not repeated here); Money Locations seen in a browser
     (scroll down on the landing page); `bash scripts/deploy-5.18.71.sh --after-only`.
 
 ## 04 Oct — 5.18.72: the Staff Cashbooks tiles on Uganda say what the money is — "received · Advances & collections" and "Still to account for" — DEPLOYED 11:56 UTC (PASSED 23/0/0)
 
 **Reported by the operator (14:1x Kampala, after the 5.18.71 screenshots):** *"fix the collected and handover wording for
-uganda"*. On the technician's Staff Cashbooks page (UGX 339,672.00 held: 650,000 received, 310,328 out) the tiles read
-**"UGX COLLECTED 650,000.00"** and **"CASH WITH STAFF 339,672.00 — Needs handover"**, beside *"Handed over 0.00 — Given to
+uganda"*. On the technician's Staff Cashbooks page (a UGX balance held by staff, with its received and paid-out figures, not repeated here) the tiles read
+**"UGX COLLECTED [figure withheld]"** and **"CASH WITH STAFF [figure withheld] — Needs handover"**, beside *"Handed over [figure withheld] — Given to
 accounts"*. That is South Sudan's collections wording, written when every staff member with a bag was a field collector who
 collects payments and hands them over to accounts. On Uganda this staff member's inflow is **advances** (and any
 collections) to be spent on approved expenses and accounted for; the hero's own pills already said *"received"* / *"out"*,
@@ -4163,8 +4166,8 @@ The rollback is printed by the script, alone, at the end of its log — never ha
   - **R.** R1 all 10 files as `88d8442` has them, manifest 5.18.72; R2 `pilot=on`; R3 084 still installed, `3:1` rows,
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 196 files from Release A through 5.18.71 intact; **R6
     the 5.18.72 wording is in place and South Sudan's `collected` / `Needs handover` branch is still in the file**, beside
-    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber &
-    Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as at 10:59, no cash movement since; the
+    every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN HAND (figure not copied here) · USD (figure not copied here); Fiber &
+    Starlink, DishNet 4G and BlueCARD (live-book figures, not repeated here)** — the same figures as at 10:59, no cash movement since; the
     photo tables and files read exactly as before.
 - **Not yet done:** the operator's look at the technician's Staff Cashbooks page on 5.18.72 (the two tiles; the figures as
   before); the 5.18.70 VOID's records log (still not
@@ -4474,7 +4477,7 @@ at all** (*"DishNet — Client Fleet"*) — what it shows anonymously should be 
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
     the hand-off is a tenant setting, the portal gates on it, the token is refused under empty inputs, zoom allowed, no
     invented uptime, no hard-coded version**, beside every earlier marker; **R7** (5.18.71's read-only tool) **UGX CASH IN
-    HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the same figures as
+    HAND and USD, and the per-project figures for Fiber & Starlink, DishNet 4G and BlueCARD (live-book figures, not repeated here)** — the same figures as
     at 10:59 and 11:56, no cash movement since; the photo tables and files read exactly as before.
 - **Not yet done:** a Uganda customer's look at the portal on 5.18.73 (home card without the *Usage details* link, a site
   page without the *Usage Details* tile, the Account footer at v5.18.73, *No outage reported*, the sign-in page zooming);
@@ -4544,7 +4547,7 @@ the one value no screen could set, and shows the configured payment instructions
   (`portal_data.php` `$portalPayText`). Uganda has it (Airtel Money merchant, Ecobank account, how to reference a
   payment — written for the assistant and the quotations); South Sudan has it unset and keeps its Bank transfer block
   from the profile. Walkthrough finding 3 (*a Uganda customer is not told how to pay*) is closed from configuration the
-  operator had already approved; the text ends *"send … the transfer confirmation here"*, which on this screen is the
+  operator had already approved; the text ends by asking the customer to send the payment confirmation (its wording not quoted here), which on this screen is the
   *I've paid this invoice* button below it — the operator can reword the setting if wanted.
 - **Kept from 5.18.73:** the tenant setting and `TenantProfile::dataReportHandoff()`; the mint's two refusals;
   `DishNet.openDataReport()` never navigating without a token; the Account footer reading the installed version; the
@@ -4638,8 +4641,8 @@ answered **200 with no token at all**.
     untouched; R4 the pilot as before, no portal/CSRF file; R5 all 197 files from Release A through 5.18.72 intact; **R6
     the hand-off ON in both profiles, the portal gates on it, the token refused under empty inputs, the secret generator
     present, "How to pay" present, zoom, no invented uptime, no hard-coded version**, beside every earlier marker; **R7**
-    (5.18.71's read-only tool) **UGX CASH IN HAND 723,072.00 · USD 10,871.37; Fiber & Starlink 723,072.00, DishNet 4G
-    0.00, BlueCARD 0.00** — the same figures as at 10:59, 11:56 and 16:24, no cash movement today; the photo tables and
+    (5.18.71's read-only tool) **UGX CASH IN HAND (figure withheld) · USD (figure withheld); Fiber & Starlink (figure withheld), DishNet 4G
+    and BlueCARD (live-book figures, not repeated here)** — the same figures as at 10:59, 11:56 and 16:24, no cash movement today; the photo tables and
     files read exactly as before.
 - **Step 2 — DONE, about 20:0x UTC.** `set_config.php --key webhook_secret --generate` answered *"webhook_secret generated
   and stored (32 characters). It is not shown here"*, and the listing that followed reads **`webhook_secret set (32
@@ -5749,8 +5752,8 @@ Results:
     *"OK: 086_install_authorisation.sql (19 stmts, 15ms)"* at 14:39:51 by its own clock (UTC+3): 11:39:51 UTC, the
     second of the copy. R3 084 still installed, `6:2` rows, untouched; R4 the pilot as before, the channel
     `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 206 files from Release A through 5.18.74 intact; R6
-    every earlier marker and 5.18.83's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00; Fiber & Starlink
-    591,072.00, DishNet 4G 0.00, BlueCARD 0.00** — the book's own figures (5.18.83's changes touch no cash code); the
+    every earlier marker and 5.18.83's; **R7** (read-only) **UGX and USD cash in hand (not repeated here); Fiber & Starlink
+    / DishNet 4G / BlueCARD per project (live-book figures, not repeated here)** — the book's own figures (5.18.83's changes touch no cash code); the
     photo tables and files read exactly as before.
   - **What it meant at 11:39 UTC:** nothing changed for staff or customers. The switch was off, so no guard ran, the job
     page showed no panel and the customer page answered 404. Step 2 followed.
@@ -5927,7 +5930,7 @@ with 5.18.83: 30 rehearsed, 29 on the server.
     authorisation ON in both copies, and the installed `InstallScheduledWhatsApp` reads the new switch OFF in both; R3 086
     still applied and complete, `0:2:1:1:0` before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the
     channel `NullWhatsAppChannel`, no portal, CSRF or AI-layer file; R5 all 217 files from Release A through 5.18.83
-    intact; R6 every earlier marker and 5.18.84's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the
+    intact; R6 every earlier marker and 5.18.84's; **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the
     figures 5.18.83's deploy read; the photo tables and files read exactly as before.
 - **SWITCH-ON — 06 Oct, by 15:25 UTC, by the operator** (recorded from the terminal the operator pasted):
   - `set_config.php --key customer_wa_install_scheduled --value 1` printed *"customer_wa_install_scheduled = 1"*, the
@@ -6158,7 +6161,7 @@ deploy reads **34 ok / 0 failed / 0 notes**, 5.18.84's 32 with V9 and R8. On the
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
     before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI-layer file; R5 all 219 files from Release A through 5.18.84 intact; R6 every earlier marker and 5.18.85's;
-    **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.84's deploy read; the photo tables
+    **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.84's deploy read; the photo tables
     and files read exactly as before; **R8** the installed quotation reader read a 000181-shaped quotation as the form
     will (the kit, the plan, installation 150000, transport asked for).
   - **Not seen yet:** the form filled from a real quotation, and a booking WhatsApp naming its technician. Both wait for
@@ -6453,7 +6456,7 @@ the server expect 37**: there is no `dishnet.sqlite` there to back up, as at 5.1
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `1:7:1:1:3`
     before and after; 084 `11:3` rows, untouched; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI-layer file, none of the rest of Batch 1; R5 all 221 files from Release A through 5.18.85 intact; R6 every
-    earlier marker and 5.18.86's; **R7** (read-only) **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.85's
+    earlier marker and 5.18.86's; **R7** (read-only) **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.85's
     deploy read; the photo tables and files read exactly as before; R8 the quotation reader as at 5.18.85; **R9** the
     installed Inbox route on the server's own Inbox row: sales → the sales number, account → the account number,
     support, accounts and web → `sendVia()` as before, the registry dark.
@@ -6662,8 +6665,8 @@ word — done, 07 Oct 06:33 UTC: the server pulls both branches from GitHub, `cl
     `InstallScheduledWhatsApp` each read their switch ON in both copies; R3 086 still applied and complete, `2:9:1:1:1`
     before and after; 084 `16:3` rows, 16 files; R4 the pilot as before, the channel `NullWhatsAppChannel`, no portal,
     CSRF or AI media-layer file, none of Batch 1, the AI worker Batch 0 alone; R5 all 225 files from Release A through
-    5.18.86 intact; R6 every earlier marker and Batch 0's pieces; **R7** (read-only) **UGX CASH IN HAND 591,072.00 ·
-    USD 0.00**, the figures 5.18.86's deploy read — and the photo comparison above; R8 the quotation reader as at
+    5.18.86 intact; R6 every earlier marker and Batch 0's pieces; **R7** (read-only) **UGX CASH IN HAND (figure withheld) ·
+    USD (a live-book figure, not repeated here)**, the figures 5.18.86's deploy read — and the photo comparison above; R8 the quotation reader as at
     5.18.85; R9 the Inbox route as at 5.18.86's deploy; **R10: the assistant is asked for a lead on the sales number and
     on the support/account number, `AiLeadService` records it in Sales → Leads, and nothing reaches uCRM.**
   - **Not seen yet:** a lead from a real conversation. It waits for the next customer who tells the assistant what they
@@ -7095,7 +7098,7 @@ same 54, one for one** (the rehearsed deploy's full output, captured afterwards,
   - **R3, the earlier migrations:** 086 complete, `2:12:1:1:1` before and after; 084 `16:3`, 16 files.
   - **R4:** no media-layer, portal or CSRF file. **R5:** all 230 files from Release A through 5.18.87 intact.
     **R6:** every earlier surface, and 5.18.88's Batch 1 pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.87's deploy read. The photos as
+  - **R7** (read-only): **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.87's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off, a lead carries
     no channel fields (S7).
@@ -7630,7 +7633,7 @@ same 62, one for one** (by check, against the rehearsed deploy's full output); t
     runbook above.
   - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 238 files from
     Release A through 5.18.88 intact. **R6:** every earlier surface, and 5.18.89's pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.88's deploy read. The photos as
+  - **R7** (read-only): **UGX and USD cash in hand (live-book figures, not repeated here)**, the figures 5.18.88's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path; with the registry off a lead is
     5.18.88's, field for field, and the uCRM write is OFF.
@@ -8269,7 +8272,7 @@ now serves 3d9cb5f"*, and the 29 files were stamped at 15:52:02 UTC.
     read from the store above, which is the verification"* — the case the rehearsal planted (4t), as on 07 Oct.
   - **R4:** no media-layer, portal or CSRF file; the pilot's channel is `NullWhatsAppChannel`. **R5:** all 253 files
     from Release A through 5.18.89 intact. **R6:** every earlier surface, and 5.18.90's pieces.
-  - **R7** (read-only): **UGX CASH IN HAND 591,072.00 · USD 0.00**, the figures 5.18.89's deploy read. The photos as
+  - **R7** (read-only): **the landing page's cash in hand per currency, UGX and USD (the figures are not repeated here)**, the figures 5.18.89's deploy read. The photos as
     before the run.
   - **R8:** the quotation reader. **R9:** the Inbox route. **R10:** the lead path, and the uCRM write OFF.
   - **R11:** the registry is dark — its switch OFF in both copies, `enabled()` and `forStore()` off, 0 statements on its
@@ -9664,12 +9667,12 @@ PASSED.**
   with its assistant on.
 - `multi_number_channels_enabled = 1` (step 2) was **refused, twice**: *"Not yet: the department numbers are not all
   verified (sales, support). Nothing was saved."* The card's **Verify number** on the Sales and Support rows (docs/66 step
-  1.5) came first: **sales verified 21:50:04 UTC (••••15), support 21:50:30 UTC (••••48)**, each read from Evolution's
+  1.5) came first: **sales verified 21:50:04 UTC (last two digits withheld), support 21:50:30 UTC (last two digits withheld)**, each read from Evolution's
   report for its instance; accounts is covered by the support number. Read back with a read-only page check the operator
   ran in the browser's console (no names, instance names or numbers printed beyond two digits).
 - **`multi_number_channels_enabled = 1` then accepted** (step 2): the registry is ON. Next, per docs/66: the department
   test, then sales-001's Verify number, Register webhook, Switch on with the assistant off, and the assistant on.
-- **sales-001 verified 22:00:32 UTC (••••57)**, read from Evolution's report for its instance; still `disabled`,
+- **sales-001 verified 22:00:32 UTC (its number's last two digits not repeated here)**, read from Evolution's report for its instance; still `disabled`,
   assistant off. The card's buttons seemed to do nothing in the browser — uCRM keeps the outer page scrolled while the
   plugin's page reloads, so the answer box at its top stays out of view — so the operator pressed it from the console with
   a script that sends exactly that button's request once, refuses a step out of order, and prints the plugin's answer
@@ -11619,3 +11622,1591 @@ its log file stays on the server in `/root/dnb-5.18.94`.
   3. One sign-in to the portal as a Uganda customer. The consent step should show version 1.2, dated 16 October 2026.
   4. The badge script's log, if it was run.
 
+
+## 17 Oct — 5.18.95: security — the photo viewer serves only photos; the emergency-repair page has no built-in key; EFRIS PDF links are signed with the install's own key; no Splynx credentials in the code; no migration; the same code on both tenants; Domain B unchanged. `release/5.18.95` = `098f6b3`, cut on live 5.18.94 (`f4b4c96`); `scripts/deploy-5.18.95.sh` pinned to it and rehearsed twice — PUSHED 17 Oct; DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes — RESULT below; AFTER-CHECKS 17 Oct 16:04 UTC: repair key written, `--after-only` PASSED 68 ok / 0 failed / 1 note (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
+
+**Request.** While designing the Ecobank Bank screen (17 Oct), the design review found that the photo viewer could be
+pointed at any file in the plugin's data folder. The operator answered *"ok go ahed fix secruitry first"*. A sweep of
+the live code followed: every file read driven by a request, every route that runs before a login, every default key
+or secret written in the code, and the status of root docs/48's PD-1…PD-13. It also measured that **the GitHub
+repository is public**, so everything written in the code, in its history too, is readable by anyone. P3b (cash in
+hand under D2 = A) moves to 5.18.96 and the Bank screen to 5.18.97, after this release; the Bank screen's design makes
+the photo-viewer fix a precondition of its deploy.
+
+### Release notes
+
+Four holes, closed with the same code on Uganda and South Sudan. Nothing a legitimate user does changes, except the
+repair page's key file.
+
+- **K1 — the photo viewer (`?page=kyc_photo`).** Who could use it: a signed-in admin, accountant, support leader or
+  field accountant. The path was cleaned with a one-pass `str_replace()` that a crafted path survives, and the file
+  was read with no containment, so the viewer could serve the database and the configuration files.
+  - Now a path that is not a string, is empty, starts with `/`, or holds a backslash, a NUL byte or an empty, `.` or `..`
+    segment is refused (400) and never cleaned.
+  - The file served is the one `realpath()` finds inside the allow-listed photo folder the path names, and it must be a
+    file; otherwise 404. A symbolic link that leaves its folder is refused.
+  - The roles and the field agent's own-expense-photo rule are unchanged.
+- **K2 — the emergency-repair page (`?page=emergency_repair`, before any login).** With no
+  `data/emergency_repair_key.txt`, or an empty one, it fell back to a key written in the code, and the Runbook and the
+  Starlink Suspensions error box printed it. It offers drop_table, vacuum and clear_wal. Root docs/48 PD-11.
+  - The key file is now **required**: one line of at least 32 printable characters, no space, never containing the old
+    built-in key. A disabled page and a wrong key get one and the same 403; the key is compared with `hash_equals`; a
+    key that is not a string is refused.
+  - No answer prints the stored key: the action lines show `key=YOUR-KEY`. The Runbook shows the address with
+    `key=YOUR-KEY` and says the page works only once the key file exists; the Suspensions box links nowhere.
+  - drop_table also refuses the staff accounts, sessions, the financial audit trail, customer identities and sessions,
+    the payment, photo and installation-authorisation tables, whatever the name's case.
+- **A2/D1 — the EFRIS PDF link (`?page=efris_pdf`, before any login).** Its token fell back to a key written in the
+  code when `webhook_secret` was unset. The EFRIS tab now mints, and `efris_pdf.php` checks, `PdfLinkToken`'s token
+  under the install's own `pdf_link_secret`, read from the store copy of `kyc_config.json` on both sides — the key the
+  receipt and delivery links already use. No fallback. A bad token and a missing file get the same 404. **A link made
+  before the deploy stops opening;** it is made again from the EFRIS tab (these links live two UTC days and only an
+  admin makes one).
+- **D5 — the Splynx API key and secret were written in the code** (`public.php` and `cron_splynx_sync.php` filled them
+  into the settings; `?page=splynx_patch` wrote them to `kyc_config.json` and printed them). They now come only from
+  Settings → Splynx, and `?page=splynx_patch` answers 410 and changes nothing. **The values in the history stay public:
+  only replacing them in Splynx closes that** (Known limits 1).
+- **Not changed:** every setting, switch and record; `cron/master.php`, `main.php`, the retry job and its gate; the
+  pilot; South Sudan's behaviour except the closed holes. No migration.
+
+### Files — 21 against `f4b4c96`: 4 added, 17 changed, none removed
+
+- **Added (4):** `tests/test_kyc_photo_route.php`, `tests/test_emergency_repair_key.php`,
+  `tests/test_efris_pdf_link.php`, `tests/test_splynx_no_code_credentials.php`.
+- **Taken whole from the development commit `8357cd1c` (each identical to live before the change):** `efris_pdf.php`,
+  `tabs/admin/efris.php`, `cron_splynx_sync.php`, `tabs/help/runbook.php`, `tabs/admin/starlink_suspensions.php`,
+  `EMERGENCY_RECOVERY.md`, `MANIFEST.md`, `SAFETY.md`, `tests/test_pdf_link_token.php` (its EFRIS pin moves: the old
+  scheme now survives nowhere).
+- **Live's text plus the change's hunks alone:** `includes/routes.php` and `public.php` (the development branch's carry
+  the undeployed PD-8 guard and the partner API). The hunks' change lines equal the development commits' exactly.
+- **The version alone (6):** `manifest.json` (5.18.95) and the pins in the five `tests/test_distributor_*.php`.
+- 21 files changed, 570 insertions(+), 101 deletions(-).
+
+### Ancestry
+
+`098f6b3` (5.18.95, release) ← `f4b4c96` (5.18.94, live). The development commits are `e54625b0` (K1, K2) and
+`8357cd1c` (A2/D1, D5, K2's hardening); the script and the rehearsal `423ff052`. P3b's development line (5.18.96) is
+built on top of `423ff052`.
+
+### Tests
+
+- **The development branch, the full suite twice:** 295 files, **14,569 passed, 0 failed**, in each of two runs, file
+  by file identical (17 Oct). That is 5.18.94's 291 / 14,482 plus the four new files and their 87 assertions.
+  - A first run made with a private `TMPDIR` (mode 0700) failed 7 assertions in `test_cli_data_dir` and
+    `test_sl_block_retry_scope`. Both drop privileges with `setpriv` and cannot enter such a folder; the same 7 fail on
+    live `f4b4c96` and on the development branch's own tip under it, and both pass with the default `TMPDIR` on every
+    tree (19/0 and 86/0). The two counted runs used the default.
+- **The release, the full suite twice:** 283 files, **13,649 passed, 0 failed**, in each of two runs, identical (17
+  Oct): 5.18.94's 279 / 13,560 plus the four new files and the moved EFRIS pins.
+- **The new tests,** each over real HTTP on the sandbox, each with a control on `f4b4c96`:
+  - `test_kyc_photo_route` **39/0**: every allowed folder serves its photo byte for byte with its type to the four
+    privileged roles; a field agent sees only their own expense photo; a missing photo 404, a folder off the list 400;
+    the route's source refuses rather than cleans and contains by `realpath`. On `f4b4c96` the 36 behaviour checks pass
+    too (legitimate viewing unchanged) and the three source checks fail.
+  - `test_emergency_repair_key` **30/0**: with no key file, the old key, an empty key or none get 403 and nothing runs;
+    unusable key files (the old key, one containing it, 31 characters, a space) the same; a usable key: a wrong one and
+    a list get the same 403, the right one opens diagnose with `key=YOUR-KEY`; no answer prints the stored key; the
+    Runbook and the Suspensions page carry no key; drop_table refuses four protected names in any case. On `f4b4c96`
+    the old key opens the page with no key file. Four weakened copies (no length rule, the old key not refused, a
+    disabled page that still compares, the key printed again) are each caught.
+  - `test_efris_pdf_link` **10/0**: a link minted under the store copy's key opens the PDF byte for byte, yesterday's
+    too; an old-scheme token, a wrong one, an empty one and a missing file get the same 404. On `f4b4c96` the
+    old-scheme token opens it. A weakened copy without the token check is caught.
+  - `test_splynx_no_code_credentials` **6/0**: no PHP file assigns a quoted Splynx key or secret; requests leave none in
+    the configuration; `splynx_patch` answers 410 to an admin and changes nothing, 403 to an accountant. On `f4b4c96`
+    the first request writes the code's key into the configuration (its value never printed).
+- **The traversal shapes themselves** were reproduced on invented files during the sweep and the design, and the fix
+  was run against them there; they are not in a committed test.
+
+### South Sudan and Domain B
+
+- The fixes are the same code on both tenants; no line of them asks which tenant it is on. South Sudan's documents are
+  compared byte for byte on the server (A17, R22), as in 5.18.94.
+- Domain B is untouched: A7 and R14.
+
+### `scripts/deploy-5.18.95.sh` — 3,973 lines, sha256 `0c8b6da7ec971f6c…`
+
+Derived from `deploy-5.18.94.sh` by an asserted builder (71 edits), then reviewed (6 defects fixed, 32 edits). It keeps
+5.18.94's checks as regressions and adds:
+
+- **A22a–g, the fixes read as text in the pin,** each with its control: the same check on `f4b4c96` from Git must give
+  exactly the defect verdict it was written for, or the run refuses. No check prints a line of code: 5.18.94's holds
+  the Splynx values.
+- **A23, notes, never refusals:** whether the repair key file is in place (its size by `wc -c`, its lines by `grep -c`,
+  whether the plugin's PHP user may read it — never its content); whether the Splynx key and secret and the
+  `pdf_link_secret` are present in the settings (never their values).
+- **A14** also reads 5.18.94's state files, and needs a passing quarantine `--check` begun after 5.18.94's copy.
+- **A19 and A20 are gone** (5.18.94's own preconditions; A20 refuses every day after 16 Oct).
+- **R7:** the migration ledger's last row the same, and `plugin.sqlite3` the same size or larger. 5.18.94's R7 run of
+  the cash-in-hand tool on the live store is gone.
+- **R23a–g:** the same checks on the installed files; **R24:** the notes again; **RB:** after a rollback, every changed
+  file 5.18.94's by sha256 and every defect back.
+- Nothing it runs on the server opens a socket. Every command it prints carries its own log. The rollback is printed
+  once, after the verdict. When the key file is not in place, the summary prints the command that writes a new random
+  key into it, run alone, showing only the file's size, owner and mode.
+
+### The rehearsal — `scripts/harness/deploy-5.18.95/rehearse.sh` (871 lines, sha256 `1f86cdef659dfb5b…`)
+
+It cuts 5.18.94's rehearsal at its 94-3 marker, then runs the real `deploy-5.18.94.sh`, its `--after-only` and the
+quarantine's `--check`, so the sandbox starts as production is. Then 5.18.95: the controls (the delta; the 19 files
+the development commit's; the two files live's plus the hunks); A14 with failures planted in 5.18.94's state; the key
+file in each state, with every planted key, Splynx and PDF value searched for in every output, log and state file;
+each A22 check refusing on a pin with its one fix reverted, and weakened copies of the checks themselves; the deploy;
+`--after-only` run from the printed text; the rollback run verbatim from the printed text, and a redeploy; what is left
+behind.
+
+- **Trial 1 (17 Oct, 12:32–12:55 UTC): 382 passed, 0 failed** (125 runs of the deploy scripts, 9 of the quarantine).
+- **Trial 2 (17 Oct, 12:56–13:20 UTC): 382 passed, 0 failed, the same 125 and 9 runs.**
+
+### Reviews
+
+- **The sweep** (four lenses over `f4b4c96`): 29 findings, 26 confirmed by a sceptic that tried to refute each and
+  reproduced it on invented files, several of them the same defect found twice. This release takes the four whose fix
+  is local, needs no migration and changes nothing a legitimate user does (K2's key file aside); the rest are recorded
+  (Known limits 2).
+- **The fixes:** a bypass review of the repair page found no way past the gate and three hardenings, all applied (the
+  stored key no longer printed; one answer for disabled and wrong; printable keys only). Two test writers and one bypass
+  reviewer were stopped by a safety filter; the two tests were then written by hand, without traversal inputs.
+- **The script and the rehearsal:** an independent static review found six defects, all fixed before the rehearsal
+  ran: controls that passed when any defect showed, now pinned exactly; the key note disagreeing with PHP's `trim()`; A14
+  not checking the quarantine's rule 3; an ineffective guard in `db_judge`; a misplaced key file going into the backup;
+  the header's account of what runs on the server.
+
+### Runbook — each step is the operator's, and each needs the operator's word
+
+1. **Say the word to push.** `release/5.18.95` and the development branch are pushed together, just before the deploy:
+   the repository is public, and the fix shows where the holes were.
+2. **Deploy**, as root on the server, then send back THE LOG FILE (never a copy of the terminal):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.95 && mkdir -p /root/dnb-5.18.95 && bash scripts/deploy-5.18.95.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.95/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, with notes: A23's (the key file, Splynx, the PDF key), R3's, R19's not yet conclusive.
+3. **If the summary says the repair key file is not in place,** run the key command it prints, on its own. The key goes
+   into the file and nowhere else. Never paste it, the file or a repair link anywhere.
+4. **At least 20 minutes after the copy**, the `--after-only` the summary prints, its own command; then the quarantine's
+   own `--check`.
+5. **Replace the Splynx API key and secret in Splynx** and enter the new ones under Settings → Splynx.
+
+### Known limits and open risks
+
+1. **The repository is public.** The old repair key, the EFRIS fallback key, the Splynx key and secret, the WhatsApp
+   feed secret and the BlueCard feed tokens are in its history. Removing a literal from the code does not unpublish
+   it: each must be replaced at its source. The Splynx pair can be replaced now (Runbook 5); the WhatsApp feed secret
+   and the BlueCard tokens need both ends changed together, in the next security release.
+2. **Recorded for the next security release** (the sweep's findings, verified): the WhatsApp webhook accepts a request
+   when its secret is blank (A3/D2) and its feed secret is a code literal (D3); the BlueCard feed proxy runs before any
+   login (PD-12/D6); a reflected script injection on the stock dashboard (PD-9); the login and `me` answers return the
+   whole account record (PD-3); unlisted tabs are open (PD-5); `customer_360` reads any client (PD-6); the stock API's
+   roles (PD-7); the JSON API's CORS and CSRF (PD-8, its JSON half fixed on the development branch, not deployed); the
+   staff API's permissions (PD-2); the data-report hand-off's source-constant key (D7); predictable default staff
+   passwords (D8); the fiber import's caller-named folder (FR-3, low); unaudited cashbook mutations (PD-13).
+3. **The repair key travels in the address,** so it reaches the web server's access log and the browser's history. A
+   tools/ home for the page, run over SSH, is the long-term shape.
+4. **drop_table still cannot drop anything:** its existence check leaves a cursor open, so SQLite answers "table is
+   locked". It fails safe; fixing it would make a destructive action work, which is the operator's decision.
+5. **Every request starts a session before the repair page's check,** the refusals included. Pre-existing.
+6. **SAFETY.md's v4.21.16 entry still names the old key,** as history; the 5.18.95 entry above it says it is
+   superseded and burned.
+7. **`tests/test_customer_pwa.php` still leaves `php -S … /tmp/dn_pwa_*` servers** after a suite run (5.18.94 Known
+   limits 6); stopped by hand before the rehearsals.
+
+### Rollback — its own command, never pasted with the deploy
+
+`scripts/deploy-5.18.95.sh --rollback` asks for `ROLLBACK`, puts 5.18.94 (`f4b4c96`) back through `deploy-hybrid.sh`,
+and checks it (RB): every changed file 5.18.94's, every defect back — **the four holes open again**, the repair page
+again on its built-in key when no key file exists. A key file written for 5.18.95 stays and keeps working with 5.18.94.
+Then run the quarantine's own `--check`. The summary prints the command, with its own log, on its own lines.
+
+### RESULT — DEPLOYED 17 Oct (copy 15:05:34 UTC): PASSED 99 ok / 0 failed / 6 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no secret,
+and the terminal held none.
+
+- **The run.** Begun 15:04:28 UTC. `/opt/dishnet` fast-forwarded to `bda21f6`, and `release/5.18.95` (`098f6b3`) fetched.
+  Live before: `f4b4c96` (5.18.94), PHP 8.1.34 in the container. No tracked edits, nothing untracked under the plugin.
+- **Stage A passed.** A0, A7, the delta exactly the 21 files, no migration. **A22a–g:** every fix read in the pin, and each
+  control on `f4b4c96` gave exactly the defect verdict its check was written for. A2–A18, A21 as in 5.18.94; A14: the
+  quarantine holds, its `--check` of 14 Oct 03:14:46 UTC began after 5.18.94's copy. Backup in
+  `/root/dnb-5.18.95/backup-20261017T150428Z` (the database, the data folder without the repair key file, the installed
+  5.18.94, the stray folder as files, the vault, the event queue).
+- **The notes (6):**
+  - **A23a and R24, the repair key file: ABSENT.** So until this deploy the repair page opened, before any login, with
+    the key written in the code. It is now shut for everyone until the key file is written (Runbook 3).
+  - **A23b:** the Splynx key and secret are present in the settings. 5.18.94's code wrote the code's values there when
+    they were empty, so these are likely the public ones: replace them in Splynx (Runbook 5).
+  - **A17:** two installation requests pending under v1.0 keep v1.0, as in 5.18.94.
+  - **R3:** `migration.log` holds no line for 087; read from the store instead, as on every deploy since 5.18.89.
+  - **R19:** the quarantine holds; not yet conclusive (master's last run of the retry job, 15:05:07 UTC, was before the
+    copy). `--after-only` after 15:25:34 UTC.
+  - **A23c and R24b:** the `pdf_link_secret` is present.
+- **The copy:** 15:05:34 UTC, the container serving `098f6b3`. V1–V13 passed; V4: no fatal since 15:05:33 UTC.
+- **Stage R passed.** R1 the 21 files byte for byte, the manifest 5.18.95; R5 all 275 earlier files; R7 the migration
+  ledger's last row and the database's size the same as stage A's; **R23a–g every fix in the installed code, each
+  control exact**; R2–R22 as in 5.18.94 — every switch, setting, row, route, prompt and policy unchanged, South Sudan and
+  Domain B unchanged, the event queue's one waiting event still there.
+- **Still to come (at the time):** the repair key file; `--after-only` (R19 conclusive); the quarantine's `--check`;
+  the Splynx key replaced. The first three are done — AFTER-CHECKS below.
+
+### AFTER-CHECKS — 17 Oct 16:04 UTC: all three PASSED
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. None of the three
+commands prints a secret, and the terminal held none: the key file's content was never shown.
+
+- **The repair key file (Runbook 3).** Written by its own command: *"repair key written: 49 bytes, owner 1000:1000,
+  mode 600"* — 48 hex characters and the newline, owned by the plugin's PHP user. The deploy had found no file at that name
+  (A23a), so nothing was moved aside. The repair page now opens with that key and with nothing else.
+- **`--after-only`, begun 16:04:13 UTC: PASSED 68 ok / 0 failed / 1 note.**
+  - Live `098f6b3` (5.18.95), as the deploy left it. V1–V13 passed; V4: no fatal since 15:05:25 UTC (2,176 lines read).
+  - R1–R23g as at the deploy, each control exact. R7: the migration ledger's last row the same, the database 32,768
+    bytes larger since the deploy's stage A (a live plugin writes; no migration).
+  - **R19 is conclusive:** master ran the retry job at 16:00:06 UTC, after the copy (15:05:34 UTC). Nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - **R24: the repair key file is in place** (32–64 bytes, one line of the key's form, readable by the plugin's PHP
+    user; its content was not read). The summary says *"repair key — in place, nothing to do"*. R24b: the
+    `pdf_link_secret` is present.
+  - The one note: R3, `migration.log` holds no line for 087, as on every deploy since 5.18.89.
+- **The quarantine's `--check`, begun 16:04:56 UTC: PASSED 9 ok / 0 failed / 2 notes.** K3–K13 hold: the old name is
+  empty, the kept file is unchanged (key, one name, sha256, size, time, owner, mode), no process holds it, and the
+  installed gate still stops the retry job, which ran at 16:00:06 UTC with nothing made. The notes: K2, the container
+  serves `098f6b3` rather than the quarantine's `69c87a6` (the gate is the same); K7, `config.json` in `<plugin>/data`
+  removed and remade since the move — names only, another writer's file, not a database.
+- **Still to do:** replace the Splynx key and secret in Splynx itself, then enter the new ones under Settings → Splynx
+  (Runbook 5). Until then the values in the settings are probably the ones that were written in this public
+  repository.
+
+## 17 Oct — 5.18.96: P3b — cash in hand under D2 = A (UGX and USD): on the Uganda tenant with no SSP it counts approved entries with no account or on a cash or mobile-money account, and nothing else; X5 — the CEO page's position tiles become cash in hand; D1 — on the Cashbook the NEGATIVE alert becomes one red alert per currency whose cash in hand is below zero, in that currency's code, and the Add Entry pill shows UGX cash in hand; no migration; every other book 5.18.95's verbatim; Domain B unchanged. `release/5.18.96` = `e35ecce`, cut on 5.18.95 (`098f6b3`); `scripts/deploy-5.18.96.sh` pinned to it and rehearsed twice — PUSHED 18 Oct; DEPLOYED 18 Oct (copy 04:44:18 UTC): PASSED 124 ok / 0 failed / 3 notes — RESULT below
+
+**Request.** The operator decided D2 = A for UGX and USD on 17 Oct (*"A for UGX and USD now"*), then *"yes do it i
+will go with your recommadnation"*: P3b as designed, with D1 and X5. It was built as 5.18.95 and moved to 5.18.96 when
+the security release went first (*"ok go ahed fix secruitry first"*).
+
+### Release notes
+
+Uganda only, and only where the rule is in force: the Uganda tenant with no SSP, read from the service's own
+configuration (`StaffJobsGate::applies()` and no SSP). Everywhere else every page runs 5.18.95's code paths.
+
+- **Cash in hand** counts approved entries that sit on no account or on a cash or mobile-money account. Ecobank, the
+  other non-cash accounts, and pending and rejected entries are out; voided entries stay out. One predicate, in
+  `cashInHand()` and in both running-balance streams, so every reader below agrees:
+  - the Cashbook's CASH IN HAND cards, its Balance column and the CSV (an entry the rule leaves out — on a non-cash
+    account, or pending or rejected — stays in the list and the export; its Balance is "—" on the page and empty in
+    the CSV, where the All layout's Balance Currency is empty too; under 5.18.95 a pending or rejected entry carried a
+    running balance);
+  - the landing page and its three project chips;
+  - the evening WhatsApp at 18:00 Kampala;
+  - `tools/cash_in_hand.php`.
+- **X5 — the CEO page.** "UGX Position" and "USD Position" become "UGX Cash in hand" and "USD Cash in hand", all
+  projects; the heading says which tiles are all projects and which are DishNet; "Today's Cash" becomes "Today's
+  collections".
+- **D1 — the Cashbook.** Under the rule the "Cash balance is NEGATIVE" alert is not shown. In its place there is one
+  red alert for each currency whose cash in hand on the project is below zero, titled "<CUR> cash in hand is below
+  zero", in that currency's own code, saying that entries with no account, or on the wrong account, can cause it.
+  **A red USD alert is therefore expected** while USD reads below zero (next bullet). The Add Entry UGX pill shows UGX
+  cash in hand, with its code. The "No cash received in last 7 days" alert now tests UGX cash in hand instead of the
+  project balance before it can show; its receipt count and its wording are unchanged (every approved receipt of the
+  project in the last 7 days, on any account and in any currency). Where the rule is off, all three are 5.18.95's.
+- **USD reads below zero** under the rule: dollars that arrived in the bank no longer count, dollar spending on no
+  account still does. Accepted on 17 Oct; it recovers as entries are put on their accounts (R1–R3).
+- **The one exception, in the UGX-only view:** an entry stored with no currency counts as UGX but is not listed there,
+  so when it is newer than the newest UGX entry the top Balance of that view is short by it. The All view lists it.
+- **Not changed:** every entry, setting and switch; the P&L; staff cash and the staff app (whose Uganda cash tiles read
+  0 today and still will: X4); the Opening Balances screen; South Sudan, a South Sudan tenant without SSP, a Uganda
+  tenant with SSP and a Uganda box whose gate fails — 5.18.95's SQL and pages verbatim. No migration.
+
+### Files — 17 against `098f6b3`: 5 added, 12 changed, none removed
+
+- **Added (5):** `tests/test_cash_in_hand_p3b.php` (T1), `tests/test_cash_in_hand_p3b_screens.php` (T2),
+  `tests/test_cash_in_hand_p3b_south_sudan.php` (T3), `tests/test_d1_bank_balance_readers.php` (T4),
+  `tests/test_cash_in_hand_p3b_mutants.php` (T1's weakened copies).
+- **Changed (6), taken whole from the development tip `c4f03dca`, each identical at `098f6b3` and `423ff052` before the
+  change:** `lib/CashbookService.php`, `tabs/accounts/cashbook.php`, `tabs/accounts/accounts_dashboard.php`,
+  `tabs/admin/ceo_dashboard.php`, `cron/cashbook_summary.php`, `tools/cash_in_hand.php`.
+- **The version alone (6):** `manifest.json` (5.18.96) and the pins in the five `tests/test_distributor_*.php`.
+- 17 files changed, 3,352 insertions(+), 33 deletions(-).
+
+### Ancestry
+
+`e35ecce` (5.18.96, release) ← `098f6b3` (5.18.95, release, live) ← `f4b4c96` (5.18.94). The development commits are
+`47445eea` (the change), `35268147` (the review's nine findings) and `c4f03dca` (the move to 5.18.96), on `423ff052`;
+the script and the rehearsal `419e2ffd`; T1's count `30798cf2`; the rehearsal's two fixes `f0cd656d`; merged into
+the development branch as `7925c587`.
+
+### Tests
+
+- **The release, the full suite twice:** 288 files, **14,569 passed, 0 failed**, in each of two runs, file by file
+  identical (17 Oct): 5.18.95's 283 / 13,649 plus the five new files — T1 548, T2 145, T3 166, T4 34, the mutants 27.
+- **Run 2 took three attempts.** The first (17 Oct, 16:09–17:08 UTC) was stopped by the two-hour limit on the
+  background command that ran both passes, after 249 of 288 files, 0 failed (`test_staff_whatsapp.php` printed
+  `Terminated` and gave no summary). **The second (17:09–18:09 UTC) failed 3 checks in `test_receipts_once.php`, which
+  P3b does not touch. Cause found and proved; the run was repeated alone (21:04–22:02 UTC) and passed 14,569 / 0.**
+  - It ran while the Bank screen's build was running tests in two other worktrees. Seventeen test files of the release
+    (twenty-two of the development tree) clean up with wildcard globs over `sys_get_temp_dir()` — every such fake
+    server's state on the machine, not only their own; eight of them (thirteen of the development tree) use
+    `/fake_evo_state_*.json` or `/fake_ucrm_*.json`, the two that reach the receipt test's files. A file trace caught
+    `test_image_media.php` and `test_voice_media.php`, from both other trees, unlinking exactly
+    the receipt test's `/tmp/fake_evo_state_<hash>.json` and `/tmp/fake_ucrm_notify_<port>.json` mid-test: its fake
+    WhatsApp server forgot texts it had received and its fake uCRM the payments it was seeded with.
+  - Reproduced: with those media tests replayed beside it, the receipt test failed 1 run in 4, 3 in 9 and 0 in 5;
+    alone it passed 5 of 5, and under six CPU hogs 6 of 6, on 5.18.95 and 5.18.96 alike; no port was shared and
+    no connection refused in any traced run. **The control:** deleting the two
+    files every 7 seconds while it runs alone fails it 2 of 2, and the next clean run passes 23/0.
+  - Not a product fault and not P3b's: a sequential suite never runs two such tests at once. The rule *never run two
+    suites or rehearsals at once* now covers any tests at all, from any worktree.
+- **The development branch with P3b merged (`7925c587`), the full suite twice:** 300 files, **15,491 passed, 0 failed**,
+  in each of two runs, file by file identical (18 Oct, 01:42–02:45 and 02:45–03:48 UTC). That is 5.18.95's 295 / 14,569 plus the five new files
+  (920) and two checks of `test_quote_tax_line.php` that 5.18.95's development tree skipped (its comparison with
+  `4c01d1c` needs the repository beside the plugin, which that worktree lacked); in this checkout both run and pass.
+
+### `scripts/deploy-5.18.96.sh` — 4,787 lines, sha256 `24b2f8b6aae48bfc…`
+
+Derived from `deploy-5.18.95.sh`; it keeps 5.18.95's checks as regressions — its seven security fixes read as text
+in the pin, the live code and the installed code, each with its control on `f4b4c96` (A22a–g, A22L, R23a–g) — and
+adds:
+
+- **The figures go to a cash sheet, never to the terminal or the log:** `/root/dnb-5.18.96/cash-<mode>-<stamp>.txt`,
+  mode 0600 in a folder of mode 700. The terminal and the log carry its path, its line count, the first 16 hex of its
+  sha256 and the `less` command.
+- **On copies, never on the live book:** every reading of the book is of a `VACUUM INTO` copy with copies of the three
+  configuration files and a vault holding only the book's own keys; every PHP process on a copy has its own
+  `DN_VAULT_FILE`; the live vault's sha256 and time are read around every batch (Z1); nothing of it is left in `/tmp`
+  (Z2).
+- **A22-T1 / R25:** T1 under the server's own PHP from a code copy, at its pinned count (548 passed, 0 failed).
+  **R24:** T4 against the installed files. **A24 / R26:** South Sudan, a South Sudan tenant without SSP and a Uganda
+  tenant with SSP unchanged through the library, with a Uganda book as the control.
+- **A23 / R23:** cash in hand of this server's book before and after, on copies; P0's own tool (at `5954ede5`, its
+  sha256 checked) on the same copy — its "today" must equal the live code's figure and its option A must equal D2 = A
+  plus the entries not approved; the drift between them named by row id; rule A must be in force on this server's own
+  configuration, or nothing is deployed.
+- **A14:** a passing quarantine `--check` begun after 5.18.95's copy (the operator's of 17 Oct, 16:04:56 UTC).
+- Nothing it runs in the container opens a socket.
+
+### The rehearsal — `scripts/harness/deploy-5.18.96/rehearse.sh` (1,223 lines, sha256 `68f30475165f0543…`)
+
+It builds the sandbox with 5.18.95's own rehearsal up to its rollback, so 5.18.95 is live and its `--after-only` and
+the quarantine's `--check` have passed, as on the server. On it: a synthetic book from P0's own builder, a webhook
+secret and a vault credential planted, a stand-in posting a receipt during the run, and three observers on every run.
+It proves the pin, A14's refusals, six faulty pins each refused at A22-T1 and again by the check written for it, the
+copies as the evidence, the deploy PASSING with the receipt as its drift, `--after-only` and the rollback run as
+printed, and weakened copies of the script each caught.
+
+- **Its first run — two trials, 17 Oct 22:03–23:27 UTC: 548 passed, 4 failed, identical.** All four were the
+  observers' checks, and the deploy script was right both times; the rehearsal was wrong twice (`f0cd656d`):
+  - **Its audit took the adjustment lookup for a run of the cash tool.** `CIHJ_PHP` is a `php -r` reading of the copy
+    with PDO, read-only, that loads no plugin code; its source names `tools/cash_in_hand.php` as a label of the cash
+    sheet, and the audit searched the whole command, source included. So every reading of the book counted two "runs
+    on a copy without a vault of their own": 86 over the rehearsal (43 readings × `pre` and `final`, in 32 runs of the 5.18.96 script), measured with the
+    audit made to write each one out, then put back. The source of a `php -r` is no longer read as a path; its
+    arguments still are. A new control writes three calls as the fake docker records them — the lookup, the tool run
+    from the plugin folder with no vault (4e's shape) and a code copy with no vault — and needs `copies=2 novault=2
+    plugin=1`; against the old audit it reads `copies=3 novault=3` and fails.
+  - **The deliberate trips were recorded on one line.** `trip96` appended the run's tag with no newline, so 2h, 2i
+    and 4e read as one line and none was left out of the final sweep. One tag a line: on three tags the fixed helper
+    gives 3 lines with `012` found, the old 1 line and none.
+- **Trial 3 (18 Oct, 00:17–00:59 UTC): 553 passed, 0 failed** (165 runs of the deploy scripts, 12 of the quarantine).
+- **Trial 4 (18 Oct, 00:59–01:41 UTC): 553 passed, 0 failed, the same 165 and 12 runs.** 553 = the 548 plus the
+  four observers' checks now passing and the new control.
+
+### RESULT — DEPLOYED 18 Oct (copy 04:44:18 UTC): PASSED 124 ok / 0 failed / 3 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **The run.** Begun 04:43:08 UTC. `/opt/dishnet` fast-forwarded `bda21f6..d47c81b`, `release/5.18.96` (`e35ecce`)
+  fetched. Live before: `098f6b3` (5.18.95), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 17 files, no migration. A22a–g and A22L: 5.18.95's seven fixes in
+  the pin and in the live code, each control exact. A2–A18, A21 as in 5.18.95; A14: the quarantine's `--check` of 17
+  Oct 16:04:56 UTC began after 5.18.95's copy. **A22-T1: 548 passed, 0 failed under the server's PHP.** **A23.1–A23.8:**
+  on a copy of the book, the live code's figure equals today's SQL and the pin's equals D2 = A's in all 8 cells; the
+  parts add up to the cent; P0's own tool agrees (no rows not approved, so P0's A is D2 = A exactly); the 12 Sep
+  adjustment found once, approved, on no account; no orphan, text id, mismatched currency or unknown kind; rule A in
+  force on the server's own configuration. **A24:** South Sudan and the two misconfigured books unchanged. Backup in
+  `/root/dnb-5.18.96/backup-20261018T044308Z`; the event queue held nothing not done.
+- **The copy:** 04:44:18 UTC, the container serving `e35ecce`. V1–V13 passed; V4: no fatal since the copy.
+- **Stage R passed.** R1 the 17 files byte for byte, the manifest 5.18.96; R5 all 287 earlier files; R7 the ledger and
+  the database's size unchanged; R23a–g the fixes installed; **R23.1–R23.10:** the installed figure equals D2 = A's SQL
+  in all 8 cells, 5.18.95's code on the same copy equals today's, the parts add up, P0 agrees, the Balance column and
+  the CSV keyed by their streams, the installed tool's figures equal the code's, no drift since A23; **R24** T4 20/0 on
+  the installed files; **R25** T1 548/0; **R26** South Sudan unchanged. Z1 the live vault untouched; Z2 nothing left in
+  `/tmp`.
+- **The notes (3):** A17, two installation requests pending under v1.0 keep v1.0; R3, `migration.log` holds no line for
+  087; **R19, not yet conclusive** (master's last run of the retry job, 04:35:04 UTC, was before the copy) —
+  `--after-only` after 05:04:18 UTC.
+- **The cash sheet:** `/root/dnb-5.18.96/cash-deploy-20261018T044308Z.txt`, 453 lines, read on the server only.
+- **Still to come:** `--after-only` (R19 conclusive) and the quarantine's `--check`; the next day's `--after-only`;
+  the screens and the physical count.
+- **The operator's first reaction (18 Oct, with the Cashbook's UGX and USD exports, which are not reproduced here):**
+  *"dont mix the bank with physical cash … keep it separate so we know exactly ECO BANK UGX balance then ECO BANK USD
+  balance not combine them keep physical cash as it is"*. The exports show 5.18.96 as designed — the Ecobank and other
+  account rows still listed, with no balance, and counted nowhere — but the Cashbook still lists them among the cash
+  rows. Answered and taken up as its own change.
+
+### AFTER-CHECKS — 18 Oct 04:55 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **`--after-only`, begun 04:54:58 UTC: PASSED 83 ok / 0 failed / 1 note**
+  (`/root/dnb-5.18.96/after-20261018T045458Z.log`).
+  - Live `e35ecce` (5.18.96), as the deploy left it; the checkout at `d47c81b`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them; 086 and 087 complete, their rows and trail unchanged.
+  - V1–V13 passed; V4: no fatal since the copy (355 lines read).
+  - **R19 is conclusive:** master ran the retry job at 04:46:24 UTC, after the copy (04:44:18 UTC). Nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - R7: the migration ledger's last row and the database's size the same as at this run's stage A and at the deploy's.
+  - **R23.1–R23.10 on a fresh copy of the book (04:55:48 UTC):** the installed figure equals D2 = A's SQL in all 8
+    cells; 5.18.95's code on the same copy equals today's SQL; the parts add up to the cent; P0's tool agrees; the
+    Balance column and the CSV 16 of 16; the installed tool's figures equal the code's; **no drift since the deploy's
+    A23 (04:43:37 UTC)**. R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault untouched since the
+    deploy's stage A; Z2 nothing left in `/tmp`.
+  - The one note: R3, `migration.log` holds no line for 087, as on every deploy since 5.18.89.
+  - The cash sheet: `/root/dnb-5.18.96/cash-after-20261018T045458Z.txt`, 253 lines, read on the server only.
+- **The quarantine's `--check`, begun 04:56:25 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261018T045625Z.log`). K3–K13 hold: the old name is empty, the kept file is
+  unchanged, no process holds it, and the installed gate still stops the retry job, which ran at 04:46:24 UTC with
+  nothing made. The notes, as on 17 Oct: K2, the container serves `e35ecce` rather than the quarantine's `69c87a6` (the
+  gate is the same); K7, `config.json` in `<plugin>/data` removed and remade since the move — names only, another
+  writer's file, not a database.
+- **A second pair at 05:19 UTC, both PASSED.** `--after-only` begun 05:19:40 UTC: 83 ok / 0 failed / 1 note (R3), the
+  retry job's latest run 05:15:05 UTC after the copy, a fresh copy at 05:20:18 UTC, no drift since A23; cash sheet
+  `/root/dnb-5.18.96/cash-after-20261018T051940Z.txt` (253 lines). The quarantine's `--check` begun 05:20:51 UTC: 9 ok /
+  0 failed / 2 notes (K2, K7), the retry job's 05:15:05 UTC run making nothing.
+- **The screens and the first count (18 Oct, about 05:24 UTC; the operator's screenshot, whose figures are not
+  reproduced here).** The Cashbook's two CASH IN HAND cards on project dishnet read under D2 = A. **The operator's
+  physical USD count is below the USD card**, and equals what 5.18.95's card showed. Measured on the operator's own USD
+  export, privately and to the cent: 5.18.95's rule (every entry not voided, any account) gave exactly the count, but only
+  because **one unapproved manual "Bank Transfer" entry of 5 Oct**, made as a balancing entry under that rule, cancelled
+  the bank and share-capital rows that rule wrongly counted as cash **and** a further, unexplained amount. D2 = A leaves
+  out the bank rows and the unapproved entry alike, so the unexplained amount shows again: the book holds USD from the
+  late-September loans that the drawer does not. **Not a software fault, and not a change to the book** (R23.10: no row
+  changed). Approving that entry as it stands would take the USD card far below zero.
+- **The operator's decision (18 Oct), asked and answered:** keep the bank out and fix the gap (the recommended option) — D2 = A stays;
+  the operator records the gap as one entry, a cash-count difference not yet explained (*"Not sure yet"*), and voids the
+  5 Oct balancing entry, so the card equals the drawer and nobody can approve that entry later. The steps are given to
+  the operator as checked against the live code (`e35ecce`), not by any change of code or data from here.
+- **And the bank, as the operator described it:** *"down to cashbook show ECO Bank and then we have two hero section like
+  ECO Bank UGX and ECO BANK USD"* — a menu item **ECO Bank** directly below Cashbook, with two cards, ECO BANK UGX and
+  ECO BANK USD, each the balance from Ecobank's own statement; the Cashbook keeps physical cash only. Taken up with the
+  Bank screen (5.18.97) and the Cashbook's physical-cash list as one change.
+- **The design that follows (18 Oct, v2), and the operator's three answers.** Two releases: **5.18.97 — ECO Bank**, a
+  menu item directly below Cashbook (administrators, Uganda, once switched on), two dark-grey cards ECO BANK UGX and
+  ECO BANK USD each showing Ecobank's own available balance after its last kept statement line, with its own date and
+  no total, the statement lines below, nothing on the Cashbook changed; then **5.18.98 — the Cashbook physical cash
+  only**, the Ecobank, stock and supplier rows moved to a read-only tab "🏦 Bank & other accounts", cash in hand
+  unchanged. Answers: **Q15** *"Yes, add it"* — ECO Bank also on the CEO page's Quick Links after Cashbook, an
+  administrator's only menu on a phone; **Q1** *"Leave them, count them"* — bank money recorded with no account stays
+  on the cash list and in cash in hand, the deploy printing counts only; **Q2** *"ECO Bank first"* — 5.18.98's deploy
+  refuses until both ECO Bank cards show a figure.
+
+### 18 Oct — privacy redaction of the current files, and what it found
+
+On the operator's answer *"Redact in current files (Recommended)"*: real book figures, customers' names and kit serials,
+uCRM client numbers, a person's phone number, the Airtel Money merchant ID and a messaging credential were replaced by
+words in **203 lines of 35 files** (`c60f5176`), each line replaced only where its sha256 still matched what the sweep
+read; every changed shell script passes `bash -n`. Left on purpose: the business's public contact number inside the
+code of historical deploy scripts and rehearsals, and a public algorithm author's credit in the pinned R0 tool. An
+independent check of the diff found no private value left on a changed line; twelve lines that had lost meaning (a
+sign, a garbled sentence, a runbook line commented out, a public list price) were corrected afterwards. **The values
+remain in Git history, which is public.**
+
+**Found by the same check — credentials in public source, to rotate (values never written here):**
+- the WASender (WhatsML) shared auth key — in text since 2 Sep (`09b40728`), removed from `MANIFEST.md` by `c60f5176`;
+- the WhatsApp feed/webhook shared secret — a hard-coded fallback in `cron_wa_sync.php`, `dishnet_wa_pusher.php` and
+  `includes/api/api_whatsapp.php`;
+- two LTE / BlueCARD feed tokens (South Sudan) — hard-coded fallbacks in `cron_lte_sync.php`, `api_cron_debug.php`,
+  `api_lte_admin.php`, `lib/BlueCardDb.php`, `tabs/admin/settings.php`, `tabs/lte/lte_bluecard.php`, `tabs/lte/bc_portal.php`;
+- the Splynx key and secret (already known; removed from the text tree by 5.18.95) — still inside the tracked archive;
+- **`dishnet-hybrid-sudan.zip`**, a tracked snapshot of the plugin from 2 Sep (`b384d44e`), holds every one of the above
+  and the unredacted text;
+- **`includes/post/post_sync.php:349`**: the default password of a retailer account created from uCRM is a fixed formula
+  of the CRM id, so an unchanged account's password can be computed by anyone who reads this public source.
+Each needs a code change (read from the settings, refuse when unset) together with the rotation — the next security
+release. **Still in code and tests (a later clean-up release, synthetic values changed together with their
+assertions):** customers' names, kit serials and service lines in comments, fixtures and examples; staff members' real
+figures in comments; the operator's own number as a South Sudan default and in tool examples; staff e-mail addresses
+mapped in code; the bank account numbers in the invoice and quotation templates (printed to customers by design) and
+the merchant ID (published on the website by design) — the last two are the operator's to decide.
+
+**The operator's answers (18 Oct).** Splynx and LTE / BlueCARD: *"currently we are not using this you can hide from menu
+and park it"* — both are to be parked on Uganda (out of every menu, their jobs stopped, their pages closed; code, data and
+settings kept; one switch to bring them back), in the security release above. The South Sudan LTE / BlueCARD server that
+the two feed tokens open: **switched off** — so those tokens leave the code but need no rotation there.
+
+**The park, mapped on the live code (`e35eccee`), and four more answers (18 Oct).** Found: on Uganda the LTE feed job
+runs every 5 minutes against the switched-off South Sudan server — about 16 calls that fail, each allowed up to 10 s to
+connect — with token A taken from the code. Parked on Uganda by one switch per feature (`splynx_parked`, `lte_parked`;
+the country profile parks both, so the deploy writes no setting): Splynx NOC, My Install Jobs, the Splynx settings tab,
+the Splynx and Fiber Finance jobs, the 07:00 support summary built from Splynx tickets; the whole LTE Network menu
+section, the 4G tiles and cards, the LTE jobs. Commissions, Daily Report, Settlement and Sync Health also cover
+Starlink and collections, so they move to Accounts → Reports for the same people. Answers: *"Park them too"* — Fiber
+Pipeline, Fiber Costs and the hourly Fiber Finance sync park with Splynx; *"No new entries"* — nothing new can go into
+the Cashbook's 4G and BlueCARD books, and each tab shows only while its book holds an entry that is not voided (the
+deploy prints the counts only); *"No, Uganda only"* — **no South Sudan installation runs this plugin any more**;
+Splynx's server: *"Switched off"* — nothing to revoke.
+- **Still to come:** `--after-only` once the evening WhatsApp has run on 5.18.96 — **today, 18 Oct, after 15:10 UTC**
+  (18:10 Kampala) already qualifies, because the deploy came before today's 15:00 UTC run (the Runbook's "the next day"
+  assumed a deploy later in the day); the UGX count; the USD count again once the correction is entered.
+
+### Runbook
+
+1. **Say the word to push** `release/5.18.96`. The development branch — `scripts/deploy-5.18.96.sh`, its rehearsal
+   and this record — is already on origin; step 2's `git fetch origin release/5.18.96` fails until the release branch
+   is pushed.
+2. **The deploy**, as root on the server, its own command, outside 14:55–15:10 UTC (the evening WhatsApp, 18:00
+   Kampala); type `DEPLOY`; send back **the log file** (never a copy of the terminal, never the cash sheet). While it
+   runs — and during every `--after-only` and a rollback — press nothing on the Salesperson numbers card, run no
+   `tools/set_config.php` and save nothing under Settings: a change made then fails the checks that compare before and
+   after.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.96 && mkdir -p /root/dnb-5.18.96 && bash scripts/deploy-5.18.96.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.96/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes. On this server most likely R3 (`migration.log` holds no line for 087, as
+   on every deploy since 5.18.89), A17 (installation requests still pending under v1.0), R19 (not yet conclusive: the
+   copy has just been made), and the book's own, depending on what it holds — A23.4 (rows not approved), A23.5 and
+   R23.9 (the 12 Sep adjustment not as R0 recorded it), A23.6 (counts for a person to look at), R23.10 (rows posted
+   between A23 and R23). Any failure, or a note you cannot place: send the log file and stop.
+3. **Read the figures on the server** with the `less` command the summary prints — each run has its own sheet. Never
+   paste, copy or send a sheet.
+4. **Right after PASSED, at a quiet moment — not between 14:55 and 15:10 UTC — look at the screens, then count the
+   cash.** The screens: the landing page (cash in hand per currency, all projects), the Cashbook (both currencies; on
+   its Alerts tab a red USD "cash in hand is below zero" alert is expected) and the CEO page (the "<CUR> Cash in hand"
+   tiles). The count (root docs/69 §1.4, the D2 row of §3.1 and the P3b row of §3.2; the count lines are on the cash
+   sheet): at the same minute, the landing page's figure per currency against the drawer, the wallets and what staff
+   collected and have not handed over; advances written down, not added; any difference in words, never amounts.
+5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command as
+   the summary prints it, each with its own log file to send. If R19 still says not yet conclusive, run `--after-only`
+   again after the time it prints.
+6. **The next day after 15:10 UTC** (18:10 Kampala, once the evening WhatsApp has arrived, so that it has run on the
+   new code; the script's summary says after 15:00): `--after-only` again.
+
+### Rollback — its own command, never pasted with the deploy
+
+Only if it is needed: a passing deploy prints it "only if it is ever needed"; on a failure, send the log file and do
+not roll back on your own unless staff or customers are affected. `--rollback` asks for `ROLLBACK` before it changes
+anything, puts 5.18.95 (`098f6b3`) back through `deploy-hybrid.sh` and checks it (RB): 5.18.95's files by sha256,
+today's rule on a copy of the book with its own cash sheet, and 5.18.95's security fixes still in place. Cash in hand
+returns to 5.18.95's rule and the CEO page shows positions again; 5.18.95's fixes, 5.18.94's documents and every switch
+stay as they are. A count recorded under 5.18.96 will not match the screens after a rollback. The command is the one
+the deploy's summary prints last, after the verdict; as root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.96.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.96/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+Then the quarantine's own `--check`, its own command, as the rollback's summary prints it.
+
+### Known limits
+
+1. **The test suite's machine-wide cleanups** (above): harmless in a sequential suite; any parallel run of tests from
+   two trees can make either fail. Recorded; the cleanups are not changed by this release.
+2. **USD below zero** — and the Cashbook's red USD alert with it — until R1–R3 put the dollar entries on their
+   accounts.
+3. **The staff app's Uganda cash tiles still read 0** (X4, with the API work).
+4. **The UGX-only view's top Balance** can be short by entries stored with no currency (above); the deploy counts them.
+5. **The evening WhatsApp's window is the operator's to keep.** The script does not check the clock: it does not
+   refuse to start between 14:55 and 15:10 UTC. Its header and the Runbook (step 2) ask that it not be started then.
+6. **The script's header comments cite "root docs/69 Part 5",** which does not exist; the passages are docs/69 §1.4,
+   §3.1 (D2) and §3.2 (P3b). Left in the comments rather than change the rehearsed bytes.
+
+## 18 Oct — 5.18.97: ECO Bank — Ecobank's own statement, on its own screen below Cashbook: two cards, ECO BANK UGX and ECO BANK USD, each Ecobank's available balance after its last kept statement line, never added together; the statement lines one account at a time; the Account Details CSV kept per account; the CEO page's Quick Link; administrators, Uganda, and **switched off after the deploy**; migration 088 (five tables, empty); the Cashbook unchanged; Domain B unchanged. `release/5.18.97` = `ec0accd`, cut on 5.18.96 (`e35ecce`); `scripts/deploy-5.18.97.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 19 Oct; DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes — RESULT below; ECO Bank switched on and both statements kept 03:39–03:40 UTC; AFTER-CHECKS 19 Oct 03:52 UTC: `--after-only` PASSED 90 ok / 0 failed / 2 notes (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
+
+**Request.** After the Cashbook exports of 18 Oct the operator asked: *"dont mix the bank with physical cash … so we know
+exacely ECO BANK UGX balance then ECO BANK USD balanace not combine them keep physical cash as it is"*, chose *"Both
+(Recommended)"*, and then described the screen: *"provide serpate view screen for bank. down to cashbook show ECO Bank
+and then we have two hero section like ECO Bank UGX and ECO BANK USD"*. Design v2 (18 Oct, above): two releases —
+this one, then 5.18.98 (the Cashbook physical cash only). Answers: Q15 *"Yes, add it"* (the CEO Quick Link), Q1
+*"Leave them, count them"*, Q2 *"ECO Bank first"*.
+
+### Release notes
+
+On the Uganda tenant with no SSP (`BankGate::ugandaWithoutSsp()`: `StaffJobsGate::applies()` and no SSP, read from the
+configuration files, as 5.18.96's rule), to administrators only, and only once switched on (`bank_screen_enabled`, off
+after the deploy). South Sudan, a Uganda tenant with SSP and every other reader: unchanged; 088's five tables are
+created on every install and stay empty wherever ECO Bank is closed.
+
+- **ECO Bank** — a menu item under Accounts → Company Books, directly below Cashbook; also on the CEO page's Quick Links
+  after 📒 Cashbook, an administrator's only menu on a phone. Both links follow one gate, `BankGate::showLink()`, true
+  exactly when the screen would open for that visitor (the dispatcher's `*admin` on the session copy, then
+  `BankGate::open()`, then `allows('bank.view')` on the fresh staff record — the screen's own checks); the link carries
+  no figure, count or badge.
+- **One card per active bank account in UGX or USD**, UGX first — on this book two, "ECO BANK UGX" and "ECO BANK USD" —
+  dark slate grey, never green or blue like the CASH IN HAND cards (only the small UGX / USD tag is coloured). Each
+  shows **Ecobank's own available balance after the latest kept statement line of that account** — the Running Balance
+  on Ecobank's highest line number — with that line's date, the account ending and when its statement was kept (*"from
+  the statement kept on …"*); every card also carries the pill *"Not compared with the Cashbook yet"* and *Show its
+  lines*, and the card whose lines are shown is ringed. **No total, no sum, no grouping per currency, and no Cashbook
+  entry read for a card.** A card with no statement kept reads "No Ecobank statement kept yet" and offers the upload to
+  an administrator, with that card's account already chosen. Only an account the book names Ecobank is headed "ECO
+  BANK"; another bank account keeps its own name. A book currency with no active bank account gets a light-grey card,
+  "NO ACTIVE BANK ACCOUNT IN <CUR>" (an Ecobank account switched off while another bank account in its currency stays
+  active simply has no card: Known limits, 4); with none in either currency the screen says only "The book has no
+  active bank account in UGX or USD."
+- **Below the cards:** the statement lines, one account at a time (Lines, Statements, the month filter, the export),
+  as the Bank screen v1 built them (`8684e9c5`).
+- **Keeping a statement:** Ecobank online banking → Account Details CSV for that account. The first file of an account
+  links it once ("Link and keep" — check the account ending first); afterwards a file must reach back to the card's
+  date. Every file is checked to end on Ecobank's own *Closing Available*.
+- **Migration 088** — five tables (`bank_account_profiles`, `bank_checks`, `bank_statements`, `bank_statement_lines`,
+  `bank_line_events`), eleven indexes, eleven triggers (kept lines can be neither changed nor deleted). Empty after
+  the deploy.
+- **Not changed:** the Cashbook (5.18.98 makes it physical cash only), cash in hand everywhere (D2 = A, 5.18.96), every
+  entry, the staff app, the landing page's figures, the evening WhatsApp, the daily e-mail, Opening Balances, South
+  Sudan, Domain B.
+
+### Files — 25 against `e35ecce`: 11 added, 14 changed, none removed
+
+- **Added (11):** `lib/BankGate.php`, `lib/BankStatementStore.php`, `lib/EcobankDetailsCsv.php`,
+  `tabs/accounts/bank.php`, `includes/post/post_bank.php`, `migrations/088_bank_statements.sql` (sha256
+  `a72fd46e31ca2480…`), `tests/fixtures/bank_statement_gen.php` (synthetic statements only) and
+  `tests/test_bank_{boundaries,reader,screen,store}.php`.
+- **Changed, taken whole from the development branch (`213c5ce0`) (5):** `includes/navigation.php` (+9, the menu
+  item), `tabs/admin/ceo_dashboard.php` (+6, the Quick Link), `includes/post_handlers.php` (+1) and
+  `tests/test_links_without_port.php` (+3), each identical at `e35eccee` and `fae07c61` before the change; and
+  `SAFETY.md` (+151 −18: its 5.18.97 entry and a late 5.18.96 entry, 5.18.96 having shipped without one), which differs
+  between `e35eccee` and `fae07c61` only by the privacy redaction of 18 Oct (`c60f5176`, 18 lines), so the release
+  carries that redaction too — the only file of it the release carries.
+- **Ported (3), 5.18.96's file with exactly the development change's lines:** `public.php` (+4: the five tables on
+  the repair page's protected list, the tab and its admin-only permission), `includes/routes.php` (+78: the export),
+  `tools/set_config.php` (+3: the switch).
+- **The version alone (6):** `manifest.json` (5.18.97) and the pins in the five `tests/test_distributor_*.php`.
+- **In the release only:** `test_bank_boundaries.php` and `test_bank_screen.php` compare with `e35eccee` (the live
+  commit) where the development branch compares with `419e2ffd`; nothing else differs.
+- **Not carried:** the ten development-only version pins (in test files the release does not have); the rest of the
+  privacy redaction — the release's `MANIFEST.md` and the plugin's `docs/` are 5.18.96's bytes, unredacted, and the
+  deploy installs them as today (`MANIFEST.md` still holds the WASender key that `c60f5176` removed on the development
+  branch: to rotate, above); Domain B.
+- 25 files changed, 7,429 insertions(+), 24 deletions(-).
+
+### Ancestry
+
+`ec0accd` (5.18.97, release) ← `e35ecce` (5.18.96, release, live) ← `098f6b3` (5.18.95). It carries the development
+change `fae07c61..213c5ce0`, seven commits: `8684e9c5` (the Bank screen v1, on `419e2ffd` — why the development branch's
+two bank tests compare with it), merged onto `fae07c61` as `752b23d0`; `1d4e1742` (the menu item, the Quick Link, one
+gate, one name), `6351f779` (every account's card at once, upload from a card), `3464d4fa` (the tests of the menu item,
+the Quick Link and the cards; SAFETY.md's 5.18.97 entry rewritten, a late 5.18.96 entry), `19c91db5`
+(`test_links_without_port` allows BankGate's same-origin comparison of the request host), `213c5ce0` (the review's
+findings); merged into the development branch as `b32dad87`. The script `5d77096f` and `f1152343`; the rehearsal
+`53c47f11`, `5011014f`, `1f29bc4b` (trial 1's findings) and `0e97c2d5` (trial 2's).
+
+### Tests
+
+- **The development branch (`b32dad87`), the full suite twice** (Sunday 18 Oct, 10:16–12:57 UTC, by a resumable
+  equivalent of `tests/run.sh`; pass B resumed at 12:17 after its two-hour limit, `test_job_notifications_day.php` run
+  again from scratch): 304 files, **16,498 passed, 8 failed**, in each run, file by file identical — the branch with
+  P3b merged (`7925c587`, 300 / 15,491) plus the four bank tests (1,043), less 28 checks a Sunday run between 07:00 and
+  19:00 UTC does not reach. The 8 failures are `test_pilot_safety.php`'s own: its "NOT RUN: it is Sunday between 07:00
+  and 19:00 UTC" check, one follow-up case and six weakened copies not run (173 checks instead of 185). Skipped, not
+  failed: `test_sales_pilot.php` 119 instead of 125, `test_multi_number_routing.php` 85 instead of 90,
+  `test_notify_evo_retry.php` 20 instead of 23, and two checks of `test_quote_tax_line.php` ("the repository is not
+  beside this copy of the plugin"). `test_pilot_safety.php` is unchanged by this work. **Run alone after 19:00 UTC:
+  185 passed, 0 failed**; the other three were not run again.
+- **The release (`ec0accd`), the full suite twice** (18 Oct, 14:21–15:37 and 15:37–16:54 UTC, the same runner; pass B
+  resumed at 16:21 after its two-hour limit, `test_kyc_crm_create.php` run again from scratch): 292 files, **15,578
+  passed, 8 failed**, in each run, file by file identical — 5.18.96's 288 / 14,569 plus the four bank tests
+  (`test_bank_screen` 341, `test_bank_store` 255, `test_bank_reader` 289, `test_bank_boundaries` 158, each 0 failed),
+  less the same 26 Sunday checks: the same 8 failures (`test_pilot_safety.php` 165 checks instead of 177) and the
+  same three files skipping (119, 79 and 20 instead of 125, 84 and 23). **`test_pilot_safety.php` run alone after
+  19:00 UTC: 177 passed, 0 failed**, as in 5.18.96's release suite.
+- **Weakened copies:** 57 of the screen test (the menu link shown always, on South Sudan, to a non-administrator, by a
+  page's own `$isAdmin`, above Cashbook, with a badge; the cards added into a total, grouped per currency, read from
+  `cb_ledger`, dated by the kept time, the wrong account preselected …), 34 of the boundaries test, 34 of the store's
+  and 35 of the reader's — each caught at the cases it names; the unchanged copy passes.
+
+### `scripts/deploy-5.18.97.sh` — 5,627 lines, sha256 `6d61b0d2f100b6ad…`
+
+Derived from `deploy-5.18.96.sh` by 109 asserted edits plus the reviews' fixes; every 5.18.96 check kept (5.18.95's
+security fixes, the quarantine, the pilot's switches, 086/087, routing and policy, Domain B, documents, cash in hand
+under D2 = A on copies with its 0600 sheet). Its own checks, named with a B so they never read as the R or A checks:
+
+- **BR1–BR3** refuse unless the installed files are live 5.18.96's, the five tables are absent (or present and empty),
+  and `bank_screen_enabled` is absent; `--redeploy` (after this release's own rollback) turns kept rows and a switch
+  left on into notes, and refuses unless 088's 27 objects are intact.
+- **BN5** counts offered accounts per currency (counts only). **BK1** cash in hand old = new on one copy. **BK2** the
+  gate per switch state, each in its own PHP process, the switch written only into the copy's configuration. **BK3**
+  the two links as text — each exactly one `href="?page=dashboard&tab=bank"`, under the pinned `showLink()` call, at
+  column 0 — and the phone's More menu 5.18.96's byte for byte (the `php -l` of every changed file is A2's).
+- After the copy: **BA1** the release installed, 088 applied exactly and empty; **BA2** BK1/BK2 again; **BA4** the
+  screen and its export answer a visitor with no session with the sign-in page.
+- New modes: `--check` (stage A only, GO / NO-GO), `--redeploy`, and the read-only `--check-bank` (one line per
+  offered account: currency, named Ecobank, a statement kept, linked, days since its last kept line; then whether both
+  ECO BANK cards show a figure — 5.18.98's R3, asked early; row ids and dates on the 0600 sheet only).
+- It prints counts, hashes and PASS/FAIL/NOTE only — no amount, no account name, number or ending.
+
+### The rehearsal — `scripts/harness/deploy-5.18.97/rehearse.sh` (1,376 lines, sha256 `6e73e9a891ae59a9…`, with three PHP helpers, `rh97-{keep,oracle,staff}.php`)
+
+It builds the sandbox with 5.18.96's own rehearsal up to just before its rollback, so 5.18.96 is live on a synthetic
+book and its `--after-only` and the quarantine's `--check` have passed, as on the server. On it, synthetic only: three
+staff records (an active administrator, an inactive one, and a former administrator still active as an accountant —
+the stale session) and a statement from `tests/fixtures/bank_statement_gen.php` kept on each Ecobank account. Then this
+release's sections: every refusal, `--check`, the deploy through a pseudo-terminal, `--after-only`, the switch,
+`--check-bank`, the two-step rollback, then `--redeploy`; and the design's plants, each with the outcome it must have:
+the switch in the store copy alone keeps the gate closed (GO, BR3's note), while a gate that read the store would show
+ECO Bank (NO-GO at BK2); a stale-session non-administrator is refused by the fresh record; kept rows and a switch left
+on through a rollback each refuse a plain deploy (BR2, BR3) and are notes with `--redeploy`; one of 088's triggers
+dropped makes `--redeploy` refuse (BR2). It proves the delta file by file (`SAFETY.md` `213c5ce0`'s, with the
+redaction; `MANIFEST.md`, the plugin's `docs/` and Domain B 5.18.96's) and sweeps every terminal, log and state file:
+no figure of the book or of a statement, no account name, number or ending and no staff member outside the cash sheets
+(10a–10c, each with its control).
+
+- **Trial 1 (18 Oct 16:54–18:16 UTC): 830 passed, 9 failed** — every failure the harness's own: four runs passed
+  `--check` before `--script`, so the script rightly answered "unknown option" (five failures); the port counter
+  counted each diff's empty last line; a `paste` quirk; the instrument 0-k could not create its copy (two).
+- **Trial 2 (18 Oct 18:22–19:45 UTC): 837 passed, 2 failed** — 0-k only: the base sandbox runs its PHP as uid 1000
+  (`setpriv`), and the instrument's folder was root's; reproduced exactly on a scratch folder and fixed by handing the
+  folder to uid 1000.
+- **Trial 3 (18 Oct 21:11–22:33 UTC, started again after a container restart cut its first attempt): 839 passed, 0
+  failed** (258 runs of the deploy scripts, 16 of the quarantine, 3 printed switch commands).
+- **Trial 4 (18 Oct 23:35 – 19 Oct 00:49 UTC, started again after a container restart cut its first attempt at 23:33
+  with 728 checks passed and none failed): 839 passed, 0 failed**, the same 258, 16 and 3 runs.
+
+### RESULT — DEPLOYED 19 Oct (copy 03:29:26 UTC): PASSED 138 ok / 0 failed / 3 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **The run.** Begun 03:27:51 UTC, the release branch pushed at the operator's word shortly before (`ec0accd`).
+  `/opt/dishnet` fast-forwarded `d47c81b..e8c43aa`, `release/5.18.97` fetched as a new branch. Live before: `e35ecce`
+  (5.18.96), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 25 files (11 added, 14 changed), one migration, 088, the reviewed
+  file (sha256 `a72fd46e31ca2480…`); 087 unchanged; Domain B's trees the live release's. **BR1:** the installed plugin
+  is live 5.18.96, all 1,465 tracked files byte for byte. A22a–g and A22L: 5.18.95's seven fixes in the pin and in the
+  live code, each control exact. A2: the 11 changed PHP files and 11 test files accepted by the server's PHP. **BK3:**
+  the two links, as text, each under the pinned `BankGate::showLink()` call; the phone's More menu 5.18.96's byte for
+  byte. A3–A18 and A21 as in 5.18.96; A14: the quarantine's `--check` of 18 Oct 05:20:51 UTC began after 5.18.96's
+  copy. A15 78/0, A16 47/0, A17's test 80/0, **A22-T1 548/0** under the server's PHP. **A23.1–A23.8:** on a copy of
+  the book, the live code's figure and the pin's each equal D2 = A's SQL in all 8 cells; the parts add up to the cent;
+  P0's own tool agrees; the 12 Sep adjustment found once, approved, on no account; rule A in force. **BK1:** cash in hand
+  under 5.18.96's code and 5.18.97's, on the same copy, the same to the last digit in all 8 cells. **BR2:** 088's
+  tables and ledger row absent on the copy, the read seeing `cb_ledger` (the control). **BR3:** the switch absent.
+  **BN5:** one offered bank account per currency, each named Ecobank, none with a statement kept. **BK2:** with the
+  switch off no active administrator is shown ECO Bank; with it on (on the copy only) every one is, and no active
+  non-administrator handed a session copy that says `is_admin`. A24: South Sudan and the two misconfigured books
+  unchanged. Backup in `/root/dnb-5.18.97/backup-20261019T032751Z`; the event queue held nothing not done.
+- **The copy:** 03:29:26 UTC, the container serving `ec0accd`. V1–V13 passed; **BA4:** ECO Bank and its export without
+  a session each send the visitor to the sign-in page; **V3j:** the switch unchanged, absent in both copies; V4: no
+  fatal since the copy (142 lines read).
+- **Stage R passed.** R1 the 25 files byte for byte (11 new), the manifest 5.18.97. **BA1:** 088 applied by the
+  plugin's own runner exactly as the release's file makes it — the ledger row with the reviewed checksum
+  (`42036d6d967521b4…`), all 27 objects by name, table and SQL text (5 tables, 11 indexes, 11 triggers), its 16 CHECKs,
+  nothing else on its tables, all five empty; `migration.log` holds its line (27 statements, 19 ms); the whole of ECO
+  Bank installed, and the repair page refusing to drop its tables. BK3 again on the installed files. R5 all 293 earlier
+  files; **R7** the ledger gained 088's row and nothing else; R13 the event queue lost nothing; R14 Domain B's 363
+  files; R23a–g the fixes installed; **R23.1–R23.10:** the installed figure equals D2 = A's SQL in all 8 cells, 5.18.96's
+  code on the same copy says the same, the parts add up, P0 agrees, the Balance column and the CSV 16 of 16, the
+  installed tool's figures equal the code's, no drift since A23 (03:28:27 UTC); **BA2:** BK1 and BK2 again on a new copy
+  through the installed code — cash in hand identical under both codes, ECO Bank shown to administrators only when the
+  switch is on; **R24** T4 20/0; **R25** T1 548/0; **R26** South Sudan unchanged. Z1 the live vault untouched; Z2
+  nothing left in `/tmp`.
+- **The notes (3), each expected:** A17, two installation requests pending under v1.0 keep v1.0; R3, `migration.log`
+  holds no line for 087; **R19, not yet conclusive** (master's last run of the retry job, 03:25:05 UTC, was before the
+  copy) — `--after-only` after 03:49:26 UTC.
+- **The cash sheet:** `/root/dnb-5.18.97/cash-deploy-20261019T032751Z.txt`, 481 lines, read on the server only.
+- **ECO Bank's switch is off**, as designed: no menu item, no Quick Link, the screen refused, until its own command.
+- **Still to come, each its own command:** the screens with the switch off; `--after-only` (R19 conclusive) and the
+  quarantine's `--check`; the switch, once the P3b count is on paper; both statements kept; `--check-bank`;
+  `--after-only` again; the next day's `--after-only` after 15:10 UTC.
+- **Then, before the after-checks (19 Oct):** the operator switched ECO Bank on — the switch's log was not sent — and
+  kept both statements, at 03:39 and 03:40 UTC (06:39 and 06:40 Kampala), seen in two screenshots of the screen: both
+  cards show a figure, each with its account ending, its last line's date and the time it was kept, every line *"Not
+  compared"*. The screenshots' figures, account endings and lines are not reproduced here. Runbook step 5 (`--after-only`
+  and the quarantine's `--check` with the switch off) was therefore not run; `--check-bank` comes first now, then
+  `--after-only` (which accepts the switch on and the kept rows: unchanged during its own run, no fewer than the deploy
+  recorded) and the quarantine's `--check`.
+
+### AFTER-CHECKS — 19 Oct 03:52 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server. `--check-bank` was not
+run: this `--after-only` read the same gate and printed `both=yes` (one offered account per currency, each named
+Ecobank, each with a statement kept), which is the question `--check-bank` asks.
+
+- **`--after-only`, begun 03:52:21 UTC: PASSED 90 ok / 0 failed / 2 notes**
+  (`/root/dnb-5.18.97/after-20261019T035221Z.log`).
+  - Live `ec0accd` (5.18.97), as the deploy left it; the checkout at `e8c43aa`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them but `bank_screen_enabled`, now `on/on` (files/store) — **V3j**
+    unchanged during this run, and a note that it changed since the deploy: the operator's own command.
+  - V1–V13 and BA4 passed; V4: no fatal since the copy (697 lines read).
+  - **BA1:** 088 exactly as the reviewed file makes it; its tables now hold the two kept statements, one per account,
+    their lines and events — none lost since the deploy's stage A, none changed while this run read them.
+  - **R19 is conclusive:** master ran the retry job at 03:50:04 UTC, after the copy (03:29:26 UTC); nothing appeared at
+    the stray store's old name, and the kept file is unchanged.
+  - R7: the ledger's last row 088's, the database the same size, since this run's stage A and since the deploy's.
+  - **R23.1–R23.10 on a fresh copy (03:52:55 UTC):** the installed figure equals D2 = A's SQL in all 8 cells, 5.18.96's
+    code says the same, the parts add up, P0 agrees, the Balance column and the CSV 16 of 16, the installed tool's
+    figures equal the code's; **no drift since the deploy's A23**. **BA2:** cash in hand the same under both codes; the
+    gate as found `switch=on open=yes both=yes`, ECO Bank shown to the administrator and to no non-administrator. R24
+    T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault untouched since the deploy's stage A; Z2 nothing
+    left in `/tmp`.
+  - **The notes (2):** V3j, the switch changed since the deploy (the operator's); R3, `migration.log` holds no line for
+    087.
+  - The cash sheet: `/root/dnb-5.18.97/cash-after-20261019T035221Z.txt`, 267 lines, read on the server only.
+- **The quarantine's `--check`, begun 03:53:56 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261019T035356Z.log`). K3–K6, K8–K11 ok; **K13:** the retry job ran at 03:50:04
+  UTC, after the move, and made nothing in `<plugin>/data`. Notes: K2 (the container serves `ec0accd`, not `69c87a6`)
+  and K7 (`config.json` re-made in `<plugin>/data` by other writers — not a database).
+- **A second `--after-only`, begun 04:04:28 UTC: PASSED 90 ok / 0 failed / 2 notes** — the same two notes, the same
+  readings (R19 conclusive again, master's run at 04:00:12 UTC; no drift since the deploy's A23; 088's rows unchanged).
+  It ran in the morning, so it is not yet the evening check.
+- **The evening `--after-only`, begun 20 Oct 05:38:55 UTC: PASSED 90 ok / 0 failed / 3 notes**
+  (`/root/dnb-5.18.97/after-20261020T053855Z.log`) — after the evening WhatsApp of 19 Oct (15:00 UTC) ran on 5.18.97,
+  so it is the evening check, and it stands in for 5.18.96's.
+  - Live `ec0accd`, the checkout at `e8c43aa`, no tracked edits; every switch and setting as before, the ECO Bank switch
+    `on/on`. V1–V13 and BA4 passed; **V4: no fatal or parse error since the copy**, 66,820 lines of the container log read.
+  - **R19 conclusive** again (master's run of the retry job at 05:30:07 UTC); R7 the ledger's last row 088's, the file
+    larger, as a live plugin writes; R13 the event queue lost nothing; BA1 088's rows as kept.
+  - **R23.1–R23.10** on a fresh copy (05:39:34 UTC): D2 = A in all 8 cells under both codes, **no drift since the
+    deploy's A23**; BA2 the gate and both cards (`both=yes`); R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged; Z1
+    the live vault untouched since the deploy's stage A; Z2 nothing left in `/tmp`.
+  - **The notes (3):** V3j (the switch changed since the deploy, the operator's); R3 (no `migration.log` line for 087);
+    BA1 (no `migration.log` line for 088 any more — rotated away; every object read from the database instead).
+  - The cash sheet: `/root/dnb-5.18.97/cash-after-20261020T053855Z.txt`, 267 lines, read on the server only.
+  - Nothing else is owed for 5.18.97: 5.18.98's deploy follows.
+
+### Runbook
+
+1. **Say the word to push** `release/5.18.97`. The development branch — the script, its rehearsal and this record — is
+   already on origin; step 2's `git fetch origin release/5.18.97` fails until the release branch is pushed.
+2. **The deploy**, as root on the server, its own command, outside 14:55–15:10 UTC (the evening WhatsApp, 18:00
+   Kampala); type `DEPLOY`; send back **the log file** (never a copy of the terminal, never the cash sheet). While it
+   runs — and during every `--after-only` and the rollback — press nothing on the Salesperson numbers card, use nothing
+   on ECO Bank, run no `tools/set_config.php` and save nothing under Settings: a change made then fails the checks that
+   compare before and after.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.97 && mkdir -p /root/dnb-5.18.97 && bash scripts/deploy-5.18.97.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.97/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes — A17, R19 (not yet conclusive right after the copy), on this server most
+   likely R3 (`migration.log` holds no line for 087, as on every deploy since 5.18.89) and, for the same reason, possibly
+   BA1's "no line for 088", and the book's own (A23.4–A23.6, R23.9, R23.10). BN5 is an ok line when the book offers one
+   bank account per currency, each named Ecobank, and a note (counts only) otherwise; BK2 and BA2 note it when the book
+   has no active staff record that is not an administrator's. Any failure, or a note you cannot place: send the log
+   file and stop.
+3. **Read the figures on the server** with the `less` command the summary prints — each run has its own sheet (cash in
+   hand before and after, the lines of the physical count; each offered bank account's row id and its last kept line's
+   date). Never paste, copy or send a sheet.
+4. **Right after PASSED, with the switch still off, at a quiet moment — not between 14:55 and 15:10 UTC — look at the
+   screens**, signed in as an administrator: no ECO Bank in the menu and no ECO Bank Quick Link on the CEO page; cash in
+   hand as before on the landing page, the Cashbook (project dishnet) and the CEO page's tiles. Then the physical count,
+   on paper, as the sheet lists it — never in the chat.
+5. **At least 20 minutes after the copy:** `--after-only`, then the quarantine's `--check`, each its own command as the
+   summary prints it, each with its own log file to send. If R19 still says not yet conclusive, run `--after-only` again
+   after the time it prints.
+6. **Switch ECO Bank on, once the P3b cash count is recorded** (SAFETY.md's operator action for 5.18.97) — the command
+   the summary prints under *"ECO Bank's switch — its own command, alone"*, the one ending `--value 1`, never the
+   rollback's step 1, which ends `--clear`. It runs the installed `tools/set_config.php` in the container as the
+   database's owner and sets `bank_screen_enabled` alone. Send its log file.
+7. **Keep both statements:** in Ecobank online banking download each account's **Account Details** as **CSV** (an
+   account's first file: any period that ends today) and upload it as Ecobank gave it — never open it in Excel and save
+   it (Excel rewrites the dates). Signed in as an administrator, open **ECO Bank** below Cashbook (on a phone, from the
+   CEO page's Quick Links). On the ECO BANK UGX card press **＋ Upload the Account Details CSV** — the form opens with that
+   account chosen — choose the file and press **Check this file**; check the account ending it shows, then press **Link
+   and keep** within two hours (the link can never be changed: 088 refuses to change or delete it). The same on the ECO
+   BANK USD card. Both cards then show a figure; report only that — never the figure, the CSV or a picture of a card.
+8. **`--check-bank`**, its own command as the summary prints it: one line per offered account and whether both ECO BANK
+   cards show a figure (what 5.18.98's deploy will require), no figure. Send its log file.
+9. **Then `--after-only` again**, and the quarantine's `--check`, as in step 5.
+10. **The next day after 15:10 UTC** (18:10 Kampala, once the evening WhatsApp has run on the new code; the script's
+    summary says after 15:00): `--after-only` again.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed: a passing run prints it "only if it is ever needed"; on a failure, send the log file and do not
+roll back on your own unless staff or customers are affected. Two steps, in this order, each its own command, as the
+summary of the deploy (or of an `--after-only`) prints them last, after the verdict:
+
+1. Clear the switch with **5.18.97's** own `tools/set_config.php` — the printed line ending `--key bank_screen_enabled
+   --clear` (5.18.96's tool refuses the key). Wait until it says *"bank_screen_enabled cleared"*.
+2. `--rollback`, which asks for `ROLLBACK` before it changes anything, puts 5.18.96 (`e35ecce`) back through
+   `deploy-hybrid.sh` and checks it (RB). If step 1 was skipped it says so before its question: type anything but
+   `ROLLBACK`, run step 1, then this again. As root on the server, on its own:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.97.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.97/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+ECO Bank goes — its menu item, its Quick Link, its screen and its export; cash in hand stays D2 = A, so the screens and a
+count recorded under 5.18.97 still match; 5.18.95's fixes, 5.18.94's documents and every other switch stay as they
+are. 088's tables and every kept statement stay, untouched and read by nothing (there is no down migration), but
+5.18.96's emergency repair page does not list the five tables among those it refuses to drop (RB notes it). Then the
+quarantine's own `--check`, its own command, as the rollback's summary prints it. A later deploy of 5.18.97 uses
+`--redeploy`, and A14 refuses it until a quarantine `--check` begun after the rollback's copy has passed. If the script
+cannot run, the deploy's summary also prints the by-hand put-back.
+
+### Known limits
+
+1. **The switch is the operator's:** the deploy never sets it; until it is switched on nobody sees ECO Bank, and its
+   address answers "ECO Bank is not available on this installation."
+2. **A card is as fresh as the last statement kept** — its date is the last movement kept, not the day of the upload.
+3. **No phone menu link for administrators** other than the CEO page's Quick Links (the More menu is not shown to
+   administrators); the address works too.
+4. **If the Ecobank UGX account is switched off while another UGX bank account is active,** the other account's card is
+   shown under its own name and no placeholder is drawn (recorded in SAFETY.md).
+5. **The Cashbook still lists the Ecobank entries** (with "—" as their Balance, not counted) until 5.18.98.
+6. **Accountants who are not administrators** cannot open ECO Bank (Q11, later).
+7. **Bank and cash still meet elsewhere** (unchanged by 5.18.97 and 5.18.98; Q10): the staff app's Full Cashbook lists
+   Ecobank entries and its positions add bank, cash and mobile money; the daily e-mail's Cash In / Cash Out add every
+   entry of the day; the evening WhatsApp's IN/OUT lines and entry count include bank entries; Opening Balances (off the
+   menu) prints the book's own Ecobank figure, which is not Ecobank's balance.
+8. **Kept statement files are in no uploads backup:** `data/bank_statements/` is not under `uploads/`, so the Google
+   Drive backup, the admin backup download and the hourly local backup do not hold them; the kept lines are in the
+   plugin database and travel with every database backup. No route serves a kept file.
+9. **A newly made administrator** sees ECO Bank once the session's cached copy of their record refreshes (within five
+   minutes, or at once on signing in again); one whose right is removed loses it on the next page.
+10. **The evening WhatsApp's window is the operator's to keep**, as in 5.18.96: the script does not refuse to start
+    between 14:55 and 15:10 UTC.
+11. **Defects found nearby, recorded, not fixed:** the cash export's field-agent list lacks `field_accountant`
+    (`includes/routes.php:250` against `cashbook.php:44`); `includes/routes.php:228` requires
+    `includes/cashbook_web.php`, which does not exist; the existing cash export neutralises no formula cells (the new
+    export does).
+
+## 19 Oct — 5.18.98: the Cashbook's list shows physical cash only (Uganda) — cash, mobile money and entries with no account; Ecobank and every other non-cash entry move, unchanged, to a read-only tab of their own, "🏦 Bank & other accounts": one button per bank account plus Other accounts, no Balance, no total, its own export; the cash export gains an Entry state column; cash in hand, every Balance figure and ECO Bank unchanged; no switch; no migration; South Sudan and Domain B unchanged. `release/5.18.98` = `ce7ac38`, cut on live 5.18.97 (`ec0accd`); `scripts/deploy-5.18.98.sh` pinned to it and rehearsed twice clean (trials 3 and 4) — PUSHED 20 Oct; DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes — RESULT below; AFTER-CHECKS 20 Oct 06:22 UTC: `--after-only` PASSED 94 ok / 0 failed / 1 note (R19 conclusive), the quarantine's `--check` PASSED 9 ok / 0 failed / 2 notes
+
+**Request.** The operator's words of 18 Oct, *"dont mix the bank with physical cash"* and *"keep physical cash as it
+is"*, gave one design and two releases (SPEC-separate-v2 §2.11): 5.18.97, ECO Bank, live since 19 Oct, and then this
+one. Answers of 18 Oct: Q1 *"Leave them, count them"* (bank money recorded with no account stays on the cash list), Q2
+*"ECO Bank first"* (5.18.97 switched on, with a statement kept on each card, before the split). Q3–Q7 stand as the
+design recommends. On 19 Oct the operator asked whether the physical Cashbook would be removed. It is not: the Ledger
+stays, and it keeps cash, mobile money and entries with no account. The operator then chose *"Yes, build 5.18.98
+(Recommended)"*. Q2's condition held when last read: both ECO Bank cards showed a figure at 03:40 UTC, when the
+statements were kept (two screenshots), and at 5.18.97's `--after-only` runs of 03:52 and 04:04 UTC (`both=yes`); G3
+checks it again before anything changes.
+
+### Release notes
+
+**In plain words.** On the Cashbook (Uganda), the Ledger lists physical cash only: entries on the cash and
+mobile-money accounts, and entries with no account. That covers almost every typed entry, payment, expense, payroll
+entry, staff cash-in and cash-bag exchange. Entries awaiting approval, rejected or voided stay listed where they are
+today. A note at the top of the list says what it holds. The Ecobank entries and every other non-cash entry (stock,
+supplier payments, director, share capital, payable, receivable, and entries whose account no longer exists) are not
+deleted. They leave the list for a new tab, **🏦 Bank & other accounts**, right after Ledger, where they can be read
+and exported but not changed. Nothing else moves:
+- cash in hand reads the same everywhere;
+- every Balance figure on the list is the same;
+- ECO Bank is untouched: its menu item, its Quick Link, its two cards, every statement kept and its switch;
+- no entry is created, changed, moved or deleted.
+
+**There is no switch:** the change shows as soon as the deploy has copied the files.
+
+The change applies only on the Uganda installation (the Uganda tenant), and only while the South Sudanese pound (SSP)
+is not among the book's currencies: rule A, `CashbookService::cashOnlyRuleInForce()`, 5.18.96's gate. The page reads
+it once (`$_cbRuleA`, now set above `$filters`, its text unchanged) and the export once (`$_csvRule2`). On South Sudan,
+on a Uganda tenant with SSP and on every other book, every page, query and export is 5.18.97's: the two new keys of
+`buildWhere()`, `book` and `book_account`, are ignored wherever rule A is off.
+
+- **The split is by location only** (SPEC-separate-v2 §2.1). Physical cash is a listed row with no account (NULL or
+  0), or one on an account whose kind is exactly `cash` or `momo` (`CASH_IN_HAND_KINDS`), active or not. Not cash is
+  the exact complement, so every listed row is on exactly one side. There is no status term, no cast (a text id never
+  reads as a number) and no DDL on any read. `cashOnlyWhere()`, `cashInHand()` and the Balance streams are unchanged.
+- **The Ledger** lists `book=cash`; its counter, its pager and its rows follow one predicate.
+  - At its top, a slate note: *"Physical cash only: cash, mobile money and entries with no account. Ecobank and other
+    accounts are under 🏦 Bank & other accounts."*
+  - A search that also matches entries on the tab adds a line, *"N entries matching "…" are under Bank & other
+    accounts →"*, with a link.
+  - A cash entry that has no Balance because it is not counted (awaiting approval, or rejected) gets a grey tag saying
+    which, *awaiting approval* or *rejected* (Q6).
+  - Unchanged: the first card at the top and its "N entries in the book" (every entry the book holds, Q7), the Pending
+    tab, approvals, voids and every Balance figure.
+- **🏦 Bank & other accounts** (Q3, Q4), after Ledger, for the Ledger's audience. A field agent still gets the Field
+  Register and never the tab.
+  - One button per bank account (active, or with entries in the project) — on this book, by 5.18.97's BN5, the two
+    Ecobank accounts, UGX and USD, plus any bank account N4 counts — then *Other accounts*: stock, supplier, director,
+    share capital, payable, receivable, and ids naming no account, shown as *account not found*. No *All* button, so the
+    two Ecobank accounts are never listed together. Each button shows its count under the search and the dates.
+  - Each row: date, SR, particulars, account (a run of five or more digits shown as •••• and its last four), category,
+    in and out in the row's own currency, ref, state (approved / awaiting approval / rejected / voided, voided struck
+    through) and source, in the table and on the phone's cards alike.
+  - **Read-only:** no ⋮ menu, no tick boxes, no bulk tools, no handover banner, no entry form.
+  - **No Balance and no total.** The book holds only part of Ecobank's history, and a grey note says so. Where
+    `BankGate::showLink()` shows ECO Bank to the visitor, the note ends *"Ecobank's own balances, UGX and USD each on
+    its own: open ECO Bank →"*; the link opens that account's lines only for an account ECO Bank offers. Anyone else
+    reads *"An administrator can see Ecobank's own balances under ECO Bank."*
+- **The exports** (Q5, Q6).
+  - The cash export (↓ CSV, ↓ UGX only, ↓ USD only) lists `book=cash`. It keeps its name, its layout and its Balance
+    cells, reads account names with a SELECT only (`accountLabels()`), and gains one last column, **Entry state**. The
+    three SSP layouts are untouched.
+  - The tab has its own export, one button at a time: `cashbook-other-accounts-<PROJ>-<ACCOUNT<id>|OTHER>-<date>.csv`,
+    where `<id>` is the app's own internal number for the account (its row id), not the bank account number. It has no
+    Balance column, makes any text cell that starts like a spreadsheet formula safe to open in Excel, and never puts an
+    account name or number in the file name. A field agent or a field accountant asking for it gets their cash export.
+- **Nothing written, no migration.** No entry, table, column, write path, void path or approval changes. On synthetic
+  books, `test_cashbook_physical_list` F shows that the list, the tab, its search line and both exports create no table
+  or index (`sqlite_master` read from a second connection is as before), and M that the added files and the three new
+  library methods hold no write. At the deploy, C5 will check that the library reads behind the list and the tab leave
+  a copy of this server's book unchanged; in the rehearsal it held on a synthetic book.
+- **Q1: bank money recorded with no account stays** on the cash list and in cash in hand, as since 5.18.96. That is
+  customer payments uCRM records as bank transfer, online or card; payments staff record in uCRM as Cash that were
+  really bank or Airtel; and staff-app payments with the method *Bank*. The deploy counts what it can see of them, and
+  related categories, each on its own (N2: uCRM's online rows, Bank Transfer in, Bank Transfer out, Bank Charges),
+  counts only; payments recorded as Cash cannot be told apart and are not counted.
+- **Not changed:** cash in hand everywhere (D2 = A, 5.18.96): the Cashbook's cards, the landing page, the CEO page's
+  tiles, the evening WhatsApp's cash line and `tools/cash_in_hand.php`. ECO Bank, the sidebar, the CEO page and every
+  bank-module file are 5.18.97's byte for byte. Also unchanged: the staff app, the daily e-mail, the evening WhatsApp,
+  Opening Balances, South Sudan and Domain B. 5.18.97's known limit 5 (the Cashbook still lists the Ecobank entries)
+  ends once this release is deployed.
+
+### Files — 17 against `ec0accd`: 5 added, 12 changed, none removed
+
+The release is the tree of `cash-98` (`5870933d`), built on the 5.18.97 release commit itself, as one commit: nothing
+ported, nothing differs.
+
+- **Added (5):**
+  - `includes/cashbook_noncash_csv.php` (74 lines): the tab's export;
+  - `lib/CashbookNonCashView.php` (128): the tab's helpers — `chips()`, `selected()`, `label()`, `state()`,
+    `flag()` — with no SQL of their own;
+  - `tabs/accounts/cashbook_noncash.php` (149): the tab's body, between the `cb-noncash` markers the tests scope to;
+  - `tests/test_cashbook_physical_list.php` (1,935): sections A–M of SPEC-separate-v2 §2.9;
+  - `tests/test_cashbook_physical_list_mutants.php` (393): the weakened copies.
+- **Changed, the code (3):**
+  - `lib/CashbookService.php` (+100), read-only additions only: `buildWhere()`'s two keys under rule A,
+    `listLocationWhere()`, `BANK_BUTTON_IDS`, `nonCashAccounts()` and `accountLabels()`;
+  - `tabs/accounts/cashbook.php` (+31 −3): the gate moved above `$filters`, the `book` key, the tab, the note, the
+    search line, the grey tags and the branch to the tab's body; the first card at the top untouched;
+  - `includes/routes.php` (+22 −7): `$_csvRule2`, the tab's export route, `book=cash`, `accountLabels()` under the
+    rule, and Entry state last in the two non-SSP layouts.
+- **Changed, the record (1):** `SAFETY.md` (+76): its 5.18.98 entry, with the review's items recorded.
+- **Tests rewritten on purpose (2):**
+  - `tests/test_bank_boundaries.php` (+124 −33), section A: `BK_BASE` is the 5.18.97 release commit; `$UNTOUCHED`
+    loses `cashbook.php` and `CashbookService.php`; `navigation.php`, `ceo_dashboard.php`, `public.php`,
+    `tools/set_config.php` and `includes/post_handlers.php` go back to `$UNTOUCHED`; `routes.php` is `ec0accd4`'s plus
+    5.18.98's declared lines; the manifest rule is 5.18.97 → 5.18.98;
+  - `tests/test_cash_in_hand_p3b_screens.php` (+26 −2), `:321-324`: the Ledger's rows are `getEntries(+book=cash)`,
+    with a control showing the list with no key holds them in order and every row left out is not cash.
+- **The version alone (6):** `manifest.json` (5.18.98) and the pins in the five `tests/test_distributor_*.php`.
+- **In the release only:**
+  - `test_bank_boundaries.php` compares with `ec0accd4`, and its menu-link blocks with `e35eccee`; the development
+    branch's copy compares with `b32dad87` and `419e2ffd`;
+  - `test_cashbook_physical_list.php`'s section M reads `ec0accd4`; the development branch's reads `b32dad87`.
+- **Not carried:** the ten development-only version pins (in test files the release does not have), the development
+  branch's own `stock_api` lines in `routes.php`, and Domain B. `MANIFEST.md` and the plugin's `docs/` are the bytes
+  5.18.97 left in place: still 5.18.96's unredacted bytes, as in 5.18.97 (`MANIFEST.md` still holds the WASender key
+  that `c60f5176` removed on the development branch: to rotate, as 5.18.97's entry records).
+- 17 files changed, 3,064 insertions(+), 51 deletions(-).
+
+### Ancestry
+
+`ce7ac38` (5.18.98, release) ← `ec0accd` (5.18.97, release, live) ← `e35ecce` (5.18.96). It carries the development
+change `ec0accd4..5870933d` on `cash-98`, five commits, its tree equal to the release's:
+- `0635b17c`, the code;
+- `95c7cbce`, the tests;
+- `8ccee8a5`, the weakened copies;
+- `17538323`, the review's findings;
+- `5870933d`, the tab's phone cards carry Ref and Src (the completeness review's COMPL-1; weakened copy W13b is
+  caught by J).
+
+It was ported onto the development branch as `ef143228`: 27 files, the release's 17 and ten development-only version
+pins.
+- `routes.php` was ported hunk by hunk. The result differs from the release's by the development branch's own
+  `stock_api` lines only, exactly as that branch's file differed from `ec0accd4`'s.
+- `test_bank_boundaries` section A compares with the development branch's own 5.18.97, `b32dad87`.
+- `test_cashbook_physical_list` section M compares with `b32dad87`; sections E2, I, J, K and L compare with `ec0accd4`.
+
+The script: `2527d291`, `cd66dba1` (the review's findings), `dfeeb522` (trial 1's fix). The rehearsal: `c939dfa8`,
+`cd66dba1`, `dfeeb522`, `9d1f0de9` (1i's comment).
+
+### Tests
+
+- **The release (`ce7ac38`'s tree, in the worktree `cash98`), the full suite twice** (19 Oct, by a resumable
+  equivalent of `tests/run.sh`).
+  - Pass A ran 08:55–10:28 UTC. Pass B ran 10:28–12:04 UTC; it was resumed once, at 10:56, when the runner's two-hour
+    limit on one command, counted from the start of pass A at 08:55, ran out, and
+    `test_cashbook_physical_list_mutants.php` was run again from scratch.
+  - **294 files, 16,164 passed, 0 failed**, in each run, file by file identical: 5.18.97's 292 plus the two new tests.
+  - The new and rewritten tests: `test_cashbook_physical_list` 493, its weakened-copy harness 48,
+    `test_bank_boundaries` 159, `test_cash_in_hand_p3b_screens` 155. Every other bank test as in 5.18.97
+    (`test_bank_screen` 341, `test_bank_store` 255, `test_bank_reader` 289).
+  - A Monday run, so nothing skipped its Sunday checks: `test_pilot_safety` 177. `test_quote_tax_line` skips one
+    comparison (the repository is not beside the worktree), in both passes of this suite and of the development
+    branch's below, as before.
+- **The development branch, the full suite twice** (19 Oct, the same runner), at `7d9fb456` in the worktree `dev98`,
+  whose plugin tree is `ef143228`'s (`4f73982c`).
+  - Pass A ran 14:15–15:56 UTC. Pass B was resumed at 16:16, when the runner's two-hour limit on one command, counted
+    from the start of pass A at 14:15, ran out, and again at 16:29 after a container restart, and finished at 17:42 UTC;
+    `test_cash_in_hand_p3b_screens.php` and `test_cashbook_physical_list_mutants.php` were each run again from scratch.
+  - **306 files, 17,084 passed, 0 failed**, in each run, file by file identical; `test_pilot_safety` 185.
+- **`test_cashbook_physical_list.php`.** Its Uganda estate plants every shape of SPEC-separate-v2 §2.1's table through
+  the plugin's own writers (raw SQL only for a NULL, orphan, negative or text id, the ghost row and voided_reconcile).
+  Each row's side and button are declared as it is written, so the oracle never reads the list predicate, and a positive
+  control requires every planted shape.
+  - A–H run in process on the tree under test.
+  - E2, I, J and K drive 5.18.97's tree from Git and this one as admin, accountant, promoted accountant, field agent
+    and field accountant.
+  - F uses an estate without `cb_accounts` and reads `sqlite_master` from a second connection.
+  - L compares the two trees on the SS, SN and UP books; M is the boundary against 5.18.97.
+- **Weakened copies: 40 of 40 caught**, each at the sections the design names. They are the 32 of `8ccee8a5` (W1–W22,
+  with W5, W9, W12 and W14 in two variants and W13 in three, W21b and W21c, W-C and the structural copy), the review's
+  seven (W15b, W15c, W21d, W-K1, W-K2, W-P and W-R) and the completeness review's W13b. The unchanged copy passes every
+  time. The first run let three through (W2, W17, W22). The test was strengthened; the code was not touched.
+- **The build's review:** nine findings confirmed, all minor, all handled in `17538323`: eight fixed, SEC-1 recorded.
+  - One rule for which bank accounts get a button, `BANK_BUTTON_IDS` (SQL-1, spec-conformance-1).
+  - Each id once (SQL-2).
+  - The tab's export reads the project (SQL-3) and a record with no role (SEC-2) the page's way.
+  - Tests: TS-1, TS-2 and TS-3.
+  - SEC-1 was recorded, not fixed (Known limits, 6).
+
+### `scripts/deploy-5.18.98.sh` — 6,197 lines, sha256 `6b412e0e3ad421e7…`
+
+It was derived from `deploy-5.18.97.sh` (5,627 lines) by 70 asserted edits (66 blocks, 4 replacements, each anchor
+asserted) and one comment. Then came the review's fixes (14 found, 11 confirmed, applied in `cd66dba1`) and trial 1's
+(`dfeeb522`).
+
+Every 5.18.97 check is kept: 5.18.95's security fixes, the quarantine, the pilot's switches, 086/087, routing and
+policy, Domain B, the documents, and cash in hand (unchanged, decision D2 = A) on copies, its figures on a sheet only
+root can read (mode 0600). ECO Bank's checks are turned round now that it is live.
+
+SPEC-separate-v2 §2.10 calls its refusals R1–R3 and its after-checks A1–A4. This script's own R and A checks already
+use those names, so here they are **G1–G3** and **CA1–CA4**, and the summary says which is which. N1–N4 and C1–C5 keep
+the design's names.
+
+Every reading of the book runs on copies: a `VACUUM INTO` copy of the book and copies of the code in the container's
+`/tmp`, each PHP process with its own `DN_VAULT_FILE`. The live vault is checked around every batch (Z1), and nothing
+is left under `/tmp` (Z2).
+
+- **G1–G3, the refusals.**
+  - **G1:** the installed version is 5.18.97, and 15 files this release must not touch have release/5.18.97's sha256,
+    pinned in the script: ECO Bank's module (its gate, store, CSV reader, screen, post handler and 088), its two links
+    (`navigation.php`, `ceo_dashboard.php`), the phone's More menu, the styles, the Cashbook's post handler,
+    `public.php`, the post handlers, `tools/set_config.php` and the cash-in-hand tool.
+  - **G2:** rule A is in force, read through the installed code on a copy.
+  - **G3: both ECO Bank cards show a figure.** On a copy, through the installed 5.18.97 classes, it makes exactly the
+    calls the cards make: `BankGate::open()` over `PluginConfig::read()`, then, for UGX and for USD, an account
+    `offeredAccounts()` offers and `ecobankNamed()` calls Ecobank's, each with a `latestLine()`.
+    - It prints one line per offered account, `account #<id> <CUR> ecobank-named=yes|no statement-kept=yes|no`: its
+      row id only, the app's own internal number for the account, not the bank account number, and the one kind of row
+      id the log carries.
+    - An offered account not named Ecobank with no statement is a note, never a refusal.
+    - `--without-bank-balance` makes G3 a note, printed as the operator's explicit choice.
+- **N1–N4, notes before the deploy, counts only.**
+  - **N1:** the rows that leave the list, per project: on bank accounts / on other kinds / naming no account / a
+    negative or text id. Its totals, counted with the script's own SQL, must equal the rows the new code puts on the
+    tab, or NO-GO.
+  - **N2 (Q1):** approved rows with no account that stay on the list and look like bank money, each class on its own:
+    uCRM's online rows (its gap-fill's included), Bank Transfer in, Bank Transfer out, Bank Charges.
+  - **N3 (Q13):** rows with no currency.
+  - **N4:** bank accounts ECO Bank does not offer (inactive, or in another currency) that hold rows; their row ids on
+    the sheet only.
+- **C1–C5, the copy checks**, on one copy of the book, 5.18.97's code and 5.18.98's from Git, each in its own process
+  with its own vault.
+  - **C1:** cash in hand per currency × project, old = new.
+  - **C2:** the list with no key, per project × view — ids, Balance and its currency — old = new.
+  - **C3**, on the new code, per project × view:
+    - the partition: cash ⊎ not cash = the list with no key, each in its order, `countFiltered` agreeing;
+    - every not-cash row is without a Balance in the list with no key;
+    - the tab's buttons ⊎ = the not-cash rows.
+  - **C4:** `countEntries`, `getPendingDisbursements` and `plByPeriod`, old = new.
+  - **C5:** the copy's row digest, its `cb_accounts` digest and its `sqlite_master` digest are taken after both
+    constructors have run once, and every read of the new code leaves them unchanged — **the proof that these reads
+    write nothing**.
+- **CA1–CA4, after the copy.**
+  - **CA1:** the installed files are release/5.18.98's by their pinned sha256, the 15 kept files 5.18.97's, and the
+    server's PHP accepts every PHP file the release changes or adds.
+  - **CA2:** C1–C5 again, on a new copy, with the installed code.
+  - **CA3:** the book's drift since the before-copy (rows added, changed and removed, by count; the ids on the sheet
+    only). **It is a note, never a failure**: webhooks, the gap-fill, the evening pull and staff write all the time,
+    and C5 has shown that the reads it makes write nothing.
+  - **CA4:** the Cashbook page, its new tab and both exports (`cb_book=noncash` included) answer a visitor with no
+    session with the sign-in page, with no PHP fatal.
+- **Carried from 5.18.97, turned round now that ECO Bank is live:**
+  - **BR1:** the installed plugin is live 5.18.97 (`ec0accd`), every file it tracks byte for byte.
+  - **BR2:** 088 on the copy exactly as its file makes it, the read seeing `cb_ledger` (the control).
+  - **BR3:** `bank_screen_enabled` read alike on the copy and in the live files.
+  - **BN5:** the offered accounts per currency, counts only.
+  - **BK1:** cash in hand under the installed 5.18.97 and under the pin, the same on one copy.
+  - **BK2:** `BankGate::showLink()` per switch state, each state in its own PHP process.
+  - **BK3:** the two links as text, under the pinned `showLink()` call.
+  - **BA1:** 088 applied exactly after the copy, and every row of its five tables unchanged by the run — an HMAC under
+    the run's key, compared, never printed; in an `--after-only`, none fewer than the deploy found.
+  - **BA2:** BK1, BK2 and G3 again, on a new copy, through the installed code.
+  - **BA4:** ECO Bank and its export refuse a visitor with no session.
+  - **V3j:** `bank_screen_enabled` is ON in the configuration files, as the operator left it, and unchanged by the run.
+- **Modes:**
+  - `--check`: stage A alone, GO / NO-GO; nothing is backed up, copied or deployed.
+  - `--after-only`.
+  - `--check-bank`, read-only: one line per offered account, and whether both cards show a figure (G3's question,
+    asked again).
+  - `--rollback`: one step, after typing `ROLLBACK`.
+  - `--redeploy`, after its own rollback: the five files 5.18.98 adds, which a rollback leaves on disk, are expected.
+  - New: `--without-bank-balance`, with a deploy or `--check` only. Over cards that both show a figure it changes
+    nothing and is not recorded.
+- **What it prints and what it never does.** It prints counts, hashes and PASS/FAIL/NOTE only: no amount, no account
+  name, number or ending. The figures go to one cash sheet per run, `/root/dnb-5.18.98/cash-<mode>-<stamp>.txt`, mode
+  0600. It sets no switch, applies no migration, keeps no statement, and renders no page or CSV with a login. **Its
+  summary prints no switch command**: ECO Bank's switch is the operator's and stays ON.
+
+### The rehearsal — `scripts/harness/deploy-5.18.98/rehearse.sh` (1,415 lines, sha256 `7814dd06cabcf007…`, with three PHP helpers, `rh98-{account,oracle,rows}.php`)
+
+**What it builds.** It builds the sandbox with 5.18.97's own rehearsal, run up to just before its section 97-8 (the
+cut is asserted). By then:
+- 5.18.97 has been deployed on a synthetic book, rolled back, and deployed again with `--redeploy`;
+- ECO Bank is switched on in both copies, as its summary printed it;
+- a synthetic Account Details statement is kept on each Ecobank card, through the installed store, by the active
+  administrator;
+- its `--after-only` and `--check-bank` have passed, and the quarantine's `--check` has run once more.
+
+That mirrors, on synthetic data, the state production was recorded in on 19 Oct where it matters: 5.18.97 live, ECO
+Bank's switch ON, a statement kept on each Ecobank card. It differs in three ways: here 5.18.97 was rolled back and
+deployed again with `--redeploy`, which production's was not; `--check-bank` ran and passed here, where production's was
+not run; and the synthetic book also offers a second UGX bank account, not named Ecobank, with no statement (98-pre's
+pre-a), where production's BN5 read one offered account per currency, each named Ecobank.
+
+On it, synthetic only:
+- an extra account the book names Ecobank, USD, with no statement, added through the installed `addAccount()`;
+- a non-cash row posted onto the Ecobank UGX account by the installed writer while a deploy runs, between the
+  before-copy and the after-copy;
+- a release variant whose library writes on a read path;
+- every weakened copy of the script.
+
+Then this release's sections, every command run as the summary printed it:
+- 98-pre: the sandbox's state, read, with the observers' controls;
+- 98-0: the controls: the pin, and the instruments (C5's digests, the judge's terms, N1–N4's own SQL and `printed98`);
+- 98-c: `--check`;
+- 98-1: the refusals;
+- 98-2: G3 both ways;
+- 98-3: C5 against a planted write;
+- 98-4: the deploy, through a pseudo-terminal, `DEPLOY` typed;
+- 98-5: `--after-only` and `--check-bank`;
+- 98-6: the rollback, `ROLLBACK` typed;
+- 98-7: `--redeploy`, G3 both ways for real;
+- 98-8: a rollback whose copy leaves 5.18.98's `routes.php` behind, then a clean `--redeploy`;
+- 98-10: the sweeps.
+
+**What it proves** (every item below held in trial 2, whose one failure is in 5.18.95's section 95-5f; trials 3 and 4
+below):
+- **The pin** (98-0). The script is pinned to the release commit (short and full), cut on `ec0accd`. The delta is
+  exactly the 17 reviewed files, its tree `cash-98`'s, each sha256 as the script pins it, computed from Git. The 15 kept
+  5.18.97 files are byte for byte in both commits, and there is no migration.
+- **`--check` is GO on a synthetic 5.18.97 install set up the way production is.** G3's lines are the book's offered
+  accounts by row id; the offered account not named Ecobank with no statement is a NOTE. C1–C5 hold. N1–N4 are this
+  rehearsal's own counts, and N2 and N4 are not zero: the copy holds every class N2 counts, and an account N4 counts.
+- **The refusals, each before anything changes:** the live install not 5.18.97, a part-way copy, a file 5.18.98 changes
+  not 5.18.97's, a bank-module file edited by hand (BR1, then G1), A14 over a failure an earlier release recorded, and
+  rule A off (A23.7, then G2).
+- **G3 both ways.** A card with no figure refuses, nothing changed, and the `--without-bank-balance` command is printed
+  alone. With the flag, G3 is a NOTE saying the operator chose to go ahead without the bank balance. ECO Bank's switch
+  cleared refuses at G3.
+- **C5 refuses a release that writes on a read path**, and C4 refuses a `countEntries()` that counts one more.
+- **The deploy PASSES with the planted row arriving mid-run**, CA3 saying it as a NOTE with the id on the sheet only.
+- **`--after-only` PASSES**, and FAILs where it must:
+  - CA4 over the tab, or its export, answering a visitor with no session;
+  - CA2 at C5 over a write planted in the installed library;
+  - BA2's G3 over a card added after the deploy without a statement;
+  - V3j over the switch cleared while a run goes on.
+- **The rollback PASSES:** 5.18.97's twelve files by sha256 and the split gone, while ECO Bank, its switch, 088 and
+  every kept row stay unchanged and both cards still show a figure. A `--redeploy` before the quarantine's `--check` is
+  refused at A14.
+- **`--redeploy` after the rollback (98-7):** over a card with no statement it is refused at G3, nothing changed; with
+  `--without-bank-balance` it PASSES, G3 and BA2 as notes, `--check-bank` printed in its own block; its `--after-only`
+  and that `--check-bank` PASS once the card is gone.
+- **A rollback whose copy leaves `routes.php` behind FAILs RB twice.**
+- **Every weakened copy of a new check is caught.**
+- **The sweeps, each with its control:** 10a–10c find no figure, secret, account name, number or ending, or staff member
+  in any output, log or state file; 10d finds no bash runtime error in any run's terminal or log; `/tmp`, the host and
+  the checkout are as found.
+
+**The trials:**
+- **Trial 1 (19 Oct 12:30–14:14 UTC): 1,061 passed, 40 failed** (306 runs of the deploy scripts, 18 of the quarantine).
+  The causes:
+  1. **`rh98.py` was never derived.** This release's readers are derived from 5.18.97's; the derivation's new header
+     named 5.18.97, so its own guard (no 5.18.97 path left) refused, and every reader printed nothing. This was most
+     of the 40.
+  2. **Section 1i's SSP plant moved the live vault.** The script's own read of the distributor switch
+     (`set_distributors.php --show`, as root) refreshes the vault, so the vault checks after it failed.
+  3. **No `ctl98` reader**, reading A22/R23 in this release's words ("kept by 5.18.98"), so the control counted none of
+     5.18.95's seven fixes, before (A22) and after (R23), where it wanted seven each.
+  4. **A real defect of the script:** RB's failure line after a rollback had an apostrophe inside `${RB_BK:+…}`. bash
+     5.2 cannot expand that ("bad substitution"), so that FAIL was never counted (8a).
+  5. The rest followed from these, most of them from the first.
+
+  All fixed in `dfeeb522`:
+  - the derivation's header is worded as 5.18.97's derivation words it, its guard unchanged, and a failed derivation
+    now stops the rehearsal;
+  - 1i keeps the vault and puts it back, bytes and time, with a positive control;
+  - `ctl98` was added, with its control;
+  - in the script, RB's reasons are built outside any `${…:+…}`; 8a′ is RB's weakened copy; and 10d checks that no run
+    holds a bash runtime error, with its control.
+
+  `9d1f0de9` corrected 1i's comment: the script's own read of the distributor switch rewrote the vault, not a cron.
+- **Trial 2 (19 Oct 17:43–19:26 UTC): 1,104 passed, 1 failed** (307 runs of the deploy scripts, 18 of the quarantine),
+  on the script as it stands (sha256 `6b412e0e3ad421e7…`).
+  - The one failure is inherited, from 5.18.95's rehearsal, which the chain runs to build the sandbox: its section
+    95-5f, *"a copy whose R23 never reads 5.18.94's copy FAILS each of the seven checks itself"*, got `0|0|0` where it
+    wants `7|7|0`. That weakened copy's `--after-only` printed no R23 line at all.
+  - It passed in trial 1 and in 5.18.97's trials 3 and 4, and its output was not kept. Trial 3 runs with
+    `REHEARSE_KEEP`, so that every run's output is kept.
+- **Trial 3 (19 Oct 19:28–21:10 UTC, with `REHEARSE_KEEP`): 1,105 passed, 0 failed** (307 runs of the deploy scripts,
+  18 of the quarantine). 95-5f passed: its kept output shows that weakened copy's `--after-only` reaching R23 and
+  failing each of the seven checks, as it must. What stopped trial 2's run before R23 is not established — its output
+  was not kept — so trial 4 keeps every run's output too.
+- **Trial 4 (19 Oct 21:11–22:50 UTC, with `REHEARSE_KEEP`): 1,105 passed, 0 failed** (307 runs of the deploy scripts,
+  18 of the quarantine), 95-5f among them. Trials 3 and 4 are the two clean runs in a row, on the committed script
+  (sha256 `6b412e0e3ad421e7…`) and rehearsal (sha256 `7814dd06cabcf007…`) at `9d1f0de9`.
+
+### RESULT — DEPLOYED 20 Oct (copy 05:42:47 UTC): PASSED 150 ok / 0 failed / 7 notes
+
+Read from the pasted terminal; the log file's name is in it, the file itself was not sent. The script prints no figure
+and no secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **Before it:** 5.18.97's evening `--after-only` (05:38:55 UTC) PASSED, its AFTER-CHECKS above; then `release/5.18.98`
+  was pushed at the operator's word (05:36 UTC).
+- **The run.** Begun 05:41:18 UTC. `/opt/dishnet` fast-forwarded `e8c43aa..401acac`, `release/5.18.98` fetched as a new
+  branch. Live before: `ec0accd` (5.18.97), PHP 8.1.34 in the container. No tracked edits, nothing untracked.
+- **Stage A passed.** A0, A7: the delta exactly the 17 files, each by its pinned sha256, no migration; 5.18.97's 15 kept
+  files the same pinned sha256 in both release commits; Domain B's trees the live release's. A22a–g and A22L with their
+  controls. **BR1:** the installed plugin is live 5.18.97, all 1,476 tracked files byte for byte. **G1:** installed is
+  5.18.97, its manifest and the 15 kept files by their pinned sha256. A2: the 6 changed PHP files and 9 test files
+  accepted by the server's PHP. BK3 the two ECO Bank links as text. A3–A18 and A21 as in 5.18.97; A14: the
+  quarantine's `--check` of 19 Oct 03:53:56 UTC began after 5.18.97's copy. A15 78/0, A16 47/0, A17's test 80/0,
+  **A22-T1 548/0**. **A23.1–A23.8:** on a copy of the book, both codes' figures equal D2 = A's SQL in all 8 cells; the
+  parts add up; P0 agrees; the 12 Sep adjustment once, on no account. **BK1:** cash in hand under 5.18.97 and 5.18.98
+  the same to the last digit in all 8 cells. **G2:** rule A on through the installed code. **BR2:** 088 intact on the
+  copy, its rows ECO Bank's two kept statements. **BR3:** the switch ON in both copies. **G3:** both ECO BANK cards
+  show a figure through the live 5.18.97 classes — one line per offered account, one per currency, each named Ecobank,
+  each with a statement kept. BN5 ok. BK2 ok.
+- **The copy checks, on one copy, each code in its own process with its own vault:** **C1** cash in hand 8/8 the same;
+  **C2** the list with no key 12/12 the same (ids, Balance, stream currency); **C3** the split apart and whole 12/12,
+  `countFiltered` agreeing 12/12, every non-cash row without a Balance 12/12, the tab's buttons holding each non-cash
+  row once 3/3; **C4** counts, pending disbursements and P&L 12/12; **C5** the copy's row, account and schema digests
+  unchanged by every read of 5.18.98's code (127 rows).
+- **The notes before the deploy (counts only):** **N1** 47 rows leave the list for the tab — 29 on bank accounts, 18 on
+  accounts of another kind, none naming no account, none with a negative or text id — all in project dishnet. **N2**
+  (Q1) approved rows with no account that look like bank money and stay on the list: uCRM's online 4; Bank Transfer in
+  0, out 0; Bank Charges 0. **N3** no row without a currency. **N4** no bank account ECO Bank does not offer holds a
+  row. A24 South Sudan and the two misconfigured books unchanged. Backup in
+  `/root/dnb-5.18.98/backup-20261020T054118Z`; the event queue held nothing not done.
+- **The copy:** 05:42:47 UTC, the container serving `ce7ac38`. V1–V13, BA4 and **CA4** (the Cashbook, the tab, the cash
+  export and the tab's export each send a visitor without a session to the sign-in page, no fatal) passed; **V3j** the
+  switch ON and unchanged; V4: no fatal since the copy.
+- **Stage R passed.** R1 the 17 files byte for byte (5 new), the manifest 5.18.98; **CA1** the 17 by their pinned
+  sha256, the 15 kept files still 5.18.97's, the changed and new PHP accepted by the container's PHP; **BA1** 088 and
+  every kept row exactly as stage A read them; BK3; R5 all 305 earlier files; **R7** the ledger and the file's size
+  unchanged — 5.18.98 writes nothing; R13 the event queue lost nothing; R14 Domain B; R23a–g; **R23.1–R23.9** on a new
+  copy; **CA3** no drift since A23 (05:41:55 UTC); **BA2** cash in hand the same under both codes, the gate, and G3
+  again through the installed code; **CA2** C1–C5 again on a new copy with the installed code, all held; R24 T4 20/0;
+  R25 T1 548/0; R26 South Sudan unchanged. Z1 the live vault untouched; Z2 nothing left in `/tmp`.
+- **The notes (7), each expected:** A17 (two installation requests pending under v1.0); N1–N4 (above, counts only); R3
+  (`migration.log` holds no line for 087); **R19, not yet conclusive** (master's last run of the retry job, 05:30:07
+  UTC, before the copy) — `--after-only` after 06:02:47 UTC.
+- **The cash sheet:** `/root/dnb-5.18.98/cash-deploy-20261020T054118Z.txt`, 538 lines, read on the server only.
+- **Still to come, each its own command:** the screens; `--after-only` (R19 conclusive) and the quarantine's `--check`;
+  the next day's `--after-only` after 15:10 UTC.
+
+### AFTER-CHECKS — 20 Oct 06:22 UTC: both PASSED; R19 conclusive
+
+Read from the pasted terminal; the log files' names are in it, the files themselves were not sent. Neither command
+prints a figure or a secret, and the terminal held none; the cash sheet stayed on the server.
+
+- **`--after-only`, begun 06:22:50 UTC: PASSED 94 ok / 0 failed / 1 note**
+  (`/root/dnb-5.18.98/after-20261020T062250Z.log`).
+  - Live `ce7ac38` (5.18.98), as the deploy left it; the checkout at `401acac`, no tracked edits, nothing untracked.
+    Every switch and setting as the deploy found them, the ECO Bank switch `on/on`; 086, 087 and 088 complete, their
+    rows unchanged.
+  - V1–V13, BA4 and **CA4** passed; **V4: no fatal or parse error since the copy** (1,917 lines read).
+  - **R19 is conclusive:** master ran the retry job at 06:15:04 UTC, after the copy (05:42:47 UTC); nothing at the stray
+    store's old name, the kept file unchanged.
+  - **CA1** the installed files the release's and the kept files 5.18.97's; R7 the ledger the same, the file larger as a
+    live plugin writes; R13 the event queue lost nothing.
+  - **On a fresh copy (06:23:26 UTC):** R23.1–R23.9 D2 = A in all 8 cells under both codes; **CA3 no drift since the
+    deploy's A23**; **BA2** cash in hand the same, the gate, and G3 again — both ECO BANK cards a figure; **CA2** C1–C5
+    again with the installed code, all held. R24 T4 20/0, R25 T1 548/0, R26 South Sudan unchanged. Z1 the live vault
+    untouched since the deploy's stage A; Z2 nothing left in `/tmp`.
+  - **The note (1):** R3 (no `migration.log` line for 087).
+  - The cash sheet: `/root/dnb-5.18.98/cash-after-20261020T062250Z.txt`, 287 lines, read on the server only.
+- **The quarantine's `--check`, begun 06:24:22 UTC: PASSED 9 ok / 0 failed / 2 notes**
+  (`/root/dnb-stray-quarantine/check-20261020T062422Z.log`). K3–K6, K8–K11 ok; **K13** the retry job ran at 06:15:04
+  UTC, after the move, and made nothing in `<plugin>/data`. Notes: K2 (the container serves `ce7ac38`, not `69c87a6`)
+  and K7 (`config.json` re-made by other writers — not a database).
+- **Still to come:** the operator's look at the screens; `--after-only` after 15:10 UTC today, once the evening WhatsApp
+  (18:00 Kampala) has run on 5.18.98.
+
+### Runbook
+
+1. **Say the word to push** `release/5.18.98`. The development branch — the script, its rehearsal, the release's copy on
+   the development branch and this record — is on origin; step 3's `git fetch origin release/5.18.98` fails until the
+   release branch is pushed.
+2. **First, if it has not been run: 5.18.97's evening `--after-only`**, after 15:10 UTC, once the evening WhatsApp
+   (18:00 Kampala) has run on 5.18.97. It is its own command, with its own log to send. It can run only while 5.18.97
+   is live: it refuses once the container serves anything but `ec0accd`.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.97.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.97/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **The deploy.** Run it as root on the server, as its own command, outside 14:55–15:10 UTC (the evening WhatsApp,
+   18:00 Kampala). Type `DEPLOY` when asked, and send back **the log file**: never a copy of the terminal, never the
+   cash sheet. While it runs, and during every `--after-only` and the rollback, press nothing on the Salesperson
+   numbers card, use nothing on ECO Bank (keep no statement), run no `tools/set_config.php` and save nothing under
+   Settings: a change made then fails the checks that compare before and after. A dry run first is possible but not
+   needed: `--check` runs stage A alone, changes nothing, and on GO prints this same command.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.98 && mkdir -p /root/dnb-5.18.98 && bash scripts/deploy-5.18.98.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.98/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   **Expected: PASSED, 0 failed, with notes.**
+   - **N1–N4** are always notes, counts only. N2 is Q1's count, the bank money that stays on the list.
+   - **R19** (not yet conclusive right after the copy), and **A17** if installation requests made under v1.0 are still
+     pending.
+   - On this server, most likely **R3** (`migration.log` holds no line for 087).
+   - **BK2** and **BA2**, when the book has no active staff record that is not an administrator's; **C5**, when
+     5.18.97's own reads move a digest (said, not judged).
+   - **CA3**, if the book moved between the before-copy and the after-copy.
+   - The book's own notes, where they apply (A23.4–A23.6, R23.9).
+
+   G3 is an ok line with one line per offered account, `account #<id> …`. That row id, the app's own internal number for
+   the account and not the bank account number, is the only one the log carries, and the log is still safe to send. BN5
+   is an ok line when the book offers one bank account per currency, each named Ecobank, and a note otherwise. **If G3
+   refuses, nothing was changed.** It is not expected: both cards showed a figure at 03:40 UTC and at 5.18.97's
+   `--after-only` runs of 03:52 and 04:04 UTC (`both=yes`); G3 checks it again before anything changes. Any failure, or
+   a note you cannot place: send the log file and stop.
+4. **Read the figures on the server** with the `less` command the summary prints. Each run has its own sheet: cash in
+   hand before and after, the copy checks' and the notes' counts, the drift by row id, ECO Bank's offered accounts,
+   and the lines of the physical count. Never paste, copy or send a sheet.
+5. **Right after PASSED, at a quiet moment (not between 14:55 and 15:10 UTC), look at the screens**, signed in as an
+   administrator:
+   - **The Cashbook (project dishnet), Ledger:** physical cash only — cash, mobile money and entries with no account,
+     those awaiting approval, rejected or voided among them — with the note at its top, *"Physical cash only: …"*. No
+     entry on an Ecobank account is on the list; bank money recorded with no account stays, as Q1 decided.
+   - **The new tab, "🏦 Bank & other accounts"**, right after Ledger: one button per bank account (on this book, by
+     5.18.97's BN5, the two Ecobank accounts, UGX and USD, plus any bank account N4 counts) plus *Other accounts*, each
+     with its count; no *All*; no Balance column and no total; read-only, with no ⋮ menu, no tick boxes and no bulk
+     tools. The grey note ends with the link to ECO Bank.
+   - **Cash in hand as before:** the Cashbook's cards, the landing page (all projects) and the CEO page's tiles, as
+     the sheet's installed lines say.
+   - **ECO Bank unchanged:** its menu item below Cashbook, its Quick Link, both cards with their figure and date, and
+     the lines as before.
+
+   Then the physical count, on paper, as the sheet lists it. Report only what the screens show: never a figure, a
+   name or a picture of a row or a card.
+6. **At least 20 minutes after the deploy copied the release's files into place** (the summary's *check it* line prints
+   the time), run `--after-only`, then the quarantine's `--check`, each its own command as the summary prints it, each
+   with its own log file to send. If R19 still says not yet conclusive, run `--after-only` again after the time it
+   prints.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.98.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.98/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+7. **The next day after 15:10 UTC** (18:10 Kampala): `--after-only` again, as in step 6. The evening WhatsApp runs at
+   15:00 UTC (18:00 Kampala) and its window ends at 15:10, so by then it has run on the new code. The script's header
+   says "after 15:00 UTC", the WhatsApp's own time; follow 15:10.
+
+There is no switch to set. 5.18.98 has none, and ECO Bank's stays ON as the operator left it: no step here runs
+`tools/set_config.php`, and the summary prints no switch command.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, "only if it is ever needed", followed
+by the by-hand put-back, each its own command. On a failure, send the log file and do not roll back on your own unless
+staff or customers are affected.
+
+It is one step. `--rollback` asks you to type `ROLLBACK` before it changes anything, puts 5.18.97 (`ec0accd`) back
+through `deploy-hybrid.sh` and checks it (RB). Unlike 5.18.97's rollback, there is no switch to clear first. As root on
+the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.98.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.98/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+What changes and what stays:
+- **Goes:** the split. The Cashbook's list shows every entry again as 5.18.97 has it, the bank and other non-cash rows
+  back among the cash ones and in its export; the tab and its export go.
+- **Stays:** cash in hand (D2 = A), so the screens and a count recorded under 5.18.98 still match.
+- **Stays exactly as it is:** ECO Bank — its switch, its screen, its links, 088's tables and every statement kept.
+  5.18.98 wrote nothing, so there is nothing to undo.
+- **Stays:** 5.18.95's fixes, 5.18.94's documents and every other switch.
+- **Stays on disk, read by nothing:** the five files 5.18.98 added.
+
+Afterwards:
+- Run the quarantine's own `--check`, its own command, as the rollback's summary prints it.
+- A later deploy of 5.18.98 uses `--redeploy`, and A14 refuses it until a quarantine `--check` begun after the
+  rollback's copy has passed.
+- If the script cannot run, the deploy's summary also prints the by-hand put-back, its own command.
+
+### Known limits
+
+1. **No switch.** The list changes, for everyone who sees the Cashbook on Uganda, as soon as the files are copied; only
+   the rollback undoes it. The one gate is rule A.
+2. **Bank money recorded with no account stays on the cash list and in cash in hand (Q1).** That is:
+   - customer payments uCRM records as bank transfer, online or card;
+   - payments staff record in uCRM as Cash that were really bank or Airtel;
+   - staff-app payments with the method *Bank*.
+
+   No rule takes them out: one would change cash in hand (D2 = A). N2 counts what can be seen: uCRM's online rows (the
+   gap-fill's included), Bank Transfer in and out, and Bank Charges. Payments recorded as Cash cannot be counted. Each
+   will be moved later, one at a time from the statement, as part of the bank-book work (`docs/69` §1.5); this release
+   moves none.
+3. **The tab is read-only (Q4).** Its entries cannot be edited, voided or deleted from the app; under 5.18.97 they
+   could be, from the Ledger. A correction is asked for and done as its own reviewed step; a void tool comes with P3c.
+4. **X2 stays with P3c.** `bank_import` pairs are not in `$pairSources`, so voiding or deleting one half leaves the
+   other half live. After 5.18.98 both halves are on the read-only tab, so the screen can no longer trigger it.
+5. **Bank and cash still meet elsewhere** (SPEC-separate-v2 §1.6, Q10), unchanged by 5.18.97 and 5.18.98:
+   - the staff app's Full Cashbook lists Ecobank and stock entries, and its positions add bank, cash and mobile money;
+   - the daily e-mail's Cash In / Cash Out add every entry of the day;
+   - the evening WhatsApp's IN/OUT lines and its entry count include bank entries;
+   - Opening Balances (off the menu) prints the book's own Ecobank figure, which is not Ecobank's balance.
+6. **SEC-1, recorded, not fixed:** neither Cashbook export asks the Cashbook tab's own permission (`$can('cashbook')`).
+   A role refused the tab can still download the cash export, and under rule A the Bank & other accounts export. This
+   is not wider than 5.18.97, whose cash export already served every row. The fix is its own step (SPEC-separate-v2
+   §2.12).
+7. **Lines of `includes/routes.php` left as they are** (SPEC-separate-v2 §2.12), all 5.18.97's:
+   - the cash export's field-agent line lacks `field_accountant`, and reads a record with no role as `''` where the
+     page reads `'sales'`;
+   - `$proj2` is NULL when a request carries no `cb_proj`, so the cash export then lists every project;
+   - `routes.php:228` still requires `includes/cashbook_web.php`, which does not exist.
+
+   The new export reads the role and the project the page's way.
+8. **Only the new export makes cells that start like a spreadsheet formula safe to open in Excel**; the cash export
+   still does not. The cash export also still ignores the category, status, direction and search filters (Q12).
+   Blank-currency rows count in UGX cash in hand but are not listed under "UGX only" (Q13; N3 counts them).
+9. **The line under the first card still reads "N entries in the book"**, every entry the book holds, Ecobank's
+   included (Q7). The "1–50 of N" counter under the list counts the cash list.
+10. **Which bank accounts get a button.** The rule is `BANK_BUTTON_IDS`: kind exactly `bank`, and an id above 0
+    stored as an integer or a text of digits.
+    - A bank account whose id is 0, negative, text or a real number (possible only in a hand-made table) has no
+      button; its rows are under Other accounts.
+    - A bank account ECO Bank does not offer (inactive, or in another currency) still gets a button — an inactive one
+      only when it holds rows — but no card on ECO Bank, and the tab's link then opens ECO Bank without choosing it. N4
+      counts such accounts that hold rows.
+11. **`accountLabels()` and a negative id, before PHP 8.1 (7.4, 8.0) against 8.1 and later (the server runs 8.1).** It
+    keeps an id that PDO returns as an integer or a string of digits.
+    - From PHP 8.1, PDO returns SQLite integers as integers, so an account stored with a negative id (a hand-made table
+      only) keeps its name and kind: a row on it shows them.
+    - Before 8.1, PDO returns them as text, so the same row reads "account not found" in the tab and in its export, its
+      Account kind is blank in that export, and in the cash export (a cash or mobile-money account with a negative id)
+      its Account cell is empty, where 5.18.97's `accounts()` filled it under both.
+
+    The name and the account kind differ, in the tab, in its export and in the cash export's Account column; no row's
+    side or button does.
+12. **RB's failure line, the RB_KEEP-only branch.** Since trial 1, the reasons are built outside any `${…:+…}`. The
+    branch for a kept 5.18.97 file that is not 5.18.97's after a rollback, with the split gone (RB_KEEP alone), was
+    expanded and checked in a scratch shell only. No rehearsal run reaches it: 8a reaches the split's branch. 10d checks
+    every run's output for a bash runtime error.
+13. **The evening WhatsApp's window is the operator's to keep**, as in 5.18.96 and 5.18.97: the script does not refuse
+    to start between 14:55 and 15:10 UTC.
+14. **5.18.97's own `--after-only` cannot run once 5.18.98 is live**, because it requires the container to serve
+    `ec0accd`. Its evening check comes first (Runbook step 2); otherwise 5.18.98's next-day `--after-only` covers the
+    evening's run on the new code.
+
+## 20 Oct — quotations from the staff app land on another company, and the app's plans differ from uCRM's: findings and decisions
+
+**The operator's report (20 Oct):** a quotation made from the staff app is not on the company the business uses —
+uCRM organization 1, quote template 1006 — and the plans in the app are not the plans in uCRM. Asked: either way,
+app or CRM, they must stay in sync.
+
+**Findings (read-only, live code `ce7ac388`; four tracers, a synthesis and an adversarial verification — 19 of 24
+claims confirmed, 5 corrected; the scratchpad keeps the full report):**
+- **No quote the plugin creates names an organization or a quote template.** uCRM gives a quote its client's
+  organization and that organization's default quote template; template 1006 is named nowhere in the plugin.
+- **The KYC registration form files every new uCRM client under "organization 2 if it exists, else the only one"**
+  (`UcrmClientTarget`, written for South Sudan, not tenant-gated; the retry job the same). The operator confirmed that
+  Uganda's uCRM now holds a second organization and that the wrong quote came from the KYC form: the cause.
+- Leads choose their organization by another rule (`ucrm_lead_organization_id`, else the commonest of 50 clients); the
+  WhatsApp quotation names the organization marked *selected*, never the client's; the plugin's fallback quote PDF can
+  print South Sudan's address on the `quote.add` e-mail path.
+- **Plans are three lists:** the plugin's own tables (what the app quotes, at the plugin's price), uCRM Products
+  (pushed one way from the plugin when an admin saves or anyone presses *Sync All*, never pulled back) and uCRM Service
+  Plans (read by the AI, the website and the WhatsApp summary, never written). Send Quotation lines are free text with
+  no uCRM item. *Sync All* (`push_products_to_ucrm`) is not admin-gated.
+
+**The operator's decisions (20 Oct):**
+- **"Always company 1":** every new app customer is filed under organization 1; a customer filed under another
+  organization is not quoted from the app — the salesperson is told to move the customer to company 1 first.
+- Organization 1's quote template was **already** the one the business uses: the operator's screenshot of
+  organization 1's edit page (20 Oct, 10:31 Kampala) shows *Quote template: V5* (the operator's template 1006). So a quote
+  for a client filed under organization 1 already carries it, from the app or from uCRM; the wrong quotes came from
+  clients filed under the other organization, with its own template and company details. The operator moves those
+  clients back to organization 1; until 5.18.99 is live, a client registered from the app is moved by hand and its
+  quote made again from uCRM. No release sends a template id until uCRM 4.5.33's acceptance of it is measured.
+- **uCRM Products are the true price list** — a later release makes them the only one.
+- **Plan approved:** first a small Uganda-only release, 5.18.99 (the configured quoting organization, the refusal before
+  any quote under another, the WhatsApp and fallback PDF naming the client's own company, *Sync All* admin-only, a
+  failed uCRM quote shown to the salesperson); then the price-list release. South Sudan unchanged in both.

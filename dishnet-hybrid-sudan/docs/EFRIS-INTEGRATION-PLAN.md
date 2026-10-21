@@ -345,7 +345,7 @@ connector is transcribed from the official spec with real credentials.
 
 Hardening note: a company buyer without a TIN no longer maps as B2B — the
 mapper blocks with the fix (set `efrisTin`, or `efrisBuyerType=individual`
-for a walk-in shop). The first live invoice (Family Shoppers) is exactly
+for a walk-in shop). The first live invoice (a real business customer, name not repeated here) is exactly
 this case.
 
 Test coverage: `tests/test_efris_uat.php` (57 asserts) against the fake

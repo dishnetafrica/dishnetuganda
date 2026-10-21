@@ -360,7 +360,7 @@ phone on mobile data in a private window.
 
 **What is measured (docs/37 §I.4).** uCRM live: client #1 `isActive false`, `isLead false`, `isArchived
 false`, clientType 2 (company), one service id 6 with **status 1 (active)** since 20 Sep 2026, one unpaid
-invoice (329,000), balance −329,000, 0 payments. The plugin's own service-status map reads 1 as `active`
+invoice (the plan's monthly price), a negative balance of the same amount, 0 payments. The plugin's own service-status map reads 1 as `active`
 (`CustomerAccountService.php:329`, `CustomerDataTools.php:335`).
 
 **What the code does with it.** `ClientSearchIndex` copies `isActive` into `is_active` (line 95) and stores
@@ -437,7 +437,7 @@ path (§5): **A1 first, then C, then A2, then the B decisions and build.** What 
 | **A1.2** consent shared across verified routes of one customer | **BUILT — 5.18.41, LIVE** | `tests/test_consent_identity.php` (28); the type-affinity trap it found is in §7.1 |
 | **A1.3** canonical host for the customer pages | **BUILT — 5.18.41, LIVE: `:8443` answers 302 to the public address (measured 15:04 UTC)** | `tests/test_canonical_host.php` (49); the rule is narrower than planned and loop-proof by construction (§7.1) |
 | **A1.4** `isActive` | unchanged (decided §4) | — |
-| **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — South Sudan `+211 921 443 006`, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
+| **DECISION A-1** (Sudan "Call us" number) | **resolved by the profile**: the portal shows and dials `contacts.support_phone` — the South Sudan support number ending 006, the number the rest of the Sudan code already calls the support phone | the portal displayed 005 and dialled 002 before; if 006 is wrong, it is one value in `profiles/south-sudan.json` |
 | **A2** legal wording | **BUILT — 5.18.42, LIVE since 26 Sep 19:56 UTC (verified 25/25: South Sudan ×0, Juba ×0 on the Terms page, `app_legal_version` 1.1).** The operator approved the §7.3 proposal (*"i will go with your recommendation"*, 26 Sep). Points 1, 2, 4, 6, 8, 9, 10 are the proposal's words; points **3, 5, 7** took the conservative form and are **flagged in §7.3 (as built)** for a later edit. Uganda 1.1 / South Sudan 1.0 — every Uganda customer accepts once on the next sign-in; South Sudan renders byte for byte (golden) and asks nobody | `tests/test_portal_tenant.php` (107), `test_consent_identity.php` (34); deploy with `scripts/deploy-5.18.42.sh` |
 | **INVOICE TAXES** (new, 26 Sep: *"separate the UCC tax and other details so customer can understand properly"*) | **The plugin half LIVE in 5.18.42; the uCRM half DECIDED AGAINST for now: *"ok keep price as it is"* / *"its ohk the way it is"* (§7.5). A label fix, 5.18.43, LIVE since 26 Sep 20:27 UTC (25 ok / 0 failed).** The invoice screen and the app API print the totals block as uCRM states it: before tax, **each tax or levy on its own line under uCRM's own name**, any discount, the total. Measured cause: the plugin read `totalTaxes`, a field a uCRM invoice does not have, so **no tax line ever rendered**. **The other half is an operator act in uCRM — §7.5** | `lib/InvoiceTotals.php`; `tools/tax_probe.php` section 5 shows the lines the latest invoices carry (read-only) |
 | **C-1** Traefik absorbs the bare `/crm` | **IN PLACE since 15:21 UTC, and HEALTHY** (attempt 2): `/crm → 302 → https://crm.dishnetuganda.com/crm/`, measured; attempt 1 had failed on the script's own YAML escape. The two Traefik log lines the operator read are **the attempt-1 file being re-parsed at 15:21:07Z**, the moment the re-run staged its temporary file inside the watched directory — one step before the old file was replaced. The attempt-2 file parses and its router exists (the 302). Script fixed a third time: staging outside the watched directory (§7.1) | **nothing** — done |
@@ -611,7 +611,7 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    **C-2b — the template, not the port.** *(Its "three edits" were superseded at 21:40 by the operator's exports,
    below: the template invoices use is the South Sudan one, so the Uganda template is pasted in whole.)* PAY NOW
    leads to DishNet's own pay page, the Uganda profile's
-   `pay_url`, `https://dishnetuganda.com/pay`. It gives Airtel Money Merchant ID 4428146 and links to the
+   `pay_url`, `https://dishnetuganda.com/pay`. It gives the Airtel Money Merchant ID (not repeated here) and links to the
    customer portal, and it is the same page the website uses. In uCRM's template editor that is three edits:
    the condition `invoice.onlinePaymentLink and not is_paid` becomes `not is_paid`, the button's `href` becomes
    the pay page, and the printed address becomes `dishnetuganda.com/pay`. Clone the template first; the clone
@@ -656,7 +656,7 @@ cd /opt/dishnet && git pull origin claude/study-this-jhe2eg \
    `PROXY_HTTPS_PORT`, `WS_PORT` and `PROXY_WS_PORT` empty, so no public port is set. DishNet's pay page answered
    200 with the Airtel Money instructions. The verdict printed the fix. The operator then exported the templates:
    - **#1000 "Invoice Ugadna" is the South Sudan invoice, "DishNet Branded Invoice v3".** It prints "Juba, South
-     Sudan", the Kololo address, +211 921 443 002, dishnetafrica.com, **"Amount Due (USD)"** and the South Sudan
+     Sudan", the Kololo address, the South Sudan support number, dishnetafrica.com, **"Amount Due (USD)"** and the South Sudan
      late-payment terms (5 %, USD 25 reconnection). It decides PAID with `totals.amountDue == '$0.00'`, which a UGX
      amount never equals, so **every Uganda invoice reads UNPAID and shows PAY NOW, paid or not. Uganda customers'
      invoices have carried South Sudan details.** Earlier audits read only the link hosts inside the PDF (docs/39

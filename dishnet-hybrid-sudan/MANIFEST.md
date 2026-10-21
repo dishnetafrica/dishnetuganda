@@ -258,7 +258,7 @@ Balance query (replaces 5 sources):
 
 ### Flow 10: SSP Imprest Model (v4.20.3) — see SAFETY Rule 16
 ```
-Step 1: Rupesh issues SSP advance to staff (e.g. 600,000 SSP to Aida)
+Step 1: Rupesh issues SSP advance to staff (e.g. an SSP amount to Aida)
   → post_cashbook.php (cb_action=add_entry, category="SSP Advance")
     → CashbookService::addEntry()       → cb_ledger OUT (CB-2768)   ← physical cash leaves
     → SspAdvanceService::registerAdvanceIssue() → cb_ssp_register IN  ← Aida's imprest balance
@@ -477,15 +477,15 @@ cron_starlink_block_retry.php (every 10 min via master.php):
 
 | Channel | Phone | app_key | Session ID |
 |---------|-------|---------|------------|
-| Support | 211921443002 | 2313..186b | 7cc8d42a..42cfc |
-| Accounts | 211921443009 | 6b93..acb5 | 1d327e8a..0ef1e |
-| Auth key (shared) | — | OCshy4xuvHETHyAI6YvY6YikqPwdpsvM2 | — |
+| Support | the business's South Sudan support number (not repeated here) | partial key, not repeated here | partial session id, not repeated here |
+| Accounts | the business's South Sudan accounts number (not repeated here) | partial key, not repeated here | partial session id, not repeated here |
+| Auth key (shared) | — | a credential, removed from this file (rotate it) | — |
 
 ## Admin Tooling (v4.21.16+)
 
 | Surface | URL | Purpose |
 |---------|-----|---------|
-| Emergency Repair | `public.php?page=emergency_repair&key=<KEY>` | Pre-bootstrap diagnostic + repair endpoint. Plain text. Runs after $dataDir is set but before SqliteStore::create() — usable when the plugin is broken. Actions: `diagnose` (default, read-only integrity_check + per-table probe), `clear_wal` (delete stale -wal/-shm), `drop_table&t=NAME&confirm=YES_DROP_NAME` (destructive, with hardcoded blacklist of money/customer tables), `vacuum`. Key in `data/emergency_repair_key.txt`. |
+| Emergency Repair | `public.php?page=emergency_repair&key=<KEY>` | Pre-bootstrap diagnostic + repair endpoint. Plain text. Runs after $dataDir is set but before SqliteStore::create() — usable when the plugin is broken. Actions: `diagnose` (default, read-only integrity_check + per-table probe), `clear_wal` (delete stale -wal/-shm), `drop_table&t=NAME&confirm=YES_DROP_NAME` (destructive, with hardcoded blacklist of money/customer tables), `vacuum`. Key in `data/emergency_repair_key.txt`, **required** since 5.18.95: no file, an empty or unreadable one, a key under 32 characters or the old built-in key → 403, page disabled (no built-in key; compared with `hash_equals`). |
 | Starlink Suspensions tab | `?page=dashboard&tab=starlink_suspensions` | Admin-only view of sl_suspension_state + sl_suspension_log. Force-restore button calls StarlinkBlockService::restore() with `triggeredBy='manual:<name>'`. CSRF-protected. |
 
 ## Recent Changes (v4.21.79 → v4.21.82) — 2026-05-04

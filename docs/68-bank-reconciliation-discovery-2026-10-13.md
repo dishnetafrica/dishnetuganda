@@ -678,6 +678,20 @@ commit `3d250082dea1fa99cad1283068e8f94d204657f0`. It refuses before P0, naming 
     the runner, every one caught.
   - The files did not change during the runs.
   - The P0 rehearsal (`rehearse.sh`), on the same P0 files and the same fake docker: 125 passed, 0 failed.
+  - **Correction, 16 Oct — some of those passes ran nothing.** Building R0's copy of this harness found three defects in
+    P0's, confirmed in P0's own logs:
+    - `rehearse.sh`: 14 checks called a shell function inside `bash -c`, where it does not exist, and negated the
+      resulting "command not found" into a pass. Each final log holds those 14 lines.
+      - The 8 T5 controls (`scripts/harness/bank-recon-p0/rehearse.sh:227`, `:230`, `:232`) proved nothing. Each was
+        meant to show that a copy of the tool with a forbidden call planted fails the source check.
+      - The 6 T6 checks (`:276-290`) proved their exit code and message, but not their last part, that P0 did not run.
+    - `rehearse-run.sh` R5b (`:184`): `data/` is git-ignored, so the sandbox checkout had no `data/` folder and the
+      planted file was never written. R5b therefore never tested that a file in `data/` is left out of the count.
+    - P0's tool, command and runner are unchanged by this, and the 14 Oct run stands on its own gates and checks.
+      **The P0 harness is to be fixed and rehearsed again before P0's second run** — done 16 Oct; see *Second run* at
+      the end of §P. R0's harness has the three fixes. Its
+      R5b now plants the file, and a weakened copy of R0's runner (a copy of P0's) without the `data/` exclusion is
+      caught by it (`docs/69` Part 4).
 - Not rehearsed: `followRemoteHEAD=never` (the sandbox has git 2.43), and the runner's own `-u SHELLOPTS -u BASHOPTS`
   for P0's start, which the line already provides.
 
@@ -823,6 +837,43 @@ the repository.
 - **Exit 7:** the automatic rule found no live, unassigned row dated 2026-09-12 whose description or category names an
   adjustment. So options B and D were not computed; A and C were.
 - **A second run waits for your word:** the same line with ` --adjustment-id=N`, once the row's id is known.
+
+**Second run — prepared 16 Oct; for the operator to run.**
+- **The id is known.** R0 (`docs/69` Part 4) found exactly one candidate for the 12 Sep adjustment, live and unassigned.
+  Its id was given to the operator in the session. Like R0's other ids, it is kept out of this record.
+- **The line** is the one above, with ` --adjustment-id=N` added right after `bash /root/dnb-bank-recon/bank-recon-p0-run.sh`,
+  before ` 2>&1`. The pins are the same: runner commit `3d250082`, runner sha256 `8e7eb192…`, tool and command from
+  `5954ede5`. Nothing in P0's tool, command or runner was changed.
+- **P0 checks the id itself.** A row that is not live and unassigned is refused with exit 3 (`--adjustment-id=N is
+  not a live, unassigned row`), and nothing is computed from it.
+- **The harness, corrected first** (the three defects in the correction above):
+  - the 8 T5 controls now call srccheck directly, through a helper that counts only its exit 1 as a refusal, with two
+    controls on the controls;
+  - the 6 T6 checks write their "P0 not run" test out in full, with a positive control that it sees a real run;
+  - R5b now creates `data/` before planting its file. A new weakened copy of the runner, without the `data/` exclusion,
+    is caught by R5b alone;
+  - a new case, **R26b**, runs this second-run line. It uses the book on which the automatic rule finds two candidates
+    (R26's exit 7). The result is P0 DONE, the adjustment `named by --adjustment-id`, B and D computed, P0 run once,
+    and `RUNNER EXIT 0`.
+- **Rehearsed on 16 Oct, one run at a time, P0's files unchanged throughout:**
+  - `rehearse.sh`, 21:28–21:32 UTC: **128 passed, 0 failed**. It now prints no "command not found" line; before the
+    correction, each run printed 14.
+  - `rehearse-run.sh`, 21:32–22:13 and 22:13–22:55 UTC: **109 passed, 0 failed each** (68 cases and 41 weakened
+    copies, every one caught). The two runs match line for line.
+- **What the log shows.** The guide above holds. The adjustment line reads `named by --adjustment-id: id N, …`, and
+  B and D are computed. The log stays confidential, as the first run's did.
+
+**Result of the second run — 17 Oct, begun 02:53:52 UTC: `RUNNER EXIT 0`.** Read from the terminal the operator
+pasted; the log file was not sent. No figure from it is recorded here.
+- **Every gate held.** The checkout (`a2c94fc`, on the branch) was clean. The two reviewed files came out of
+  `5954ede5` with their reviewed sha256s. The fetched branch held that commit, 23 commits on. The book was in the
+  expected folder, with the expected owner.
+- **The adjustment was named** by `--adjustment-id`: live, unassigned, dated 12 Sep, out, UGX, approved. It is in that
+  month's P&L.
+- **All four options were computed** in both currencies (B and D for the first time). The parts add up in both
+  currencies. The connections changed no row, the two immutable readings were identical, and no side file appeared.
+- **After P0**, the checkout was unchanged, and the P0 command had read the folder that was checked.
+- **D2 is now the operator's decision**, on these figures (given in the session, not here).
 
 ### P.1 The 5.18.94 after-checks — separately, each with its own log
 

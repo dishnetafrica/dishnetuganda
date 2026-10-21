@@ -46,7 +46,7 @@ would be the "over-emailing" failure the brief warns about.
 
 ### 1.2 `ucrm_email_templates/notification_invoice_overdue.html.twig` (191 lines)
 - Same path/owner as above. **Has `@media` ✓** (only template that does)
-- 🔴 Prints **+211 921 443 002** — a South Sudan number — to a Uganda customer
+- 🔴 Prints **a South Sudan business support number** (not repeated here) to a Uganda customer
 - Assumes postpaid dunning; Uganda is prepaid. **Production-ready:** ❌
 
 ### 1.3 `ucrm_email_templates/notification_payment_received.html.twig` (170 lines)
@@ -68,7 +68,7 @@ would be the "over-emailing" failure the brief warns about.
 ### 1.7 `lib/OtpEmailTemplate.php` (login code email) — **the only polished one**
 - **Trigger:** customer requests portal/app login → `api_customer_app.php:485`
 - Has viewport, clean layout, brand red `#D41C1C`
-- 🔴 Footer: **"DishNet Africa Ltd. · Juba, South Sudan"**, `dishnetafrica.com`, support **+211 921 443 009**
+- 🔴 Footer: **"DishNet Africa Ltd. · Juba, South Sudan"**, `dishnetafrica.com`, support **a South Sudan business number** (not repeated here)
 - 🔴 `Reply-To: info@dishnetafrica.com` is **hardcoded** at `api_customer_app.php:486`
 - **Production-ready:** ❌ for Uganda (mechanically fine, geographically wrong)
 
@@ -189,8 +189,8 @@ RENEWAL / UPGRADE / CANCELLATION ──📱 WA + 📧 confirm──► MISSING
 | Brand red `#D41C1C` | ✅ in OTP, quote, delivery templates |
 | Typography | ⚠️ inconsistent; one template pulls remote Google Fonts (won't load) |
 | Footer | 🔴 Sudan address in every template |
-| Phone | 🔴 +211 numbers; Uganda is +256 705 993 348 |
-| WhatsApp link | 🔴 wa.me/211921443009 |
+| Phone | 🔴 +211 numbers; Uganda has its own support number (not repeated here) |
+| WhatsApp link | 🔴 a wa.me link to a South Sudan business number (not repeated here) |
 | Website | 🔴 dishnetafrica.com; should be dishnetuganda.com |
 | Company/legal | ❌ no TIN 1059140632 / Reg 80046255496181 (present on PDFs only) |
 | UCC wording | ❌ absent from every email |
@@ -240,7 +240,7 @@ Email footer line: **"UCC Authorised Starlink Installer"** ✅ (matches the flye
 
 **Phase 1 — Foundation (do first)**
 1. `lib/EmailTemplate.php` — one Uganda-branded shell (header, red rule, footer with
-   +256 705 993 348, dishnetuganda.com, TIN, UCC line) with `@media` + dark-mode tokens
+   the Uganda support number (not repeated here), dishnetuganda.com, TIN, UCC line) with `@media` + dark-mode tokens
 2. Fix the hardcoded `Reply-To` and the OTP footer
 3. Verify (or replace) the uCRM notification send path and the dunning cron's SMTP
 

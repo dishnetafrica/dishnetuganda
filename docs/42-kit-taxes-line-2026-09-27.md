@@ -357,7 +357,7 @@ A chat reply that quotes a kit price keeps 5.18.48's line (§2), which names the
 A quote made in uCRM, as the customer receives it on WhatsApp (the test's order 000114; no customer's details):
 
 ```
-🏷️ *Total: UGX 2,648,000*
+🏷️ *Total: the quotation's total (not repeated here)*
 ✅ All prices include all taxes — URA taxes and UCC charges are already in them. Nothing is added on top.
 
 💳 Cash / Transfer / Card

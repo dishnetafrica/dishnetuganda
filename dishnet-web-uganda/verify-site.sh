@@ -71,6 +71,7 @@ for f in glob.glob(os.path.join(root,'site','**','*.html'),recursive=True):
     for m in pat.findall(open(f,encoding='utf-8',errors='ignore').read()):
         r=m.split('?')[0].split('#')[0]
         if not r or skip.match(r): continue
+        if r == '/login': continue    # a 302 to the CRM, asserted under "customer sign-in"
         if r.endswith('.apk'): continue   # binaries are uploaded at deploy, not tracked in git
         u=r if r.startswith('/') else '/'+os.path.relpath(os.path.normpath(os.path.join(d,r)),os.path.join(root,'site'))
         if u.endswith('/'): u += 'index.html'   # a directory link means its index
@@ -100,6 +101,23 @@ else
 fi
 d=$(curl -s -o /dev/null -w '%{http_code}' "$B/404.html")
 [ "$d" = 404 ] && echo "  /404.html not directly reachable (internal)" || { echo "  FAIL: /404.html directly returned $d"; fail=1; }
+
+echo "== customer sign-in =="
+# Every "Customer Login" links /login; nginx answers it with a 302 (never a
+# 301, which a browser would keep) to the CRM sign-in, carrying the same
+# security headers as every other path.
+LOGIN_TARGET='https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login'
+h=$(curl -sI "$B/login")
+c=$(printf '%s\n' "$h" | head -1 | awk '{print $2}')
+loc=$(printf '%s\n' "$h" | grep -i '^location:' | sed -E 's/^[Ll]ocation: *//' | tr -d '\r')
+s=$(printf '%s\n' "$h" | grep -icE 'x-content-type-options|x-frame-options|referrer-policy')
+if [ "$c" = 302 ] && [ "$loc" = "$LOGIN_TARGET" ] && [ "$s" = 3 ]; then
+  echo "  /login -> 302 to the CRM sign-in, 3/3 security headers"
+else
+  echo "  FAIL: /login returned $c, Location '$loc', $s/3 security headers"; fail=1
+fi
+n=$(grep -rlF 'href="/login"' "$HERE/site" --include='*.html' | wc -l)
+[ "$n" -gt 0 ] || { echo "  FAIL: no page links /login"; fail=1; }
 
 echo "== seo =="
 # A canonical pointing at another domain tells Google not to index this site at
@@ -131,11 +149,14 @@ done
 # One WhatsApp number, everywhere.
 wa=$(grep -rhoE 'wa\.me/[0-9]+' "$HERE/site" --include='*.html' | sort -u)
 [ "$wa" = "wa.me/256705993348" ] || { echo "  unexpected WhatsApp target(s): $wa"; fail=1; }
-# One customer-portal URL, everywhere it appears — plus the plugin's public
-# price feed, which legitimately lives on the same host — and, since the
-# shop page, the accessories feed and the bare origin shop.html preconnects
-# to, because every product photo is served from there too — and the public
-# distributor-application intake the Become-a-Distributor page posts to.
+# No customer-portal URL in any page: every "Customer Login" links the site's
+# own /login, which nginx redirects to the CRM sign-in (checked under
+# "customer sign-in" above), so the CRM plugin's path never sits in a link a
+# customer reads. The only CRM URLs a page may carry are the plugin's public
+# price feed and web chat, the shop's accessories feed and the bare origin
+# shop.html and index.html preconnect to (every product photo is served from
+# there too), and the public distributor-application intake the
+# Become-a-Distributor page posts to — none of them shown to a customer.
 # (The sed strips a trailing '...; the intake URL lives in single-quoted JS.)
 portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --include='*.html' | sed "s/'.*//" | sort -u \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=prices$' \
@@ -143,13 +164,15 @@ portal=$(grep -rhoE 'https://crm\.dishnetuganda\.com[^"]*' "$HERE/site" --includ
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=shop&amp;format=json$' \
          | grep -v '^https://crm\.dishnetuganda\.com/crm/_plugins/dishnet-hybrid-sudan/public\.php?page=distributor_apply$' \
          | grep -v '^https://crm\.dishnetuganda\.com$')
-[ "$portal" = "https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login" ] || { echo "  unexpected portal URL(s): $portal"; fail=1; }
+[ -z "$portal" ] || { echo "  unexpected CRM URL(s) in pages: $portal"; fail=1; }
+n=$(grep -rF 'page=customer_login' "$HERE/site" --include='*.html' -l | wc -l)
+[ "$n" = 0 ] || { echo "  $n pages still link page=customer_login directly instead of /login"; fail=1; }
 # Never the bare /crm. The server in front of uCRM answers it with a permanent
 # redirect to /crm/ that carries its own port, :8443 — self-signed, so a
 # customer's browser shows a security warning instead of the sign-in page.
 n=$(grep -rF 'https://crm.dishnetuganda.com/crm"' "$HERE/site" --include='*.html' -l | wc -l)
 [ "$n" = 0 ] || { echo "  $n pages still link the bare /crm, which redirects to :8443"; fail=1; }
-[ $fail -eq 0 ] && echo "  no foreign-country remnants; one WhatsApp number; one portal URL"
+[ $fail -eq 0 ] && echo "  no foreign-country remnants; one WhatsApp number; no portal URL outside /login"
 
 echo "== commercial rules =="
 # The house law: prices live in uCRM, never in this site. The only currency
