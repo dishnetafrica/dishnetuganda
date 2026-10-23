@@ -78,7 +78,8 @@
 #   · a rollback whose copy leaves 5.18.99's debug route behind FAILS RB twice, and a copy blind to the quoting code
 #     there FAILS once (caught); 5.18.99's Sync All gate, Uganda profile and set_config installed by hand over 5.18.98
 #     already serving: the rollback refuses before anything changes; over rows 5.18.99 wrote, RB counts them, and with
-#     the same three left behind by the rollback's own copy it FAILS naming all three (8);
+#     the same three installed by the stand-in at the run's first request, after stage A compared the files (5.18.98
+#     already serving: the rollback's checks alone, no copy), it FAILS naming all three (8);
 #   · nothing reaches Evolution; every observer quiet but where a run trips one on purpose; no figure, secret, client id,
 #     client name or contact, or uCRM key in any output, log, state file or request record, the sheets aside for ids;
 #     no stand-in uCRM, token copy or code copy left; /tmp, the host and the checkout as found (10).
@@ -1881,9 +1882,10 @@ check "$(installed99 "$P98")$(stat -c '%u:%g' "$PD/includes/api/api_cron_debug.p
 # First, three of its quoting markers — 5.18.99's Sync All gate, Uganda profile and set_config — installed by hand
 # BEFORE the run, over 5.18.98 already serving: the record says 5.18.98 and these files are not its, so the rollback
 # refuses in stage A, changes nothing and prints the put-back alone — the script's designed path (a copy that did not
-# complete, or an edit by hand), which trial 2's 8b met. Then the same three left behind by the rollback's OWN copy, as
-# .left99 models it for the debug route: the stand-in's .left99m installs them at the run's first request, after stage
-# A has compared the installed files — and RB counts the rows and names all three.
+# complete, or an edit by hand), which trial 2's 8b met. Then, with 5.18.98 still serving, the rollback copies nothing
+# and runs its checks alone; the stand-in's .left99m installs the same three at the run's first request (section V),
+# after stage A has compared the installed files — files changed after stage A, the model 8a' runs on, not what a
+# rollback's copy leaves behind (8a shows that, for the debug route) — and RB counts the rows and names all three.
 D8B99="$(data94)"; cfg_keep; RQ99="$(rows_add99 "$SEED99RB")"; file_set ucrm_quote_organization_id 1; D8B0="$(data94)"
 for f in includes/api/api_products_admin.php profiles/uganda.json tools/set_config.php; do cp -p "$PD/$f" "$SB/rbq99-${f##*/}.kept"; git -C "$REPO" show "$P99:$P/$f" > "$PD/$f"; done
 fresh99; OUT="$(run99 --answer ROLLBACK --rollback)"; T="$(last99)"
@@ -1899,7 +1901,7 @@ chmod 644 "$SB/left99m.list"; mv "$SB/left99m.list" "$SB/web/.left99m"
 fresh99; OUT="$(run99 --answer ROLLBACK --rollback)"; T="$(last99)"
 check "$RQ99|$(live)|$(noteline "$OUT" RB 'applications with a quote refusal recorded 1, leads flagged quote_org_missing 1, ucrm_quote_organization_id set/unset')$(failline "$OUT" RB "the installed code after the rollback is not 5.18.98's as it must be:" "5.18.99's quoting code still there: api_products_admin.php:push_products_to_ucrm-admin-only profiles/uganda.json:quoting tools/set_config.php:ucrm_quote_organization_id")$(failline "$OUT" RB "installed files that are not 5.18.98's after the rollback:" 'includes/api/api_products_admin.php' 'profiles/uganda.json' 'tools/set_config.php')|$(ureq99 "$T" | cut -d' ' -f1)|$(spent99 .left99m)" \
       "{\"rows\":2}|$P98|yesyesyes|total=0|spent" \
-  "8b over rows 5.18.99 wrote and the key in the configuration file, RB counts them — 1, 1, set/unset — and, with 5.18.99's Sync All gate, Uganda profile and set_config left behind by the rollback's own copy (the stand-in's .left99m), FAILS naming all three markers, and by sha256; it asks uCRM nothing"
+  "8b over rows 5.18.99 wrote and the key in the configuration file, RB counts them — 1, 1, set/unset — and, with 5.18.98 already serving (the rollback's checks alone) and 5.18.99's Sync All gate, Uganda profile and set_config installed by the stand-in (.left99m) at the run's first request, after stage A compared the files, FAILS naming all three markers, and by sha256; it asks uCRM nothing"
 for f in includes/api/api_products_admin.php profiles/uganda.json tools/set_config.php; do cat "$SB/rbq99-${f##*/}.kept" > "$PD/$f"; touch -r "$SB/rbq99-${f##*/}.kept" "$PD/$f"; done
 cfg_back; sqx "DELETE FROM kyc_applications WHERE json_extract(data, '\$._rh99rb') = 1" >/dev/null; sqx "DELETE FROM leads WHERE json_extract(data, '\$._rh99rb') = 1" >/dev/null
 check "$(installed99 "$P98")|$(stat -c '%u:%g' "$PD/includes/api/api_products_admin.php" "$PD/profiles/uganda.json" "$PD/tools/set_config.php" | paste -sd, -)|$(data94)" "0|1000:1000,1000:1000,1000:1000|$D8B99" \
@@ -1924,10 +1926,22 @@ rm -f "$SB/anchor-missing"
 S="$(pinned_copy99 pinprobe99 "$P99" "$DEPLOY99" lib/NoSuchFile.php "$(printf '0%.0s' $(seq 1 64))" 2>/dev/null)"
 check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )" "pinned_copy99:pinprobe99 " "control on the control: a re-pinned copy whose file has no pinned line is recorded as such"
 rm -f "$SB/anchor-missing" "$S"
+printf 'rh99 restore control\n' > "$SB/rh99-restore-target"; touch -d '2020-01-01 00:00:00 UTC' "$SB/rh99-restore-target"; rm -f "$SB/rh99-no-such.kept"
+RST99="$(sha256sum "$SB/rh99-restore-target" | cut -c1-64)@$(stat -c %Y "$SB/rh99-restore-target")"
+restore99 "$SB/rh99-no-such.kept" "$SB/rh99-restore-target"
+check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )|$( [ "$(sha256sum "$SB/rh99-restore-target" | cut -c1-64)@$(stat -c %Y "$SB/rh99-restore-target")" = "$RST99" ] && echo unchanged)" "restore99:rh99-restore-target |unchanged" \
+  "control on the control: a restore whose kept copy is missing is recorded as such (restore99), and its target is left as it was, bytes and time — never truncated"
+rm -f "$SB/anchor-missing" "$SB/rh99-restore-target"
 check "$( [ -f "$SB/bad-runs" ] && tr '\n' ' ' < "$SB/bad-runs" )" "" "every run took the options it was given — none answered 'unknown option'"
 OUT="$(run99 --after-only --rehearsal-unknown-option)"
 check "$(has "$OUT" 'unknown option: --rehearsal-unknown-option')$( [ -s "$SB/bad-runs" ] && echo recorded)" "yesrecorded" "control on the control: a run given an option the script does not know is recorded as such"
 rm -f "$SB/bad-runs"
+# spent99's control on the control, before the sweep below reads its record: a planted file no case spends is recorded
+# and taken out; only the probe's own line is removed afterwards, so the record keeps whatever the cases wrote.
+touch "$SB/web/.rh99spentprobe"; SPC99="$(spent99 .rh99spentprobe)"
+check "$SPC99|$( [ -e "$SB/web/.rh99spentprobe" ] && echo left || echo gone)|$(grep -cxF .rh99spentprobe "$SB/unspent99" 2>/dev/null)" "unspent|gone|1" \
+  "control on the control: a trigger its case never spent is recorded as such (spent99) and taken out of the stand-in's folder"
+if [ -f "$SB/unspent99" ]; then grep -vxF .rh99spentprobe "$SB/unspent99" > "$SB/unspent99.rest"; if [ -s "$SB/unspent99.rest" ]; then mv "$SB/unspent99.rest" "$SB/unspent99"; else rm -f "$SB/unspent99.rest" "$SB/unspent99"; fi; fi
 check "$(ls -A "$SB/web" | grep -c '^\.leak_sync99$\|^\.leak_kyc99$\|^\.left99$\|^\.left99m$\|^\.add_noncash98$\|^\.leak_cb98$\|^\.leak_cbx98$\|^\.left98$\|^\.flip_switch$')|$( [ -s "$SB/unspent99" ] && tr '\n' ' ' < "$SB/unspent99" || echo none)|$(ls "$U99"/flip-seen-* 2>/dev/null | grep -c .)" "0|none|0" "every trigger the rehearsal planted was spent — none is left in the stand-in's folder, and none was taken out unspent by its own case (spent99 records each one it takes out) — and the stand-in uCRM's flip memory is clear"
 # The observers over every run of the 5.18.99 script, but those that trip one on purpose (recorded as they ran).
 OBS_BAD=0; OBS_N=0; TOK_BAD=0; GET_BAD=0
