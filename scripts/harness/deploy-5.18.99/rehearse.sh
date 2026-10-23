@@ -34,9 +34,12 @@
 #     exactly the reviewed thirty-six files, its tree the development branch's (quote-99), each file's sha256 as the script
 #     pins it, computed here from Git; the thirty-one kept files by theirs in both commits, the thirty changed ones by
 #     their previous form; no migration; T1 and T4 pinned as before; the header's three commands, each alone; every later
-#     command defined with its own log wrapper; no status the script judges read off a pipeline whose reader exits early
-#     (SIGPIPE under pipefail: no pipe into grep -q, its four other readers through drained — a here-string put back as
-#     a pipe, and drained taken away, each caught); the instruments — C5's digests, the judge's every term (the split and
+#     command defined with its own log wrapper; no status the script judges read off a pipe into a grep that stops at
+#     its first match (SIGPIPE under pipefail: no pipe into grep -q, -m, -l or -L — the option before or after the
+#     pattern, egrep and fgrep, a variable set before it — and its four other readers through drained; a here-string
+#     put back as a pipe, drained taken away, an option after the pattern and egrep after a variable, each caught —
+#     head, sed …q and awk …exit are not read here: the script's forty were inventoried once, by a checker outside this
+#     tree, each read for its value alone); the instruments — C5's digests, the judge's every term (the split and
 #     the tab's buttons against the old code's among them, each line's weakened copy caught), the copy checks' comparison,
 #     the GET-only wrapper (a weakened one lets a POST through: caught), the token copy as the probe makes it (0600, the
 #     two keys alone, never printed), and the probe's refusal of a path outside /tmp (0);
@@ -79,6 +82,15 @@
 #
 # Everything runs in a sandbox; it never touches this checkout, the server or the network, and refuses to run where the
 # server could be, or while a stand-in uCRM of an earlier run of it is still up. Everything seeded is fictitious.
+#
+# Left as found, knowingly: the earlier releases' scripts that the earlier rehearsals above run, and that this one runs
+# again (5.18.98's --after-only in 99-pre, the quarantine's --checks) — the quarantine's and 5.18.93's to 5.18.98's —
+# are records, each pinned byte for byte by its own rehearsal, and still judge statuses read off pipelines whose reader
+# exits early (1, 18, 16, 16, 17, 20 and 21 of them, counted by the checker outside this tree). Each of their runs here
+# can stop falsely, at a small measured rate: 5.18.94's stopped once inside this rehearsal with "the pin lacks files …
+# tests/test_consent_identity.php" on a pin it had built correctly. Such a stop fails the rehearsal — it is never a
+# pass — and is not a defect of 5.18.99's: the last line says how many failures came before this release's own
+# sections, and the rehearsal is run again. Only 5.18.99's own pipelines were changed, and this rehearsal's two.
 #
 #   bash scripts/harness/deploy-5.18.99/rehearse.sh            REHEARSE_KEEP=<dir> keeps every run's full output
 set -u
@@ -146,6 +158,7 @@ PY
 # shellcheck disable=SC1090
 . "$H99_PREFIX"
 rm -f "$H99_PREFIX"
+FAIL_PRE99=$FAILN   # the earlier rehearsals' failures, before this release's own sections: the last line names them
 
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 # 5.18.99's own rehearsal, on the sandbox built above: 5.18.98 (ce7ac38) live, deployed again with --redeploy, ECO Bank
@@ -327,13 +340,15 @@ cmds99() {   # cmds99 SCRIPT — each of the nine definitions once (1 each) | th
 sigpipe99() {   # sigpipe99 SCRIPT — no status the script judges may come from a pipeline whose reader exits early: under pipefail
                 # it is 141 when SIGPIPE kills a writer still writing (printf '%s\n' "$L" | grep -qxF -- x falsely failed 1 in
                 # 3,000; 5.18.94's script, inside this rehearsal, stopped on a pin it had built correctly). The pipes into a grep
-                # that stops at its first match (-q, -m, -l, -L, their long forms) on the script's code lines — heredoc bodies
-                # and comment lines aside, continued lines joined — not through drained | the pipes through drained |
-                # drained's definition, the script's own, exactly once. A grep -q has no output: its status is all it gives,
-                # so every such pipe is a judged one; a -m, -l or -L could be read for its value instead, and the script has
-                # none — one added must still go through drained or a here-string. head, sed …q and awk …exit are read
-                # there for their value alone (forty, inventoried statically with check_sigpipe99.py) and are not this
-                # reading's
+                # that stops at its first match (-q, -m, -l, -L, their long forms — read in every word of the grep's stage,
+                # before or after its pattern, up to --; egrep and fgrep, and a grep with a variable set before it, too) on
+                # the script's code lines — heredoc bodies and comment lines aside, continued lines joined — not through
+                # drained | the pipes through drained | drained's definition, the script's own, exactly once. A grep -q has
+                # no output: its status is all it gives, so every such pipe is a judged one; a -m, -l or -L could be read
+                # for its value instead, and the script has none — one added must still go through drained or a
+                # here-string. head, sed …q and awk …exit are not this reading's: the script's forty were inventoried once,
+                # statically, by a checker outside this tree (check_sigpipe99.py), each read for its value alone — one
+                # added later is not caught here
   python3 - "$1" <<'PY'
 import re, sys
 src = open(sys.argv[1], encoding='utf-8').read().split('\n')
@@ -350,18 +365,59 @@ while i < len(src):
         while i < len(src) and (src[i].lstrip('\t') if m.group(1) else src[i]) != m.group(3):
             i += 1
         i += 1
+def words(s):
+    # the words of one pipeline stage, as bash splits them, quotes removed: up to the first | ; & ) or newline outside
+    # quotes and outside a $( … ) or <( … ) opened in the stage itself, or a comment (an & of a redirection, 2>&1 or &>,
+    # is part of its word)
+    ws, w, q, depth, i = [], None, None, 0, 0
+    while i < len(s):
+        c = s[i]
+        if q:
+            if c == q: q = None
+            elif c == '\\' and q == '"' and i + 1 < len(s): i += 1; w += s[i]
+            else: w += c
+        elif c in '\'"': q = c; w = w if w is not None else ''
+        elif c == '\\' and i + 1 < len(s): i += 1; w = (w or '') + s[i]
+        elif c == '#' and w is None:
+            break
+        elif c in ' \t':
+            if w is not None: ws.append(w); w = None
+        elif depth == 0 and (c in '|;\n)' or (c == '&' and s[i - 1:i] != '>' and s[i + 1:i + 2] != '>')):
+            break
+        else:
+            if c == '(': depth += 1
+            elif c == ')': depth -= 1
+            w = (w or '') + c
+        i += 1
+    return ws + ([w] if w is not None else [])
 def early(rest):
-    for w in rest.split():
-        if w == '--' or not w.startswith('-'):
+    # GNU grep takes its options anywhere before --, the pattern's words among them: every word of the stage is read.
+    # -q -m -l -L (alone or in a cluster) and --quiet --silent --max-count --files-with(out)-match(es) stop at a match;
+    # -e -f -A -B -C -d -D (and --regexp --file …) take the next word, or the rest of their cluster, as their value
+    ws, i = words(rest), 0
+    while i < len(ws):
+        w = ws[i]; i += 1
+        if w == '--':
             return False
         if w.startswith('--'):
-            if w in ('--quiet', '--silent', '--files-with-matches', '--files-without-match') or w.startswith('--max-count'):
+            k = w.split('=', 1)[0]
+            if k in ('--quiet', '--silent', '--max-count', '--files-with-matches', '--files-without-match'):
                 return True
+            if k in ('--regexp', '--file', '--after-context', '--before-context', '--context', '--directories', '--devices',
+                     '--exclude', '--include', '--exclude-dir', '--exclude-from', '--label', '--binary-files') and '=' not in w:
+                i += 1
             continue
-        if re.match(r'^-[A-Za-z]*[qmlL]', w):
-            return True
+        if len(w) > 1 and w[0] == '-':
+            for j, c in enumerate(w[1:], 1):
+                if c in 'qmlL':
+                    return True
+                if c in 'efABCdD':
+                    if j == len(w) - 1:
+                        i += 1
+                    break
     return False
-n = sum(1 for l in code for m in re.finditer(r'(?<!\|)\|(?!\|)\s*grep\s+(?=(.*))', l) if early(m.group(1)))   # (?=…): two on one line both seen
+n = sum(1 for l in code for m in re.finditer(r'(?<!\|)\|(?!\|)&?\s*(?:[A-Za-z_][A-Za-z_0-9]*=(?:\'[^\']*\'|"[^"]*"|[^\s\'"])*\s+)*[ef]?grep\s+(?=(.*))', l)
+        if early(m.group(1)))   # (?=…): two on one line both seen; egrep, fgrep, and a variable set before it, too
 d = sum(len(re.findall(r'(?<!\|)\|(?!\|)\s*drained\s', l)) for l in code if not l.startswith('drained() {'))
 f = sum(1 for l in code if l.startswith('drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }'))
 print('%d|%d|%d' % (n, d, f))
@@ -476,6 +532,8 @@ hdrdeploy	deploy	#   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg
 runbookdef	deploy	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh $(LOGW deploy)"	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh"
 sigpipehere	deploy	for rel in $EXPECTED_ADDED; do grep -qxF -- "$PLUGIN/$rel" <<<"$ADDED" || MISSING="$MISSING $rel(added)"; done	for rel in $EXPECTED_ADDED; do printf '%s\n' "$ADDED" | grep -qxF -- "$PLUGIN/$rel" || MISSING="$MISSING $rel(added)"; done
 sigpipedrained	deploy	php -l < "$DEST/$ca1_rel" 2>&1 | drained grep -q '^No syntax errors detected'; then	php -l < "$DEST/$ca1_rel" 2>&1 | grep -q '^No syntax errors detected'; then
+sigpipeopt	deploy	if grep -q '=' <<<"$SW_AFTER"; then ok "R2 the installed set_distributors --show reports	if printf '%s\n' "$SW_AFTER" | grep '=' -q; then ok "R2 the installed set_distributors --show reports
+sigpipeenv	deploy	if grep -q '=' <<<"$SW_AFTER"; then ok "R2 the installed set_distributors --show reports	if printf '%s\n' "$SW_AFTER" | LC_ALL=C egrep -q '='; then ok "R2 the installed set_distributors --show reports
 qoorgs	qo	        $rows = $this->crm->get('organizations');	        try { $this->crm->post('organizations', ['rh99' => 1]); } catch (\Throwable $rh99) { } $rows = $this->crm->get('organizations');   // RH99: a request that is not a GET, planted before the read
 qooff	qo	    private const OFF_WORDS   = ['0', 'off', 'no', 'none', 'false'];	    private const OFF_WORDS   = ['off', 'no', 'none', 'false'];   // RH99: 0 no longer switches the gate off
 qotenant	qo	            if ($profile->id() !== 'uganda') return $off;	            if (false) return $off;   // RH99: the tenant no longer read
@@ -958,9 +1016,10 @@ rm -f "$M"
 check "$(sigpipe99 "$DEPLOY99")" "0|4|1" \
   "no status the script judges comes from a pipeline whose reader exits early — under pipefail SIGPIPE turns such a pipeline's match into 141: no pipe into grep -q, -m, -l or -L on its code lines, four pipes through drained, drained defined once"
 M="$(weak99 sigpipeh99 "$DEPLOY99" sigpipehere)"; M2="$(weak99 sigpiped99 "$DEPLOY99" sigpipedrained)"
-check "$(sigpipe99 "$M")|$(sigpipe99 "$M2")" "1|4|1|1|3|1" \
-  "0-sigpipe' a copy with one here-string put back as printf '%s\\n' | grep -qxF (the pin's file list, A0) and one with drained taken from php -l's pipe (Q-CA1) are each caught by the same reading"
-rm -f "$M" "$M2"
+M3="$(weak99 sigpipeo99 "$DEPLOY99" sigpipeopt)"; M4="$(weak99 sigpipee99 "$DEPLOY99" sigpipeenv)"
+check "$(sigpipe99 "$M")|$(sigpipe99 "$M2")|$(sigpipe99 "$M3")|$(sigpipe99 "$M4")" "1|4|1|1|3|1|1|4|1|1|4|1" \
+  "0-sigpipe' a copy with one here-string put back as printf '%s\\n' | grep -qxF (the pin's file list, A0), one with drained taken from php -l's pipe (Q-CA1), and two with R2's put back as a pipe into a grep written otherwise — its -q after the pattern (grep '=' -q), and egrep after a variable (LC_ALL=C egrep -q) — are each caught by the same reading"
+rm -f "$M" "$M2" "$M3" "$M4"
 PR99_TWO="$(printf '%s\n' '== F. Summary ==' "      $EXP_AFTER99; $EXP_ROLLBACK99")"
 PR99_WORDS="  ok    Q-CA3 deploy-5.18.99.sh's GETs, as deploy-5.18.99.sh's stage A read them — the script named twice, in words"
 check "$(printed99 "$PR99_TWO")|$(printed99 "$PR99_WORDS" | cut -d'|' -f3)" "1|0|1|0" \
@@ -1836,4 +1895,5 @@ check "$(grep -c 'Fatal\|Parse error' "$SB/web.log")|$(grep -c 'Fatal\|Parse err
 check "$(checkout_state)" "$CHECKOUT0" "this checkout is as the rehearsal found it: same commit, same tracked files"
 
 echo; echo "rehearsal: $PASS passed, $FAILN failed ($(cat "$SB/runs") runs of the deploy scripts, $(cat "$SB/qruns" 2>/dev/null || echo 0) of the quarantine)"
+[ "$FAILN" = "0" ] || echo "  $FAIL_PRE99 of the $FAILN failed in the earlier releases' rehearsals, before this release's own sections. Their scripts — the quarantine's and 5.18.93's to 5.18.98's, run there and again here (99-pre, the quarantine's --checks) — are records, left as they are, and still judge statuses read off pipelines whose reader exits early: a refusal of theirs at such a check (5.18.94's \"the pin lacks files …\" on a pin built correctly, measured) is a SIGPIPE false stop, not a defect of 5.18.99's. Read the first FAIL; if it is one, run the rehearsal again — it is never a pass."
 [ "$FAILN" = "0" ]
