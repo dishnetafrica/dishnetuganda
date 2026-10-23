@@ -151,7 +151,7 @@ rm -f "$H99_PREFIX"
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 REL99=release/5.18.99; DEPLOY99="$REPO/$F99"
 DEV99=quote-99                                       # the change on the development branch
-DEV99_TIP=dcd4c906                                   # …its tip: the four commits of 5.18.99 on the live release
+DEV99_TIP=d813d254                                   # …its tip: the five commits of 5.18.99 on the live release
 ADDED99="lib/QuoteOrganization.php tests/fixtures/fake_ucrm_quote_org.php tests/fixtures/quote_company_journey.php tests/test_fake_smtp_relay.php tests/test_quote_company.php tests/test_quote_company_mutants.php"
 CHANGED99="SAFETY.md cron_quote_wa.php includes/api/api_crm_misc.php includes/api/api_cron_debug.php includes/api/api_products_admin.php includes/post/post_kyc.php lib/KycCrmSync.php lib/KycService.php lib/PluginQuotePdf.php lib/QuotationService.php lib/QuotePdfSource.php lib/UcrmClientTarget.php lib/UcrmLeadSync.php manifest.json profiles/uganda.json tabs/lte/lte_dashboard.php tabs/sales/applications.php tabs/sales/kyc_form.php tests/fixtures/fake_smtp_server.php tests/fixtures/fake_ucrm_staff_jobs.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_notify_kyc_quote_send.php tests/test_notify_quote_once.php tools/set_config.php"
 PINS99="tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php"
@@ -869,8 +869,8 @@ check "$(dl A "$P98" "$P99" | sort | paste -sd' ' -)|$(dl M "$P98" "$P99" | sort
   "…the six added are QuoteOrganization, its test, its weakened copies, two fixtures and the fake mail relay's test; the thirty changed the KYC, quotation, lead-sync and PDF classes, the three tab pages, the profile, set_config, the manifest, SAFETY.md, the fake relay and the tests that name them — and the script's own lists say exactly that"
 check "$(dl AM "$P98" "$P99" | grep -c "^$P/migrations/")|$(git -C "$REPO" show "$P99:$P/migrations/088_bank_statements.sql" | sha256sum | cut -c1-64)" "0|$MIG88_SHA99" "no migration; 088 at the pin the reviewed file the script pins (sha256 ${MIG88_SHA99:0:16}…)"
 check "$(git -C "$REPO" cat-file -e "$DEV99_TIP^{commit}" 2>/dev/null && echo held)|$(git -C "$REPO" rev-parse "$P99:$P")|$(git -C "$REPO" rev-list --count "$P98F..$DEV99_TIP" -- "$P")|$(git -C "$REPO" merge-base --is-ancestor "$P98F" "$DEV99_TIP" && echo on-the-live-release)" \
-      "held|$(git -C "$REPO" rev-parse "$DEV99_TIP:$P" 2>/dev/null)|4|on-the-live-release" \
-  "the release's plugin tree is the development branch's ($DEV99, $DEV99_TIP) exactly — its four commits on $P98"
+      "held|$(git -C "$REPO" rev-parse "$DEV99_TIP:$P" 2>/dev/null)|5|on-the-live-release" \
+  "the release's plugin tree is the development branch's ($DEV99, $DEV99_TIP) exactly — its five commits on $P98"
 PS99="$(sed -n '/^PIN_SHA256S="\$(cat <<.SUMS.$/,/^SUMS$/p' "$DEPLOY99" | grep -E '^[0-9a-f]{64}  ')"
 KS99="$(sed -n '/^PREV_KEPT_SHA256S="\$(cat <<.SUMS.$/,/^SUMS$/p' "$DEPLOY99" | grep -E '^[0-9a-f]{64}  ')"
 PC99="$(sed -n '/^PREV_CHANGED_SHA256S="\$(cat <<.SUMS.$/,/^SUMS$/p' "$DEPLOY99" | grep -E '^[0-9a-f]{64}  ')"

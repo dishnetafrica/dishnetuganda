@@ -272,12 +272,13 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="e15d299"   # 5.18.99 (release) — Uganda's app customers and app quotes on one company (lib/QuoteOrganization.php): new app customers filed under the quoting organization, no uCRM quote for a client under another, the WhatsApp and the fallback PDF naming the client's company, Sync All admin-only, a failed uCRM quote shown; cut on 5.18.98; branch release/5.18.99
-EXPECTED_PLUGIN_COMMIT_FULL="e15d299fc2c363441d32721edcf4c678bbd615de"   # the same commit in full: A0 refuses a short hash that names any other
-# This pin replaces c9aa49c, a release commit never pushed; it differs from it in four files, none run on the server:
-# the tests' fake mail relay (tests/fixtures/fake_smtp_server.php) now writes each message down before it answers and
-# replaces its transcript whole (it caused a test_install_authorisation H3 failure in the release suite on 20 Oct); its
-# own test (tests/test_fake_smtp_relay.php) is new; SAFETY.md and tests/test_quote_company.php record both.
+EXPECTED_PLUGIN_COMMIT="ca05ada"   # 5.18.99 (release) — Uganda's app customers and app quotes on one company (lib/QuoteOrganization.php): new app customers filed under the quoting organization, no uCRM quote for a client under another, the WhatsApp and the fallback PDF naming the client's company, Sync All admin-only, a failed uCRM quote shown; cut on 5.18.98; branch release/5.18.99
+EXPECTED_PLUGIN_COMMIT_FULL="ca05ada5aaed83374cddcb80c2777b9a280e224b"   # the same commit in full: A0 refuses a short hash that names any other
+# This pin replaces c9aa49c and then e15d299, release commits never pushed. Against c9aa49c it differs in four files,
+# none run on the server: the tests' fake mail relay (tests/fixtures/fake_smtp_server.php) now writes each message down
+# before it answers and replaces its transcript whole (it caused a test_install_authorisation H3 failure in the release
+# suite on 20 Oct); its own test (tests/test_fake_smtp_relay.php) is new; SAFETY.md and tests/test_quote_company.php
+# record both. Against e15d299 it differs in that test alone (its review fixes).
 EXPECTED_VERSION="5.18.99"
 BASELINE_COMMIT="ce7ac38"          # 5.18.98 (release, the Cashbook's list physical cash only; the live plugin, docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on each card
 BASELINE_COMMIT_FULL="ce7ac388f7f03db4f0955494880ed75fc54ae109"
@@ -426,7 +427,7 @@ c305b5a4e9c7b8cb281bbe7e5f3fdd67b2d2fb5c2924a052192f62102f68a805  tests/test_not
 SUMS
 )"
 PREV_CHANGED_N=30
-# 5.18.99 — the release's own files, each with the sha256 release/5.18.99 (e15d299) gives it: the delta, exactly — A0
+# 5.18.99 — the release's own files, each with the sha256 release/5.18.99 (ca05ada) gives it: the delta, exactly — A0
 # reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
 b0f9058a216ce2cd398083425673fcf2efce3e5e8bb8cbb13f98bbbe8ec638ae  SAFETY.md
@@ -459,7 +460,7 @@ ba91bca311f7a0c9bc47afdf37966e7fcadc194ec2582d2b3a65cd2b83df08dc  tests/test_dis
 c97b6f43883d9e871ff544d4d52b95c2e02ff821859b8e91476788d7435422ce  tests/test_distributor_notify.php
 3535689324eee9acf43deefd0f6bb874fb8cd7c5c03bfd0fae53a8b13d2d8ee0  tests/test_distributor_registry.php
 31cffe882c23d04310a6e345167bb06f07cdf0ef39af7b6b36f9de786b5c83b2  tests/test_distributor_territory.php
-33ccda03c1eb3cb870c0cd81f5cad835013181cd3e6764d312bb5ceb1cc1a577  tests/test_fake_smtp_relay.php
+7a63ea80ae37e38d84b9340f1e3a7017982a86eb2b69604369d4d477220237e4  tests/test_fake_smtp_relay.php
 580f53603c0b462fd559c7d8477da0c0ed5c69da991c91e5798b5971fcb6f62a  tests/test_notify_kyc_quote_send.php
 b0b7315bffe7885e166bbfcea8fafd027499c6192026f522eba4ae55038d2618  tests/test_notify_quote_once.php
 56d7c45fa0f2dc05a204e2463c688ab043b22bbdf226c9b547f5b334ae43ce40  tests/test_quote_company.php
@@ -516,8 +517,8 @@ T4_TEST="tests/test_d1_bank_balance_readers.php"   # static, with 5.18.94's own 
 # T1's count is the release suite's own run of the release commit — the one number this script cannot read off the code.
 # Until it is pinned here the script refuses to run (below) rather than accept any count. 5.18.99 changes neither T1 nor
 # any file T1 reads (lib/CashbookService.php, ConfigVault, SqliteStore, StoreInterface, TenantProfile — each kept, by its
-# sha256 above), so the count is 5.18.98's; the release suite's run of e15d299 must say the same, and A22-T1 refuses,
-# before anything changes, wherever this server's run does not.
+# sha256 above), so the count is 5.18.98's. The release suite's two runs of e15d299 (every file but the relay's test
+# as it is here) said the same, and A22-T1 refuses, before anything changes, wherever this server's run does not.
 T1_SIGNATURE="548 passed, 0 failed rc=0"
 # T4 without its weakened copies (--no-mutants): its matcher and readers (6), the positive control on 5.18.94's tree (4),
 # the tree judged (4), the allowed list against the SPEC (6). 5.18.99's three tab pages (the KYC form, Orders, the LTE
