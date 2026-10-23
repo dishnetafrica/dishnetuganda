@@ -12,9 +12,10 @@
 #            and the fallback PDF name the client's own organization; push_products_to_ucrm ("Sync All") is admin-only on
 #            every tenant; a failed uCRM create on Send Quotation is shown, not hidden behind a plugin-only reference. No
 #            migration; South Sudan unchanged; the Cashbook, ECO Bank and every Balance exactly 5.18.98's. Files, against
-#            ce7ac38: 5 added (lib/QuoteOrganization.php, its test, its weakened copies and two fixtures), 29 changed
-#            (the KYC, quotation, lead-sync and PDF classes, the three tab pages, the profile, tools/set_config.php, the
-#            manifest, SAFETY.md and the version pins and tests that name them).
+#            ce7ac38: 6 added (lib/QuoteOrganization.php, its test, its weakened copies, two fixtures and the fake mail
+#            relay's test), 30 changed (the KYC, quotation, lead-sync and PDF classes, the three tab pages, the profile,
+#            tools/set_config.php, the manifest, SAFETY.md, the tests' fake mail relay and the version pins and tests
+#            that name them).
 #
 #   THE FIGURES GO TO A CASH SHEET, NEVER TO THE TERMINAL OR THE LOG. Each run writes its own sheet,
 #            /root/dnb-5.18.99/cash-<mode>-<UTC stamp>.txt, mode 0600, in a folder of mode 700. It holds the book's cash in
@@ -114,9 +115,9 @@
 #            (A23, R23, RB), under D2 = A before and after. 5.18.95's security fixes are read as TEXT, a regression: the
 #            pin, the live code and, after the deploy, the installed code must carry all seven, each check with its
 #            control on 5.18.94's copy (f4b4c96), which must show exactly its defects (A22a–A22g, A22L, R23a–R23g; after a
-#            rollback, RB). 5.18.99's own tests and their weakened copies serve a fake uCRM of their own and run in the
-#            suites only. The quoting checks' only sockets are the GETs above, from the container to this server's uCRM,
-#            through the plugin's own client.
+#            rollback, RB). 5.18.99's own tests and their weakened copies serve a fake uCRM of their own (the fake mail
+#            relay's test, a relay of its own) and run in the suites only. The quoting checks' only sockets are the GETs
+#            above, from the container to this server's uCRM, through the plugin's own client.
 #
 #   P0 BEFORE AND AFTER. P0's own tool (scripts/bank-recon-p0.php at 5954ede5, taken by git cat-file, its sha256 checked)
 #            runs unchanged on the copy, for all projects and dishnet: its "today" must equal today's SQL, and its option A
@@ -146,7 +147,7 @@
 #            that compare before and after.
 #
 #   THE COMMIT IT INSTALLS IS A RELEASE COMMIT, NOT THE BRANCH TIP. The pin below, on release/5.18.99, is cut on ce7ac38
-#            (5.18.98, live): 34 files, each file's sha256 pinned here. Stage A refuses a pin whose parent is not 5.18.98,
+#            (5.18.98, live): 36 files, each file's sha256 pinned here. Stage A refuses a pin whose parent is not 5.18.98,
 #            whose short hash names another commit, whose delta is not exactly these files by these hashes, that carries a
 #            migration, and a checkout holding a file git does not track under the plugin folder outside data/. Its
 #            master.php and main.php are checked byte for byte (A0).
@@ -185,7 +186,7 @@
 #                        Run it at least 20 minutes after the copy, and once more the next day after 15:00 UTC
 #   --move-list-only     read-only, before the deploy, while 5.18.98 is live: Q-G1, Q-G2, Q-G3, Q-G4 and Q-N2 alone, the
 #                        move-list on its own sheet; nothing is backed up, copied, deployed or set (SPEC §6, OPS-10)
-#   --redeploy           deploy 5.18.99 again after its own rollback: the five files it adds, which the rollback leaves on
+#   --redeploy           deploy 5.18.99 again after its own rollback: the six files it adds, which the rollback leaves on
 #                        disk, are expected there (BR1's note)
 #   --check              stage A alone — every refusal and note of the deploy, its cash, bank, copy and quoting readings on
 #                        copies — and stop before the backup: nothing is backed up, copied or deployed. With --redeploy and
@@ -268,8 +269,12 @@ umask 077
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="c9aa49c"   # 5.18.99 (release) — Uganda's app customers and app quotes on one company (lib/QuoteOrganization.php): new app customers filed under the quoting organization, no uCRM quote for a client under another, the WhatsApp and the fallback PDF naming the client's company, Sync All admin-only, a failed uCRM quote shown; cut on 5.18.98; branch release/5.18.99
-EXPECTED_PLUGIN_COMMIT_FULL="c9aa49ce4eaef532722ad6a3c8c80ca20b703571"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="e15d299"   # 5.18.99 (release) — Uganda's app customers and app quotes on one company (lib/QuoteOrganization.php): new app customers filed under the quoting organization, no uCRM quote for a client under another, the WhatsApp and the fallback PDF naming the client's company, Sync All admin-only, a failed uCRM quote shown; cut on 5.18.98; branch release/5.18.99
+EXPECTED_PLUGIN_COMMIT_FULL="e15d299fc2c363441d32721edcf4c678bbd615de"   # the same commit in full: A0 refuses a short hash that names any other
+# This pin replaces c9aa49c, a release commit never pushed; it differs from it in four files, none run on the server:
+# the tests' fake mail relay (tests/fixtures/fake_smtp_server.php) now writes each message down before it answers and
+# replaces its transcript whole (it caused a test_install_authorisation H3 failure in the release suite on 20 Oct); its
+# own test (tests/test_fake_smtp_relay.php) is new; SAFETY.md and tests/test_quote_company.php record both.
 EXPECTED_VERSION="5.18.99"
 BASELINE_COMMIT="ce7ac38"          # 5.18.98 (release, the Cashbook's list physical cash only; the live plugin, docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on each card
 BASELINE_COMMIT_FULL="ce7ac388f7f03db4f0955494880ed75fc54ae109"
@@ -383,7 +388,7 @@ SUMS
 PREV_KEPT_N=31
 # 5.18.99 (Q-G1, RB) — every file 5.18.99 changes, with the sha256 release/5.18.98 (ce7ac38) gives it: what the live
 # plugin must hold before anything changes (Q-G1), and what a rollback must put back (RB). A0 finds them in 5.18.98's
-# release commit from Git; the five files 5.18.99 adds have no 5.18.98 form.
+# release commit from Git; the six files 5.18.99 adds have no 5.18.98 form.
 PREV_CHANGED_SHA256S="$(cat <<'SUMS'
 99efdcf84b04ed3f2cd6ab2dd24c19f0f86c6358c902a71a9e70f5a0095d2387  SAFETY.md
 cd9a9a18cff2cb17be4e26d3be8acc90a7c267f6de5214b84fe0c3680c4805a6  cron_quote_wa.php
@@ -403,6 +408,7 @@ a76b03bfcb82ef05d449b3e1954a92fccd81ec6db2abd5c35ab72c660536cc4f  lib/UcrmClient
 bd35bd82275550e20ec62c54fc978bde5bae6ea0bcace5f7cd1d57525124d936  tabs/lte/lte_dashboard.php
 33c53fead67a0f42c56895ef2125a78f82892630324c566a8d8cc379eabd04f7  tabs/sales/applications.php
 a7ccbbe3369b9b55f41bcf7b0535680217f675e4798e48cf00aea8ba741ec504  tabs/sales/kyc_form.php
+7a2c03d8d6659b1c29759c5821392411da0f8e1e7908c8ddadc5c1e642c6cce7  tests/fixtures/fake_smtp_server.php
 e21476877c2a9e89744bc440111d41bc118c3772c88742b6d497e13ffa1a1c84  tests/fixtures/fake_ucrm_staff_jobs.php
 d8ba84ef7c032f2a976dd52ae9547ceaf3afa728ffc7672d9a1a42156207a36e  tests/test_bank_boundaries.php
 b741144c1778f48188b20ae610d77e2126cfd3d021e9bb815029620986a8aeb4  tests/test_cashbook_physical_list.php
@@ -416,11 +422,11 @@ c305b5a4e9c7b8cb281bbe7e5f3fdd67b2d2fb5c2924a052192f62102f68a805  tests/test_not
 6660d00881872410f7853af587f4d20d36f7053e872bb21853dc32f1752e3ff0  tools/set_config.php
 SUMS
 )"
-PREV_CHANGED_N=29
-# 5.18.99 — the release's own files, each with the sha256 release/5.18.99 (c9aa49c) gives it: the delta, exactly — A0
+PREV_CHANGED_N=30
+# 5.18.99 — the release's own files, each with the sha256 release/5.18.99 (e15d299) gives it: the delta, exactly — A0
 # reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-621d3dd934a42ce67dca741a5aaeb44a38d7d39a88316924fb39d26b394695a7  SAFETY.md
+b0f9058a216ce2cd398083425673fcf2efce3e5e8bb8cbb13f98bbbe8ec638ae  SAFETY.md
 1a13e5536b64250acf8b242fd24fa5d69a0222a51defcea366c6c7a37c310699  cron_quote_wa.php
 ba316fbb0b81d5a6600f4e45f0b2e91f9055d59452569405195e69c03e378536  includes/api/api_crm_misc.php
 9ae3b24f2e479ba775e249b17034f2e6233ebd5b0ef4ed012322de48e4bb86bb  includes/api/api_cron_debug.php
@@ -439,6 +445,7 @@ ef449a41262a065d7bfaf7d62ae13e6bf37b3b436712a6b32446de498d66a51d  manifest.json
 3969dee63c2d9d4dac541ef52b61f602783c386b5746d64d90bd865f8110a94a  tabs/lte/lte_dashboard.php
 0a8962792900e1ec6915862237855c1aee481bf21a7658cf3b0a9b405f5fda86  tabs/sales/applications.php
 65a51607d0b2c22d6dc07fb4e561ed995ceb9afb39b747f13ab583bce3c23238  tabs/sales/kyc_form.php
+93480f93a01c7d32f4cf4652e7e62cca51a69b67abcb8061ac4cbeeea41b973b  tests/fixtures/fake_smtp_server.php
 34204c7bd9fbe74b9cb4fe0a0acaef679ac93aaf37c6237571dd5e667a827cd0  tests/fixtures/fake_ucrm_quote_org.php
 3b22f13140613e85f5fc81511614605030bcca01d7290fb2de3a87c0021f766b  tests/fixtures/fake_ucrm_staff_jobs.php
 0f66c570085c103e2357c35d202c858f47914a8b9edf7de43e89e818471f18d0  tests/fixtures/quote_company_journey.php
@@ -449,14 +456,15 @@ ba91bca311f7a0c9bc47afdf37966e7fcadc194ec2582d2b3a65cd2b83df08dc  tests/test_dis
 c97b6f43883d9e871ff544d4d52b95c2e02ff821859b8e91476788d7435422ce  tests/test_distributor_notify.php
 3535689324eee9acf43deefd0f6bb874fb8cd7c5c03bfd0fae53a8b13d2d8ee0  tests/test_distributor_registry.php
 31cffe882c23d04310a6e345167bb06f07cdf0ef39af7b6b36f9de786b5c83b2  tests/test_distributor_territory.php
+33ccda03c1eb3cb870c0cd81f5cad835013181cd3e6764d312bb5ceb1cc1a577  tests/test_fake_smtp_relay.php
 580f53603c0b462fd559c7d8477da0c0ed5c69da991c91e5798b5971fcb6f62a  tests/test_notify_kyc_quote_send.php
 b0b7315bffe7885e166bbfcea8fafd027499c6192026f522eba4ae55038d2618  tests/test_notify_quote_once.php
-b18da851c6f0257513b93e56725e6449678b97bbfd233531a08c9dfbeddc3d98  tests/test_quote_company.php
+56d7c45fa0f2dc05a204e2463c688ab043b22bbdf226c9b547f5b334ae43ce40  tests/test_quote_company.php
 ad91ecea8b1787044de4be5660681084e68c393ca2bd4065f622bad4b228ade5  tests/test_quote_company_mutants.php
 091b4c551d5ca317e435cfc8cbd326cf5063cb45edf9eca77dacf8ad3414cae5  tools/set_config.php
 SUMS
 )"
-PIN_SHA_N=34
+PIN_SHA_N=36
 DOMAIN_B="dishnet-mikrotik-control-plane docs"    # Domain B and the plugin's documents, under the plugin directory: never touched (A7, R14)
 # The event processor run once on a throwaway database with five events (A6, R13, RB): type=status/attempts, and +unknown
 # when it was logged as an unknown type. South Sudan's loop — 5.18.87's, kept by 5.18.88 — and Uganda's since 5.18.88, which
@@ -490,21 +498,22 @@ P90_SIGNATURE="uganda+on: gaps=sales,support seller=internal_numbers_incomplete;
 # registry off it reads "policy=off/off refusal=-/- sql=-/- evo=off,-/off,- gaps=-/- channels=0:0/0:0 internal=<n>:0/<n>:0
 # statements=0 registry-reads=0 writes=0", then "|" and an HMAC under this run's key — inert; on, it reads the registry and
 # refuses what it finds unsafe. writes= is 0 in every reading.
-# The release's own files, and nothing else: five added, twenty-nine changed — thirty-four, each by its sha256
+# The release's own files, and nothing else: six added, thirty changed — thirty-six, each by its sha256
 # (PIN_SHA256S). Anything outside this list in the pin is another build.
-EXPECTED_ADDED="lib/QuoteOrganization.php tests/fixtures/fake_ucrm_quote_org.php tests/fixtures/quote_company_journey.php tests/test_quote_company.php tests/test_quote_company_mutants.php"
-EXPECTED_CHANGED="SAFETY.md cron_quote_wa.php includes/api/api_crm_misc.php includes/api/api_cron_debug.php includes/api/api_products_admin.php includes/post/post_kyc.php lib/KycCrmSync.php lib/KycService.php lib/PluginQuotePdf.php lib/QuotationService.php lib/QuotePdfSource.php lib/UcrmClientTarget.php lib/UcrmLeadSync.php manifest.json profiles/uganda.json tabs/lte/lte_dashboard.php tabs/sales/applications.php tabs/sales/kyc_form.php tests/fixtures/fake_ucrm_staff_jobs.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_notify_kyc_quote_send.php tests/test_notify_quote_once.php tools/set_config.php"
+EXPECTED_ADDED="lib/QuoteOrganization.php tests/fixtures/fake_ucrm_quote_org.php tests/fixtures/quote_company_journey.php tests/test_fake_smtp_relay.php tests/test_quote_company.php tests/test_quote_company_mutants.php"
+EXPECTED_CHANGED="SAFETY.md cron_quote_wa.php includes/api/api_crm_misc.php includes/api/api_cron_debug.php includes/api/api_products_admin.php includes/post/post_kyc.php lib/KycCrmSync.php lib/KycService.php lib/PluginQuotePdf.php lib/QuotationService.php lib/QuotePdfSource.php lib/UcrmClientTarget.php lib/UcrmLeadSync.php manifest.json profiles/uganda.json tabs/lte/lte_dashboard.php tabs/sales/applications.php tabs/sales/kyc_form.php tests/fixtures/fake_smtp_server.php tests/fixtures/fake_ucrm_staff_jobs.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_notify_kyc_quote_send.php tests/test_notify_quote_once.php tools/set_config.php"
 # 5.18.96 — the two of its tests the server runs under its own PHP, kept by 5.18.97, 5.18.98 and 5.18.99 (which change
 # neither). The page tests (T2, T3) serve the plugin over HTTP and run only in the suites; the weakened copies (the mutant
 # driver) only there too; ECO Bank's tests, 5.18.98's (tests/test_cashbook_physical_list.php and its weakened copies) and
-# 5.18.99's own (tests/test_quote_company.php, its weakened copies and its fake uCRM) too — they build their books, serve
-# the plugin or a fake uCRM on HTTP servers of their own.
+# 5.18.99's own (tests/test_quote_company.php, its weakened copies and its fake uCRM; tests/test_fake_smtp_relay.php and
+# the fake mail relay it starts) too — they build their books, serve the plugin or a fake uCRM on HTTP servers of their
+# own, or start the relay on a port of its own.
 T1_TEST="tests/test_cash_in_hand_p3b.php"          # in process, on synthetic books it builds itself (A22-T1, R25)
 T4_TEST="tests/test_d1_bank_balance_readers.php"   # static, with 5.18.94's own tree as its positive control (R24)
 # T1's count is the release suite's own run of the release commit — the one number this script cannot read off the code.
 # Until it is pinned here the script refuses to run (below) rather than accept any count. 5.18.99 changes neither T1 nor
 # any file T1 reads (lib/CashbookService.php, ConfigVault, SqliteStore, StoreInterface, TenantProfile — each kept, by its
-# sha256 above), so the count is 5.18.98's; the release suite's run of c9aa49c must say the same, and A22-T1 refuses,
+# sha256 above), so the count is 5.18.98's; the release suite's run of e15d299 must say the same, and A22-T1 refuses,
 # before anything changes, wherever this server's run does not.
 T1_SIGNATURE="548 passed, 0 failed rc=0"
 # T4 without its weakened copies (--no-mutants): its matcher and readers (6), the positive control on 5.18.94's tree (4),
@@ -3811,7 +3820,7 @@ done
 M87_SHA="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$MIG87" 2>/dev/null | sha256sum | cut -c1-64)"
 [ "$M87_SHA" = "$MIG87_SHA256" ] || stop "the pin's $MIG87 is not the reviewed one production applied on 7 Oct (sha256 ${M87_SHA:0:16}…, reviewed ${MIG87_SHA256:0:16}…) — this script is for another build"
 # 5.18.98: every file of the delta by the sha256 pinned in this script (PIN_SHA256S) — the list is the delta exactly, its
-# thirty-four files and no other — and 5.18.98's files this release must leave as they are (PREV_KEPT_SHA256S) by theirs,
+# thirty-six files and no other — and 5.18.98's files this release must leave as they are (PREV_KEPT_SHA256S) by theirs,
 # in both release commits: what Q-G1 reads installed before anything changes, Q-CA1 after the copy and RB after a
 # rollback. 5.18.99: and every file it changes by the sha256 5.18.98's release commit gives it (PREV_CHANGED_SHA256S) —
 # what Q-G1 requires installed before anything changes, and RB after a rollback.
@@ -5786,7 +5795,7 @@ done
 IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
 [ "$IV" = "$EXPECTED_VERSION" ] && ok "R1 the installed manifest says $IV" || bad "R1 the installed manifest says ${IV:-?}"
 # Q-CA1 — 5.18.99 (SPEC-quote-company §6): the installed files are 5.18.99's release by the sha256 THIS SCRIPT pins for
-# each of its 34 (R1 compared them with Git); the 5.18.98 files this release must not touch — ECO Bank's module, its
+# each of its 36 (R1 compared them with Git); the 5.18.98 files this release must not touch — ECO Bank's module, its
 # links, the Cashbook's service, its page, its tab, its export and its routes, webhook.php, api/index.php and the rest —
 # are still 5.18.98's by theirs, and master.php and main.php are the reviewed ones byte for byte; and php -l, under the
 # container's own PHP, passes on every changed or new PHP file as installed (the test files said apart: copied, never
@@ -6849,7 +6858,7 @@ else
 fi
 note "RB run the quarantine's --check next, its own command (printed at the end, with its own log): it is the authority on the kept file, and it measures what this script does not — whether a process holds it"
 # 5.18.99's files are 5.18.98's again, each byte for byte — by Git's sha256 and by the one THIS SCRIPT pins for each
-# (PREV_CHANGED_SHA256S, Q-G1's set read again) — and the five files it added stay on disk, reached by nothing: the KYC
+# (PREV_CHANGED_SHA256S, Q-G1's set read again) — and the six files it added stay on disk, reached by nothing: the KYC
 # path, the quotation services, the lead sync and the PDF no longer ask QuoteOrganization anything.
 RB_SHA_BAD=""; RB_SHA_N=0; RB_PC_N=0
 for f in $CHANGED; do
@@ -6863,7 +6872,7 @@ while read -r rbp_sum rbp_rel; do
   [ "$(sha256sum "$DEST/$rbp_rel" 2>/dev/null | cut -c1-64)" = "$rbp_sum" ] || RB_SHA_BAD="$RB_SHA_BAD $rbp_rel(not-the-pinned-$BASELINE_VERSION)"
 done <<< "$PREV_CHANGED_SHA256S"
 [ "$RB_PC_N" = "$PREV_CHANGED_N" ] || RB_SHA_BAD="$RB_SHA_BAD count:$RB_PC_N/$PREV_CHANGED_N"
-if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte — by Git's sha256 and by the $RB_PC_N this script pins (Q-G1's set); the $N_ADDED files it added — QuoteOrganization, its test, its weakened copies and two fixtures — stay on disk, and $BASELINE_VERSION reads none of them"
+if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte — by Git's sha256 and by the $RB_PC_N this script pins (Q-G1's set); the $N_ADDED files it added — QuoteOrganization, its test, its weakened copies, two fixtures and the fake mail relay's test — stay on disk, and $BASELINE_VERSION reads none of them"
 else bad "RB installed files that are not $BASELINE_VERSION's after the rollback:${RB_SHA_BAD:- none could be compared}"; fi
 RB_BK=""; RB_KEEP=""; RB_KEEP_N=0; RB_QO=""
 # 5.18.99's quoting code is gone from the installed code: no file that reaches uCRM names QuoteOrganization; Sync All is
@@ -7013,7 +7022,7 @@ grep -qF 'Cash in hand — per currency' "$DEST/tabs/accounts/accounts_dashboard
 grep -qF 'var _fr3Base' "$DEST/tabs/sales/wallet.php" 2>/dev/null && grep -qF '(5.18.70)' "$DEST/$RECORDS_TOOL" 2>/dev/null && grep -qF "'currency'        => \$manCur," "$DEST/tabs/accounts/staff_cashbooks.php" 2>/dev/null && ok "RB the 5.18.70 Field Register fix and records tool and the 5.18.69 Manual Entry stamp are still there" || bad "RB the installed plugin lost 5.18.69/5.18.70 code"
 grep -qF 'CASH IN HAND</div>' "$DEST/tabs/accounts/cashbook.php" 2>/dev/null && grep -qF "dn_book_base(null)" "$DEST/lib/StaffCashPositionService.php" 2>/dev/null && ok "RB the 5.18.68 staff-cash chain and card are still there" || bad "RB the installed plugin lost 5.18.68 code"
 grep -qF 'var UG_PHOTOS' "$DEST/tabs/support/scheduling.php" 2>/dev/null && grep -qF -- "$LAYOUT_MARK" "$DEST/tabs/support/scheduling.php" 2>/dev/null && ok "RB the 5.18.66 photo surface and the 5.18.67 card are still there" || bad "RB the installed job page lost 5.18.66/5.18.67 code"
-note "RB the code is $BASELINE_VERSION again. The rollback restores code only. The files $EXPECTED_VERSION added stay on disk (deploy-hybrid.sh never deletes) — QuoteOrganization, its test, its weakened copies and two fixtures, never run on the server: $(printf '%s ' $EXPECTED_ADDED); $BASELINE_VERSION reads none of them. ECO Bank stays as it was: its switch, its screen, its links, 088's tables and every statement kept (RB above). 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
+note "RB the code is $BASELINE_VERSION again. The rollback restores code only. The files $EXPECTED_VERSION added stay on disk (deploy-hybrid.sh never deletes) — QuoteOrganization, its test, its weakened copies, two fixtures and the fake mail relay's test, never run on the server: $(printf '%s ' $EXPECTED_ADDED); $BASELINE_VERSION reads none of them. ECO Bank stays as it was: its switch, its screen, its links, 088's tables and every statement kept (RB above). 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
 fi
 
 # 5.18.93: the salesperson pilot against the deploy's own record of it. A run compares the pilot only with what it read
