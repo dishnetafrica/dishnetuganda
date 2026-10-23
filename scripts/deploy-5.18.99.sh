@@ -268,6 +268,18 @@
 #            operator's steps in uCRM; the rollback last, after the verdict, its own block
 set -uo pipefail
 umask 077
+# A pipeline whose reader stops reading before its input ends — grep -q, grep -m, head, sed …q, awk …exit — can kill an
+# earlier stage still writing to it with SIGPIPE, and under pipefail the pipeline is then 141, "no match", although the
+# reader matched. Measured: printf '%s\n' "$LIST" | grep -qxF -- <an early line> failed 1 time in 3,000 (bash writes
+# such a printf once per line), and it made 5.18.94's script, inside this release's rehearsal, stop with "the pin lacks
+# files … tests/test_consent_identity.php" on a pin it had built correctly. A positive check (it expects a match) turns
+# into a false refusal; a negative one (… | grep -q PARTIAL && bad) into a missed detection, a false pass. So no status
+# this script judges comes from such a pipeline: a printf of a variable reaches its reader as a here-string — grep -q X
+# <<<"$v", the same bytes as printf '%s\n' "$v" and one final newline more than printf '%s' "$v", which none of these
+# checks can see (none matches an empty line; the one anchored with $ matches before a final newline as at the end) —
+# and any other writer pipes into drained, which runs the reader, then reads the rest of its input to the end, so that
+# no writer is ever left without a reader. drained's status is the reader's, exactly.
+drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | drained READER [ARG…] — e.g. … | drained grep -q X
 
 main() {
 PLUGIN="dishnet-hybrid-sudan"
@@ -1611,7 +1623,7 @@ sec_repair() {   # K2 — public.php, ?page=emergency_repair: the key file requi
   [ "$(grep -ciE "[?:=][[:space:]]*['\"]DISHNET_REPAIR['\"]" <<<"$f")" = "0" ] || w="$w fallback-key"
   # the one line of the file that names the old key is the refusal of it
   n="$(grep -ciF 'DISHNET_REPAIR' <<<"$f")"
-  { [ "${n:-0}" = "1" ] && grep -iF 'DISHNET_REPAIR' <<<"$f" | grep -qF "&& stripos(\$storedKey, 'DISHNET_REPAIR') === false;"; } || w="$w old-key-named-${n:-0}x"
+  { [ "${n:-0}" = "1" ] && grep -iF 'DISHNET_REPAIR' <<<"$f" | drained grep -qF "&& stripos(\$storedKey, 'DISHNET_REPAIR') === false;"; } || w="$w old-key-named-${n:-0}x"
   sec_has "$b" "\$keyUsable = strlen(\$storedKey) >= 32 && preg_match('/^[\x21-\x7E]+\z/', \$storedKey) === 1" || w="$w no-key-rule"
   sec_has "$b" 'if (!$keyUsable || !is_string($givenKey) || !hash_equals($storedKey, $givenKey)) {' || w="$w no-gate"
   [ "$(sec_lines "$f" '{$storedKey}')" = "0" ] || w="$w prints-the-key"
@@ -3862,12 +3874,12 @@ ok "A7 Domain B untouched: the whole repository differs between $BASELINE_COMMIT
 STRAY=""; MISSING=""
 for f in $CHANGED; do
   rel="${f#"$PLUGIN"/}"
-  if printf '%s\n' "$ADDED" | grep -qxF -- "$f"; then in_list "$rel" "$EXPECTED_ADDED" || STRAY="$STRAY $rel(added)"
+  if grep -qxF -- "$f" <<<"$ADDED"; then in_list "$rel" "$EXPECTED_ADDED" || STRAY="$STRAY $rel(added)"
   else in_list "$rel" "$EXPECTED_CHANGED" || STRAY="$STRAY $rel"; fi
 done
-for rel in $EXPECTED_ADDED; do printf '%s\n' "$ADDED" | grep -qxF -- "$PLUGIN/$rel" || MISSING="$MISSING $rel(added)"; done
+for rel in $EXPECTED_ADDED; do grep -qxF -- "$PLUGIN/$rel" <<<"$ADDED" || MISSING="$MISSING $rel(added)"; done
 for rel in $EXPECTED_CHANGED; do
-  printf '%s\n' "$CHANGED" | grep -qxF -- "$PLUGIN/$rel" && ! printf '%s\n' "$ADDED" | grep -qxF -- "$PLUGIN/$rel" || MISSING="$MISSING $rel"
+  grep -qxF -- "$PLUGIN/$rel" <<<"$CHANGED" && ! grep -qxF -- "$PLUGIN/$rel" <<<"$ADDED" || MISSING="$MISSING $rel"
 done
 [ -z "$STRAY" ] || stop "the pin carries files that are not $EXPECTED_VERSION's, which this release must not ship:$STRAY"
 [ -z "$MISSING" ] || stop "the pin lacks files $EXPECTED_VERSION is made of:$MISSING — this script is for another build"
@@ -4705,7 +4717,7 @@ if [ "$MODE" = "deploy" ]; then
   L_OK=0; L_TOK=0; L_BAD=""; L_TBAD=""
   for f in $(printf '%s\n' "$CHANGED" | grep '\.php$'); do
     if git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$f" > "/tmp/dnb_lint.$$" 2>/dev/null \
-       && docker exec -i "$CONTAINER" php -l < "/tmp/dnb_lint.$$" 2>&1 | grep -q '^No syntax errors detected'; then
+       && docker exec -i "$CONTAINER" php -l < "/tmp/dnb_lint.$$" 2>&1 | drained grep -q '^No syntax errors detected'; then
       case "$f" in "$PLUGIN"/tests/*) L_TOK=$((L_TOK+1));; *) L_OK=$((L_OK+1));; esac
     else case "$f" in "$PLUGIN"/tests/*) L_TBAD="$L_TBAD ${f#"$PLUGIN"/}";; *) L_BAD="$L_BAD ${f#"$PLUGIN"/}";; esac; fi
   done
@@ -5067,7 +5079,7 @@ if [ "$MODE" = "deploy" ]; then
   A23_ADJ="$(kv "$CIH_K" adj)"
   case "$A23_ADJ" in
     present,*,status=approved,un=yes,*) ok "A23.5 the 12 Sep adjustment is in the book: one row of that day, out, $(printf '%s' "$A23_ADJ" | sed -nE 's/.*,cur=([^,]*).*/\1/p'), approved, on no account — inside D2 = A, as in P0's A; named to P0 by its id; its amount never read out" ;;
-    present,*) note "A23.5 the 12 Sep adjustment is in the book but $(printf '%s' "$A23_ADJ" | grep -q ',un=no' && echo "ON AN ACCOUNT" || echo "not approved") ($(printf '%s' "$A23_ADJ" | sed -E 's/^present,id=[0-9]+,//')) — so D2 = A does not count it as P0's A did; not named to P0. Its amount is never read out" ;;
+    present,*) note "A23.5 the 12 Sep adjustment is in the book but $(grep -q ',un=no' <<<"$A23_ADJ" && echo "ON AN ACCOUNT" || echo "not approved") ($(printf '%s' "$A23_ADJ" | sed -E 's/^present,id=[0-9]+,//')) — so D2 = A does not count it as P0's A did; not named to P0. Its amount is never read out" ;;
     absent,*) note "A23.5 the 12 Sep adjustment is not in the book: no row of 2026-09-12, out, UGX or blank, whose cents hash to R0's — the definition never names it; P0 runs without --adjustment-id" ;;
     *) note "A23.5 the 12 Sep adjustment could not be identified ($A23_ADJ) — P0 runs without --adjustment-id; the definition never names it" ;;
   esac
@@ -5492,16 +5504,16 @@ if [ -n "$PLUGIN_BASE" ]; then
       # numbers' Verify number, sends a visitor with no session to the sign-in page, and its answer carries no part of the
       # card. A GET: nothing is posted to the screen.
       http GET "$PLUGIN_BASE?page=dashboard&tab=wa_ai_setup"
-      if [ "$HTTP_CODE" = "302" ] && printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login' && [ "$(count 'sales-numbers')" = "0" ]; then
+      if [ "$HTTP_CODE" = "302" ] && grep -qF 'page=login' <<<"$HTTP_LOCATION" && [ "$(count 'sales-numbers')" = "0" ]; then
         ok "V12 the WhatsApp AI screen without a session sends the visitor to the sign-in page (302) — no part of the Salesperson numbers card is in the answer"
       else bad "V12 the WhatsApp AI screen without a session → $HTTP_CODE${HTTP_LOCATION:+ to $HTTP_LOCATION}; 'sales-numbers' ×$(count 'sales-numbers') (expected 302 to the sign-in page)"; fi
       # BA4 — 5.18.97 (SPEC §2.10b A4): ECO Bank and its export send a visitor with no session to the sign-in page (302) —
       # the export route asks for the sign-in before BankGate and before anything is read — with nothing of the screen and
       # no file in either answer, and no PHP fatal. Two GETs: nothing is posted; no page is rendered with a login.
       http GET "$PLUGIN_BASE?page=dashboard&tab=bank"
-      BA4_P="$HTTP_CODE|$(printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login' && echo login || echo other)|$(count 'bk-card')|$(count 'Fatal error')$(count 'Parse error')"
+      BA4_P="$HTTP_CODE|$(grep -qF 'page=login' <<<"$HTTP_LOCATION" && echo login || echo other)|$(count 'bk-card')|$(count 'Fatal error')$(count 'Parse error')"
       http GET "$PLUGIN_BASE?page=dashboard&tab=bank&bk_export=csv&bk_acct=1"
-      BA4_X="$HTTP_CODE|$(printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login' && echo login || echo other)|$(printf '%s' "$HTTP_HEADERS" | grep -ciF 'content-disposition' || true)|$(count 'Fatal error')$(count 'Parse error')"
+      BA4_X="$HTTP_CODE|$(grep -qF 'page=login' <<<"$HTTP_LOCATION" && echo login || echo other)|$(printf '%s' "$HTTP_HEADERS" | grep -ciF 'content-disposition' || true)|$(count 'Fatal error')$(count 'Parse error')"
       if [ "$BA4_P|$BA4_X" = "302|login|0|00|302|login|0|00" ]; then
         ok "BA4 ECO Bank (?page=dashboard&tab=bank) and its export (bk_export=csv) without a session each send the visitor to the sign-in page (302) — no part of the screen, no file, no PHP fatal in either answer"
       else bad "BA4 ECO Bank or its export without a session does not answer with the sign-in page as it must: the screen $BA4_P, the export $BA4_X (code|where|screen-or-file|fatals; expected 302|login|0|00)"; fi
@@ -5512,7 +5524,7 @@ if [ -n "$PLUGIN_BASE" ]; then
       CA4_R=""
       for ca4 in "the page:tab=cashbook" "the tab:tab=cashbook&cb_view=noncash" "the cash export:tab=cashbook&cb_export=csv&cb_proj=dishnet" "the tab's export:tab=cashbook&cb_export=csv&cb_proj=dishnet&cb_book=noncash&cb_acct=other"; do
         http GET "$PLUGIN_BASE?page=dashboard&${ca4#*:}"
-        ca4v="$HTTP_CODE|$(printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login' && echo login || echo other)|$(count 'cb3-')$(count 'CASH IN HAND')|$(printf '%s' "$HTTP_HEADERS" | grep -ciF 'content-disposition' || true)|$(count 'Fatal error')$(count 'Parse error')"
+        ca4v="$HTTP_CODE|$(grep -qF 'page=login' <<<"$HTTP_LOCATION" && echo login || echo other)|$(count 'cb3-')$(count 'CASH IN HAND')|$(printf '%s' "$HTTP_HEADERS" | grep -ciF 'content-disposition' || true)|$(count 'Fatal error')$(count 'Parse error')"
         [ "$ca4v" = "302|login|00|0|00" ] || CA4_R="$CA4_R ${ca4%%:*}=$ca4v;"
       done
       if [ -z "$CA4_R" ]; then
@@ -5522,12 +5534,12 @@ if [ -n "$PLUGIN_BASE" ]; then
       # installed includes/api/api_products_admin.php's $_gateAdminOnly names it (comments aside); over the public address
       # its route, dry_run=1, answers a visitor with no session with the staff guard (401/403) or the sign-in page — before
       # any uCRM read — with no PHP fatal. One GET: nothing is posted, nothing pushed.
-      if awk '/\$_gateAdminOnly *= *\[/ { p = 1 } p && /\];/ { exit } p' "$DEST/includes/api/api_products_admin.php" 2>/dev/null | grep -vE '^[[:space:]]*//' | grep -qF "'push_products_to_ucrm',"; then QCA4_T="yes"; else QCA4_T="no"; fi
+      if awk '/\$_gateAdminOnly *= *\[/ { p = 1 } p && /\];/ { exit } p' "$DEST/includes/api/api_products_admin.php" 2>/dev/null | grep -vE '^[[:space:]]*//' | drained grep -qF "'push_products_to_ucrm',"; then QCA4_T="yes"; else QCA4_T="no"; fi
       http GET "$PLUGIN_BASE?page=api&action=push_products_to_ucrm&dry_run=1"
       QCA4_F="$(count 'Fatal error')$(count 'Parse error')"
       case "$QCA4_T|$HTTP_CODE|$QCA4_F" in
         yes\|401\|00|yes\|403\|00) ok "Q-CA4 Sync All is admin-only: the installed admin-only gate (\$_gateAdminOnly, read as text) names push_products_to_ucrm, and its route (dry_run=1) answers a visitor with no session $HTTP_CODE — the staff guard, before any uCRM read; no PHP fatal" ;;
-        yes\|302\|00) if printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login'; then ok "Q-CA4 Sync All is admin-only: the installed admin-only gate (\$_gateAdminOnly, read as text) names push_products_to_ucrm, and its route (dry_run=1) sends a visitor with no session to the sign-in page (302) — before any uCRM read; no PHP fatal"
+        yes\|302\|00) if grep -qF 'page=login' <<<"$HTTP_LOCATION"; then ok "Q-CA4 Sync All is admin-only: the installed admin-only gate (\$_gateAdminOnly, read as text) names push_products_to_ucrm, and its route (dry_run=1) sends a visitor with no session to the sign-in page (302) — before any uCRM read; no PHP fatal"
                       else bad "Q-CA4 push_products_to_ucrm without a session → 302${HTTP_LOCATION:+ to $HTTP_LOCATION}, not the sign-in page"; fi ;;
         *) bad "Q-CA4 Sync All is not as $EXPECTED_VERSION makes it: the installed gate names push_products_to_ucrm: $QCA4_T; its route without a session → $HTTP_CODE; fatals $QCA4_F (expected yes, 401/403 or the sign-in page, 00)" ;;
       esac
@@ -5537,7 +5549,7 @@ if [ -n "$PLUGIN_BASE" ]; then
       QCA5_R=""
       for qca5 in "the KYC form:form" "Send Quotation:send_quote" "Quote History:quote_logs" "Orders:applications" "the LTE dashboard:lte_dashboard"; do
         http GET "$PLUGIN_BASE?page=dashboard&tab=${qca5#*:}"
-        qca5v="$HTTP_CODE|$(printf '%s' "$HTTP_LOCATION" | grep -qF 'page=login' && echo login || echo other)|$(count 'Fatal error')$(count 'Parse error')"
+        qca5v="$HTTP_CODE|$(grep -qF 'page=login' <<<"$HTTP_LOCATION" && echo login || echo other)|$(count 'Fatal error')$(count 'Parse error')"
         [ "$qca5v" = "302|login|00" ] || QCA5_R="$QCA5_R ${qca5%%:*}=$qca5v;"
       done
       if [ -z "$QCA5_R" ]; then ok "Q-CA5 the KYC form, Send Quotation, Quote History, Orders and the LTE dashboard without a session each send the visitor to the sign-in page (302) — no PHP fatal in any answer"
@@ -5549,7 +5561,7 @@ else note "V1/V2/V5/V7$( [ "$MODE" != "rollback" ] && echo " and BA4, CA4, Q-CA4
 # V3 — the distributor pilot's switch (distributors_enabled) is UNCHANGED by the deploy: whatever state the operator left it
 # in, it stays. It is not the salesperson numbers' switches — those are V3f and V3h.
 SW_AFTER="$(switch_state)"
-if [ -z "$SW_AFTER" ] || ! printf '%s' "$SW_AFTER" | grep -q '='; then bad "V3 could not read the distributor pilot's switch ($SW_AFTER)"
+if [ -z "$SW_AFTER" ] || ! grep -q '=' <<<"$SW_AFTER"; then bad "V3 could not read the distributor pilot's switch ($SW_AFTER)"
 elif [ "$SW_AFTER" = "${SW_BEFORE:-}" ]; then ok "V3 the distributor pilot's switch is unchanged by the deploy (before=$SW_BEFORE, after=$SW_AFTER) — $EXPECTED_VERSION changes no configuration value"
 else bad "V3 the distributor pilot's switch CHANGED across the deploy (before=${SW_BEFORE:-?}, after=$SW_AFTER) — $EXPECTED_VERSION must never touch it"; fi
 printf '  …     the distributor pilot reads %s (distributors_enabled, set by the operator; manage it with set_distributors.php --show/--on/--off)\n' "${SW_AFTER#pilot=}"
@@ -5726,8 +5738,8 @@ check_086() {   # $1 the label
   case "$tb" in
     "mig=applied:"*)
       [ "$(printf '%s' "$tb" | sed -E 's/^mig=applied:([0-9a-f]*) .*/\1/')" = "$md5" ] || r3bad="$r3bad ledger-checksum≠installed-file"
-      printf '%s' "$tb" | grep -q ' tables=5/5 triggers=10/10 indexes=4/4 checks=2/2 ' || r3bad="$r3bad incomplete:$(printf '%s' "$tb" | sed -E 's/.* missing=//')"
-      printf '%s\n' "$mlog" | grep -q 'PARTIAL' && r3bad="$r3bad migration.log:PARTIAL"
+      grep -q ' tables=5/5 triggers=10/10 indexes=4/4 checks=2/2 ' <<<"$tb" || r3bad="$r3bad incomplete:$(printf '%s' "$tb" | sed -E 's/.* missing=//')"
+      grep -q 'PARTIAL' <<<"$mlog" && r3bad="$r3bad migration.log:PARTIAL"
       rows="$(printf '%s' "$tb" | sed -E 's/.* rows=([^ ]*) .*/\1/')"
       if [ -n "$r3bad" ]; then bad "$1 migration 086 is recorded but not complete:$r3bad ($tb)"
       else ok "$1 migration 086 (5.18.83's) is still applied and complete — 5 tables, 10 triggers, 4 indexes, both CHECKs, the ledger row matching the installed file; its tables hold install_auth:events:activations:exempt:rate = $rows (before this run: $(printf '%s' "$IA_TB_BEFORE" | sed -E 's/.* rows=([^ ]*) .*/\1/'))"; fi ;;
@@ -5759,11 +5771,11 @@ check_087() {   # $1 the label
   case "$st" in
     "mig=applied:"*)
       [ "$(printf '%s' "$st" | sed -E 's/^mig=applied:([0-9a-f]*) .*/\1/')" = "$md5" ] || bad87="$bad87 ledger-checksum≠installed-file"
-      printf '%s' "$st" | grep -q ' tables=2/2 indexes=3/3 triggers=3/3 checks=2/2 ' || bad87="$bad87 incomplete:$(printf '%s' "$st" | sed -E 's/.* missing=//')"
-      printf '%s' "$st" | grep -qE ' rows=[0-9]+:[0-9]+ seed=[^ ]+ dnum=[0-3] other=[0-9]+ active=[0-9]+ oai=[0-9]+ trail=[^ ]+ dtrail=[0-9]+ ' || bad87="$bad87 rows-unreadable:$(wa87_rows "$st")"
-      printf '%s' "$st" | grep -qE ' depts=3/3 seeded=yes .* sig=[0-9a-f]+/[0-9a-f]+ missing=' || bad87="$bad87 department-rows-or-seeded-trail-or-key:$(printf '%s' "$st" | sed -nE 's/.* (depts=[^ ]* seeded=[^ ]*) .*/\1/p')"
+      grep -q ' tables=2/2 indexes=3/3 triggers=3/3 checks=2/2 ' <<<"$st" || bad87="$bad87 incomplete:$(printf '%s' "$st" | sed -E 's/.* missing=//')"
+      grep -qE ' rows=[0-9]+:[0-9]+ seed=[^ ]+ dnum=[0-3] other=[0-9]+ active=[0-9]+ oai=[0-9]+ trail=[^ ]+ dtrail=[0-9]+ ' <<<"$st" || bad87="$bad87 rows-unreadable:$(wa87_rows "$st")"
+      grep -qE ' depts=3/3 seeded=yes .* sig=[0-9a-f]+/[0-9a-f]+ missing=' <<<"$st" || bad87="$bad87 department-rows-or-seeded-trail-or-key:$(printf '%s' "$st" | sed -nE 's/.* (depts=[^ ]* seeded=[^ ]*) .*/\1/p')"
       [ "$st" = "${WA87_BEFORE:-}" ] || bad87="$bad87 changed-by-this-run(every column of every row and trail entry compared under this run's key; before: $(wa87_rows "${WA87_BEFORE:-}"); now: $(wa87_rows "$st"))"
-      if printf '%s\n' "$mlog" | grep -qE 'PARTIAL|ERROR|WARNING'; then bad87="$bad87 migration.log:$(printf '%s\n' "$mlog" | grep -oE 'PARTIAL|ERROR|WARNING' | head -1)"
+      if grep -qE 'PARTIAL|ERROR|WARNING' <<<"$mlog"; then bad87="$bad87 migration.log:$(printf '%s\n' "$mlog" | grep -oE 'PARTIAL|ERROR|WARNING' | head -1)"
       elif [ "${nl:-0}" -gt 0 ] && [ "${nok:-0}" != "$nl" ]; then
         cnt="$(printf '%s\n' "$mlog" | grep -oE 'OK: 087_wa_channels\.sql \([0-9]+ stmts' | sed -E 's/.*\(([0-9]+) stmts/\1/' | grep -vx "$MIG87_STMTS" | head -1)"
         bad87="$bad87 migration.log:OK-counts-${cnt:-?}-of-$MIG87_STMTS-statements"
@@ -5878,7 +5890,7 @@ done <<< "$PREV_KEPT_SHA256S"
 [ "$(sha256sum "$DEST/$MAIN" 2>/dev/null | cut -c1-64)" = "$MAIN_PIN_SHA256" ] || CA1_BAD="$CA1_BAD $MAIN(not-the-reviewed-one)"
 for ca1_rel in $EXPECTED_ADDED $EXPECTED_CHANGED; do
   case "$ca1_rel" in *.php) ;; *) continue ;; esac
-  if [ -f "$DEST/$ca1_rel" ] && docker exec -i "$CONTAINER" php -l < "$DEST/$ca1_rel" 2>&1 | grep -q '^No syntax errors detected'; then CA1_L=$((CA1_L + 1))
+  if [ -f "$DEST/$ca1_rel" ] && docker exec -i "$CONTAINER" php -l < "$DEST/$ca1_rel" 2>&1 | drained grep -q '^No syntax errors detected'; then CA1_L=$((CA1_L + 1))
   else case "$ca1_rel" in tests/*) CA1_T="$CA1_T $ca1_rel" ;; *) CA1_BAD="$CA1_BAD php-l:$ca1_rel" ;; esac; fi
 done
 if [ -z "$CA1_BAD" ] && [ "$CA1_P|$CA1_K" = "$PIN_SHA_N|$PREV_KEPT_N" ]; then
@@ -5888,7 +5900,7 @@ else bad "Q-CA1 the installed files are not as the release and $BASELINE_VERSION
 
 # R2 — the installed tool re-reads the live switch through the installed code; the deploy left it exactly as it was. And
 # the installed authorisation code reads its own switch as the plugin will: InstallAuth::enabled() over the configuration.
-if printf '%s' "$SW_AFTER" | grep -q '='; then ok "R2 the installed set_distributors --show reports $SW_AFTER — the distributor pilot's switch, distributors_enabled (the operator's setting, unchanged by this deploy)"
+if grep -q '=' <<<"$SW_AFTER"; then ok "R2 the installed set_distributors --show reports $SW_AFTER — the distributor pilot's switch, distributors_enabled (the operator's setting, unchanged by this deploy)"
 else bad "R2 could not read the installed switch ($SW_AFTER)"; fi
 IA_CODE="?"
 [ -n "$DB_OWNER" ] && IA_CODE="$(docker exec -u "$DB_OWNER" "$CONTAINER" php -r '
@@ -5948,7 +5960,7 @@ R2B_BAD=""
 case "$B2_CODE" in "files="*" store="*) ;; *) R2B_BAD="$R2B_BAD unreadable" ;; esac
 [ "$B2_CODE" = "$B2_CODE_B" ] || R2B_BAD="$R2B_BAD differs-from-$BASELINE_VERSION's-code($B2_CODE_B)"
 [ "$B2_CODE" = "${B2C_A:-}" ] || R2B_BAD="$R2B_BAD changed-since-stage-A(${B2C_A:-not-read-at-A})"
-printf '%s' "$B2_CODE" | grep -qE "^files=$(b2_want files) store=$(b2_want store)\$" || R2B_BAD="$R2B_BAD not-as-the-switches-read($OL_AFTER $FH_AFTER $MN_AFTER)"
+grep -qE "^files=$(b2_want files) store=$(b2_want store)\$" <<<"$B2_CODE" || R2B_BAD="$R2B_BAD not-as-the-switches-read($OL_AFTER $FH_AFTER $MN_AFTER)"
 B2_F="${B2_CODE#files=}"; B2_F="${B2_F%% *}"
 case "$B2_F" in on,*) R2B_OL="ON — a salesperson sees only their own leads" ;; *) R2B_OL="OFF — every salesperson sees every lead" ;; esac
 case "$B2_F" in *,held,*) R2B_HOLD="holding sales-001's automated follow-ups — its owner follows up personally" ;; *) R2B_HOLD="holding nothing on sales-001" ;; esac

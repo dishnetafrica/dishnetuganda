@@ -34,8 +34,10 @@
 #     exactly the reviewed thirty-six files, its tree the development branch's (quote-99), each file's sha256 as the script
 #     pins it, computed here from Git; the thirty-one kept files by theirs in both commits, the thirty changed ones by
 #     their previous form; no migration; T1 and T4 pinned as before; the header's three commands, each alone; every later
-#     command defined with its own log wrapper; the instruments — C5's digests, the judge's every term (the split and the
-#     tab's buttons against the old code's among them, each line's weakened copy caught), the copy checks' comparison,
+#     command defined with its own log wrapper; no status the script judges read off a pipeline whose reader exits early
+#     (SIGPIPE under pipefail: no pipe into grep -q, its four other readers through drained — a here-string put back as
+#     a pipe, and drained taken away, each caught); the instruments — C5's digests, the judge's every term (the split and
+#     the tab's buttons against the old code's among them, each line's weakened copy caught), the copy checks' comparison,
 #     the GET-only wrapper (a weakened one lets a POST through: caught), the token copy as the probe makes it (0600, the
 #     two keys alone, never printed), and the probe's refusal of a path outside /tmp (0);
 #   · --check is GO on the live release as production has it: every quoting check holds — the tenant through the
@@ -103,7 +105,7 @@ done
 # never finds itself.)
 U99_SEEN="$(ps -eo pid=,ppid=,args= 2>/dev/null | awk -v a='/ucrm99/' -v b='rh99-ucrm.php' 'index($0, a b) { print $1 ":" $2 }')"
 if [ -n "$U99_SEEN" ]; then
-  if printf '%s\n' "$U99_SEEN" | grep -qE '^[0-9]+:1$'; then
+  if grep -qE '^[0-9]+:1$' <<<"$U99_SEEN"; then
     echo "refusing: a stand-in uCRM left by an earlier run of this rehearsal is still up (pid:ppid $(printf '%s' "$U99_SEEN" | paste -sd' ' -)) — its parent is gone; stop it (kill <pid>), then run this again"
   else echo "refusing: a stand-in uCRM of another run of this rehearsal is up (pid:ppid $(printf '%s' "$U99_SEEN" | paste -sd' ' -)) — let that run end first"; fi
   exit 2
@@ -322,6 +324,49 @@ cmds99() {   # cmds99 SCRIPT — each of the nine definitions once (1 each) | th
     "$(grep -cxF "    printf '      %s\n' \"\$MOVELIST_CMD\"" "$f")" "$(grep -cF 'then F_RUN_CMD="$RUNBOOK_CMD"' "$f")$(grep -F 'else F_RUN_CMD="cd $REPO && git pull origin $BRANCH' "$f" | grep -cF '$(LOGW "')" \
     "$(grep -cE 'SWITCH_ON_CMD|SWITCH_CLEAR_CMD' "$f")"
 }
+sigpipe99() {   # sigpipe99 SCRIPT — no status the script judges may come from a pipeline whose reader exits early: under pipefail
+                # it is 141 when SIGPIPE kills a writer still writing (printf '%s\n' "$L" | grep -qxF -- x falsely failed 1 in
+                # 3,000; 5.18.94's script, inside this rehearsal, stopped on a pin it had built correctly). The pipes into a grep
+                # that stops at its first match (-q, -m, -l, -L, their long forms) on the script's code lines — heredoc bodies
+                # and comment lines aside, continued lines joined — not through drained | the pipes through drained |
+                # drained's definition, the script's own, exactly once. A grep -q has no output: its status is all it gives,
+                # so every such pipe is a judged one; a -m, -l or -L could be read for its value instead, and the script has
+                # none — one added must still go through drained or a here-string. head, sed …q and awk …exit are read
+                # there for their value alone (forty, inventoried statically with check_sigpipe99.py) and are not this
+                # reading's
+  python3 - "$1" <<'PY'
+import re, sys
+src = open(sys.argv[1], encoding='utf-8').read().split('\n')
+code, i = [], 0
+hd = re.compile(r"<<(-?)\s*(['\"]?)([A-Za-z_][A-Za-z_0-9]*)\2")
+while i < len(src):
+    l = src[i]; i += 1
+    if re.match(r'^\s*#', l):
+        continue
+    while (l.endswith('\\') or l.rstrip().endswith('|')) and i < len(src):
+        l = (l[:-1] if l.endswith('\\') else l) + ' ' + src[i].strip(); i += 1
+    code.append(l)
+    for m in hd.finditer(l.replace('<<<', '')):
+        while i < len(src) and (src[i].lstrip('\t') if m.group(1) else src[i]) != m.group(3):
+            i += 1
+        i += 1
+def early(rest):
+    for w in rest.split():
+        if w == '--' or not w.startswith('-'):
+            return False
+        if w.startswith('--'):
+            if w in ('--quiet', '--silent', '--files-with-matches', '--files-without-match') or w.startswith('--max-count'):
+                return True
+            continue
+        if re.match(r'^-[A-Za-z]*[qmlL]', w):
+            return True
+    return False
+n = sum(1 for l in code for m in re.finditer(r'(?<!\|)\|(?!\|)\s*grep\s+(?=(.*))', l) if early(m.group(1)))   # (?=…): two on one line both seen
+d = sum(len(re.findall(r'(?<!\|)\|(?!\|)\s*drained\s', l)) for l in code if not l.startswith('drained() {'))
+f = sum(1 for l in code if l.startswith('drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }'))
+print('%d|%d|%d' % (n, d, f))
+PY
+}
 ctl99() {   # ctl99 OUTPUT A22|R23 — the earlier readers in this release's words: "kept by 5.18.99"
   local out="$1" n=0 x
   for x in a b c d e f g; do
@@ -429,6 +474,8 @@ br1	deploy	  [ -z "$BR1_MISS" ] || stop "NO-GO (BR1)	  true || stop "NO-GO (BR1)
 qg1g1	deploy	  [ -z "$G1_BAD" ] || stop "NO-GO (Q-G1): the installed plugin is not	  true || stop "NO-GO (Q-G1): the installed plugin is not
 hdrdeploy	deploy	#   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.99 && mkdir -p /root/dnb-5.18.99 && bash scripts/deploy-5.18.99.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )	#   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.99 && mkdir -p /root/dnb-5.18.99 && bash scripts/deploy-5.18.99.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/deploy-$(date -u +%Y%m%dT%H%M%SZ).log ) && bash scripts/deploy-5.18.99.sh --rollback
 runbookdef	deploy	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh $(LOGW deploy)"	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh"
+sigpipehere	deploy	for rel in $EXPECTED_ADDED; do grep -qxF -- "$PLUGIN/$rel" <<<"$ADDED" || MISSING="$MISSING $rel(added)"; done	for rel in $EXPECTED_ADDED; do printf '%s\n' "$ADDED" | grep -qxF -- "$PLUGIN/$rel" || MISSING="$MISSING $rel(added)"; done
+sigpipedrained	deploy	php -l < "$DEST/$ca1_rel" 2>&1 | drained grep -q '^No syntax errors detected'; then	php -l < "$DEST/$ca1_rel" 2>&1 | grep -q '^No syntax errors detected'; then
 qoorgs	qo	        $rows = $this->crm->get('organizations');	        try { $this->crm->post('organizations', ['rh99' => 1]); } catch (\Throwable $rh99) { } $rows = $this->crm->get('organizations');   // RH99: a request that is not a GET, planted before the read
 qooff	qo	    private const OFF_WORDS   = ['0', 'off', 'no', 'none', 'false'];	    private const OFF_WORDS   = ['off', 'no', 'none', 'false'];   // RH99: 0 no longer switches the gate off
 qotenant	qo	            if ($profile->id() !== 'uganda') return $off;	            if (false) return $off;   // RH99: the tenant no longer read
@@ -796,7 +843,7 @@ s = s.replace(old, new, 1)
 assert s.count("'.leak_sync99'") == 1 and s.count("'.leak_kyc99'") == 1 and s.count("'.left99'") == 1 and s.count('rh99_probe') == 1 and s.count(old) == 1
 open(p, 'w').write(s)
 PY
-for i in $(seq 1 60); do pubget page=rh99_probe | grep -q 'rh99-triggers-ready' && break; sleep 0.1; done   # PHP re-reads the edited file
+for i in $(seq 1 60); do grep -q 'rh99-triggers-ready' <<<"$(pubget page=rh99_probe)" && break; sleep 0.1; done   # PHP re-reads the edited file
 check "$(pubget page=rh99_probe)$(ls -A "$SB/web" | grep -c '^\.leak_sync99$\|^\.leak_kyc99$\|^\.left99$')|$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "$PLUGIN_BASE?page=api&action=push_products_to_ucrm&dry_run=1")|$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "$PLUGIN_BASE?page=dashboard&tab=form")" \
       "rh99-triggers-ready0|401|302" \
   "control: the stand-in carries the three triggers, unspent and unset — Sync All's route answers 401 and the KYC form the sign-in page while they are"
@@ -908,6 +955,12 @@ check "$(cmds99 "$DEPLOY99")" "111111111|12|8|15|4|1|1|1|11|0" \
 M="$(weak99 fnowrap99 "$DEPLOY99" runbookdef)"
 check "$(cmds99 "$M" | cut -d'|' -f1)" "111111101" "0-cmd' a copy that defines the runbook's deploy without its log wrapper is caught by the same reading"
 rm -f "$M"
+check "$(sigpipe99 "$DEPLOY99")" "0|4|1" \
+  "no status the script judges comes from a pipeline whose reader exits early — under pipefail SIGPIPE turns such a pipeline's match into 141: no pipe into grep -q, -m, -l or -L on its code lines, four pipes through drained, drained defined once"
+M="$(weak99 sigpipeh99 "$DEPLOY99" sigpipehere)"; M2="$(weak99 sigpiped99 "$DEPLOY99" sigpipedrained)"
+check "$(sigpipe99 "$M")|$(sigpipe99 "$M2")" "1|4|1|1|3|1" \
+  "0-sigpipe' a copy with one here-string put back as printf '%s\\n' | grep -qxF (the pin's file list, A0) and one with drained taken from php -l's pipe (Q-CA1) are each caught by the same reading"
+rm -f "$M" "$M2"
 PR99_TWO="$(printf '%s\n' '== F. Summary ==' "      $EXP_AFTER99; $EXP_ROLLBACK99")"
 PR99_WORDS="  ok    Q-CA3 deploy-5.18.99.sh's GETs, as deploy-5.18.99.sh's stage A read them — the script named twice, in words"
 check "$(printed99 "$PR99_TWO")|$(printed99 "$PR99_WORDS" | cut -d'|' -f3)" "1|0|1|0" \
