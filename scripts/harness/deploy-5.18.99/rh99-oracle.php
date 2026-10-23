@@ -13,6 +13,12 @@
 //   qn4        KycCrmSync's queue by state, the pending ones at ten attempts and those whose saved request names another
 //              organization than the quoting one: "pending:N,spent:N,otherorg:N,review:N,failed:N,synced:N"
 //   qn5        crm_queue.json by status, "status:N,…" in order of the status, or "-"
+//   qn6        lte_subscribers (a table of columns): the registrations of the last 90 days not deleted, and how many of
+//              them carry a uCRM id, "n:l" — or "-" when there is no such table
+//   qn7        the staff records (retailers) active, not admin, with an id — all of them can open UCRM Product Mapping —
+//              and of them those whose role the RBAC tables grant admin:plans / admin:hardware (a role id as it is, a
+//              legacy role mapped to its slug as RbacService::mapLegacyRole maps it, "dealer" when unknown) or whose own
+//              modules list names it: "pm:N,plans:N,hw:N"
 // Counts and the ids file only: never a name, a phone or an amount.
 declare(strict_types=1);
 [$_, $db, $m, $idsFile] = $argv + [null, '', '0', ''];
@@ -81,5 +87,43 @@ ksort($q5); $q5s = [];
 foreach ($q5 as $k => $v) $q5s[] = $k . ':' . $v;
 $kcs = [];
 foreach ($kc as $k => $v) $kcs[] = $k . ':' . $v;
+$q6 = '-';
+if ($p->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'lte_subscribers'")->fetchColumn() !== false) {
+    $n6 = 0; $l6 = 0; $since6 = time() - 90 * 86400;
+    foreach ($load('lte_subscribers') as $r) {
+        $t = strtotime((string)($r['created_at'] ?? '') . ' UTC');
+        if ($t === false || $t < $since6 || trim((string)($r['deleted_at'] ?? '')) !== '') continue;
+        $n6++;
+        if ((int)($r['ucrm_id'] ?? 0) > 0) $l6++;
+    }
+    $q6 = $n6 . ':' . $l6;
+}
+$legacy = ['admin' => 'admin', 'support_leader' => 'support_leader', 'support' => 'support', 'sales' => 'dealer', 'sales_staff' => 'sales_staff',
+           'field_agent' => 'field_agent', 'field_accountant' => 'field_accountant', 'collection' => 'collection', 'accountant' => 'accountant',
+           'employee' => 'sales_staff', 'dealer' => 'dealer'];
+$grant = function ($role, string $mod) use ($p, $legacy): bool {
+    try {
+        if (is_numeric($role)) $rid = (int)$role;
+        else {
+            $st = $p->prepare('SELECT id FROM roles WHERE slug = ?');
+            $st->execute([$legacy[is_scalar($role) ? (string)$role : ''] ?? 'dealer']);
+            $rid = (int)$st->fetchColumn();
+        }
+        if ($rid <= 0) return false;
+        $st = $p->prepare("SELECT COUNT(*) FROM role_permissions rp JOIN permissions pm ON pm.id = rp.permission_id WHERE rp.role_id = ? AND pm.module = 'admin' AND pm.action = ?");
+        $st->execute([$rid, $mod]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) { return false; }
+};
+$pm = 0; $pl = 0; $hw = 0;
+foreach ($load('retailers') as $r) {
+    if (empty($r['is_active']) || !empty($r['is_admin']) || (int)($r['id'] ?? 0) <= 0) continue;
+    $role = $r['role_id'] ?? ($r['role'] ?? 'sales');
+    $mods = (isset($r['modules']) && is_array($r['modules'])) ? $r['modules'] : [];
+    $pm++;
+    if ($grant($role, 'plans') || in_array('plans', $mods, true)) $pl++;
+    if ($grant($role, 'hardware') || in_array('hardware', $mods, true)) $hw++;
+}
 echo json_encode(['all' => count($all), 'cap' => count($cap), 'src' => implode(',', $src), 'qg5' => $n5 . ':' . $s5,
-                  'qn4' => implode(',', $kcs), 'qn5' => $q5s ? implode(',', $q5s) : '-']), "\n";
+                  'qn4' => implode(',', $kcs), 'qn5' => $q5s ? implode(',', $q5s) : '-', 'qn6' => $q6,
+                  'qn7' => 'pm:' . $pm . ',plans:' . $pl . ',hw:' . $hw]), "\n";

@@ -39,7 +39,8 @@
 #     the GET-only wrapper (a weakened one lets a POST through: caught), the token copy as the probe makes it (0600, the
 #     two keys alone, never printed), and the probe's refusal of a path outside /tmp (0);
 #   · --check is GO on the live release as production has it: every quoting check holds — the tenant through the
-#     installed code, the quoting organization through the release's, uCRM's organizations and the token client's, read
+#     installed code, the quoting organization through the release's, uCRM's organizations and the token client's (and
+#     through crm_base_url, when set), read
 #     with GETs only (the stand-in's record: nothing but GETs, as many as the script counts) — and the notes are this
 #     rehearsal's own counts; the move-list on the sheet by id, never a name; nothing changed: the installed tree, the
 #     store's bytes and rows, the vault, both settings files and ucrm.json as before; the token copy made and gone (c);
@@ -57,16 +58,19 @@
 #     South Sudan's books read with the rule on (A24, weakened: GO, caught) (2);
 #   · the deploy, DEPLOY typed, PASSES: every check of the release's and the carried ones, stage A's readings in the state
 #     file, the sheet's move-list, GETs only, the token copy made twice and gone each time, nothing secret printed (4);
-#   · --after-only as printed PASSES; each after-check bites — Q-CA1 a kept file, Q-CA2 and its control, Q-CA3 a POST,
-#     a client moved between its discovery and its check, uCRM's list grown, a refusal line in the plugin's log, Q-CA4,
-#     Q-CA5, Q-CA6, Z2 a token copy left, V3j the switch cleared — and each one's weakened copy is caught; --check and
-#     --move-list-only refused with 5.18.99 live; --check-bank PASSES (5);
+#   · --after-only as printed PASSES; each after-check bites — Q-CA1 a kept file, Q-CA2 and both its controls, Q-CA3 a
+#     POST, a client moved between its discovery and its check (inside, and outside), the token client answering
+#     otherwise, uCRM's list grown, the probe's lines in its code copy's logs, a line of this run's in the live plugin
+#     log (a staff line there only a note), Q-CA4, Q-CA5, Q-CA6's profile, listing and refusal, Z2 a token copy left, V3j
+#     the switch cleared — and each one's weakened copy is caught; its two clients on its sheet, by id; Q-N3's window the
+#     deploy's; --check and --move-list-only refused with 5.18.99 live; --check-bank PASSES (5);
 #   · the rollback as printed, ROLLBACK typed: PASSED — 5.18.98's files by sha256, the quoting code gone, ECO Bank, its
 #     switch and every kept row unchanged; a --redeploy before the quarantine's --check refused at A14 (6);
 #   · --redeploy after the rollback with all three quoting flags over a book where only Q-G5 needs its: PASSED, the state
 #     file recording what each flag did, not that it was typed; its --after-only PASSES (7);
 #   · a rollback whose copy leaves 5.18.99's debug route behind FAILS RB twice, and a copy blind to the quoting code
-#     there FAILS once (caught) (8);
+#     there FAILS once (caught); over rows 5.18.99 wrote, RB counts them, and with its Sync All gate, Uganda profile and
+#     set_config left behind it FAILS naming all three (8);
 #   · nothing reaches Evolution; every observer quiet but where a run trips one on purpose; no figure, secret, client id,
 #     client name or contact, or uCRM key in any output, log, state file or request record, the sheets aside for ids;
 #     no stand-in uCRM, token copy or code copy left; /tmp, the host and the checkout as found (10).
@@ -368,8 +372,9 @@ PY
   echo "$REPO/scripts/.$1.sh"
 }
 # ── Every anchor this rehearsal's weakened copies, release variants and planted edits replace, with what replaces it,
-# in one table: name, the file it is found in (deploy: the script; qo, cb: the release's QuoteOrganization and
-# CashbookService; qt, ss, crm: the live release's QuoteTaxLine, South Sudan profile and CrmApiClient), the anchor
+# in one table: name, the file it is found in (deploy: the script; qo, cb, sc: the release's QuoteOrganization,
+# CashbookService and tools/set_config.php; qt, ss, crm: the live release's QuoteTaxLine, South Sudan profile and
+# CrmApiClient), the anchor
 # (exactly once in that file — asserted wherever it is used, and recorded as missing otherwise), and its replacement.
 # Tab-separated, read as written: no line of it is ever expanded. ──────────────────────────────────────────────────────
 ANCH99="$SB/anchors99.tsv"
@@ -397,10 +402,20 @@ qca2main	deploy	    elif [ "$(kv "$QO_G2" tenant)" = "uganda/uganda" ] && [ "$s2
 qca2c1	deploy	    if [ "$(kv "$QO_C1" setting)" = "off:-:explicit-off:-/off:-:explicit-off:-" ]; then ok "Q-CA2 control: the same copy with ucrm_quote_organization_id=0	    if true; then ok "Q-CA2 control: the same copy with ucrm_quote_organization_id=0
 qca3orgs	deploy	        elif [ "$t" = "$QG4_A" ]; then ok "Q-CA3 uCRM's organizations, through the INSTALLED	        elif true; then ok "Q-CA3 uCRM's organizations, through the INSTALLED
 qca3in	deploy	        *) bad "Q-CA3 checkClient() on a client stage A read in the quoting organization	        *) ok "Q-CA3 checkClient() on a client stage A read in the quoting organization
-qca3log	deploy	    if [ "$QO_LOGHIT" = "0" ]; then ok "Q-CA3 the live data/plugin.log gained no line	    if true; then ok "Q-CA3 the live data/plugin.log gained no line
+qca3log	deploy	    if [ "$QO_LOGHIT" != "0" ]; then bad "Q-CA3 the live data/plugin.log gained $QO_LOGHIT line(s) labelled this run's (deploy-check)	    if false; then bad "Q-CA3 the live data/plugin.log gained $QO_LOGHIT line(s) labelled this run's (deploy-check)
+qca3cp	deploy	    if [ "$QO_CPROBE" = "0:1 0:1" ]; then ok "Q-CA3 the probe's refusal lines reached neither	    if true; then ok "Q-CA3 the probe's refusal lines reached neither
+qca3nosink	deploy	$r = (new QuoteOrganization($c, $setting, $sink))->checkClient($id, "deploy-check");	$r = (new QuoteOrganization($c, $setting, null))->checkClient($id, "deploy-check");
+qca3noctl	deploy	$ctl = (new QuoteOrganization($plug, ["on" => true, "id" => null, "source" => "setting", "error" => "invalid"], null))->checkClient(0, "deploy-check-control");	$ctl = ["ok" => false, "code" => "R6"];
+qca3out	deploy	        *) bad "Q-CA3 checkClient() on a client outside the quoting organization → $out	        *) ok "Q-CA3 checkClient() on a client outside the quoting organization → $out
+qca3tok	deploy	        token=set*) if [ "$(kv "$QO_R" tin)" = "$in" ] && [ "$(kv "$QO_R" tout)" = "$out" ]; then ok "Q-CA3 the same two checks through the token client	        token=set*) if true; then ok "Q-CA3 the same two checks through the token client
+qca2c0	deploy	    if [ "$(kv "$QO_C0" tenant)" = "south-sudan/south-sudan" ] && [ "$(kv "$QO_C0" setting)" = "off:-:off:-/off:-:off:-" ]; then ok "Q-CA2 control: the same copy with tenant_profile=south-sudan	    if true; then ok "Q-CA2 control: the same copy with tenant_profile=south-sudan
 qca4	deploy	        *) bad "Q-CA4 Sync All is not as $EXPECTED_VERSION makes it:	        *) ok "Q-CA4 Sync All is not as $EXPECTED_VERSION makes it:
 qca5	deploy	        [ "$qca5v" = "302|login|00" ] || QCA5_R="$QCA5_R ${qca5%%:*}=$qca5v;"	        true || QCA5_R="$QCA5_R ${qca5%%:*}=$qca5v;"
 qca6	deploy	    [ "$o" = "uganda=1 south-sudan=NULL" ] && ok "Q-CA6 the installed profiles	    true && ok "Q-CA6 the installed profiles
+qca6list	deploy	    grep -qF "'ucrm_quote_organization_id' => ['text'," "$DEST/tools/set_config.php" 2>/dev/null	    true
+qca6ref	deploy	      if [ "$rc" = "rc=1" ] && grep -qF '"disabled" is not an organization number or 0/off, so nothing was saved.' <<<"$o" && [ "$t" = "0" ]; then ok "Q-CA6 the installed tools/set_config.php, from the copy	      if true; then ok "Q-CA6 the installed tools/set_config.php, from the copy
+qg1base	deploy	      stop "NO-GO (Q-G1): the container's record says	      true || stop "NO-GO (Q-G1): the container's record says
+qg1chg	deploy	|| G1_BAD="$G1_BAD $g1_rel(not-$BASELINE_VERSION's)"	|| true
 z2tok	deploy	 -o -iname "*vault*.json" -o -name "token.json" -o -name "plugin.sqlite3*"	 -o -iname "*vault*.json" -o -name "plugin.sqlite3*"
 rbqo	deploy	  grep -qF 'QuoteOrganization' "$DEST/$rbq" 2>/dev/null && RB_QO="$RB_QO $rbq:QuoteOrganization"	  true
 a0stray	deploy	[ -z "$STRAY" ] || stop	true || stop
@@ -416,6 +431,9 @@ hdrdeploy	deploy	#   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg
 runbookdef	deploy	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh $(LOGW deploy)"	RUNBOOK_CMD="cd $REPO && git pull origin $BRANCH && git fetch origin $RELEASE_BRANCH && mkdir -p $OUT && bash scripts/deploy-$EXPECTED_VERSION.sh"
 qoorgs	qo	        $rows = $this->crm->get('organizations');	        try { $this->crm->post('organizations', ['rh99' => 1]); } catch (\Throwable $rh99) { } $rows = $this->crm->get('organizations');   // RH99: a request that is not a GET, planted before the read
 qooff	qo	    private const OFF_WORDS   = ['0', 'off', 'no', 'none', 'false'];	    private const OFF_WORDS   = ['off', 'no', 'none', 'false'];   // RH99: 0 no longer switches the gate off
+qotenant	qo	            if ($profile->id() !== 'uganda') return $off;	            if (false) return $off;   // RH99: the tenant no longer read
+scqlist	sc	    'ucrm_quote_organization_id' => ['text',	    'ucrm_quote_organization_id' => ['text' ,
+scqoff	sc	    if (!in_array($new, ['0', 'off', 'no', 'none', 'false'], true)) {	    if (!in_array($new, ['0', 'off', 'no', 'none', 'false', 'disabled'], true)) {   // RH99: "disabled" taken for off
 cbwrite	cb	            $cashKinds = implode(', ', array_map([$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));	            $this->pdo()->exec("UPDATE cb_accounts SET updated_at = updated_at || '.' WHERE id = (SELECT MIN(id) FROM cb_accounts)"); $cashKinds = implode(', ', array_map([$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));   // RH99: a write planted on a read path
 cbgate	cb	                $this->cashRuleCache = StaffJobsGate::applies($cfg, $this->dataDir) && !dn_ssp_selectable($cfg);	                $this->cashRuleCache = true;   // RH99: rule A on for every tenant, South Sudan's books among them
 qtax	qt	->id() === 'uganda';	->id() === 'rh99-not-uganda';
@@ -452,6 +470,17 @@ o99() {   # o99 [QORG] — this rehearsal's own reading of the quoting checks' c
 oids99() { printf '%s' "$H99/v/$(basename "$1" .json).ids"; }        # oids99 O99-FILE — the client ids of that reading, newest first
 qx99() { python3 "$H99/rh99.py" qn2exp "$(oids99 "$1")" "$U99/state.json" "${2:-1}"; }   # what Q-N2 must read, from that reading and the stand-in's state
 qj() { python3 -c 'import json, sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "$1" "$2"; }   # qj JSON KEY
+q6say99() { if [ "$1" = "-" ]; then echo "no lte_subscribers table"; else echo "${1%%:*}, ${1#*:} of them with a uCRM link"; fi; }   # Q-N6's count in the note's words
+q99delta() {   # q99delta NOW BEFORE — the difference of two oracle counts, "n:l" or "pm:N,plans:N,hw:N", field by field
+  python3 -c 'import sys
+a, b = sys.argv[1], sys.argv[2]
+if a.startswith("pm:") and b.startswith("pm:"):
+    pa = dict(x.split(":") for x in a.split(",")); pb = dict(x.split(":") for x in b.split(","))
+    print(",".join("%s:%d" % (k, int(pa[k]) - int(pb.get(k, 0))) for k in pa))
+elif a.count(":") == 1 and b.count(":") == 1:
+    print("%d:%d" % tuple(int(x) - int(y) for x, y in zip(a.split(":"), b.split(":"))))
+else:
+    print("none(%s|%s)" % (a, b))' "$1" "$2" 2>&1; }
 cash99() { local f="$H99/cash-$1.json"; oracle96 > "$f"; printf '%s' "$f"; }   # the cash cells as the earlier rehearsal reads them
 forms99() { python3 "$H99/rh99.py" forms "$SB/forms99.txt" "$SB/seed96.amounts" "$SB/seed97.amounts" "$SB/stmt97.amounts" "$SB/seed98.amounts" "$H97"/cash-*.json "$H98"/cash-*.json "$H99"/cash-*.json "$R97"/sheets/cash-*.txt "$R98"/sheets/cash-*.txt "$R99"/sheets/cash-*.txt "$OUT97"/cash-*.txt "$OUT98"/cash-*.txt "$OUT99"/cash-*.txt >/dev/null 2>&1; }
 figs99() { forms99; python3 "$H99/rh99.py" hits "$SB/forms99.txt" "$@"; }   # figs99 FILE… — how many hold a figure of the book, in any printed form
@@ -789,13 +818,30 @@ SEED99='{"kyc_applications.json":[
  {"_rh99":true,"type":"manual","crm_client_id":71930457,"crm_quote_id":0,"created_at":"rel:-2 days"},
  {"_rh99":true,"type":"lte","crm_client_id":71930458,"crm_quote_id":0,"created_at":"rel:-1 day"}],
  "crm_queue.json":[{"_rh99":true,"status":"pending"},{"_rh99":true,"status":"done"}]}'
+# Q-N7's staff records: five accounts of a role id no role has (987654321, so the RBAC tables grant it nothing and only
+# the account's own modules list counts) — active with Subscription Plans and the Hardware Catalog, active with Plans
+# alone, active with neither, inactive, an admin: three counted (all three Product Mapping), two with Plans, one with the
+# Hardware Catalog. Through the installed code's own writer, as the rest.
+SEED99RT='{"retailers.json":[
+ {"_rh99":true,"name":"rh99-staff-1","role_id":987654321,"is_active":true,"modules":["plans","hardware"]},
+ {"_rh99":true,"name":"rh99-staff-2","role_id":987654321,"is_active":true,"modules":["plans"]},
+ {"_rh99":true,"name":"rh99-staff-3","role_id":987654321,"is_active":true},
+ {"_rh99":true,"name":"rh99-staff-4","role_id":987654321,"is_active":false,"modules":["plans","hardware"]},
+ {"_rh99":true,"name":"rh99-staff-5","role_id":987654321,"is_active":true,"is_admin":true,"modules":["plans"]}]}'
+# Q-N6's LTE registrations, in lte_subscribers (a table of columns, migration 020): three days old with a uCRM id, three
+# days old without, 120 days old, and three days old but deleted — two counted, one of them with a uCRM link.
+LTE99_SQL="INSERT INTO lte_subscribers (name, ucrm_id, created_at, deleted_at, notes) VALUES ('rh99-lte-1', 71930451, datetime('now', '-3 days'), NULL, 'rh99'), ('rh99-lte-2', NULL, datetime('now', '-3 days'), NULL, 'rh99'), ('rh99-lte-3', 71930451, datetime('now', '-120 days'), NULL, 'rh99'), ('rh99-lte-4', 71930451, datetime('now', '-3 days'), datetime('now', '-1 days'), 'rh99')"
+# RB's positive control (8b): an application with a quote refusal recorded and a lead flagged quote_org_missing, as 5.18.99
+# writes them — what a rollback must count and leave.
+SEED99RB='{"kyc_applications.json":[{"_rh99":true,"_rh99rb":true,"quote_refused":"R1","created_at":"rel:-1 day"}],
+ "leads.json":[{"_rh99":true,"_rh99rb":true,"crm_sync_flag":"quote_org_missing","created_at":"rel:-1 day"}]}'
 # Q-G5's plant: two more Manual quotes with a uCRM client and no uCRM quote — fewer than half then have one.
 PLANT99_QG5='{"quotes_log.json":[
  {"_rh99":true,"_rh99plant":true,"type":"manual","crm_client_id":71930451,"crm_quote_id":0,"created_at":"rel:-1 day"},
  {"_rh99":true,"_rh99plant":true,"type":"manual","crm_client_id":71930453,"crm_quote_id":0,"created_at":"rel:-1 day"}]}'
 settle96; sleep 1; VTS99A="$(vt_host)"; settle96; VTS99="$(vt_host)"   # the live vault at its fixed point before anything is seeded
 O99_PRE="$(o99 1)"
-RS99="$(rows_add99 "$SEED99")"
+RS99="$(rows_add99 "$SEED99")"; RT99="$(rows_add99 "$SEED99RT")"; LT99="$(sqx "$LTE99_SQL")"
 row_set crm_auth_token "$TOKEN99"
 settle96; sleep 1; settle96; VT99_0="$(vt_host)"
 O99_0="$(o99 1)"; QX99_0="$(qx99 "$O99_0")"
@@ -805,6 +851,9 @@ check "$RS99|$(( $(oj "$O99_0" all) - $(oj "$O99_PRE" all) ))|$(grep -cwF -f "$S
 check "$(qj "$QX99_0" outside)|$(qj "$QX99_0" sheet)|$(qj "$QX99_0" in)|$(qj "$QX99_0" out)|$(qj "$QX99_0" outorg)|$(oj "$O99_0" qg5)|$(sub98 "$(oj "$O99_0" qn4)" otherorg)" \
       "4|71930452:2;71930454:2;71930458:2;71930456:0|71930453|71930452|2|3:2|1" \
   "pre-e the reading the quoting checks are set against is not vacuous: four of the app's clients are filed under another organization or none (the move-list), one of each side to probe, three recent Lead and Manual quotes with a client, two of them with a uCRM quote, and one pending application whose request names organization 2"
+check "$RT99|$LT99|$(sq "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lte_subscribers'")|$(q99delta "$(oj "$O99_0" qn6)" "$(oj "$O99_PRE" qn6)")|$(q99delta "$(oj "$O99_0" qn7)" "$(oj "$O99_PRE" qn7)")" \
+      '{"rows":5}|done|1|2:1|pm:3,plans:2,hw:1' \
+  "pre-e' Q-N6's and Q-N7's readings are not vacuous: five staff records and four LTE registrations added — this rehearsal's own reading counts two more recent registrations, one with a uCRM link, and three more accounts that could open Sync All, two with Subscription Plans, one with the Hardware Catalog"
 D99="$(data94)"; QREC99="$(sha256sum "$QREC" | cut -c1-16)"; KEPT99="$(kept_state)"
 
 echo; echo "== 99-0. what is rehearsed: 5.18.99 — the controls =="
@@ -867,8 +916,9 @@ check "$(grep -cE '(>|>>) *"?\$(VAULT_HOST|VAULT)"?( |$)' "$DEPLOY99")$(grep -cE
   "the script never writes, moves or touches the live vault — it copies it only into its own backup"
 check "$(grep -cE '(cat|head|tail|more|less|awk|sed|grep)( -[^ ]+)* +"\$SHEET"' "$DEPLOY99")$(grep -cF 'echo "      less $SHEET"' "$DEPLOY99")" "04" \
   "nothing in the script reads the sheet out — it prints only \`less <path>\`, on its own line, in each of its four summaries"
-check "$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cE 'set_config\.php --key')|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cF "$BK97 --value")|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cF "$BK97 --clear")|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cE -- '--key ucrm_quote_organization_id --value [0-9]')" "0|0|0|0" \
-  "the script sets no key on the live install — not ECO Bank's switch, not the quoting organization (Q-CA6's one call of set_config is a refusal, on a throwaway folder)"
+SC99="$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -E 'set_config\.php"? --key')"
+check "$(grep -c . <<<"$SC99")|$(grep -cF -- '-e DN_DATA_DIR="$d"' <<<"$SC99")$(grep -cF -- '--key ucrm_quote_organization_id --value disabled' <<<"$SC99")|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cF "$BK97 --value")|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cF "$BK97 --clear")|$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cE -- '--key ucrm_quote_organization_id --value [0-9]')" "1|11|0|0|0" \
+  "the script sets no key on the live install — not ECO Bank's switch, not the quoting organization: its one call of set_config with a key, in any quoting, is Q-CA6's refusal (--value disabled) on a throwaway data folder (DN_DATA_DIR=\$d)"
 check "$(grep -c 'DISHNET_REPAIR' "$DEPLOY99")$(grep 'DISHNET_REPAIR' "$DEPLOY99" | grep -vc 'grep -')$(grep -cFf "$SB/spx.vals" "$DEPLOY99")" "400" \
   "the script names the old built-in key only in grep patterns (four), and holds none of 5.18.94's Splynx values"
 check "$(grep -vE '^[[:space:]]*#' "$DEPLOY99" | grep -cE 'Ecobank UGX|Ecobank USD|7000000001|RH-Account|RH-CLIENT|0000000001|0000000002|RH98 |RH99|rh99|71930')|$(grep -cF -f "$U99_SECRETS" "$DEPLOY99")" "0|0" \
@@ -1004,7 +1054,7 @@ check "$(data94)|$(ls -d /tmp/rh99-k.* 2>/dev/null | grep -c .)|$(vt_host)" "$D9
 
 echo; echo "== 99-c. --check: stage A alone — GO on 5.18.98 as production has it; the quoting organization read with GETs only; the option rules =="
 fresh99; S0="$(states99)"; FP0="$(fp99)"; O="$(o99 1)"; QX="$(qx99 "$O")"; OC="$(o97)"; NC="$(o98)"
-OUT="$(run99 --check)"; T="$(last99)"; SHC="$(sheet_of "$OUT")"; FP1="$(fp99)"
+OUT="$(run99 --check)"; T="$(last99)"; SHC="$(sheet_of "$OUT")"; FP1="$(fp99)"; TC99="$T"
 check "$(checkgo99 "$OUT")" "yesyesnono0|0|$S0" "c1 --check is GO: stage A held — nothing asked, nothing backed up, no state file written"
 check "$FP1" "$FP0" "c1' …and nothing changed: the installed tree, the store's bytes and every row, the vault (bytes and time), both settings files, the stray folder's, ucrm.json and the record of the live commit as before the run"
 check "$(okline "$OUT" Q-G1 "installed is 5.18.98 ($P98): its manifest says 5.18.98; all 30 files 5.18.99 changes carry the sha256 pinned for 5.18.98, and all 31 files it must not touch")$(okline "$OUT" Q-G2 'the tenant is Uganda, through the INSTALLED 5.18.98 code on a copy' '(uganda/uganda, yes/yes)')$(okline "$OUT" Q-G3 "quoting organization #1 (from the Uganda profile), through the RELEASE's QuoteOrganization::setting() on the same copy" '(on:1:profile:-)')" "yesyesyes" \
@@ -1017,8 +1067,8 @@ check "$(okline "$OUT" Q-G5 "the last 30 days' Lead and Manual quotes with a uCR
 check "$(noteline "$OUT" Q-N1 'ucrm_lead_organization_id unset/unset' 'crm_auth_token unset/set' 'ucrm_quote_organization_id unset/unset')$(noteline "$OUT" Q-N2 "read/all $(oj "$O" cap)/$(oj "$O" all) (at most 300 read), one GET each: $(python3 "$H99/rh99.py" qn2say "$(qj "$QX" qn2)") — the $(qj "$QX" outside) filed under another organization are on the sheet by id")$(noteline "$OUT" Q-N3 'the newest uCRM quote: #88017402 (2 created since')" "yesyesyes" \
   "c3 Q-N1 (the token in the store row alone, nothing set of the quoting keys), Q-N2 (every id the app holds read once, counted by organization — this rehearsal's own reading of the store and the stand-in's), Q-N3 (the stand-in's newest quote)"
 Q4=$(oj "$O" qn4)
-check "$(noteline "$OUT" Q-N4 "pending $(sub98 "$Q4" pending) ($(sub98 "$Q4" spent) of them at ten attempts; $(sub98 "$Q4" otherorg) whose saved request names another organization), review $(sub98 "$Q4" review), failed $(sub98 "$Q4" failed); synced $(sub98 "$Q4" synced)")$(noteline "$OUT" Q-N5 "crm_queue.json by status: $(oj "$O" qn5 | sed 's/,/, /g; s/:/ /g')")$(noteline "$OUT" Q-N6 'LTE registrations of the last 90 days')$(noteline "$OUT" Q-N7 'the active non-admin accounts that could open a Sync All screen')" "yesyesyesyes" \
-  "c3' Q-N4 and Q-N5 in this rehearsal's own counts — the pending application whose request names organization 2 among them; Q-N6 and Q-N7 said"
+check "$(noteline "$OUT" Q-N4 "pending $(sub98 "$Q4" pending) ($(sub98 "$Q4" spent) of them at ten attempts; $(sub98 "$Q4" otherorg) whose saved request names another organization), review $(sub98 "$Q4" review), failed $(sub98 "$Q4" failed); synced $(sub98 "$Q4" synced)")$(noteline "$OUT" Q-N5 "crm_queue.json by status: $(oj "$O" qn5 | sed 's/,/, /g; s/:/ /g')")$(noteline "$OUT" Q-N6 "LTE registrations of the last 90 days: $(q6say99 "$(oj "$O" qn6)") — ")$(noteline "$OUT" Q-N7 'the active non-admin accounts that could open a Sync All screen' "UCRM Product Mapping $(sub98 "$(oj "$O" qn7)" pm) (every one), Subscription Plans $(sub98 "$(oj "$O" qn7)" plans), the Hardware Catalog $(sub98 "$(oj "$O" qn7)" hw) — ")" "yesyesyesyes" \
+  "c3' Q-N4 to Q-N7 in this rehearsal's own counts — the pending application whose request names organization 2 among them; the LTE registrations of 90 days and their uCRM links; the accounts that could open each Sync All screen, by the RBAC tables and their own modules lists"
 check "$(noteids98 "$OUT")" "A17 A23.4 A23.5 A23.6 BN5 G3 N1 N2 N3 N4 Q-N1 Q-N2 Q-N3 Q-N4 Q-N5 Q-N6 Q-N7" "c3'' its notes are exactly 5.18.98's stage-A notes on this book and Q-N1–Q-N7"
 check "$(okline "$OUT" G2 'rule A is on, read through the INSTALLED code on a copy')$(okline "$OUT" G3 'both ECO BANK cards show a figure, through the live 5.18.98 classes on the copy')$(okline "$OUT" BR3 "ECO Bank's switch, $BK97, is ON in the configuration files")$(okline "$OUT" C1 'the same in all 8/8 currency × project cells')$(okline "$OUT" C3 '(12/12 and 12/12)')$(okline "$OUT" C5 "unchanged by every read of 5.18.99's code")|$(g3say98 "$R99/run-$T.txt")|$(noteline "$OUT" N4 "that hold rows: $(sub98 "$(oj "$NC" n4)" accounts), with $(sub98 "$(oj "$NC" n4)" rows) row(s)")" \
       "yesyesyesyesyesyes|$(python3 "$H98/rh98.py" g3exp "$OC")|yes" \
@@ -1035,24 +1085,35 @@ check "$(tok99 "$T")|$(okline "$OUT" Z2 'nothing of the vault, no webhook_secret
   "c8 the token copy: made before the probe (there at its call), gone at the next call — the probe deleted it once read — Z2 finds none, and none is left in /tmp"
 check "$(secrets99 "$R99/run-$T.txt" "$SHC" "$R99/ucrm/run-$T.req")|$(noids99 "$R99/run-$T.txt")|$(figs99 "$R99/run-$T.txt")|$(bankhits98 "$R99/run-$T.txt" "$SHC")|$(quietobs99 "$T")" "0|0|0|0|0|novault=0 plugin=0|$VT99_0>$VT99_0" \
   "c9 no name, contact or key of the stand-in's in the terminal, the sheet or its record; no client id and no figure in the terminal; no account name or number anywhere; the copy observers quiet — every process on a copy, the quoting ones among them, with a vault of its own — the live vault untouched"
-fresh99; OUT="$(run99 --after-only --rollback)"
+# crm_base_url set in the store row, on the stand-in's second path: the KYC path's token client — and the debug retry's,
+# the same client then — reads there, the plugin's own client where ucrm.json says. The stand-in records each request's
+# path before /api (prefix.log), never a key.
+cfg_keep; row_set crm_base_url "http://127.0.0.1:$UPORT99/crm2/api/v2.1"; : > "$U99/prefix.log"
+fresh99; S0="$(states99)"; OUT="$(run99 --check)"; T="$(last99)"
+check "$(checkgo99 "$OUT")|$(okline "$OUT" Q-G4b 'token client: organizations read (2)' '(crm_base_url, x-auth-token)' "the debug retry's own client is that one here")$(noteline "$OUT" Q-N1 'crm_base_url unset/same-host')|$(LC_ALL=C sort -u "$U99/prefix.log" | paste -sd, -)|$(ureq99 "$T" | sed -E 's/^total=[0-9]+ get=[0-9]+ //')" \
+      "yesyesnono0|0|$S0|yesyes|/crm app-key,/crm2 token|other=0 app=$(( 2 + $(qj "$QX" n) )) token=1 none=0 odd=0" \
+  "c9' crm_base_url set in the store row: Q-G4b says the token client reads through crm_base_url, the debug retry's the same client; Q-N1 says it is set in the store row, on the plugin's own uCRM host — and the stand-in saw the token's request on that path, every request of the plugin's own client on ucrm.json's, all GETs"
+cfg_back
+check "$(data94)" "$D99" "…crm_base_url taken out again: the data as before"
+fresh99; OUT="$(run99 --after-only --rollback)"; C15T99="$(last99)"
 check "$(has "$OUT" '--after-only, --rollback, --check-bank and --move-list-only are each a run of their own: give one of them')$(went99 "$OUT")|$(quiet99)" "yesnono|$P98|0|$D99|$KEPT99|0" "c10 two modes in one run are refused"
-OUT="$(run99 --move-list-only --after-only)"
+OUT="$(run99 --move-list-only --after-only)"; C15T99="$C15T99 $(last99)"
 check "$(has "$OUT" '--after-only, --rollback, --check-bank and --move-list-only are each a run of their own: give one of them')$(went99 "$OUT")|$(quiet99)" "yesnono|$P98|0|$D99|$KEPT99|0" "c10' …the move-list run with another mode too"
 for o in --check --redeploy --without-bank-balance --quote-create-unproven --lead-org-differs; do
-  OUT="$(run99 --move-list-only "$o")"
+  OUT="$(run99 --move-list-only "$o")"; C15T99="$C15T99 $(last99)"
   check "$(has "$OUT" '--redeploy, --check, --without-bank-balance, --quote-create-unproven and --lead-org-differs go with a deploy only, never with --after-only, --rollback, --check-bank or --move-list-only')$(went99 "$OUT")|$(quiet99)" "yesnono|$P98|0|$D99|$KEPT99|0" "c11 --move-list-only with $o is refused before anything is read"
 done
 for m in --after-only --rollback --check-bank; do
-  OUT="$(run99 "$m" --quote-company-off)"
+  OUT="$(run99 "$m" --quote-company-off)"; C15T99="$C15T99 $(last99)"
   check "$(has "$OUT" '--quote-company-off goes with a deploy, --check or --move-list-only, never with --after-only, --rollback or --check-bank')$(went99 "$OUT")|$(quiet99)" "yesnono|$P98|0|$D99|$KEPT99|0" "c12 --quote-company-off with $m is refused before anything is read"
 done
-fresh99; OUT="$(run99 --check-bank)"
+fresh99; OUT="$(run99 --check-bank)"; C15T99="$C15T99 $(last99)"
 nogo99 "c13 --check-bank with 5.18.98 live: refused — it reads ECO Bank as 5.18.99 has it" \
   "--check-bank reads ECO Bank as 5.18.99 has it: the container serves $P98 (5.18.98), not $P99 (5.18.99) — deploy it first. Nothing was changed" "$OUT"
-fresh99; OUT="$(run99 --after-only)"
+fresh99; OUT="$(run99 --after-only)"; C15T99="$C15T99 $(last99)"
 nogo99 "c14 --after-only with 5.18.98 live: refused — there is no deploy to check" "the container serves $P98, not $P99" "$OUT"
-check "$(python3 "$H99/rh99.py" u99req "$U99/requests.log")" "total=0 get=0 other=0 app=0 token=0 none=0 odd=0" "c15 …and none of the refused runs asked uCRM anything"
+C15B99=""; for t in $C15T99; do [ "$(ureq99 "$t" | cut -d' ' -f1)" = "total=0" ] || C15B99="$C15B99 $t"; done
+check "$(wc -w <<<"$C15T99" | tr -d ' ')|${C15B99:-none}" "12|none" "c15 …and none of the twelve refused runs (c10–c14) asked uCRM anything — each run's own record read, not the last one's alone"
 
 echo; echo "== 99-m. --move-list-only: the move-list on its sheet, nothing else read or changed; its refusals before uCRM is asked =="
 fresh99; S0="$(states99)"; FP0="$(fp99)"; O="$(o99 1)"; QX="$(qx99 "$O")"
@@ -1062,8 +1123,9 @@ check "$FP1" "$FP0" "m1' …and nothing changed: the installed tree, the store's
 check "$(okline "$OUT" Q-G1 "installed is 5.18.98 ($P98)")$(okline "$OUT" Q-G2 '(uganda/uganda, yes/yes)')$(okline "$OUT" Q-G3 '(on:1:profile:-)')$(okline "$OUT" Q-G4 '1,2 — the quoting organization #1 among them')$(noteline "$OUT" Q-N2 "one GET each: $(python3 "$H99/rh99.py" qn2say "$(qj "$QX" qn2)") — the $(qj "$QX" outside) filed under another organization are on the sheet by id")|$(python3 "$H99/rh99.py" qg4lines "$R99/run-$T.txt")" \
       "yesyesyesyesyes|$(python3 "$H99/rh99.py" qg4exp "$U99/state.json")" \
   "m2 Q-G1, Q-G2, Q-G3 and Q-G4 hold, and Q-N2 counts the app's clients by organization in this rehearsal's own counts"
-check "$(grep -cE '^  (ok|note|FAIL)  (A14|A22|A23|A24|BR1|BR2|C[1-5]|G2|G3|Q-G4b|Q-G5|Q-G6|Q-N1|Q-N3|Q-N4|Q-N5|Q-N6|Q-N7) ' <<<"$OUT")|$(grep -c '^  Q-G4b ' <<<"$OUT")" "0|0" \
-  "m3 …and nothing else of stage A runs: no quarantine, no cash, bank or copy check, no token client, no Q-G5, Q-G6 or other note"
+M3RX99='^  (ok|note|FAIL) +(A14|A22|A23|A24|BR1|BR2|C[1-5]|G2|G3|Q-G4b|Q-G5|Q-G6|Q-N1|Q-N3|Q-N4|Q-N5|Q-N6|Q-N7) '   # ok() pads its word to four spaces, note() and bad() to two
+check "$(grep -cE "$M3RX99" <<<"$OUT")|$(grep -c '^  Q-G4b ' <<<"$OUT")|$( [ "$(grep -cE "$M3RX99" "$R99/run-$TC99.txt")" -ge 10 ] && echo seen)" "0|0|seen" \
+  "m3 …and nothing else of stage A runs: no quarantine, no cash, bank or copy check, no token client, no Q-G5, Q-G6 or other note — control: the same reading finds ten or more of those lines, ok, note or FAIL, in --check's run (c1)"
 check "$(stat -c %a "$SHM" 2>/dev/null)|$(stat -c %a "$OUT99")|$(python3 "$H99/rh99.py" mlsheet "$SHM")|$(grep -cxF "  Q-N2 the app's uCRM clients filed under another organization than #1 — the move-list for uCRM: $(qj "$QX" outside)" "$SHM")|$(grep -cxF "      less $SHM" <<<"$OUT")|$(secrets99 "$SHM")|$(figs99 "$SHM")" \
       "600|700|$(qj "$QX" sheet)|1|1|0|0" \
   "m4 its sheet: 0600 in a folder of 700 — the move-list by client id and organization, this rehearsal's own reading; \`less\` for it alone; no name, contact or key of the stand-in's, no figure of the book"
@@ -1140,7 +1202,7 @@ check "$(mlpass99 "$OUT" | cut -d'|' -f1)" "0yesnono" "m15' a copy without that 
 u99_set
 # Q-N2's sheet: a copy that writes no move-list line PASSES as the real one does — only the sheet shows it (caught here).
 M="$(weak99 qn2sheet99 "$DEPLOY99" qn2sheet)"; fresh99; OUT="$(run99 --script "$M" --move-list-only)"; rm -f "$M"; SHM="$(mlsheet_of "$OUT")"
-check "$(mlpass99 "$OUT" | cut -d'|' -f1)|$(python3 "$H99/rh99.py" mlsheet "$SHM")|$(qj "$QX" sheet)" "0yesnono|-|$(qj "$QX" sheet)" \
+check "$(mlpass99 "$OUT" | cut -d'|' -f1)|$(python3 "$H99/rh99.py" mlsheet "$SHM")|$(qj "$QX" sheet)" "0yesnono|-|71930452:2;71930454:2;71930458:2;71930456:0" \
   "m16 a copy whose sheet lists no client — Q-N2's weakened copy — PASSES with an empty move-list where this rehearsal's own reading has four clients (caught)"
 # A copy of 5.18.99 that stopped part-way: a file it changes installed but not 5.18.98's — refused before anything is read.
 cp -p "$PD/lib/KycService.php" "$SB/kyc99.kept"; printf '\n' >> "$PD/lib/KycService.php"
@@ -1149,6 +1211,11 @@ nogo99 "m17 a file 5.18.99 changes installed but not 5.18.98's (the KYC service,
   "NO-GO (Q-G1): the container's record says $P98 (5.18.98), but these installed files are not 5.18.98's: lib/KycService.php — " "$OUT"
 check "$(grep -cxF "      $EXP_PUTBACK99" <<<"$OUT")$(grep -c 'deploy-5.18.99.sh --rollback' <<<"$OUT")|$(python3 "$H99/rh99.py" u99req "$U99/requests.log")" "10|total=0 get=0 other=0 app=0 token=0 none=0 odd=0" \
   "m17' …it prints the by-hand put-back of 5.18.98 alone, with its own log — no rollback — and uCRM is never asked"
+M="$(weak99 qg1base99 "$DEPLOY99" qg1base)"; fresh99; OUT="$(run99 --script "$M" --move-list-only)"; rm -f "$M"
+nogo99 "m17'' …with that refusal taken out of a copy, Q-G1 refuses it by the sha256 this script pins for 5.18.98's KYC service" \
+  "NO-GO (Q-G1): the installed plugin is not 5.18.98 as it was reviewed — these installed files do not carry the sha256 this script pins for them: lib/KycService.php(not-5.18.98's) — an edit by hand, or another build" "$OUT"
+M="$(weak99 qg1both99 "$DEPLOY99" qg1base qg1chg)"; fresh99; OUT="$(run99 --script "$M" --move-list-only)"; rm -f "$M"
+check "$(mlpass99 "$OUT" | cut -d'|' -f1)|$(okline "$OUT" Q-G1 "installed is 5.18.98 ($P98)")" "0yesnono|yes" "m17''' a copy without both PASSES over the changed KYC service, and calls it 5.18.98's (caught)"
 cat "$SB/kyc99.kept" > "$PD/lib/KycService.php"; touch -r "$SB/kyc99.kept" "$PD/lib/KycService.php"
 check "$(installed99 "$P98")|$(quiet99)" "0|$P98|0|$D99|$KEPT99|0" "…every file 5.18.98's again; nothing changed"
 
@@ -1320,7 +1387,8 @@ for l in "ok    A0 the release delta is exactly 5.18.99's 36 files — 6 added, 
          "ok    Q-CA3 checkClient() on a client outside it (its id on the sheet) → refused: filed under organization #2" \
          "ok    Q-CA3 the same two checks through the token client (built as KycService::postQuote builds it, its copy removed once read): pass, refused:R1" \
          "  Q-CA3           the guard's refusal lines went to this run's own sink: 2 — never to the plugin's log" \
-         "ok    Q-CA3 the live data/plugin.log gained no line naming a probed client" "ok    Q-CA3 the newest uCRM quote is stage A's (#88017402) — nothing was quoted by this run" \
+         "ok    Q-CA3 the probe's refusal lines reached neither its code copy's data/plugin.log nor its PHP error log (0 and 0) — its own sink took them; control: the same guard with no sink, on the same copy, wrote its one line to each (1 and 1)" \
+         "  Q-CA3           the live data/plugin.log gained no line labelled this run's or naming a probed client while the probe ran" "ok    Q-CA3 the newest uCRM quote is stage A's (#88017402, created since " \
          "ok    Q-CA6 the installed profiles, through the installed TenantProfile: profiles/uganda.json gives quoting.ucrm_organization_id 1, South Sudan none" \
          "ok    Q-CA6 the installed tools/set_config.php lists ucrm_quote_organization_id as text" "ok    Q-CA6 the installed tools/set_config.php, from the copy of the installed code on a throwaway data folder" \
          "ok    Z1 the live vault" "ok    Z2 nothing of the vault, no webhook_secret file, no token copy" \
@@ -1335,11 +1403,16 @@ check "$(noteids98 "$OUT")" "A17 A23.4 A23.5 A23.6 BN5 G3 N1 N2 N3 N4 Q-N1 Q-N2 
 check "$(sed -n 's/^QG3_A=//p' "$STATE99" | tail -1)|$(sed -n 's/^QG4_A=//p' "$STATE99" | tail -1)|$(sed -n 's/^QN3_A=//p' "$STATE99" | tail -1)|$(sed -n 's/^QOFF_NOTED=//p' "$STATE99" | tail -1)|$(sed -n 's/^QG5_NOTED=//p' "$STATE99" | tail -1)|$(sed -n 's/^QG6_NOTED=//p' "$STATE99" | tail -1)|$(sed -n 's/^REDEPLOY=//p' "$STATE99" | tail -1)|$(sed -n 's/^BK_BEFORE=//p' "$STATE99" | tail -1)" \
       "on:1:profile:-|1,2|88017402||||bk=on/on" \
   "4a the state file records stage A's readings of the quoting organization — the setting's answer, uCRM's organization ids, the newest quote's id — and no flag, none having decided a check; ECO Bank's switch as found"
+QS99="$(sed -n 's/^QN3_SINCE=//p' "$STATE99" | tail -1)"
+check "$(grep -cE '^QN3_SINCE=[0-9]{4}-[0-9]{2}-[0-9]{2}$' "$STATE99")|$(noteline "$OUT" Q-N3 "created since $QS99")$(okline "$OUT" Q-CA3 "the newest uCRM quote is stage A's (#88017402, created since $QS99: stage A's window, read again)")" "1|yesyes" \
+  "4a' …and Q-N3's window, the date its quotes were read from: stage A's note names it, and stage R read the same window again"
 check "$(grep -c "^COPY_AT=$(stat -c %Y "$PD/lib/KycService.php")\$" "$STATE99")$(grep -c '^Q_HOLDS_BEFORE=yes$' "$STATE99")$(grep -c '^STRAY_Q_FAILED=' "$STATE99")|$(grep -cwF -f "$SB/ids99.pat" "$STATE99")|$(secrets99 "$STATE99")" "110|0|0" \
   "4b …the copy's time as stamp_copy gave lib/KycService.php, the quarantine held before, no failure — and no client id, name, contact or key"
 check "$(python3 "$H99/rh99.py" mlsheet "$SHEET99D")|$(stat -c %a "$SHEET99D")|$(grep -cxF "      less $SHEET99D" <<<"$OUT")|$(sheetsha_of "$OUT")|$(secrets99 "$SHEET99D")|$(python3 "$H96/rh96.py" sheet "$SHEET99D" "$O_PRE" A23)" \
       "$(qj "$QX" sheet)|600|1|$(sha256sum "$SHEET99D" | cut -c1-16)|0|8/8" \
   "4c the sheet: stage A's move-list by id, this rehearsal's own reading; 0600; \`less\` for it alone and its sha256-16 in F; no name, contact or key; A23's figures this rehearsal's own SQL before the run"
+QCA3L99="  Q-CA3 checkClient() through the installed code, the quoting organization #1: inside it client #$(qj "$QX" in) → pass, outside it client #$(qj "$QX" out) → refused:R1; through the token client: pass, refused:R1"
+check "$(grep -cxF "$QCA3L99" "$SHEET99D")" "1" "4c' …and stage R's two Q-CA3 clients, by id, with what each answered through both clients — on the sheet, where the log points"
 U="$(ureq99 "$T99D")"; G="$(qget99 "$OUT")"
 check "$U|$(uother99 "$T99D")|$G" "total=$(( 12 + $(qj "$QX" n) )) get=$(( 12 + $(qj "$QX" n) )) other=0 app=$(( 7 + $(qj "$QX" n) )) token=5 none=0 odd=0|-|$(( 12 + $(qj "$QX" n) )):0" \
   "4d GETs only, across the whole deploy: stage A's reads and stage R's — the organizations twice per client, the two probed clients and the list behind the refusal's words, through each client, and the newest quote — exactly as many as the script counts"
@@ -1372,6 +1445,9 @@ check "$U|$(uother99 "$TA")|$G|$(tok99 "$TA")" "total=$(( 9 + $(qj "$QX" disc) )
 check "$(printed99 "$OUT")|$(order99 "$OUT")|$(grep -cxF "      $EXP_ROLLBACK99" <<<"$OUT")|$(printf '%s\n' "$ALOG" | grep -c .)|$(stat -c %a "$ALOG" 2>/dev/null)|$(secrets99 "$R99/line-$TA.txt" "$ALOG")|$(noids99 "$R99/line-$TA.txt" "$ALOG")|$(quietobs99 "$TA")" \
       "4|0|0|verdict<rollback<putback|1|1|600|0|0|0|novault=0 plugin=0|$VT99_0>$VT99_0" \
   "5a''' its summary the same four commands in the same order; its own log, 0600; no secret and no client id in either; the observers quiet"
+SHA99="$(sheet_of "$OUT99A")"
+check "$(grep -cxF "$QCA3L99" "$SHA99" 2>/dev/null)|$(stat -c %a "$SHA99" 2>/dev/null)|$(cat "$R99/line-$TA.txt" "$ALOG" | grep -cwF -e "$(qj "$QX" in)" -e "$(qj "$QX" out)")" "1|600|0" \
+  "5a'''' the two clients it picked again and probed are on its sheet, by id, with what each answered (0600) — and neither id is in its terminal or its log"
 afterfails99() { base_log; local o; o="$(run99 "$@" --after-only)"; printf '%s' "$o"; }   # an --after-only, the log's start put back first
 # Q-CA1: a kept file edited after the deploy.
 cp -p "$PD/lib/CrmApiClient.php" "$SB/crm99a.kept"; edit_installed lib/CrmApiClient.php "$(a99 crmbyte)" "$(r99 crmbyte)"
@@ -1423,15 +1499,47 @@ check "$(failline "$OUT" Q-CA3 "uCRM's organizations, through the installed code
 M="$(weak99 qca3ow99 "$DEPLOY99" qca3orgs)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
 check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5g' a copy that never compares the lists PASSES (caught)"
 u99_set
+# Q-CA3: the client picked outside the quoting organization filed under no organization by the time it is checked (R2,
+# not R1) — the check refuses it, and its weakened copy calls it ok.
+u99_set "flip={\"$(qj "$QX" out)\": 0}"
+OUT="$(afterfails99)"
+check "$(failline "$OUT" Q-CA3 'checkClient() on a client outside the quoting organization → refused:R2' 'it must be refused R1')$(fails "$OUT")|$(ls "$U99"/flip-seen-* 2>/dev/null | grep -c .)" "yes1|1" \
+  "5r the client picked outside the quoting organization filed under none by the time it is checked: Q-CA3 FAILS — refused, but R2, not R1 — the one failure; the flip happened"
+u99_set "flip={\"$(qj "$QX" out)\": 0}"
+M="$(weak99 qca3outw99 "$DEPLOY99" qca3out)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5r' a copy that calls any answer for the outside client ok — its weakened copy — PASSES (caught)"
+# Q-CA3: the token client answering otherwise than the plugin's — its list without the quoting organization (R5).
+u99_set 'token_orgs=[{"id":2,"name":"RH99 Org Two","currencyCode":"UGX","selected":true}]'
+OUT="$(afterfails99)"
+check "$(failline "$OUT" Q-CA3 'through the token client the two checks answer pass, refused:R5' 'answered pass, refused:R1')$(fails "$OUT")" "yes1" \
+  "5s the token client's list without the quoting organization: through it the outside client is refused R5, through the plugin's R1 — Q-CA3 FAILS, the one failure"
+M="$(weak99 qca3tokw99 "$DEPLOY99" qca3tok)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5s' a copy that never sets the token client's answers against the plugin's PASSES (caught)"
+u99_set
+# Q-CA3: where the probe's refusal lines went, read on its code copy — a probe that gives the guard no sink of its own
+# leaves them in its copy's plugin log and PHP error log (FAIL); without that reading's verdict, PASS (caught); without
+# the control's line, the reading sees nothing and FAILS rather than pass on nothing.
+M="$(weak99 qca3nosink99 "$DEPLOY99" qca3nosink)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(failline "$OUT" Q-CA3 "where the probe's refusal lines went, read on its code copy" ': 2:1 2:1 — ')$(fails "$OUT")|$(has "$OUT" "the guard's refusal lines went to this run's own sink: 0")" "yes1|yes" \
+  "5t a copy whose probe gives the guard no sink: its two refusals land in its code copy's plugin log and its PHP error log, beside the control's line — Q-CA3 FAILS, the one failure (the live log untouched)"
+M="$(weak99 qca3nosinkw99 "$DEPLOY99" qca3nosink qca3cp)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5t' …and with that reading's verdict taken out too, PASS over it (caught)"
+M="$(weak99 qca3noctl99 "$DEPLOY99" qca3noctl)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(failline "$OUT" Q-CA3 "where the probe's refusal lines went" ': 0:0 0:0 — ')$(fails "$OUT")" "yes1" \
+  "5t'' control on the control: a copy without the control's line reads 0:0 in both — a reading that cannot see a line — and FAILS, never a pass on nothing"
 # Q-CA3: refusal lines in the live plugin log while the probe runs (the stand-in writes one per client read).
 PLOG99="$PD/data/plugin.log"; PLOG99_HAD=""; [ -f "$PLOG99" ] && { PLOG99_HAD=1; cp -p "$PLOG99" "$SB/plog99.kept"; }
 [ -f "$PLOG99" ] || install -o 1000 -g 1000 -m 644 /dev/null "$PLOG99"
 u99_set "leaklog=\"$PLOG99\""
 OUT="$(afterfails99)"
-check "$(failline "$OUT" Q-CA3 'the live data/plugin.log gained' 'line(s) naming a probed client or (deploy-check) while the probe ran')$(fails "$OUT")|$( [ "$(grep -c "planted by the rehearsal's stand-in uCRM" "$PLOG99")" -ge 1 ] && echo written)" "yes1|written" \
-  "5h refusal lines naming a probed client written to the live plugin log while the probe runs: Q-CA3 FAILS — the one failure; the lines were written"
+check "$(failline "$OUT" Q-CA3 'the live data/plugin.log gained' "line(s) labelled this run's (deploy-check) while the probe ran")$(fails "$OUT")|$( [ "$(grep -c "planted by the rehearsal's stand-in uCRM" "$PLOG99")" -ge 1 ] && echo written)" "yes1|written" \
+  "5h refusal lines labelled this run's (deploy-check) written to the live plugin log while the probe runs — what only a code copy logging where the live plugin does could write: Q-CA3 FAILS — the one failure; the lines were written"
 M="$(weak99 qca3lw99 "$DEPLOY99" qca3log)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
-check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5h' a copy that never reads the plugin log PASSES over them (caught)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')" "0yes" "5h' a copy blind to this run's label in the live plugin log PASSES over them — labelled, they are no staff note either (caught)"
+u99_set "leaklog=\"$PLOG99\"" 'leakwhere="kyc-new"'
+OUT="$(afterfails99)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')|$(noteline "$OUT" Q-CA3 'the live data/plugin.log gained' "naming a probed client (its id on the sheet) while the probe ran, none labelled this run's" 'staff activity on that client, never this run')|$( [ "$(grep -c '(kyc-new): planted' "$PLOG99")" -ge 1 ] && echo written)" "0yes|yes|written" \
+  "5h'' lines naming a probed client in the live plugin log, labelled as staff's KYC path writes them: a NOTE — staff at work — never a FAIL that blames the probe"
 u99_set
 if [ -n "$PLOG99_HAD" ]; then cat "$SB/plog99.kept" > "$PLOG99"; touch -r "$SB/plog99.kept" "$PLOG99"; else rm -f "$PLOG99"; fi
 check "$( [ -n "$PLOG99_HAD" ] && cmp -s "$SB/plog99.kept" "$PLOG99" && echo as-found || { [ -z "$PLOG99_HAD" ] && [ ! -e "$PLOG99" ] && echo as-found; } )" "as-found" "…the plugin log as it was found"
@@ -1454,7 +1562,34 @@ check "$(failline "$OUT" Q-CA6 'the installed profiles, through the installed Te
   "5k South Sudan's installed profile naming a quoting organization: Q-CA6 FAILS — and Q-CA1 by the bytes of a kept file"
 M="$(weak99 qca6w99 "$DEPLOY99" qca6)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
 check "$(okline "$OUT" Q-CA6 'the installed profiles')|$(( FQ6 - $(fails "$OUT") ))" "yes|1" "5k' a copy that calls any profile ok counts the same install one failure fewer, as an ok (caught)"
+# Q-CA2's South Sudan control: over that profile, the installed QuoteOrganization no longer reading the tenant — setting()
+# turns on for South Sudan: the control FAILS; its weakened copy counts the same install one failure fewer, as an ok.
+cp -p "$PD/lib/QuoteOrganization.php" "$SB/qo99c0.kept"; edit_installed lib/QuoteOrganization.php "$(a99 qotenant)" "$(r99 qotenant)"
+OUT="$(afterfails99)"; FQ0="$(fails "$OUT")"
+check "$(failline "$OUT" Q-CA2 'control: the same copy with tenant_profile=south-sudan reads tenant south-sudan/south-sudan, setting on:1:profile:-/on:1:profile:-' 'it must be off')$(okline "$OUT" Q-CA2 'control: the same copy with ucrm_quote_organization_id=0')" "yesyes" \
+  "5k'' …and the installed QuoteOrganization no longer reading the tenant: the control with tenant_profile=south-sudan FAILS — on, organization 1, from South Sudan's profile — the other control still holds"
+M="$(weak99 qca2c0w99 "$DEPLOY99" qca2c0)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(okline "$OUT" Q-CA2 'control: the same copy with tenant_profile=south-sudan')|$(( FQ0 - $(fails "$OUT") ))" "yes|1" "5k''' a copy whose South Sudan control never compares counts the same install one failure fewer, as an ok (caught)"
+cat "$SB/qo99c0.kept" > "$PD/lib/QuoteOrganization.php"; touch -r "$SB/qo99c0.kept" "$PD/lib/QuoteOrganization.php"
 cat "$SB/ss99.kept" > "$PD/profiles/south-sudan.json"; touch -r "$SB/ss99.kept" "$PD/profiles/south-sudan.json"
+# Q-CA6's set_config checks: the installed tools/set_config.php listing the key in another form (FAIL, and Q-CA1 by its
+# bytes); then taking "disabled" for off, so that the throwaway folder is written (FAIL). Each weakened copy counts the
+# same install one failure fewer, as an ok.
+cp -p "$PD/tools/set_config.php" "$SB/sc99.kept"; edit_installed tools/set_config.php "$(a99 scqlist)" "$(r99 scqlist)"
+OUT="$(afterfails99)"; FQ7="$(fails "$OUT")"
+check "$(failline "$OUT" Q-CA6 'the installed tools/set_config.php does not list ucrm_quote_organization_id as text')$(failline "$OUT" Q-CA1 'tools/set_config.php')$(okline "$OUT" Q-CA6 'refuses --value disabled')" "yesyesyes" \
+  "5u the installed set_config listing the key in another form: Q-CA6 FAILS on the listing — and Q-CA1 by its bytes; its refusal still holds"
+M="$(weak99 qca6listw99 "$DEPLOY99" qca6list)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(okline "$OUT" Q-CA6 'the installed tools/set_config.php lists ucrm_quote_organization_id as text')|$(( FQ7 - $(fails "$OUT") ))" "yes|1" "5u' a copy that never reads the listing counts the same install one failure fewer, as an ok (caught)"
+cat "$SB/sc99.kept" > "$PD/tools/set_config.php"; touch -r "$SB/sc99.kept" "$PD/tools/set_config.php"
+edit_installed tools/set_config.php "$(a99 scqoff)" "$(r99 scqoff)"
+OUT="$(afterfails99)"; FQ8="$(fails "$OUT")"
+check "$(failline "$OUT" Q-CA6 'the installed tools/set_config.php on a throwaway data folder, --value disabled:' 'the refusal NOT printed' 'it must refuse with exit 1 and write nothing')$(okline "$OUT" Q-CA6 'lists ucrm_quote_organization_id as text')|$(left_tmp99)" "yesyes|$TMP99" \
+  "5v the installed set_config taking \"disabled\" for off: on the throwaway folder it saves instead of refusing — Q-CA6 FAILS on the refusal; the listing still holds; the folder removed with the run"
+M="$(weak99 qca6refw99 "$DEPLOY99" qca6ref)"; OUT="$(afterfails99 --script "$M")"; rm -f "$M"
+check "$(okline "$OUT" Q-CA6 'refuses --value disabled')|$(( FQ8 - $(fails "$OUT") ))" "yes|1" "5v' a copy that never judges the refusal counts the same install one failure fewer, as an ok (caught)"
+cat "$SB/sc99.kept" > "$PD/tools/set_config.php"; touch -r "$SB/sc99.kept" "$PD/tools/set_config.php"
+check "$(installed99 "$P99")|$(stat -c '%u:%g' "$PD/tools/set_config.php" "$PD/lib/QuoteOrganization.php" | paste -sd, -)" "0|1000:1000,1000:1000" "…set_config and QuoteOrganization put back as the pin has them, owned by the store's user"
 # Z2: a token copy left in the run's code folder.
 : > "$SB/z2.plant"; OUT="$(afterfails99 --env "FAKE_Z2_PLANT=$SB/z2.plant")"
 check "$(failline "$OUT" Z2 'this run left behind, in the container' 'file:rh99-planted/token.json')$(fails "$OUT")$( [ -e "$SB/z2.plant" ] && echo unspent || echo spent)|$(left_tmp99)" "yes1spent|$TMP99" \
@@ -1468,6 +1603,22 @@ check "$(failline "$OUT" V3j "ECO Bank's switch, $BK97, CHANGED across this run 
   "5m the switch cleared in both places while an --after-only runs: V3j FAILS, naming both readings"
 cfg_back
 check "$(both_copies "$BK97")|$(installed99 "$P99")" "11|0" "…the switch and every file put back"
+# Q-N3's window, read again by an --after-only from the deploy's state file — stage A's date, never one of the run's own: a
+# date planted there is the one the stand-in is asked for; uCRM listing no quote in it where stage A read one is not
+# comparable, never staff quoting; a newer one in it is staff quoting — notes, never a failure.
+cp -p "$STATE99" "$SB/state99.kept"; sed -i 's/^QN3_SINCE=.*/QN3_SINCE=2000-01-02/' "$STATE99"; : > "$U99/quotes-since.log"
+OUT="$(afterfails99)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')|$(okline "$OUT" Q-CA3 "the newest uCRM quote is stage A's (#88017402, created since 2000-01-02: stage A's window, read again)")|$(LC_ALL=C sort -u "$U99/quotes-since.log" | paste -sd, -)" "0yes|yes|2000-01-02" \
+  "5w an --after-only reads Q-N3's window from the deploy's state file: a date planted there is the one it asks uCRM for, and the one it names"
+cat "$SB/state99.kept" > "$STATE99"; touch -r "$SB/state99.kept" "$STATE99"
+u99_set 'quotes=[]'; OUT="$(afterfails99)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')|$(noteline "$OUT" Q-CA3 'is none now, and stage A read #88017402 in the same window' 'not comparable')$(noteline "$OUT" Q-CA3 'staff quoting')" "0yes|yesno" \
+  "5w' uCRM listing no quote in that window where stage A read one: a NOTE, not comparable — never called staff quoting"
+u99_set 'quotes=[88017401,88017402,88017403]'; OUT="$(afterfails99)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.99 (after): PASSED')|$(noteline "$OUT" Q-CA3 'is #88017403, stage A read #88017402 in the same window' 'staff quoting since, never this run')" "0yes|yes" \
+  "5w'' a newer quote in that window: a NOTE, staff quoting since — never this run's, never a failure"
+u99_set
+check "$(sha256sum "$STATE99" | cut -c1-16)" "$(sha256sum "$SB/state99.kept" | cut -c1-16)" "…the deploy's state file as it was"
 fresh99; OUT="$(run99 --check)"
 nogo99 "5n --check with 5.18.99 live: refused — the --after-only printed instead, alone" \
   "--check is stage A before a deploy, and the container already serves $P99 (5.18.99) — run --after-only instead, its own command, alone:" "$OUT" "$(data94)" "$P99"
@@ -1553,6 +1704,20 @@ check "$(live)|$( [ -e "$SB/web/.left99" ] && echo unspent || echo spent)|$(cmp 
   "8a' a copy whose RB is blind to the quoting code — its weakened copy — over the same route left behind (5.18.98 already serving): it calls the quoting code gone (caught); only the sha256 still sees the file"
 git -C "$REPO" show "$P98:$P/includes/api/api_cron_debug.php" > "$PD/includes/api/api_cron_debug.php"
 check "$(installed99 "$P98")$(stat -c '%u:%g' "$PD/includes/api/api_cron_debug.php")" "01000:1000" "…the route put back as 5.18.98's: every file 5.18.98's again"
+# RB's count of what 5.18.99 left behind, against a positive control — an application with a quote refusal recorded and a
+# lead flagged quote_org_missing, through the installed code's own writer, and the key set in the configuration file —
+# and three more of its quoting markers left in place by a copy that did not complete: 5.18.99's Sync All gate, Uganda
+# profile and set_config, over 5.18.98 already serving (the rollback's checks alone).
+D8B99="$(data94)"; cfg_keep; RQ99="$(rows_add99 "$SEED99RB")"; file_set ucrm_quote_organization_id 1
+for f in includes/api/api_products_admin.php profiles/uganda.json tools/set_config.php; do cp -p "$PD/$f" "$SB/rbq99-${f##*/}.kept"; git -C "$REPO" show "$P99:$P/$f" > "$PD/$f"; done
+fresh99; OUT="$(run99 --answer ROLLBACK --rollback)"; T="$(last99)"
+check "$RQ99|$(live)|$(noteline "$OUT" RB 'applications with a quote refusal recorded 1, leads flagged quote_org_missing 1, ucrm_quote_organization_id set/unset')$(failline "$OUT" RB "the installed code after the rollback is not 5.18.98's as it must be:" "5.18.99's quoting code still there: api_products_admin.php:push_products_to_ucrm-admin-only profiles/uganda.json:quoting tools/set_config.php:ucrm_quote_organization_id")$(failline "$OUT" RB "installed files that are not 5.18.98's after the rollback:" 'includes/api/api_products_admin.php' 'profiles/uganda.json' 'tools/set_config.php')|$(ureq99 "$T" | cut -d' ' -f1)" \
+      "{\"rows\":2}|$P98|yesyesyes|total=0" \
+  "8b over rows 5.18.99 wrote and the key in the configuration file, RB counts them — 1, 1, set/unset — and, with 5.18.99's Sync All gate, Uganda profile and set_config left in place, FAILS naming all three markers, and by sha256; it asks uCRM nothing"
+for f in includes/api/api_products_admin.php profiles/uganda.json tools/set_config.php; do cat "$SB/rbq99-${f##*/}.kept" > "$PD/$f"; touch -r "$SB/rbq99-${f##*/}.kept" "$PD/$f"; done
+cfg_back; sqx "DELETE FROM kyc_applications WHERE json_extract(data, '\$._rh99rb') = 1" >/dev/null; sqx "DELETE FROM leads WHERE json_extract(data, '\$._rh99rb') = 1" >/dev/null
+check "$(installed99 "$P98")|$(stat -c '%u:%g' "$PD/includes/api/api_products_admin.php" "$PD/profiles/uganda.json" "$PD/tools/set_config.php" | paste -sd, -)|$(data94)" "0|1000:1000,1000:1000,1000:1000|$D8B99" \
+  "…the three files 5.18.98's again, owned by the store's user; the two rows and the key taken out: the data as before"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after that rollback: PASSED"
 

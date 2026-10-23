@@ -6,7 +6,10 @@
 //
 //   <METHOD> <the path after the API prefix>[?<the query's keys, never their values>] <app-key|token|none>
 //
-// — never a key's value, never a body. It answers the four reads the deploy script's quoting checks make (SPEC-quote-
+// — never a key's value, never a body. Two side records beside it, for what the record leaves out on purpose: prefix.log,
+// each request's path BEFORE the API prefix and which key it carried ("/crm app-key", "/crm2 token": which base URL a
+// client used); and quotes-since.log, the createdDateFrom each quotes read asked for (a date, Q-N3's window).
+// It answers the four reads the deploy script's quoting checks make (SPEC-quote-
 // company §6), and nothing else but 404:
 //   GET organizations                the organizations (the token client's own list when state.token_orgs is set)
 //   GET clients/{id}                 one client: id, organizationId, a name, a contact — 404 for an id it does not hold
@@ -17,7 +20,7 @@
 // x-auth-token equal to state.token; anything else 401. Toggles, each off unless set: app_401 (the plugin's own key
 // refused), token_401 (the admin token refused), orgs_500 (organizations unreadable), leaklog (a path: every GET of a
 // client appends a line naming that client and "(deploy-check)" to it — a refusal line written to the live plugin log,
-// which Q-CA3 must see), flip ({"<client id>": <organization>}: the FIRST GET of that client answers its own
+// which Q-CA3 must see; with leakwhere, the label is that one instead, as staff's own paths write it), flip ({"<client id>": <organization>}: the FIRST GET of that client answers its own
 // organization, every later one the organization named — a client moved in uCRM between Q-CA3's discovery of it and
 // its check; the first GET is remembered in flip-seen-<id> beside this file, which the rehearsal removes whenever it
 // writes the state). Every name, contact and key it serves is a marked secret of the rehearsal's own (RH99SECRET-…,
@@ -39,6 +42,8 @@ $tok = (string)($_SERVER['HTTP_X_AUTH_TOKEN'] ?? '');
 $kind = $app !== '' ? 'app-key' : ($tok !== '' ? 'token' : 'none');
 $keys = implode(',', array_map('strval', array_keys($q)));
 @file_put_contents($dir . '/requests.log', $method . ' ' . ($p === '' ? '/' : $p) . ($keys !== '' ? '?' . $keys : '') . ' ' . $kind . "\n", FILE_APPEND | LOCK_EX);
+$pre = (string)preg_replace('#/api/v[0-9.]+.*$#', '', $path);
+@file_put_contents($dir . '/prefix.log', ($pre === '' ? '/' : $pre) . ' ' . $kind . "\n", FILE_APPEND | LOCK_EX);
 $out = function ($d, int $code = 200): void {
     http_response_code($code);
     header('Content-Type: application/json');
@@ -70,7 +75,8 @@ if (preg_match('#^/clients/([0-9]+)$#', $p, $m)) {
         if (is_file($seen)) $c['org'] = $fl; else @touch($seen);
     }
     $leak = $want('leaklog');
-    if ($leak !== '') @file_put_contents($leak, '[QuoteOrganization] no quote for client #' . $id . " (deploy-check): planted by the rehearsal's stand-in uCRM\n", FILE_APPEND);
+    $lw = $want('leakwhere') !== '' ? $want('leakwhere') : 'deploy-check';
+    if ($leak !== '') @file_put_contents($leak, '[QuoteOrganization] no quote for client #' . $id . ' (' . $lw . "): planted by the rehearsal's stand-in uCRM\n", FILE_APPEND);
     $out($client($id, $c));
 }
 if ($p === '/clients') {
@@ -79,6 +85,7 @@ if ($p === '/clients') {
     $out($l);
 }
 if ($p === '/billing/quotes') {
+    @file_put_contents($dir . '/quotes-since.log', (is_scalar($q['createdDateFrom'] ?? null) ? (string)$q['createdDateFrom'] : '-') . "\n", FILE_APPEND | LOCK_EX);
     $l = [];
     foreach ((array)($st['quotes'] ?? []) as $x) $l[] = ['id' => (int)$x, 'number' => 'RH99-Q' . (int)$x, 'createdDate' => gmdate('Y-m-d\TH:i:sO')];
     $out($l);

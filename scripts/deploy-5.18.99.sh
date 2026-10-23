@@ -76,8 +76,11 @@
 #            Q-G3's, with two controls each in a PHP process of its own (tenant_profile=south-sudan → off;
 #            ucrm_quote_organization_id=0 → explicit-off); Q-CA3 organizations() through the installed code equals Q-G4's,
 #            checkClient() on a Q-N2 client inside → pass and on one outside → refused, again through the token client
-#            when it is set, the refusal lines to the run's own sink, data/plugin.log gaining no line naming a probed
-#            client, nothing created, the newest quote Q-N3's (a newer one a note: staff may be quoting); Q-CA4 the
+#            when it is set, both client ids on the sheet; the refusal lines to the run's own sink — none in its code
+#            copy's plugin log or PHP error log, where a control line with no sink must land (one in each) — and the live
+#            data/plugin.log gaining no line labelled this run's (one naming a probed client is a note: staff); nothing
+#            created; the newest quote over Q-N3's own window Q-N3's (a newer one a note: staff may be quoting; one no
+#            longer listed, not comparable); Q-CA4 the
 #            installed admin-only gate names push_products_to_ucrm, read as text, and its route refuses a visitor with no
 #            session; Q-CA5 the KYC form, Send Quotation, Quote History, Orders and the LTE dashboard answer a visitor with
 #            no session with the sign-in page, no PHP fatal; Q-CA6 the installed profile gives organization 1, the
@@ -3015,11 +3018,21 @@ try {
                 $r = (new QuoteOrganization($c, $setting, $sink))->checkClient($id, "deploy-check");
                 return $r["ok"] ? "pass" : "refused:" . (string)$r["code"];
             };
-            $out[] = "in=" . $one($plug, $in) . " out=" . $one($plug, $ox);
-            if ($tok !== null) $out[] = "tin=" . $one($tok, $in) . " tout=" . $one($tok, $ox);
-            else $out[] = "tin=unset tout=unset";
+            $rin = $one($plug, $in); $rout = $one($plug, $ox);
+            $out[] = "in=" . $rin . " out=" . $rout;
+            if ($tok !== null) { $tin = $one($tok, $in); $tout = $one($tok, $ox); } else { $tin = "unset"; $tout = "unset"; }
+            $out[] = "tin=" . $tin . " tout=" . $tout;
             $sl = (string)@file_get_contents($sinkF); $on = preg_match('/filed under organization #([0-9]+), quotes are made under #/', $sl, $mm) ? (int)$mm[1] : 0;
             $out[] = "outorg=" . $on . " sink=" . $sinkN;
+            // The control on the shell's reading of where those lines went: the same guard with NO sink, on the same code
+            // copy, an invalid setting (R6 — no uCRM read at all) and a label of its own. Its one line goes where a refusal
+            // without a sink goes: PHP's error log (this run's own file) and data/plugin.log beside the code it loaded (the
+            // copy's). The shell reads both before the copy is removed: the control's line must be in each, the probe's in neither.
+            $ctl = (new QuoteOrganization($plug, ["on" => true, "id" => null, "source" => "setting", "error" => "invalid"], null))->checkClient(0, "deploy-check-control");
+            $out[] = "ctl=" . ($ctl["ok"] ? "pass" : "refused:" . (string)$ctl["code"]);
+            // The two client ids Q-CA3 probed, with what each answered: on the sheet (remote.txt), never on stdout.
+            $S[] = "  Q-CA3 checkClient() through the installed code, the quoting organization #" . $m . ": inside it " . ($in > 0 ? "client #" . $in : "no client") . " → " . $rin
+                 . ", outside it " . ($ox > 0 ? "client #" . $ox : "no client") . " → " . $rout . "; through the token client: " . $tin . ", " . $tout;
         }
         if (isset($what["quotes"])) {
             $q = $plug->get("billing/quotes?" . http_build_query(["createdDateFrom" => (string)($A["since"] ?? gmdate("Y-m-d", time() - 2 * 86400))]));
@@ -3154,14 +3167,16 @@ qo_gate() {
 # installed code after it (r: Q-CA3, the organizations and the newest quote again). Sets QO_G2, QO_G3, QO_C0, QO_C1,
 # QO_L, QO_R, QO_TOK, QO_ORGS (the organizations' lines, Q-G4's to print), QO_PICK_IN, QO_PICK_OUT and QO_PICK_OUTORG
 # (two client ids, kept for Q-CA3 — never printed), QO_SINK (the refusal lines the probe's own sink took), QO_LOGHIT
-# (r: data/plugin.log's lines naming a probed client, or this run's label, written while the probe ran), QO_AT, or
+# and QO_LOGSTAFF (r: the live data/plugin.log's lines written while the probe ran — labelled this run's, which only this
+# run writes; unlabelled and naming a probed client, which only staff write), QO_CPROBE (r: the probe's refusal lines and
+# its control's in its own code copy's data/plugin.log, then in its PHP error log), QO_SINCE (Q-N3's window), QO_AT, or
 # QO_ERR; the counts and the client ids go to the run's sheet. Every copy — the token's first — is removed before it
 # returns; the run's folder again by the trap.
-QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_AT=""; QO_ERR=""; QO_LABEL=""
+QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_LOGSTAFF=""; QO_CPROBE=""; QO_SINCE=""; QO_AT=""; QO_ERR=""; QO_LABEL=""
 QO_A_IN=""; QO_A_OUT=""; QO_A_OUTORG=""
 qo_run() {
-  local kind="$1" inst="$2" pin="${3:-}" sub o size free need qorg what code plog n0 n1 cin cout
-  QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_AT=""; QO_ERR=""
+  local kind="$1" inst="$2" pin="${3:-}" sub o size free need qorg what code plog n0 n1 cin cout since lg lids x
+  QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_LOGSTAFF=""; QO_CPROBE=""; QO_SINCE=""; QO_AT=""; QO_ERR=""
   [ -n "$SHEET" ] || { QO_ERR="the run's sheet is not open"; return 1; }
   cih_init || { QO_ERR="the run's folder in the container's /tmp, or its copy of the vault, could not be made (${CIH_VAULT_SAYS:-?})"; return 1; }
   size="$(db_state | sed -nE 's/^size=([0-9]+) .*/\1/p')"; free="$(dxo php -r 'echo (int)@disk_free_space($argv[1]);' /tmp)"
@@ -3196,35 +3211,65 @@ qo_run() {
     case "$QO_TOK" in token=*) ;; *) QO_ERR="whether crm_auth_token is set could not be read (${QO_TOK:-?})"; cih_drop "$sub"; return 1 ;; esac
   fi
   if ! cih_root "$code" "$sub/u/$PLUGIN" "$sub/conf"; then QO_ERR="a code root could not be copied (uCRM's reading)"; cih_drop "$sub"; return 1; fi
+  # Q-N3's window: stage A's own date — this run's stage A, or the deploy's state file — so that the newest quote is read
+  # twice over the same window; a date of this run's own only where stage A's is not known (Q-CA3: then not comparable).
+  since="$QN3_SINCE"; [ -n "$since" ] || since="$(date -u -d '-2 days' +%Y-%m-%d)"; QO_SINCE="$since"
   plog="$DEST/data/plugin.log"; n0="$(grep -c '' "$plog" 2>/dev/null || true)"; n0="${n0:-0}"
-  QO_R="$(docker exec -u "$DB_OWNER" -e DN_VAULT_FILE="$sub/u-vault-none.json" -e DN_DATA_DIR="$sub/u-none" "$CONTAINER" php -d display_errors=stderr -r "$QO_PHP" remote "$sub/u/$PLUGIN" "ucrm=$IN_CONTAINER" "qorg=${qorg:-0}" "what=$what" "ids=$sub/ids.txt" "out=$sub/remote.txt" "orgsout=$sub/orgs.txt" "pick=$sub/pick.txt" "token=$( [ "$QO_TOK" != "token=unset" ] && printf '%s' "$sub/tok/token.json" )" "sink=$sub/sink.txt" "elog=$sub/php_error.log" "budget=150" "since=$(date -u -d '-2 days' +%Y-%m-%d)" "cin=$cin" "cout=$cout" "label=${QO_LABEL:-the copy made at $QO_AT}" 2>/dev/null </dev/null)"
+  QO_R="$(docker exec -u "$DB_OWNER" -e DN_VAULT_FILE="$sub/u-vault-none.json" -e DN_DATA_DIR="$sub/u-none" "$CONTAINER" php -d display_errors=stderr -r "$QO_PHP" remote "$sub/u/$PLUGIN" "ucrm=$IN_CONTAINER" "qorg=${qorg:-0}" "what=$what" "ids=$sub/ids.txt" "out=$sub/remote.txt" "orgsout=$sub/orgs.txt" "pick=$sub/pick.txt" "token=$( [ "$QO_TOK" != "token=unset" ] && printf '%s' "$sub/tok/token.json" )" "sink=$sub/sink.txt" "elog=$sub/php_error.log" "budget=150" "since=$since" "cin=$cin" "cout=$cout" "label=${QO_LABEL:-the copy made at $QO_AT}" 2>/dev/null </dev/null)"
   dxo rm -rf "$sub/tok" >/dev/null 2>&1 || true   # the token's copy — the probe deleted it once read; whatever is left goes now
   qo_count "$QO_R" "$kind"
+  if [ "$kind" = "r" ]; then   # Q-CA3: where the probe's refusal lines went, read on its own code copy before it goes — its
+                               # data/plugin.log (PluginLog writes beside the code it loads) and its PHP error log, each as
+                               # "<lines labelled (deploy-check)>:<lines labelled (deploy-check-control)>"
+    QO_CPROBE="$(dxo sh -c 'for f in "$1" "$2"; do if [ -f "$f" ]; then printf "%s:%s " "$(grep -cF "(deploy-check)" "$f")" "$(grep -cF "(deploy-check-control)" "$f")"; else printf "0:0 "; fi; done' _ "$sub/u/$PLUGIN/data/plugin.log" "$sub/php_error.log")"
+    QO_CPROBE="${QO_CPROBE% }"
+  fi
   cih_drop "$sub/u"
   QO_ORGS="$(dxo cat "$sub/orgs.txt")"
   o="$(dxo cat "$sub/pick.txt")"; QO_PICK_IN="$(kv "$o" in)"; QO_PICK_OUT="$(kv "$o" out)"; QO_PICK_OUTORG="$(kv "$o" outorg)"
   QO_SINK="$(dxo sh -c 'if [ -f "$1" ]; then grep -c "" "$1"; else echo 0; fi' _ "$sub/sink.txt")"
-  if [ "$kind" = "r" ]; then   # Q-CA3: what data/plugin.log gained while the probe ran — lines naming a probed client, or this run's label
+  if [ "$kind" = "r" ]; then   # Q-CA3: what the live data/plugin.log gained while the probe ran — lines labelled this run's
+                               # (deploy-check, deploy-check-control), which only this run writes; and lines naming a probed
+                               # client, unlabelled, which only staff write (the probe cannot reach this file: it logs beside
+                               # its own code copy)
     n1="$(grep -c '' "$plog" 2>/dev/null || true)"; n1="${n1:-0}"
     [ "$n1" -ge "$n0" ] || n0=0   # the log was cut while the probe ran: read all of it
-    QO_LOGHIT="$(tail -n "+$((n0 + 1))" "$plog" 2>/dev/null | grep -cE "\(deploy-check\)|client #(${QO_PICK_IN:-0}|${QO_PICK_OUT:-0}) \(" || true)"; QO_LOGHIT="${QO_LOGHIT:-0}"
+    lg="$(tail -n "+$((n0 + 1))" "$plog" 2>/dev/null || true)"
+    QO_LOGHIT="$(printf '%s\n' "$lg" | grep -cE '\(deploy-check(-control)?\)' || true)"; QO_LOGHIT="${QO_LOGHIT:-0}"
+    lids=""; for x in "${QO_PICK_IN:-0}" "${QO_PICK_OUT:-0}"; do case "$x" in ''|0|*[!0-9]*) ;; *) lids="${lids:+$lids|}$x" ;; esac; done
+    QO_LOGSTAFF=0
+    if [ -n "$lids" ]; then QO_LOGSTAFF="$(printf '%s\n' "$lg" | grep -E "client #($lids) \(" | grep -vcE '\(deploy-check(-control)?\)' || true)"; QO_LOGSTAFF="${QO_LOGSTAFF:-0}"; fi
+    lg=""
   fi
   if ! docker exec -u "$DB_OWNER" "$CONTAINER" sh -c 'cat "$1"; [ ! -f "$2" ] || cat "$2"' _ "$sub/local.txt" "$sub/remote.txt" >> "$SHEET" 2>/dev/null </dev/null; then QO_ERR="the quoting checks' lines could not be put on the sheet"; cih_drop "$sub"; return 1; fi
   cih_drop "$sub"
   case "$QO_R" in *" gets="*" other="*) ;; *) QO_ERR="uCRM could not be read for the quoting checks (${QO_R:-?})"; return 1 ;; esac
   return 0
 }
+# qn3_cmp NOW STAGE_A — the newest uCRM quote of one window, read twice (an id, or "none"): same | newer | notcomparable.
+# A reading that has lost stage A's quote (none now, or a lower id) is not comparable — never staff quoting.
+qn3_cmp() {
+  local a="$1" b="$2"
+  if [ "$a" = "$b" ]; then echo same; return; fi
+  case "$a" in ''|*[!0-9]*) echo notcomparable; return ;; esac
+  case "$b" in none) echo newer; return ;; ''|*[!0-9]*) echo notcomparable; return ;; esac
+  if [ "$a" -gt "$b" ]; then echo newer; else echo notcomparable; fi
+}
 # Q-N2's line in words: "org #1: n · org #2: m · no organization: c · not found: j · unreadable: k", from the probe's list.
 qn2_say() { printf '%s' "$1" | tr ',' '\n' | awk -F: '$1 ~ /^org[0-9]+$/ { printf "%sorg #%s: %s", (n++ ? " · " : ""), substr($1, 4), $2 } $1 == "none" { printf "%sno organization: %s", (n++ ? " · " : ""), $2 } $1 == "notfound" { printf "%snot found: %s", (n++ ? " · " : ""), $2 } $1 == "unreadable" { printf "%sunreadable: %s", (n++ ? " · " : ""), $2 } $1 == "unread" && $2 > 0 { printf "%snot read within the time budget: %s", (n++ ? " · " : ""), $2 } END { if (!n) printf "none read" }'; }
 # qo_stage a|m INST_ROOT — stage A's quoting checks (a: a deploy and --check; m: --move-list-only): Q-G2–Q-G6 and the notes
 # Q-N1–Q-N7 (m: Q-G2–Q-G4 and Q-N2), on copies and from uCRM with GETs only. A refusal stops, as every refusal of stage
-# A does: nothing has changed. Sets QG3_A, QG4_A, QN3_A (for the state file and Q-CA2, Q-CA3) and QO_A_IN, QO_A_OUT (two
-# client ids for Q-CA3, never printed), and QOFF_NOTED, QG5_NOTED, QG6_NOTED only when a flag decided its check.
-QG3_A=""; QG4_A=""; QN3_A=""; QOFF_NOTED=""; QG5_NOTED=""; QG6_NOTED=""
+# A does: nothing has changed. Sets QG3_A, QG4_A, QN3_A, QN3_SINCE (for the state file and Q-CA2, Q-CA3) and QO_A_IN,
+# QO_A_OUT (two client ids for Q-CA3, never printed), and QOFF_NOTED, QG5_NOTED, QG6_NOTED only when a flag decided its
+# check.
+QG3_A=""; QG4_A=""; QN3_A=""; QOFF_NOTED=""; QG5_NOTED=""; QG6_NOTED=""; QN3_SINCE=""
 qo_stage() {
   local kind="$1" inst="$2" vb s3 r3 qorg="" book ids has qcur tok dbg n5 s5 lf lr ln qn1 t q
   QO_LABEL="$( [ "$kind" = "m" ] && echo "the move-list run" || echo "stage A, before the deploy" ), the copy of $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   vb="$(vt_now)"
+  # Q-N3's window, fixed once, here: the quotes created since two days before stage A — Q-CA3 reads the same window again,
+  # after the copy, from this value or the deploy's state file.
+  [ "$kind" = "m" ] || QN3_SINCE="$(date -u -d '-2 days' +%Y-%m-%d)"
   qo_run "$kind" "$inst" "$P3B_PIN" || stop "NO-GO (Q-G): the quoting checks could not be read on a copy and from uCRM — $QO_ERR. Every copy is removed. Nothing was changed. Send the log file"
   vt_same "$vb" || stop "NO-GO (Q-G): the live vault (${VAULT_IN:-its path not known}) could not be shown unchanged while the quoting checks read their copies ($(vt_say "$vb") → $(vt_say "$(vt_now)")) — a run on a copy must never write it; a settings save at that moment is the other cause. Nothing was changed. Send the log file"
   echo "  quoting copy    made at $QO_AT — the quoting keys of the settings files, of the vault and of the store row, and the book's consistent copy"
@@ -3318,9 +3363,9 @@ qo_stage() {
   note "Q-N2 the app's uCRM clients — the distinct crm_client_id of kyc_applications, leads and quotes_log, read/all $(kv "$QO_L" ids | cut -d: -f1) (at most 300 read), one GET each: $(qn2_say "$(kv "$QO_R" qn2)") — the $(kv "$QO_R" outside) filed under another organization are on the sheet by id: the move-list for uCRM"
   q="$(kv "$QO_R" qn3)"; QN3_A="${q%%:*}"
   case "$QN3_A" in
-    none) note "Q-N3 no uCRM quote created since $(date -u -d '-2 days' +%Y-%m-%d) — read again after the copy (Q-CA3)" ;;
+    none) note "Q-N3 no uCRM quote created since $QN3_SINCE — read again after the copy (Q-CA3)" ;;
     ''|*[!0-9]*) note "Q-N3 the newest uCRM quote could not be read ($q) — Q-CA3 then has nothing to set its own reading against" ;;
-    *) note "Q-N3 the newest uCRM quote: #$QN3_A ($(printf '%s' "$q" | cut -d: -f2) created since $(date -u -d '-2 days' +%Y-%m-%d)) — read again after the copy (Q-CA3): a newer one is staff quoting, never this run" ;;
+    *) note "Q-N3 the newest uCRM quote: #$QN3_A ($(printf '%s' "$q" | cut -d: -f2) created since $QN3_SINCE) — read again after the copy (Q-CA3): a newer one is staff quoting, never this run" ;;
   esac
   q="$(kv "$QO_L" qn4)"
   note "Q-N4 KycCrmSync's queue — the applications saved here and not yet in uCRM, which its retry creates, after the deploy, under the quoting organization: pending $(subkv "$q" pending) ($(subkv "$q" spent) of them at ten attempts; $(subkv "$q" otherorg) whose saved request names another organization), review $(subkv "$q" review), failed $(subkv "$q" failed); synced $(subkv "$q" synced)"
@@ -3333,8 +3378,8 @@ qo_stage() {
 }
 # qo_after INST_ROOT — after the copy (stage R; --after-only too): Q-CA2, Q-CA3 and Q-CA6 through INST_ROOT, the copy of
 # the installed code (ICODE_R), on copies and from uCRM with GETs only. Stage R reports; nothing here stops. Reads QG3_A,
-# QG4_A and QN3_A (stage A's, from this run or from the state file) and QO_A_IN, QO_A_OUT (this run's stage A only: an
-# --after-only run picks its two clients again from Q-N2's list, never from a file).
+# QG4_A, QN3_A and QN3_SINCE (stage A's, from this run or from the state file) and QO_A_IN, QO_A_OUT (this run's stage A
+# only: an --after-only run picks its two clients again from Q-N2's list, never from a file).
 qo_after() {
   local inst="$1" vb s2 r2 qorg t q in out d o rc
   QO_LABEL="stage R, after the copy, the copy of $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -3389,12 +3434,28 @@ qo_after() {
       esac
       echo "  Q-CA3           the guard's refusal lines went to this run's own sink: $(kv "$QO_R" sink) — never to the plugin's log"
     fi
-    if [ "$QO_LOGHIT" = "0" ]; then ok "Q-CA3 the live data/plugin.log gained no line naming a probed client, nor this run's (deploy-check), while the probe ran — other lines may appear: staff may be working"
-    else bad "Q-CA3 the live data/plugin.log gained $QO_LOGHIT line(s) naming a probed client or (deploy-check) while the probe ran — the probe's refusals must go to its own sink"; fi
+    # Where the probe's refusal lines went, read on its own code copy before it was removed: its data/plugin.log (PluginLog
+    # writes beside the code it loads) and its PHP error log hold none of them — its sink took them — and the control, the
+    # same guard with no sink on the same copy (deploy-check-control), wrote its one line to each, so the reading can see
+    # one. The live data/plugin.log the probe cannot reach: a line there labelled this run's means its code copy logs
+    # where the live plugin does (FAIL); a line naming a probed client, unlabelled, is staff at work (a note).
+    if [ "$QO_CPROBE" = "0:1 0:1" ]; then ok "Q-CA3 the probe's refusal lines reached neither its code copy's data/plugin.log nor its PHP error log (0 and 0) — its own sink took them; control: the same guard with no sink, on the same copy, wrote its one line to each (1 and 1)"
+    else bad "Q-CA3 where the probe's refusal lines went, read on its code copy — data/plugin.log, then its PHP error log, each as the probe's:the control's: ${QO_CPROBE:-not read} — the probe's must be 0 in both, the control's 1 in each"; fi
+    if [ "$QO_LOGHIT" != "0" ]; then bad "Q-CA3 the live data/plugin.log gained $QO_LOGHIT line(s) labelled this run's (deploy-check) while the probe ran — only this run's guard writes that label, and its code copy logs beside itself: here it logged where the live plugin does"
+    elif [ "$QO_LOGSTAFF" != "0" ]; then note "Q-CA3 the live data/plugin.log gained $QO_LOGSTAFF line(s) naming a probed client (its id on the sheet) while the probe ran, none labelled this run's — staff activity on that client, never this run, whose lines went to its own sink"
+    else echo "  Q-CA3           the live data/plugin.log gained no line labelled this run's or naming a probed client while the probe ran (other lines may: staff may be working)"; fi
+    # Q-N3's window read again: the quotes created since stage A's own date (this run's stage A, or the deploy's state
+    # file), never a window of this run's own — the same question asked twice. A newer quote in it is staff quoting; a
+    # reading that has lost stage A's quote, or a window not known, is not comparable: a note either way, never a FAIL.
     q="$(kv "$QO_R" qn3)"; t="${q%%:*}"
-    if [ -z "$t" ] || [ "$t" = "?" ] || [ -z "$QN3_A" ] || [ "$QN3_A" = "?" ]; then note "Q-CA3 the newest uCRM quote could not be set against stage A's (now ${q:-not read}; stage A ${QN3_A:-not known to this run})"
-    elif [ "$t" = "$QN3_A" ]; then ok "Q-CA3 the newest uCRM quote is stage A's ($( [ "$t" = "none" ] && echo "none since the day before stage A" || echo "#$t")) — nothing was quoted by this run"
-    else note "Q-CA3 the newest uCRM quote is $( [ "$t" = "none" ] && echo "none" || echo "#$t"), stage A read $QN3_A — staff quoting since, never this run (it asked uCRM nothing but GETs)"; fi
+    if [ -z "$t" ] || [ "$t" = "?" ] || [ -z "$QN3_A" ] || [ "$QN3_A" = "?" ] || [ -z "$QN3_SINCE" ] || [ "$QO_SINCE" != "$QN3_SINCE" ]; then note "Q-CA3 the newest uCRM quote could not be set against stage A's (now ${q:-not read}, created since ${QO_SINCE:-?}; stage A ${QN3_A:-not known to this run}, created since ${QN3_SINCE:-a date not known to this run})"
+    else
+      case "$(qn3_cmp "$t" "$QN3_A")" in
+        same) ok "Q-CA3 the newest uCRM quote is stage A's ($( [ "$t" = "none" ] && echo "none" || echo "#$t"), created since $QN3_SINCE: stage A's window, read again) — nothing was quoted by this run" ;;
+        newer) note "Q-CA3 the newest uCRM quote created since $QN3_SINCE is #$t, stage A read $( [ "$QN3_A" = "none" ] && echo "none" || echo "#$QN3_A") in the same window — staff quoting since, never this run (it asked uCRM nothing but GETs)" ;;
+        *) note "Q-CA3 the newest uCRM quote created since $QN3_SINCE is $( [ "$t" = "none" ] && echo "none" || echo "#$t") now, and stage A read #$QN3_A in the same window — not comparable: a quote stage A read is no longer listed (removed in uCRM, or a window uCRM does not keep to); this run asked uCRM nothing but GETs" ;;
+      esac
+    fi
   fi
   # Q-CA6 — the installed profile, set_config's listing and its refusal of a value that is not a number, on a throwaway folder.
   if [ -z "$inst" ]; then bad "Q-CA6 the copy of the installed code was not made — the profile and set_config are not read"
@@ -5281,9 +5342,10 @@ PHP
   # changed nothing, and a later --after-only must not relax V3j or BA2 on it.
   printf 'BK_BEFORE=%s\nBANK_BEFORE=%s\nREDEPLOY=%s\nWITHOUT_BANK=%s\n' "${BK_BEFORE:-}" "$(bank_show "${BANK_LIVE_A:-}")" "${REDEPLOY:-}" "${G3_NOTED:-}" >> "$STATE_W"
   # 5.18.99: stage A's readings of the quoting organization, for Q-CA2 and Q-CA3 of a later --after-only — the setting's
-  # answer, uCRM's organization ids and the newest quote's id, never a client's — and which of the three explicit choices
+  # answer, uCRM's organization ids, the newest quote's id and the date Q-N3's window began, never a client's — and which of
+  # the three explicit choices
   # decided its check (each only when it did: typed over a check that held, it changed nothing).
-  [ "$MODE" = "deploy" ] && printf 'QG3_A=%s\nQG4_A=%s\nQN3_A=%s\nQOFF_NOTED=%s\nQG5_NOTED=%s\nQG6_NOTED=%s\n' "${QG3_A:-}" "${QG4_A:-}" "${QN3_A:-}" "${QOFF_NOTED:-}" "${QG5_NOTED:-}" "${QG6_NOTED:-}" >> "$STATE_W"
+  [ "$MODE" = "deploy" ] && printf 'QG3_A=%s\nQG4_A=%s\nQN3_A=%s\nQN3_SINCE=%s\nQOFF_NOTED=%s\nQG5_NOTED=%s\nQG6_NOTED=%s\n' "${QG3_A:-}" "${QG4_A:-}" "${QN3_A:-}" "${QN3_SINCE:-}" "${QOFF_NOTED:-}" "${QG5_NOTED:-}" "${QG6_NOTED:-}" >> "$STATE_W"
   # 5.18.96: A23's reading of the book, for R23's drift in a later --after-only — its time, the cash sheet's path and the
   # first 16 hex of its sha256 as A23 left it (R23 adds its own reading to the same sheet later in this run, so F's hash
   # of the finished sheet differs), the row digest (a count, the highest id and a sha256) and the 0600 file of each row's
@@ -6669,14 +6731,15 @@ else bad "R26 the installed library does not keep the books where the rule is of
 # Q-CA2, Q-CA3, Q-CA6 — 5.18.99 (SPEC-quote-company §6), after the copy: through the copy of the installed code (ICODE_R),
 # on a fresh copy and from uCRM with GETs only — setting() equal to stage A's Q-G3 with its two controls, organizations()
 # equal to Q-G4's, checkClient() on one client inside and one outside, again through the token client when it is set,
-# the refusal lines to this run's own sink and the live data/plugin.log gaining none, nothing created, the newest quote
+# the refusal lines to this run's own sink, never its code copy's logs (a control line in each), none of this run's in
+# the live data/plugin.log, nothing created, the newest quote over the same window as
 # Q-N3's; the installed profile and set_config, and set_config's refusal on a throwaway data folder. An --after-only run
-# reads stage A's readings from the deploy's state file (organization ids and a quote id, never a client's) and picks its
+# reads stage A's readings from the deploy's state file (organization ids, a quote id and Q-N3's window, never a client's) and picks its
 # two clients again from Q-N2's list.
 hdr "R. The quoting organization, installed (5.18.99; read-only, on copies and from uCRM with GETs only)"
 if [ "$MODE" = "after" ]; then
   QG3_A="$(sed -n 's/^QG3_A=//p' "$STATE" 2>/dev/null | tail -n1)"; QG4_A="$(sed -n 's/^QG4_A=//p' "$STATE" 2>/dev/null | tail -n1)"
-  QN3_A="$(sed -n 's/^QN3_A=//p' "$STATE" 2>/dev/null | tail -n1)"
+  QN3_A="$(sed -n 's/^QN3_A=//p' "$STATE" 2>/dev/null | tail -n1)"; QN3_SINCE="$(sed -n 's/^QN3_SINCE=//p' "$STATE" 2>/dev/null | tail -n1)"
 fi
 qo_after "${ICODE_R:-}"
 elif [ "$MODE" = "rollback" ]; then
