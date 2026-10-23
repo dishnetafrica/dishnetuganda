@@ -27,6 +27,9 @@ declare(strict_types=1);
  * 5.18.85, each off unless set: /__test/users_v1_404 {"on":true} — GET users/{id} answers 404 for every id, as the
  * production uCRM does (measured 27 Sep 2026, docs/44 §13.1), while users/admins/{id} still answers;
  * /__test/quotes_down {"down":true} — GET billing/quotes answers 502.
+ *
+ * 5.18.99: GET organizations answers the seeded "organizations" rows — ONLY when the seed has that key; otherwise the
+ * 404 every other test relies on (tests/test_notify_quote_once.php seeds it on its Uganda sandbox).
  */
 $stateFile = (string)getenv('FAKE_UCRM_STATE');
 $state = is_file($stateFile) ? (json_decode((string)file_get_contents($stateFile), true) ?: []) : [];
@@ -127,6 +130,11 @@ if ($method === 'POST' && $path === '/scheduling/jobs') {
     $j = array_merge($j, array_intersect_key($body, $j), (array)($state['post_override'] ?? []));
     $state['jobs'][(string)$id] = $j;
     fu_out($j, 201);
+}
+
+// ── Organizations (5.18.99): only when seeded; unseeded, the 404 below, as before ──────────────────────────────────
+if ($method === 'GET' && $path === '/organizations' && array_key_exists('organizations', $state)) {
+    fu_out(array_values((array)$state['organizations']));
 }
 
 // ── Clients ──────────────────────────────────────────────────────────────────

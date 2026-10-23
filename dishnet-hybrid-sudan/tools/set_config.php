@@ -52,6 +52,8 @@ $FLAGS = [
         'Also create that lead in uCRM as a lead client (needs ai_lead_capture)'],
     'ucrm_lead_organization_id' => ['text',
         'uCRM organization new leads belong to (unset = the one existing clients use)'],
+    'ucrm_quote_organization_id' => ['text',
+        'Uganda only (ignored on South Sudan): the uCRM organization app customers are filed under and app quotes are made for. Blank = the Uganda profile (organization 1); 0 or off = switched off, as 5.18.98'],
     'ucrm_lead_country_id' => ['text',
         'uCRM country id for new leads (unset = the one existing clients use)'],
     'ai_hardware_expert' => ['bool',
@@ -449,6 +451,36 @@ if (!$clear && $key === 'portal_data_report_handoff') {
         exit(1);
     }
     $new = strtolower(trim($new));
+}
+// 5.18.99: the Uganda quoting organization — 0/off/no/none/false, or an organization number this uCRM lists. A mistyped
+// value would stop every Uganda app quote from the next request, and a wrong number would refuse every one, so both are
+// refused here and nothing is saved. uCRM is only read (GET organizations). --clear returns the key to the profile.
+if (!$clear && $key === 'ucrm_quote_organization_id') {
+    $qoGiven = trim($new);
+    $new     = strtolower($qoGiven);
+    if (!in_array($new, ['0', 'off', 'no', 'none', 'false'], true)) {
+        if (!preg_match('/^[1-9][0-9]{0,8}$/', $new)) {
+            echo "\n  \"" . $qoGiven . "\" is not an organization number or 0/off, so nothing was saved.\n\n";
+            exit(1);
+        }
+        require_once $root . '/lib/CrmApiClient.php';
+        require_once $root . '/lib/QuoteOrganization.php';
+        $qoCfg  = PluginConfig::read($root, $dataDir);   // the read-only path: a refusal below must change nothing on disk
+        $qoRead = (new QuoteOrganization(CrmApiClient::fromUcrm($root, $qoCfg),
+            ['on' => true, 'id' => (int)$new, 'source' => 'setting', 'error' => '']))->organizations();
+        if ($qoRead['list'] === null) {
+            echo "\n  uCRM's organizations could not be read (" . $qoRead['error'] . "), so nothing was saved.\n\n";
+            exit(1);
+        }
+        $qoIds = [];
+        foreach ($qoRead['list'] as $qoRow) if (isset($qoRow['id'])) $qoIds[] = (int)$qoRow['id'];
+        if (!in_array((int)$new, $qoIds, true)) {
+            echo "\n  uCRM has no organization " . (int)$new . " (it has organization "
+               . ($qoIds === [] ? 'none' : implode(', ', $qoIds)) . "), so nothing was saved.\n\n";
+            exit(1);
+        }
+        $new = (string)(int)$new;
+    }
 }
 // 5.18.82 (docs/63): the customer authorisation link's life in days, 1 to 90 — refused outside the range, never clamped silently.
 require_once dirname(__DIR__) . '/lib/InstallAuth.php';

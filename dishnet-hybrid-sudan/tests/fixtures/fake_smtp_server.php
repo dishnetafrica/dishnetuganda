@@ -30,16 +30,31 @@ if ($port <= 0 || $file === '') { fwrite(STDERR, "usage: fake_smtp_server.php <p
 $srv = @stream_socket_server("tcp://127.0.0.1:{$port}", $errno, $errstr);
 if (!$srv) { fwrite(STDERR, "listen failed: {$errstr}\n"); exit(1); }
 
-$record = function (array $session) use ($file): void {
+// The transcript is replaced whole, never rewritten in place: written to a
+// file beside it and renamed over it, which a reader sees as one step. A test
+// reads it without a lock the moment the plugin returns, and an in-place write
+// (truncate, then write) could hand that reader an empty or half-written file,
+// which decodes to no messages at all: a test that counted the messages before
+// a send then counted 0 (test_install_authorisation, H3, 20 Oct).
+$write = function (array $all) use ($file): void {
+    $tmp = $file . '.part';
+    if (@file_put_contents($tmp, json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) !== false) @rename($tmp, $file);
+};
+
+// $replace: this connection was already written down (at the end of its
+// message), so its entry, the last one, is replaced rather than added again.
+// One connection at a time, so the last entry is always this connection's.
+$record = function (array $session, bool $replace) use ($file, $write): void {
     $all = is_file($file) ? (json_decode((string)@file_get_contents($file), true) ?: []) : [];
+    if ($replace && $all !== []) array_pop($all);
     $all[] = $session;
-    @file_put_contents($file, json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    $write($all);
 };
 
 // Written only once a socket is actually listening, so a client that finds
 // this file knows the port is up. Racing on "connect and retry" instead made
 // the suite flaky on a loaded machine.
-@file_put_contents($file, json_encode([], JSON_PRETTY_PRINT));
+$write([]);
 
 while (true) {
     $c = @stream_socket_accept($srv, $idle);
@@ -49,7 +64,7 @@ while (true) {
     $session = ['ehlo' => '', 'mail_from' => '', 'rcpt_to' => [], 'data' => '', 'commands' => []];
     fwrite($c, "220 fake.smtp.test ESMTP ready\r\n");
 
-    $inData = false; $body = ''; $auth = '';
+    $inData = false; $body = ''; $auth = ''; $written = false;
     while (($line = fgets($c, 4096)) !== false) {
         if ($auth !== '') {
             // The two lines that answer an AUTH LOGIN prompt: kept out of the commands, so no password is recorded.
@@ -70,6 +85,9 @@ while (true) {
                 // holds the message as it was composed.
                 $session['data'] = preg_replace('/^\.\./m', '.', $body) ?? $body;
                 $body = '';
+                // Written down BEFORE the reply: a sender that hears "queued" and
+                // returns may be read at once, so the message must already be there.
+                $record($session, $written); $written = true;
                 fwrite($c, "250 2.0.0 Ok: queued as FAKE\r\n");
                 continue;
             }
@@ -96,6 +114,9 @@ while (true) {
             $inData = true;
             fwrite($c, "354 End data with <CR><LF>.<CR><LF>\r\n");
         } elseif ($verb === 'QUIT') {
+            // The whole conversation, QUIT included, is written down before the
+            // goodbye, for the same reason: the sender returns once it hears it.
+            $record($session, $written); $written = true;
             fwrite($c, "221 2.0.0 Bye\r\n");
             break;
         } elseif ($verb === 'RSET') {
@@ -113,7 +134,10 @@ while (true) {
     }
 
     @fclose($c);
-    $record($session);
+    // The conversation as it ended: the same entry the QUIT wrote, or, for a
+    // sender that hung up without one, everything it said. The transcript ends
+    // up exactly as it always did; only WHEN each entry appears has changed.
+    $record($session, $written);
 }
 
 @fclose($srv);

@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/QuotePdfToken.php';
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda gate for the fallback PDF's details
 
 if (!function_exists('str_contains')) {
     function str_contains(string $h, string $n): bool { return $n === '' || strpos($h, $n) !== false; }
@@ -100,8 +101,13 @@ class PluginQuotePdf
             if (!$clientEmail && !empty($c['email'])) $clientEmail = htmlspecialchars($c['email']);
         }
 
+        // 5.18.99 (Uganda): this PDF names the quoted client's own organization and the Uganda profile's locality, and
+        // never prints South Sudan's details. Elsewhere every line below is unchanged.
+        $ug = QuoteOrganization::setting($this->config, $this->dataDir)['on'];
+
         // ── Sales person ──
         $salesPerson = 'Yash Madlani';
+        if ($ug) $salesPerson = '';   // 5.18.99: no default name on Uganda; the signature line stays
         foreach (($client['attributes'] ?? []) as $attr) {
             if (($attr['key'] ?? '') === 'salesPerson' && !empty($attr['value'])) {
                 $salesPerson = htmlspecialchars($attr['value']);
@@ -116,6 +122,25 @@ class PluginQuotePdf
         $orgPhone   = htmlspecialchars($org['phone'] ?? '0925831111');
         $orgEmail   = htmlspecialchars($org['email'] ?? 'info@dishnetafrica.com');
         $orgWebsite = htmlspecialchars($org['website'] ?? 'www.dishnetafrica.com');
+        $ugLocality = '';
+        if ($ug) {
+            // 5.18.99 (Uganda): the value, or nothing — never the South Sudan defaults above. The name falls back to the
+            // Uganda profile's legal entity.
+            $ugProfile  = null;
+            try {
+                if (!class_exists('TenantProfile')) require_once __DIR__ . '/TenantProfile.php';
+                $ugProfile = TenantProfile::current($this->config, $this->dataDir);
+            } catch (\Throwable $e) { $ugProfile = null; }
+            $ugText     = function ($v): string { return is_scalar($v) ? trim((string)$v) : ''; };
+            $ugName     = $ugText($org['name'] ?? '');
+            $orgName    = htmlspecialchars($ugName !== '' ? $ugName : ($ugProfile !== null ? $ugProfile->legalEntity() : ''));
+            $orgStreet  = htmlspecialchars($ugText($org['street1'] ?? ''));
+            $orgCity    = htmlspecialchars($ugText($org['city'] ?? ''));
+            $orgPhone   = htmlspecialchars($ugText($org['phone'] ?? ''));
+            $orgEmail   = htmlspecialchars($ugText($org['email'] ?? ''));
+            $orgWebsite = htmlspecialchars($ugText($org['website'] ?? ''));
+            $ugLocality = htmlspecialchars($ugProfile !== null ? $ugProfile->locality() : '');
+        }
 
         // ── Service pill ──
         $pillHtml = '';
@@ -164,7 +189,21 @@ class PluginQuotePdf
 
         // ── Build full HTML ──
         $html = $this->getTemplate();
+        // 5.18.99: the five placeholders below are replaced FIRST (str_replace runs in array order). Their values where
+        // the gate is off are exactly the template's old text, so after this first pass the HTML is the old template
+        // byte for byte and every later replacement runs on the same text; and nothing inserted later (a customer's
+        // name, address or notes) can be touched by them. On Uganda the organization lines are only the non-empty ones.
+        $ugLines = [];
+        foreach (['{{ORG_STREET}}' => $orgStreet, '{{ORG_CITY}}' => $orgCity, '{{ORG_PHONE}}' => $orgPhone,
+                  '{{ORG_EMAIL}}' => $orgEmail, '{{ORG_WEBSITE}}' => $orgWebsite] as $ph => $val) {
+            if ($val !== '') $ugLines[] = $ph;
+        }
         $replacements = [
+            '{{HEADER_LOCALITY}}' => $ug ? $ugLocality : 'Juba, South Sudan',
+            '{{ORG_LINES}}'       => $ug ? implode('<br>', $ugLines) : '{{ORG_STREET}}<br>{{ORG_CITY}}<br>{{ORG_PHONE}}<br>{{ORG_EMAIL}}<br>{{ORG_WEBSITE}}',
+            '{{AMOUNT_HEAD}}'     => $ug ? 'Amount (' . htmlspecialchars(dn_code($this->config)) . ')' : 'Amount (USD)',
+            '{{PREPARED_ORG}}'    => $ug ? '{{ORG_NAME}}' : 'DishNet Africa Ltd',
+            '{{FOOTER_LOCALITY}}' => $ug ? $ugLocality : 'Juba, South Sudan',
             '{{QUOTE_NUM}}'      => htmlspecialchars($quoteNum),
             '{{CURRENCY_CODE}}'  => dn_code($this->config),
             '{{CREATED_DATE}}'   => $createdDate,
@@ -415,7 +454,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#141414;line-he
 <td style="padding:18px 28px 14px;vertical-align:middle;">
 <span style="font-size:30px;font-weight:900;color:#fff;font-family:Helvetica,Arial,sans-serif;letter-spacing:-0.5px;">DishNet</span>{{PILL_HTML}}
 <div style="height:3px;width:115px;background:linear-gradient(to right,#D41C1C,#E8521A,#FF7A35);border-radius:2px;margin-top:2px;"></div>
-<div style="font-size:9px;color:#777;margin-top:4px;">Internet Service Provider &middot; Juba, South Sudan</div>
+<div style="font-size:9px;color:#777;margin-top:4px;">Internet Service Provider &middot; {{HEADER_LOCALITY}}</div>
 </td>
 <td style="padding:18px 28px 14px;text-align:right;vertical-align:middle;">
 <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#666;">QUOTATION</div>
@@ -436,7 +475,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#141414;line-he
 <td style="width:50%;background:#f8f8f8;border-radius:6px;padding:12px 14px;vertical-align:top;border-left:3px solid #141414;">
 <div style="font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:#9B9B9B;font-weight:700;margin-bottom:4px;">FROM</div>
 <div style="font-size:14px;font-weight:700;color:#141414;margin-bottom:3px;">{{ORG_NAME}}</div>
-<div style="font-size:10px;color:#6B6B6B;line-height:1.5;">{{ORG_STREET}}<br>{{ORG_CITY}}<br>{{ORG_PHONE}}<br>{{ORG_EMAIL}}<br>{{ORG_WEBSITE}}</div>
+<div style="font-size:10px;color:#6B6B6B;line-height:1.5;">{{ORG_LINES}}</div>
 </td></tr></table>
 
 <div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9B9B9B;font-weight:700;margin-bottom:5px;">QUOTATION DETAILS</div>
@@ -446,7 +485,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#141414;line-he
 <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:left;width:43%;">Description</th>
 <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:12%;">Qty</th>
 <th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:18%;">Unit Price</th>
-<th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:22%;">Amount (USD)</th>
+<th style="background:#141414;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:0.8px;padding:9px 10px;font-weight:700;text-align:right;width:22%;">{{AMOUNT_HEAD}}</th>
 </tr></thead>
 <tbody>{{ITEMS_HTML}}</tbody></table>
 
@@ -472,7 +511,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#141414;line-he
 <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#9B9B9B;font-weight:700;">PREPARED BY</div>
 <div style="border-top:1.5px solid #141414;padding-top:4px;margin-top:16px;">
 <span style="font-size:10px;font-weight:700;">{{AGENT_NAME}}</span>
-<span style="font-size:9px;color:#6B6B6B;float:right;">DishNet Africa Ltd</span>
+<span style="font-size:9px;color:#6B6B6B;float:right;">{{PREPARED_ORG}}</span>
 </div></td>
 <td style="width:10%;border:none;"></td>
 <td style="width:45%;padding:8px 0 0;vertical-align:top;border:none;">
@@ -486,7 +525,7 @@ body{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#141414;line-he
 
 <div style="height:3px;background:linear-gradient(to right,#D41C1C,#E8521A,#FF7A35);margin-top:10px;"></div>
 <table style="width:100%;background:#141414;border-collapse:collapse;"><tr>
-<td style="padding:8px 28px;font-size:9px;color:#777;">{{ORG_NAME}} &middot; Juba, South Sudan</td>
+<td style="padding:8px 28px;font-size:9px;color:#777;">{{ORG_NAME}} &middot; {{FOOTER_LOCALITY}}</td>
 <td style="padding:8px 28px;font-size:10px;color:#555;text-align:center;font-style:italic;font-weight:600;">Of course we can ...</td>
 <td style="padding:8px 28px;font-size:9px;color:#999;text-align:right;">{{ORG_WEBSITE}}</td>
 </tr></table>

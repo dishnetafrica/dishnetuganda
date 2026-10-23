@@ -606,7 +606,7 @@ $_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2):
                 if ($ucrmId > 0) {
                     // Full flow: UCRM quote + WA proforma
                     $quoteRef = 'LTE-' . date('Ymd') . '-' . $saved['id'];
-                    $crmResult  = $quotSvc->createCrmQuote($ucrmId, $quoteItems, $quoteRef, $retailer);
+                    $crmResult  = $quotSvc->createCrmQuote($ucrmId, $quoteItems, $quoteRef, $retailer, '', 'lte');   // 5.18.99: 'lte' names the path in the log
                     $crmQuoteId = $crmResult['ok'] ? (int)$crmResult['quote_id'] : 0;
                     // Use UCRM's own number as canonical ref
                     if ($crmResult['ok'] && !empty($crmResult['quote_number'])) {
@@ -624,6 +624,11 @@ $_cmJobGuard = function (int $jobId) use ($_cmUganda, $me2, $store, $crm, $er2):
                         $quotSvc->sendKycQuoteWhatsApp($fakeApp, $quoteItems, $crmQuoteId, $retailer);
                         $saved['_quote_id']  = $crmQuoteId;
                         $saved['_quote_ref'] = $quoteRef;
+                    } elseif (!empty($crmResult['refused'])) {
+                        // 5.18.99 (Uganda, "always company 1"): the client is filed under another company. No quote, and no
+                        // cash proforma in its place; the screen says why and what to do.
+                        $saved['_quote_error'] = 'Subscriber registered. ' . (string)($crmResult['error'] ?? '')
+                            . ' (Use Send Quotation → Manual with CRM ID ' . $ucrmId . '.)';
                     } else {
                         // UCRM failed — fall back to WA-only proforma
                         $quotSvc->sendCashSaleProforma($customerName, $phone, $quoteItems, (float)($body['amount_paid'] ?? 0), $retailer);

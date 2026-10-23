@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization (the lead fallback)
+
 /**
  * UcrmLeadSync — put an AI-qualified lead into uCRM, once.
  *
@@ -49,6 +51,13 @@ declare(strict_types=1);
  * When the answer cannot be established, this refuses and says so. It does not
  * fall back to a literal: a lead filed under the wrong company is a lead
  * somebody has to find and move.
+ *
+ * 5.18.99 (Uganda, "always company 1"): with ucrm_lead_organization_id unset, a
+ * lead client is filed under the quoting organization (QuoteOrganization), once
+ * this uCRM lists it — never the commonest of the sampled clients, never "the
+ * only one". If it is not listed, or the setting is not a number, nothing is
+ * created: the lead is flagged quote_org_missing and one plugin-log line names the
+ * lead. An explicit ucrm_lead_organization_id still wins, unchanged.
  */
 final class UcrmLeadSync
 {
@@ -137,6 +146,16 @@ final class UcrmLeadSync
             return $this->no('failed', 'uCRM unreachable while resolving defaults: ' . $defaults['error']);
         }
         if ($defaults['org'] === null) {
+            if (!empty($defaults['why'])) {
+                // 5.18.99 (Uganda): the quoting organization cannot be used. Flagged and logged where a person looks,
+                // because a skipped lead is not retried; the next event syncs it once the setting is corrected.
+                $this->flag($leadId, 'quote_org_missing', (string)$defaults['why']);
+                try {
+                    if (!class_exists('PluginLog')) require_once __DIR__ . '/PluginLog.php';
+                    \PluginLog::write('quotes', 'lead #' . $leadId . ' not synced: ' . (string)$defaults['why']);
+                } catch (\Throwable $e) { /* the flag is the record */ }
+                return $this->no('skipped', (string)$defaults['why']);
+            }
             return $this->no('skipped',
                 'cannot establish organizationId from existing clients — set '
                 . 'ucrm_lead_organization_id, or run tools/org_probe.php to see why');
@@ -382,6 +401,33 @@ final class UcrmLeadSync
         $org     = (int)($this->config['ucrm_lead_organization_id'] ?? 0) ?: null;
         $country = (int)($this->config['ucrm_lead_country_id'] ?? 0) ?: null;
 
+        // 5.18.99 (Uganda): with the lead key unset, the quoting organization — once this uCRM lists it. Read only when
+        // the key is unset, so an explicit ucrm_lead_organization_id still wins and South Sudan reads nothing new.
+        $qo  = ['on' => false];
+        $why = '';
+        if ($org === null) {
+            $qo = QuoteOrganization::setting($this->config,
+                method_exists($this->store, 'getDataDir') ? (string)$this->store->getDataDir() : null);
+            if ($qo['on']) {
+                if (($qo['error'] ?? '') !== '' || !is_int($qo['id'] ?? null)) {
+                    $why = 'the setting ucrm_quote_organization_id is not an organization number';
+                } else {
+                    $list = (new QuoteOrganization($this->crm, $qo))->organizations();
+                    if ($list['list'] === null) {
+                        // Could not ASK: retryable, exactly like the unreachable case below.
+                        return ['org' => null, 'country' => null, 'error' => 'the organizations could not be read: ' . $list['error']];
+                    }
+                    $ids = [];
+                    foreach ($list['list'] as $o) if (isset($o['id'])) $ids[] = (int)$o['id'];
+                    if (in_array((int)$qo['id'], $ids, true)) {
+                        $org = (int)$qo['id'];
+                    } else {
+                        $why = 'uCRM has no organization ' . (int)$qo['id'] . ', the company Uganda customers are filed under';
+                    }
+                }
+            }
+        }
+
         $error = '';
         if ($org === null || $country === null) {
             $rows = null;
@@ -402,7 +448,7 @@ final class UcrmLeadSync
                 $n = (int)($c['countryId'] ?? 0);
                 if ($n > 0) $countries[$n] = ($countries[$n] ?? 0) + 1;
             }
-            if ($org === null && $orgs !== []) {
+            if ($org === null && $orgs !== [] && !$qo['on']) {   // 5.18.99: never the commonest when the gate is on
                 arsort($orgs);
                 $org = (int)array_key_first($orgs);
             }
@@ -434,7 +480,7 @@ final class UcrmLeadSync
 
             // Same for the organization itself, for an install whose clients
             // are all new: one organization is not a choice.
-            if ($org === null) {
+            if ($org === null && !$qo['on']) {   // 5.18.99: never "the only one" when the gate is on
                 try {
                     $orgRows = $this->crm->get('organizations');
                     if (is_array($orgRows) && count($orgRows) === 1) {
@@ -445,7 +491,8 @@ final class UcrmLeadSync
             }
         }
 
-        $resolved = ['org' => $org, 'country' => $country, 'error' => $error];
+        $resolved = ['org' => $org, 'country' => $country, 'error' => $error]
+                  + ($qo['on'] ? ['why' => $why] : []);   // 5.18.99: only when the gate is on
         // A failed read is never cached: the next attempt must ask again.
         if ($error === '') $this->defaults = $resolved;
         return $resolved;

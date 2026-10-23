@@ -5,6 +5,7 @@ require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/PaymentUuids.php';
 require_once __DIR__ . '/UcrmClientTarget.php';
 require_once __DIR__ . '/KycService.php';
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization
 
 /**
  * KycCrmSync — put a KYC customer who is saved in the plugin but not in uCRM
@@ -172,7 +173,7 @@ final class KycCrmSync
         // 2. Fit the request to the connected uCRM.
         $placed = $this->target()->apply($this->payloadFor($app));
         if ($placed['error'] !== '') {
-            return $this->failed($app, $placed['error'], $by);
+            return $this->failed($app, $placed['error'], $by, !empty($placed['config']));   // 5.18.99
         }
         $payload = $placed['payload'];
 
@@ -229,16 +230,36 @@ final class KycCrmSync
         ]);
         error_log("[kyc_crm_sync] App #{$id} created in uCRM as client #{$crmId} ({$by})");
 
-        $this->afterCreate($app, $crmId);
+        // 5.18.99 (Uganda): what the create answered, so the quote check needs no request when it says where the client
+        // is filed. Read only where the quoting-organization gate is on.
+        $known = [];
+        if (QuoteOrganization::setting($this->config, $this->gateDataDir())['on']) {
+            $known = [
+                'organizationId' => is_int($res['organizationId'] ?? null) ? $res['organizationId'] : null,
+                'organizations'  => $this->target()->organizationRows(),
+                'where'          => 'kyc-retry',
+            ];
+        }
+        $refused = $this->afterCreate($app, $crmId, $known);
 
-        return $this->result(true, 'synced', $crmId,
+        $out = $this->result(true, 'synced', $crmId,
             "Application #{$id} is now in the CRM as client #{$crmId}"
             . (!empty($app['is_lead']) ? ' (a lead: find it under Leads in uCRM).' : '.'));
+        if ($refused !== '') {   // 5.18.99: the customer is in uCRM, the quotation was refused, and why
+            $out['message'] .= ' ' . $refused;
+            $out['quote_refused'] = $refused;
+        }
+        return $out;
     }
 
-    /** What KycService would have done after a successful create. */
-    private function afterCreate(array $app, string $crmId): void
+    /**
+     * What KycService would have done after a successful create.
+     *
+     * 5.18.99: returns the text when the Uganda quote check refused the quotation, '' otherwise.
+     */
+    private function afterCreate(array $app, string $crmId, array $known = []): string
     {
+        $refused = '';
         $id = (int)$app['id'];
 
         // Work order and tag use South Sudan template and tag numbers.
@@ -285,8 +306,10 @@ final class KycCrmSync
                         . (string)($app['sales_person'] ?? $app['retailer_name'] ?? '')
                         . ' | Connection: ' . (string)($app['connectivity_type'] ?? '')
                         . ' | Priority: ' . (string)($app['priority'] ?? 'Medium');
-                KycService::postQuote($this->crm, $this->store, $id, (int)$crmId, $items, $notes,
-                    'Plugin ref: ' . ($ref !== '' ? $ref : 'KYC-' . $id), (string)($app['mobile'] ?? ''));
+                $posted = KycService::postQuote($this->crm, $this->store, $id, (int)$crmId, $items, $notes,
+                    'Plugin ref: ' . ($ref !== '' ? $ref : 'KYC-' . $id), (string)($app['mobile'] ?? ''),
+                    $known !== [] ? $known : null);
+                if (!empty($posted['refused'])) $refused = (string)$posted['refused'];   // 5.18.99
             }
         }
 
@@ -296,6 +319,7 @@ final class KycCrmSync
                 $this->store->updateOne('payment_collections.json', 'id', $col['id'], ['crm_customer_id' => $crmId]);
             }
         }
+        return $refused;
     }
 
     /**
@@ -392,7 +416,7 @@ final class KycCrmSync
             "Application #{$appId} is now linked to uCRM client #{$clientId}. Nothing was created in uCRM.");
     }
 
-    private function failed(array $app, string $reason, string $by): array
+    private function failed(array $app, string $reason, string $by, bool $config = false): array
     {
         $id       = (int)$app['id'];
         $attempts = (int)($app['crm_sync_attempts'] ?? 0) + 1;
@@ -403,7 +427,8 @@ final class KycCrmSync
             'crm_sync_last_attempt' => date('Y-m-d H:i:s'),
             'crm_sync_by'           => $by,
         ]);
-        error_log("[kyc_crm_sync] App #{$id} attempt #{$attempts} failed: {$reason}");
+        error_log("[kyc_crm_sync] App #{$id} attempt #{$attempts} failed: {$reason}"
+            . ($config ? ' (setting ucrm_quote_organization_id)' : ''));   // 5.18.99
         return $this->result(false, 'failed', null, "Application #{$id} is still not in the CRM: {$reason}");
     }
 
@@ -522,7 +547,14 @@ final class KycCrmSync
 
     private function target(): UcrmClientTarget
     {
-        return $this->target ??= new UcrmClientTarget($this->crm);
+        // 5.18.99 (Uganda): forInstall — the configured quoting organization, never "prefer 2".
+        return $this->target ??= UcrmClientTarget::forInstall($this->crm, $this->config, $this->gateDataDir());
+    }
+
+    /** 5.18.99: the store's data directory, which the quoting-organization gate reads (QuoteOrganization::setting). */
+    private function gateDataDir(): ?string
+    {
+        return method_exists($this->store, 'getDataDir') ? (string)$this->store->getDataDir() : null;
     }
 
     private function result(bool $ok, string $status, ?string $crmId, string $message): array

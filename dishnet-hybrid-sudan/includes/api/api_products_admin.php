@@ -18,6 +18,9 @@
         'verify_product_mapping',
         'auto_map_products',
         'set_product_mapping',
+        // 5.18.99 (security, every tenant): "Sync All" overwrites uCRM product prices; it was open to any signed-in
+        // account. Both dry_run=1 and dry_run=0 answer a non-admin 403 here, before any uCRM read.
+        'push_products_to_ucrm',
     ];
     if (in_array($act, $_gateAdminOnly, true) && empty($isAdmin)) $er2('Admin only.', 403);
 

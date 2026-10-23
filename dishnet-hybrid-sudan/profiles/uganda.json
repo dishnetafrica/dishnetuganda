@@ -114,6 +114,10 @@
     "_readme": "5.18.74: the customer portal hands a customer over to the dishnet-data-report plugin's client view (the Usage links) with a token signed from this plugin's webhook_secret and crm_auth_token, which that plugin rebuilds and verifies. ON at the operator's decision (4 Oct 2026: 'usage link i want to keep'; 5.18.73 had switched it off because this install held neither value and every link ended in that plugin's 404). While either value is empty the portal does not mint a token and tells the customer the details are not available yet. Set them: php tools/set_config.php --key webhook_secret --generate (never shown) and Settings → UCRM Connection → Admin Auth Token. The explicit key portal_data_report_handoff=no hides the links.",
     "data_report_handoff": true
   },
+  "quoting": {
+    "_readme": "5.18.99 (the operator, 20 Oct 2026: 'always company 1'): the uCRM organization every app customer is filed under and every app quotation is made for. A KYC customer is created in it; a lead client falls back to it when ucrm_lead_organization_id is unset; and no app quote is made for a client filed under any other organization — the salesperson is told to move the customer first. The explicit setting ucrm_quote_organization_id wins: php tools/set_config.php --key ucrm_quote_organization_id --value N, and 0 or off switches all of 5.18.99's Uganda behaviour off (5.18.98's behaviour). profiles/south-sudan.json has no such block.",
+    "ucrm_organization_id": 1
+  },
   "products": [
     "starlink"
   ],

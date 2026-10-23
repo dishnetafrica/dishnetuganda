@@ -430,7 +430,7 @@ document.getElementById('kycForm')?.addEventListener('submit', function(e) {
         }).then(r=>r.json()).then(function(d){
             btn.disabled=false;btn.textContent='Submit';
             if(d.status==='success'){
-                alert('✅ LTE Subscriber #'+d.data.id+' registered!'+(d.data._first_renewal?' Plan activated until '+d.data._first_renewal._expires+'.':''));
+                alert('✅ LTE Subscriber #'+d.data.id+' registered!'+(d.data._first_renewal?' Plan activated until '+d.data._first_renewal._expires+'.':'')<?php /* 5.18.99 (Uganda): the reason no quotation was made — emitted only where the quoting-organization gate is on */ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php'; if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']): ?>+(d.data._quote_error?' '+d.data._quote_error:'')<?php endif; ?>);
                 window.location.href='?page=dashboard&tab=lte_dashboard';
             } else {
                 alert('⚠ '+( d.message||'Registration failed'));

@@ -336,6 +336,12 @@ $totalC  = count($myApps);
         <?php endif; ?>
     </div>
     <?php endif; ?>
+<?php if (!empty($a['quote_refused_text']) && empty($a['quote_created'])): /* 5.18.99 (Uganda): the quote check refused this customer's quotation, and none has been made since */ ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+        <div style="font-weight:800;margin-bottom:3px;">⚠ No quotation was made</div>
+        <div><?= h((string)$a['quote_refused_text']) ?></div>
+    </div>
+<?php endif; ?>
     <div class="app-card-bottom">
         <span style="font-size:11px;color:#9ca3af;"><i class="bi bi-calendar3"></i> <?= h(substr($a['submitted_at']??$a['created_at']??'',0,10)) ?></span>
         <span style="font-size:10px;color:#9ca3af;"><?= h($a['connectivity_type']??'') ?> · <?= h($a['sales_type']??'') ?></span>

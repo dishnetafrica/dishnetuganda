@@ -1652,7 +1652,7 @@ window.doCreateSubscriber = function(){
     st.style.color='var(--text-3)';st.textContent='Registering…';
     pp('lte_create_subscriber',body).then(function(d){
         if(d.status==='success'){
-            st.style.color='var(--green)';st.textContent='✓ Subscriber #'+d.data.id+' registered!';
+            st.style.color='var(--green)';st.textContent='✓ Subscriber #'+d.data.id+' registered!'<?php /* 5.18.99 (Uganda): the reason no quotation was made — emitted only where the quoting-organization gate is on */ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php'; if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']): ?>+(d.data._quote_error?' '+d.data._quote_error:'')<?php endif; ?>;
             setTimeout(function(){lteHideModal('lte-new-sub-modal');loadDash();window._subLoaded=false;},2000);
         } else {st.style.color='var(--red)';st.textContent='⚠ '+(d.message||'Failed');}
     });

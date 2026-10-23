@@ -15,6 +15,9 @@ declare(strict_types=1);
  *   4. South Sudan: 5.18.53 unchanged — both duplicates still happen there (docs/46 §E).
  *   5. Weakened copies, each caught (skipped with --no-mutants).
  *
+ * 5.18.99: on the Uganda sandbox customer 15 is filed under organization 1, the quoting organization, because the screen's
+ * quote check now reads the client first; a control below proves the check ran and passed.
+ *
  * What this proves is what the plugin hands to WhatsApp, never delivery to a phone. Every person, number and document
  * is fictitious; nothing leaves the machine.
  */
@@ -40,6 +43,14 @@ $start = function (string $tree, string $tenant, string $tag): SjSandbox {
     $crm['quotes'] = ['3401' => ['id' => 3401, 'number' => 'Q-3401', 'clientId' => 15, 'status' => 1, 'createdDate' => date('c'),
         'items' => [['label' => 'Starlink Standard Kit', 'quantity' => 1, 'price' => 2500000.0, 'total' => 2500000.0]],
         'total' => 2500000.0]];
+    // 5.18.99 (rewritten on purpose): on Uganda the screen makes a quote only for a client uCRM files under the quoting
+    // organization (1, profiles/uganda.json); the check reads customer 15 before the quote is made. So on the Uganda
+    // sandbox customer 15 is in organization 1, and the fake lists that organization (served only when seeded). South
+    // Sudan reads neither and is seeded as before. The refusal itself is tested in tests/test_quote_company.php §C.
+    if ($tenant === 'uganda') {
+        $crm['clients']['15']['organizationId'] = 1;
+        $crm['organizations'] = [['id' => 1, 'name' => 'TEST Company One', 'selected' => true, 'currencyCode' => 'UGX']];
+    }
     $s->seedCrm($crm);
     SjScenario::staff($s);
     return $s;
@@ -86,7 +97,11 @@ $screenCase = function (SjSandbox $s) use ($texts, $drain, $ledger, $screen): ar
     $o = [];
     $s->seedCrm(['next_quote' => 3500]);   // the id the fake gives the screen's quote, whatever ran before
     $n = count($s->texts());
+    $r0 = count($s->crmDump()['requests'] ?? []);
     $o['form'] = $screen($s);
+    // 5.18.99: what the form asked uCRM, in order — on Uganda the quote check's GET clients/15 comes before the create.
+    $o['form_reqs'] = array_map(function ($r) { return $r['method'] . ' ' . $r['path']; },
+        array_slice($s->crmDump()['requests'] ?? [], $r0));
     $o['screen'] = $texts($s, 'Q-3500', $n);
     $s->fire('quote.add', 'quote', 3500, 'q-3500');
     $drain($s);
@@ -128,6 +143,9 @@ is_(strpos($a['cron_log'], 'DEDUP BLOCK Flow B: quote #3401') !== false, 'and th
 echo "\n2. Uganda — a quote made on the quote screen (D2c): one WhatsApp, the screen's\n";
 $b = $screenCase($u);
 is_((int)$b['form'][0] === 302 || (int)$b['form'][0] === 200, 'the form is accepted', (string)$b['form'][0]);
+$chk = array_search('GET /clients/15', $b['form_reqs'], true); $mk = array_search('POST /billing/quotes', $b['form_reqs'], true);
+is_($chk !== false && $mk !== false && $chk < $mk,
+    '5.18.99 control: the quote check read customer 15 (organization 1) before the quote was made', json_encode($b['form_reqs']));
 is_($b['screen'] === 1, 'the screen sends its quotation', (string)$b['screen']);
 is_($b['after_event'] === 1 && $b['total'] === 1, 'uCRM\'s quote.add for it, then the quote cron: nothing more', json_encode([$b['after_event'], $b['total']]));
 is_($b['ledger'] === 'plugin_manual', 'the claim is the screen\'s', $b['ledger']);

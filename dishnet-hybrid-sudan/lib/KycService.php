@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/UcrmClientTarget.php';
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization and the quote check
 
 /**
  * KycService
@@ -125,6 +126,16 @@ class KycService
         return $clone;
     }
 
+    /**
+     * 5.18.99: the data directory the quoting-organization gate reads (QuoteOrganization::setting): the store's, as
+     * QuotationService and KycCrmSync read it, else this service's own. It differs only when the vault falls back to
+     * <dataDir>/config_vault.json (ConfigVault::path).
+     */
+    private function gateDataDir(): string
+    {
+        return method_exists($this->store, 'getDataDir') ? (string)$this->store->getDataDir() : $this->dataDir;
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // PUBLIC — called by web form & mobile API
     // ══════════════════════════════════════════════════════════════════════
@@ -168,6 +179,16 @@ class KycService
     {
         $cfg         = $this->store->load('kyc_config.json') ?: [];
         $customerId  = trim($post['customer_id']);
+        // 5.18.99 (Uganda): the CRM ID is a number, and the check, the quote and the record all use the same one. The
+        // path is concatenated into the request, so "15/../16" would be checked as 15 and quoted for 16.
+        $quoteOrg = QuoteOrganization::setting(is_array($cfg) ? $cfg : [], $this->gateDataDir());
+        if ($quoteOrg['on']) {
+            if (!ctype_digit($customerId) || (int)$customerId <= 0) {
+                QuoteOrganization::logNotANumber('kyc-existing');   // PHP's log and the plugin's log, as every refusal
+                return ['success' => false, 'message' => QuoteOrganization::text('R3', ['{ID}' => QuoteOrganization::plain($customerId)])];
+            }
+            $customerId = (string)(int)$customerId;
+        }
         $salesPerson = $this->resolveSalesPerson($post, $retailer);
 
         // ── Resolve plan + hardware ───────────────────────────────────────
@@ -274,6 +295,26 @@ class KycService
             }
         }
 
+        // 5.18.99: built before anything is saved, so the quote check reads uCRM with the client the quote is made with.
+        // Building it sends nothing.
+        $_quoteCfg   = $cfg;
+        $_quoteToken = trim($_quoteCfg['crm_auth_token'] ?? '');
+        $_quoteUrl   = trim($_quoteCfg['crm_base_url'] ?? '');
+        $quoteCrm = ($_quoteToken !== '')
+            ? new CrmApiClient(
+                $_quoteUrl !== '' ? $_quoteUrl : rtrim($this->crm->getBaseUrl(), '/'),
+                $_quoteToken,
+                'x-auth-token'
+              )
+            : $this->crm;
+
+        // 5.18.99 (Uganda, "always company 1"): no quote for a customer filed under another company. Before the first
+        // write: no application, no quote, no job, no wallet debit, nothing sent.
+        if ($quoteOrg['on']) {
+            $quoteCheck = (new QuoteOrganization($quoteCrm, $quoteOrg))->checkClient((int)$customerId, 'kyc-existing');
+            if (!$quoteCheck['ok']) return ['success' => false, 'message' => $quoteCheck['message']];
+        }
+
         // ── Save application locally first (generates quote_ref) ──────────
         $appId = $this->saveApplication([
             'connectivity_type'     => $connectivity,
@@ -318,16 +359,7 @@ class KycService
         $savedApp = $this->store->findOne('kyc_applications.json', 'id', $appId);
         $qRef     = $savedApp['quote_ref'] ?? '';
 
-        $_quoteCfg   = $cfg;
-        $_quoteToken = trim($_quoteCfg['crm_auth_token'] ?? '');
-        $_quoteUrl   = trim($_quoteCfg['crm_base_url'] ?? '');
-        $quoteCrm = ($_quoteToken !== '')
-            ? new CrmApiClient(
-                $_quoteUrl !== '' ? $_quoteUrl : rtrim($this->crm->getBaseUrl(), '/'),
-                $_quoteToken,
-                'x-auth-token'
-              )
-            : $this->crm;
+        // ($quoteCrm is built above, before the application is saved — 5.18.99.)
 
         // Notes include new service address prominently so admin knows where to install
         $quoteNotes = "ADDITIONAL SERVICE — EXISTING CUSTOMER\n"
@@ -696,7 +728,8 @@ class KycService
         // mean the same thing, and replaces or drops them where they do not —
         // on the Uganda uCRM organization 2 does not exist and field 1 is
         // "EFRIS TIN". See the class for the measurements.
-        $target = new UcrmClientTarget($this->crm);
+        // 5.18.99 (Uganda): forInstall — the configured quoting organization, never "prefer 2".
+        $target = UcrmClientTarget::forInstall($this->crm, is_array($cfg) ? $cfg : [], $this->gateDataDir());
         $placed = $target->apply($crmPayload);
 
         // ── Retry loop: if CRM rejects username as taken, auto-increment and retry ──
@@ -709,7 +742,8 @@ class KycService
             // Where this customer belongs could not be established, so nothing
             // is sent. Saved below as pending with the reason; the retry asks again.
             $crmSyncError = $placed['error'];
-            error_log("[KycService] CRM client creation not attempted: {$crmSyncError} — saving locally for cron retry");
+            error_log("[KycService] CRM client creation not attempted: {$crmSyncError} — saving locally for cron retry"
+                . (!empty($placed['config']) ? ' (setting ucrm_quote_organization_id)' : ''));   // 5.18.99
             $maxRetries = 0;
         } else {
             $crmPayload = $placed['payload'];
@@ -924,6 +958,7 @@ class KycService
         $quoteItems = self::quoteItems($offer ?: null, is_array($hwCart) ? $hwCart : [], $device ?: null,
             (int)($post['kitQty'] ?? 1), (string)($post['customer_type'] ?? ''), $cfg);
         $quoteCreated = false;
+        $quoteRefused = '';   // 5.18.99: the text when the Uganda quote check refused the quotation
         $quoteId      = null;
         $qSeq         = null;
         $qRef         = null;
@@ -1090,13 +1125,25 @@ class KycService
                 $autoNotes = $qRef . ' | Auto-generated on KYC registration. Sales: ' . $salesPerson
                            . ' | Connection: ' . $connectivity
                            . ' | Priority: ' . ($post['priority'] ?? 'Medium');
+                // 5.18.99 (Uganda): what the create told us — the client's organization and the organizations read —
+                // so the quote check needs no request when uCRM's answer already says where the client is filed.
+                $quoteKnown = null;
+                if (QuoteOrganization::setting(is_array($cfg) ? $cfg : [], $this->gateDataDir())['on']) {
+                    $quoteKnown = [
+                        'organizationId' => is_int($crmResponse['organizationId'] ?? null) ? $crmResponse['organizationId'] : null,
+                        'organizations'  => $target->organizationRows(),
+                        'where'          => 'kyc-new',
+                    ];
+                }
                 $posted = self::postQuote($this->crm, $this->store, (int)$appId, (int)$crmClientId, $quoteItems,
                     ($qNotesPrefix ? $qNotesPrefix . "\n" : '') . $autoNotes, 'Plugin ref: ' . $qRef,
-                    (string)($post['mobile'] ?? ''));
+                    (string)($post['mobile'] ?? ''), $quoteKnown);
                 if ($posted['created']) {
                     $quoteId      = $posted['id'];
                     $quoteCreated = true;
                     if ($posted['ref'] !== '') $qRef = $posted['ref'];
+                } elseif (!empty($posted['refused'])) {
+                    $quoteRefused = (string)$posted['refused'];   // 5.18.99
                 }
             } else {
                 error_log("[KycService] Quote BLOCKED — quote_ref is empty for app #{$appId}. savedApp keys: " . implode(',', array_keys($savedApp ?? [])));
@@ -1171,10 +1218,13 @@ class KycService
             // a success while every create was being refused.
             $successMsg = "Customer saved in the plugin, but NOT in the CRM yet"
                         . ($crmSyncError !== '' ? " ({$crmSyncError})" : '')
-                        . ". It is retried automatically, and an admin can retry it now from Orders. Username: {$username}.";
+                        . (!empty($placed['config'])   // 5.18.99: a retry cannot fix the company setting
+                            ? ". Once that is fixed it goes into the CRM at the next automatic retry. Automatic retries stop about two and a half days after this; then an admin retries it from Orders. Username: {$username}."
+                            : ". It is retried automatically, and an admin can retry it now from Orders. Username: {$username}.");
         } else {
             $successMsg = "Customer registered! CRM ID: {$crmClientId}. Username: {$username}.";
             if ($quoteCreated)   $successMsg .= " Quote #{$quoteId} created.";
+            if ($quoteRefused !== '') $successMsg .= ' ' . $quoteRefused;   // 5.18.99 (Uganda): no quote, and why
             if ($paymentCreated) $successMsg .= " Payment #{$paymentId} posted to UCRM.";
             elseif ($isCash && $checkAmount > 0) $successMsg .= " (Payment could not be auto-posted — add manually in UCRM.)";
         }
@@ -1205,7 +1255,7 @@ class KycService
                 'photo_uploaded'     => $photoUploaded,
                 'id_uploaded'        => $idUploaded,
                 'kit_image_uploaded' => $kitImageUploaded,
-            ],
+            ] + ($quoteRefused !== '' ? ['quote_refused' => $quoteRefused] : []),   // 5.18.99: only when refused
         ];
     }
 
@@ -1622,10 +1672,16 @@ class KycService
      * crm_base_url if given), otherwise with the plugin's own key: the rule
      * the form has always used.
      *
-     * @return array{created:bool,id:mixed,ref:string}
+     * 5.18.99 (Uganda): before the quote is made, the client's company is checked (QuoteOrganization) with the same
+     * client the quote is made with. A customer filed under another company gets no quote: the application records
+     * quote_refused, quote_refused_text and quote_refused_at (never quote_error, never wa_quote_pending), and the
+     * answer carries 'refused' with the text for the agent. $known holds what the create answered (organizationId,
+     * the organizations read, and 'where' for the log), so no request is needed when uCRM already said.
+     *
+     * @return array{created:bool,id:mixed,ref:string,refused?:string}
      */
     public static function postQuote($pluginCrm, $store, int $appId, int $crmClientId, array $items,
-                                     string $notes, string $adminNotes, string $phone): array
+                                     string $notes, string $adminNotes, string $phone, ?array $known = null): array
     {
         $cfg   = $store->load('kyc_config.json') ?? [];
         $token = trim((string)($cfg['crm_auth_token'] ?? ''));
@@ -1633,6 +1689,23 @@ class KycService
         $quoteCrm = ($token !== '')
             ? new CrmApiClient($url !== '' ? $url : rtrim($pluginCrm->getBaseUrl(), '/'), $token, 'x-auth-token')
             : $pluginCrm;
+
+        // 5.18.99 (Uganda, "always company 1"): no quote for a customer filed under another company.
+        $quoteOrg = QuoteOrganization::setting(is_array($cfg) ? $cfg : [],
+            method_exists($store, 'getDataDir') ? (string)$store->getDataDir() : null);
+        if ($quoteOrg['on']) {
+            $where = is_array($known) && is_string($known['where'] ?? null) ? $known['where'] : 'kyc-new';
+            $check = (new QuoteOrganization($quoteCrm, $quoteOrg))->checkClient($crmClientId, $where, $known);
+            if (!$check['ok']) {
+                $text = QuoteOrganization::kycText($check, $crmClientId);
+                $store->updateOne('kyc_applications.json', 'id', $appId, [
+                    'quote_refused'      => $check['code'],
+                    'quote_refused_text' => $text,
+                    'quote_refused_at'   => date('Y-m-d H:i:s'),
+                ]);
+                return ['created' => false, 'id' => null, 'ref' => '', 'refused' => $text];
+            }
+        }
 
         error_log("[KycService] Attempting quote POST for CRM #{$crmClientId} with " . count($items) . " items");
         $resp = $quoteCrm->post("clients/{$crmClientId}/quotes", [

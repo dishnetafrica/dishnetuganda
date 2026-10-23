@@ -10,7 +10,7 @@ declare(strict_types=1);
  * comparisons are skips, never passes.
  *
  *   A  (rewritten for 5.18.98) every file 5.18.98 leaves alone is byte-identical to ec0accd4: the module's shared files
- *      (the sidebar and the CEO page with their ECO Bank links, public.php, tools/set_config.php,
+ *      (the sidebar and the CEO page with their ECO Bank links, public.php, tools/set_config.php until 5.18.99,
  *      includes/post_handlers.php), the phone's More menu and the Cashbook's POST handler among them; includes/routes.php
  *      is ec0accd4's with 5.18.98's declared changed lines (the Uganda export's account names, and its two non-SSP
  *      layouts with Entry state last) and insertions only, each block naming 5.18.98 (and the export hunk sits after the
@@ -209,7 +209,11 @@ $UNTOUCHED = ['includes/styles.php', 'lib/BankStatement.php',
     'lib/SqliteStore.php', 'lib/MigrationRunner.php', 'tabs/admin/photo_manager.php', 'includes/post/post_cashbook.php', 'lib/StaffJobsGate.php',
     'lib/PluginConfig.php', 'lib/currency.php',
     'tabs/sales/more_menu.php',   // 5.18.97: the phone's More menu gets no entry (SPEC §2.8.4: an admin has no menu there)
-    'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'public.php', 'tools/set_config.php', 'includes/post_handlers.php'];   // 5.18.98: as 5.18.97 left them
+    'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'public.php', 'includes/post_handlers.php'];   // 5.18.98: as 5.18.97 left them
+// 5.18.99 (rewritten on purpose, SPEC-quote-company §3): tools/set_config.php leaves this list, as cashbook.php left it in
+// 5.18.98 — 5.18.99 adds the ucrm_quote_organization_id entry and its validation block. It is held instead by
+// tests/test_quote_company.php I3: ce7ac388's bytes (5.18.98 = 5.18.97's file) plus exactly those two. The bank switch's
+// own entry is still asserted below ('bank_screen_enabled' => ['bool',).
 $gitOk = base_of('manifest.json') !== null;
 if (!$gitOk) {
     $skip++;
@@ -219,12 +223,13 @@ if (!$gitOk) {
         $b = base_of($rel);
         is_($b !== null && hash('sha256', $b) === hash('sha256', src($rel)), "{$rel} is byte-identical to " . BK_BASE);
     }
-    // manifest.json: the release's version and nothing else — ec0accd4's bytes with the one version line moved to 5.18.98.
+    // manifest.json: the release's version and nothing else — ec0accd4's bytes with the one version line moved to the
+    // release's (5.18.99: the version pin moves with the release; was 5.18.98).
     $mb = (string)base_of('manifest.json');
-    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.98",', $mb, $mn);
-    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.98',
+    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.99",', $mb, $mn);
+    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.99',
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
-        [1, true, '5.18.98']);
+        [1, true, '5.18.99']);
     // includes/routes.php: the base with 5.18.98's changed lines put in their place; then every line of it is still there, in
     // order, and the extra lines are 5.18.98's, in blocks that each name it, and only these.
     $rb = (string)base_of('includes/routes.php'); $chg = [];
@@ -522,7 +527,7 @@ if ($withMutants) {
         ['the neutraliser without @', [$RT, "strpos(\"=+-@\\t\\r\", \$s[0])", "strpos(\"=+-\\t\\r\", \$s[0])"]],
         ['a changed line in public.php beside the hunks', ['public.php', "    'distributors' => '*admin',", "    'distributors' => null,"]],
         ['the forbidden hunk missing', ['public.php', "            'bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events',\n", '']],
-        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.98",', '    "version": "5.18.97",']],   // 5.18.98
+        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.99",', '    "version": "5.18.97",']],   // 5.18.99 (was 5.18.98)
         ['manifest.json changed beside its version', ['manifest.json', '    "url": "https://dishnetafrica.com",', '    "url": "https://example.test",']],
     ];
     $mainPass = $pass;                                                      // the child runs sections A–H, exactly what this run passed

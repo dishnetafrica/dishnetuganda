@@ -39,7 +39,9 @@ declare(strict_types=1);
  *      every row, with no cb_proj, and refused to a record with no role; and where the export's own settings have no
  *      SSP but the files' rule is off (the reverse of E2), 5.18.97's export, no Entry state
  *   L  South Sudan and the other rule-off books: the new tab, a search, a button and the new export as 5.18.97's
- *   M  The boundary: what 5.18.98 changes and adds against the 5.18.97 release commit
+ *   M  The boundary: what 5.18.98 changes and adds against the 5.18.97 release commit (5.18.99: measured on the 5.18.98
+ *      release commit ce7ac388, from Git; this tree is then held to it — every file 5.18.98 added or changed is
+ *      ce7ac388's, byte for byte, and manifest.json differs from ce7ac388's by its version line only)
  *
  * The Git baseline is ec0accd4 (the 5.18.97 release). When Git cannot supply it, the comparisons that need it are
  * reported as skips, never as passes.
@@ -126,6 +128,7 @@ require_once $root . '/lib/CashbookService.php';
 if (is_file($root . '/lib/CashbookNonCashView.php')) require_once $root . '/lib/CashbookNonCashView.php';
 
 const PL_BASE   = 'ec0accd4';                       // the 5.18.97 release commit
+const PL_REL    = 'ce7ac388';                       // 5.18.99: the 5.18.98 release commit, which M's boundary is measured on
 const PL_ADMIN  = 'RH-Admin One';
 const PL_FIELD  = 'RH-Field One';                    // a field agent (role sales)
 const PL_FIELD2 = 'RH-Field Two';                    // a field accountant
@@ -1854,19 +1857,28 @@ if ($OLDT === null) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-echo "\nM. The boundary: 5.18.98 against the 5.18.97 release commit (" . PL_BASE . ")\n";
-$lsRaw = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' ls-tree --full-tree -r -z ' . escapeshellarg(PL_BASE) . ' -- dishnet-hybrid-sudan/ 2>/dev/null');
-$BASEB = [];
-foreach (explode("\0", $lsRaw) as $ln) {
-    if (preg_match('/^\d+ blob ([0-9a-f]{40})\tdishnet-hybrid-sudan\/(.+)$/s', $ln, $lm)) $BASEB[$lm[2]] = $lm[1];
-}
-$gitShow = function (string $rel) use ($lib): ?string {
-    $o = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' show ' . escapeshellarg(PL_BASE . ':dishnet-hybrid-sudan/' . $rel) . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
+echo "\nM. The boundary: 5.18.98 (" . PL_REL . ") against the 5.18.97 release commit (" . PL_BASE . "), and this tree against " . PL_REL . "\n";
+// 5.18.99 (rewritten on purpose, never weakened): M stated 5.18.98's delta by comparing ec0accd4 with the working tree, so
+// any later release's files read as 5.18.98's. 5.18.98's boundary is now measured on its own release commit, ce7ac388,
+// from Git — exactly the claim, and exact — and the tree is held to that commit for everything 5.18.98 added or changed.
+// Every content check below still reads this tree.
+$lsTree = function (string $rev) use ($lib): array {
+    $raw = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' ls-tree --full-tree -r -z ' . escapeshellarg($rev) . ' -- dishnet-hybrid-sudan/ 2>/dev/null');
+    $out = [];
+    foreach (explode("\0", $raw) as $ln) {
+        if (preg_match('/^\d+ blob ([0-9a-f]{40})\tdishnet-hybrid-sudan\/(.+)$/s', $ln, $lm)) $out[$lm[2]] = $lm[1];
+    }
+    return $out;
+};
+$BASEB = $lsTree(PL_BASE);
+$RELB  = $lsTree(PL_REL);
+$gitShow = function (string $rel, string $rev = PL_BASE) use ($lib): ?string {
+    $o = (string)shell_exec('git -C ' . escapeshellarg($lib) . ' show ' . escapeshellarg($rev . ':dishnet-hybrid-sudan/' . $rel) . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
     if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
     return substr($o, 0, -strlen($m[0]));
 };
-if (count($BASEB) < 300 || $gitShow('manifest.json') === null) {
-    pl_skip('section M', 'Git cannot supply ' . PL_BASE);
+if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 300 || $gitShow('manifest.json', PL_REL) === null) {
+    pl_skip('section M', 'Git cannot supply ' . PL_BASE . ' and ' . PL_REL);
 } else try {
     $blob = function (string $file): ?string { if (!is_file($file)) return null; $c = (string)file_get_contents($file); return sha1('blob ' . strlen($c) . "\0" . $c); };
     $SKIPD = ['tests', 'docs', 'data', '.git', 'prototype', 'dishnet-mikrotik-control-plane', 'node_modules'];
@@ -1876,19 +1888,36 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null) {
     $it = new \RecursiveIteratorIterator(new \RecursiveCallbackFilterIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS),
         function ($f) use ($root, $SKIPD, $top) { return !in_array($top(substr($f->getPathname(), strlen($root) + 1)), $SKIPD, true); }));
     foreach ($it as $f) if ($f->isFile()) $curFiles[] = substr($f->getPathname(), strlen($root) + 1);
-    sort($baseFiles); sort($curFiles);
-    $added = array_values(array_diff($curFiles, $baseFiles));
-    $removed = array_values(array_diff($baseFiles, $curFiles));
+    $relFiles = array_values(array_filter(array_keys($RELB), function ($r) use ($SKIPD, $top) { return !in_array($top($r), $SKIPD, true); }));
+    sort($baseFiles); sort($curFiles); sort($relFiles);
+    $added = array_values(array_diff($relFiles, $baseFiles));
+    $removed = array_values(array_diff($baseFiles, $relFiles));
     $changed = [];
-    foreach ($curFiles as $rel) if (isset($BASEB[$rel]) && $blob($root . '/' . $rel) !== $BASEB[$rel]) $changed[] = $rel;
-    t('5.18.98 adds exactly three files: the tab, its export, and their helpers', $added, ['includes/cashbook_noncash_csv.php', 'lib/CashbookNonCashView.php', 'tabs/accounts/cashbook_noncash.php']);
-    t('and removes none (' . count($curFiles) . ' files outside tests/ and docs/)', [$removed, count($curFiles) > 300], [[], true]);
+    foreach ($relFiles as $rel) if (isset($BASEB[$rel]) && $RELB[$rel] !== $BASEB[$rel]) $changed[] = $rel;
+    t('5.18.98 (' . PL_REL . ') adds exactly three files: the tab, its export, and their helpers', $added, ['includes/cashbook_noncash_csv.php', 'lib/CashbookNonCashView.php', 'tabs/accounts/cashbook_noncash.php']);
+    t('and removes none (' . count($relFiles) . ' files outside tests/ and docs/)', [$removed, count($relFiles) > 300], [[], true]);
     t('outside tests/ and docs/ it changes exactly lib/CashbookService.php, tabs/accounts/cashbook.php, includes/routes.php and manifest.json, besides documents (*.md)',
         array_values(array_filter($changed, function ($r) { return substr($r, -3) !== '.md'; })), ['includes/routes.php', 'lib/CashbookService.php', 'manifest.json', 'tabs/accounts/cashbook.php']);
     $mb = (string)$gitShow('manifest.json');
+    $mr = (string)$gitShow('manifest.json', PL_REL);
     $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.98",', $mb, $mn);
-    t('manifest.json is ' . PL_BASE . "'s with one line changed, its version, 5.18.97 → 5.18.98",
-        [$mn, hash('sha256', $mw) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
+    t('manifest.json is ' . PL_BASE . "'s with one line changed, its version, 5.18.97 → 5.18.98 (in " . PL_REL . ')',
+        [$mn, hash('sha256', $mw) === hash('sha256', $mr)], [1, true]);
+    // This tree against 5.18.98: it removes none of 5.18.98's files, keeps every file 5.18.98 added or changed exactly as
+    // 5.18.98 left it, and moves only the version line of manifest.json (5.18.99; a later release moves this pin on).
+    t('this tree removes none of ' . PL_REL . "'s files (" . count($curFiles) . ' outside tests/ and docs/)',
+        [array_values(array_diff($relFiles, $curFiles)), count($curFiles) > 300], [[], true]);
+    $since = [];
+    $held = array_values(array_filter(array_merge($added, array_values(array_diff($changed, ['manifest.json']))),
+        function ($r) { return substr($r, -3) !== '.md'; }));   // documents (*.md) are not code, as above
+    foreach ($held as $rel) {
+        if ($blob($root . '/' . $rel) !== ($RELB[$rel] ?? 'absent')) $since[] = $rel;
+    }
+    t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
+        [$since, count($held)], [[], 6]);
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', $mr, $mtn);
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.99",
+        [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {
         t("{$rel} is byte-identical to " . PL_BASE, [isset($BASEB[$rel]), $blob($root . '/' . $rel) === ($BASEB[$rel] ?? 'absent')], [true, true]);

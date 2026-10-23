@@ -187,6 +187,7 @@ foreach ($apps as $app) {
         'via_crm'     => true,
         'agent'       => $_agentName,
         'agent_phone' => $_agentPhone,
+        'letterhead_client_id' => (int)($app['crm_client_id'] ?? 0),   // 5.18.99 (read on Uganda only)
     ]);
 
     // v4.11.3: Atomic SQLite dedup -- INSERT OR IGNORE prevents double-send
@@ -328,6 +329,7 @@ foreach ($quotes as $q) {
         'type'    => 'Quotation',
         'via_crm' => true,
         'agent'   => is_string($q['createdBy'] ?? null) ? $q['createdBy'] : '',
+        'letterhead_client_id' => $clientId,   // 5.18.99 (read on Uganda only): that client's own company
     ]);
 
     // v4.11.3: Atomic SQLite dedup for Flow B (manual UCRM quotes)

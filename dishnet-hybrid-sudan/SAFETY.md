@@ -542,6 +542,92 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.99 (2026-10-20) — Uganda app customers and app quotes on one company (organization 1); Sync All admin-only
+
+### Why
+The operator, 20 Oct: Uganda's uCRM holds a second company besides organization 1, and the KYC form's rule "prefer
+organization 2" (`UcrmClientTarget`) filed new app customers there, so their quotation came out under the wrong company.
+The answer: *"always company 1"* — every new app customer is filed under organization 1, and a customer filed under
+another organization is not quoted by the app: the salesperson is told plainly to move the customer to company 1 first.
+Template 1006 becomes organization 1's default quote template in uCRM (the operator's step; no code sends a template
+id). The real price list (uCRM Products) is the next release, not this one.
+
+### What
+- **The gate, Uganda only:** `lib/QuoteOrganization.php` (new). `setting()` reads the tenant exactly as
+  `QuoteTaxLine::applies` does (TenantProfile, with the data directory) AND the quoting organization: the explicit key
+  `ucrm_quote_organization_id`, else `profiles/uganda.json` `quoting.ucrm_organization_id` (1). `0/off/no/none/false`
+  switch all of it off (5.18.98's behaviour); any other value that is not an organization number is `invalid`, and every
+  user of the gate then refuses — never a guess. South Sudan carries no value and reads no other key.
+- **Item 1 — KYC customers in the configured organization:** `UcrmClientTarget::forInstall()` (KycService and the
+  KycCrmSync retry) uses the configured id when uCRM lists it; otherwise C1/C2, marked `config`, nothing posted, the
+  application kept `pending`, and the amber line says what the retry job really does: "Once that is fixed it goes into
+  the CRM at the next automatic retry. Automatic retries stop about two and a half days after this; then an admin
+  retries it from Orders." (`KycCrmSync` counts a configuration refusal like any failure: ten attempts, then `failed`.)
+- **Item 2 — the check before every Uganda app quote** (`QuoteOrganization::checkClient`, GETs only): KYC existing
+  customer (before the first write; the CRM ID canonicalised first), KYC new and the retry (inside `postQuote`; from the
+  create answer when it carries `organizationId`), Send Quotation Lead and Manual (box ticked or not), the LTE create
+  through `createCrmQuote`, and the debug `retry_quote` (409). A client filed elsewhere gets R1 ("Move them to … (#1) in
+  uCRM (or ask an admin to), then make the quote again"); R2–R7 for no organization, no such client, uCRM unreachable,
+  the configured company missing, an invalid setting, a refused key. Nothing is created, written or sent; on KYC new
+  and the retry the application records `quote_refused`, `quote_refused_text`, `quote_refused_at` (three JSON fields,
+  no migration) and Orders shows "⚠ No quotation was made" — until a quote is made for it (`quote_created`), when the
+  block goes. Every refusal line, a CRM ID that is not a number included, goes to PHP's log and `data/plugin.log`.
+- **Item 3 — lead sync:** with `ucrm_lead_organization_id` unset, `UcrmLeadSync` files a lead client under the quoting
+  organization once uCRM lists it, never "the commonest of 50"; otherwise the lead is flagged `quote_org_missing` and
+  one plugin-log line names the lead id. An explicit lead key still wins.
+- **Item 4 — the WhatsApp letterhead** names the client's own organization (`letterhead_client_id`, read on Uganda
+  only); with no client (Cash Proforma, the preview) it is the quoting organization; when uCRM cannot be read the last
+  fallback is the Uganda profile's name, phone and reply-to, never the South Sudan constants.
+- **Item 5 — the fallback quote PDF** on Uganda gets the keys `PluginQuotePdf` reads (`street1`, `phone`, `email`,
+  `website`) from the quote and the client's organization, prints "Kampala, Uganda", `Amount (UGX)` and the organization
+  in "Prepared by", and never prints Juba, `+211`, `0925831111`, `dishnetafrica.com` or a default salesperson. The five
+  new placeholders are replaced FIRST, with the old text as their value elsewhere, so South Sudan's HTML is byte for
+  byte 5.18.98's.
+- **Item 6 — security, every tenant:** `push_products_to_ucrm` ("Sync All") joins `$_gateAdminOnly`: a non-admin gets
+  `403 Admin only.` for `dry_run=1` and `dry_run=0`, before any uCRM read.
+- **Item 7 — a failed uCRM create on Send Quotation is shown** (Uganda): F7a (uCRM answered 4xx), F7k (401/403), F7u
+  (anything uncertain: a curl error or timeout, a 5xx, a 2xx without a quotation number, an exception — "It may have
+  been made, so check the customer's quotes in uCRM before trying again"). No plugin-only reference is sent in its
+  place: no WhatsApp, no lead update, no log row.
+- **`tools/set_config.php`** lists `ucrm_quote_organization_id` and validates it: an off word, or a number uCRM lists
+  (read-only `GET organizations`); anything else is refused and nothing is saved. `--clear` returns it to the profile.
+- **Unchanged:** prices and the product push (except item 6's gate), template ids, how existing uCRM quotes are read,
+  the Cash Proforma (plugin-only), the `quote.add` webhook's own text, the three legacy queue processors, `master.php`,
+  `main.php`, `webhook.php`, `api/index.php`, `public.php`, every other tab. No migration.
+- **Tests only — the fake mail relay** (`tests/fixtures/fake_smtp_server.php`), found by this release's own suite on 20
+  Oct (`test_install_authorisation` H3 counted the messages before a send and got 0, with forty-one sent): it wrote a
+  conversation down only after it had said goodbye, and rewrote its transcript in place, so a test reading it at once
+  could find it missing or empty. It now writes each message down before it answers "queued" and "bye", and replaces the
+  transcript whole (written beside it, then renamed). The transcript ends up exactly as before. `tests/test_fake_smtp_relay.php`
+  (new) holds it, and fails against 5.18.98's relay. No plugin code is involved.
+
+### Operator action
+- None is needed for the setting: the Uganda profile carries organization 1. To change it or switch it off:
+  `php tools/set_config.php --key ucrm_quote_organization_id --value N` (or `--value 0`).
+- In uCRM: make template 1006 organization 1's default quote template, and move app customers filed under the other
+  company to organization 1. Do not make a test quote for a real customer.
+
+### SAFETY
+- Uganda only: never let `ucrm_quote_organization_id`, `letterhead_client_id`, `quote_refused*` or the F7 texts change a
+  request, a text, a PDF or a page where `QuoteOrganization::setting()` is off; read the gate only through that method.
+- Never guess a company: an invalid setting, a configured organization uCRM does not list, or an unreadable client is a
+  refusal, never "prefer 2", "the selected one", "the only one" or "the commonest".
+- The quote check comes before every write and only GETs; it reads with the same client that makes the quote. Every
+  new quote-create path is guarded the same way before it ships.
+- A refusal log line carries ids and organization numbers only — never a customer's name, phone, amount or an
+  organization's name.
+- Every file that names `QuoteOrganization` loads it itself (`require_once`); `PluginQuotePdf`'s five new placeholders
+  stay first in `$replacements`.
+- Keep `push_products_to_ucrm` admin-only on every tenant.
+
+### Known limitations (recorded, accepted)
+- A non-admin who presses Sync All now gets a 403 that the three bulk screens display as "Done… Created: 0"; the write
+  is stopped, and the screens are unchanged so that South Sudan's pages stay byte-identical.
+- The legacy queue processors are not gated; a client they create is still refused at quote time.
+- Orders' Retry does not remake a refused KYC quote: the agent is sent to Send Quotation → Manual, which is checked.
+- A Lead or Manual quote naming a uCRM client cannot be made while uCRM is unreachable (R4), even with the box unticked.
+- An LTE quote create that fails without a refusal keeps the WhatsApp-only cash-proforma fallback.
+
 ## 5.18.98 (2026-10-19) — the Cashbook list shows physical cash only (Uganda); Ecobank and other accounts on their own read-only tab
 
 ### Why

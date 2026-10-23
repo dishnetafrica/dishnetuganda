@@ -19,6 +19,9 @@
  *   6. tools/set_config.php sets it, and the form then makes no call
  *   7. Weakened copies, each caught (skipped with --no-mutants)
  *
+ * 5.18.99: on Uganda the additional service's client (901) is seeded in organization 1, the quoting organization, since
+ * the quote check now reads it before the quote is made (tests/test_quote_company.php tests the refusal).
+ *
  * Every person, number and document is fictitious; nothing leaves the machine.
  */
 declare(strict_types=1);
@@ -114,6 +117,14 @@ $submit = function (string $tree, string $tenant, array $cfg, int $existing = 0,
     $n++;
     $fake('/__test/reset?scenario=' . ($tenant === 'uganda' ? 'uganda' : 'sudan'));
     if ($refuse) $fake('/__test/set', ['refuse_send' => true]);
+    // 5.18.99 (rewritten on purpose): on Uganda an existing customer's quote is made only for a client uCRM files under the
+    // quoting organization (1, profiles/uganda.json), and the check reads the client first. Client 901 is therefore held
+    // by the fake, in organization 1, as the Uganda customer it stands for; South Sudan reads nothing new and is unseeded.
+    // The refusal itself is tested in tests/test_quote_company.php §C.
+    if ($existing > 0 && $tenant === 'uganda') {
+        $fake('/__test/set', ['clients' => [['id' => $existing, 'organizationId' => 1, 'firstName' => 'Test',
+            'lastName' => 'Existing', 'contacts' => []]]]);
+    }
     $dir = $dir ?? "{$tmp}/data{$n}";
     @mkdir($dir, 0777, true);
     $phone = '+256 700 000 6' . str_pad((string)$n, 2, '0', STR_PAD_LEFT);
@@ -151,6 +162,7 @@ echo json_encode(["ok" => !empty($r["success"]), "message" => (string)($r["messa
     return (is_array($j) ? $j : ['ok' => false, 'raw' => implode("\n", $o)]) + [
         'posted' => count($calls('POST', '/clients/\d+/quotes')),
         'sends'  => count($calls('PATCH', '/billing/quotes/\d+/send')),
+        'checked' => $existing > 0 ? count($calls('GET', '/clients/' . $existing)) : null,   // 5.18.99: the quote check's read
         'log'    => substr($logAfter, strlen($logBefore)),
         'errlog' => (string)@file_get_contents($dir . '/php_errors.log'),
         'phone_digits' => preg_replace('/\D/', '', $phone), 'lastname' => $post['lastname'],
@@ -170,6 +182,9 @@ is_($quoteMade($a) && $a['sends'] === 1, 'a new customer\'s quote: made, sent by
 $b = $submit($real, $UG, [], $CLIENT);
 is_($quoteMade($b) && $b['sends'] === 1, 'an existing customer\'s additional service: the same', json_encode($b));
 is_($a['log'] === '' && $b['log'] === '', 'nothing in the plugin\'s log when uCRM accepts');
+// 5.18.99: the control that the seeding above is what the additional service now reads — the quote check asked uCRM for
+// client 901 once, and found it under the quoting organization (else no quote would have been made).
+is_($b['checked'] === 1, '5.18.99: the additional service\'s quote check read client ' . $CLIENT . ' from uCRM once', json_encode($b['checked']));
 
 echo "\n2. Uganda — kyc_quote_send_via_crm = 0: uCRM is not asked; the quote and its WhatsApp stand\n";
 $c = $submit($real, $UG, ['kyc_quote_send_via_crm' => '0']);

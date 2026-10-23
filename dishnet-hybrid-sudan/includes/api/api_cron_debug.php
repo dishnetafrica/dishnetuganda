@@ -1052,6 +1052,15 @@
 
         $quoteCrm = new CrmApiClient(rtrim($crm->getBaseUrl(), '/'), $token, 'x-auth-token');
 
+        // 5.18.99 (Uganda, "always company 1"): no quote for a client filed under another company. Read with the client
+        // the quote would be made with; nothing is written.
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        $_qoRetry = QuoteOrganization::setting(is_array($cfg) ? $cfg : [], isset($dataDir) ? (string)$dataDir : null);
+        if ($_qoRetry['on']) {
+            $_qoCheck = (new QuoteOrganization($quoteCrm, $_qoRetry))->checkClient($crmId, 'debug-retry');
+            if (!$_qoCheck['ok']) $er2($_qoCheck['message'], 409);
+        }
+
         // Build items from app data
         $qItems = [];
         $pkgId = (int)($app['package_choice'] ?? 0);

@@ -19,6 +19,8 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda fallback PDF's organization fields
+
 class QuotePdfSource
 {
     /**
@@ -103,7 +105,12 @@ class QuotePdfSource
 
             require_once __DIR__ . '/PluginQuotePdf.php';
             $gen = new PluginQuotePdf($dataDir, $config);
-            $res = $gen->generate($quote, $client, [
+            // 5.18.99 (Uganda): the keys PluginQuotePdf reads (street1, phone, email, website …), from the quote and the
+            // client's organization in uCRM — read only now, after uCRM served no PDF. Elsewhere: unchanged.
+            $quoteOrg = QuoteOrganization::setting($config, $dataDir);
+            $res = $gen->generate($quote, $client, $quoteOrg['on']
+                ? QuoteOrganization::pdfFields($crm, $quote, $client, $quoteOrg)
+                : [
                 'name'   => (string)($quote['organizationName'] ?? ''),
                 'tax_id' => (string)($quote['organizationTaxId'] ?? ''),
                 'reg_no' => (string)($quote['organizationRegistrationNumber'] ?? ''),

@@ -9,6 +9,7 @@ if (!function_exists('str_ends_with')) { function str_ends_with(string $h, strin
 require_once __DIR__ . '/NotificationService.php';
 require_once __DIR__ . '/CrmApiClient.php';
 require_once __DIR__ . '/QuoteTaxLine.php';   // 5.18.49: what every Uganda quotation says about tax
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization and the quote check
 
 /**
  * QuotationService — DishNet Hybrid v4.4.20
@@ -49,6 +50,12 @@ class QuotationService
     private array $orgMemo = [];
     /** Why uCRM was not the source, when it was not. Empty means it was. */
     private string $orgError = '';
+    /** @var array|null 5.18.99: QuoteOrganization::setting() for this instance, once read */
+    private ?array $quoteOrgSetting = null;
+    /** @var array<int,array> 5.18.99: the quote check's answer per client, so it runs once per client per request */
+    private array $quoteCheckMemo = [];
+    /** @var QuoteOrganization|null 5.18.99 */
+    private $quoteGuard = null;
 
     public function __construct($store, string $dataDir, array $config = [])
     {
@@ -102,6 +109,7 @@ class QuotationService
             'type'    => 'New Connection',
             'via_crm' => true,
             'agent'   => $retailer['name'] ?? '',
+            'letterhead_client_id' => (int)($application['crm_client_id'] ?? 0),   // 5.18.99 (read on Uganda only)
         ]);
 
         // 5.18.54 (docs/46 row 17, D2c): one WhatsApp per quote on Uganda — see claimQuoteWa().
@@ -155,6 +163,12 @@ class QuotationService
         }
 
         $total    = $this->itemsTotal($items);
+        // 5.18.99 (Uganda, "always company 1"): no quote — in uCRM or plugin-only, box ticked or not — for a lead whose
+        // uCRM client is filed under another company. Nothing is written and nothing is sent.
+        if ($this->quoteOrg()['on'] && (int)($lead['crm_client_id'] ?? 0) > 0) {
+            $check = $this->checkQuoteClient((int)$lead['crm_client_id'], 'lead');
+            if (!$check['ok']) return ['ok' => false, 'error' => $check['message'], 'refused' => true];
+        }
         $quoteRef = $this->nextQuoteRef('LEAD');
         $crmQuoteId = null;
         $sentViaCrm = false;
@@ -170,6 +184,10 @@ class QuotationService
                 if (!empty($result['quote_number'])) {
                     $quoteRef = $result['quote_number'];
                 }
+            } elseif ($this->quoteOrg()['on']) {
+                // 5.18.99 (Uganda): the uCRM quote failed, so the salesperson is told — never a plugin-only reference
+                // sent in its place. No WhatsApp, no lead update, no log row.
+                return ['ok' => false, 'error' => $result['error']];
             }
         }
 
@@ -186,6 +204,7 @@ class QuotationService
                 'agent'      => $retailer['name'] ?? '',
                 'note'       => $lead['notes'] ?? '',
                 'follow_up'  => $lead['follow_up_date'] ?? '',
+                'letterhead_client_id' => $crmClientId,   // 5.18.99 (read on Uganda only)
             ]);
             $waSent = $this->sendWA($phone, $msg, 'quote_lead');
         }
@@ -323,10 +342,20 @@ class QuotationService
 
         if (empty($items)) return ['ok' => false, 'error' => 'At least one line item required.'];
 
+        // 5.18.99 (Uganda, "always company 1"): no quote — in uCRM or plugin-only, box ticked or not — for a customer
+        // filed under another company. Nothing is written and nothing is sent.
+        $quoteOrgOn = $this->quoteOrg()['on'];
+        if ($quoteOrgOn && $crmClientId > 0) {
+            $check = $this->checkQuoteClient($crmClientId, 'manual');
+            if (!$check['ok']) return ['ok' => false, 'error' => $check['message'], 'refused' => true];
+        }
+
         // If CRM client ID given, fetch name/phone from CRM if not provided
         if ($crmClientId > 0 && (!$customerName || !$customerPhone)) {
             try {
-                $crmClient = $this->crm->get("clients/{$crmClientId}");
+                $crmClient = ($quoteOrgOn && is_array($this->quoteCheckMemo[$crmClientId]['client'] ?? null))
+                    ? $this->quoteCheckMemo[$crmClientId]['client']   // 5.18.99: the row the check just read
+                    : $this->crm->get("clients/{$crmClientId}");
                 if ($crmClient) {
                     if (!$customerName)  $customerName  = trim(($crmClient['firstName'] ?? '') . ' ' . ($crmClient['lastName'] ?? ''));
                     if (!$customerPhone) $customerPhone = $crmClient['contacts'][0]['phone'] ?? $crmClient['contacts'][0]['value'] ?? '';
@@ -344,7 +373,7 @@ class QuotationService
         $sentViaCrm = false;
 
         if ($createCrm && $crmClientId > 0) {
-            $result = $this->createCrmQuote($crmClientId, $items, $quoteRef, $retailer, $note);
+            $result = $this->createCrmQuote($crmClientId, $items, $quoteRef, $retailer, $note, 'manual');
             if ($result['ok']) {
                 $crmQuoteId = $result['quote_id'];
                 $sentViaCrm = true;
@@ -352,6 +381,10 @@ class QuotationService
                 if (!empty($result['quote_number'])) {
                     $quoteRef = $result['quote_number'];
                 }
+            } elseif ($quoteOrgOn) {
+                // 5.18.99 (Uganda): the uCRM quote failed, so the salesperson is told — never a plugin-only reference
+                // sent in its place. No WhatsApp, no log row.
+                return ['ok' => false, 'error' => $result['error']];
             }
         }
 
@@ -360,6 +393,7 @@ class QuotationService
             'via_crm' => $sentViaCrm,
             'agent'   => $retailer['name'] ?? '',
             'note'    => $note,
+            'letterhead_client_id' => $crmClientId,   // 5.18.99 (read on Uganda only)
         ]);
         // 5.18.54 (docs/46 row 17, D2c): one WhatsApp per quote on Uganda — see claimQuoteWa().
         $waByEvent = $crmQuoteId && !$this->claimQuoteWa((int)$crmQuoteId, $quoteRef, 'plugin_manual');
@@ -413,7 +447,14 @@ class QuotationService
         $followUp   = $opts['follow_up']   ?? '';
         $amountPaid = isset($opts['amount_paid']) ? (float)$opts['amount_paid'] : null;
         $balance    = isset($opts['balance'])     ? (float)$opts['balance']     : null;
-        $co         = $this->companyDetails(isset($opts['client_id']) ? (int)$opts['client_id'] : null);
+        $letter     = isset($opts['client_id']) ? (int)$opts['client_id'] : null;
+        // 5.18.99 (Uganda): the letterhead is the quoted client's own organization. letterhead_client_id is ignored
+        // where the gate is off, so South Sudan reads no client and its text is unchanged.
+        if ($letter === null && $this->quoteOrg()['on']) {
+            $lc = (int)($opts['letterhead_client_id'] ?? 0);
+            if ($lc > 0) $letter = $lc;
+        }
+        $co         = $this->companyDetails($letter);
         $company    = $co['name'];
         $compPhone  = $co['phone'];
         $compEmail  = $co['email'];
@@ -553,11 +594,19 @@ class QuotationService
             'email' => ['email', 'quote_company_email', self::COMPANY_EMAIL],
         ];
         $out = [];
+        // 5.18.99 (Uganda): the last fallback is the Uganda profile's own name, phone and reply-to — never the South
+        // Sudan constants. uCRM, then quote_company_*, still come first.
+        $profileLast = $this->quoteOrg()['on'] ? $this->profileLetterhead() : null;
         foreach ($map as $field => [$orgKey, $cfgKey, $const]) {
             $fromOrg = trim((string)($org[$orgKey] ?? ''));
             $fromCfg = trim((string)($this->config[$cfgKey] ?? ''));
             if ($fromOrg !== '')      { $out[$field] = $fromOrg; $src[$field] = 'ucrm'; }
             elseif ($fromCfg !== '')  { $out[$field] = $fromCfg; $src[$field] = 'config'; }
+            elseif ($profileLast !== null) {
+                $out[$field] = $profileLast[$field]; $src[$field] = 'profile';
+                $warn[] = "{$field} fell through to the Uganda profile's \"{$profileLast[$field]}\" — "
+                        . "uCRM has no {$orgKey} and {$cfgKey} is unset";
+            }
             else {
                 $out[$field] = $const; $src[$field] = 'constant';
                 $warn[] = "{$field} fell through to the built-in default \"{$const}\" — "
@@ -608,9 +657,17 @@ class QuotationService
         $org = [];
         try {
             $orgId = null;
+            $qo    = $this->quoteOrg();
             if ($clientId !== null && $clientId > 0) {
-                $client = $this->crm->get("clients/{$clientId}");
+                $client = ($qo['on'] && is_array($this->quoteCheckMemo[$clientId]['client'] ?? null))
+                    ? $this->quoteCheckMemo[$clientId]['client']   // 5.18.99: the row the quote check read
+                    : $this->crm->get("clients/{$clientId}");
                 $orgId  = isset($client['organizationId']) ? (int)$client['organizationId'] : null;
+            }
+            // 5.18.99 (Uganda, "always company 1"): no client, or none readable — the quoting organization, never
+            // whichever uCRM marks selected.
+            if (($orgId === null || $orgId <= 0) && $qo['on'] && is_int($qo['id'] ?? null) && $qo['id'] > 0) {
+                $orgId = (int)$qo['id'];
             }
             $all = $this->crm->get('organizations') ?? [];
             foreach ((array)$all as $o) {
@@ -637,8 +694,15 @@ class QuotationService
         return $this->orgMemo[$key] = $org;
     }
 
-    public function createCrmQuote(int $crmClientId, array $items, string $quoteRef, array $retailer, string $note = ''): array
+    public function createCrmQuote(int $crmClientId, array $items, string $quoteRef, array $retailer, string $note = '',
+                                   string $where = 'lead'): array
     {
+        // 5.18.99 (Uganda, "always company 1"): no uCRM quote for a client filed under another company. The answer
+        // carries 'refused' only here, only where the gate is on.
+        if ($this->quoteOrg()['on']) {
+            $check = $this->checkQuoteClient($crmClientId, $where);
+            if (!$check['ok']) return ['ok' => false, 'error' => $check['message'], 'refused' => true];
+        }
         $validityDays = (int)($this->config['kyc_quote_validity_days'] ?? self::VALIDITY_DAYS);
         $notesPrefix  = trim($this->config['kyc_quote_notes_prefix']  ?? '');
         $agentNote    = "Ref: {$quoteRef} | Agent: " . ($retailer['name'] ?? 'Agent');
@@ -652,10 +716,12 @@ class QuotationService
             'invoiceItems'        => $items,
         ];
 
+        $madeId = null;   // 5.18.99: kept outside the try, so a failure after uCRM made the quote says so
         try {
             $resp = $this->crm->post('billing/quotes', $payload);
             if (!empty($resp['id'])) {
                 $quoteId    = (int)$resp['id'];
+                $madeId     = $quoteId;
                 // Use UCRM's number (e.g. PF003847) — fetch if not in POST response
                 $ucrmNumber = $resp['number'] ?? null;
                 if (!$ucrmNumber) {
@@ -686,9 +752,83 @@ class QuotationService
                 return ['ok' => true, 'quote_id' => $quoteId, 'quote_number' => $ucrmNumber,
                         'emailed_by_plugin' => $viaPlugin, 'email_error' => $emailErr];
             }
+            if ($this->quoteOrg()['on']) return $this->quoteNotMade($crmClientId, $where, $resp, null, null);   // 5.18.99
             return ['ok' => false, 'error' => 'UCRM did not return quote ID.'];
         } catch (\Throwable $e) {
+            if ($this->quoteOrg()['on']) return $this->quoteNotMade($crmClientId, $where, null, $e, $madeId);   // 5.18.99
             return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * 5.18.99 (Uganda): why a uCRM quote was not made, for the salesperson. Definite only when uCRM answered 4xx;
+     * anything else is uncertain — uCRM may hold the quote, and its quote.add may already have messaged the customer.
+     * lastError is read only when the POST itself returned null: CrmApiClient never clears it after a success.
+     */
+    private function quoteNotMade(int $clientId, string $where, ?array $resp, ?\Throwable $e, ?int $madeId): array
+    {
+        if ($e !== null) {
+            $why = $madeId !== null
+                ? 'uCRM made quotation #' . $madeId . ' but the app could not finish it'
+                : QuoteOrganization::plain($e->getMessage(), 120);
+            $code = 'F7u';
+        } elseif ($resp === null) {
+            $err  = (array)$this->crm->getLastError();
+            $http = (int)($err['http_code'] ?? 0);
+            if (!class_exists('UcrmClientTarget')) require_once __DIR__ . '/UcrmClientTarget.php';
+            $why  = UcrmClientTarget::describe($err);
+            $code = ($http === 401 || $http === 403) ? 'F7k' : (($http >= 400 && $http <= 499) ? 'F7a' : 'F7u');
+        } else {
+            $why  = 'uCRM answered without a quotation number';
+            $code = 'F7u';
+        }
+        $texts = [
+            'F7a' => 'uCRM refused the quotation (' . $why . '), so nothing was sent to the customer. Tell an admin: trying again will not help.',
+            'F7k' => 'uCRM refused the app\'s key, so no quotation was made and nothing was sent to the customer. Tell an admin.',
+            'F7u' => 'uCRM did not confirm the quotation (' . $why . '). It may have been made, so check the customer\'s quotes in uCRM before trying again. Nothing was sent from the app.',
+        ];
+        $line = "[QuotationService] uCRM quote not made for client #{$clientId} ({$where}): {$code} {$why}";
+        try {
+            if (!class_exists('PluginLog')) require_once __DIR__ . '/PluginLog.php';
+            error_log(PluginLog::mask($line));
+            PluginLog::write('quotes', $line);
+        } catch (\Throwable $le) { /* the answer below is what matters */ }
+        return ['ok' => false, 'error' => $texts[$code]];
+    }
+
+    /** 5.18.99: QuoteOrganization::setting() for this instance's configuration and data directory, read once. */
+    private function quoteOrg(): array
+    {
+        if ($this->quoteOrgSetting === null) {
+            $this->quoteOrgSetting = QuoteOrganization::setting($this->config, $this->dataDir);
+        }
+        return $this->quoteOrgSetting;
+    }
+
+    /**
+     * 5.18.99: the quote check (QuoteOrganization), with the client that makes the quote, once per client per request.
+     * The client row it read is kept, so the letterhead and the Manual name/phone fetch do not read it again.
+     */
+    private function checkQuoteClient(int $id, string $where): array
+    {
+        if (isset($this->quoteCheckMemo[$id])) return $this->quoteCheckMemo[$id];
+        if ($this->quoteGuard === null) $this->quoteGuard = new QuoteOrganization($this->crm, $this->quoteOrg());
+        $r = $this->quoteGuard->checkClient($id, $where);
+        $r['client'] = $this->quoteGuard->lastClient();
+        return $this->quoteCheckMemo[$id] = $r;
+    }
+
+    /** 5.18.99: the Uganda profile's letterhead (name, phone, reply-to), the last fallback on the Uganda book. */
+    private function profileLetterhead(): array
+    {
+        try {
+            if (!class_exists('TenantProfile')) require_once __DIR__ . '/TenantProfile.php';
+            $p = TenantProfile::current($this->config, $this->dataDir);
+            return ['name'  => $p->text('email_brand.company_name'),
+                    'phone' => $p->text('email_brand.support_phone'),
+                    'email' => $p->text('email_brand.reply_to')];
+        } catch (\Throwable $e) {
+            return ['name' => '', 'phone' => '', 'email' => ''];
         }
     }
 

@@ -90,7 +90,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_submit'){
     // Saved here but not in uCRM is not a success: it is shown in amber, with
     // the reason, instead of the green that hid every refused create.
     $kycFlash = !$result['success'] ? 'danger'
-              : ((($result['data']['crm_sync_status'] ?? '') === 'pending') ? 'warning' : 'success');
+              : ((($result['data']['crm_sync_status'] ?? '') === 'pending') ? 'warning'
+              : (!empty($result['data']['quote_refused']) ? 'warning' : 'success'));   // 5.18.99: no quote (Uganda) is amber
     flash($result['message'], $kycFlash);
     redirect('?page=dashboard&tab=form');
 }
@@ -107,7 +108,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='kyc_crm_retry'
         ($_POST['force'] ?? '') === '1',
         'admin:' . (string)($admin['name'] ?? $admin['email'] ?? $admin['id'] ?? 'unknown')
     );
-    flash($retry['message'], $retry['ok'] ? 'success'
+    flash($retry['message'], $retry['ok'] ? (!empty($retry['quote_refused']) ? 'warning' : 'success')   // 5.18.99
         : (in_array($retry['status'], ['review', 'busy'], true) ? 'warning' : 'danger'));
     redirect('?page=dashboard&tab=applications');
 }

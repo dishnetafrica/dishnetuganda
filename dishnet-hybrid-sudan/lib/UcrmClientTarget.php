@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/EfrisClientField.php';
+require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization
 
 /**
  * UcrmClientTarget — where a new uCRM client made by this plugin goes, on the
@@ -26,6 +27,15 @@ require_once __DIR__ . '/EfrisClientField.php';
  * standing rule is that the South Sudan install does not change without new
  * configuration.
  *
+ * 5.18.99 (Uganda, the operator, 20 Oct 2026: "always company 1"): built with
+ * forInstall(), on the Uganda tenant the organization is the configured quoting
+ * organization (QuoteOrganization: ucrm_quote_organization_id, else the Uganda
+ * profile's quoting.ucrm_organization_id), checked against this uCRM's list. It is
+ * never "prefer 2": that rule filed new app customers under Uganda's second
+ * company. If the configured one is not listed, or the setting is not a number,
+ * the answer is a refusal marked 'config' — never a guess. Where the gate is off
+ * (South Sudan, or the setting 0/off) the rule below is unchanged, byte for byte.
+ *
  * Nothing is decided without asking. If uCRM cannot be read the answer is an
  * error, nothing is sent, and the application waits for the retry job.
  */
@@ -41,15 +51,40 @@ final class UcrmClientTarget
     private ?array $clientFields = null;
     private string $orgError = '';
     private string $fieldError = '';
+    /** 5.18.99: QuoteOrganization::setting() for this install; [] (the gate off) when built without one. */
+    private array $quoteOrg;
+    /** @var array[]|null 5.18.99: the organization rows read with the ids, for the quote check after the create */
+    private ?array $organizationRows = null;
 
-    public function __construct($crm)
+    public function __construct($crm, array $quoteOrg = [])
     {
         $this->crm = $crm;
+        $this->quoteOrg = $quoteOrg;
     }
 
-    /** @return array{org:?int,error:string} */
+    /** 5.18.99: the target for this install — on Uganda, the configured quoting organization (QuoteOrganization). */
+    public static function forInstall($crm, array $config, ?string $dataDir): self
+    {
+        return new self($crm, QuoteOrganization::setting($config, $dataDir));
+    }
+
+    /** @return array{org:?int,error:string,config?:bool} */
     public function organization(): array
     {
+        // 5.18.99 (Uganda): the configured quoting organization, if this uCRM lists it; otherwise a refusal marked
+        // 'config', because retrying cannot fix it. Never a guess, never "prefer 2".
+        if (!empty($this->quoteOrg['on'])) {
+            $want = $this->quoteOrg['id'] ?? null;
+            if (($this->quoteOrg['error'] ?? '') !== '' || !is_int($want) || $want <= 0) {
+                return ['org' => null, 'error' => 'the company Uganda customers are filed under is not set correctly, so the plugin will not guess which company to file the customer under. Tell an admin', 'config' => true];
+            }
+            $listed = $this->organizations();
+            if ($listed === null) return ['org' => null, 'error' => $this->orgError];
+            if (in_array($want, $listed, true)) return ['org' => $want, 'error' => ''];
+            return ['org' => null, 'error' => 'uCRM does not list the company Uganda customers are filed under (organization #' . $want
+                . '; it lists ' . ($listed === [] ? 'no organization' : 'organization #' . implode(', #', $listed))
+                . '), so the plugin will not guess which company to file the customer under. Tell an admin', 'config' => true];
+        }
         $orgs = $this->organizations();
         if ($orgs === null) return ['org' => null, 'error' => $this->orgError];
         if (in_array(self::LEGACY_ORGANIZATION, $orgs, true)) {
@@ -96,7 +131,9 @@ final class UcrmClientTarget
     public function apply(array $payload): array
     {
         $o = $this->organization();
-        if ($o['error'] !== '') return ['payload' => null, 'error' => $o['error']];
+        if ($o['error'] !== '') {
+            return ['payload' => null, 'error' => $o['error']] + (!empty($o['config']) ? ['config' => true] : []);   // 5.18.99
+        }
         $f = $this->customFields();
         if ($f['error'] !== '') return ['payload' => null, 'error' => $f['error']];
 
@@ -149,7 +186,14 @@ final class UcrmClientTarget
         foreach ($rows as $r) {
             if (is_array($r) && isset($r['id'])) $ids[] = (int)$r['id'];
         }
+        $this->organizationRows = array_values(array_filter($rows, 'is_array'));   // 5.18.99: kept for the quote check
         return $this->organizations = $ids;
+    }
+
+    /** 5.18.99: the organization rows read with the ids (null when none were read); the quote check reuses them. */
+    public function organizationRows(): ?array
+    {
+        return $this->organizationRows;
     }
 
     /** @return array<int,array>|null */
