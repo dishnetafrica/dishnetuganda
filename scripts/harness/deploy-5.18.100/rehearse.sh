@@ -91,7 +91,7 @@ assert pre.count(new_dir) == 1 and pre.count(old_dir) == 0
 for need in ('H98_HARNESS="$H99_DIR/../deploy-5.18.98/rehearse.sh"', 'run99() {', 'run_line99() {', 'fresh99() {', 'nogo99() {',
              'went99() {', 'quiet99() {', 'checkgo99() {', 'audit99() {', 'hits99() {', 'vault99() {', 'quietobs99() {',
              'copy_back99() {', 'release_variant99() {', 'pinned_copy99() {', 'installed99() {', 'epoch99() {', 'rows_add99() {',
-             'secrets99() {', 'tree99() {', 'fp99() {', 'ureq99() {', 'uother99() {', 'tok99() {', 'weak99() {', 'mutant() {',
+             'secrets99() {', 'tree99() {', 'fp99() {', 'ureq99() {', 'uother99() {', 'tok99() {', 'weak99() {',
              'OUT99="$SB/out99"; mkdir -p "$OUT99"; STATE99="$OUT99/state-5.18.99.env"', 'R99="$SB/r99"', 'H99="$SB/rh99"',
              'U99="$SB/ucrm99"', 'trap cleanup99 EXIT', 'LOGW99() {',
              'echo; echo "== 99-7. --redeploy after the rollback, all three quoting flags typed where only Q-G5 needs its =="',
@@ -104,6 +104,9 @@ PY
 # shellcheck disable=SC1090
 . "$H100_PREFIX"
 rm -f "$H100_PREFIX"
+for f100 in mutant checkout_state row_set sqx qj okline failline noteline has fails live data94 kept_state oldname printed qrun; do
+  declare -F "$f100" >/dev/null || { echo "refusing: the rehearsals this one runs did not define $f100()"; exit 2; }
+done
 FAIL_PRE100=$FAILN   # the earlier rehearsals' failures, before this release's own sections: the last line names them
 
 # ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
