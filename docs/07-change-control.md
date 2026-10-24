@@ -14059,3 +14059,34 @@ branch's 5.18.99 (`b1783e66`). It changes 27 files and adds no migration.
 Still the operator's (root `docs/65` §AE.4): his exact role, whether his row has `is_admin` set, and whether it carries
 his own phone; the production values of `wa_inbox_roles`, `alert_whatsapp`, `lead_supervisor_phone` and
 `wa_handover_copy_central`; whether his role holds `all_leads`; and his agreement to the persona.
+
+## 24 Oct — 5.18.99 DEPLOYED (copy 10:39:23 UTC) — PASSED 169 ok / 0 failed / 17 notes
+
+**From the operator's terminal**, pasted on 24 Oct; the script prints no secret and no figure there. Two runs, each its
+own command, as root on the server.
+
+- **The move-list** (`--move-list-only`, begun 10:37:17 UTC): **PASSED, 8 ok, 0 failed, 2 notes**, 10 GETs and nothing
+  else asked of uCRM. Q-G1–Q-G4 and Q-G4's organizations read through the plugin's client: 1 and 2, the quoting
+  organization #1 among them. Q-N2: the app's 9 uCRM clients, **4 under organization #1, 5 under #2**, none not found or
+  unreadable; the 5 are on its sheet by id (`cash-movelist-20261024T103717Z.txt`, 0600).
+  - **The deploy was run straight after it, without moving the five.** By design they stay unquotable by the app
+    (Q-CA3's refusal: *filed under organization #2*) until each is moved to organization #1 in uCRM.
+- **The deploy** (begun 10:37:50 UTC; the backup in `/root/dnb-5.18.99/backup-20261024T103750Z`): every check of stage A
+  held — A0 the 36 files by their pinned sha256, A7, A22/A22L, BR1–BR3, Q-G1–Q-G6, A23 and BK1–BK3, C1–C5, A24, A6 and
+  A11–A17 — then GO; `DEPLOY` typed; **the container serves `ca05ada`**; V1–V13 over the public address; R1–R26,
+  Q-CA1–Q-CA6, Z1 and Z2 after the copy. **PASSED, 169 ok, 0 failed, 17 notes.** uCRM was asked 21 GETs and nothing
+  else.
+  - **Q-CA6 passed on the server** — the throwaway folder `8e38a876` moved into the container's `/tmp` was made, and
+    `set_config` refused `--value disabled` on it with nothing saved: the defect trial 4 found would have been this
+    run's one failure.
+  - **The notes:** A17 (two pending requests under v1.0), Q-G4 (no currency given for organization #1), Q-G5
+    INCONCLUSIVE (no Lead or Manual quote with a uCRM client in 30 days: the first real quote is the evidence), Q-N1–Q-N7,
+    N1–N4, R3 (no `migration.log` line for 087), R19 (not yet conclusive: the retry job had not run since the copy) and
+    Q-CA3's.
+  - **One note not seen in the rehearsal: Q-N3 could not read uCRM's newest quote, `?:http404`**, in stage A and again
+    after the copy (Q-CA3's note). It decides nothing — the check is a comparison of two readings, a note either way —
+    but which request answered 404, and why on this uCRM, is not established. To be looked at, read-only.
+- **Still to come:** `--after-only` after 10:59:23 UTC, then the quarantine's `--check`, each with its own log; the next
+  day after 15:10 UTC, `--after-only` again; the five clients moved to organization #1 in uCRM (the next `--after-only`
+  counts them again, Q-N2); the screens as an administrator; and the first real quote, for a customer under
+  organization #1, as the proof. No test quote for a real customer.
