@@ -246,6 +246,26 @@ sys.stdout.write(s.replace(old, new))' "$2" "$3" | git -C "$REPO" hash-object -w
   c="$(git -C "$REPO" -c user.name=rehearsal -c user.email=rehearsal@example.test commit-tree "$tree" -p "$(git -C "$REPO" rev-parse "$P99")" -m "rehearsal variant: $1")"
   git -C "$REPO" rev-parse --short "$c"
 }
+pinned_copy100() {   # pinned_copy100 NAME COMMIT FILE SHA256 — pinned_copy99's copy of this release's script, pinned to COMMIT
+                     # short and full, with FILE's line re-pinned in PIN_SHA256S ALONE: a file 5.18.100 changes is listed
+                     # twice — the release's sha256 there, 5.18.99's in PREV_CHANGED_SHA256S, which stays as it is (trial
+                     # 2: pinned_copy99 asserts one line in the whole script, so for a changed file it wrote no copy at all)
+  local dst; dst="$(pinned_copy99 "$1" "$2" "$DEPLOY100")"
+  python3 - "$dst" "$3" "$4" <<'PY' || echo "pinned_copy100:$1" >> "$SB/anchor-missing"
+import sys, re
+dst, f, sha = sys.argv[1:4]
+s = open(dst).read()
+head = 'PIN_SHA256S="$(cat <<\'SUMS\'\n'
+assert s.count(head) == 1, 'PIN_SHA256S'
+i = s.index(head) + len(head); j = s.index('\nSUMS\n', i)
+rx = re.compile(r'(?m)^[0-9a-f]{64}  ' + re.escape(f) + r'$')
+assert len(rx.findall(s[i:j])) == 1, f
+assert re.fullmatch(r'[0-9a-f]{64}', sha), sha
+s = s[:i] + rx.sub(lambda m: sha + '  ' + f, s[i:j], count=1) + s[j:]
+open(dst, 'w').write(s)
+PY
+  echo "$dst"
+}
 row_keep100() { php -r '$p = new PDO("sqlite:" . $argv[1]); echo (string)$p->query("SELECT data FROM kyc_config WHERE id = 0")->fetchColumn();' "$DATA/plugin.sqlite3" > "$SB/kyc-row100.kept"; }   # the store row, byte for byte
 row_back100() { php -r '$p = new PDO("sqlite:" . $argv[1]); $p->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $p->prepare("UPDATE kyc_config SET data = ? WHERE id = 0")->execute([file_get_contents($argv[2])]);' "$DATA/plugin.sqlite3" "$SB/kyc-row100.kept"; }
 # The readers: 5.18.99's, taught this release's folders — its run folders in /tmp and the owner checks' code copies (t-i,
@@ -373,7 +393,11 @@ check "$(git -C "$REPO" rev-parse --short "$VAR100^")|$(git -C "$REPO" diff --na
   "control: the variant is cut on 5.18.99 and differs from the release in the class alone"
 fresh100; OUT="$(run100 --answer NO --script "$(pinned_copy99 var100 "$VAR100" "$DEPLOY100")")"
 nogo100 "1e a release whose rule takes an administrator's technician account in, re-pinned short and full but not its sha256: refused at A0" "the pin's files are not the reviewed 5.18.100's by sha256" "$OUT"
-VC100="$(pinned_copy99 var100s "$VAR100" "$DEPLOY100" lib/SalesNumbersAdmin.php "$VSUM100")"
+VC100="$(pinned_copy100 var100s "$VAR100" lib/SalesNumbersAdmin.php "$VSUM100")"
+SNA99_LINE="$(sed -n '/^PREV_CHANGED_SHA256S="$(cat <<.SUMS.$/,/^SUMS$/p' "$DEPLOY100" | grep -E '  lib/SalesNumbersAdmin\.php$')"
+check "$(diff "$DEPLOY100" "$VC100" 2>/dev/null | grep -c '^>')|$(diff "$DEPLOY100" "$VC100" 2>/dev/null | grep -c '^> EXPECTED_PLUGIN_COMMIT')|$(sed -n '/^PIN_SHA256S="$(cat <<.SUMS.$/,/^SUMS$/p' "$VC100" 2>/dev/null | grep -cxF "$VSUM100  lib/SalesNumbersAdmin.php")|$(sed -n '/^PREV_CHANGED_SHA256S="$(cat <<.SUMS.$/,/^SUMS$/p' "$VC100" 2>/dev/null | grep -E '  lib/SalesNumbersAdmin\.php$')" \
+      "3|2|1|$SNA99_LINE" \
+  "control: that copy differs from the script in three lines — the two commit pins and the class's line in the release's sha256 list, now the variant's; 5.18.99's line for it (PREV_CHANGED_SHA256S) as it was"
 fresh100; OUT="$(run100 --answer NO --script "$VC100")"
 nogo100 "1f …its sha256 re-pinned too: A0 lets it through, TN-G1 refuses it as text" "NO-GO (TN-G1): the pin's owner rule is not the reviewed one" "$OUT"
 check "$(has "$OUT" "kind=0")" "yes" "…naming the rule's line it does not find (kind=0)"
@@ -508,6 +532,10 @@ check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )" "
 rm -f "$SB/anchor-missing"   # the control below reads its own record alone
 M="$(weak100 anchorprobe100 no-such-entry 2>/dev/null)"
 check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )" "weak100:no-such-entry " "control on the control: a weakened copy asked for an entry the table does not hold is recorded as such (weak100)"
+rm -f "$SB/anchor-missing" "$M"
+M="$(pinned_copy100 pinprobe100 "$P100" lib/KycService.php "$(printf '0%.0s' $(seq 1 64))" 2>/dev/null)"
+check "$( [ -f "$SB/anchor-missing" ] && tr '\n' ' ' < "$SB/anchor-missing" )|$(grep -c '^0\{64\}  ' "$M" 2>/dev/null)" "pinned_copy100:pinprobe100 |0" \
+  "control on the control: a copy re-pinned for a file the release's sha256 list does not hold (lib/KycService.php, pinned once, among the kept files) is recorded as such, and its line is replaced nowhere (pinned_copy100)"
 rm -f "$SB/anchor-missing" "$M"
 check "$( [ -f "$SB/bad-runs" ] && tr '\n' ' ' < "$SB/bad-runs" )" "" "every run took the options it was given — none answered 'unknown option'"
 OUT="$(run100 --after-only --rehearsal-unknown-option)"
