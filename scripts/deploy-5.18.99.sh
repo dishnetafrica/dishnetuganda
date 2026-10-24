@@ -3479,7 +3479,10 @@ qo_after() {
     grep -qF "'ucrm_quote_organization_id' => ['text'," "$DEST/tools/set_config.php" 2>/dev/null \
       && ok "Q-CA6 the installed tools/set_config.php lists ucrm_quote_organization_id as text" \
       || bad "Q-CA6 the installed tools/set_config.php does not list ucrm_quote_organization_id as text"
-    d="$CHK/qca6-$$"
+    # The throwaway folder is the database owner's own, in the container's /tmp, named as every folder that owner makes
+    # is (ep_run, cih_init): the code copy ($CHK) is root's, made by docker cp, and nobody else may write in it — the
+    # folder inside it could never be made (rehearsal trial 4, 99-4). chk_cleanup removes it at the end in any case.
+    d="/tmp/dnb-$EXPECTED_VERSION-qca6-$TS-$$-$RANDOM"
     if ! dxo mkdir -m 700 "$d"; then bad "Q-CA6 the throwaway data folder for set_config's refusal could not be made in the container's /tmp"
     else
       o="$(docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$d" -e DN_VAULT_FILE="$d/vault.json" "$CONTAINER" sh -c 'php "$1/tools/set_config.php" --key ucrm_quote_organization_id --value disabled 2>&1; echo "rc=$?"' _ "$inst" 2>/dev/null </dev/null)"
