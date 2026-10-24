@@ -13210,3 +13210,852 @@ claims confirmed, 5 corrected; the scratchpad keeps the full report):**
 - **Plan approved:** first a small Uganda-only release, 5.18.99 (the configured quoting organization, the refusal before
   any quote under another, the WhatsApp and fallback PDF naming the client's own company, *Sync All* admin-only, a
   failed uCRM quote shown to the salesperson); then the price-list release. South Sudan unchanged in both.
+
+## 20–24 Oct — 5.18.99: Uganda's app customers and app quotes on one company — every new app customer filed under the quoting organization (uCRM organization 1, from the Uganda profile); no uCRM quote for a client filed under another organization, the salesperson told to move the customer to company 1 first; the WhatsApp quotation and the fallback quote PDF name the client's own company; *Sync All* admin-only on every tenant; a failed uCRM quote shown to the salesperson; one setting, `ucrm_quote_organization_id` (0 or off switches it all off); no migration; the Cashbook, ECO Bank, South Sudan's quoting and Domain B unchanged. `release/5.18.99` = `ca05ada`, cut on live 5.18.98 (`ce7ac38`); `scripts/deploy-5.18.99.sh` pinned to it; the release suite PASSED twice (297 files, 16,534 passed, 0 failed, on `e15d299`, which differs only in the relay's test) and the two new tests twice on `ca05ada` — NOT pushed; dev suite PENDING; rehearsal PENDING; NOT deployed
+
+**Request.** The operator's report of 20 Oct, the findings and the decisions are the entry above (*"quotations from
+the staff app land on another company…"*). The KYC registration form filed every new uCRM client under "organization 2
+if it exists, else the only one", and Uganda's uCRM now holds a second organization, so app customers' quotations came
+out under the wrong company. The operator's answer was *"always company 1"*: every new app customer is filed under
+organization 1, and a customer filed under another organization is not quoted from the app — the salesperson is told to
+move the customer to company 1 first. Organization 1's default quote template was already the business's (V5, the
+operator's 1006), so a quote for a client filed there carries it; no release sends a template id. The plan approved:
+first this small Uganda-only release, then the price-list release (uCRM Products the only list). The design is
+SPEC-quote-company, revision 2, §1–§9. It applied the design review's findings (CC-1…CC-9, SSG-1…SSG-7,
+OPS-1…OPS-13): none was rejected outright, and the three parts not taken each have their reason in §9. Until 5.18.99 is
+live, a client registered from the app is moved by hand and its quote made again from uCRM.
+
+### Release notes
+
+**In plain words.** On the Uganda installation the app now works for one company, uCRM organization 1:
+- **New app customers are filed under organization 1.** That is the KYC registration form, its automatic retry, and an
+  AI lead's client when `ucrm_lead_organization_id` is not set. The old rules ("organization 2 if it exists", "the only
+  one", "the commonest") no longer decide on Uganda, unless the setting below is switched off.
+- **Before every app quote for a uCRM customer, the app reads that customer in uCRM** (reads only), and makes no quote
+  for one filed under another organization. The salesperson reads *"This customer is filed under <company> (#N) in
+  uCRM. Move them to <company> (#1) in uCRM (or ask an admin to), then make the quote again."* Nothing is created,
+  written or sent.
+- **The WhatsApp quotation and the fallback quote PDF name the client's own company**, never South Sudan's details.
+- **Sync All** (the plugin's products pushed to uCRM) **is for administrators only**, on every tenant.
+- **A uCRM quote that fails on Send Quotation is shown to the salesperson**, where 5.18.98 sent a plugin-only quotation
+  in its place without saying so.
+
+Nothing else moves: prices and the product push (Sync All's gate aside), template ids, how existing uCRM quotes are
+read, the Cash Proforma (plugin-only), the `quote.add` webhook's own text, the Cashbook and cash in hand, ECO Bank, the
+salesperson pilot and every other screen. No table, column or index is added, and nothing is migrated.
+
+**The setting, with no command needed.** The quoting organization is `ucrm_quote_organization_id` when it is set, else
+the Uganda profile's new `quoting.ucrm_organization_id`, which is 1. The release therefore works as soon as its files
+are copied, with no window in which the KYC form still files customers under organization 2. To change it, or switch all
+of it off:
+- `tools/set_config.php --key ucrm_quote_organization_id --value N` sets another organization. It reads uCRM's
+  organizations first (a read only) and saves nothing for a number uCRM does not list, or for a value that is neither a
+  number nor an off word;
+- `--value 0` (or `off`, `no`, `none`, `false`) switches it off. Uganda then quotes exactly as 5.18.98 did, except Sync
+  All, which stays admin-only;
+- `--clear` returns it to the profile's 1.
+
+No step of this release sets it. The deploy refuses an off value unless the run carries `--quote-company-off` (Q-G3).
+
+**Where it applies.** One new class, `lib/QuoteOrganization.php`, reads the gate. It is on for the Uganda tenant, read
+exactly as `QuoteTaxLine::applies` reads it (TenantProfile with the data directory; anything unclear reads off), **and**
+a quoting organization. An explicit value that is neither an organization number nor an off word is *invalid*, and every
+user of the gate then refuses: it never guesses. South Sudan carries no value and reads no other key. There, and on a
+Uganda book switched off, every uCRM request, WhatsApp text, PDF, page and store content is 5.18.98's byte for byte
+(`test_quote_company` §S). Two deliberate changes reach South Sudan, both inert to its quoting: Sync All's gate
+(item 6), and `tools/set_config.php` listing the key, which the tenant half of the gate leaves unread there.
+
+By item (SPEC §2):
+
+- **1 — KYC customers in the quoting organization.** `UcrmClientTarget::forInstall()`, used by the KYC form and its
+  retry (`KycCrmSync`), files the client under the quoting organization when uCRM lists it.
+  - When uCRM does not list it, or the setting is invalid, no client is posted. The application is kept `pending` with
+    the reason, as on any client-target refusal today, so the customer the agent typed is not lost.
+  - The agent's amber line then ends *"Once that is fixed it goes into the CRM at the next automatic retry. Automatic
+    retries stop about two and a half days after this; then an admin retries it from Orders."* The retry job counts
+    such a refusal like any failure: ten attempts over about 58 hours, then `failed`.
+- **2 — the check before every Uganda app quote** (`QuoteOrganization::checkClient()`). It sends GETs only, through the
+  same uCRM client that would make the quote (the admin token where one is set). It runs on every path that makes a
+  quote for a uCRM customer — the five create sites and no other; `test_quote_company` I1 proves there is no sixth:
+  - KYC existing customer, before the first write. The CRM ID is first made one canonical number, so a crafted id cannot
+    pass the check on one client and post the quote to another;
+  - KYC new customer and its retry, decided from the create answer's organization when it carries one (no extra
+    request);
+  - Send Quotation, Lead and Manual, **whether or not "Also create UCRM quote" is ticked**;
+  - LTE registration's uCRM quote;
+  - the admins' debug `retry_quote`, which answers 409.
+
+  A client filed under organization 1 costs one `GET clients/{id}`; the organization list is read only to word a
+  refusal. The refusals, each with an exact text: R1 filed under another organization (the operator's instruction, to
+  move the customer); R2 uCRM names no organization; R3 no such customer; R4 uCRM unreachable; R5 the quoting
+  organization is not in uCRM; R6 an invalid setting (no request is sent at all); R7 uCRM refused the app's key
+  (*"trying again will not help"*). Company names are cleaned and carry their number, so two similar companies are told
+  apart. Each refusal writes one line to PHP's log and to `data/plugin.log`, with ids and organization numbers only —
+  never a customer's name, phone or amount, or a company's name.
+  - **On KYC new and the retry the customer already exists in uCRM**, so the agent reads *"The customer is in uCRM as
+    #<id>, but no quotation was made: <reason> Then make the quotation from Send Quotation → Manual with CRM ID <id>. Do
+    not register this customer again, and do not use Existing Customer."* The flash is amber, not green. The
+    application records `quote_refused`, `quote_refused_text` and `quote_refused_at` (three JSON fields on the existing
+    row), and **Orders shows "⚠ No quotation was made"** with that text until a quote is made for it.
+  - **On LTE registration** the subscriber is registered, no cash proforma goes out, and both LTE screens show the
+    refusal with the CRM ID, on Uganda only.
+- **3 — AI leads.** With `ucrm_lead_organization_id` unset, an AI lead's uCRM client is filed under the quoting
+  organization once uCRM lists it, never "the commonest of 50". When uCRM does not list it, the lead is not synced: it
+  is flagged `quote_org_missing`, and one plugin-log line names the lead by its id. An explicit lead key still wins; the
+  deploy refuses one that differs from the quoting organization (Q-G6).
+- **4 — the WhatsApp letterhead.** The WhatsApp quotation names the client's own organization: Lead, Manual, KYC, and
+  the quotation cron's two flows. With no client (the Cash Proforma, the preview) it names the quoting organization, not
+  whichever organization uCRM marks *selected*. When uCRM cannot be read, the last fallback is the Uganda profile's
+  name, phone and reply-to address, never South Sudan's; an explicit `quote_company_*` setting still wins. A quote made
+  in uCRM for a client under another organization is letter-headed with that organization's details: it is that
+  company's quote, made in uCRM, not by the app.
+- **5 — the fallback quote PDF.** It is drawn only when uCRM serves no PDF, on the app's e-mail path or on the
+  `quote.add` webhook's. On Uganda it prints the client's organization's street, city, phone, e-mail and website,
+  *"Kampala, Uganda"*, *Amount (UGX)*, and the organization under *Prepared by*. A line the organization holds nothing
+  for is left out, and it never prints South Sudan's address, phone or website, or a default salesperson. Its five new
+  template fields are filled first, with the old text as their value elsewhere, so South Sudan's PDF is 5.18.98's byte
+  for byte.
+- **6 — Sync All admin-only, every tenant** (a security fix, not tenant-gated). `push_products_to_ucrm` joins the
+  admin-only actions: a non-admin gets `403 Admin only.` for a dry run and for a real one, before any uCRM read. The
+  three bulk screens are not changed (Known limits 1).
+- **7 — a failed uCRM quote shown.** On Send Quotation (Lead or Manual, the box ticked), a uCRM create that fails is
+  shown and nothing else happens: no WhatsApp, no lead update, no quotes-log row, and no plugin-only reference sent in
+  its place.
+  - *F7a*, uCRM refused it (an HTTP 4xx): *"…so nothing was sent to the customer. Tell an admin: trying again will not
+    help."*
+  - *F7k*, uCRM refused the app's key (401 or 403).
+  - *F7u*, anything uncertain: a timeout or another connection failure, a 5xx, an answer with no quotation number, or an
+    error after uCRM returned one. *"…It may have been made, so check the customer's quotes in uCRM before trying again.
+    Nothing was sent from the app."*
+
+  The screens already show the error; no page changed for it.
+- **Tests only — the fake mail relay** (`tests/fixtures/fake_smtp_server.php`), found by this release's own suite on 20
+  Oct (Tests, below). No plugin code is involved.
+
+### Files — 36 against `ce7ac38`: 6 added, 30 changed, none removed
+
+The release is the tree of `quote-99` (`d813d254`), built on the 5.18.98 release commit itself, as one commit: nothing
+ported, nothing differs.
+
+- **Added (6):**
+  - `lib/QuoteOrganization.php` (371 lines): the gate, the check, the organization list, the name cleaner and the
+    PDF's fields;
+  - `tests/test_quote_company.php` (1,957): sections A–I and S of SPEC §5;
+  - `tests/test_quote_company_mutants.php` (544): the weakened copies;
+  - `tests/fixtures/fake_ucrm_quote_org.php` (242): that test's fake uCRM;
+  - `tests/fixtures/quote_company_journey.php` (663): the journey J1–J14, which §S runs on both trees;
+  - `tests/test_fake_smtp_relay.php` (222): the mail relay's checks.
+- **Changed, the code (15):**
+  - `lib/QuotationService.php` (+145 −5): the check on Lead and Manual, the letterhead and its profile fallback, item 7;
+  - `lib/KycService.php` (+90 −17): the check on KYC existing and new, the canonical CRM ID, the refusal's record and
+    text;
+  - `lib/UcrmLeadSync.php` (+50 −3), `lib/UcrmClientTarget.php` (+47 −3), `lib/KycCrmSync.php` (+42 −10): items 1 and
+    3;
+  - `lib/PluginQuotePdf.php` (+44 −5), `lib/QuotePdfSource.php` (+8 −1): item 5;
+  - `includes/api/api_cron_debug.php` (+9), `includes/api/api_crm_misc.php` (+6 −1),
+    `includes/api/api_products_admin.php` (+3), `includes/post/post_kyc.php` (+3 −2), `cron_quote_wa.php` (+2);
+  - `tabs/sales/applications.php` (+6), `tabs/sales/kyc_form.php` (+1 −1), `tabs/lte/lte_dashboard.php` (+1 −1): each
+    hunk inside a condition on the refusal's record or on the gate.
+- **Changed, the configuration (2):** `profiles/uganda.json` (+4: `quoting.ucrm_organization_id` = 1) and
+  `tools/set_config.php` (+32: the key's entry and its validation block).
+- **Changed, the record (1):** `SAFETY.md` (+86): its 5.18.99 entry.
+- **Tests and fixtures changed on purpose (6):**
+  - `tests/fixtures/fake_smtp_server.php` (+29 −5): the relay fix;
+  - `tests/fixtures/fake_ucrm_staff_jobs.php` (+8): `organizations` served only when a seed holds them, else the 404
+    every other test relies on;
+  - `tests/test_notify_kyc_quote_send.php` (+15) and `tests/test_notify_quote_once.php` (+18): their Uganda customers
+    filed under organization 1, each with a control that the check ran and passed;
+  - `tests/test_bank_boundaries.php` (+12 −7): `tools/set_config.php` leaves `$UNTOUCHED` and is held instead by
+    `test_quote_company` I3 (5.18.98's bytes plus exactly the entry and the block); the manifest rule 5.18.97 → 5.18.99;
+  - `tests/test_cashbook_physical_list.php` (+48 −19), section M, rewritten, not weakened: 5.18.98's boundary is
+    measured on its own release commit, `ce7ac388`, from Git, and the tree is held to it for the six files 5.18.98 added
+    or changed.
+- **The version alone (6):** `manifest.json` (5.18.99) and the pins in the five `tests/test_distributor_*.php`.
+- **In the release only:** `test_quote_company` section I measures the delta against `ce7ac388`, where the development
+  branch's copy measures it against `ef143228`, that branch's 5.18.98. `test_bank_boundaries` compares with `ec0accd4`
+  (the development branch's copy with `b32dad87`), and `test_cashbook_physical_list` M with `ce7ac388` and `ec0accd4`
+  (the development branch's copy with `ef143228` and `b32dad87`).
+- **Untouched:** `master.php`, `main.php`, `migrations/`, `webhook.php`, `api/index.php`, `public.php`, the lead post
+  handler, every other tab (the three Sync All screens among them), the three legacy queue processors, the bank module,
+  the Cashbook's files and Domain B. Nothing outside the plugin folder changes. `MANIFEST.md` and the plugin's `docs/`
+  are the bytes 5.18.98 left in place; `MANIFEST.md` still holds the WASender key, to rotate, as 5.18.97's entry
+  records.
+- 36 files changed, 4,714 insertions(+), 86 deletions(-).
+
+### Ancestry
+
+`ca05ada` (5.18.99, release) ← `ce7ac38` (5.18.98, release, live) ← `ec0accd` (5.18.97). It carries the development
+change `ce7ac388..d813d254` on `quote-99`, five commits, its tree equal to the release's:
+- `7230bd12`, the code;
+- `6055301d`, the tests and the weakened copies;
+- `021ace28`, the build review's findings (code-1 to code-5, and the tests');
+- `dcd4c906`, the fake mail relay, tests only;
+- `d813d254`, the relay test's review fixes.
+
+It replaces two release commits that were never pushed. `c9aa49c` held `021ace28`'s tree (34 files: 5 added, 29
+changed), and `e15d299` held `dcd4c906`'s (36 files). `ca05ada` differs from `e15d299` in
+`tests/test_fake_smtp_relay.php` alone. From `c9aa49c` it differs in four files, none of them run on the server: the
+relay, its test, `SAFETY.md` and `test_quote_company`'s declared list.
+
+It was ported onto the development branch, on `c7855c13`, as `dev-99`: three commits, one per release commit.
+- `707dc039` (from `c9aa49ce`). Thirty-one files are taken whole, each checked by blob before and after.
+  - `tools/set_config.php` was ported hunk by hunk. The validation block is placed by its trailing context, because that
+    branch's media-ranges block sits between its two contexts.
+  - `test_bank_boundaries` keeps its base `b32dad87`; `test_cashbook_physical_list` M measures 5.18.98 on `ef143228`
+    against `b32dad87`.
+  - `test_quote_company` section I measures the delta against `ef143228`, with one new assertion, I0, that the tree is
+    at hand.
+  - The version pins move in the ten development-only tests.
+- `b1783e66` (from `e15d299`): the relay fix.
+- `bfd6c33e` (from `ca05ada`): the relay test's review fixes.
+
+That is 46 files against `c7855c13`: the release's 36 and the ten development-only version pins. Thirty-two of the 36
+are the release's blobs exactly; the four that differ (`tools/set_config.php`, `test_bank_boundaries`,
+`test_cashbook_physical_list`, `test_quote_company`) differ only as described.
+
+The script, on `dep-99` (on `c7855c13`): `19861e1d` (pinned to `c9aa49c`), `028f54d7` (re-pinned to `e15d299`),
+`ac7172dc` (the review's findings), `4ee6908e` (re-pinned to `ca05ada`), `df2b3a91` (the pipeline fix) and `8e38a876`
+(the Q-CA6 fix). The rehearsal: `679ea985`, `ac7172dc`, `4ee6908e`, `df2b3a91`, `7cf2204b` (the pipeline fix's
+review), `38aae3a3` and `b30b9b90` (trial 2's findings), in the rehearsal alone.
+
+**What is pushed for the install.** `release/5.18.99` at `ca05ada`, and the development branch fast-forwarded to
+`dep-99` with this entry: the script, its rehearsal and the record. **`dev-99`, the port of the code onto the
+development branch, is not pushed with them:** its suite is not finished (Tests, below). The deploy reads the release
+commit alone, never the development branch's plugin files, so the install does not wait for it.
+
+### Tests
+
+- **The release, the full suite twice** (23 Oct, by the resumable equivalent of `tests/run.sh`), on `e15d299`'s tree in
+  the worktree `rel-5.18.99`. Every file there is `ca05ada`'s but `tests/test_fake_smtp_relay.php`, whose review fixes
+  came after.
+  - Pass A ran 06:43:53–09:45:26 UTC and was resumed once, at 08:44:09. Pass B ran 09:45:26–12:08:06 UTC and was resumed
+    once, at 10:44:22. Each resumption came two hours after the previous command had begun, the runner's limit on one
+    command, and the file it cut off (`test_quote_company_mutants.php` in A, `test_job_notifier.php` in B) was run
+    again from scratch.
+  - **297 files, 16,534 passed, 0 failed**, in each run, file by file identical: 5.18.98's 294 plus the three new tests.
+  - The new and changed tests:
+    - `test_quote_company` 272, and its weakened-copy harness 79;
+    - `test_fake_smtp_relay` 15 (`dcd4c906`'s version);
+    - `test_install_authorisation` 381;
+    - `test_cashbook_physical_list` 496 (493 in 5.18.98, with M rewritten), and its harness 48;
+    - `test_bank_boundaries` 158 (159 in 5.18.98: `tools/set_config.php` is held by `test_quote_company` I3 instead);
+    - `test_notify_kyc_quote_send` 25 and `test_notify_quote_once` 20 (one control each added).
+  - As in 5.18.98: T1 (`test_cash_in_hand_p3b`) 548, T4 (`test_d1_bank_balance_readers`) 34 (the deploy runs it with
+    `--no-mutants`: 20), `test_cash_in_hand_p3b_screens` 155 and `test_pilot_safety` 177. `test_quote_tax_line` skips
+    one comparison (the repository is not beside the worktree), as before.
+- **On `ca05ada` itself** (23 Oct, after the relay test's review fixes): `tests/test_fake_smtp_relay.php` **22 passed,
+  0 failed, twice**; `tests/test_quote_company.php` **272 passed, 0 failed, twice**.
+- **The development branch** (`dev-99` = `bfd6c33e`, in the worktree `dev99`). **dev suite: NOT FINISHED.** Pass A
+  ran 230 of its 309 files on 23 Oct (12,802 passed, 0 failed, every file's exit status 0) and was paused, because no
+  two suites or rehearsals run at once; the other 79 files and pass B are still to run. That is why `dev-99` is not
+  pushed with this release.
+- **`test_quote_company.php`.** All data is invented, and every section starts with a positive control.
+  - **A**, the gate: every resolution case, the vault-only Uganda case, and the tenant half always equal to
+    `QuoteTaxLine::applies()`.
+  - **B**, item 1: `UcrmClientTarget`, `handleNew` through the `post_kyc.php` include, the retry and `runDue`, with the
+    retry window measured.
+  - **C**, item 2: every path, every refusal and failure mode, the same uCRM client as the POST, names cleaned, the log,
+    the canonical CRM ID, the injected log sink and the request counts.
+  - **D–H**, items 3–7: E with uCRM unreadable, F through both PDF paths, G over HTTP, H every outcome of a create.
+  - **I**, inventory and form: every quote POST guarded, every client POST on an allow-list, `set_config`'s behaviour,
+    the declared hunks, no migration, no PHP 8-only syntax, and every file that names `QuoteOrganization` loading it
+    itself.
+  - **§S, byte-identity.** The journey J1–J14 runs on `ce7ac388`'s tree and on this one: South Sudan, South Sudan with
+    the key set, and Uganda switched off by `0` and by `off`. The two JSON documents must be identical byte for byte,
+    after an explicit list of clock and random fields completed by measurement. The gate-on Uganda run differs where it
+    must, the control on the comparison; a copy writing an unlisted field fails it, the control on the normaliser.
+- **Weakened copies: 62 of 62 caught** (W1–W61 and W36b), each at the section the design names. The unchanged copy
+  comes first and passes every section.
+- **The fake mail relay** (`tests/fixtures/fake_smtp_server.php`).
+  - **Found:** the release suite's first pass, on 20 Oct, on `c9aa49c`, failed one assertion.
+    `test_install_authorisation` H3 counted the messages before a send and got 0, with forty-one already sent (380
+    passed, 1 failed). That run was not completed.
+  - **The cause:** the relay wrote a conversation down only after it had said goodbye and closed the connection, and it
+    rewrote its transcript in place (emptied, then written). A test reading the transcript at once could find the newest
+    message missing, or the file empty.
+  - **The fix:** each message is written down before the relay answers *queued* (250), and the conversation before it
+    answers *bye* (221); the transcript is written beside itself and renamed over. It ends up exactly as before.
+  - **`tests/test_fake_smtp_relay.php`**, 22 assertions: messages read the moment the relay answers; a sender that
+    hangs up; the readiness probe; one entry per connection; a reader in a tight loop that must never see a torn file;
+    and the other client shapes the suite uses (a silent probe, AUTH LOGIN with two messages and an RSET, a hang-up
+    after an RSET). **5.18.98's relay fails 4 of them; six weakened copies of the new one fail 1, 3, 11, 1, 2 and 3.**
+  - No plugin code is involved. It very likely explains 5.18.94's Known limits 7, the focused run of the same test on
+    13 Oct that failed *"the technician is told by the e-mail copy alone"* (380 passed, 1 failed). That run's output was
+    not kept, so it is not proved.
+- **The build's review** (`021ace28`): five code findings fixed, and the tests' findings applied.
+  - code-1: a refused `set_config` value leaves the vault untouched;
+  - code-2: Orders' block goes once a quote is made;
+  - code-3: the amber line says when the automatic retries stop;
+  - code-4: a CRM ID that is not a number is logged like every other refusal;
+  - code-5: the documents and tests of the delta are held to a declared list.
+- **PHP versions.** `php -l` ran under PHP 8.4 here; 7.4 and 8.1 are not installed. I6 rejects PHP 8-only syntax by
+  pattern, and the deploy lints every PHP file the release changes or adds with the server's own PHP (8.1), before and
+  after the copy (A2, Q-CA1).
+
+### `scripts/deploy-5.18.99.sh` — 7,278 lines, sha256 `8521883d5a24c144…`
+
+It was derived from `deploy-5.18.98.sh` (6,197 lines) by an asserted-edit tool: 15 line-range edits and 75 text
+replacements, each anchor and count asserted. It was written twice, from a scratch copy and from the source, with
+identical results, then one more asserted replacement (`19861e1d`). Then:
+- `028f54d7` re-pinned it to `e15d299`;
+- `ac7172dc` applied the review's findings by 24 asserted edits (conformance-1, conformance-2, OPS-1, OPS-2);
+- `4ee6908e` re-pinned it to `ca05ada`;
+- `df2b3a91` fixed 24 of its pipelines, a defect the rehearsal's first trial found (*The pipeline fix*, below).
+  `7cf2204b`, that fix's review, changed the rehearsal alone, and so did `38aae3a3` and `b30b9b90` (trial 2's);
+- `8e38a876` (24 Oct) made Q-CA6's throwaway data folder where the database's owner can make it, a defect the
+  rehearsal's fourth trial found (*The Q-CA6 fix*, below).
+
+Static checks at each step to `4ee6908e`: `bash -n`, `php -l` on its PHP, and its pinned sha256 lists against Git (0
+mismatches at `19861e1d`; since `028f54d7`, a checker's 45 passed, 0 failed). At `df2b3a91`: `bash -n` and the
+pipeline checks below. At `8e38a876`: `bash -n`, the pin checker again (45 passed, 0 failed), the pipeline checker (0
+consumed early-exit pipelines) and the Q-CA6 targeted test below. It has run nowhere but in the rehearsal.
+
+Every 5.18.98 check is kept, and so is its method:
+- copies only: `VACUUM INTO` copies of the book and copies of the code in the container's `/tmp`, each PHP process with
+  its own `DN_VAULT_FILE`;
+- the live vault checked around every batch (Z1), and nothing left under `/tmp` (Z2);
+- the 0600 sheet, and the quarantine's order (A14, R19, RB);
+- the pilot and every switch read as found and required unchanged;
+- 5.18.95's fixes read as text, the documents, P0, cash in hand under D2 = A, South Sudan, Domain B and ECO Bank.
+
+**Names.** SPEC §6 names this release's checks Q-G (refusals before the copy), Q-N (notes) and Q-CA (after the copy),
+so that none reads as a 5.18.98 check. 5.18.98's G2, G3, CA2–CA4, C1–C5 and N1–N4 keep their names; its G1 and CA1
+are folded into Q-G1 and Q-CA1. The summary says which is which.
+
+- **A0, the pin.**
+  - `release/5.18.99` is `ca05ada`, short and full (the short one naming no other commit), one commit on `ce7ac38`.
+  - Its delta is exactly the 36 files, 6 added and 30 changed, each by the sha256 the script pins.
+  - It holds no file under `migrations/`; `master.php` and `main.php` are 5.18.98's byte for byte; the checkout holds
+    no untracked file under the plugin folder outside `data/`.
+  - Two more lists, each found in Git by A0. The 30 changed files with **5.18.98's** sha256: what Q-G1 requires before,
+    and what a rollback must put back. And **31 files kept byte for byte**:
+    - ECO Bank's module (its gate, store, CSV reader, screen, post handler and migration 088), its two links, the
+      phone's More menu, the styles, the Cashbook's post handler, `public.php`, the post handlers and the cash-in-hand
+      tool;
+    - 5.18.98's list split: the Cashbook's service, page, tab, export, routes and the tab's class;
+    - the files the quoting code reads and 5.18.99 does not change: `webhook.php`, `api/index.php`, the lead post
+      handler, TenantProfile, QuoteTaxLine, CrmApiClient, PluginLog, ConfigVault, PluginConfig, the South Sudan profile
+      and `tools/org_probe.php`.
+- **Q-G1–Q-G6, the refusals, each before anything changes.**
+  - **Q-G1:** the live plugin is 5.18.98: its version, every file 5.18.99 changes by 5.18.98's pinned sha256, and the
+    31 kept files by theirs.
+  - **Q-G2:** the tenant is Uganda, through the **installed** code on a copy (`TenantProfile::current()` and
+    `QuoteTaxLine::applies()`). The copy holds the configuration files and a vault copy with the book's own keys and the
+    two organization keys, never a credential.
+  - **Q-G3:** the quoting organization, through the **release's** `QuoteOrganization::setting()` on the same copy,
+    printed with where it comes from (the profile or the setting). It refuses:
+    - an invalid value;
+    - an off value, unless the run carries `--quote-company-off`;
+    - beyond the design, configuration files and a store row that disagree, because the AI-lead worker and the KYC path
+      would then quote under different companies.
+  - **Q-G4:** uCRM's organizations, one GET through the plugin's own client and the release's `organizations()`. The log
+    prints one line per organization, `organization #<id> [selected] <currency> <name>`: DishNet's own companies,
+    printed on every quote, never a client. It refuses when the read fails, when the quoting organization is not listed,
+    or when uCRM gives its currency and that is not the book's (a note when uCRM gives none).
+  - **Q-G4b:** when `crm_auth_token` is set, the same read through the token client the KYC paths use, and in the debug
+    retry's shape where its base address differs. The token and `crm_base_url` are the one credential the deploy
+    copies: a 0600 file in a folder of mode 700, deleted by the probe once read and by the script after it, never
+    printed. Z2 checks that no copy is left.
+  - **Q-G5:** the evidence that Send Quotation's uCRM create works, from a copy of the quotes log. Over 30 days it
+    counts N, the Lead and Manual quotes with a uCRM client, and S, those of them with a uCRM quote (counts only). It
+    refuses when 2·S < N, unless the run carries `--quote-create-unproven`; when N = 0 it reads INCONCLUSIVE, a note,
+    never PASS. N − S bounds the failed creates from above: a quote whose box was left unticked cannot be told apart.
+  - **Q-G6:** `ucrm_lead_organization_id` set and not the quoting organization. It refuses unless the run carries
+    `--lead-org-differs`, because every new AI-lead client would then be filed where the check refuses it.
+- **Q-N1–Q-N7, notes, counts only.**
+  - **Q-N1:** the configuration that bears on the check, as set/unset, on/off or equal/differs: the lead organization,
+    `ai_crm_lead_sync`, `crm_auth_token` and how many retailers carry a personal uCRM key, `crm_base_url` and whether
+    its host is the plugin's, the three `quote_company_*` keys, `quote_email_via_plugin` and the `quotation` e-mail
+    switch.
+  - **Q-N2, the move-list:** the app's uCRM clients by organization. These are the distinct CRM ids of the applications,
+    the leads and the quotes log on the copy, one GET each, at most 300, under a time budget. The log prints
+    `org #1: n · org #2: m · not found: j · unreadable: k`; the ids filed outside the quoting organization go to the
+    sheet only.
+  - **Q-N3:** the newest uCRM quote, over a window fixed once in stage A (quotes created in the last two days) and kept
+    in the state file for stage R and `--after-only`.
+  - **Q-N4:** KycCrmSync's queue — pending (how many at ten attempts, and how many whose saved request names another
+    organization), review, failed. The design has no Q-N4; the name was free.
+  - **Q-N5:** `crm_queue.json` by status, what the legacy processors could still create clients from.
+  - **Q-N6:** LTE registrations in 90 days, and how many carry a uCRM id.
+  - **Q-N7:** the non-admin accounts that could open a Sync All screen.
+- **Q-CA1–Q-CA6, after the copy.**
+  - **Q-CA1:** the installed files are `ca05ada`'s by their pinned sha256, the 31 kept files 5.18.98's, and the server's
+    PHP accepts every PHP file the release changes or adds.
+  - **Q-CA2:** `setting()` through the installed code equals Q-G3's answer. Two controls, each in a PHP process of its
+    own: `tenant_profile=south-sudan` reads off, and `ucrm_quote_organization_id=0` reads explicit off.
+  - **Q-CA3:** through the installed code, GETs only.
+    - `organizations()` equals Q-G4's list.
+    - `checkClient()` on a Q-N2 client inside the quoting organization passes, and on one outside is refused; again
+      through the token client when one is set. Both client ids go to the sheet only.
+    - If Q-N2 found none inside, one `GET clients?limit=50` picks one. If that finds none either, the result is
+      INCONCLUSIVE, never PASS, and the first real quote is the proof.
+    - The refusal lines go to the run's own sink, labelled `deploy-check`. Its code copy's plugin log and PHP error log
+      must hold none of them, while a control line made with no sink must land once in each. The live `data/plugin.log`
+      must gain no line labelled as this run's; an unlabelled line naming a probed client is a note (staff working).
+    - The newest quote over Q-N3's window must be Q-N3's. A newer one is a note (staff may be quoting); one no longer
+      listed is *not comparable*.
+  - **Q-CA4:** the installed admin-only list names `push_products_to_ucrm` (read as text), and the route refuses a
+    visitor with no session.
+  - **Q-CA5:** the KYC form, Send Quotation, Quote History, Orders and the LTE dashboard send a visitor with no session
+    to the sign-in page, with no PHP fatal.
+  - **Q-CA6:** the installed profile gives organization 1. The installed `tools/set_config.php` lists the key as `text`,
+    and refuses `--value disabled` on a throwaway data folder, before any uCRM read and before any save.
+- **The GET-only rule.** Every uCRM client the quoting checks hold is wrapped: the plugin's own
+  (`CrmApiClient::fromUcrm`, the live `ucrm.json` read in place) and the token client. A GET is passed on and counted;
+  anything else is counted and refused before it reaches the client. The run's count of other requests must be 0
+  (Q-G4, Q-CA3), and the summary prints both counts. Nothing is ever created, changed or deleted in uCRM (the plugin
+  WhatsApps every new quote), and no key is set.
+- **Carried from 5.18.98, against 5.18.98's code:**
+  - **C1–C5**, on one copy: first 5.18.98's code against 5.18.99's from Git (A23), then 5.18.98's against the installed
+    (CA2). Cash in hand, the list with no key, the partition, the counts, the pending disbursements and the P&L must be
+    old = new, and C5's digests must be unchanged by every read of the new code. **C3 now also requires the list split
+    and the tab's buttons to be the same under both codes.** N1 stays as C3's cross-check from outside the code; CA3
+    (the drift, a note) and CA4 (the Cashbook page, its tab and both exports refuse a visitor with no session) keep
+    their names.
+  - **G2**, rule A through the installed code, and **G3**, both ECO Bank cards show a figure (`--without-bank-balance`
+    its note).
+  - **ECO Bank exactly as it is:** BR1 (the installed plugin is live 5.18.98, every tracked file byte for byte), BR2,
+    BR3, BN5, BK1, BK2, BK3 (the two links, as text), BA1 (088 and every row of its five tables unchanged by the run: an
+    HMAC compared, never printed), BA2, BA4, and V3j (the switch ON, as the operator left it, and unchanged).
+  - T1 548/0 (A22-T1, R25) and T4 20/0 (R24): 5.18.99 changes no file T1 reads, and its three tab pages add no balance
+    reader.
+- **Modes:**
+  - `--check`: stage A alone, GO / NO-GO; nothing is backed up, copied or deployed. On GO it prints the deploy command,
+    with only the flags its checks needed.
+  - **New: `--move-list-only`**, read-only, while 5.18.98 is live: Q-G1–Q-G4 and Q-N2 alone, the move-list on its own
+    sheet. Nothing is backed up, copied, deployed or set.
+  - `--after-only`: the checks again, against stage A's readings in the state file.
+  - `--check-bank`, read-only.
+  - `--rollback` to 5.18.98: one step, after typing `ROLLBACK`.
+  - `--redeploy`, after its own rollback: the six files 5.18.99 adds, which a rollback leaves on disk, are expected.
+  - **New, the operator's explicit choices:** `--quote-company-off` (Q-G3; with a deploy, `--check` or
+    `--move-list-only`), `--quote-create-unproven` (Q-G5) and `--lead-org-differs` (Q-G6), the last two with a deploy or
+    `--check`. Each is recorded only where its check needed it. A refusal prints its own command, alone, with the flag;
+    a flag typed where nothing needed it is said so and left out of the command printed. `--without-bank-balance` is
+    as in 5.18.98.
+- **What it prints and what it never does.**
+  - It prints counts, hashes, organization ids, the organizations' own names (Q-G4) and PASS/FAIL/NOTE. It never prints
+    a figure, a customer's name, phone or amount, an account's name, number or ending, or a credential.
+  - Client ids, the figures and the drift go to one sheet per run, `/root/dnb-5.18.99/cash-<mode>-<stamp>.txt`, mode
+    0600.
+  - It sets no key (`ucrm_quote_organization_id` and ECO Bank's switch among them), applies no migration, creates
+    nothing in uCRM, sends nothing, and renders no page or CSV with a login. **Its summary prints no switch command.**
+
+**The pipeline fix — `df2b3a91`, 23 Oct.** A measured defect, found by the rehearsal's first trial inside an earlier
+release's script (*The trials*, below), and fixed in this script.
+- **The defect.** The script runs under `set -o pipefail`. A pipeline whose last stage exits early (`grep -q`) can kill
+  its writer with SIGPIPE when the writer writes more than once, and bash writes a `printf '%s\n' "$LIST"` once per
+  line (its standard output is line-buffered). The pipeline's status is then 141, which reads as "no match" although
+  the reader matched. A positive check (a match expected) then refuses falsely; a negative one
+  (`… | grep -q PARTIAL && bad`) misses what it looks for, a false pass.
+- **Measured** by a probe outside the repository (`sigpipe_probe2.sh`: bash alone, the script's own options, the match
+  on the first line, 5,000 runs of each form):
+  - the original form falsely failed **1 of 5,000** on a 40-line list, about the size of this pin's file list, and
+    500 of 500 and 137 of 500 on the probe's harder list (100 lines of about 1 KB), written by `printf` and by another
+    command;
+  - the fixed forms (a here-string, and `drained` for any other writer) falsely failed **0 of 5,000** each, on both
+    lists, in the same run;
+  - the fixed forms' statuses for no match, a bad pattern, a late match, a `$`-anchored pattern and an empty value are
+    unchanged (100 runs of each, none different).
+
+  The original's rate on the 40-line list varies from run to run: 1 in 3,000 when first measured, then 0 of 5,000,
+  1 of 5,000 twice, and 3 of 20,000. It was not measured on the server.
+- **24 pipelines fixed:** every pipeline the script's own bash evaluates with an early-exit reader and a judged status.
+  A static checker outside the repository (`check_sigpipe99.py`) finds them by parsing the script; heredoc bodies and
+  the strings `docker exec … sh -c` hands to another shell are not this bash's. It reads 24 on `4ee6908e`'s script
+  (and 2 on its rehearsal), and 0 on both after.
+  - **20 became here-strings** (`grep -q X <<<"$v"` for `printf '%s\n' "$v" | grep -q X`): the same bytes, and one
+    final newline more than `printf '%s' "$v"`, which none of these checks can see (none matches an empty line; R2b,
+    the one anchored with `$`, matches before a final newline as at the end).
+  - **4 with another writer pipe into `drained`**: the two `php -l` lints through `docker exec`, K2's repair-key line
+    and Q-CA4's gate read as text. `drained`, defined once beside `set -uo pipefail`, runs the reader, reads the rest
+    of its input to the end, and returns the reader's status.
+- **What each could have done:**
+  - **20 positive checks**, a false refusal or FAIL, which reads worse than the truth and changes nothing: K2's key
+    line, A0's file lists (three), the two lints (A2, Q-CA1), V12, BA4 (two), CA4, Q-CA4 (two), Q-CA5, V3, R2, R3's
+    086 completeness, 087's three readings and R2b;
+  - **4 negative checks**, a missed detection, a false pass: A0's *"changed, not added"* (an added file passed as
+    changed), A23.5's note wording (an adjustment on an account worded *"not approved"*), and the migration log's
+    `PARTIAL` for 086 and `PARTIAL|ERROR|WARNING` for 087.
+- The script's other 40 early-exit pipelines (`… | head -1` and the like) are read for their value only, and are
+  unchanged. So are the earlier releases' scripts (Known limits 14).
+
+**The Q-CA6 fix — `8e38a876`, 24 Oct.** A measured defect, found by the rehearsal's fourth trial, the first whose
+deploy reached stage R. Q-CA6 runs the installed `tools/set_config.php` with a value that is not a number, on a
+throwaway data folder, and expects the refusal. The folder was made by the database's owner (`dxo mkdir -m 700`, a
+`docker exec -u`) inside the code copy (`$CHK`), which `docker cp` makes root's and the script makes mode 755: nobody
+else may write in it. So the folder could never be made, and every deploy and every `--after-only` would have reported
+Q-CA6 as FAILED after the copy. On the server it is the same: the code copy is made by `docker cp`, as root. The
+rehearsal's fake docker runs `-u` as that user (`setpriv`), as a container does, which is why it showed.
+- **The fix:** the folder is made where every folder the database's owner makes is,
+  `/tmp/dnb-$EXPECTED_VERSION-qca6-$TS-$$-$RANDOM`, as `ep_run`, `b2_run`, `p90_run`, `slr_run` and `cih_init` name
+  theirs. `cih_drop` removes it at once, and `chk_cleanup`'s pattern at the end. One line changed, three of comment
+  added; nothing else.
+- **The targeted test** (`q99/target_qca6.sh`, scratchpad; 14 passed, 0 failed, on `dep-99` and again on the frozen
+  `reh99-t5`). The script's own lines run verbatim — the Q-CA6 block, `dxo`, `cih_drop`, `QO_PHP` and `chk_cleanup`'s
+  command — against release/5.18.99's code, under a fake docker that honours `-u`, the code copy made as the script
+  makes it (root, 755). The frozen script reproduces trial 4's failure. The fixed one passes all three Q-CA6 checks,
+  its folder uid 1000, mode 700, and gone afterwards. With `-u` ignored the frozen script passes: the folder's
+  ownership is the whole cause. A fixed copy without `cih_drop` leaves its folder and is caught, and `chk_cleanup`'s
+  command removes it.
+
+### The rehearsal — `scripts/harness/deploy-5.18.99/rehearse.sh` (1,988 lines, sha256 `79b8621444feeaa7…` at `8e38a876`, with three PHP helpers, `rh99-{oracle,seed,ucrm}.php`)
+
+**What it builds.** It builds the sandbox with 5.18.98's own rehearsal, run up to just before its section 98-10 (the cut
+is asserted), which builds every earlier sandbox from its own rehearsal. By then 5.18.98 has been deployed, rolled back
+and deployed again with `--redeploy`; ECO Bank is switched on in both copies; and a statement is kept on each Ecobank
+card. Then 5.18.98's `--after-only` runs once more after its copy (R19 conclusive), followed by the quarantine's
+`--check`: production's state on the day.
+
+On it, synthetic only:
+- a stand-in uCRM (`rh99-ucrm.php`, on 127.0.0.1, never the network) holding two organizations, a few clients and two
+  quotes, every name, contact and key a marked secret of the rehearsal's;
+- the plugin's `ucrm.json` naming it, and an admin token in the store row;
+- the app's own records of uCRM clients — applications, leads, the quotes log, the legacy queue — added through the
+  installed code's own writer (`rh99-seed.php`);
+- every plant and weakened copy named below.
+
+The stand-in records every request — its method, path, query keys and which key it carried — never a key's value, and
+the rehearsal reads that record after every run.
+
+Then this release's sections, every command run as the summary prints it:
+- 99-pre: the sandbox as production is;
+- 99-0: the controls (the pin, the instruments, the GET-only wrapper, the token copy, and sigpipe99 since `df2b3a91`);
+- 99-c: `--check`;
+- 99-m: `--move-list-only`, and its refusals before uCRM is asked;
+- 99-1: a deploy's quoting refusals, the flags, GETs only, and every new check's weakened copy;
+- 99-2: 5.18.98's carried checks still bite;
+- 99-4: the deploy, through a pseudo-terminal, `DEPLOY` typed;
+- 99-5: `--after-only` as printed, and each after-check's plant and weakened copy;
+- 99-6: the rollback, `ROLLBACK` typed, and a `--redeploy` too soon;
+- 99-7: `--redeploy` with all three quoting flags typed where only Q-G5 needs its own;
+- 99-8: a rollback whose copy leaves 5.18.99's debug route behind;
+- 99-10: the sweeps.
+
+**What it is to show** (its header; not shown yet):
+- **The pin.** The script is pinned to the release commit on `release/5.18.99`, cut on the live release. The delta is
+  exactly the 36 reviewed files, its tree `quote-99`'s, each sha256 as the script pins it, computed from Git; the 31
+  kept files and the 30 changed files' previous forms are byte for byte as pinned; there is no migration.
+- **No status the script judges comes from a pipeline whose reader exits early** (99-0, sigpipe99, since `df2b3a91`):
+  no pipe into `grep -q`, `-m`, `-l` or `-L` on the script's code lines (the option before or after the pattern,
+  `egrep` and `fgrep`, a variable set before the grep), four pipes through `drained`, and `drained` defined once
+  (`0|4|1`). Four weakened copies are each caught: a here-string put back as `printf '%s\n' | grep -qxF` (A0's file
+  list, `1|4|1`), `drained` taken from Q-CA1's `php -l` pipe (`1|3|1`), and R2's line put back as a pipe into
+  `grep '=' -q` and into `LC_ALL=C egrep -q '='` (`1|4|1` each; the reading before `7cf2204b` gave `0|4|1` for both).
+  `head`, `sed …q` and `awk …exit` are not read there: the script's forty were inventoried once, by the checker
+  outside the repository, each read for its value alone, and one added later is not caught.
+- **`--check` is GO** on 5.18.98 as production has it. The stand-in's record shows nothing but GETs, as many as the
+  script counts; the move-list is on the sheet by id, never a name; nothing changes; the token copy is made and gone.
+- **`--move-list-only` PASSES**, with its sheet (0600, ids only) and nothing changed. Each of its refusals holds — Q-G1
+  on a kept file and on a file 5.18.99 changes, Q-G2, Q-G3's three and Q-G4's three — and each one's weakened copy,
+  which turns it into a PASS, is caught.
+- **The quoting refusals:** the quoting organization not in uCRM's list, the admin token refused, Q-G3's off, Q-G5 and
+  Q-G6. Each flag is recorded only where its check needed it. A release that asks uCRM a POST is refused by the pinned
+  sha256, then by the GET-only count; with the wrapper weakened the POST reaches the stand-in (caught).
+- **5.18.98's carried checks still bite:** ECO Bank's gate edited by hand, its switch cleared, a write on a read path,
+  and South Sudan's books read with the rule on.
+- **The deploy PASSES**, `DEPLOY` typed: GETs only, the token copy made twice and gone each time, nothing secret
+  printed.
+- **`--after-only` PASSES**, and each after-check bites, its weakened copy caught: Q-CA1 a kept file; Q-CA2 and both its
+  controls; Q-CA3 a POST, a client moved between its discovery and its check, the token client answering otherwise, the
+  probe's lines in its code copy's logs, and a line of this run's in the live plugin log; Q-CA4–Q-CA6; Z2 a token copy
+  left behind; V3j the switch cleared.
+- **The rollback PASSES:** 5.18.98's files by sha256, the quoting code gone, ECO Bank, its switch and every kept row
+  unchanged. A `--redeploy` before the quarantine's `--check` is refused at A14.
+- **`--redeploy` PASSES** with all three quoting flags typed over a book where only Q-G5 needs its own, the state file
+  recording what each flag did, not that it was typed.
+- **A rollback whose copy leaves 5.18.99's debug route behind FAILs RB twice**, and a copy of RB blind to the quoting
+  code there is caught. With 5.18.99's Sync All gate, Uganda profile and `set_config` left behind, RB FAILs naming all
+  three; over rows 5.18.99 wrote, RB counts them.
+- **The sweeps:** nothing reaches Evolution; no figure, secret, client id, client name or contact, or uCRM key in any
+  output, log, state file or request record (the sheets aside, for ids); no stand-in uCRM, token copy or code copy
+  left; `/tmp`, the host and the checkout as found.
+
+**The earlier releases' scripts are left as found, knowingly** (`7cf2204b`). They are records, each pinned byte for
+byte by its own rehearsal, and this rehearsal runs them again (5.18.98's `--after-only` in 99-pre, the quarantine's
+`--check`s) as the earlier rehearsals do. Only 5.18.99's script was changed, and this rehearsal's own two such
+pipelines (the stand-in's orphan check and the triggers-ready loop), which became here-strings although the rehearsal
+runs with `set -u` alone and neither could return 141. When anything failed, the rehearsal's last line says how many
+of the failures came before this release's own sections (`FAIL_PRE99`) and what such a refusal is (Known limits 15).
+
+**The trials: one clean trial is required** — the operator's rule of 23 Oct: one full rehearsal once the targeted
+tests pass, and a second only with its own reason and approval — **each run from a worktree frozen at a fixed commit**,
+never from a working tree that may be committed into. A failure before 99-pre may be excused only one by one, as an
+inherited A0 false stop shown by the run's kept output and by Git (the classifier, below). Any other failure, any
+failure from 99-pre on, or one that cannot be shown, means the trial is not clean. A clean trial is evidence for the
+rehearsal only: it authorises no push and no deploy by itself.
+- **Trial 1 (23 Oct 12:16–14:08 UTC, of `4ee6908e`, with `REHEARSE_KEEP`): VOID for 5.18.99's own sections**, which
+  it never reached. Its log holds 1,085 ok lines and one FAIL, all in the sections inherited from the earlier
+  rehearsals, and no count of its own.
+  - **The FAIL is where the pipeline defect was found.** It is inherited, from 5.18.94's rehearsal, which the chain runs
+    to build the sandbox, and it is inside the 5.18.94 script itself. Its case 94-2, *"2d a pin whose v1.1 text changed
+    refuses (A17)"*, got *"the pin lacks files 5.18.94 is made of: tests/test_consent_identity.php"* (12:23 UTC): a
+    false STOP before A17 could refuse. It came from A0's MISSING loop over the changed files
+    (`printf '%s\n' "$CHANGED" | grep -qxF -- … && ! … || MISSING=…`). The same variant rebuilt by hand holds that
+    file.
+  - **Why it is void:** it ran from the `dep-99` working tree, and the fix was committed into the same files while it
+    ran (`df2b3a91` at 13:12 UTC, `7cf2204b` at 13:44 UTC). bash reads its script as it runs: once the inherited
+    sections ended, it read the changed file at the old offsets (*"line 151: o98() {,: command not found"* …
+    *"syntax error near unexpected token"*) and stopped.
+  - **The lesson, recorded:** every later trial runs from a frozen worktree at a fixed commit, never from a working
+    tree that may be committed into.
+- **Trial 2 (23 Oct 14:09–16:40 UTC, the worktree `reh99-t2` at `7cf2204b`): 1,257 passed, 177 failed, exit 1.**
+  - **175 were in 5.18.99's own sections, nearly all one cascade.** The sandbox this rehearsal inherits holds
+    `crm_base_url = http://127.0.0.1:1`, a port nothing answers, and the rehearsal had assumed the key unset. So the
+    token client went to the dead port, and every `--check` and the deploy stopped at Q-G4b (*"token client: curl"*).
+    The script was right to stop; the rehearsal's model was wrong. Fixed in the rehearsal alone (`38aae3a3`, its
+    review `b30b9b90`): the key is taken out of both copies in 99-pre, asserted, with a new case that the inherited
+    value makes `--check` NO-GO at Q-G4b, and its control.
+  - **The other 2 were inherited:** 5.18.97's case 6c got *"the pin lacks files 5.18.97 is made of:
+    lib/EcobankDetailsCsv.php(added)"*, an A0 false stop, and its follow-on check failed with it.
+- **A targeted test of Q-G4 and Q-G4b** (23 Oct, `q99/target_qg4b.sh`, scratchpad): `crm_base_url` unset → GO, the
+  stand-in's second path → GO, the dead port → NO-GO at Q-G4b, the control → GO. 28 passed, 0 failed; a weakened copy
+  caught.
+- **Trial 3 (23 Oct 18:21–19:25 UTC, `reh99-t3` at `b30b9b90`): STOPPED** at 19:25 UTC under the operator's budget
+  rule, with 729 ok and 0 FAIL. Its last section was 97-4 (inherited); 5.18.99's sections were not reached. Its partial
+  log is kept.
+- **The inherited-failure classifier** (23 Oct, `q99/classify_inherited.py`, scratchpad; read-only, it changes no count
+  and no exit status). For one kept run it decides whether the STOP is an inherited A0 false stop that Git contradicts:
+  directly, by `git diff` of the pin, or, where the pin was a rehearsal variant gone with its sandbox, by the counts the
+  run printed against the script's expected lists at the frozen commit. **22 of 22** of its tests, after two defects in
+  the classifier itself were found by them and fixed:
+  - trial 1's 2d and trial 2's 6c shown to be inherited false stops;
+  - trial 2's A17 (a planted refusal) and its 5.18.99 Q-G4b failure kept as they are;
+  - ten synthetic cases, a file really missing among them, never excused;
+  - three weakened classifiers fooled, each by the case meant to catch it.
+- **Trial 4 (23 Oct 20:24–22:40 UTC, `reh99-t3` at `b30b9b90`): STOPPED EARLY** at its first FAIL from 99-pre on,
+  in 99-4, the deploy; exit 143 (the watcher's TERM). 1,323 ok and 3 FAIL, none before 99-pre: no inherited false stop
+  occurred. **The first trial whose deploy reached stage R.** The deploy's own tally was 166 ok, 1 failed, 21 notes:
+  *"Q-CA6 the throwaway data folder for set_config's refusal could not be made in the container's /tmp"*. The
+  rehearsal's other two FAILs followed from it. Fixed in the script: *The Q-CA6 fix*, above.
+- **Trial 5 (24 Oct 05:14–08:44 UTC, `reh99-t5` at `8e38a876`, with `REHEARSE_KEEP`): STOPPED by its 3 h 30 min
+  limit in 99-5; exit 124. Not a clean trial.** 1,351 ok and **0 FAIL** in every section it reached, the inherited
+  ones included. It ran about forty minutes slower than trial 4 through the inherited sections, which took 2 h 22 min.
+  - **The deploy (99-4) PASSED: 167 ok, 0 failed, 21 notes**, Q-CA6's three checks among the ok lines; every refusal
+    case of 99-1 and 99-2, `--check` (99-c) and `--move-list-only` (99-m) as designed.
+  - 99-5, the `--after-only` and its weakened copies, had passed 27 checks when the limit came. **99-6 (the rollback),
+    99-7 (`--redeploy` after it), 99-8 and 99-10 (the sweeps) were not reached.**
+  - **The operator chose, on 24 Oct, to deploy on this evidence** (*"give command to deploy"*) rather than run a sixth
+    trial with a longer limit (Known limits 16).
+
+### Runbook
+
+1. **Pushed with this entry, 24 Oct:** `release/5.18.99` at `ca05ada`, and the development branch carrying the script
+   (`8e38a876`), its rehearsal and this record. The port `dev-99` is not pushed (its suite is not finished); the deploy
+   does not need it. Step 3's `git pull origin claude/study-this-jhe2eg` brings the script, and its
+   `git fetch origin release/5.18.99` the release.
+2. **First, if it has not been run: 5.18.98's next-day `--after-only`**, after 15:10 UTC, once the evening WhatsApp
+   (18:00 Kampala) has run on 5.18.98. It is its own command, with its own log to send. It can run only while 5.18.98 is
+   live: it refuses once the container serves anything but `ce7ac38`.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.98.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.98/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **The move-list, before the deploy and as often as needed: `--move-list-only`.** It is read-only and runs only while
+   5.18.98 is live. It lists, on its sheet and by uCRM client id only, the app's customers filed under another
+   organization. Move each listed client to organization 1 in uCRM, then run it again until the list is empty, or until
+   what remains is accepted. While it runs, use none of the screens step 4 names. Send its log file.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.99 && mkdir -p /root/dnb-5.18.99 && bash scripts/deploy-5.18.99.sh --move-list-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/movelist-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Whether uCRM lets staff move a client that has invoices, services or payments, or move one across currencies, is not
+   established. A client uCRM will not move stays unquotable by the app until an admin decides.
+4. **The deploy.** Run it as root on the server, as its own command, outside 14:55–15:10 UTC (the evening WhatsApp,
+   18:00 Kampala). A14 needs a quarantine `--check` that passed after 5.18.98's copy: the one begun 20 Oct 06:24:22 UTC
+   passed. Type `DEPLOY` when asked, and send back **the log file**: never a copy of the terminal, never the cash sheet.
+   While it runs, and during every `--after-only`, `--move-list-only` and the rollback, do not use the Salesperson
+   numbers card, ECO Bank (keep no statement), Send Quotation, the KYC form, `tools/set_config.php` or Settings: a
+   change made then fails the checks that compare before and after. A dry run first is possible but not needed:
+   `--check` runs stage A alone, changes nothing, and on GO prints this same command.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.99 && mkdir -p /root/dnb-5.18.99 && bash scripts/deploy-5.18.99.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   **Expected: PASSED, 0 failed, with notes.**
+   - **Q-N1–Q-N7** are always notes, counts only. Q-N2 is the move-list, its ids on the sheet.
+   - **Q-G5** is a note when it reads INCONCLUSIVE (no Lead or Manual quote with a uCRM client in 30 days); **Q-G4** is
+     a note when uCRM gives no currency for organization 1.
+   - **R19** (not yet conclusive right after the copy), and **A17** if installation requests made under v1.0 are still
+     pending.
+   - On this server, most likely **R3** (`migration.log` holds no line for 087).
+   - **BK2** and **BA2**, when the book has no active staff record that is not an administrator's; **C5**, when
+     5.18.98's own reads move a digest (said, not judged); **CA3**, if the book moved between the before-copy and the
+     after-copy; **Q-CA3**'s notes for staff working (a newer quote, an unlabelled log line).
+   - The book's own notes, where they apply (A23.4–A23.6, R23.9).
+
+   **If a Q-G check refuses, nothing was changed.** Q-G3 (an off value), Q-G5 (creates unproven) and Q-G6 (the lead
+   organization differs) each print their own command with their flag; running it is the operator's explicit choice,
+   never a default. Q-G1, Q-G2, Q-G4 and Q-G4b have no flag. For any failure, or a note you cannot place: send the log
+   file and stop.
+5. **Read the figures and the move-list on the server** with the `less` command the summary prints. Each run has its own
+   sheet. Never paste, copy or send a sheet.
+6. **In uCRM, nothing to do for the template.** Organization 1's default quote template was already V5 (the operator's
+   1006) on 20 Oct, by the operator's screenshot of 10:31 Kampala. Only check that it still is. The deploy's summary and
+   `SAFETY.md` still word this as a step to take (Known limits 9).
+7. **Right after PASSED, at a quiet moment (not between 14:55 and 15:10 UTC), look at the screens**, signed in as an
+   administrator:
+   - the Cashbook and its tab *"🏦 Bank & other accounts"* as before, and cash in hand as before (the Cashbook's card,
+     the landing page, the CEO page's tiles);
+   - ECO Bank as before, both cards with a figure;
+   - UCRM Product Mapping, Subscription Plans and Hardware: Sync All still works for an administrator.
+
+   **Do not make a test quote for a real customer**: the plugin WhatsApps every new quote. The proof is the next real
+   quote: made for a customer filed under company 1, its PDF on template V5. Report only what the screens show.
+8. **At least 20 minutes after the deploy copied the release's files into place** (the summary's *check it* line prints
+   the time), run `--after-only`, then the quarantine's `--check`, each its own command, each with its own log file to
+   send. If R19 still says not yet conclusive, run `--after-only` again after the time it prints.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.99.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+9. **The next day after 15:10 UTC** (18:10 Kampala): `--after-only` again, as in step 8. The script's header says
+   "after 15:00 UTC", the WhatsApp's own time; follow 15:10.
+
+There is no switch to set. No step here sets `ucrm_quote_organization_id`, ECO Bank's switch stays ON as the operator
+left it, and the summary prints no switch command.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, "only if it is ever needed", followed
+by the by-hand put-back, each its own command. On a failure, send the log file and do not roll back on your own unless
+staff or customers are affected.
+
+It is one step. `--rollback` asks you to type `ROLLBACK` before it changes anything, puts 5.18.98 (`ce7ac38`) back
+through `deploy-hybrid.sh` and checks it (RB). There is no switch to clear first. As root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.99.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+What changes and what stays:
+- **Goes:** the quoting organization and the check before every quote. A new KYC customer is filed by 5.18.98's rule
+  again, "organization 2 if it exists" — the cause of the wrong quotes — so new app customers are moved by hand again,
+  as before 5.18.99. Sync All is open to every signed-in account again, and the WhatsApp quotation and the fallback PDF
+  are as before.
+- **Stays, inert, counted by RB:** what 5.18.99 may have written — `quote_refused*` on applications, `quote_org_missing`
+  on leads, and an explicit `ucrm_quote_organization_id`. 5.18.98 reads none of them. Its `tools/set_config.php` cannot
+  clear the key, because it does not list it.
+- **Stays exactly as it is:** the Cashbook's list, its tab and cash in hand (D2 = A); ECO Bank — its switch, screen and
+  links, 088's tables and every statement kept. 5.18.99 wrote nothing to the book, so there is nothing to undo.
+- **Stays:** 5.18.95's fixes, 5.18.94's documents and every other switch.
+- **Stays on disk, read by nothing:** the six files 5.18.99 added.
+
+Afterwards:
+- Run the quarantine's own `--check`, its own command, as the rollback's summary prints it.
+- A later deploy of 5.18.99 uses `--redeploy`, and A14 refuses it until a quarantine `--check` begun after the
+  rollback's copy has passed.
+- If the script cannot run, the deploy's summary also prints the by-hand put-back, its own command.
+
+### Known limits
+
+1. **A non-admin who presses Sync All now gets a 403 that the three bulk screens show as success** (*"Done… Created:
+   0"*, *"Push complete — 0 created"*) on Subscription Plans, Hardware and UCRM Product Mapping. The write is stopped.
+   The screens are unchanged so that South Sudan's pages stay byte-identical; Q-N7 counts who can reach them. Showing
+   the message, as the per-row sync does, is a candidate for a later release.
+2. **The three legacy queue processors are not gated.** Only stale `crm_queue.json` rows reach them (Q-N5 counts them),
+   and a client they create is still refused at quote time.
+3. **Orders' Retry does not remake a refused KYC quote.** The refusal is shown on Orders, and the agent is sent to Send
+   Quotation → Manual, which is checked. A remake from Retry would be a sixth quote path, and would change the retry's
+   "already in the CRM" answer on every tenant.
+4. **A Lead or Manual quote naming a uCRM client cannot be made while uCRM is unreachable** (R4), even with the box
+   unticked; 5.18.98 sent a plugin-only quote then. Clearing the CRM ID on a Manual quote makes a plugin-only quote,
+   letter-headed with company 1.
+5. **An LTE quote create that fails without a refusal** keeps the WhatsApp-only cash-proforma fallback, even when the
+   failure is uncertain. Item 7 covers Send Quotation only.
+6. **Agents' personal uCRM keys are not probed by the deploy.** Q-N1 counts them; a revoked one answers R7 *"Tell an
+   admin"* on the existing-customer path.
+7. **Item 7 makes every failed Send Quotation create a hard stop.** Whether `POST billing/quotes` succeeds on uCRM
+   4.5.33 is bounded only by Q-G5, from the quotes log, where an unticked box and a failed create cannot be told apart.
+   The N and S the deploy measures go into this entry's RESULT before item 7 is relied on.
+8. **Not established** (SPEC §7):
+   - whether uCRM applies the organization's default template to quotes created through the API (the next real quote
+     is the evidence);
+   - whether uCRM lets staff move a client that has invoices, services or payments, or move one across currencies;
+   - whether uCRM's `POST clients` answer carries `organizationId` (when it does not, the check reads the client);
+   - whether LTE registration is used on Uganda (Q-N6 counts it);
+   - the vault's fallback path: where the plugin's parent folder is not writable, two readers in KycService may read
+     different vault files. This cannot be tested as root.
+9. **The template step's wording.** `SAFETY.md`'s 5.18.99 entry and the deploy's summary still say *"make template 1006
+   organization 1's default quote template"*. On 20 Oct it already was (the entry above). There is nothing to do
+   unless it has changed since; the release does not change the text.
+10. **A rollback brings back 5.18.98's "organization 2 if it exists" rule** for new KYC customers. Until 5.18.99 is
+    deployed again, app-registered clients are moved by hand and their quotes made again from uCRM, as the operator
+    decided on 20 Oct.
+11. **The relay fix is tests only.** 5.18.94's Known limits 7 (13 Oct) very likely had the same cause; it is not proved,
+    because that run's output was not kept.
+12. **5.18.98's own `--after-only` cannot run once 5.18.99 is live**, because it requires the container to serve
+    `ce7ac38`. Its next-day check comes first (Runbook step 2); otherwise 5.18.99's next-day `--after-only` covers the
+    evening's run on the new code.
+13. **The evening WhatsApp's window is the operator's to keep**, as in 5.18.96–5.18.98: the script does not refuse to
+    start between 14:55 and 15:10 UTC.
+14. **The earlier releases' scripts keep such pipelines.** They are records, each pinned byte for byte by its own
+    rehearsal, and were not changed. By the checker: 5.18.93's 18, 5.18.94's 16, 5.18.95's 16, 5.18.96's 17, 5.18.97's
+    20 and 5.18.98's 21, and the quarantine's 1.
+    - On the server each was run only for its own purpose: a release's deploy and after-checks, or the quarantine and
+      its `--check`s. A false result at a positive check there reads worse than the truth and shows, and none appears
+      in their recorded results (5.18.94's one refusal, its first run at A18, has its real cause recorded with it).
+    - **Their negative checks could, in principle, have missed a detection**, at the rate measured here (up to about
+      1 in 3,000 per evaluation on a 40-line list; not measured on the server). By a search for the four forms 5.18.99
+      fixed, 5.18.93–5.18.95 hold three each (A0's *"changed, not added"* and the migration log's readings for 086 and
+      087), 5.18.96 and 5.18.98 four (A23.5's wording too) and 5.18.97 five (its 088 reading too); the quarantine's
+      one is a positive check. **A residual, not established to have happened.**
+    - 5.18.98's one unexplained failure in its trial 2, at 95-5f (`0|0|0`: that weakened copy's `--after-only`
+      printed no R23 line at all), is plausibly the same race: a false stop before R23. Not established, because that
+      run's output was not kept.
+15. **Any trial of this rehearsal can still stop falsely in an inherited section**, as trials 1 and 2 did, because it
+    runs the earlier scripts again. Such a stop is not a defect of 5.18.99's, and it is never counted as a pass. It is
+    excused only one by one, when the classifier shows from the run's kept output and from Git that it is an inherited
+    A0 false stop; any other inherited failure, or one that cannot be shown, fails the trial. When anything failed, the
+    last line says how many of the failures came before this release's own sections. An inherited step is not re-run
+    inside a trial: that would need its state put back, which could not be proved here.
+16. **No clean trial; deployed on the operator's decision.** Trial 5 (`8e38a876`) ran out of time in 99-5 with 0
+    failures. The deploy passed in the rehearsal (167 ok, 0 failed), and so did every after-check case it reached. **The
+    rollback to 5.18.98, the `--redeploy` after it, 99-8 and the final sweeps were not rehearsed clean for 5.18.99**:
+    trial 2 ran them, over 175 failures from another cause. The rollback is the script's own, printed after the verdict;
+    if it is ever needed, send its log file. The development branch's suite is not finished either (pass A 230 of 309
+    files, 0 failed), and `dev-99` is not pushed.
+
+## 23 Oct — sales-002 switched on; a technician's number designed
+
+**sales-002, Rogers' salesperson number, was switched on on 23 Oct** through the WhatsApp AI screen's own three actions
+on its Salesperson numbers card, in order: *Verify number*, *Register webhook* and *Switch on*. The operator's earlier
+presses of those buttons had not taken; the cause is not established here. The three actions were then run from the
+browser's console by the signed-in administrator. All three answered OK, and the card then read
+*active · assistant on · connected · number verified*. Nothing was deployed and no code changed; no setting was made by
+hand.
+- 5.18.99's deploy reads the pilot and every switch as it finds them (A5, A5b, A8–A11) and requires only that the run
+  changes none of them (V3–V3j, R2–R22). sales-002 switched on is the state it will find.
+- Runbook step 4 above stands: nothing is pressed on the card while a deploy, an `--after-only`, a `--move-list-only` or
+  a rollback runs.
+
+**A technician's number (Elish): the operator's decisions of 23 Oct** (root `docs/65` §AE, on `tech-100`):
+- **D6:** a new work SIM, not his personal WhatsApp.
+- **D1:** any technician role (`support`, `support_leader`, `support_engineer`) may own a number, labelled
+  *"— technician"* on the card; an admin adds each number for one named person. A technician whose account is flagged
+  `is_admin` is neither offered nor accepted. The salespeople's rule is 5.18.99's, unchanged; the review withdrew a
+  narrowing of it that nobody had decided.
+- **D4:** the line stays a sales line. A recognised customer's support problem is acknowledged, one question is asked,
+  and it is handed to him with the central copy: no troubleshooting, no ticket.
+- **D2:** he owns the leads from his line, and reaches them by a Leads bookmark (`?page=dashboard&tab=leads&f=all`); no
+  menu changes. The 60-minute escalation applies as for a salesperson.
+- **D3, D5, D7, D8 and D9**, told to the operator as the recommended defaults:
+  - hand-overs go to his phone of record, with the central copy on;
+  - the persona is unchanged, and his agreement is still to be confirmed;
+  - one owner list, with labels;
+  - the `wa_inbox_roles` STOP rule widened to the technician roles;
+  - the card keeps its title, *Salesperson numbers*.
+
+**Built as 5.18.100 on `tech-100`:** `66f75a94`, the build, and `ad0d72b8`, the review's findings, on the development
+branch's 5.18.99 (`b1783e66`). It changes 27 files and adds no migration.
+- In the code, only the card's owner rule and its words change (`lib/SalesNumbersAdmin.php`,
+  `tabs/engage/wa_ai_setup.php`). The registry, migration 087 and every runtime reader already ask only "staff-owned and
+  active", and are untouched. The other 25 files are `SAFETY.md`, the manifest, `tests/test_sales_numbers.php` and its
+  new weakened copies, version pins and boundary tests, and the records: root `docs/65` §AE and `docs/66`'s section
+  *"A technician's number"*.
+- South Sudan is untouched; the card is Uganda-only.
+- The version is 5.18.100, not 5.19.0: every reader of the plugin version compares it by string equality, by
+  `sort -V` or by a digit pattern.
+- Static checks only. **It has not been tested or released, and nothing of it is deployed.** It comes after 5.18.99.
+
+Still the operator's (root `docs/65` §AE.4): his exact role, whether his row has `is_admin` set, and whether it carries
+his own phone; the production values of `wa_inbox_roles`, `alert_whatsapp`, `lead_supervisor_phone` and
+`wa_handover_copy_central`; whether his role holds `all_leads`; and his agreement to the persona.
