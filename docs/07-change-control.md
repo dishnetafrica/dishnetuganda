@@ -14086,7 +14086,12 @@ own command, as root on the server.
   - **One note not seen in the rehearsal: Q-N3 could not read uCRM's newest quote, `?:http404`**, in stage A and again
     after the copy (Q-CA3's note). It decides nothing — the check is a comparison of two readings, a note either way —
     but which request answered 404, and why on this uCRM, is not established. To be looked at, read-only.
-- **Still to come:** `--after-only` after 10:59:23 UTC, then the quarantine's `--check`, each with its own log; the next
+- **The quarantine's `--check`** (begun 10:41:53 UTC, two minutes after the deploy, before its `--after-only`):
+  **PASSED, 9 ok, 0 failed, 2 notes** — K2 (the container serves `ca05ada`), K7 (`config.json` removed and made again
+  in `<plugin>/data` since the move: names only, not a database). K13 holds on the retry job's run at 10:30:06 UTC,
+  which came before the copy (10:39:23 UTC): it says the quarantine holds, not yet that it holds under 5.18.99's code.
+  That is R19's question, and the `--after-only` asks it.
+- **Still to come:** `--after-only` after 10:59:23 UTC, then the quarantine's `--check` again, each with its own log; the next
   day after 15:10 UTC, `--after-only` again; the five clients moved to organization #1 in uCRM (the next `--after-only`
   counts them again, Q-N2); the screens as an administrator; and the first real quote, for a customer under
   organization #1, as the proof. No test quote for a real customer.
