@@ -958,17 +958,18 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
 
 <?php if ($_wSN !== null):
       // 5.18.89 (docs/65 §AA.1 item 1): salesperson numbers. Every number in the channel registry, the business number
-      // masked; actions only on a salesperson's number that is not retired.
+      // masked; actions only on a salesperson's number that is not retired. 5.18.100: a technician may own one too —
+      // the owner lists come from SalesNumbersAdmin::owners(), which labels a technician; the title stays.
       $_snRows   = $_wSN->view($_wDetected);
       $_snFree   = $_wLive !== null ? $_wSN->freeInstances() : [];
-      $_snPeople = $_wSN->salespeople();
+      $_snPeople = $_wSN->owners();
       $_snOn     = $_wSN->registryOn();
       $_snGaps   = $_wSN->departmentGaps(); ?>
 <div class="wa-card" id="sales-numbers">
   <h3>Salesperson numbers</h3>
   <div class="wa-note" style="padding:10px 15px">
-    A salesperson's own WhatsApp number. The assistant answers on it as that salesperson's assistant at DishNet, sends
-    hand-overs to them (with a copy to the alert number), and the leads it brings in are theirs.
+    A salesperson's or technician's own WhatsApp number. The assistant answers on it as that person's assistant at
+    DishNet, sends hand-overs to them (with a copy to the alert number), and the leads it brings in are theirs.
     A number is added switched off; pair it, verify its number and register its webhook, then switch it on.
     <?php if (!$_snOn): ?>
       <br><b>The channel registry is off</b> (multi_number_channels_enabled), so nothing is received or answered on these
@@ -1073,7 +1074,7 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
     <div class="wa-row"><span class="d">Every instance in Evolution is already a number's. Create one under
       Connect &amp; webhooks, then add it here.</span></div>
   <?php elseif (!$_snPeople): ?>
-    <div class="wa-row"><span class="d">There is no active salesperson to give a number to.</span></div>
+    <div class="wa-row"><span class="d">There is no active salesperson or technician to give a number to.</span></div>
   <?php else: ?>
     <form method="post" class="wa-row"><?= $_csrf ?>
       <input type="hidden" name="wa_action" value="sn_add">
@@ -1083,10 +1084,10 @@ $_csrf    = function_exists('csrfField') ? csrfField() : '';
         <?php foreach ($_snFree as $_fi): ?><option value="<?= h($_fi) ?>"><?= h($_fi) ?></option><?php endforeach; ?>
       </select>
       <select name="owner_staff_id" required>
-        <option value="">— salesperson —</option>
+        <option value="">— salesperson or technician —</option>
         <?php foreach ($_snPeople as $_pid => $_pname): ?><option value="<?= (int)$_pid ?>"><?= h($_pname) ?></option><?php endforeach; ?>
       </select>
-      <input type="text" name="display_name" maxlength="80" placeholder="Shown to staff, e.g. Sales — Kampala 2">
+      <input type="text" name="display_name" maxlength="80" placeholder="Shown to staff, e.g. Sales — Kampala 2, or Sales — Gulu (technician)">
       <button class="wa-btn p" type="submit">Add, switched off</button>
     </form>
   <?php endif; ?>

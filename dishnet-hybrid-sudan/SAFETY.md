@@ -542,6 +542,76 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.100 (2026-10-23) — a technician can own a WhatsApp number on the WhatsApp AI screen (Uganda); the number stays a sales line; no migration
+
+### Why
+The operator, 23 Oct: a technician's own WhatsApp number, answered by the assistant, for sales and support — and he
+stays a technician on install jobs. The owner's staff role was checked in one place only, the Salesperson numbers card
+(`SalesNumbersAdmin`), which offered and accepted the three sales roles alone; the registry, migration 087 and every
+runtime reader (LineOwner, the hand-over, the lead's owner, OwnedLead, the internal-number guard, the automated-send
+policy) ask only "staff-owned and active". The operator's decisions (docs/65 §AE): **D6** a new work SIM, not his
+personal WhatsApp; **D1** any technician role, labelled, and no technician's account flagged `is_admin` offered or
+accepted; **D4** the number's role stays `sales`; **D2** the leads from his number are his, reached by a bookmark; D3,
+D5, D7, D8 and D9 as recommended.
+
+### What
+- **The owner rule, one helper:** `SalesNumbersAdmin::TECHNICIAN_ROLES = ['support', 'support_leader',
+  'support_engineer']` beside the untouched `SALES_ROLES` — written out, never `StaffDirectory::JOB_ROLES`, which holds
+  `admin`. `ownerKind()` reads the staff row alone: `sales` (an active row with a sales role — 5.18.99's rule,
+  unchanged), `technician` (an active row with a technician role and no `is_admin`), or `''` for an inactive row, an
+  `is_admin` technician and every other role. `owners()` (was `salespeople()`) is the list both forms
+  offer, by name, a technician labelled "— technician"; `eligibleOwner()` (was `salesperson()`) refuses at the add and
+  at a new owner: "Choose the person the number belongs to.", "That staff member is not active.", "A number belongs to
+  a salesperson (role sales, sales_staff or field_agent) or a technician (role support, support_leader or
+  support_engineer) whose account is not an administrator's."
+- **Unchanged:** the row the card writes — role `sales`, owner `staff`, portfolio `own`, hand-over `owner`, assistant
+  on, added **disabled**, "Sales — <name>", id `sales-NNN` — `ACTIONS`, the switch-on gates and the department rules;
+  and everything after the card: ChannelRegistry, migration 087, StaffDirectory (his role, so his install jobs),
+  LineOwner, AlertService, AiLeadService, OwnedLead, InternalNumbers, AutomationPolicy, the worker, the brain and its
+  persona, the webhook. No migration.
+- **The card's words** (`tabs/engage/wa_ai_setup.php`): the intro, the empty list, the owner placeholder and the
+  display-name example name both groups; the add hint and the taken-instance refusal say "person". The title stays
+  *Salesperson numbers* (D9).
+- **No narrowing for salespeople (after review):** the `is_admin` test binds a technician only. An `is_admin` account
+  with a sales role is offered and accepted as in 5.18.99: D1 (*"Admin accounts stay excluded"*) was put to the
+  operator about technicians, and narrowing salespeople would be its own decision. U9 pins both (an is_admin
+  salesperson offered and accepted; an is_admin technician refused); X-h and X-k weaken each.
+- **Tests only:** `tests/test_sales_numbers.php` U9 and S rewritten on purpose, U10 new (in process, and in the
+  sandbox: the worker, his lead, the alert loop's seed, his job messages), R new (this release's boundary against
+  ca05ada5, the 5.18.99 release commit); `tests/test_sales_numbers_mutants.php` (new, X-a … X-k);
+  `tests/test_quote_company.php` section I measures 5.18.99's delta on ca05ada5 and holds the tree to it; the version
+  pins.
+
+### Operator action
+- Before his number is added (docs/66, "A technician's number"): his staff row active, role `support`,
+  `support_leader` or `support_engineer`, no `is_admin`, his own phone on it; his role holding no *All Leads (Admin
+  View)* grant and his own module list without `all_leads` (else he sees every lead); `alert_whatsapp` set and not his
+  phone; `wa_inbox_roles` unset or naming no role that owns a number; the new work SIM in his phone. Any of these not
+  so: stop and ask — never change his role, his `is_admin` flag or his phone to fit the card.
+- Only after the deploy run has finished: add the number (owner "<name> — technician"), pair, verify, register the
+  webhook, switch on with the assistant off, then docs/66 step 5 with its loop test (5.5). Then section 6, its
+  cross-visibility row checked as another technician too: no number's owner, salesperson or technician, sees another
+  owner's leads.
+- Give him the bookmark `?page=dashboard&tab=leads&f=all`, and tell him that only a call logged there stops the
+  60-minute escalation: Call Now (or the lead's Call), an outcome, then Save & Next Lead.
+
+### SAFETY
+- Never reuse `StaffDirectory::JOB_ROLES` for the owner rule, never add `admin` to `TECHNICIAN_ROLES`, and read the rule
+  only through `ownerKind()`. Its `is_admin` test is a technician's only: the sales rule stays 5.18.99's.
+- The card never writes a staff row: a number's owner keeps his role, his phone and his install jobs.
+- A technician's number is a sales line (`'role' => 'sales'`): no role field on the card and no new channel role
+  without a migration and its own release — 087's CHECK texts are verified by the deploy scripts.
+- `wa_inbox_roles` must name no role that owns a number — a sales role or, now, a technician role — or one owner reads
+  another's customers.
+
+### Known limitations (recorded, accepted)
+- The assistant does not troubleshoot on his number and opens no ticket: every support question from a recognised
+  customer is handed to him with the central copy (D4). A caller it does not recognise gets the sales posture.
+- His phone's menu has no Leads link: the bookmark (D2). The 60-minute escalation goes to `lead_supervisor_phone`, else
+  the first `is_admin` account with a phone; a WhatsApp reply does not stop it.
+- Every active technician is on both owner lists (D1 is wider than one person); each number is still one admin's
+  choice, with a reason and a trail row, added switched off.
+
 ## 5.18.99 (2026-10-20) — Uganda app customers and app quotes on one company (organization 1); Sync All admin-only
 
 ### Why

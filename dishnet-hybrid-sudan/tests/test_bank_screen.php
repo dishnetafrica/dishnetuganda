@@ -1356,9 +1356,19 @@ if ($withCompare) {
             $a = bk_read_norm($bs, 'boss', $qs); $b = bk_read_norm($ss, 'boss', $qs);
             $i = 0; $n = min(strlen($a), strlen($b)); while ($i < $n && $a[$i] === $b[$i]) $i++;
             is_($a === $b, "South Sudan, {$lbl}: identical to e35eccee (5.18.96)", "first difference at byte {$i} of " . strlen($a) . '/' . strlen($b));
-            if ($lbl === 'the CEO page') $verCtl = [substr_count($a, 'v<version>') >= 1, substr_count($b, 'v<version>') >= 1, preg_match('/\bv5\.18\.9\d\b/', $a . $b)];
+            if ($lbl === 'the CEO page') {
+                // 5.18.100, after review: built from both trees' own manifest versions, as bk_norm reads them, so the control
+                // sees this tree's label whatever its digit count (v5.18.100 is not v5.18.9x); a tree with no version counts.
+                $left = 0;
+                foreach ([$base, $root] as $vt) {
+                    $vm = json_decode((string)@file_get_contents($vt . '/manifest.json'), true);
+                    $vv = (string)($vm['information']['version'] ?? '');
+                    $left += $vv === '' ? 1 : (int)preg_match_all('/\bv' . preg_quote($vv, '/') . '\b/', $a . $b);
+                }
+                $verCtl = [substr_count($a, 'v<version>') >= 1, substr_count($b, 'v<version>') >= 1, $left];
+            }
         }
-        t('control: the version label, each tree\'s own, is on both CEO pages and normalised (no v5.18.9x left)', $verCtl ?? null, [true, true, 0]);
+        t('control: the version label, each tree\'s own, is on both CEO pages and normalised (neither tree\'s version left)', $verCtl ?? null, [true, true, 0]);
         $a = bk_read_norm($bs, 'boss', 'page=dashboard&tab=bank'); $b = bk_read_norm($ss, 'boss', 'page=dashboard&tab=bank');
         $b2 = str_replace($gateOff, '', $b);
         $b2 = (string)preg_replace('#<div style="text-align:right;font-size:9px;color:\#cbd5e1;font-weight:700;letter-spacing:\.5px;margin-bottom:4px;user-select:none;">.*?</div>#s', '', $b2, 1);

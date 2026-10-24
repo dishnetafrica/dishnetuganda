@@ -1904,7 +1904,8 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     t('manifest.json is ' . PL_BASE . "'s with one line changed, its version, 5.18.97 → 5.18.98 (in " . PL_REL . ')',
         [$mn, hash('sha256', $mw) === hash('sha256', $mr)], [1, true]);
     // This tree against 5.18.98: it removes none of 5.18.98's files, keeps every file 5.18.98 added or changed exactly as
-    // 5.18.98 left it, and moves only the version line of manifest.json (5.18.99; a later release moves this pin on).
+    // 5.18.98 left it, and moves only the version line of manifest.json (5.18.99; a later release moves this pin on —
+    // 5.18.100 did: neither 5.18.99 nor 5.18.100 touches 5.18.98's six files, and 5.18.99 moved only the version line).
     t('this tree removes none of ' . PL_REL . "'s files (" . count($curFiles) . ' outside tests/ and docs/)',
         [array_values(array_diff($relFiles, $curFiles)), count($curFiles) > 300], [[], true]);
     $since = [];
@@ -1915,8 +1916,8 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     }
     t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
         [$since, count($held)], [[], 6]);
-    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', $mr, $mtn);
-    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.99",
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.100",', $mr, $mtn);
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.100",
         [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {
@@ -1952,8 +1953,44 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     $keep = ['tests/test_cash_in_hand_p3b.php', 'tests/test_cash_in_hand_p3b_south_sudan.php', 'tests/test_cash_in_hand_p3b_mutants.php',
              'tests/test_d1_bank_balance_readers.php', 'tests/test_cashbook_currency.php'];
     foreach (glob($root . '/tests/test_bank_*.php') ?: [] as $f) if (basename($f) !== 'test_bank_boundaries.php') $keep[] = 'tests/' . basename($f);
-    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files)',
-        array_values(array_filter($keep, function ($rel) use ($BASEB, $blob, $root) { return !isset($BASEB[$rel]) || $blob($root . '/' . $rel) !== $BASEB[$rel]; })), []);
+    // 5.18.100 (rewritten on purpose, never weakened): tests/test_bank_screen.php carries one declared change, its CEO-page
+    // version control built from both trees' own manifest versions (a three-digit 5.18.100 is not v5.18.9x). It is held to
+    // 5.18.97's bytes with that change taken out: each of its two pieces there exactly once, then the file byte for byte.
+    $bsRevert = [
+        [<<<'TXT'
+            if ($lbl === 'the CEO page') {
+                // 5.18.100, after review: built from both trees' own manifest versions, as bk_norm reads them, so the control
+                // sees this tree's label whatever its digit count (v5.18.100 is not v5.18.9x); a tree with no version counts.
+                $left = 0;
+                foreach ([$base, $root] as $vt) {
+                    $vm = json_decode((string)@file_get_contents($vt . '/manifest.json'), true);
+                    $vv = (string)($vm['information']['version'] ?? '');
+                    $left += $vv === '' ? 1 : (int)preg_match_all('/\bv' . preg_quote($vv, '/') . '\b/', $a . $b);
+                }
+                $verCtl = [substr_count($a, 'v<version>') >= 1, substr_count($b, 'v<version>') >= 1, $left];
+            }
+TXT
+        , <<<'TXT'
+            if ($lbl === 'the CEO page') $verCtl = [substr_count($a, 'v<version>') >= 1, substr_count($b, 'v<version>') >= 1, preg_match('/\bv5\.18\.9\d\b/', $a . $b)];
+TXT
+        ],
+        [<<<'TXT'
+        t('control: the version label, each tree\'s own, is on both CEO pages and normalised (neither tree\'s version left)', $verCtl ?? null, [true, true, 0]);
+TXT
+        , <<<'TXT'
+        t('control: the version label, each tree\'s own, is on both CEO pages and normalised (no v5.18.9x left)', $verCtl ?? null, [true, true, 0]);
+TXT
+        ],
+    ];
+    $kept = function (string $rel) use ($root, $blob, $bsRevert): ?string {
+        if ($rel !== 'tests/test_bank_screen.php') return $blob($root . '/' . $rel);
+        if (!is_file($root . '/' . $rel)) return null;
+        $c = (string)file_get_contents($root . '/' . $rel);
+        foreach ($bsRevert as [$new, $old]) { if (substr_count($c, $new) !== 1) return null; $c = str_replace($new, $old, $c); }
+        return sha1('blob ' . strlen($c) . "\0" . $c);
+    };
+    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files; tests/test_bank_screen.php with 5.18.100\'s one declared change taken out)',
+        array_values(array_filter($keep, function ($rel) use ($BASEB, $kept) { return !isset($BASEB[$rel]) || $kept($rel) !== $BASEB[$rel]; })), []);
 } catch (\Throwable $e) { pl_threw('section M', $e); }
 
 // This run wrote no vault but its own and the sandboxes'.

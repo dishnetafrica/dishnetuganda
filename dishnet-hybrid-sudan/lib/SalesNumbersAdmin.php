@@ -13,8 +13,9 @@ require_once __DIR__ . '/InternalNumbers.php';
  * which writes the row and its trail row in one transaction, with the admin's name and a reason. This class adds the
  * screen's own rules:
  *
- *   - a number is ADDED switched off (disabled), owned by an active salesperson, on an Evolution instance that is no
- *     department's and no other number's, and that Evolution reports;
+ *   - a number is ADDED switched off (disabled), owned by an active salesperson, or an active technician (5.18.100)
+ *     whose account is not an administrator's, on an Evolution instance that is no department's and no other number's,
+ *     and that Evolution reports;
  *   - its business number is READ from Evolution's own report for that instance (the paired account), never typed, and
  *     only while the instance is connected;
  *   - it is SWITCHED ON only once its number is verified, its owner is still active, and the channel registry
@@ -36,6 +37,12 @@ final class SalesNumbersAdmin
 {
     /** The roles a salesperson's staff row carries: the three the Leads page's daily rota calls. */
     const SALES_ROLES = ['sales', 'sales_staff', 'field_agent'];
+
+    /**
+     * 5.18.100: a technician may own a number too, and stays a technician — StaffDirectory::JOB_ROLES without 'admin',
+     * written out so that neither list can widen the other. The number is still a sales line (role 'sales').
+     */
+    const TECHNICIAN_ROLES = ['support', 'support_leader', 'support_engineer'];
 
     /** A number added here is sales-001, sales-002, …; an id is never reused (a channel is never deleted). */
     const ID_PREFIX = 'sales-';
@@ -120,15 +127,15 @@ final class SalesNumbersAdmin
     private function add(array $post, string $actor, string $reason): array
     {
         $inst = trim((string)($post['instance'] ?? ''));
-        if ($inst === '') return self::no('Choose the Evolution instance of the salesperson\'s number.');
+        if ($inst === '') return self::no('Choose the Evolution instance of the person\'s number.');
         if (!isset($this->live()[$inst])) {
             return self::no('Evolution does not report an instance called ' . $inst . ' — reload the page and choose one from the list.');
         }
         if (!in_array($inst, $this->freeInstances(), true)) {
-            return self::no('That instance is already a number\'s — a department\'s or another salesperson\'s.');
+            return self::no('That instance is already a number\'s — a department\'s or another person\'s.');
         }
         $staffId = (int)($post['owner_staff_id'] ?? 0);
-        $person  = $this->salesperson($staffId);
+        $person  = $this->eligibleOwner($staffId);
         $name    = trim((string)($post['display_name'] ?? ''));
         if ($name === '') $name = 'Sales — ' . trim((string)($person['name'] ?? ''));
         $id = $this->nextId();
@@ -309,7 +316,7 @@ final class SalesNumbersAdmin
     private function owner(array $row, array $post, string $actor, string $reason): array
     {
         $staffId = (int)($post['owner_staff_id'] ?? 0);
-        $person  = $this->salesperson($staffId);
+        $person  = $this->eligibleOwner($staffId);
         $this->reg->setOwner((string)$row['channel_id'], $staffId, $actor,
             $reason !== '' ? $reason : 'new owner set on the WhatsApp AI screen');
         return self::yes((string)$row['display_name'] . ' now belongs to ' . trim((string)($person['name'] ?? '')) . '.');
@@ -425,14 +432,19 @@ final class SalesNumbersAdmin
         return $out;
     }
 
-    /** The people a number may belong to: active staff with a sales role. @return array<int,string> id => name */
-    public function salespeople(): array
+    /**
+     * The people a number may belong to (5.18.100): active salespeople, and active technicians whose account is not an
+     * administrator's (ownerKind()). A technician is labelled " — technician", so a salesperson's number is not given to
+     * one by a wrong pick; a salesperson keeps their bare name. Sorted by name. @return array<int,string> id => name
+     */
+    public function owners(): array
     {
         $out = [];
         foreach ($this->staffById() as $id => $r) {
-            if (\StaffDirectory::isActive($r) && in_array(\StaffDirectory::role($r), self::SALES_ROLES, true)) {
-                $out[$id] = trim((string)($r['name'] ?? '')) !== '' ? trim((string)$r['name']) : ('staff #' . $id);
-            }
+            $kind = self::ownerKind($r);
+            if ($kind === '') continue;
+            $name = trim((string)($r['name'] ?? '')) !== '' ? trim((string)$r['name']) : ('staff #' . $id);
+            $out[$id] = $kind === 'technician' ? $name . ' — technician' : $name;
         }
         asort($out);
         return $out;
@@ -502,16 +514,33 @@ final class SalesNumbersAdmin
         }
     }
 
-    /** An active staff row with a sales role, or a refusal. */
-    private function salesperson(int $staffId): array
+    /** 5.18.100: an active salesperson or technician (ownerKind()), or a refusal. Used by add and by a new owner. */
+    private function eligibleOwner(int $staffId): array
     {
         $r = $this->staffById()[$staffId] ?? null;
-        if ($r === null) throw new \InvalidArgumentException('Choose the salesperson the number belongs to.');
+        if ($r === null) throw new \InvalidArgumentException('Choose the person the number belongs to.');
         if (!\StaffDirectory::isActive($r)) throw new \InvalidArgumentException('That staff member is not active.');
-        if (!in_array(\StaffDirectory::role($r), self::SALES_ROLES, true)) {
-            throw new \InvalidArgumentException('A salesperson\'s number belongs to a salesperson (role sales, sales_staff or field_agent).');
+        if (self::ownerKind($r) === '') {
+            throw new \InvalidArgumentException('A number belongs to a salesperson (role sales, sales_staff or field_agent) or a '
+                . 'technician (role support, support_leader or support_engineer) whose account is not an administrator\'s.');
         }
         return $r;
+    }
+
+    /**
+     * 5.18.100: who may own a number, by the staff row alone — 'sales' (an active row with a SALES_ROLES role: 5.18.99's
+     * rule, unchanged, so an is_admin salesperson is still offered), 'technician' (an active row with a TECHNICIAN_ROLES
+     * role and no is_admin: D1, "admin accounts stay excluded", was asked about technicians), or '' for anyone else: an
+     * inactive row, an is_admin technician and every other role. The one rule the pick list and the refusal both read;
+     * nothing here writes the row.
+     */
+    private static function ownerKind(array $r): string
+    {
+        if (!\StaffDirectory::isActive($r)) return '';
+        $role = \StaffDirectory::role($r);
+        if (in_array($role, self::SALES_ROLES, true)) return 'sales';
+        if (in_array($role, self::TECHNICIAN_ROLES, true)) return \StaffDirectory::isAdmin($r) ? '' : 'technician';
+        return '';
     }
 
     private function ownerActive(array $row): bool

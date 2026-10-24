@@ -16,8 +16,13 @@ declare(strict_types=1);
  *   H  the webhook guard watches every active number's instance with the registry on
  *   S  the WhatsApp AI screen's Salesperson numbers card, through its forms
  *   W  the worker: the persona in the brain's context, the lead assigned, the hand-over to the salesperson and central
+ *   U10 5.18.100: a technician's own number — the owner rule (any technician role, labelled; never an is_admin
+ *      technician; the sales rule 5.18.99's), the number still a sales line, his staff row untouched (he keeps his role
+ *      and his install jobs); in process, then in the sandbox (part tech): the worker, the lead his, the alert loop's
+ *      seed, his job messages
  *   Z  South Sudan: unchanged, every switch set
- *   X  weakened copies, each caught
+ *   R  5.18.100: the release boundary — what it changes against ca05ada5, the 5.18.99 release commit
+ *   X  weakened copies, each caught (the owner rule's own: tests/test_sales_numbers_mutants.php)
  *
  * Driver mode: php tests/test_sales_numbers.php --driver <plugin-root> <part,part,...>
  */
@@ -49,6 +54,7 @@ require_once $root . '/lib/ReplyPrivacyGuard.php';
 require_once $root . '/lib/DishNetAiBrain.php';
 require_once $root . '/lib/EvolutionApiService.php';
 require_once $root . '/lib/ChannelRegistry.php';
+require_once $root . '/lib/NotificationService.php';   // 5.18.100: U10's job message, through sendVia()
 require_once $root . '/lib/LineOwner.php';
 require_once $root . '/lib/OwnedLead.php';
 require_once $root . '/lib/LeadVisibility.php';
@@ -145,7 +151,19 @@ function sn_unit(string $root): array
     $seller2 = $add(['name' => 'Second Seller', 'role' => 'sales_staff', 'phone' => '0700000102']);
     $nophone = $add(['name' => 'Nophone Seller', 'role' => 'sales']);
     $gone    = $add(['name' => 'Gone Seller', 'role' => 'sales', 'phone' => '0700000104', 'is_active' => false]);
-    $tech    = $add(['name' => 'Sandbox Support', 'role' => 'support', 'phone' => '0700000105']);
+    $tech    = $add(['name' => 'Tango Support', 'role' => 'support', 'phone' => '0700000105']);   // 5.18.100: was Sandbox Support
+    // 5.18.100: who else a number may — or may not — belong to. No phone: a technician is J8 staff, so a phone used by a
+    // sender anywhere below would make that sender a colleague.
+    $techLead  = $add(['name' => 'Leader Tech', 'role' => 'support_leader']);
+    $techEng   = $add(['name' => 'Engineer Tech', 'role' => 'support_engineer']);
+    $techGone  = $add(['name' => 'Gone Tech', 'role' => 'support', 'is_active' => false]);
+    $techAdmin = $add(['name' => 'Admin Tech', 'role' => 'support', 'is_admin' => true]);
+    $roleAdmin = $add(['name' => 'Role Admin', 'role' => 'admin']);   // the admin role without the flag
+    $acct      = $add(['name' => 'Sandbox Accountant', 'role' => 'accountant']);
+    $coll      = $add(['name' => 'Sandbox Collector', 'role' => 'collection']);
+    // 5.18.100, after review: an is_admin salesperson. The sales rule is 5.18.99's, the role alone, so he is offered and
+    // accepted; only a technician is refused for the flag (D1). No phone, as above.
+    $sellerAdmin = $add(['name' => 'Admin Seller', 'role' => 'sales', 'is_admin' => true]);
     $setActive = function (int $id, bool $on) use ($store): void {
         $rows = $store->load('retailers.json') ?? [];
         foreach ($rows as &$r) if ((int)($r['id'] ?? 0) === $id) $r['is_active'] = $on;
@@ -361,16 +379,31 @@ function sn_unit(string $root): array
     $f['u9_shown'] = [SalesNumbersAdmin::shown($UG, $dir, $pdo), SalesNumbersAdmin::shown($ON, $dir, $pdo),
                       SalesNumbersAdmin::shown($SS, $dir, $pdo), SalesNumbersAdmin::shown($UG, $dir, null)];
     $f['u9_free'] = $svc($UG)->freeInstances();
-    $f['u9_people'] = array_keys($svc($UG)->salespeople()) === [$nophone, $seller, $seller2] || array_values($svc($UG)->salespeople()) === ['Nophone Seller', 'Sandbox Seller', 'Second Seller'];
+    // 5.18.100 (rewritten on purpose): salespeople and technicians, a technician labelled; never an is_admin technician —
+    // an is_admin salesperson is offered, as 5.18.99 offered him (after review).
+    $people = $svc($UG)->owners();
+    $f['u9_people'] = [array_values($people), array_keys($people) === [$sellerAdmin, $techEng, $techLead, $nophone, $seller, $seller2, $tech]];
     $f['u9_not_admin'] = $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $seller], ['id' => $seller, 'name' => 'Sandbox Seller']);
     $f['u9_add_refused'] = [
         'not_in_evolution' => $act($UG, 'sn_add', ['instance' => 'sn-ghost', 'owner_staff_id' => $seller])['ok'],
         'department'       => $act($UG, 'sn_add', ['instance' => 'ug-sales', 'owner_staff_id' => $seller])['ok'],
         'taken'            => $act($UG, 'sn_add', ['instance' => 'sn-sales-1', 'owner_staff_id' => $seller])['ok'],
-        'not_sales'        => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $tech])['ok'],
+        // 5.18.100 (rewritten on purpose): the probe that was a technician is an accountant — a technician may own a
+        // number now (U10) — and the administrator, the admin role, an is_admin technician, collection and an inactive
+        // technician are refused too.
+        'accountant'       => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $acct])['ok'],
+        'collection'       => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $coll])['ok'],
+        'admin'            => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $admin])['ok'],
+        'role_admin'       => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $roleAdmin])['ok'],
+        'tech_is_admin'    => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $techAdmin])['ok'],
+        'tech_inactive'    => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $techGone])['ok'],
         'inactive'         => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $gone])['ok'],
         'nobody'           => $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => 0])['ok'],
     ];
+    // 5.18.100: the refusal's words, pinned for the first time (each refused above, so sn-new is still free).
+    $why = function (int $who) use ($act, $UG): string { return (string)$act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $who])['text']; };
+    $f['u9_refusal_text'] = ['accountant' => $why($acct), 'tech_is_admin' => $why($techAdmin), 'role_admin' => $why($roleAdmin),
+                             'tech_inactive' => $why($techGone), 'nobody' => $why(0)];
     $f['u9_rows_before'] = count($reg->rows());
     $a1 = $act($UG, 'sn_add', ['instance' => 'sn-new', 'owner_staff_id' => $seller, 'display_name' => '']);
     $n1 = $row('sales-006');
@@ -401,7 +434,16 @@ function sn_unit(string $root): array
                    (sn_last($trail('sales-006'))['reason'] ?? null)];
     $f['u9_ai'] = [$act($ON, 'sn_ai', ['channel_id' => 'sales-006', 'value' => '0'])['ok'], (int)($row('sales-006')['ai_enabled'] ?? 9),
                    $act($ON, 'sn_ai', ['channel_id' => 'sales-006', 'value' => '1'])['ok'], (int)($row('sales-006')['ai_enabled'] ?? 9)];
-    $f['u9_owner'] = [$act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $tech])['ok'],
+    // 5.18.100 (rewritten on purpose): the accountant, the administrator and an is_admin technician refused; an is_admin
+    // salesperson accepted, as in 5.18.99 (after review); a technician accepted — a salesperson's number may move to a
+    // technician (D7) — then the salesperson again.
+    $f['u9_owner'] = [$act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $acct])['ok'],
+                      $act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $admin])['ok'],
+                      $act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $techAdmin])['ok'],
+                      $act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $sellerAdmin])['ok'],
+                      (int)($row('sales-006')['owner_staff_id'] ?? 0) === $sellerAdmin,
+                      $act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $tech])['ok'],
+                      (int)($row('sales-006')['owner_staff_id'] ?? 0) === $tech,
                       $act($ON, 'sn_owner', ['channel_id' => 'sales-006', 'owner_staff_id' => $seller2])['ok'],
                       (int)($row('sales-006')['owner_staff_id'] ?? 0) === $seller2];
     $f['u9_department'] = [$act($ON, 'sn_status', ['channel_id' => 'sales', 'status' => 'disabled'])['ok'], $row('sales')['status'] ?? null];
@@ -416,6 +458,62 @@ function sn_unit(string $root): array
                      $by['sales-006']['owner']['name'] ?? null, count($by['sales-006']['trail'] ?? []), $by['sales-006']['connected'] ?? null,
                      strpos(json_encode($view), '700000601') === false];
     $f['u9_owners'] = $svc($ON)->instanceOwners()['sn-new'] ?? null;
+
+    // ── U10. A technician's number (5.18.100) ───────────────────────────────────────────────────────────────────────
+    // Its instance is reported from here on only: every $svc() builds a new service, which reads Evolution's list again,
+    // so U9 saw two free instances. Its number is the technician's own phone of record — the alert loop's seed.
+    $evo->instances[] = ['name' => 'sn-tech', 'state' => 'open', 'connected' => true, 'phone' => '256700000105', 'profile' => ''];
+    $techRow = function () use ($store, $tech): array {
+        foreach ((array)($store->load('retailers.json') ?? []) as $r) if (is_array($r) && (int)($r['id'] ?? 0) === $tech) return $r;
+        return [];
+    };
+    $techHash = function () use ($techRow): string { return hash('sha256', (string)json_encode($techRow())); };
+    $h0 = $techHash();
+    $f['u10_free'] = $svc($UG)->freeInstances();
+    $a10 = $act($UG, 'sn_add', ['instance' => 'sn-tech', 'owner_staff_id' => $tech, 'display_name' => '']);
+    $n10 = $row('sales-008');
+    $f['u10_added'] = [$a10['ok'], strpos((string)$a10['text'], 'Added sales-008 for Tango Support. It is switched off') === 0,
+                       $n10['status'] ?? null, $n10['owner_type'] ?? null, (int)($n10['owner_staff_id'] ?? 0) === $tech,
+                       $n10['handover_to'] ?? null, $n10['portfolio_scope'] ?? null, $n10['role'] ?? null, $n10['display_name'] ?? null,
+                       $n10['evo_instance'] ?? null, (sn_last($trail('sales-008'))['actor'] ?? null) === 'Sandbox Admin (#' . $admin . ')'];
+    $h1 = $techHash();
+    $f['u10_owner'] = [$act($ON, 'sn_owner', ['channel_id' => 'sales-008', 'owner_staff_id' => $techLead])['ok'],
+                       $act($ON, 'sn_owner', ['channel_id' => 'sales-008', 'owner_staff_id' => $tech])['ok'],
+                       (int)($row('sales-008')['owner_staff_id'] ?? 0) === $tech];
+    $h2 = $techHash();
+    $f['u10_verify'] = [$act($UG, 'sn_verify', ['channel_id' => 'sales-008'])['ok'], $row('sales-008')['business_number'] ?? null];
+    $f['u10_on_registry_off'] = [$act($UG, 'sn_status', ['channel_id' => 'sales-008', 'status' => 'active'])['ok'], $row('sales-008')['status'] ?? null];
+    $setActive($tech, false);
+    $f['u10_on_owner_gone'] = [$act($ON, 'sn_status', ['channel_id' => 'sales-008', 'status' => 'active'])['ok'], $row('sales-008')['status'] ?? null];
+    $setActive($tech, true);
+    $h3 = $techHash();
+    $f['u10_on'] = [$act($ON, 'sn_status', ['channel_id' => 'sales-008', 'status' => 'active', 'reason' => 'a technician\'s number'])['ok'],
+                    $row('sales-008')['status'] ?? null];
+    $h4 = $techHash();
+    // His staff row is the card's to read, never to write: the same bytes after the add, the new owner and the switch-on
+    // (the inactive control between them is this test's own write, put back). And he still takes install jobs.
+    $f['u10_row_hash'] = [$h1 === $h0, $h2 === $h0, $h3 === $h0, $h4 === $h0, ($techRow()['role'] ?? null) === 'support'];
+    $f['u10_jobs'] = [StaffDirectory::takesJobs($techRow()),
+                      strpos((string)@file_get_contents($root . '/lib/StaffDirectory.php'),
+                             "    public const JOB_ROLES = ['support', 'support_leader', 'support_engineer', 'admin'];\n") !== false];
+    // The runtime never asks the owner's role: his first name and phone, the persona, the hand-over, the lead.
+    $lo10 = LineOwner::of($ctx('sales-008'), $store, $UG, $dir);
+    $f['u10_line_owner'] = $lo10 === null ? null : [$lo10->id() === $tech, $lo10->firstName(), $lo10->phone()];
+    $named10 = $brain->promptPreview($sales(['line_owner' => $lo10 !== null ? $lo10->firstName() : '']));
+    $f['u10_persona'] = [strpos($named10, "You are Tango's assistant at DishNet, replying to a customer on WhatsApp, on Tango's own line.\n") !== false,
+                         strpos($named10, "4a. This is Tango's own line: the one staff name you may use is Tango's.") !== false];
+    $ev10 = new SnEvo($UG);
+    $out10 = (new AlertService($store, $UG, $ev10))->handover(31, '+256700000300', 'sales-008', 'asked for a person', $lo10);
+    $f['u10_handover'] = [array_map(function ($r) { return [$r['sent'], $r['reason']]; }, $out10),
+                          array_map(function ($m) {
+                              return [$m['channel'], (string)preg_replace('/\D/', '', (string)$m['to']), $m['class'],
+                                      strpos((string)$m['text'], 'a customer on your WhatsApp line needs you') !== false,
+                                      strpos((string)$m['text'], "(sales-008, Tango's line)") !== false];
+                          }, $ev10->sent)];
+    $c10 = $cap(['channel_id' => 'sales-008', 'channel_role' => 'sales', 'channel_owner_type' => 'staff', 'channel_owner_id' => $tech,
+                 'source_number' => '+256700000105'], $lo10, '+256700000411', 511);
+    $f['u10_lead'] = [$c10['action'], (int)($c10['lead']['assigned_to'] ?? 0) === $tech, $c10['lead']['assigned_name'] ?? null,
+                      $c10['lead']['assigned_by'] ?? null, OwnedLead::isProtected((array)$c10['lead'], (array)($store->load('retailers.json') ?? []))];
     return $f;
 }
 
@@ -496,6 +594,9 @@ function sn_uganda(string $root, array $parts): array
     $B = $s->staff('bravo', ['name' => 'Bravo Seller', 'email' => 'bravo@example.test', 'role' => 'sales']);
     $M = $s->staff('mgr', ['name' => 'Mike Manager', 'email' => 'mgr@example.test', 'role' => 'sales', 'modules' => ['leads', 'all_leads', 'send_quote']]);
     $C = $s->staff('gone', ['name' => 'Charlie Gone', 'email' => 'gone@example.test', 'role' => 'sales', 'is_active' => false]);
+    // 5.18.100: a technician (J8 staff): offered on the card (S), and the owner of a number in the sandbox (part tech).
+    // His phone is no sender's anywhere in this file.
+    $T = $s->staff('tango', ['name' => 'Tango Support', 'email' => 'tango@example.test', 'role' => 'support', 'phone' => '0700000206']);
     foreach (['admin' => 'admin@example.test', 'alpha' => 'alpha@example.test', 'bravo' => 'bravo@example.test', 'mgr' => 'mgr@example.test'] as $who => $em) {
         $s->login($who, $em, 'sj-password-1');
     }
@@ -719,6 +820,8 @@ function sn_uganda(string $root, array $parts): array
             ['name' => 'sn-sales-1', 'connectionStatus' => 'open', 'ownerJid' => '256700588021@s.whatsapp.net', 'profileName' => 'SN'],
             ['name' => 'sn-new', 'connectionStatus' => 'open', 'ownerJid' => '256700000701@s.whatsapp.net', 'profileName' => 'SN'],
             ['name' => 'sn-off', 'connectionStatus' => 'close', 'ownerJid' => '', 'profileName' => 'SN'],
+            // 5.18.100: the technician's, used only after the two adds below, so sales-005 and sales-006 keep their ids.
+            ['name' => 'sn-tech', 'connectionStatus' => 'open', 'ownerJid' => '256700000711@s.whatsapp.net', 'profileName' => 'SN'],
         ]);
         $qs = 'page=dashboard&tab=wa_ai_setup';
         $page = $s->page('admin', $qs);
@@ -727,6 +830,12 @@ function sn_uganda(string $root, array $parts): array
                         strpos($addForm, 'value="sn-off"') !== false, strpos($addForm, 'value="sj-sales"') !== false,
                         strpos($addForm, 'value="sn-sales-1"') !== false, strpos($addForm, 'Alpha Seller') !== false,
                         strpos($addForm, 'Sandbox Admin') !== false, strpos($page, 'channel registry is off') !== false];
+        // 5.18.100: the technician on both lists, labelled; the card's words widened, its title kept (above).
+        $ownerForm = preg_match('#name="wa_action" value="sn_owner">(.*?)</form>#s', $page, $mo) ? $mo[1] : '';
+        $f['s_card_tech'] = [strpos($addForm, '>Tango Support — technician</option>') !== false,
+                             strpos($ownerForm, '>Tango Support — technician</option>') !== false && strpos($ownerForm, '>Bravo Seller</option>') !== false,
+                             strpos($addForm, '— salesperson or technician —') !== false,
+                             strpos($page, 'A salesperson\'s or technician\'s own WhatsApp number.') !== false];
         $f['s_not_admin'] = strpos($s->page('alpha', $qs), 'Salesperson numbers') !== false;
         $post = function (array $fields) use ($s, $qs): string {
             $r = $s->form('admin', $fields, $qs, $qs);
@@ -741,6 +850,11 @@ function sn_uganda(string $root, array $parts): array
         $f['s_added'] = [$n5['status'] ?? null, (int)($n5['owner_staff_id'] ?? 0) === $A, $n5['handover_to'] ?? null, $n5['portfolio_scope'] ?? null,
                          $n5['evo_instance'] ?? null, $n5['display_name'] ?? null];
         $post(['wa_action' => 'sn_add', 'instance' => 'sn-off', 'owner_staff_id' => $B, 'display_name' => 'Sales — Bravo 2']);
+        // 5.18.100: a technician's number through the form — sales-007, switched off, a sales line like any other.
+        $f['s_add_tech'] = $post(['wa_action' => 'sn_add', 'instance' => 'sn-tech', 'owner_staff_id' => $T, 'display_name' => '']);
+        $n7 = $chan('sales-007');
+        $f['s_added_tech'] = [$n7['status'] ?? null, (int)($n7['owner_staff_id'] ?? 0) === $T, $n7['role'] ?? null, $n7['owner_type'] ?? null,
+                              $n7['handover_to'] ?? null, $n7['portfolio_scope'] ?? null, $n7['evo_instance'] ?? null, $n7['display_name'] ?? null];
         $r = $s->form('admin', ['wa_action' => 'sn_pair', 'channel_id' => 'sales-005'], $qs, $qs);
         $f['s_pair'] = [strpos($r[1], 'data:image/png;base64,' . base64_encode('FAKE-QR-sn-new')) !== false, strpos($r[1], 'FAKECODE') !== false,
                         in_array('sn-new', (array)($evoState()['connect_calls'] ?? []), true)];
@@ -843,6 +957,95 @@ function sn_uganda(string $root, array $parts): array
                 array_filter($t, function ($x) { return (string)$x['number'] !== '256700000803'; })))];
         $flag(false);
     }
+
+    // ── U10 (sandbox). A technician's own number (5.18.100): the worker, the alert loop's seed, his job messages ─────────
+    if ($want('tech')) {
+        $flag(true);
+        // W's helpers, again: this part runs on its own too (the weakened copies drive it alone).
+        $runT = function (string $canned) use ($s, &$cfgNow): array {
+            $w = new AiReplyWorker($s->store(), $cfgNow, 30, 10);
+            $b = new SnBrain($cfgNow); $b->canned = $canned;
+            $rp = new ReflectionProperty(AiReplyWorker::class, 'brain'); $rp->setAccessible(true); $rp->setValue($w, $b);
+            ob_start();
+            try { $res = $w->run(); } finally { $log = (string)ob_get_clean(); }
+            return ['brain' => $b, 'log' => $log, 'run' => $res];
+        };
+        $inT = function (string $phone, string $text, string $instance) use ($s): array {
+            $r = $s->evoInbound($phone, $text, $instance, 'SN-T-' . bin2hex(random_bytes(5)));
+            return [$r[0], $r[2]['outcome'] ?? null, $r[2]['channel'] ?? null];
+        };
+        $nEvents = function (string $type) use ($q): int { return (int)($q('SELECT COUNT(*) c FROM events WHERE event_type = ?', [$type])[0]['c'] ?? 0); };
+        $digits = function (array $calls): array {
+            return array_values(array_map(function ($x) { return [(string)$x['instance'], (string)preg_replace('/\D/', '', (string)$x['number'])]; }, $calls));
+        };
+        // Tango's line, verified as the card verifies it. Its number is his own phone of record (0700000206): the alert
+        // loop's seed, and the number his job messages go to — a DishNet line now, on every channel.
+        $line = '256700000206';
+        $reg()->create(['channel_id' => 'sales-010', 'evo_instance' => 'sn-tech-line', 'display_name' => 'Sales — Tango', 'role' => 'sales',
+                        'owner_type' => 'staff', 'owner_staff_id' => $T, 'handover_to' => 'owner', 'portfolio_scope' => 'own', 'status' => 'active'],
+                       'sales numbers test', 'a technician\'s own number', $cm);
+        $reg()->verifyNumber('sales-010', '+' . $line, 'sales numbers test', 'verified for the test');
+
+        // The worker: his assistant, the reply on his number, the lead his.
+        $f['t_in'] = $inT('256700000811', 'Hello, I need internet for my workshop', 'sn-tech-line');
+        $n0 = $nText();
+        $k = $runT('Thank you, I will have a quotation prepared. <<LEAD{"requirement":"Starlink for a workshop","location":"Lira",'
+                 . '"customer_type":"business","quote_requested":true,"ai_summary":"A workshop in Lira asked for a quotation"}>>');
+        $c = $k['brain']->contexts[0] ?? [];
+        $p = $c !== [] ? $k['brain']->promptPreview($c) : '';
+        $f['t_ctx'] = [$c['line_owner'] ?? null, strpos($p, "You are Tango's assistant at DishNet") !== false, strpos($p, "4a. This is Tango's own line") !== false];
+        $f['t_reply_on'] = array_column($textsSince($n0), 'instance');
+        $l = null;
+        foreach ($q('SELECT * FROM leads') as $r) {
+            $d = isset($r['data']) ? (json_decode((string)$r['data'], true) ?: []) : $r;
+            if (substr((string)($d['phone'] ?? ''), -6) === '000811') $l = $d;
+        }
+        $f['t_lead'] = [(int)($l['assigned_to'] ?? 0) === $T, $l['assigned_by'] ?? null, $l['channel_id'] ?? null,
+                        $l !== null && OwnedLead::isProtected($l, (array)($s->store()->load('retailers.json') ?? []))];
+
+        // The hand-over: Tango on his phone of record — his own line — from the DishNet sales number, and the copy to central.
+        $inT('256700000811', 'Can I talk to a person?', 'sn-tech-line');
+        $n0 = $nText();
+        $runT('<<ESCALATE customer asked for a person>>');
+        $t = $textsSince($n0);
+        $to = function (string $num) use ($t): array {
+            return array_values(array_filter($t, function ($x) use ($num) { return (string)preg_replace('/\D/', '', (string)$x['number']) === $num; }));
+        };
+        $f['t_handover'] = [
+            'owner'    => array_map(function ($x) { return [$x['instance'], strpos((string)$x['text'], 'a customer on your WhatsApp line needs you') !== false]; }, $to($line)),
+            'central'  => array_map(function ($x) { return [$x['instance'], strpos((string)$x['text'], "(sales-010, Tango's line)") !== false]; }, $to('256700000999')),
+            'customer' => array_column($to('256700000811'), 'instance'),
+        ];
+
+        // The alert loop's seed (tests/test_pilot_safety.php's, for a technician): the alert lands on his line from the sales
+        // department's number, which is DishNet's own — filed for the team, nothing queued, never answered.
+        $dept = (string)preg_replace('/\D+/', '', (string)($reg()->row('sales')['business_number'] ?? ''));
+        $alertText = (string)($to($line)[0]['text'] ?? 'the AI needs a human for this chat');
+        $e0 = $nEvents('ai.reply'); $n1 = $nText();
+        $w = $inT($dept, $alertText, 'sn-tech-line');
+        $runT('This must never be sent. SN-T-SEED');
+        $cv = $q('SELECT category FROM wa_conversations WHERE phone = ? AND channel = ?', [$dept, 'sales-010'])[0] ?? [];
+        $f['t_seed'] = ['dept' => strlen($dept) >= 10, 'in' => [$w[0], $w[1]], 'queued' => $nEvents('ai.reply') - $e0,
+                        'answered' => $digits($textsSince($n1)), 'category' => $cv['category'] ?? null];
+
+        // His job messages: sendVia('support', …, CLASS_STAFF), as JobNotifier sends them, leave for his phone although it
+        // is a DishNet line now — the policy asks only about automated customer messages. The control: a reply to the
+        // same number on the same channel is refused, internal_recipient.
+        $ns = new NotificationService($s->store(), $cfgNow);
+        $n0 = $nText();
+        $ns->sendVia('support', '+' . $line, 'SN-T-JOB: a test installation is assigned to you', 'sn_tech_job', [], ContactOptOut::CLASS_STAFF);
+        $jr = $ns->lastSendResult();
+        $f['t_job'] = [!empty($jr['success']), $digits($textsSince($n0))];
+        $ev = EvolutionApiService::forStore($cfgNow, $s->store()->getPdo(), $s->data);
+        $ev->useStaffStore($s->store());
+        $n0 = $nText();
+        $st = $ev->sendText('support', $line, 'SN-T-STAFF: a staff message', ContactOptOut::CLASS_STAFF);
+        $f['t_staff'] = [!empty($st['ok']), $digits($textsSince($n0))];
+        $n0 = $nText();
+        $rr = $ev->sendText('support', $line, 'SN-T-REPLY: this must never leave', ContactOptOut::CLASS_REPLY);
+        $f['t_reply_refused'] = [EvolutionApiService::policyReason($rr), $digits($textsSince($n0))];
+        $flag(false);
+    }
     $s->stop();
     return $f;
 }
@@ -909,6 +1112,9 @@ $drive = function (string $tree, string $parts, array $env = []) use ($self): ar
 
 $u = $drive($root, 'unit');
 if (isset($u['_raw'])) { echo "  FAIL the in-process part did not finish\n       {$u['_raw']}\n"; exit(1); }
+// 5.18.100: who a number may belong to, as the card refuses everyone else — pinned in U9 and S.
+$SN_OWNER_RULE = 'A number belongs to a salesperson (role sales, sales_staff or field_agent) or a technician (role support, '
+               . 'support_leader or support_engineer) whose account is not an administrator\'s.';
 
 echo "\nU1. The registry's two new writers\n";
 is_($u['u1_verify'] === 'ok' && $u['u1_row'][0] === '+256700000201' && $u['u1_row'][1] && $u['u1_row'][2] === 'Sandbox Admin (#1)',
@@ -996,10 +1202,24 @@ is_($u['u8_no_table'] === false && strpos($u['u8_bad_column'], 'refused') === 0,
 echo "\nU9. The screen's service\n";
 is_($u['u9_shown'] === [true, true, false, false], 'shown on Uganda with the switch on or off; never on South Sudan or without a database', $j($u['u9_shown']));
 is_($u['u9_free'] === ['sn-new', 'sn-off'], 'the instances a number may use: Evolution\'s, nobody\'s yet', $j($u['u9_free']));
-is_($u['u9_people'], 'the people a number may belong to: active salespeople');
+// 5.18.100 (rewritten on purpose): a technician may own a number too, unless his account is an administrator's; the
+// sales rule is 5.18.99's, so an is_admin salesperson still may (after review).
+is_($u['u9_people'] === [['Admin Seller', 'Engineer Tech — technician', 'Leader Tech — technician', 'Nophone Seller', 'Sandbox Seller',
+                          'Second Seller', 'Tango Support — technician'], true],
+    'the people a number may belong to: active salespeople — an is_admin one too, as in 5.18.99 — and technicians, each technician '
+    . 'labelled, by name; never the administrator, the admin role, an is_admin technician, an accountant, a collection agent or anyone '
+    . 'inactive', $j($u['u9_people']));
 is_($u['u9_not_admin']['ok'] === false, 'not an administrator: refused');
-is_($u['u9_add_refused'] === array_fill_keys(['not_in_evolution', 'department', 'taken', 'not_sales', 'inactive', 'nobody'], false),
-    'add refuses: an instance Evolution does not report, a department\'s, another number\'s, not a salesperson, inactive, nobody', $j($u['u9_add_refused']));
+is_($u['u9_add_refused'] === array_fill_keys(['not_in_evolution', 'department', 'taken', 'accountant', 'collection', 'admin', 'role_admin',
+                                              'tech_is_admin', 'tech_inactive', 'inactive', 'nobody'], false),
+    'add refuses: an instance Evolution does not report, a department\'s, another number\'s, an accountant, a collection agent, the '
+    . 'administrator (flag and role), the admin role alone, an is_admin technician, an inactive technician, an inactive salesperson, nobody',
+    $j($u['u9_add_refused']));
+is_($u['u9_refusal_text'] === ['accountant' => $SN_OWNER_RULE, 'tech_is_admin' => $SN_OWNER_RULE, 'role_admin' => $SN_OWNER_RULE,
+                               'tech_inactive' => 'That staff member is not active.', 'nobody' => 'Choose the person the number belongs to.'],
+    '5.18.100: the refusal names both groups, and that a technician\'s account may not be an administrator\'s; an inactive one and '
+    . 'nobody keep their own words',
+    $j($u['u9_refusal_text']));
 is_($u['u9_added'] === [true, 'disabled', 'staff', true, 'owner', 'own', 'sales', 'Sales — Sandbox Seller', 'sn-new', true],
     'added: sales-006, switched off, theirs, hand-overs to them, own portfolio, role sales, by the admin', $j($u['u9_added']));
 is_($u['u9_pair'][0] && $u['u9_pair'][1] === 'sn-new' && $u['u9_pair'][2] === 'SNCODE' && $u['u9_pair'][3] === ['sn-new'], 'pair: the QR for that instance', $j($u['u9_pair']));
@@ -1016,7 +1236,9 @@ is_($u['u9_on_no_departments'] === [false, 'disabled'], '5.18.90: not switched o
 is_($u['u9_verify_departments'] === [true, true, true], '5.18.90: the three department numbers verified on the screen, the registry off', $j($u['u9_verify_departments']));
 is_($u['u9_on'] === [true, 'active', 'the pilot'], 'switched on, with the reason in the trail', $j($u['u9_on']));
 is_($u['u9_ai'] === [true, 0, true, 1], 'the assistant off and on', $j($u['u9_ai']));
-is_($u['u9_owner'] === [false, true, true], 'a new owner: a salesperson only', $j($u['u9_owner']));
+is_($u['u9_owner'] === [false, false, false, true, true, true, true, true, true],
+    'a new owner: a salesperson — an is_admin one too, as in 5.18.99 — or a technician (5.18.100); never an accountant, the '
+    . 'administrator or an is_admin technician; the number moves to a technician, then back to a salesperson', $j($u['u9_owner']));
 is_($u['u9_department'] === [false, 'active'], 'a department number is never changed here', $j($u['u9_department']));
 is_($u['u9_retire_unconfirmed'] === [false, 'disabled'] && $u['u9_retire'] === [true, 'retired'] && $u['u9_after_retire'] === [false, false, 'retired'],
     'retire needs the box ticked, and a retired number takes no further change', $j([$u['u9_retire_unconfirmed'], $u['u9_retire'], $u['u9_after_retire']]));
@@ -1025,6 +1247,30 @@ is_($u['u9_view'][0] === ['sales', 'support', 'account'] && $u['u9_view'][1] ===
     && $u['u9_view'][3] === 'Second Seller' && $u['u9_view'][4] === 3 && $u['u9_view'][5] === true && $u['u9_view'][6],
     'the card\'s rows: departments first, the number masked, the owner, the last three trail rows', $j($u['u9_view']));
 is_($u['u9_owners'] === 'sales-006', 'the instance is marked as in use by its number');
+
+echo "\nU10. A technician's number (5.18.100), in process\n";
+is_($u['u10_free'] === ['sn-tech'], 'its instance: Evolution\'s, nobody\'s yet (reported only from U10 on, so U9 saw two)', $j($u['u10_free']));
+is_($u['u10_added'] === [true, true, 'disabled', 'staff', true, 'owner', 'own', 'sales', 'Sales — Tango Support', 'sn-tech', true],
+    'added for a technician: sales-008, switched off, his, hand-overs to him, own portfolio, role sales — still a sales line — the '
+    . 'default name, by the admin', $j($u['u10_added']));
+is_($u['u10_owner'] === [true, true, true], 'a new owner: another technician (support_leader), then back to him', $j($u['u10_owner']));
+is_($u['u10_verify'] === [true, '+256700000105'], 'verified: the number Evolution reports — here his own phone of record', $j($u['u10_verify']));
+is_($u['u10_on_registry_off'] === [false, 'disabled'] && $u['u10_on_owner_gone'] === [false, 'disabled'],
+    'a salesperson\'s gates: not switched on with the registry off, nor while he is not active', $j([$u['u10_on_registry_off'], $u['u10_on_owner_gone']]));
+is_($u['u10_on'] === [true, 'active'], 'switched on', $j($u['u10_on']));
+is_($u['u10_row_hash'] === [true, true, true, true, true],
+    'his staff row, by hash, is the same bytes after the add, the new owner and the switch-on: the card never writes it, and his role stays support',
+    $j($u['u10_row_hash']));
+is_($u['u10_jobs'] === [true, true], 'he still takes install jobs: StaffDirectory::takesJobs, and JOB_ROLES as 5.18.99 left it', $j($u['u10_jobs']));
+is_($u['u10_line_owner'] === [true, 'Tango', '+256700000105'], 'LineOwner resolves him: his first name, his phone in international form',
+    $j($u['u10_line_owner']));
+is_($u['u10_persona'] === [true, true], 'the persona is his — "Tango\'s assistant at DishNet" — with rule 4a', $j($u['u10_persona']));
+is_($u['u10_handover'] === [['owner' => [true, 'sent'], 'central' => [true, 'sent']],
+                            [['sales', '256700000105', 'staff', true, false], ['sales', '256700000999', 'staff', false, true]]],
+    'the hand-over: him on his phone of record, the copy to central naming his line — both from the DishNet sales number, as staff messages',
+    $j($u['u10_handover']));
+is_($u['u10_lead'] === ['created', true, 'Tango Support', 'channel:sales-008', true],
+    'a new lead from his number is his, with the reason, and protected from the rota and the 72-hour reassignment', $j($u['u10_lead']));
 
 // ── G ──
 echo "\nG. Golden: with no owner the prompt is the brain's before Batch 2, byte for byte\n";
@@ -1045,7 +1291,7 @@ if (strpos($baseSrc, 'class DishNetAiBrain') === false) {
 }
 
 // ── The sandbox ──
-$g = $drive($root, 'pages,leadcron,followup,guard,screen,worker');
+$g = $drive($root, 'pages,leadcron,followup,guard,screen,worker,tech');
 if (isset($g['_raw'])) { echo "  FAIL the Uganda sandbox did not finish\n       {$g['_raw']}\n"; exit(1); }
 
 echo "\nP. Own leads only (D7), on the real pages\n";
@@ -1089,11 +1335,20 @@ is_($g['h_guard']['disconnected'] === [['256700000999', true]], 'a salesperson\'
 
 echo "\nS. The WhatsApp AI screen\n";
 is_($g['s_card'] === [true, true, true, false, false, true, false, true],
-    'the card: free instances only, salespeople only, and the registry\'s switch stated', $j($g['s_card']));
+    'the card: free instances only, the people a number may belong to (a salesperson, never the administrator), and the registry\'s switch stated',
+    $j($g['s_card']));
+is_($g['s_card_tech'] === [true, true, true, true],
+    '5.18.100: the technician on the add list and the new-owner list, labelled; the placeholder and the intro name both; the title kept',
+    $j($g['s_card_tech']));
 is_($g['s_not_admin'] === false, 'not shown to a salesperson');
-is_(strpos($g['s_add_department'], 'no: ') === 0 && strpos($g['s_add_admin_owner'], 'no: ') === 0, 'a department\'s instance, an owner who is not a salesperson: refused', $j([$g['s_add_department'], $g['s_add_admin_owner']]));
+is_(strpos($g['s_add_department'], 'no: ') === 0 && strpos($g['s_add_admin_owner'], 'no: ' . $SN_OWNER_RULE) === 0,
+    'a department\'s instance, the administrator as owner: refused — the administrator with the owner rule\'s words (5.18.100)',
+    $j([$g['s_add_department'], $g['s_add_admin_owner']]));
 is_(strpos($g['s_add'], 'ok: Added sales-005') === 0 && $g['s_added'] === ['disabled', true, 'owner', 'own', 'sn-new', 'Sales — Alpha 2'],
     'added through the form, switched off', $j([$g['s_add'], $g['s_added']]));
+is_(strpos($g['s_add_tech'], 'ok: Added sales-007 for Tango Support. It is switched off') === 0
+    && $g['s_added_tech'] === ['disabled', true, 'sales', 'staff', 'owner', 'own', 'sn-tech', 'Sales — Tango Support'],
+    '5.18.100: a technician\'s number through the form: sales-007, switched off, his, role sales, hand-overs to him', $j([$g['s_add_tech'], $g['s_added_tech']]));
 is_($g['s_pair'] === [true, true, true], 'Show QR code: Evolution\'s code for that instance', $j($g['s_pair']));
 is_(strpos($g['s_verify_off'][0], 'no: Not connected yet') === 0 && $g['s_verify_off'][1] === null, 'verify refused while not connected', $j($g['s_verify_off']));
 is_($g['s_verify'][0] && $g['s_verify'][1] === '+256700000701' && strpos((string)$g['s_verify'][2], 'Sandbox Admin (#') === 0 && $g['s_verify'][3],
@@ -1125,11 +1380,158 @@ is_($g['w_department'][0] === false && $g['w_department'][1] === false && count(
     && $g['w_department'][2][0][0] === '256700000999' && strpos($g['w_department'][2][0][2], '(sales) — customer asked for a person') !== false,
     'the department number: no persona, and the alert it always was', $j($g['w_department']));
 
+echo "\nU10 (sandbox). A technician's number: the worker, the alert loop's seed, his job messages (5.18.100)\n";
+is_($g['t_in'] === [200, 'accepted', 'sales-010'], 'a message on his instance is his number\'s', $j($g['t_in']));
+is_($g['t_ctx'] === ['Tango', true, true], 'the brain is told his first name: his assistant\'s prompt, with rule 4a', $j($g['t_ctx']));
+is_($g['t_reply_on'] === ['sn-tech-line'], 'the reply leaves on his number', $j($g['t_reply_on']));
+is_($g['t_lead'] === [true, 'channel:sales-010', 'sales-010', true], 'the lead is assigned to him, and protected', $j($g['t_lead']));
+is_($g['t_handover'] === ['owner' => [['sj-sales', true]], 'central' => [['sj-sales', true]], 'customer' => ['sn-tech-line']],
+    'a hand-over: his phone of record — his own line — and the copy to the alert number, both from the DishNet sales number; the holding line on his',
+    $j($g['t_handover']));
+is_($g['t_seed'] === ['dept' => true, 'in' => [200, 'accepted'], 'queued' => 0, 'answered' => [], 'category' => 'staff'],
+    'the alert loop\'s seed: arriving on his line from the sales department\'s number, the alert is kept for the team and never answered',
+    $j($g['t_seed']));
+is_($g['t_job'] === [true, [['sj-support', '256700000206']]],
+    'he stays on install jobs: a job message (sendVia support, CLASS_STAFF) leaves for his phone, a DishNet line now', $j($g['t_job']));
+is_($g['t_staff'] === [true, [['sj-support', '256700000206']]] && $g['t_reply_refused'] === ['internal_recipient', []],
+    'a staff message to it is never put to the policy; a reply to the same number on the same channel is refused, internal_recipient (the control)',
+    $j([$g['t_staff'], $g['t_reply_refused']]));
+
 echo "\nZ. South Sudan — unchanged, every switch set\n";
 $z = $drive($root, 'south_sudan');
 is_(!isset($z['_raw']) && $z['z_card'] === false && $z['z_leads'] === true && $z['z_call'] === 200
     && $z['z_hold'] === false && $z['z_shown'] === false && $z['z_visibility'] === false,
     'no card, every lead visible, the call log as before, nothing held', $j($z));
+
+// ── R ──
+// 5.18.100: the release's own boundary, measured against the 5.18.99 release commit from Git — as
+// tests/test_quote_company.php I measures 5.18.99's on its own commit. It reads this checkout; a later release re-points it.
+const SN_R_BASE = 'ca05ada5';
+const SN_R_CODE = ['lib/SalesNumbersAdmin.php', 'manifest.json', 'tabs/engage/wa_ai_setup.php'];
+const SN_R_DOCS = ['SAFETY.md', 'tests/test_bank_boundaries.php', 'tests/test_cashbook_physical_list.php',
+    'tests/test_distributor_apply.php', 'tests/test_distributor_link_ucrm.php', 'tests/test_distributor_notify.php',
+    'tests/test_distributor_registry.php', 'tests/test_distributor_territory.php', 'tests/test_quote_company.php',
+    'tests/test_sales_numbers.php', 'tests/test_sales_numbers_mutants.php', 'tests/test_bank_screen.php'];   // the release copy: its own tests alone
+/**
+ * Syntax newer than PHP 7.4 (the server's), each rule with a line it must catch and a PHP 7.4 line it must leave alone.
+ * After review: every rule of tests/test_quote_company.php's I6 (QC_I6_RULES) is here too, the last five's patterns and
+ * samples byte for byte, because I6 reads 5.18.99's files only and this is the one scan of this release's lines.
+ */
+const SN_R_PHP8 = [
+    'match ('            => '/\bmatch\s*\(/',
+    'str_contains('      => '/\bstr_contains\(/',
+    'str_starts_with('   => '/\bstr_starts_with\(/',
+    'str_ends_with('     => '/\bstr_ends_with\(/',
+    '?->'                => '/\?->/',
+    'readonly'           => '/\breadonly\b/',
+    'enum'               => '/^\s*enum\s+\w+/',
+    'a mixed, static or never type' => '/\)\s*:\s*\??(?:mixed|static|never)\b|[(,]\s*\??mixed\s+&?\$/',
+    'constructor promotion' => '/\bfunction\s+__construct\s*\([^)]*\b(?:public|private|protected)\s/',
+    'an attribute'       => '/^\s*#\[/',
+    'a named argument'   => '/[(,]\s*[a-zA-Z_][a-zA-Z0-9_]*\s*:(?!:)\s*[^\s:]/',
+    'a union type'       => '/(?:[(,]\s*|\)\s*:\s*)\??[A-Za-z_\\\\][A-Za-z0-9_\\\\]*\s*\|\s*\??[A-Za-z_\\\\][A-Za-z0-9_\\\\]*(?:\s+&?(?:\.\.\.)?\$|\s*[{;])/',
+    'throw as an expression' => '/(?:=>|\?\?|\?:|(?<![=!<>])=(?![=>]))\s*throw\b/',
+    '::class on an object' => '/\$[A-Za-z_][A-Za-z0-9_]*(?:->[A-Za-z_][A-Za-z0-9_]*)*::class\b/',
+    'a trailing comma in a parameter or use list' => '/\b(?:function|fn|use)\b[^()]*\([^()]*,\s*\)/',
+];
+const SN_R_PHP8_SAMPLES = [
+    'match ('            => ['$x = match ($a) { 1 => 2 };', '$x = $matches[0];'],
+    'str_contains('      => ['if (str_contains($h, $n)) {', 'if (strpos($h, $n) !== false) {'],
+    'str_starts_with('   => ['$ok = str_starts_with($h, "a");', '$ok = strpos($h, "a") === 0;'],
+    'str_ends_with('     => ['$ok = str_ends_with($h, "a");', '$ok = substr($h, -1) === "a";'],
+    '?->'                => ['$x = $a?->b;', '$x = $a->b ?? null;'],
+    'readonly'           => ['public readonly int $x;', 'private int $x;'],
+    'enum'               => ['enum Kind: string {', '$kind = "enum";'],
+    'a mixed, static or never type' => ['public function f(): static {', 'public function f(): self {'],
+    'constructor promotion' => ['public function __construct(private int $x) {', 'public function __construct(int $x) {'],
+    'an attribute'       => ['#[Pure]', '# a comment'],
+    'a named argument'   => ['foo(name: 1);', 'foo($a, B::C);'],
+    'a union type'       => ['function f(int|string $x): int|string {', 'function f(int $x): ?int { return A | B; }'],
+    'throw as an expression' => ['$x = $y ?? throw new E();', 'if (!$y) throw new E();'],
+    '::class on an object' => ['$n = $obj::class;', '$n = get_class($obj) . self::class;'],
+    'a trailing comma in a parameter or use list' => ['$f = function ($a, $b, ) {', '$f = function ($a, $b) use ($c) { return g($a, ); };'],
+];
+echo "\nR. The release boundary (5.18.100), against " . SN_R_BASE . " (the 5.18.99 release commit)\n";
+$gitR = function (string $args) use ($root): ?array {
+    $o = []; exec('git -C ' . escapeshellarg($root) . ' ' . $args . ' 2>/dev/null', $o, $rc);
+    return $rc === 0 ? $o : null;
+};
+$showR = function (string $rel) use ($root): ?string {
+    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg(SN_R_BASE . ':dishnet-hybrid-sudan/' . $rel)
+                           . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
+    if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
+    return substr($o, 0, -strlen($m[0]));
+};
+$gd = $gitR('diff --name-only --relative ' . escapeshellarg(SN_R_BASE) . ' -- .');
+$gu = $gitR('ls-files --others --exclude-standard -- .');
+$mbR = $showR('manifest.json');
+if ($gd === null || $gu === null || $mbR === null) {
+    is_(false, 'R Git supplies ' . SN_R_BASE . ' — without it the boundary cannot be measured: a failure, never a skip');
+} else {
+    $allR = array_values(array_unique(array_filter(array_merge($gd, $gu), 'strlen')));
+    sort($allR);
+    $isDoc = function (string $rel): bool { return substr($rel, -3) === '.md' || in_array(explode('/', $rel)[0], ['tests', 'docs'], true); };
+    $codeR = array_values(array_filter($allR, function ($r) use ($isDoc) { return !$isDoc($r); }));
+    $docsR = array_values(array_filter($allR, $isDoc));
+    $wantDocs = SN_R_DOCS; sort($wantDocs);
+    is_($codeR === SN_R_CODE, 'R outside tests and documents it changes exactly lib/SalesNumbersAdmin.php, tabs/engage/wa_ai_setup.php and '
+        . 'manifest.json: no migration, and no registry, runtime or staff-record file', $j($codeR));
+    is_($docsR === $wantDocs, 'R … and exactly the ' . count(SN_R_DOCS) . ' declared tests and documents',
+        $j(['not declared' => array_values(array_diff($docsR, $wantDocs)), 'not changed' => array_values(array_diff($wantDocs, $docsR))]));
+    $mwR = str_replace('    "version": "5.18.99",', '    "version": "5.18.100",', $mbR, $mnR);
+    is_($mnR === 1 && hash('sha256', $mwR) === hash_file('sha256', $root . '/manifest.json'),
+        'R manifest.json is ' . SN_R_BASE . '\'s with one line changed, its version, 5.18.99 → 5.18.100');
+    $sbR = (string)$showR('lib/SalesNumbersAdmin.php');
+    $snR = (string)@file_get_contents($root . '/lib/SalesNumbersAdmin.php');
+    $keepR = ["    const SALES_ROLES = ['sales', 'sales_staff', 'field_agent'];\n", "    const ID_PREFIX = 'sales-';\n",
+              "    const ACTIONS = ['sn_add', 'sn_pair', 'sn_verify', 'sn_webhook', 'sn_ai', 'sn_status', 'sn_owner', 'sn_verify_department'];\n",
+              "            'role'            => 'sales',\n", "            'owner_type'      => 'staff',\n", "            'portfolio_scope' => 'own',\n",
+              "            'handover_to'     => 'owner',\n", "            'status'          => 'disabled',\n",
+              "            \$gaps = \$this->departmentGaps();   // 5.18.90 (docs/65 §AD)\n"];
+    $keptR = array_map(function ($l) use ($sbR, $snR) { return [substr_count($sbR, $l), substr_count($snR, $l)]; }, $keepR);
+    is_($keptR === array_fill(0, count($keepR), [1, 1]),
+        'R lib/SalesNumbersAdmin.php keeps, once each and as 5.18.99 had them: SALES_ROLES, the sales- ids, ACTIONS, the row it writes '
+        . '(role sales, owner staff, own portfolio, hand-over owner, added disabled) and the department gaps line', $j($keptR));
+    is_(substr_count($snR, "    const TECHNICIAN_ROLES = ['support', 'support_leader', 'support_engineer'];\n") === 1
+        && preg_match("/const TECHNICIAN_ROLES[^\\n]*'admin'/", $snR) === 0, "R TECHNICIAN_ROLES is the three technician roles, never 'admin'");
+    is_(substr_count((string)@file_get_contents($root . '/tabs/engage/wa_ai_setup.php'), "  <h3>Salesperson numbers</h3>\n") === 1,
+        'R the card keeps its title, which the South Sudan "not shown" checks read (D9)');
+    // PHP 7.4 on the server: no newer syntax on an added code line (comments taken out) of either PHP file, and php -l.
+    $stripR = function (string $src): string {
+        $o = '';
+        foreach (token_get_all($src) as $tk) {
+            if (is_array($tk) && in_array($tk[0], [T_COMMENT, T_DOC_COMMENT], true)) { $o .= str_repeat("\n", substr_count($tk[1], "\n")); continue; }
+            $o .= is_array($tk) ? $tk[1] : $tk;
+        }
+        return $o;
+    };
+    $badR = []; $lintR = [];
+    // php -l under this machine's PHP and, where installed, under php7.4 too (after review, as I6 does); php7.4 not
+    // installed is a note, never an ok — then the rules stand for it, and they catch only what they name.
+    $lintBinsR = ['php ' . PHP_VERSION => PHP_BINARY];
+    $where74R = trim((string)shell_exec('command -v php7.4 2>/dev/null'));
+    if ($where74R !== '') $lintBinsR['php7.4'] = $where74R;
+    else echo "  note R limitation: php7.4 is not installed here, so neither file was linted under it; PHP 7.4 syntax rests on the "
+            . "rules below and on php -l under PHP " . PHP_VERSION . " — a stated limitation, not a pass\n";
+    foreach (['lib/SalesNumbersAdmin.php', 'tabs/engage/wa_ai_setup.php'] as $rel) {
+        $added = array_diff(explode("\n", $stripR((string)@file_get_contents($root . '/' . $rel))), explode("\n", $stripR((string)$showR($rel))));
+        foreach ($added as $l) foreach (SN_R_PHP8 as $what => $re) {
+            // a ternary's "? a : b" reads as a named argument; such a line is left to php -l, as I6 leaves it
+            if (preg_match($re, $l) && !($what === 'a named argument' && preg_match('/\?\s*[^:]*:/', $l))) $badR[] = "{$rel}: {$what}: " . trim($l);
+        }
+        foreach ($lintBinsR as $binName => $bin) {
+            $o = []; exec(escapeshellarg($bin) . ' -l ' . escapeshellarg($root . '/' . $rel) . ' 2>&1', $o, $rc);
+            if ($rc !== 0) $lintR[] = $rel . ' (' . $binName . ')';
+        }
+    }
+    is_($badR === [] && $lintR === [], 'R no added code line uses ' . implode(', ', array_keys(SN_R_PHP8)) . '; php -l passes on both, under '
+        . implode(', ', array_keys($lintBinsR)), $j([$badR, $lintR]));
+    $missR = [];
+    foreach (SN_R_PHP8_SAMPLES as $what => [$hit, $clean]) {
+        if (!isset(SN_R_PHP8[$what]) || preg_match(SN_R_PHP8[$what], $hit) !== 1 || preg_match(SN_R_PHP8[$what], $clean) === 1) $missR[] = $what;
+    }
+    is_($missR === [] && count(SN_R_PHP8_SAMPLES) === count(SN_R_PHP8), 'R control: each rule catches its PHP 8 sample and passes its PHP 7.4 one', $j($missR));
+}
 
 // ── X ──
 echo "\nX. Weakened copies, each caught\n";

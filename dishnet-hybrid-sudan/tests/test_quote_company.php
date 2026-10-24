@@ -23,13 +23,24 @@ declare(strict_types=1);
  *      South Sudan, South Sudan with the key set, and Uganda switched off (0 and off), after an explicit normaliser that
  *      a baseline self-comparison completes and checks; the gate-on run differs where it should
  *
+ * 5.18.100 (rewritten on purpose, never weakened): I4 and I5 compared ce7ac388 with the working tree, so any later
+ * release's files read as 5.18.99's (the next release, a technician's WhatsApp number, changes lib/SalesNumbersAdmin.php,
+ * tabs/engage/wa_ai_setup.php and the manifest's version). 5.18.99's delta is now measured on the 5.18.99 release
+ * commit, ca05ada5 (QC_DELTA_REL), against ce7ac388, both from Git — exactly the claim, and exact — and this tree is
+ * then held to ca05ada5: every file 5.18.99 changed or added is ca05ada5's byte for byte, migrations/ is ca05ada5's,
+ * and manifest.json differs from ca05ada5's by its version line only, as tests/test_cashbook_physical_list.php M was
+ * re-pointed for 5.18.98 by 5.18.99. I1–I3 and I6–I8 still read this tree.
+ *
  * Every section starts with its positive control. The weakened copies are tests/test_quote_company_mutants.php.
  *
  *   cd tests && DN_VAULT_FILE=$(mktemp -d)/v.json php test_quote_company.php [--root=DIR] [--base=DIR] [--sections=REGEX] [--no-mutants]
+ *        [--delta-rel=DIR]
  *
  * --root: the plugin tree judged (default: this checkout's). --base: a ce7ac388 tree (default: from Git); without one,
  * the comparisons that need it FAIL — never a skip. --sections: run the sections whose letter matches. --no-mutants:
- * skip the weakened copies this file makes itself (the normaliser's control in §S).
+ * skip the weakened copies this file makes itself (the normaliser's control in §S). --delta-rel (5.18.100): a ca05ada5
+ * tree for section I (default: from Git, taken when section I runs); without one, I0 and the delta checks FAIL —
+ * never a skip.
  *
  * Every person, number, address, organization and amount is invented (TEST names, example.test, +2567000001xx).
  * The servers this test starts answer with a token only it knows, and only those are stopped. Nothing leaves the machine.
@@ -38,12 +49,15 @@ declare(strict_types=1);
 require_once __DIR__ . '/fixtures/quote_company_journey.php';
 require_once __DIR__ . '/fixtures/staff_jobs_scenario.php';   // sj_baseline_tree(), SjSandbox::parseMail()
 
-$opt = getopt('', ['root:', 'base:', 'sections:', 'no-mutants']);
+$opt = getopt('', ['root:', 'base:', 'sections:', 'no-mutants', 'delta-rel:']);   // --delta-rel: 5.18.100
 $LIB  = dirname(__DIR__);
 $ROOT = isset($opt['root']) ? rtrim((string)$opt['root'], '/') : $LIB;
 $SECTIONS = isset($opt['sections']) ? (string)$opt['sections'] : '';
 $WITH_MUTANTS = !isset($opt['no-mutants']);
 const QC_BASE_COMMIT = 'ce7ac388';
+// 5.18.100: the 5.18.99 release commit. Section I measures 5.18.99's delta on it, against QC_BASE_COMMIT, and holds
+// this tree to it, so that a later release does not read as 5.18.99.
+const QC_DELTA_REL = 'ca05ada5';
 // The zone each book runs in: a test file pins it, the fixture never does (tests/test_timezone.php). '' is the
 // vault-only Uganda book, which names no tenant in its configuration.
 const QC_TZ = ['uganda' => 'Africa/Kampala', 'south-sudan' => 'Africa/Juba', '' => 'Africa/Kampala'];
@@ -1517,6 +1531,19 @@ t('H an exception after uCRM returned quotation 77: F7u naming #77', [$x['out'][
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 if (qc_section('I')) {
 echo "\nI. Inventory and form\n";
+// 5.18.100: the tree 5.18.99's delta is measured ON — ca05ada5, the 5.18.99 release commit — taken from Git when this
+// section runs, or --delta-rel. The delta is measured against ce7ac388's tree, the one B–H and S read.
+$RBASE = null; $whyRel = '';
+if (isset($opt['delta-rel'])) {
+    $RBASE = rtrim((string)$opt['delta-rel'], '/');
+    if (!is_file($RBASE . '/manifest.json')) { $whyRel = 'the given --delta-rel holds no plugin'; $RBASE = null; }
+} else {
+    [$RBASE, $whyRel] = sj_baseline_tree(QC_DELTA_REL);
+}
+$relVer = $RBASE !== null ? (string)(json_decode((string)@file_get_contents($RBASE . '/manifest.json'), true)['information']['version'] ?? '') : '';
+if ($RBASE !== null && $relVer !== '5.18.99') { $whyRel = 'its version is ' . qc_j($relVer) . ', not 5.18.99'; $RBASE = null; }
+is_($RBASE !== null, 'I0 the ' . QC_DELTA_REL . ' tree 5.18.99\'s delta is measured on is at hand (the 5.18.99 release, '
+    . (isset($opt['delta-rel']) ? 'given' : 'from Git') . '); without it the delta checks fail, never skip', $whyRel);
 /** Every file of a tree outside the directories a release does not ship (tests, docs, data …): rel => path. */
 $files = function (string $tree): array {
     $out = [];
@@ -1683,14 +1710,17 @@ t('I3 … and both refusals leave the vault byte for byte as they found it (read
 $r = $sc($b, ['--key', 'ucrm_quote_organization_id', '--clear']);
 t('I3 --clear is accepted: the key goes back to the profile', [$r[0], $r[1]], [0, '<unset>']);
 
-// I4 — the delta against ce7ac388: exactly the declared files, every hunk naming 5.18.99; the three tabs' hunks gated
+// I4 — the delta against ce7ac388: exactly the declared files, every hunk naming 5.18.99; the three tabs' hunks gated.
+// 5.18.100: measured on ca05ada5 (QC_DELTA_REL), the 5.18.99 release commit, from Git — never on the working tree,
+// which a later release moves on — and the tree is held to it below.
 $DECLARED = ['cron_quote_wa.php', 'includes/api/api_crm_misc.php', 'includes/api/api_cron_debug.php', 'includes/api/api_products_admin.php',
     'includes/post/post_kyc.php', 'lib/KycCrmSync.php', 'lib/KycService.php', 'lib/PluginQuotePdf.php', 'lib/QuotationService.php',
     'lib/QuoteOrganization.php', 'lib/QuotePdfSource.php', 'lib/UcrmClientTarget.php', 'lib/UcrmLeadSync.php', 'manifest.json',
     'profiles/uganda.json', 'tabs/lte/lte_dashboard.php', 'tabs/sales/applications.php', 'tabs/sales/kyc_form.php', 'tools/set_config.php'];
 $changed = []; $hunkFails = []; $declSeen = [];
 $baseFiles = $BASE !== null ? $files($BASE) : [];
-foreach ($tree as $rel => $path) {
+$relTree = $RBASE !== null ? $files($RBASE) : [];
+foreach ($relTree as $rel => $path) {
     if (substr($rel, -3) === '.md' || $rel === 'ucrm.json') continue;          // documents; the book's own pointer
     $old = $baseFiles[$rel] ?? null;
     if ($old !== null && hash_file('sha256', $old) === hash_file('sha256', $path)) continue;
@@ -1711,13 +1741,25 @@ foreach ($tree as $rel => $path) {
         $hunkFails[] = $rel . ' hunk ' . ($i + 1) . ': ' . mb_substr(implode(' / ', $h['+'] ?: $h['-']), 0, 140);
     }
 }
-foreach ($baseFiles as $rel => $p) if (!isset($tree[$rel]) && substr($rel, -3) !== '.md') $changed[] = $rel . ' (removed)';
+foreach ($baseFiles as $rel => $p) if (!isset($relTree[$rel]) && substr($rel, -3) !== '.md') $changed[] = $rel . ' (removed)';
 sort($changed);
-t('I4 against ce7ac388 the release changes exactly the declared files (besides documents)', $BASE !== null ? $changed : null, $DECLARED);
-t('I4 … and every hunk of every one names 5.18.99, or is one of the ' . (count(QC_I4_UNMARKED, COUNT_RECURSIVE) - count(QC_I4_UNMARKED)) . ' declared hunks', $hunkFails, []);
+t('I4 ' . QC_DELTA_REL . ' (5.18.99) against ' . QC_BASE_COMMIT . ' changes exactly the declared files (besides documents)', $BASE !== null && $RBASE !== null ? $changed : null, $DECLARED);
+// After review: gated on both trees as its neighbours are — with no tree the walk sees no hunk, and that is a failure.
+t('I4 … and every hunk of every one names 5.18.99, or is one of the ' . (count(QC_I4_UNMARKED, COUNT_RECURSIVE) - count(QC_I4_UNMARKED)) . ' declared hunks',
+    $BASE !== null && $RBASE !== null ? $hunkFails : null, []);
 $stale = [];
 foreach (QC_I4_UNMARKED as $rel => $list) foreach ($list as $k => $txt) if (!isset($declSeen[$rel][$k])) $stale[] = $rel . ': ' . mb_substr($txt, 0, 80);
 t('I4 … and every declared hunk is still there (none left over)', $stale, []);
+// 5.18.100: this tree against 5.18.99 — it keeps every file 5.18.99 changed or added exactly as ca05ada5 left it (the
+// manifest is I5's), and removes none of ca05ada5's files.
+$held = [];
+foreach ($DECLARED as $rel) {
+    if ($rel === 'manifest.json') continue;
+    if ($RBASE === null || !is_file($T . '/' . $rel) || !is_file($RBASE . '/' . $rel) || hash_file('sha256', $T . '/' . $rel) !== hash_file('sha256', $RBASE . '/' . $rel)) $held[] = $rel;
+}
+t('I4 this tree holds every file 5.18.99 changed or added, besides documents and the manifest, as ' . QC_DELTA_REL . ' left it, byte for byte (' . (count($DECLARED) - 1) . ' files)',
+    [$held, $RBASE !== null], [[], true]);
+t('I4 … and removes none of ' . QC_DELTA_REL . '\'s files outside the walk\'s exclusions', $RBASE !== null ? array_values(array_diff(array_keys($relTree), array_keys($tree))) : null, []);
 $gate = '<?php /* 5.18.99 (Uganda): the reason no quotation was made — emitted only where the quoting-organization gate is on */ require_once dirname(__DIR__, 2) . \'/lib/QuoteOrganization.php\'; if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)[\'on\']): ?>+(d.data._quote_error?\' \'+d.data._quote_error:\'\')<?php endif; ?>';
 foreach (['tabs/sales/kyc_form.php', 'tabs/lte/lte_dashboard.php'] as $rel) {
     $new = (string)file_get_contents($T . '/' . $rel);
@@ -1739,8 +1781,10 @@ $git = function (string $args) use ($LIB): ?array {
     $o = []; exec('git -C ' . escapeshellarg($LIB) . ' ' . $args . ' 2>/dev/null', $o, $rc);
     return $rc === 0 ? $o : null;
 };
-$gd = $git('diff --name-only --relative ' . escapeshellarg(QC_BASE_COMMIT) . ' -- .');
-$gu = $git('ls-files --others --exclude-standard -- .');
+// 5.18.100: between the two commits (ce7ac388 and ca05ada5), not against the working tree, so no later release's
+// documents, tests or uncommitted files read as 5.18.99's.
+$gd = $git('diff --name-only --relative ' . escapeshellarg(QC_BASE_COMMIT) . ' ' . escapeshellarg(QC_DELTA_REL) . ' -- .');
+$gu = $gd !== null ? [] : null;
 $outside = null;
 if ($gd !== null && $gu !== null) {
     $outside = array_values(array_unique(array_filter(array_merge($gd, $gu), function ($rel) {
@@ -1749,14 +1793,20 @@ if ($gd !== null && $gu !== null) {
     sort($outside);
 }
 $declOutside = array_keys(QC_I4_DOCS_TESTS); sort($declOutside);
-t('I4 … and outside the walk (documents and tests) it changes exactly the ' . count(QC_I4_DOCS_TESTS) . ' declared files, each declared with why (Git, against ' . QC_BASE_COMMIT . ')',
+t('I4 … and outside the walk (documents and tests) it changes exactly the ' . count(QC_I4_DOCS_TESTS) . ' declared files, each declared with why (Git, ' . QC_DELTA_REL . ' against ' . QC_BASE_COMMIT . ')',
     $outside, $declOutside);
 
 // I5 — no migration; the manifest moves its version only
 $mig = function (?string $t) use ($files) { if ($t === null) return null; $o = []; foreach (glob($t . '/migrations/*') ?: [] as $f) $o[basename($f)] = hash_file('sha256', $f); ksort($o); return $o; };
-is_($BASE !== null && $mig($T) === $mig($BASE) && count((array)$mig($T)) > 50, 'I5 migrations/ is ce7ac388\'s, file for file (' . count((array)$mig($T)) . ' files): no migration');
+is_($BASE !== null && $RBASE !== null && $mig($RBASE) === $mig($BASE) && count((array)$mig($RBASE)) > 50,
+    'I5 ' . QC_DELTA_REL . '\'s migrations/ is ' . QC_BASE_COMMIT . '\'s, file for file (' . count((array)$mig($RBASE)) . ' files): 5.18.99 adds no migration');
+is_($RBASE !== null && $mig($T) === $mig($RBASE), 'I5 this tree\'s migrations/ is ' . QC_DELTA_REL . '\'s, file for file (' . count((array)$mig($T)) . ' files): no migration since (5.18.100)');
 $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
-t('I5 manifest.json is ce7ac388\'s with its version line moved to 5.18.99', [$mn ?? 0, hash('sha256', $mb) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
+t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
+    [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
+$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.100",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';
+t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.100 (a later release moves this pin on)',
+    [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
 
 // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's
 // PHP and, where installed, under php7.4 and php8.1 too; a version that is not installed is reported as a limitation
