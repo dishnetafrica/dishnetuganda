@@ -57,7 +57,9 @@ Nothing is paired until all six are confirmed, and written down by the operator 
      characters.
 2. **The salesperson** — their staff record is active, its role is `sales`, `sales_staff` or `field_agent` (the card
    offers no one else), and it carries their phone. Without a phone the hand-over alert goes to the central number
-   alone.
+   alone. *(Added 23 Oct, 5.18.100: the card also offers a technician — role `support`, `support_leader` or
+   `support_engineer` — and never a technician's account with `is_admin` set; a salesperson's rule is as before. For a
+   technician's number, see "A technician's number" below.)*
 3. **The channel record** — created by step 1, switched off, owner [the salesperson].
 4. **The instance name** — [PILOT_INSTANCE] exists in Evolution and is none of the three department numbers' instances
    (the card refuses those).
@@ -86,7 +88,9 @@ Expect, before step 1:
 - all four switches `null` — not set;
 - **`wa_inbox_roles` `null`, or naming no sales role.** The Inbox is not filtered by number. A role granted it reads
   every number's chats, so a sales role granted it would let one salesperson read another's customers — a STOP
-  condition (Phase 12). Measured: `tests/test_sales_pilot.php`, L.
+  condition (Phase 12). Measured: `tests/test_sales_pilot.php`, L. *(Added 23 Oct, 5.18.100: once a technician owns a
+  number, naming no technician role either — `support`, `support_leader`, `support_engineer`. The setting's own
+  example is `support,support_leader`, which would then be a STOP.)*
 
 **P3. The registry.**
 
@@ -264,7 +268,7 @@ On the card, for sales-001: **Assistant on**.
 | channel audit | `channels.php --trail sales-001` | created, ai_enabled (off — 07 Oct), number, status (active), ai_enabled (on) — each with the admin's name |
 | DishNet numbers | step 5's loop test; the Inbox | a message from any DishNet number — a department's, a salesperson's, an owner's phone, the alert number — kept for the team, filed `staff`, never answered |
 | assistant off | the card's **Assistant off**; the follow-up queue | no assistant reply, no typing indicator, no follow-up opened, drafted, approved or sent — an approved one is closed `channel_assistant_disabled`; a person's Inbox reply still leaves from the pilot number |
-| no cross-visibility | Sales → Leads as another salesperson | none of [the salesperson]'s leads |
+| no cross-visibility | Sales → Leads as another salesperson — and, once a technician owns a number, as another technician (5.18.100) | none of [the salesperson]'s leads: no number's owner, salesperson or technician, sees another owner's leads |
 
 **When the number fails:**
 - **A failed send is never sent from another number.** The reply is retried on the pilot number five times, over about
@@ -288,7 +292,9 @@ Stop at once, and roll back by section R, if any of these is seen:
   **Evolution now reports another number for this instance** or **… this instance's owner with no phone number**;
 - a reply, an Inbox message, a hand-over line or a follow-up for a chat on the pilot number arrives from **any other
   number**;
-- a salesperson can see another salesperson's leads, or P2 shows a sales role in `wa_inbox_roles`;
+- a salesperson can see another salesperson's leads — or, once a technician owns a number, any number's owner,
+  salesperson or technician, another owner's (5.18.100) — or P2 shows a sales role in `wa_inbox_roles` — or, once a
+  technician owns a number, a technician role (5.18.100);
 - P3 shows the pilot instance mapped to more than one channel, or `sales-001` *NOT ROUTED*;
 - any change in how sales, support or account receive or reply;
 - the verified ••••NN is not the confirmed number's;
@@ -372,6 +378,75 @@ moment the number is verified and given its owner: the other numbers stop answer
 are added:
 - **WhatsApp's ban risk** grows with every automated send from a person's number;
 - **`wa_followups_on_owned_numbers` applies to every salesperson number at once**, not number by number.
+
+## A technician's number (5.18.100)
+
+From 5.18.100 the card also offers technicians — role `support`, `support_leader` or `support_engineer`, labelled
+*"— technician"* in both owner lists — and never a technician's account with `is_admin` set (a salesperson's rule is as
+before: the role alone). The number is a sales line like any other: role `sales`, hand-overs to its owner with a copy to
+the central number, its leads his. The technician keeps his role and his install jobs: the card never writes a staff
+row. The operator's decisions of 23 Oct are docs/65 §AE. Documents name him **[the technician]**.
+
+Only after 5.18.100's deploy run has finished — the run checks that it changed nothing on the card — and one number at
+a time, as for Salesperson #2, #3, … above:
+
+1. **Section 0, for a technician.** **If any of these is not so, STOP and ask the operator.** Do not change his role,
+   his `is_admin` flag or his phone to make him fit the card: his role is what gives him his install jobs, and his phone
+   of record receives his job WhatsApps and is what marks him as a colleague on every DishNet number.
+   - **The SIM: a new work SIM (D6), never his personal WhatsApp.** Everyone who writes to the number is answered as
+     *"[the technician]'s assistant at DishNet"* — family, friends, and the customers whose installs he coordinates. A
+     message he types stands the assistant down on that chat for `wa_human_cooldown_minutes` only. Switch off any
+     WhatsApp Business greeting or away message on that phone.
+   - **His staff row:** active; its role `support`, `support_leader` or `support_engineer`; **no `is_admin`** (the card
+     does not offer such an account); its phone **his own phone** — not a shared office phone, and not a department's
+     number: an owner alert sent to a department's number is kept for the team and reaches nobody.
+   - **What the Leads page shows him (D2):** his role holds **no *All Leads (Admin View)* grant** (`all_leads`) on the
+     *Roles & Permissions* screen, and his own module list, if his row has one, does not include `all_leads`. Either one
+     shows him every lead — every salesperson's — and every technician with that role would see his.
+   - **The alert number (D3):** `alert_whatsapp` — the *Alert a human on* field on the WhatsApp AI screen — set, and
+     **not** his phone. The central copy is the safety net while he is on an install; with `alert_whatsapp` blank there
+     is no copy, and an owner with no phone gets no alert at all. Keep `wa_handover_copy_central` unset or on.
+   - **Who gets the escalations:** whether `lead_supervisor_phone` is set (step 6 below). It has no screen.
+   - **The persona (D5):** tell him what his number will say in his name — *"[the technician]'s assistant at DishNet …
+     [the technician] will follow up personally"* — and record that he agrees. It is not changed for a technician:
+     **if he does not agree, do not add the number.**
+
+The alert number and the escalations, read-only. Like P2, it opens the database read-only, writes nothing and prints
+**no number**: for `alert_whatsapp`, from both places, whether it is set and whether it is the phone of record of an
+active technician — expect `set, no active technician phone of record`; if it says `IS`, STOP and ask the operator — and
+whether `lead_supervisor_phone` is set (the lead alerts read it from the store alone).
+
+```
+docker exec ucrm php -r 'chdir("/data/ucrm/data/plugins/dishnet-hybrid-sudan"); require "lib/bootstrap_data.php"; require "lib/PluginConfig.php"; require "lib/TenantProfile.php"; require "lib/PhoneNumber.php"; $d = cliDataDir(getcwd()); $f = PluginConfig::read(getcwd(), $d); $t = TenantProfile::load("uganda"); $n = function ($v) use ($t) { $v = is_scalar($v) ? trim((string)$v) : ""; $i = $v === "" ? null : PhoneNumber::international($v, $t); return $i === null ? "" : (string)preg_replace("/\D+/", "", $i); }; try { $p = new PDO("sqlite:" . $d . "/plugin.sqlite3", null, null, [PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]); $s = json_decode((string)$p->query("SELECT data FROM kyc_config WHERE id = 0")->fetchColumn(), true); $tech = []; foreach ($p->query("SELECT data FROM retailers") as $r) { $x = json_decode((string)$r["data"], true); if (is_array($x) && !empty($x["is_active"]) && in_array(strtolower(trim((string)($x["role"] ?? ""))), ["support", "support_leader", "support_engineer"], true) && $n($x["phone"] ?? "") !== "") $tech[$n($x["phone"])] = true; } } catch (Throwable $e) { $s = null; $tech = null; } $say = function ($v) use ($n, $tech) { if (preg_replace("/[^0-9+]/", "", is_scalar($v) ? (string)$v : "") === "") return "not set"; return "set, " . ($tech === null ? "staff unreadable" : (isset($tech[$n($v)]) ? "and IS an active technician phone of record" : "no active technician phone of record")); }; printf("%-22s files: %s\n", "alert_whatsapp", $say($f["alert_whatsapp"] ?? "")); printf("%-22s store: %s\n", "alert_whatsapp", is_array($s) ? $say($s["alert_whatsapp"] ?? "") : "unreadable"); printf("%-22s store: %s\n", "lead_supervisor_phone", is_array($s) ? ((is_scalar($s["lead_supervisor_phone"] ?? null) && trim((string)$s["lead_supervisor_phone"]) !== "") ? "set" : "not set") : "unreadable");'
+```
+
+2. **P2 — the STOP rule, widened (D8):** `wa_inbox_roles` unset, or naming no role that owns a number: no sales role
+   and, now, no `support`, `support_leader` or `support_engineer`. The Inbox is not filtered by number: a technician
+   role granted it reads every number's chats — his customers' to every technician, every salesperson's to him. Reading
+   is grantable; sending from the Inbox never is.
+3. **Step 1, the card:** in the *Add a number* form, choose *"[the technician] — technician"* in the owner list (a
+   salesperson is listed by name alone), type a display name staff will recognise (the default is *"Sales — [his
+   name]"*), and press **Add, switched off**. The number is added switched off but with the assistant **on**. Then
+   **Show QR code**, **Verify number** and **Register webhook**, as for a salesperson.
+4. **Step 4:** first **Stop the assistant on this number**, then **Switch on**, then the Inbox test.
+5. **Step 5:** the assistant on and the four tests, then **5.5, the AI-to-AI loop test — mandatory**: between his
+   number and the sales number, and between his number and every other number a person owns — a salesperson's or
+   another technician's. Expect no reply on any phone. If his phone of record is the line itself, the hand-over alert
+   arrives on the line from the sales number and is kept for the team, never answered (`tests/test_sales_numbers.php`,
+   U10).
+6. **The leads (D2):** give him the bookmark `?page=dashboard&tab=leads&f=all` on his phone. His phone's menu has no
+   Leads link, and the page's default list (*My Today*) does not show the leads he owns; *All* does. Do not tick "My
+   Leads" in his modules, and do not grant him `all_leads`. **Tell him in the same breath:** a lead from his number
+   alerts him at once, warns at 45 minutes, and **escalates at 60 minutes** unless he logs the call on that page —
+   **Call Now** (or the lead's **Call** button), choose an outcome, then **Save & Next Lead**. Pressing Call Now,
+   dialling, or a WhatsApp message — from his phone or from the call window — does not count. The escalation goes to
+   `lead_supervisor_phone`, or, when that is unset, to the first account with `is_admin` set and a phone.
+7. **Section 6**, then record the go-live in docs/07.
+
+**What his number does not do (D4).** It answers as a sales line. A recognised customer's problem is acknowledged, one
+question asked, and handed to him with the central copy; the assistant does not troubleshoot and opens no ticket. A
+caller it does not recognise (someone at the install site, writing from a number the account does not hold) gets the
+sales posture. Rollback is section R, as for any number.
 
 ## What the acceptance test proves, and what it cannot
 

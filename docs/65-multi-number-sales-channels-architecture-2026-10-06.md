@@ -1129,6 +1129,7 @@ OFF. Where the build went beyond the design, or stops short of it, the item says
      an active salesperson (role `sales`, `sales_staff` or `field_agent`) and a display name (default *"Sales —
      [their name]"*). The id is `sales-NNN`, the next free number; ids are never reused, because a channel is never
      deleted. Role `sales`, owner `staff`, `handover_to = owner`, `portfolio_scope = own`, status **disabled**.
+     *(5.18.100: or an active technician, labelled, whose account is not flagged `is_admin` — §AE.)*
    - **pair** — Evolution's QR code (and pairing code) for that number's instance.
    - **verify** — the number Evolution reports for that instance (`fetchInstances`), only while it is connected,
      through the new `ChannelRegistry::verifyNumber()`. It writes the number, `verified_at`, `verified_by`, and a trail
@@ -1139,7 +1140,7 @@ OFF. Where the build went beyond the design, or stops short of it, the item says
      member: the go-live order of §AA.3, enforced.
    - **pause, switch off, retire** — retiring needs a ticked confirmation, and a retired number takes no further change.
    - **assistant on/off** and **new owner** — the new `ChannelRegistry::setOwner()`, a salesperson only. The trail
-     keeps the previous owner.
+     keeps the previous owner. *(5.18.100: a salesperson or a technician — §AE.)*
 
    *Found in Evolution* now marks an instance a salesperson's number uses as *in use*, so it is never offered to a
    department. That card still shows an admin each instance's own number, as Evolution reports it, as it did before.
@@ -1750,3 +1751,71 @@ and nothing that lets an automated message out; six MINOR findings, all of them 
 | a re-pair made while the registry is off is recognised only after switch-on — AD.5 dated the window from the re-pair | AD.5 and the runbook say so; **Back on** after R-3 now verifies the department numbers first, which records what Evolution reports for every instance |
 | AD.8 claimed a weakened copy for every fix | reworded: the guard-alone assertion has none, and why |
 | the `reported_back` assertion's message credited the guard with what a verification had done | relabelled |
+
+## AE. A technician's own number (5.18.100, development, 23 Oct) — the operator's decisions; released 24 Oct (`release/5.18.100` = `8ff469f`, root docs/07); NOT deployed
+
+**The request.** The operator, 23 Oct: one technician's own WhatsApp number, answered by the assistant, *"for sales and
+support"*, with hand-overs and leads going to him — and he stays a technician on install jobs. Documents name him
+*[the technician]* (docs/66).
+
+**Measured first.** The owner's staff role was checked in one place only: the card, `SalesNumbersAdmin` (its pick list
+and its refusal). The registry, migration 087 and every runtime reader — LineOwner, the hand-over, the lead's owner,
+OwnedLead, InternalNumbers, AutomationPolicy — ask only "staff-owned and active". So the change is the card's rule and
+its words: no migration, and no registry, runtime or staff-record change.
+
+### AE.1 Decided on 23 Oct (the operator's answers; nothing settled before was reopened)
+
+- **D6 — a new work SIM**, not his personal WhatsApp.
+- **D1 — any technician role** (`support`, `support_leader`, `support_engineer`) is offered, labelled *"— technician"*;
+  an admin adds each number for one named person. **A technician's account with `is_admin` set is neither offered nor
+  accepted** (told to the operator as *"Admin accounts stay excluded"*). The question was about technicians: the sales
+  rule is 5.18.99's, unchanged, so an `is_admin` account with a sales role is offered and accepted as before. *(After
+  review: the first build excluded it too — a narrowing of salespeople that nobody decided; withdrawn, SAFETY.md.)*
+- **D4 — the number's role stays `sales`:** the sales posture. A recognised customer's problem is acknowledged, one
+  question asked, and handed to him with the central copy; no troubleshooting, no ticket.
+- **D2 — the leads from his number are his.** He reaches them by the bookmark `?page=dashboard&tab=leads&f=all`; no menu
+  changes. The 60-minute escalation applies as for a salesperson.
+- Told to the operator as defaults, not asked separately: **D3** — hand-overs to his phone of record, with
+  `wa_handover_copy_central` on; **D5** — the persona unchanged (*"<first name>'s assistant at DishNet"*; the operator
+  confirms he agrees); **D7** — one owner list, with labels; **D8** — the `wa_inbox_roles` STOP rule widened to the
+  technician roles; **D9** — the card's title, *Salesperson numbers*, kept.
+
+§AA's D3, D4 and D5 stand as decided for salespeople; AE.1 applies them to a technician's number.
+
+### AE.2 What is built (5.18.100)
+
+- `SalesNumbersAdmin::TECHNICIAN_ROLES` beside the untouched `SALES_ROLES` — written out, never
+  `StaffDirectory::JOB_ROLES`, which holds `admin`. One helper, `ownerKind()`: `sales` (5.18.99's rule, the role
+  alone), `technician` (no `is_admin`), or `''` for an inactive row, an `is_admin` technician and every other role.
+  `owners()` replaces `salespeople()`; `eligibleOwner()` replaces `salesperson()`, with one refusal sentence naming both
+  groups. The row the card writes is unchanged.
+- The card's intro, empty list, placeholder and example name both groups.
+- Tests: `tests/test_sales_numbers.php` — U9 and S rewritten on purpose; U10 in process and in the sandbox (his number
+  added switched off as a sales line, his staff row the same bytes by hash across the add, a new owner and the
+  switch-on, `takesJobs` still true; the worker, his lead, the alert loop's seed; his job message through
+  `NotificationService::sendVia` with CLASS_STAFF, and a CLASS_REPLY to the same number refused `internal_recipient` as
+  its control); R, this release's boundary against b1783e66. `tests/test_sales_numbers_mutants.php`: X-a to X-k.
+  `tests/test_quote_company.php` I measures 5.18.99's delta on b1783e66 and holds the tree to it.
+- The runbook: docs/66, *"A technician's number"*.
+
+### AE.3 Not done, each its own decision and release
+
+- A `support` role on his number, a combined role, a ticket from WhatsApp, the assistant troubleshooting on his line.
+- A Leads menu link for a number's owner (`public.php`, `more_menu.php` and `navigation.php` are held byte-identical by
+  `tests/test_bank_boundaries.php`).
+- Changes to the lead alerts or the 60-minute escalation; another owner for his leads; a per-person staff flag; a card
+  rename; technician persona wording.
+- The next deploy script's read-only checks (the `TECHNICIAN_ROLES` line, the owner list counted by kind, a
+  `wa_inbox_roles` report): derived from 5.18.99's, with the release. *(After review:)* its `owners()` probe also
+  counts, by count only, the active sales-role rows with `is_admin` set and the current numbers owned by one, so the
+  rule's reach is measured before the release goes live. *(24 Oct, as built: `scripts/deploy-5.18.100.sh` has
+  TN-G1–TN-G3, TN-N1 and TN-N2, root docs/07. It does not print that count separately: the salespeople's rule is
+  5.18.99's, unchanged, and TN-G2 shows the installed list and the pin's offering the same salespeople; TN-N1 counts the
+  numbers by their owner's kind, a salesperson's with or without `is_admin` as one kind.)*
+
+### AE.4 Still the operator's (not in the repository)
+
+- His exact role, whether his row has `is_admin` set, and whether it carries his own phone.
+- The production values of `wa_inbox_roles`, `alert_whatsapp`, `lead_supervisor_phone` and `wa_handover_copy_central`.
+- Whether his role holds `all_leads` in the production RBAC (he would then see every lead).
+- His agreement to the persona.
