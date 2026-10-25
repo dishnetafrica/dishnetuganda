@@ -14095,3 +14095,352 @@ own command, as root on the server.
   day after 15:10 UTC, `--after-only` again; the five clients moved to organization #1 in uCRM (the next `--after-only`
   counts them again, Q-N2); the screens as an administrator; and the first real quote, for a customer under
   organization #1, as the proof. No test quote for a real customer.
+
+## 24–25 Oct — 5.18.100: a technician can own a WhatsApp number on the WhatsApp AI screen (Uganda) — any technician role (`support`, `support_leader`, `support_engineer`) whose account is not an administrator's, offered and labelled *"— technician"* beside the salespeople; the number stays a sales line, and he keeps his role and his install jobs; no migration; no switch; South Sudan and Domain B unchanged. `release/5.18.100` = `8ff469f`, cut on live 5.18.99 (`ca05ada`); `scripts/deploy-5.18.100.sh` pinned to it; the release suite PASSED twice (298 files, 16,598 passed, 0 failed, on `8ff469f`); the rehearsal PASSED, a clean trial (trial 3, 25 Oct: 1,538 ok, 0 failed); NOT deployed
+
+**Request.** The operator's decisions of 23 Oct are the entry *"23 Oct — sales-002 switched on; a technician's number
+designed"* above (root `docs/65` §AE). On 24 Oct, after 5.18.99 was live, the operator asked for the command, and chose
+*"Go ahead end to end"*: the tests, the release branch on `ca05ada`, the release suite twice, the deploy script, one full
+rehearsal, then the push and the command, stopping only if something fails. One test failed on the way
+(`test_cashbook_physical_list` M, a test of the tests): on the operator's *"Fix and continue"* it was fixed (`6d6f0bc5`,
+Tests below). The rehearsal's second trial then stopped on a fault of its own, not the script's. On the operator's
+*"Run trial 3 now"* (25 Oct), the third trial ran on the fix and passed (*The trials*, below).
+
+### Release notes
+
+**In plain words.** On the Uganda installation, the Salesperson numbers card of the WhatsApp AI screen now offers a
+technician as well as a salesperson, for a new number and for a new owner:
+- **Who is offered:** every active staff account whose role is `sales`, `sales_staff` or `field_agent` (5.18.99's rule,
+  unchanged, an administrator's account included), and every active account whose role is `support`, `support_leader`
+  or `support_engineer` **and that is not flagged `is_admin`**. A technician shows as *"<name> — technician"*.
+- **Who is refused:** an inactive account, a technician's account flagged `is_admin`, and every other role. The card
+  says: *"A number belongs to a salesperson (role sales, sales_staff or field_agent) or a technician (role support,
+  support_leader or support_engineer) whose account is not an administrator's."*
+- **What the number is:** a sales line, exactly as a salesperson's: role `sales`, owner `staff`, portfolio `own`,
+  hand-over `owner`, assistant on, added **switched off**, *"Sales — <name>"*, id `sales-NNN`. The leads from it are
+  his; the hand-over goes to his phone of record, with the central copy as configured.
+- **What does not change:** his staff row — role, `is_admin`, phone, install jobs — which the card never writes; the
+  registry, migration 087 and every reader after the card (LineOwner, the hand-over, OwnedLead, the internal-number
+  guard, the automated-send policy, the worker, the brain, the webhook); the card's title, *Salesperson numbers*; its
+  switch-on gates.
+- **Nothing is switched on by the deploy.** A number is added only by an administrator, on the card, after the deploy.
+
+### Files — 15 against `ca05ada`: 1 added, 14 changed, none removed
+
+The release is `tech-100`'s change (`b1783e66..6d6f0bc5`), built on the 5.18.99 release commit itself, as one commit.
+- **The code (2):** `lib/SalesNumbersAdmin.php` (+45 −16): `TECHNICIAN_ROLES` beside the untouched `SALES_ROLES`, the
+  rule in one helper (`ownerKind()`), `owners()` (was `salespeople()`) and `eligibleOwner()` (was `salesperson()`) with
+  their refusals; `tabs/engage/wa_ai_setup.php` (+8 −7): the card's words and its call of `owners()`.
+- **The record (1):** `SAFETY.md` (+70): its 5.18.100 entry.
+- **Tests, on purpose (6):**
+  - `tests/test_sales_numbers.php` (+414 −12): U9 and S rewritten, U10 new (in process, and in the sandbox: the
+    worker, his lead, the alert loop's seed, his job messages), R new (this release's boundary against `ca05ada5`);
+  - `tests/test_sales_numbers_mutants.php` (new, 250 lines): the weakened copies X-a … X-k;
+  - `tests/test_quote_company.php` (+62 −12): section I measures 5.18.99's delta on its own release commit, `ca05ada5`,
+    from Git, and holds this tree to it;
+  - `tests/test_cashbook_physical_list.php` (+42 −5), section M: `tests/test_bank_screen.php` held to 5.18.97 with this
+    release's one declared change taken out;
+  - `tests/test_bank_screen.php` (+12 −2) and `tests/test_bank_boundaries.php` (+5 −5): the version rule and the one
+    declared change.
+- **The version alone (6):** `manifest.json` (5.18.100) and the pins in the five `tests/test_distributor_*.php`.
+- **In the release only:** six of the 15 differ from `tech-100`'s, and only in what they measure against —
+  `SAFETY.md` and `test_sales_numbers` R name `ca05ada5` where `tech-100` names `b1783e66`; `test_quote_company` I,
+  `test_bank_boundaries`, `test_bank_screen` and `test_cashbook_physical_list` M name the release commits (`ca05ada5`,
+  `ce7ac388`, `ec0accd4`, `e35eccee`) where `tech-100` names the development branch's (`b1783e66`/`707dc039`,
+  `ef143228`, `b32dad87`, `419e2ffd`), and the release's `test_quote_company` has no `--delta-base` and no
+  development-only tests in its declared list; `test_sales_numbers`' list of files it lets change holds the release's
+  15, not the branch's 25 (the branch changes 27 files, two of them root docs/65 and docs/66, outside the plugin), and
+  its persona base in G is `6464204` (release/5.18.89) where `tech-100` has `7195253`, each inherited from its parent.
+  The other nine are
+  `tech-100`'s blobs exactly; the class and its page among them (the rehearsal's 100-0 and the pin check both
+  compare them with `tech-100`'s, byte for byte).
+- **Untouched:** `migrations/`, `master.php`, `main.php`, `webhook.php`, `public.php`, `lib/ChannelRegistry.php`,
+  `lib/StaffDirectory.php`, `lib/WhatsAppAccess.php`, every runtime reader of a number's owner, the quoting code,
+  ECO Bank, the Cashbook, South Sudan and Domain B. Nothing outside the plugin folder changes.
+- 15 files changed, 914 insertions(+), 65 deletions(-).
+
+### Ancestry
+
+`8ff469f` (5.18.100, release) ← `ca05ada` (5.18.99, release, live since 24 Oct) ← `ce7ac38` (5.18.98). It carries the
+development change on `tech-100`, three commits on `b1783e66` — `dev-99`'s relay-fix commit, one before its tip
+`bfd6c33e` (the relay test's review fixes), which `tech-100` does not contain:
+- `66f75a94`, the build;
+- `ad0d72b8`, the review's findings;
+- `6d6f0bc5`, tests only: `test_cashbook_physical_list` M holds `tests/test_bank_screen.php` to 5.18.97 with this
+  release's one declared change taken out (it had failed 495/1 on `tech-100`, rightly: that file was changed on
+  purpose, and M did not yet know it).
+
+**What is pushed for the install:** `release/5.18.100` at `8ff469f`, and the development branch with the script, its
+rehearsal and this record, plus the records of the decision (root `docs/65` §AE, root `docs/66` *"A technician's
+number (5.18.100)"*). **`tech-100` itself is not pushed:** it is built on `dev-99`'s history, whose suite is not finished
+(5.18.99's entry); the two records are carried onto the development branch by themselves. The deploy reads the release commit alone.
+
+### Tests
+
+- **On `tech-100`, the 21 files the change touches or names** (24 Oct, one at a time): 20 passed at once —
+  `test_sales_numbers` 162, `test_sales_numbers_mutants` 21 (X-a … X-k, each weakened copy caught), `test_quote_company`
+  278, `test_bank_boundaries` 158, `test_bank_screen` 341, the five distributor tests, the media, document, partner and
+  voice tests. **`test_cashbook_physical_list` failed 495/1, rightly:** its M held `tests/test_bank_screen.php` to 5.18.97
+  byte for byte, and 5.18.100 changes that file on purpose. On the operator's *"Fix and continue"*, M now takes this
+  release's one declared change out before comparing (`6d6f0bc5`): 496/0, and two controls — one line added to the
+  file, one line missing — each fail it (495/1).
+- **On the release tree, the 12 files it changes or that name it** (before the commit, on `ca05ada` plus the 15):
+  `test_sales_numbers` 162/0, `test_sales_numbers_mutants` 21/0, `test_quote_company` 277/0,
+  `test_quote_company_mutants` 79/0, `test_bank_boundaries` 158/0, `test_bank_screen` 341/0,
+  `test_cashbook_physical_list` 496/0 and the five distributor tests. After `SAFETY.md` was set to name `ca05ada5`, the
+  four tests that read it again: `test_sales_numbers` 162/0, `test_quote_company` 277/0, `test_sl_block_retry_scope`
+  86/0, `test_starlink_connector` 97/0.
+- **The release, the full suite twice** (24 Oct, by the resumable equivalent of `tests/run.sh`), on `8ff469f` in the
+  worktree `rel-5.18.100`, clean: **pass A** 14:52–17:16 UTC and **pass B** 17:16–19:39 UTC, each **298 files, 16,598
+  passed, 0 failed, EXIT=0**. 5.18.99's release suite was 297 files and 16,534; the one file more is
+  `test_sales_numbers_mutants`. `test_cash_in_hand_p3b`, the script's T1, read 548 passed, 0 failed in both, as
+  `T1_SIGNATURE` pins it.
+- **The script's own checks, outside the suite** (after it, one at a time):
+  - its pins, by an independent checker: 46/0 — the 15 release files by sha256 at `8ff469f`, the 60 kept and the 14
+    changed at `ca05ada`, every single-file pin, no stale wording;
+  - the TN judges, taken from the script itself and run on canned readings (stage A, after the copy, after a
+    rollback): 32/0; the same test against the script as first derived, before the reviews' fixes, fails 15 of them —
+    the owner's current role never compared (TN-1) and the swapped entry never seen among them;
+  - the two probes on a synthetic book: 14/0 — the owners' roles and the granted entries hashed alike, free text
+    never printed, a value that is not text read as WhatsAppAccess casts it, the two lists of known role names one
+    list;
+  - the owner-list probe against six weakened copies of the class, each caught (6/6), and the rule-as-text reader
+    against five, each caught (5/5).
+
+### `scripts/deploy-5.18.100.sh` — 7,622 lines, sha256 `f7b09f91acc64512…`
+
+Derived from 5.18.99's script (the one that PASSED on 24 Oct) by 89 asserted edits, each anchor found exactly the stated
+number of times or nothing written; its two release tokens filled with `8ff469f` by a second asserted step that checks
+every pinned sha256 against Git. 5.18.99's and 5.18.98's checks are carried with their names. New:
+- **A0, pinned:** the 15 files by sha256, 1 added and 14 changed; the 60 files it must not touch by theirs in both
+  commits; the 14 it changes by their 5.18.99 form (Q-G1 installed, before anything changes).
+- **TN-G1–TN-G3, stage A, before anything changes (refusals):**
+  - **TN-G1** the owner rule as text, in the pin (5.18.100's: the technician roles once, never `admin`; the sales roles
+    exactly as 5.18.99; an administrator's technician account refused; a number still added with the role `sales`;
+    the page calling `owners()`) and installed (5.18.99's: `salespeople()`).
+  - **TN-G2** the two owner lists on one consistent copy of the book (VACUUM INTO, the settings row cut to the book's
+    keys), through each code's own class — no Evolution client is ever constructed — judged against the rule written
+    out in the probe: the installed list the active salespeople and nobody else; the pin's the same salespeople and the
+    active technicians whose account is not an administrator's, each labelled; both readings of the same rows (an HMAC
+    under the run's key, never printed).
+  - **TN-G3 `wa_inbox_roles` (the decision D8, A),** read from the live store row, read-only, parsed as
+    `WhatsAppAccess::inboxRoles()` parses it: it must be unset, or grant no role that owns, or after 5.18.100 may own,
+    a number — **neither one of the six sales and technician roles nor the role any number's active owner holds now**
+    (a number keeps working for any active owner, whatever his role became). The two sides are compared as keyed
+    hashes under the run's key; an entry that is not a known role name is counted and **never printed** (the setting is
+    free text). The Inbox is not filtered by number, so such a grant would show every number's chats to everyone with
+    that role.
+  - Notes: TN-N1 the registry's numbers by their owner's kind (counts); TN-N2 no technician account to offer, or
+    administrators' technician accounts left out.
+- **After the copy (R; `--after-only` too):** TN-CA1 the installed rule as text; TN-CA2 the installed `owners()` on a
+  new copy, as the rule makes it, its counts against stage A's (a difference a note: staff accounts change); TN-CA3
+  `wa_inbox_roles` again and unchanged by the run — in the deploy every entry compared as keyed hashes; in an
+  `--after-only` its known role names and the count of the others, from the state file.
+- **After a rollback (RB):** the owner rule 5.18.99's again, as text and on a copy; the numbers a technician owns
+  counted — a note: they keep their owner and keep working under 5.18.99, whose card offers no technician for a new
+  number or a new owner.
+- **The copy's time** is read off `lib/SalesNumbersAdmin.php` (COPY_MARK), a file this release changes.
+
+**Reviews before the trial.** Three independent read-only reviews of the script and its rehearsal, each finding
+verified by a second reader before it was acted on:
+- Round 1: seven confirmed, all fixed — TN-G3 compared `wa_inbox_roles` with the six roles only, not with the roles
+  the numbers' owners hold now (TN-1); the inbox probe could print free text from the setting (conf-1); six stale
+  comments; and in the rehearsal three checks that could never pass, two that compared a value with itself, and a sweep
+  of every run's observers lost when 5.18.99's last section was cut.
+- Round 2: three confirmed, all fixed — a derivation one edit behind its blocks; the judges' targeted test could not
+  run (`grab` never stopped when start and end were the same line); and TN-CA3 no longer saw an unknown entry swapped
+  during a deploy (stage A's keyed hashes now kept in memory for stage R).
+- Round 3, every literal expectation of the rehearsal set against the script's own text: one confirmed and fixed (4a
+  counted keyed hashes over the whole state file, where 087's own reading rightly keeps its `sig`).
+
+### The rehearsal — `scripts/harness/deploy-5.18.100/rehearse.sh` (588 lines, sha256 `34912494afa35f4b…` at `5b26be3d`, with `rh100-oracle.php`)
+
+The sandbox is 5.18.99's rehearsal's, built by its own code up to just before its last section (the cut asserted),
+which builds every earlier sandbox from their own rehearsals; 5.18.99 is then deployed once more with `--redeploy`, its
+copy moved back, its `--after-only` and the quarantine's `--check` passed: production's state on the day. On it, four
+staff records are added through the installed code's writer — a technician, a technician with no name, a technician
+leader whose account is an administrator's, an inactive engineer — each name a marked secret of the rehearsal's. Its own
+oracle (`rh100-oracle.php`) reads who the card may offer, independently of the class.
+- **100-0** the pins against Git (short and full; the 15, the 60, the 14), the class and its page `tech-100`'s, the
+  header's two commands alone, COPY_MARK on a changed file, TN-G1's reader on both commits.
+- **100-c** `--check` GO: TN-G1–TN-G3 ok, TN-G2's counts the oracle's; nothing changed, no name printed, GETs only.
+- **100-1** TN-G3 refuses a technician role and a sales role in `wa_inbox_roles`; accepts one naming neither, its free
+  text counted and never printed; TN-G1 refuses a release whose rule takes an administrator's technician account in
+  (re-pinned so A0 lets it through), and with TN-G1 weakened TN-G2 refuses it on its own; four weakened copies, each
+  caught; nothing changed by any of them.
+- **100-4** the deploy, DEPLOY typed: PASSED; the TN lines, the carried ones, the state file without a keyed hash, the
+  copy's time, the three commands printed alone; no name, no stand-in secret; the ledger, ECO Bank and the quarantine
+  as they were.
+- **100-5** `--after-only` as printed: PASSED; a number given to the technician: TN-N1; `wa_inbox_roles` set to a
+  technician role: TN-CA3 FAILS; his role changed to one outside the six and `wa_inbox_roles` naming it: TN-CA3 FAILS
+  (TN-1); two weakened copies caught; `--check` with 5.18.100 live refused.
+- **100-6** the rollback as printed, ROLLBACK typed: PASSED — 5.18.99's files, owner rule and quoting code; his number
+  still his and counted; `--redeploy` too soon refused at A14.
+- **100-7** `--redeploy`: PASSED; BR1 the one file on disk; its `--after-only` PASSED.
+- **100-10** every run of the 5.18.100 script: copy observers quiet, token copies gone, the stand-in uCRM given GETs
+  only, the vault as it was; no figure, secret, client id, staff name, keyed hash or bash runtime error in any output,
+  log or state file; nothing left in /tmp; every anchor found and every option known, each with its control on the
+  control; the checkout as found.
+
+**The trials: one clean trial is required**, under 5.18.99's rule of 23 Oct. Each trial runs from a worktree frozen at a fixed commit, with an early stop at the first FAIL from 100-pre on. Any failure from 100-pre on, or one that cannot be shown, means the trial is not clean. A clean trial is evidence for the rehearsal only. It authorises no push and no deploy by itself. The operator approved one full rehearsal on 24 Oct. They approved trial 3, with its own reason, on 25 Oct (*"Run trial 3 now"*).
+- **Trial 1 (24 Oct 19:43 UTC, `reh100-t1` at `64532cdd`): refused at once; nothing ran.** The rehearsal's own check of the chain it cuts asserted that 5.18.99's rehearsal defines `mutant()`. It does not: 5.18.90's rehearsal, which the chain also runs, defines it. Fixed in the rehearsal (`0a4911af`): the cut no longer asks for it, and every helper the 5.18.100 sections call is asserted defined once the chain is sourced.
+- **Trial 2 (24 Oct 19:46–22:53 UTC, `reh100-t2` at `0a4911af`): STOPPED EARLY at its first FAIL from 100-pre on**, in 100-1, case 1f; exit 143 (the runner's TERM).
+  - 1,424 ok and **0 FAIL** in every inherited section: 5.18.90's to 5.18.99's rehearsals and the quarantine's. 28 more ok in 100-pre, 100-0, 100-c and 100-1's cases 1a–1e.
+  - **The FAIL was the rehearsal's, not the script's.** Case 1f re-pins the variant's `lib/SalesNumbersAdmin.php` with 5.18.99's helper `pinned_copy99`, which asserts that the file's sha256 line occurs once in the whole script. 5.18.100 *changes* that file, so its script lists it twice: 5.18.99's sha256 in `PREV_CHANGED_SHA256S` and the release's in `PIN_SHA256S`. The assertion failed, no copy was written, and 1f and 1g ran a script that did not exist (*"got 'nononono…'"*, then *"No such file or directory: …/.var100s.sh"*).
+  - Fixed in the rehearsal alone (`5b26be3d`), with three changes:
+    - `pinned_copy100` re-pins the file inside `PIN_SHA256S` only, asserted once there, and leaves 5.18.99's line as it is.
+    - A control before 1f runs its copy: the copy differs from the script in three lines (the two commit pins and the class's line in the release's list), and 5.18.99's line is as it was.
+    - In 100-10, a control on the control: a file the release's list does not hold is recorded as such, and its line is replaced nowhere.
+  - **The script is unchanged.**
+  - **The targeted test** (`q100/reh/target_pin100.sh`, scratchpad) used the real script, the real variant commit, and the patched rehearsal's own lines verbatim: **13 passed, 0 failed**.
+    - The copy's own TN-G1 reader gives the variant `kind=0`, as 1f expects.
+    - 1g's and 1h's anchors are found once on the copy.
+    - Trial 2's call and two weakened helpers are each caught: one re-pins the first line in the whole script, which is 5.18.99's; one has no count and no block.
+  - Before trial 3, the sections that trial 2 never reached (100-4 to 100-10) were read for the same kind of fault: a helper inherited from 5.18.99's rehearsal whose assumption a changed file breaks. Every function and variable they use is defined in the chain. Their raw SQL names the store's real columns: staff records are `id` + JSON `data`, and `wa_channels` and `wa_channel_log` are as migration 087 has them. Nothing else was found.
+- **Trial 3 (25 Oct 05:09–08:42 UTC, `reh100-t3` at `5b26be3d`): **PASSED, a clean trial: 1,538 ok, 0 failed, exit 0** (*"RESULT: 1538 ok, 0 failed (the script: the committed script)"*), in 3 h 33 min.
+  - 1,424 ok in the inherited sections and 114 in 5.18.100's own, 100-pre to 100-10. **0 FAIL anywhere.** 23 runs of the 5.18.100 script were kept: 17 by option, and 6 as a summary printed them.
+  - 1e–1h, where trial 2 stopped, passed, with the new control before 1f.
+  - **The deploy (100-4) PASSED: 175 ok, 0 failed, 24 notes.** Every line 100-4 looks for is among them: A0, BR1, Q-G1, A14, A22-T1, G3, Q-G2–Q-G4, TN-G1–TN-G3, R1, Q-CA1, Q-CA2, TN-CA1–TN-CA3, Z1 and Z2. The state file's owner and inbox lines carry no keyed hash (087's own reading keeps its `sig`, as 5.18.99's did), and the three commands are each printed alone.
+  - **`--after-only` (100-5) PASSED as printed, R19 conclusive.** Then the technician's number: TN-N1 noted it. TN-CA3 FAILED both plants: `wa_inbox_roles` naming a technician role, and naming a role outside the six that a number's owner now holds (review TN-1). Both weakened copies were caught, and `--check` with 5.18.100 live was refused.
+  - **The rollback (100-6) PASSED, ROLLBACK typed:**
+    - 5.18.99's files, quoting code and owner rule (as text and on a copy) are back;
+    - RB noted the one number a technician owns, and it is still his;
+    - 088 stays;
+    - `--redeploy` too soon was refused at A14;
+    - the quarantine's `--check` PASSED.
+  - **`--redeploy` (100-7) PASSED.** BR1 found the one file on disk, and its `--after-only` and the quarantine's `--check` PASSED.
+  - **The sweeps (100-10):**
+    - every anchor was found exactly once, and each of these checks has its control on the control: anchors, a re-pinned copy, unknown options and the sweeps;
+    - the copy observers were quiet, every token copy was gone, and the stand-in uCRM received GETs only;
+    - no figure, secret, client id, staff name, keyed hash or bash runtime error appears in any output;
+    - nothing of this release's is left in /tmp, and the checkout is as it was found.**
+
+### Runbook
+
+1. **Pushed with this entry:** `release/5.18.100` at `8ff469f`, and the development branch carrying the script, its
+   rehearsal and this record. Step 3's `git pull origin claude/study-this-jhe2eg` brings the script, and its
+   `git fetch origin release/5.18.100` the release.
+2. **First, while 5.18.99 is still live: its own after-checks, if they have not been run** (5.18.99's entry, steps 8
+   and 9). They can run only while 5.18.99 is live: its script refuses once the container serves anything but `ca05ada`.
+   - `--after-only` (at least 20 minutes after 5.18.99's copy at 10:39:23 UTC on 24 Oct), then the quarantine's
+     `--check`, each its own command, each with its own log file to send;
+   - the next day after 15:10 UTC (18:10 Kampala), `--after-only` once more.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.99.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.99/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **The deploy.** Run it as root on the server, as its own command, outside 14:55–15:10 UTC (the evening WhatsApp,
+   18:00 Kampala). A14 needs a quarantine `--check` that passed after 5.18.99's copy: the one begun 24 Oct 10:41:53 UTC
+   passed. Type `DEPLOY` when asked, and send back **the log file**: never a copy of the terminal, never the cash sheet.
+   While it runs, and during every `--after-only` and the rollback, do not use the Salesperson numbers card, ECO Bank
+   (keep no statement), Send Quotation, the KYC form, `tools/set_config.php` or Settings: a change made then fails the
+   checks that compare before and after. **His number is added only after the deploy run has finished** (step 7).
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.100 && mkdir -p /root/dnb-5.18.100 && bash scripts/deploy-5.18.100.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.100/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   **Expected: PASSED, 0 failed, with notes.**
+   - **TN-N1** always: the registry's numbers by their owner's kind, counts only. **TN-N2** if no active technician
+     account without `is_admin` exists yet (the card then offers salespeople only), or if technician accounts with
+     `is_admin` are left out — never clear `is_admin` or change a role to fit the card.
+   - 5.18.99's notes, carried: **Q-N1–Q-N7** (counts; Q-N2 the app's clients outside organization 1, on the sheet),
+     **Q-G5** INCONCLUSIVE when there is no Lead or Manual quote with a uCRM client in 30 days, **Q-G4** when uCRM gives
+     no currency for organization 1, **Q-N3**'s `?:http404` as on 24 Oct (not yet looked at), **N1–N4**, **R3** (no
+     `migration.log` line for 087), **R19** (not yet conclusive right after the copy), **A17** if requests made under
+     v1.0 are still pending, and Q-CA3's.
+
+   **If TN-G3 refuses, nothing was changed.** Either `wa_inbox_roles` grants the shared Inbox to a role that owns, or
+   may own, a number, or the script could not judge it. In the first case its message ends by telling you to set or
+   clear `wa_inbox_roles` and run it again. **Do not do that part:** do not change `wa_inbox_roles` on your own. Send
+   the log file and stop — the change is a decision (D8, A; docs/66 P2: a STOP). Any other refusal or failure, or a
+   note you cannot place: send the log file and stop.
+4. **Right after PASSED, at a quiet moment (not between 14:55 and 15:10 UTC), look at the card**, signed in as an
+   administrator: the WhatsApp AI screen's *Salesperson numbers* card, its owner list in *Add a number* and in each
+   number's owner change — the salespeople as before, and each active technician whose account is not an
+   administrator's as *"<name> — technician"*; every number on it as before. Look only; add nothing yet. The Cashbook,
+   ECO Bank, Send Quotation and the KYC form as before. **Do not make a test quote for a real customer**: the plugin
+   WhatsApps every new quote.
+5. **At least 20 minutes after the deploy copied the release's files into place** (the summary's *check it* line prints
+   the time), run `--after-only`, then the quarantine's `--check`, each its own command, each with its own log file to
+   send. If R19 still says not yet conclusive, run `--after-only` again after the time it prints.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.100.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.100/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+6. **The next day after 15:10 UTC** (18:10 Kampala): `--after-only` again, as in step 5. The script's header and
+   summary say "after 15:00 UTC", the WhatsApp's own time; follow 15:10.
+7. **Then his number, one step at a time, by root `docs/66` *"A technician's number (5.18.100)"*:** section 0 for a
+   technician — a new work SIM, his staff row (active, a technician role, **no `is_admin`**, his own phone), his role
+   holding no *All Leads (Admin View)* grant **and his own module list, if his row has one, without `all_leads`**
+   (either one shows him every lead); `alert_whatsapp` set and not his phone, checked with docs/66's read-only
+   command — expect `set, no active technician phone of record`, and **stop if it says `IS`**; whether
+   `lead_supervisor_phone` is set; and his agreement to the persona — **if he does not agree, do not add the number**.
+   **If any of these is not so, stop and ask** — never change his role, his `is_admin` flag or his phone to fit the card.
+   Then P2 (`wa_inbox_roles`), the card (*"<name> — technician"*, **Add, switched off**), pairing, *Verify number*,
+   *Register webhook*, *Switch on* with the assistant stopped, the tests and 5.5's loop test, and the Leads bookmark
+   `?page=dashboard&tab=leads&f=all` — never "My Leads" ticked in his modules and never `all_leads` granted — with the
+   60-minute rule told to him. Then section 6, its cross-visibility row checked as another technician too (no number's
+   owner, salesperson or technician, sees another owner's leads), and record the go-live in docs/07. Report only what
+   the screens show.
+
+There is no switch to set. No step here sets `wa_inbox_roles`, a staff role or `is_admin`, and the summary prints no
+switch command.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, "only if it is ever needed", followed
+by the by-hand put-back, each its own command. On a failure, send the log file and do not roll back on your own unless
+staff or customers are affected.
+
+It is one step. `--rollback` asks you to type `ROLLBACK` before it changes anything, puts 5.18.99 (`ca05ada`) back
+through `deploy-hybrid.sh` and checks it (RB). There is no switch to clear first. As root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.100.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.100/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+What changes and what stays:
+- **Goes:** the card's technicians. Its owner lists offer the active salespeople again, and nobody else; a technician
+  cannot be chosen for a new number or as a new owner.
+- **Stays, and keeps working:** a number already given to a technician under 5.18.100. The rollback rewrites no registry
+  row, and 5.18.99 switches a number on for any active owner, so it keeps its owner, its leads and its hand-overs. RB
+  counts such numbers; to stop one, switch it off on the card.
+- **Stays exactly as it is:** his staff row (the card never wrote it); 5.18.99's quoting organization and its check
+  before every quote; the Cashbook's list, its tab and cash in hand (D2 = A); ECO Bank — its switch, screen and links,
+  088's tables and every statement kept; 5.18.95's fixes, 5.18.94's documents and every other switch.
+- **Stays on disk, read by nothing:** the one file 5.18.100 added (`tests/test_sales_numbers_mutants.php`).
+
+Afterwards:
+- Run the quarantine's own `--check`, its own command, as the rollback's summary prints it.
+- A later deploy of 5.18.100 uses `--redeploy`, and A14 refuses it until a quarantine `--check` begun after the
+  rollback's copy has passed.
+- If the script cannot run, the deploy's summary also prints the by-hand put-back, its own command.
+
+### Known limits
+
+1. **The check of `wa_inbox_roles` is the deploy's, not the runtime's.** TN-G3 and TN-CA3 refuse, or fail, when it grants a
+   role that owns or may own a number, at the moment they run. Nothing stops a later change of `wa_inbox_roles`, or of an
+   owner's role, from granting the Inbox to an owner's role afterwards; docs/66's P2 is the rule for every number added.
+   The Inbox itself is not filtered by number (5.18.88's design, unchanged).
+2. **The comparison is stricter than the Inbox.** The script compares roles trimmed and lower-cased; the Inbox
+   lower-cases the signed-in role without trimming it. A role written with spaces around it can make the check stop where
+   the Inbox would not grant, never the other way round.
+3. **An `--after-only` compares `wa_inbox_roles` with the deploy's reading by its known role names and the count of its
+   other entries only.** Entries that are not known role names are compared, as keyed hashes, within one run; the key
+   is the run's own and is never recorded. Each run still judges the value it reads against the numbers' owners in full.
+4. **The list of known role names is written out** in the two probes (the roles the staff screen offers: sales,
+   sales_staff, field_agent, support, support_leader, support_engineer, accountant, field_accountant, collection, dealer).
+   A role added to the plugin later is counted as "not a known role name" and compared all the same; only its name is not
+   printed.
+5. **A technician's account with `is_admin` set is never offered** (D1). If his account carries it, the card will not
+   list him, and TN-N2 says how many such accounts there are; clearing `is_admin` is not a step of this release.
+6. **After a rollback his number keeps working under 5.18.99** (above), but 5.18.99's card cannot give it to another
+   technician or back to him if its owner is changed.
+7. **TN-G3's refusal tells the operator to set or clear `wa_inbox_roles` and run again.** The runbook overrides it
+   (step 3): the change is a decision, so the operator sends the log and stops. The wording is the script's as
+   rehearsed; changing it would have meant a new pin and a new trial.
+8. **Q-N3's `?:http404`**, seen in 5.18.99's deploy on 24 Oct, is carried as it was: a note, a comparison of two
+   readings, not yet looked at.
