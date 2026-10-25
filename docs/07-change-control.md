@@ -14444,3 +14444,49 @@ Afterwards:
    rehearsed; changing it would have meant a new pin and a new trial.
 8. **Q-N3's `?:http404`**, seen in 5.18.99's deploy on 24 Oct, is carried as it was: a note, a comparison of two
    readings, not yet looked at.
+
+## 25 Oct — 5.18.100 DEPLOYED (copy 11:24:06 UTC) — PASSED 177 ok / 0 failed / 19 notes
+
+**From the operator's terminal**, pasted on 25 Oct; the script prints no secret and no figure there. One run, as root on
+the server, of the command step 3 of the runbook gives.
+
+- **The deploy** (begun 11:21:47 UTC; the backup in `/root/dnb-5.18.100/backup-20261025T112147Z`): every check of
+  stage A held, then GO.
+  - **The release:** A0 the 15 files by their pinned sha256, and A7.
+  - **5.18.95's fixes:** A22a–A22g and A22L.
+  - **The live install:** BR1 (all 1,487 files 5.18.99 tracks under the plugin, byte for byte), Q-G1, and A2–A6 and
+    A8–A18 and A21.
+  - **The cash checks:** A22-T1, A23.1–A23.8, G2, G3, BK1–BK3, BR2, BR3, BN5, C1–C5 and A24.
+  - **5.18.99's quoting checks:** Q-G2–Q-G6.
+  - **5.18.100's own:** TN-G1 as text, TN-G2 and TN-G3.
+- **`DEPLOY` was typed and the container serves `8ff469f`.** After the copy: V1–V13 over the public address, BA4, CA4,
+  Q-CA4 and Q-CA5; then R1–R26, BA1, BA2, CA2, CA3, Q-CA1–Q-CA6, TN-CA1–TN-CA3, Z1 and Z2. **PASSED, 177 ok, 0 failed,
+  19 notes.** uCRM was asked 21 GETs and nothing else.
+- **What 5.18.100 found and left:**
+  - The pin's `owners()` offers the 3 active salesperson accounts, as 5.18.99's `salespeople()` does, and **7 active
+    technician accounts**, none of them an administrator's (0 left out). TN-N2 did not arise.
+  - The registry: 2 salesperson numbers, 0 a technician's, 3 departments' — none added or changed (TN-N1, R11).
+  - `wa_inbox_roles` is unset, so the shared Inbox stays administrators' only (TN-G3, TN-CA3).
+- **The notes, each expected by the runbook:**
+  - A17: two pending requests under v1.0.
+  - N1–N4.
+  - Q-G4: no currency given for organization #1.
+  - Q-G5 INCONCLUSIVE: no Lead or Manual quote with a uCRM client in 30 days.
+  - Q-N1–Q-N7. Q-N2 still counts **the 9 clients, 4 under organization #1 and 5 under #2: the five are not yet moved**.
+    Q-N3 reads `?:http404`, as on 24 Oct.
+  - TN-N1, twice; R3: no `migration.log` line for 087; Q-CA3's note.
+  - R19: not yet conclusive. The retry job last ran at 11:15:03 UTC, before the copy; run `--after-only` after
+    11:44:06 UTC.
+- **Run before 5.18.99's day-later check.** The deploy came at 11:21 UTC, before the 15:10 UTC that check waited for.
+  Whether 5.18.99's first `--after-only` (due after 10:59:23 UTC on 24 Oct) was run is not recorded here. Neither can
+  run now: 5.18.99's script refuses once the container serves anything but `ca05ada`. 5.18.100's `--after-only` carries
+  5.18.99's checks (Q-CA1–Q-CA6, R19).
+- **Still to come:**
+  - `--after-only`, now that 11:44:06 UTC has passed, then the quarantine's `--check`, each its own command with its own
+    log file;
+  - the next day after 15:10 UTC, `--after-only` again;
+  - the screens as an administrator: the card's owner lists, the salespeople as before and each technician as
+    *"<name> — technician"*;
+  - his number, only after those checks, by root `docs/66` *"A technician's number (5.18.100)"*;
+  - the five clients moved to organization #1 in uCRM;
+  - Q-N3's `?:http404`, to be looked at, read-only.
