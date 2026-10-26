@@ -306,8 +306,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="5127a78"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
-EXPECTED_PLUGIN_COMMIT_FULL="5127a78e6c4de1fd33c61539088fe6b977db677a"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="39a0b0d"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
+EXPECTED_PLUGIN_COMMIT_FULL="39a0b0db1feff2ee2aee18a663a1ba88355fe4a3"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.101"
 BASELINE_COMMIT="8ff469f"          # 5.18.100 (release, a technician may own a WhatsApp number; the live plugin since 25 Oct, docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on each card
 BASELINE_COMMIT_FULL="8ff469f5055e120e876033cea485419c1b13b0f4"
@@ -472,10 +472,10 @@ df8e3a72cd6d9b927c5f6aed9ad47db06ee6dbbdf1a0b419a515e9c60df3ebf6  webhook.php
 SUMS
 )"
 PREV_CHANGED_N=13
-# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (5127a78) gives it: the delta,
+# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (39a0b0d) gives it: the delta,
 # exactly — A0 reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-78d79137742a4c75afd4be5b13be92101d861080a33b143d19a8035a583aa9fc  SAFETY.md
+93bf144ae22f8eed1667680a6faea366ed4f1296c2302cbc6e0d25a70f81a3d4  SAFETY.md
 ec118dbde413cfa390e35b75d338ea02c311f61a44783705c1d3cd9a5674bbe3  manifest.json
 c838327aa8045c339c3232a3f690ef80394c0060640f3a234b33fbb7d13f0111  tests/test_bank_boundaries.php
 ba1f64b4e7e8ffd8741dbd55cbdba5cd593025da7a7dbaec3f7686f88d37cbd4  tests/test_cashbook_physical_list.php
@@ -5940,7 +5940,7 @@ if [ -n "$PLUGIN_BASE" ]; then
         yes\|401\|00|yes\|403\|00) ok "Q-CA4 Sync All is admin-only: the installed admin-only gate (\$_gateAdminOnly, read as text) names push_products_to_ucrm, and its route (dry_run=1) answers a visitor with no session $HTTP_CODE — the staff guard, before any uCRM read; no PHP fatal" ;;
         yes\|302\|00) if grep -qF 'page=login' <<<"$HTTP_LOCATION"; then ok "Q-CA4 Sync All is admin-only: the installed admin-only gate (\$_gateAdminOnly, read as text) names push_products_to_ucrm, and its route (dry_run=1) sends a visitor with no session to the sign-in page (302) — before any uCRM read; no PHP fatal"
                       else bad "Q-CA4 push_products_to_ucrm without a session → 302${HTTP_LOCATION:+ to $HTTP_LOCATION}, not the sign-in page"; fi ;;
-        *) bad "Q-CA4 Sync All is not as $EXPECTED_VERSION makes it: the installed gate names push_products_to_ucrm: $QCA4_T; its route without a session → $HTTP_CODE; fatals $QCA4_F (expected yes, 401/403 or the sign-in page, 00)" ;;
+        *) bad "Q-CA4 Sync All is not as 5.18.99 made it (unchanged by $EXPECTED_VERSION): the installed gate names push_products_to_ucrm: $QCA4_T; its route without a session → $HTTP_CODE; fatals $QCA4_F (expected yes, 401/403 or the sign-in page, 00)" ;;
       esac
       # Q-CA5 — 5.18.99 (SPEC §6): the pages 5.18.99 changes or reaches — the KYC form, Send Quotation, Quote History,
       # Orders and the LTE dashboard — send a visitor with no session to the sign-in page (302), with no PHP fatal. Five
@@ -5952,7 +5952,7 @@ if [ -n "$PLUGIN_BASE" ]; then
         [ "$qca5v" = "302|login|00" ] || QCA5_R="$QCA5_R ${qca5%%:*}=$qca5v;"
       done
       if [ -z "$QCA5_R" ]; then ok "Q-CA5 the KYC form, Send Quotation, Quote History, Orders and the LTE dashboard without a session each send the visitor to the sign-in page (302) — no PHP fatal in any answer"
-      else bad "Q-CA5 a page $EXPECTED_VERSION changes does not answer a visitor with no session with the sign-in page as it must:$QCA5_R (code|where|fatals; expected 302|login|00)"; fi
+      else bad "Q-CA5 a page 5.18.99 changed or reaches (none changed by $EXPECTED_VERSION) does not answer a visitor with no session with the sign-in page as it must:$QCA5_R (code|where|fatals; expected 302|login|00)"; fi
     fi
   fi
 else note "V1/V2/V5/V7$( [ "$MODE" != "rollback" ] && echo " and BA4, CA4, Q-CA4, Q-CA5 (ECO Bank, the Cashbook and their exports, Sync All, the KYC, quotation, order and LTE pages)") skipped — the plugin's public URL could not be derived (re-run with --plugin-base); the R checks below read the install directly"; fi
