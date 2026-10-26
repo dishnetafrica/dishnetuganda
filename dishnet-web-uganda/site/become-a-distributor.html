@@ -575,7 +575,11 @@ var TRAIN_TECH=[
 var S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false};
 var STORE_KEY='dn_distributor_prototype_v1';
 function save(){try{sessionStorage.setItem(STORE_KEY,JSON.stringify({S:S,step:step}));}catch(e){}}
-function load(){try{var r=sessionStorage.getItem(STORE_KEY);if(r){var o=JSON.parse(r);if(o&&o.S){S=Object.assign(S,o.S);if(!S.coverage)S.coverage={outlets:[]};if(!S.coverage.outlets)S.coverage.outlets=[];}}}catch(e){}}
+function load(){try{var r=sessionStorage.getItem(STORE_KEY);if(r){var o=JSON.parse(r);if(o&&o.S){S=Object.assign(S,o.S);if(!S.coverage)S.coverage={outlets:[]};if(!S.coverage.outlets)S.coverage.outlets=[];
+  /* a draft saved by an earlier version of this page may hold a choice it no longer offers: keep only the ones it does */
+  S.services=(S.services||[]).filter(function(x){return SERVICE_NAME.hasOwnProperty(x);});
+  S.activities=(S.activities||[]).filter(function(x){return ACT_NAME.hasOwnProperty(x);});
+  if(!MODEL_NAME.hasOwnProperty(S.model))S.model='';}}}catch(e){}}
 
 /* ---------- step engine ---------- */
 var STEPS=['Model','Business','Coverage','Services','Readiness','Training','Review','Next steps'];
