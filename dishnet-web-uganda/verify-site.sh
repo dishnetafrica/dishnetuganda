@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Serve site/ with the real nginx.conf and check it end to end.
-# Uganda edition: no _redirects section — dishnetuganda.com has no legacy URLs.
+# Uganda edition: no Netlify _redirects; nginx.conf redirects /login, /app and the
+# withdrawn fibre addresses (all asserted below).
 #
 # Worth re-running after the localisation pass: that rewrites hundreds of
 # links, and a broken one is invisible in production because the Netlify
@@ -213,6 +214,15 @@ for f in glob.glob(os.path.join(root, '**', '*.html'), recursive=True):
     t = open(f, encoding='utf-8', errors='ignore').read()
     for m in re.findall(r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*', t):
         print(f"  price-like figure {m!r} outside tutorials: {os.path.relpath(f, root)}"); bad = 1
+# Scripts too, with their comments removed: a figure a script writes into a page is a published price. Prices from
+# the billing feed go through fmt(), never a literal. Control: the stripper keeps code and drops comments.
+def code(t):
+    t = re.sub(r'/\*.*?\*/', '', t, flags=re.S)
+    return '\n'.join(l for l in t.split('\n') if not l.lstrip().startswith('//'))
+if code("/* UGX 5 */ x = 'UGX 9';\n// $1\n") != " x = 'UGX 9';\n": print('  CONTROL FAILED: comment stripper'); sys.exit(1)
+for f in glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
+    for m in re.findall(r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*', code(open(f, encoding='utf-8').read())):
+        print(f"  price-like figure {m!r} in a script: {os.path.relpath(f, root)}"); bad = 1
 sys.exit(bad)
 PYCOM
 [ $fail -eq 0 ] && echo "  no price published anywhere outside tutorial mock screenshots"
@@ -228,10 +238,15 @@ root = sys.argv[1]; bad = 0
 rules = [(re.compile(r'fib(?:er|re)', re.I), 'fibre'), (re.compile(r'\bLTE\b'), 'LTE'),
          (re.compile(r'24/7|24x7|24 hours a day', re.I), '24/7 support'),
          (re.compile(r'four regions|every region', re.I), 'an unapproved coverage claim'),
-         (re.compile(r'10\+ years|ten years|two countries|\b2 countries|thousands of', re.I), 'an unapproved company fact')]
+         (re.compile(r'10\+ years|ten years|two countries|\b2 countries|thousands of', re.I), 'an unapproved company fact'),
+         (re.compile(r'answered every day|support every day|every day of the week', re.I), 'unapproved support-hours wording'),
+         (re.compile(r'Uganda since 2013', re.I), 'an unapproved company fact (the approved one is "DishNet Africa has operated since 2013")'),
+         (re.compile(r'\b4G\b|fixed wireless|data network', re.I), 'an alternative connectivity offer'),
+         (re.compile(r'\bwe activate\b|\bwe will activate\b|activate your (?:kit|dish)|5-15 minutes', re.I), 'an activation promise (Starlink controls activation)')]
 # Control: each rule must match its own sample first, so a rule broken by an edit cannot pass by matching nothing.
 for (rx, name), sample in zip(rules, ('Fibre plans', 'Starlink, LTE', 'support 24/7', 'across all four regions',
-                                      'over 10+ years in two countries')):
+                                      'over 10+ years in two countries', 'WhatsApp, answered every day',
+                                      'Connecting Uganda since 2013', '4G backup', 'we activate your kit')):
     if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
 files = glob.glob(os.path.join(root, '**', '*.html'), recursive=True) + [os.path.join(root, f) for f in ('sitemap.xml', 'robots.txt')]
 for f in files:
@@ -239,7 +254,9 @@ for f in files:
     for rx, name in rules:
         for m in rx.finditer(t):
             print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
-if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim or company fact on any page (rules self-checked)')
+assert len(rules) == 9
+if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, company fact, support-hours wording,'
+                  ' alternative connectivity or activation promise on any page (rules self-checked)')
 sys.exit(bad)
 PYPOS
 

@@ -12,7 +12,7 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 | Domain | All canonicals, OG tags, JSON-LD, sitemap and robots now `dishnetuganda.com` (the drop targeted `uganda.dishnetafrica.com`; tutorial pages pointed at `dishnetafrica.com`) |
 | WhatsApp | `wa.me/256705993348` / `+256 705 993 348` everywhere (was the `256700000000` placeholder; one stray South Sudan number in a tutorial fixed too) |
 | Customer portal | Every "Customer Login" links the site's own `/login` (16 Oct 2026), which `nginx.conf` answers with a 302 to `https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=customer_login` — the DishNet portal sign-in (26 Sep 2026; decision 8 of the customer-login remediation plan) — so no page carries the plugin's `dishnet-hybrid-sudan` path in a customer link. The browser's address bar still shows it once the CRM answers; removing it there is a CRM-side change. It was uCRM's own client-zone login `/crm/login` from 25 Sep, and the South Sudan plugin URL before that. Never the bare `/crm`: the server in front of uCRM redirects it to `/crm/` on its own port, `:8443`, which has a self-signed certificate |
-| Images | The drop hotlinked one logo PNG from `portal.dishnetss.com` in 110 places, including favicon and og:image. Now local: `assets/img/favicon.svg` (header + icon), `og-dishnet.png` (social + JSON-LD), kit photos on starlink-kits.html |
+| Images | The drop hotlinked one logo PNG from `portal.dishnetss.com` in 110 places, including favicon and og:image. Now local: `assets/img/favicon.svg` (header + icon), `og-dishnet-uganda.png` (social + JSON-LD; `og-uganda.png` retired in `docs/70`), kit photos on starlink-kits.html |
 | Fonts | `Outfit` / `DM Sans` / `Barlow` woff2 now shipped and linked on every page — the drop named them with no font files, so every visitor got fallbacks |
 | 404 | Branded `404.html` added (the drop had none, so nginx would have served its default page) |
 | Address | `4th floor, Acacia Mall, 14-18 Cooper Road, office TT06, Kampala` on every page and in every schema.org record. Was Mawanda Road in 39 places. Same string as the plugin's knowledge base, so the website and the WhatsApp assistant cannot drift |
@@ -68,7 +68,7 @@ Prices and the product list live in uCRM only.
 
 | Item | Where |
 | --- | --- |
-| Email `info@dishnetafrica.com` | 45 files — confirm this mailbox is monitored for Uganda enquiries |
+| Email `info@dishnetafrica.com` | every page — confirmed by the owner as the consultation address (`docs/70`, decision 9) |
 | APK | not published (operator, 25 Sep 2026). `get-the-app.html` says *coming soon* with a WhatsApp "tell me" button instead of a download that 404'd. When the signed app exists: drop it at `site/dishnet-africa.apk` and put the download button back (nginx already serves `.apk` with the right MIME type) |
 | Testimonials / gallery | deliberately absent — send real Ugandan quotes and photos and the pages get built; invented ones are fake reviews |
 | Portal deep-link | DONE 26 Sep 2026: every "Customer Login" opens `public.php?page=customer_login`, which sends a customer with a live session straight to the portal. Since 16 Oct 2026 the 197 links on 64 pages point at `/login` and nginx redirects (302) to that URL; `verify-site.sh` fails on any page that links `page=customer_login` directly and checks the 302 and its `Location`. A short address on the CRM host (`/customer-login`, one Traefik file) is optional and separate |

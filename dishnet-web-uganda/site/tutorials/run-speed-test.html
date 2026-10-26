@@ -4,18 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>How to run a speed test — DishNet Africa Tutorials</title>
-<meta name="description" content="Test your DishNet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.">
+<meta name="description" content="Test your internet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.">
 <link rel="canonical" href="https://dishnetuganda.com/tutorials/run-speed-test.html">
 <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
 <link rel="stylesheet" href="../assets/fonts/fonts.css?v=a4794a72">
 <link rel="stylesheet" href="../styles.css?v=c3393a72">
-<link rel="stylesheet" href="tutorial-shared.css?v=9b1bcad1">
+<link rel="stylesheet" href="tutorial-shared.css?v=9cada49f">
 <meta property="og:type" content="article">
 <meta property="og:title" content="How to run a speed test — DishNet Africa">
-<meta property="og:description" content="Test your DishNet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.">
+<meta property="og:description" content="Test your internet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"HowTo","name":"How to run a speed test","description":"Test your DishNet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
+{"@context":"https://schema.org","@type":"HowTo","name":"How to run a speed test","description":"Test your internet connection speed. The app measures download, upload, and ping using Cloudflare's nearest server. Share the result with our support team if you think speeds are off.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
 </script>
 </head>
 <body>
@@ -63,8 +63,10 @@
         <div class="header-inner">
             <a href="/" class="logo"><img src="../assets/img/favicon.svg" alt="DishNet Africa"></a>
                         <nav class="nav">
-                <a href="../starlink-kits.html">Products</a>
-                <a href="../hotspot.html">Hotspot</a>
+                <a href="/">Home</a>
+                <a href="../services.html">Services</a>
+                <a href="../shop.html">Shop</a>
+                <a href="../security.html">Security</a>
                 <a href="../coverage.html">Coverage</a>
                 <a href="../get-the-app.html">App</a>
                 <a href="../contact.html">Contact</a>
@@ -85,9 +87,10 @@
     <a href="../get-the-app.html">App</a>
     <a href="../contact.html">Contact</a>
     <a href="../services.html">Services</a>
+    <a href="../starlink-kits.html">Starlink Kits</a>
+    <a href="../security.html">CCTV &amp; Security</a>
     <a href="../about.html">About</a>
     <a href="index.html">Tutorials</a>
-    <a href="../get-the-app.html">Live Demo</a>
     <a href="../faq.html">FAQ</a>
     <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20">Book a free consultation</a>
     <a href="/login">Customer Login</a>
@@ -103,7 +106,7 @@
             <div class="tut-meta">
                 <div class="tut-meta-item"><svg><use href="#i-clock"/></svg> About 2 min to complete</div>
                 <div class="tut-meta-item"><svg><use href="#i-router"/></svg> 4 steps</div>
-                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Works on Android &amp; iOS</div>
+                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Android app or web portal</div>
             </div>
         </div>
     </div>
@@ -119,7 +122,7 @@
         <p>Tap the <b>Sites</b> tab at the bottom. You'll see a list of every Starlink site on your account, split into <b>Active</b> and <b>Inactive</b>. Tap the one you want to test.</p>
         <div class="tut-step-tip"><b>Single-site customer?</b> The home screen has a shortcut. Tap your service name on the home card and it'll take you straight to your site.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -181,7 +184,7 @@
         <p>Before tapping, take a quick look at <b>Dish status</b>. If it says <b>Online</b> with a green dot, you're good. If it says <b>Offline</b> or <b>Unavailable</b>, the speed test won't work either &mdash; the dish has to be reachable.</p>
         <div class="tut-step-tip"><b>For best results:</b> close other apps on your phone and ask people not to stream video or download things while the test is running. Otherwise the test sees a slower number than your real maximum speed.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -248,13 +251,13 @@
         <div class="tut-step-num">3</div>
         <h2>Watch the gauge as the test runs</h2>
         <p>The test runs in three phases:</p>
-        <p><b>1. Latency (ping)</b> &mdash; how fast the server replies (should be under 100 ms)<br>
+        <p><b>1. Latency (ping)</b> &mdash; how fast the server replies (lower is better)<br>
            <b>2. Download speed</b> &mdash; how fast you can pull data (the big number you care about)<br>
            <b>3. Upload speed</b> &mdash; how fast you can send data</p>
         <p>The gauge fills up live as the test runs. The whole thing takes about <b>15-20 seconds</b>.</p>
         <div class="tut-step-tip"><b>Don't switch apps while it's running.</b> If you minimise the app or your phone goes to sleep, the test will pause or fail. Just keep the screen on for 20 seconds.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -295,13 +298,13 @@
         <div class="tut-step-num">4</div>
         <h2>Read your result &mdash; and share it if needed</h2>
         <p>You get three numbers and a verdict at the top:</p>
-        <p><b>Download</b> &mdash; the big number. For Starlink Residential in Kampala, expect <b>50-200 Mbps</b> on a good day. Drops happen during peak hours (evenings).<br>
-           <b>Upload</b> &mdash; usually <b>5-20 Mbps</b>. Lower than download, that's normal.<br>
-           <b>Ping</b> &mdash; ideally <b>30-60 ms</b>. Higher means slower-feeling connection for video calls and gaming.</p>
+        <p><b>Download</b> &mdash; the big number. Starlink does not guarantee a speed; what you get depends on your location, plan, weather and how busy the network is. Speeds often drop at busy times (evenings).<br>
+           <b>Upload</b> &mdash; lower than download &mdash; that's normal.<br>
+           <b>Ping</b> &mdash; lower is better. Higher ping makes video calls and gaming feel slower.</p>
         <p>If you think speed is way off, tap <b>Share result</b>. This sends your test result to our WhatsApp support so the team can investigate.</p>
         <div class="tut-step-tip"><b>One bad result isn't a real problem.</b> Speeds vary throughout the day &mdash; Starlink gets congested when many people use it at once. Run the test 2-3 times across different hours before you decide there's an issue.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -374,9 +377,9 @@
         <div class="tut-help-inner">
             <div>
                 <div class="tut-help-t">Stuck on something?</div>
-                <div class="tut-help-s">Our team in Kampala is on WhatsApp 7 days a week.</div>
+                <div class="tut-help-s">WhatsApp support is available seven days a week.</div>
             </div>
-            <a href="https://wa.me/256705993348" class="btn btn-primary">
+            <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%20need%20help%20with%20the%20DishNet%20app." class="btn btn-primary">
                 <svg style="width:16px;height:16px"><use href="#i-wa"/></svg>
                 Message support
             </a>
@@ -399,6 +402,7 @@
                     <li><a href="../services.html">All Services</a></li>
                     <li><a href="../coverage.html">Coverage Map</a></li>
                     <li><a href="../hotspot.html">Hotspot Setup</a></li>
+                    <li><a href="../security.html">CCTV &amp; Firewalls</a></li>
                     <li><a href="../reseller.html">Reseller Program</a></li>
                     <li><a href="../why-dishnet.html">Why DishNet</a></li>
                 </ul>
@@ -409,7 +413,6 @@
                     <li><a href="../about.html">About Us</a></li>
                     <li><a href="../contact.html">Contact</a></li>
                     <li><a href="../faq.html">FAQ</a></li>
-                    <li><a href="../why-dishnet.html">Reviews</a></li>
                     <li><a href="../careers.html">Careers</a></li>
                 </ul>
             </div>

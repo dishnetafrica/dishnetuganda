@@ -33,7 +33,7 @@ PARAMS = {
     'ACK':            '1 working day',  # complaint and warranty-claim acknowledgement
     'RESOLVE':        '14 days',        # final written answer to a complaint
 }
-UPDATED = 'Last updated: 12 October 2026'
+UPDATED = 'Last updated: 26 October 2026'
 
 PAGES = [
     ('policies.html', 'Policies', 'Legal',

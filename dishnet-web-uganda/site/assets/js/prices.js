@@ -200,11 +200,11 @@
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
           (best ? '<span class="price-pill">Best value</span>' : '') +
-          (!best && flex ? '<span class="price-pill price-pill-soft">UGX 0 upfront</span>' : '') +
+          (!best && flex ? '<span class="price-pill price-pill-soft">Kit included</span>' : '') +
           (!best && biz ? '<span class="price-pill price-pill-soft">Public IP</span>' : '') +
           '<h3>' + esc(p.name) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
-          (flex ? '<p class="price-desc">UGX 0 hardware upfront — Starlink Mini + connectivity + professional installation + DishNet support.</p>'
+          (flex ? '<p class="price-desc">No kit to buy upfront — Starlink Mini, connectivity, professional installation and DishNet support in one monthly price.</p>'
            : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP · for offices, remote access &amp; heavy users. When the priority data is used up, the speed drops until more is bought.</p>'
                  : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
           (p.speed ? '<p class="price-speed">Up to ' + esc(String(p.speed)) + ' Mbps</p>' : '') +
@@ -267,7 +267,7 @@
       }).join('');
       if (flexPlans.length) {
         h += '<button type="button" class="of-card" data-hw="__flex">' +
-          '<span class="of-tag">' + esc(cur) + ' 0 upfront</span>' +
+          '<span class="of-tag">Kit included</span>' +
           '<h4>Rent with Flex</h4>' +
           '<div class="of-sub">No kit to buy — Starlink Mini, installation and internet in one monthly price.</div>' +
           '<div class="of-price">Pay monthly <small>choose your plan next</small></div>' +
@@ -275,7 +275,7 @@
       }
       h += '<button type="button" class="of-card" data-hw="__own">' +
         '<h4>I already have a kit</h4>' +
-        '<div class="of-sub">Bring your own Starlink — we connect it to a DishNet plan with local support and mobile-money billing.</div>' +
+        '<div class="of-sub">Already have a Starlink kit? Ask us about installation and support, about registering in your own name, or about a managed DishNet plan — each case is reviewed individually, subject to Starlink\'s terms.</div>' +
         '<div class="of-price">No hardware needed</div>' +
         '</button>';
       return h;
@@ -306,7 +306,7 @@
     }
 
     function hwLabel() {
-      if (state.hw === '__flex') return 'Flex (kit included, ' + cur + ' 0 upfront)';
+      if (state.hw === '__flex') return 'Flex (kit included in the monthly price)';
       if (state.hw === '__own') return 'Using my own Starlink kit';
       return state.hw;
     }
@@ -323,7 +323,7 @@
         recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
       } else if (state.hw === '__flex') {
         rows.push([state.plan.name + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
-        rows.push(['Hardware upfront', fmt(cur, 0)]);
+        rows.push(['Kit', 'Included in the monthly price']);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
       } else {
