@@ -127,6 +127,7 @@ LOGW101() { printf '2>&1 | ( umask 077; exec tee %s/%s-%s.log )' "$OUT101" "$1" 
 EXP_AFTER101="cd $REPO && bash scripts/deploy-5.18.101.sh --after-only $(LOGW101 after)"
 EXP_ROLLBACK101="cd $REPO && bash scripts/deploy-5.18.101.sh --rollback $(LOGW101 rollback)"
 EXP_REDEPLOY101="cd $REPO && bash scripts/deploy-5.18.101.sh --redeploy $(LOGW101 redeploy)"
+EXP_PUTBACK101="( cd $REPO && git checkout $P100 && { bash scripts/deploy-hybrid.sh; git checkout -; } ) $(LOGW101 putback)"   # the script's PUTBACK_CMD, as it prints it
 left_tmp101() { ls -d /tmp/dnb-5.18.101-* 2>/dev/null | wc -l | tr -d ' '; }
 host_code101() { ls -d "$OUT101"/code-* "$OUT101"/p3b-* "$OUT101"/br1-* "$OUT101"/domainb-* "$OUT101"/tn-* "$OUT101"/qs-* 2>/dev/null | wc -l | tr -d ' '; }
 backups101() { ls -d "$OUT101"/backup-* 2>/dev/null | wc -l | tr -d ' '; }
@@ -375,7 +376,7 @@ assert s.count(a) == 1
 open(p, 'w', encoding='utf-8').write(s.replace(a, '            $msg .= "\\n\\n🛰️ *DishNet Uganda*";'))
 PY
 fresh101; OUT="$(run101 --answer NO)"
-check "$(has "$OUT" "NO-GO: the container's record says $P100 (5.18.100), but these installed files are not 5.18.100's: webhook.php — a copy that did not complete")$(has "$OUT" 'Nothing was changed.')$(went101 "$OUT")|$(live)|$(backups101)" "yesyesnono|$P100|0" \
+check "$(has "$OUT" "NO-GO: the container's record says $P100 (5.18.100), but these installed files are not 5.18.100's: webhook.php — a copy that did not complete")$(has "$OUT" 'Nothing was changed.')$(went101 "$OUT")|$(grep -cxF "      $EXP_PUTBACK101" <<<"$OUT")|$(live)|$(backups101)" "yesyesnono|1|$P100|0" \
   "1e the installed webhook.php edited by hand: refused before anything changes, the file named, the put-back printed; nothing deployed or backed up"
 cp -p "$SB/webhook101.kept" "$PD/webhook.php"; rm -f "$SB/webhook101.kept"
 check "$(installed101 "$P100")|$(data94)|$(live)" "0|$D101|$P100" "…the installed webhook.php put back: every file 5.18.101 touches 5.18.100's again, the data as before, 5.18.100 serving"
@@ -409,8 +410,8 @@ check "$(sed -n 's/^TN_A_P=//p' "$STATE101" | tail -1 | grep -c '^code=owners of
 check "$(grep -c "^COPY_AT=$(stat -c %Y "$PD/webhook.php")\$" "$STATE101")|$(epoch99 "$(sed -n 's/^COPY_AT=//p' "$STATE101" | tail -1)")" "1|epoch" \
   "4b the copy's time, as stamp_copy gave webhook.php — a file this release changes"
 SUM101="$(sed -n '/^== F\. Summary ==$/,$p' <<<"$OUT")"
-check "$(grep -cxF "      $EXP_AFTER101" <<<"$SUM101")$(grep -cxF "      $EXP_QCHECK" <<<"$SUM101")$(grep -cxF "      $EXP_ROLLBACK101" <<<"$SUM101")$(grep -cE '(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh).*(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh)' <<<"$OUT")" "1110" \
-  "4c the --after-only, the quarantine's --check and the rollback, each printed exactly, alone on its line"
+check "$(grep -cxF "      $EXP_AFTER101" <<<"$SUM101")$(grep -cxF "      $EXP_QCHECK" <<<"$SUM101")$(grep -cxF "      $EXP_ROLLBACK101" <<<"$SUM101")$(grep -cxF "      $EXP_PUTBACK101" <<<"$SUM101")$(grep -cE '(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh|deploy-hybrid\.sh).*(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh)' <<<"$OUT")" "11110" \
+  "4c the --after-only, the quarantine's --check, the rollback and the by-hand put-back, each printed exactly, alone on its line"
 check "$(names100 "$R101/run-$T101D.txt" "$STATE101" "$OUT101"/*.log)|$(secrets99 "$R101/run-$T101D.txt" "$STATE101")|$(audit101 "$T101D" | sed -E 's/^copies=([0-9]+) /\1 /' | awk '{print ($1 >= 20 ? "many" : $1 " only") " " $2 " " $3}')|$(uother101 "$T101D")" "0|0|many novault=0 plugin=0|-" \
   "4d no staff record's name and no stand-in secret printed or recorded; every PHP process on a copy with a vault of its own; GETs only"
 check "$(ledger95)|$(both_copies "$BK97")|$(kept_state)$(oldname)$(host_code101)$(left_tmp101)$(evo_calls)" "$LEDGER101|11|${KEPT101}0000" \
