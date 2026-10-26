@@ -23,10 +23,8 @@
  *   <div data-dishnet-hardware></div>     every kit in uCRM, priced, as cards
  *   <span data-dishnet-from></span>       "from UGX X/month", cheapest live plan
  *
- * A price with no unit is the thing customers actually complained about: a
- * kit card read "UGX 1,850,000 / VAT inclusive" and nothing on the page said
- * whether that was once or every month, or that a monthly plan is due as well.
- * Hardware now always carries "one-off" and the monthly it sits alongside.
+ * Every price says what it is for: hardware always carries "one-off", so a
+ * kit price is never read as a monthly one.
  *
  * Nothing here is ever blank. A slot whose product is missing from the feed
  * keeps whatever the page already had inside it — so every slot in the HTML
@@ -36,9 +34,7 @@
  * One naming system: the DishNet name from uCRM IS the display name on every
  * channel (site, chat, WhatsApp, invoice). data-service-map on the script tag
  * maps each plan to its underlying Starlink service (e.g. "DishNet Home" ->
- * "Residential"), shown as a small transparency line — never as the headline,
- * which would invite a straight price comparison with starlink.com instead of
- * a comparison of the DishNet bundle.
+ * "Residential"), shown as a small line under the plan name.
  */
 (function () {
   'use strict';
@@ -49,10 +45,9 @@
   var FEATURED = (script.getAttribute('data-featured') || 'DishNet Home').toLowerCase();
   if (!ENDPOINT) return;
 
-  // Managed DishNet plans are held back until Starlink's written position (or an authorised-reseller agreement) and
-  // the UCC licence are confirmed (docs/70 §10). Off: no plans grid, no monthly figure beside a price, no Flex, no
-  // "first month of internet", and the order flow sells the kit only, with the Starlink service in the customer's own
-  // name. Turning it back on also needs the page sections the hold-back removed (revert that commit).
+  // Managed DishNet plans are not offered on this site at present. Off: no plans grid, no monthly figure beside a
+  // price, no Flex, no "first month of internet", and the order flow sells the kit only, with the Starlink service in
+  // the customer's own name. Turning it back on also needs the page sections removed with it.
   var SELL_PLANS = false;
 
   function fmt(cur, n) {
@@ -355,11 +350,11 @@
     }
 
     function paint() {
-      // Someone who already has a kit is asking, not ordering: whether it can be installed, registered in their own
-      // name or put on a managed plan is reviewed case by case (decisions 2 and 3), so no plan, price or total.
+      // Someone who already has a kit is asking, not ordering: what we can do with it is reviewed case by case, so no
+      // plan, price or total.
       var own = state.hw === '__own';
       var html =
-        '<div class="of-step">Step 1</div><div class="of-title">Choose your hardware</div>' +
+        (SELL_PLANS ? '<div class="of-step">Step 1</div>' : '') + '<div class="of-title">Choose your hardware</div>' +
         '<div class="of-grid" data-of-hw>' + hwCards() + '</div>';
       if (SELL_PLANS && state.hw && !own) {
         html +=
@@ -369,7 +364,7 @@
       html +=
         '<div class="of-summary">' +
           '<div class="of-sumtext" data-of-sum>' +
-            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support, registering it in your own name, or a managed DishNet plan. No price is quoted until then.' :
+            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support' + (SELL_PLANS ? ', registering it in your own name, or a managed DishNet plan' : ', and registering it in your own name') + '. No price is quoted until then.' :
               state.hw && (state.plan || !SELL_PLANS) ? receipt() :
               state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +
@@ -395,7 +390,7 @@
         state.hw = hw.getAttribute('data-hw');
         state.plan = null;
         paint();
-        var p2 = host.querySelector('[data-of-plan]');
+        var p2 = host.querySelector(SELL_PLANS ? '[data-of-plan]' : '.of-summary');
         if (p2) p2.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         return;
       }
