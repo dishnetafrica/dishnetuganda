@@ -45,13 +45,13 @@
   var FEATURED = (script.getAttribute('data-featured') || 'DishNet Home').toLowerCase();
   if (!ENDPOINT) return;
 
-  // Managed DishNet plans are not offered on this site at present. Off: no plans grid, no monthly figure beside a
-  // price, no Flex, no "first month of internet", and the order flow sells the kit only, with the Starlink service in
-  // the customer's own name. Turning it back on also needs the page sections removed with it.
-  var SELL_PLANS = false;
-  // A kit's description is its uCRM invoice label, which can still describe the package with plans ("... + first
-  // month of internet"). While plans are off, a description that mentions a plan, a month, internet service, a
-  // subscription or Flex is not shown, and the page's own kit text stands in.
+  // Managed DishNet plans: on, the plans grid, the monthly figures and the plan step of the order flow are shown.
+  // Off, the order flow sells the kit only, with the Starlink service in the customer's own name; turning it off also
+  // needs the plan sections taken out of the pages.
+  var SELL_PLANS = true;
+  // A kit's description is its uCRM invoice label, which can describe the package with plans ("... + first month of
+  // internet"). While plans are off, a description that mentions a plan, a month, internet service, a subscription or
+  // Flex is not shown, and the page's own kit text stands in.
   function kitDesc(d) { d = String(d || ''); return SELL_PLANS || !/month|plan|managed|flex|internet|subscription/i.test(d) ? d : ''; }
 
   function fmt(cur, n) {
@@ -368,7 +368,7 @@
       html +=
         '<div class="of-summary">' +
           '<div class="of-sumtext" data-of-sum>' +
-            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support' + (SELL_PLANS ? ', registering it in your own name, or a managed DishNet plan' : ', and registering it in your own name') + '. No price is quoted until then.' :
+            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support, registering it in your own name, or a managed DishNet plan. No price is quoted until then.' :
               state.hw && (state.plan || !SELL_PLANS) ? receipt() :
               state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +

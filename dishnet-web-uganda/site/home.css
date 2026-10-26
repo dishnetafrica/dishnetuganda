@@ -72,14 +72,14 @@ ul { margin: 0; padding: 0; }
 .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1; letter-spacing: -.02em; }
 .brand-name small { display: block; font-size: 10.5px; letter-spacing: .22em; color: var(--red); font-weight: 700; margin-top: 4px; }
 .nav-links { display: flex; align-items: center; gap: 4px; list-style: none; }
-.nav-links a { display: block; white-space: nowrap; padding: 8px 10px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 15px; font-weight: 500; }
+.nav-links a { display: block; white-space: nowrap; padding: 8px 8px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 15px; font-weight: 500; }
 .nav-links a:hover { background: var(--soft); color: var(--ink); }
 .nav-cta { display: flex; align-items: center; gap: 10px; }
 .nav-login { white-space: nowrap; font-size: 15px; font-weight: 500; color: var(--muted); text-decoration: none; padding: 8px 6px; }
 .nav-login:hover { color: var(--ink); }
 .menu-btn { display: none; width: 46px; height: 46px; border: 1px solid var(--line); border-radius: 12px; background: #fff; align-items: center; justify-content: center; cursor: pointer; color: var(--ink); }
 .mobile-menu { display: none; }
-@media (max-width: 1140px) {
+@media (max-width: 1180px) {
   .nav-links, .nav-cta .nav-login { display: none; }
   .menu-btn { display: inline-flex; }
   .mobile-menu { display: block; position: fixed; inset: 0; z-index: 150; background: rgba(14,16,20,.45); opacity: 0; pointer-events: none; transition: opacity .25s; }
@@ -197,7 +197,7 @@ section { scroll-margin-top: 84px; }
 @media (max-width: 760px) { .boundaries { grid-template-columns: 1fr; } }
 
 /* ═══ Two ways ═══════════════════════════════════════════════════════════════════════════════════════════ */
-.ways { display: grid; grid-template-columns: minmax(0, 880px); gap: 20px; }
+.ways { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .way { padding: 30px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); }
 .way h3 { font-size: 22px; }
 .way .kicker { font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--red); margin-bottom: 8px; }
@@ -253,7 +253,7 @@ section { scroll-margin-top: 84px; }
 .helper-result .small-print { color: #9EA1A8; margin-top: auto; }
 @media (max-width: 860px) { .helper { grid-template-columns: 1fr; } }
 
-.plan-band { margin-top: 16px; display: grid; grid-template-columns: 1fr 2fr; gap: 18px; align-items: stretch; }
+.plan-band { margin-top: 18px; display: grid; grid-template-columns: 1fr 2fr; gap: 18px; align-items: stretch; }
 .plan-band .availability { grid-column: auto; display: grid; grid-template-columns: auto 1fr; gap: 4px 28px; align-items: start; }
 .plan-band .availability h3 { grid-row: span 2; margin: 0; }
 .plan { padding: 24px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); }
@@ -460,4 +460,27 @@ section { scroll-margin-top: 84px; }
 
 /* ═══ Production additions ═══════════════════════════════════════════════════════════════════════════════ */
 .plans-sub { margin: 6px 0 0; font-size: 15.5px; }
+.plans-title { scroll-margin-top: 96px; }
+
+/* ═══ Live plan prices ═══ prices.js fills [data-dishnet-plans] from the billing system's price feed (the same markup
+   as on starlink-kits.html); the two .plan cards inside it are what shows when the feed does not answer. */
+.home-plans { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; align-items: stretch; }
+.home-plans .plan-group { grid-column: 1 / -1; margin: 12px 0 -4px; }
+.home-plans .plan-group:first-child { margin-top: 0; }
+.home-plans .plan-group h3 { font-size: 19px; margin: 0 0 2px; }
+.home-plans .plan-group p { margin: 0; color: var(--muted); font-size: 15px; max-width: 66ch; }
+.home-plans .price-card { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 26px 22px 22px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); container-type: inline-size; }
+.home-plans .price-card-best { border-color: var(--red); box-shadow: var(--shadow-md); }
+.home-plans .price-card h3 { font-size: 19px; margin: 0; }
+.home-plans .price-pill { position: absolute; top: -11px; left: 18px; font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--red); padding: 4px 11px; border-radius: 999px; }
+.home-plans .price-pill-soft { background: var(--ink); }
+.home-plans .price-amount { font-family: var(--font-display); font-weight: 700; font-size: clamp(21px, 10cqi, 30px); line-height: 1.1; letter-spacing: -.02em; color: var(--ink); }
+.home-plans .price-amount small { font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
+.home-plans .price-desc { flex: 1; margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+.home-plans .price-speed, .home-plans .price-map { margin: 0; color: var(--muted); font-size: 13px; }
+.home-plans .price-card .btn { margin-top: 6px; min-height: 44px; padding: 8px 18px; font-size: 15px; white-space: normal; text-align: center; }
+.home-plans .price-vat { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted); font-size: 13px; text-align: center; }
+.hero-from { max-width: 600px; margin: -12px 0 24px; font-size: 15.5px; color: var(--muted); }
+.hero-from strong { color: var(--ink); }
+.hero-from[hidden] { display: none; }
 .faq-more { margin-top: 12px; }

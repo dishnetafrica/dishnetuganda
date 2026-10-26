@@ -93,7 +93,7 @@
   var foot = el('div', 'dnc-foot');
   var input = el('input');
   input.type = 'text';
-  input.placeholder = 'Ask about kits, prices, coverage…';
+  input.placeholder = 'Ask about plans, prices, coverage…';
   input.setAttribute('aria-label', 'Your message');
   var send = el('button', 'dnc-send', 'Send');
   foot.appendChild(input); foot.appendChild(send);
@@ -227,7 +227,7 @@
     if (!panel.hidden) {
       if (!opened) {
         opened = true;
-        if (!restoreLog()) bot('Hello! 👋 Ask me anything about Starlink kits, prices, or coverage in Uganda.');
+        if (!restoreLog()) bot('Hello! 👋 Ask me anything about Starlink plans, prices, or coverage in Uganda.');
         if (leadMode === 'before') leadCard();
       }
       input.focus();

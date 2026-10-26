@@ -3,8 +3,10 @@
 **Status: LAUNCH APPROVED by the owner on 26 Oct 2026, PREPARED (§10) and MERGED: into `main` by PR #26 (`647faccf`),
 then into `claude/study-this-jhe2eg` (`0de69559`), the branch EasyPanel's `web-uganda` app actually builds (§10.7). LIVE NOT
 VERIFIED from this session:** the live systems answer this session's proxy with 403, and the four checks of §10.4 were
-not run before the merge (the owner chose to proceed). Until §10 the record below describes the build as the owner
-approved it; where §10 differs, §10 applies.
+not run before the merge (the owner chose to proceed). **Later on 26 Oct the owner asked for the subscription prices and
+the shop to stay, as on the old site: the managed-plan hold-back of §10.1 is reversed on `claude/study-this-jhe2eg`, and
+the homepage shows the live plan prices and links the shop (§10.8).** Until §10 the record below describes the build as
+the owner approved it; where §10 differs, §10 applies.
 
 The owner reviewed revision 2 of the website demo and its content change report and asked for the next stage: a
 production implementation in the existing site structure and release process, keeping the approved consultancy-led
@@ -588,6 +590,8 @@ and *"Do not publish unverified claims or expose internal planning information."
 
 ### 10.1 The managed DishNet plan is held back
 
+*Reversed later the same day at the owner's request: see §10.8.*
+
 **Why.** The repository confirms neither condition: there is no written position from Starlink and no
 authorised-reseller agreement (`docs/67` §E item 1), and the UCC letter of 4 Sep 2026 is a conditional no-objection,
 not a licence; it requires an Equipment Vending and Installation Licence before services start, and whether
@@ -750,3 +754,59 @@ instruction `main` was merged into `claude/study-this-jhe2eg` (`0de69559`), conf
 the merged tree `verify-site.sh`, `verify-address.py`, `policies/build.py --check`, `stamp-assets.sh --check` and
 `node --check` all passed (exit 0). Future website releases go to `claude/study-this-jhe2eg` as well as `main`, or the
 app's source branch is changed to `main` in EasyPanel; the owner decides.
+
+### 10.8 Subscription prices and the shop kept (26 Oct 2026)
+
+**The owner's instruction**, after the launch was deployed: *"we need to keep shop and price for subscription so users
+get an idea the way it was"*. The old site (`e01696a2`) had a Shop link in its menu and a plan-price grid filled live
+from the billing system on its homepage. The new homepage had neither: its design carried two fixed "ask for today's
+price" managed-plan cards, and the hold-back (§10.1) had removed those too and hidden the plans everywhere else.
+
+**What changed, on `claude/study-this-jhe2eg`:**
+
+1. **The hold-back is reversed.**
+   - `f659a3bc` is reversed for the homepage, the kits page and `home.css`. The distributor page's internal planning
+     preview stays removed.
+   - Of `6be8b42e`, only the edits classified `hide-offer` or `first-month` are undone, plus the tutorial index's badge.
+     The `internal-info` and `unverified-claim` edits stay.
+   - The two FAQ answers that `bd522250` rewrote (moving a kit; refunds) are back to their original wording, in the
+     visible text and the JSON-LD alike.
+   - The Kampala intro gets back "or as a managed DishNet plan" only. Its WiFi-zone earnings phrase stays removed (§10.2).
+   - `prices.js` has `SELL_PLANS = true`. With the switch on, it behaves as before the hold-back, except for comment
+     changes, the removed claim "the total shown is the total invoiced", and a guard against a missing plan.
+   - The Terms of Service clause on the first month is restored, and the Terms page is rebuilt.
+   - Every claim removal (§10.2) and every launch-review fix (§10.3) is kept. A check found none of the 41 distinctive
+     held-back texts left, and all 56 original passages back.
+2. **The homepage shows the prices and links the shop.**
+   - **Menus:** "Prices" (`#plans`) and "Shop" (`shop.html`) in the top menu; "Plans and prices", "Starlink kits" and
+     "Shop" in the phone menu; "Shop" in the footer.
+   - **Plan grid:** `prices.js` fills it from the price feed (same markup as the kits page). The two managed-plan cards
+     inside it stay when the feed does not answer.
+   - **Hero line:** "Managed DishNet home plans from UGX …/month", shown only when the feed has a home plan.
+   - **Band below:** the own-name card and the availability box.
+   - **Menu fit:** the two extra links did not fit between 1141 and 1169 px. So menu links are 2 px narrower on each
+     side, and the phone menu now takes over at 1180 px instead of 1140 px (in `home.css` and `home.js`).
+3. **`verify-site.sh`:** the hold-back rule becomes its opposite, which requires:
+   - `SELL_PLANS` on;
+   - the plans grid on the kits page and on the homepage;
+   - `prices.js` loaded on the homepage;
+   - Shop in the homepage menu.
+
+   The website chat stays off (`CHAT_ON = false`) until the owner turns it back on. The nine removed-claim rules are
+   unchanged. Seven planted defects each fail the check, and an unplanted copy passes.
+
+**Checks on the working tree (exit 0 each):**
+- `verify-site.sh` PASS;
+- `verify-address.py`;
+- `policies/build.py --check`;
+- `stamp-assets.sh --check`;
+- `node --check` on every script;
+- the browser test, rewritten for the plans: **808 passed, 0 failed**, with a held-back `prices.js` as the control for
+  every plans assertion. Of the 70 files changed, 48 differ only by an asset stamp.
+
+**Still true, and the owner's decision:**
+- The reason for §10.1 is unchanged. There is no written position from Starlink and no authorised-reseller agreement,
+  and the UCC position is as `docs/67` §E records. The owner chose to show the plans regardless.
+- The four live checks of §10.4 have still not been run from this session.
+- `main` does not carry this change; the live app builds `claude/study-this-jhe2eg` (§10.7).
+

@@ -287,17 +287,16 @@ if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, co
 sys.exit(bad)
 PYPOS
 
-echo "== launch hold-back and removed claims =="
-# docs/70 §10. Managed DishNet plans are held back until Starlink's position and the UCC licence are confirmed: no
-# marketing page may offer or name one (policies and the app tutorials are existing customers' contract and help, and
-# keep their wording), prices.js keeps SELL_PLANS off, and the shop and chat scripts name none. The claims removed for
+echo "== plans and prices shown, website chat off, removed claims =="
+# docs/70 §10.8. The owner asked on 26 Oct 2026 for the subscription prices and the shop to stay on the site, as they
+# were on the old one: prices.js keeps SELL_PLANS on, the kits page and the homepage carry the live plans grid, and the
+# homepage menu links the shop. The website chat stays off until the owner turns it back on. The claims removed for
 # launch because nothing establishes them stay removed on every page, policies and tutorials included.
 python3 - "$HERE/site" <<'PYHOLD' || fail=1
 import sys, re, glob, os
 root = sys.argv[1]; bad = 0
 EXEMPT = {'acceptable-use.html', 'complaints.html', 'installation.html', 'policies.html', 'privacy.html', 'returns.html',
           'terms-of-sale.html', 'terms.html', 'warranty.html'}
-held = re.compile(r'managed DishNet|DishNet plan|managed plan|first month|DishNet (?:Lite|Home|Business|Flex)|Flex (?:package|24|12)', re.I)
 claims = [(re.compile(r'\bhosts? earn\b|\bearn from (?:it|internet)\b|earning assets|turn bandwidth into revenue', re.I), 'a WiFi-zone earnings claim'),
           (re.compile(r'Airtel Money billing|billing,? (?:and )?vouchers|per-tenant billing|billing engine', re.I), 'a WiFi-zone billing claim'),
           (re.compile(r'Hotspot zones — select towns|svc-hotspot">Hotspot<|hotspot zones are available', re.I), 'a hotspot availability claim'),
@@ -312,33 +311,37 @@ for (rx, name), sample in zip(claims, ('and hosts earn', 'with Airtel Money bill
                                        'it is free of charge for you', 'Genuine Starlink hardware',
                                        'the total shown is the total invoiced', 'Maintenance contracts')):
     if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
-if not held.search('a managed DishNet plan') or not held.search('your first month of internet'):
-    print('  CONTROL FAILED: the hold-back rule does not match its samples'); sys.exit(1)
 pages = glob.glob(os.path.join(root, '**', '*.html'), recursive=True)
 marketing = [f for f in pages if os.path.relpath(f, root) not in EXEMPT and not os.path.relpath(f, root).startswith('tutorials' + os.sep)]
 genuine = re.compile(r'\bgenuine\b', re.I)   # a supply claim on marketing pages; the Terms of Sale promise genuine kits
 if not genuine.search('Genuine kits, delivered'): print('  CONTROL FAILED: the genuine rule does not match its sample'); sys.exit(1)
 for f in marketing + [os.path.join(root, 'assets', 'js', x) for x in ('shop.js', 'chat.js')]:
     t = open(f, encoding='utf-8', errors='ignore').read()
-    for m in held.finditer(t):
-        print(f"  managed plan held back: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
     for m in genuine.finditer(t):
         print(f"  an unestablished supply claim: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
 pj = open(os.path.join(root, 'assets', 'js', 'prices.js'), encoding='utf-8').read()
-if pj.count('var SELL_PLANS = false;') != 1:
-    print('  managed plan held back: prices.js must hold exactly one "var SELL_PLANS = false;"'); bad = 1
-# The website chat answers from the same catalogue as WhatsApp, which quotes the monthly plans: it stays off with them.
+if pj.count('var SELL_PLANS = true;') != 1 or 'var SELL_PLANS = false' in pj:
+    print('  plans and prices: prices.js must hold exactly one "var SELL_PLANS = true;"'); bad = 1
+def page(n): return open(os.path.join(root, n), encoding='utf-8').read()
+kits, home = page('starlink-kits.html'), page('index.html')
+nav = re.search(r'<ul class="nav-links">(.*?)</ul>', home, re.S)
+for ok, what in ((kits.count('data-dishnet-plans') == 1 and 'id="plans"' in kits, 'starlink-kits.html must carry the plans grid (#plans, [data-dishnet-plans])'),
+                 (home.count('data-dishnet-plans') == 1 and 'id="plans"' in home, 'index.html must carry the live plans grid (#plans, [data-dishnet-plans])'),
+                 (re.search(r'<script src="assets/js/prices\.js\?v=[0-9a-f]+" defer data-endpoint="[^"]+page=prices"', home) is not None, 'index.html must load prices.js with the price feed'),
+                 (nav is not None and 'href="shop.html"' in nav.group(1), 'the homepage menu must link the shop')):
+    if not ok: print('  plans and prices: ' + what); bad = 1
+# The website chat stays off until the owner turns it back on (docs/70 §10.8): the floating WhatsApp button is the way in.
 cj = open(os.path.join(root, 'assets', 'js', 'chat.js'), encoding='utf-8').read()
 if cj.count('var CHAT_ON = false;') != 1 or cj.count('if (!CHAT_ON) return;') != 1:
-    print('  managed plan held back: chat.js must hold "var CHAT_ON = false;" and return on it'); bad = 1
+    print('  website chat: chat.js must hold "var CHAT_ON = false;" and return on it'); bad = 1
 for f in pages + glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
     t = open(f, encoding='utf-8', errors='ignore').read()
     for rx, name in claims:
         for m in rx.finditer(t):
             print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
 assert len(claims) == 9 and len(marketing) >= 30, (len(claims), len(marketing))
-if not bad: print(f'  {len(marketing)} marketing pages offer no managed plan, SELL_PLANS and the website chat are off, and none of the 9 removed claims is'
-                  ' back on any page or script (rules self-checked)')
+if not bad: print(f'  plans on (SELL_PLANS, the kits and homepage grids, the homepage shop link), the website chat off, no marketing claim of'
+                  f' genuine supply on {len(marketing)} marketing pages, and none of the 9 removed claims back on any page or script (rules self-checked)')
 sys.exit(bad)
 PYHOLD
 
