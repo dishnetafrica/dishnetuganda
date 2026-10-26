@@ -816,6 +816,26 @@ price" managed-plan cards, and the hold-back (§10.1) had removed those too and 
   every plans assertion. Of the 70 files changed, 48 differ only by an asset stamp.
 - after the logo change: the same five checks exit 0 again, and the browser test passes **810, 0 failed**.
 
+**Independent review of this change.** Five reviewers looked at it: restore completeness, claims, the homepage in a
+browser, cross-page consistency, and `prices.js`. A second agent tried to refute each finding. Five were refuted and
+seven confirmed; the seven are five distinct defects, all fixed:
+
+1. **`services.html`:** the hold-back's last-row span (`bd522250`) left an empty cell once the sixth card was back.
+   It is removed, which gives the `6be8b42e^` markup.
+2. **Homepage services grid at 641–1000 px:** the CCTV card sat alone in a half row. It now spans the row, and its
+   pill keeps its own width (`align-self`; `justify-self` had no effect in that flex column).
+3. **Homepage fallback cards:** these are titled "Home internet" and "Business internet", as on the kits page and the
+   old site, not "DishNet Home plans" or "DishNet Business plans", which the repository records as no longer plan
+   names.
+4. **`prices.js`:** a uCRM plan name that starts with "Starlink" (the last recorded live list has four) is displayed
+   without that word, because a managed plan is DishNet's service, not a Starlink product. Matching, `data-plan` and
+   every WhatsApp text keep the exact uCRM name.
+5. **`home.css`:** a plain price size now comes before the container-unit size, as in `styles.css`, for browsers
+   without container units.
+
+The browser test adds a check for each: **818 passed, 0 failed**. The new layout and plan-name checks each fail on the
+previous version, as a control. The five site checks exit 0.
+
 **Still true, and the owner's decision:**
 - The reason for §10.1 is unchanged. There is no written position from Starlink and no authorised-reseller agreement,
   and the UCC position is as `docs/67` §E records. The owner chose to show the plans regardless.

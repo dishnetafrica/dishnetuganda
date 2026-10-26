@@ -54,6 +54,10 @@
   // Flex is not shown, and the page's own kit text stands in.
   function kitDesc(d) { d = String(d || ''); return SELL_PLANS || !/month|plan|managed|flex|internet|subscription/i.test(d) ? d : ''; }
 
+  // A managed plan is DishNet's service, not a Starlink product, so a uCRM name that starts with "Starlink" is shown
+  // without it. Display only: matching, data-plan and every WhatsApp text keep the exact uCRM name.
+  function planLabel(n) { return String(n).replace(/^Starlink\s+/i, ''); }
+
   function fmt(cur, n) {
     var whole = Math.round(n) === n;
     return cur + ' ' + n.toLocaleString('en-US', { maximumFractionDigits: whole ? 0 : 2 });
@@ -210,7 +214,7 @@
           (best ? '<span class="price-pill">Best value</span>' : '') +
           (!best && flex ? '<span class="price-pill price-pill-soft">Kit included</span>' : '') +
           (!best && biz ? '<span class="price-pill price-pill-soft">Public IP</span>' : '') +
-          '<h3>' + esc(p.name) + '</h3>' +
+          '<h3>' + esc(planLabel(p.name)) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
           (flex ? '<p class="price-desc">No kit to buy upfront — Starlink Mini, connectivity, professional installation and DishNet support in one monthly price.</p>'
            : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP · for offices, remote access &amp; heavy users. When the priority data is used up, the speed drops until more is bought.</p>'
@@ -219,7 +223,7 @@
           (SVCMAP[p.name] ? '<p class="price-map">Starlink service: ' + esc(SVCMAP[p.name]) + '</p>' : '') +
           '<a class="btn btn-primary" href="https://wa.me/' + WA +
             '?text=' + encodeURIComponent('Hello DishNet, I would like to sign up for ' + p.name) +
-          '">Get ' + esc(p.name.replace(/^DishNet\s*/i, '')) + '</a>' +
+          '">Get ' + esc(planLabel(p.name).replace(/^DishNet\s*/i, '')) + '</a>' +
           '</article>';
       };
       var head = function (title, sub) {
@@ -296,7 +300,7 @@
       var one = function (p) {
         var biz = isBusiness(p);
         return '<button type="button" class="of-card" data-plan="' + esc(p.name) + '">' +
-          '<h4>' + esc(p.name) + '</h4>' +
+          '<h4>' + esc(planLabel(p.name)) + '</h4>' +
           (SVCMAP[p.name] ? '<div class="of-sub">Starlink service: ' + esc(SVCMAP[p.name]) + '</div>'
            : biz ? '<div class="of-sub">' + esc(bizQty(p.name)) + ' priority data · public IP included</div>'
                  : '<div class="of-sub">Monthly, cancel anytime</div>') +
@@ -338,7 +342,7 @@
         today = kit.price;
         recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
       } else {   // Flex; the own-kit option never reaches a receipt (it is an enquiry, see paint())
-        rows.push([state.plan.name + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
+        rows.push([planLabel(state.plan.name) + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
         rows.push(['Kit', 'Included in the monthly price']);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
