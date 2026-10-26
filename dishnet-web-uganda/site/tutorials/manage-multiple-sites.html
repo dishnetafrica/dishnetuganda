@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>How to manage multiple sites — DishNet Africa Tutorials</title>
+<title>How to manage multiple sites | DishNet Uganda</title>
 <meta name="description" content="If your business has more than one Starlink, the DishNet app shows them all in one place. See active and inactive sites, jump between them, and check status for each.">
 <link rel="canonical" href="https://dishnetuganda.com/tutorials/manage-multiple-sites.html">
 <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="../assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="../styles.css?v=31a8d2af">
-<link rel="stylesheet" href="tutorial-shared.css?v=9b1bcad1">
+<link rel="stylesheet" href="../assets/fonts/fonts.css?v=40474c18">
+<link rel="stylesheet" href="../styles.css?v=b0a39163">
+<link rel="stylesheet" href="tutorial-shared.css?v=9cada49f">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How to manage multiple sites — DishNet Africa">
+<meta property="og:title" content="How to manage multiple sites | DishNet Uganda">
 <meta property="og:description" content="If your business has more than one Starlink, the DishNet app shows them all in one place. See active and inactive sites, jump between them, and check status for each.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo","name":"How to manage multiple sites","description":"If your business has more than one Starlink, the DishNet app shows them all in one place. See active and inactive sites, jump between them, and check status for each.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
@@ -20,7 +20,7 @@
 </head>
 <body>
 
-<!-- DishNet customer app icon sprite — matches portal.php icons exactly.
+<!-- DishNet customer app icon sprite.
      Include once per tutorial page. Use via <svg><use href="#i-NAME"/></svg>. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
     <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></symbol>
@@ -63,16 +63,17 @@
         <div class="header-inner">
             <a href="/" class="logo"><img src="../assets/img/favicon.svg" alt="DishNet Africa"></a>
                         <nav class="nav">
-                <a href="/#products">Products</a>
-                <a href="../fiber.html">Fiber</a>
-                <a href="../hotspot.html">Hotspot</a>
+                <a href="/">Home</a>
+                <a href="../services.html">Services</a>
+                <a href="../shop.html">Shop</a>
+                <a href="../security.html">Security</a>
                 <a href="../coverage.html">Coverage</a>
                 <a href="../get-the-app.html">App</a>
                 <a href="../contact.html">Contact</a>
             </nav>
             <div class="nav-actions">
                 <a href="/login" class="btn btn-outline" style="padding:10px 20px;font-size:14px">Customer Login</a>
-                <a href="https://wa.me/256705993348" class="header-cta">Get a Quote</a>
+                <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20" class="header-cta">Free consultation</a>
             </div>
             <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav"><span></span></button>
         </div>
@@ -81,16 +82,19 @@
 <div class="mobile-nav" id="mobileNav">
     <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
     <a href="/">Home</a>
-    <a href="../fiber.html">Fiber</a>
     <a href="../hotspot.html">Hotspot</a>
     <a href="../coverage.html">Coverage</a>
     <a href="../get-the-app.html">App</a>
     <a href="../contact.html">Contact</a>
     <a href="../services.html">Services</a>
+    <a href="../starlink-kits.html">Starlink Kits</a>
+    <a href="../shop.html">Shop Accessories</a>
+    <a href="../security.html">CCTV &amp; Security</a>
     <a href="../about.html">About</a>
     <a href="index.html">Tutorials</a>
-    <a href="../get-the-app.html">Live Demo</a>
     <a href="../faq.html">FAQ</a>
+    <a href="../pay.html">Pay a Bill</a>
+    <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20">Book a free consultation</a>
     <a href="/login">Customer Login</a>
 </div>
 
@@ -104,7 +108,7 @@
             <div class="tut-meta">
                 <div class="tut-meta-item"><svg><use href="#i-clock"/></svg> About 2 min to complete</div>
                 <div class="tut-meta-item"><svg><use href="#i-router"/></svg> 3 steps</div>
-                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Works on Android &amp; iOS</div>
+                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Android app or web portal</div>
             </div>
         </div>
     </div>
@@ -118,9 +122,9 @@
         <h2>Multi-site customers see a different home screen</h2>
         <p>If your account has 2 or more Starlinks, the home screen shows a <b>summary across all sites</b> instead of one. You'll see total GB used, count of active sites, and a quick list of your top sites by usage.</p>
         <p>Tap <b>View all sites &rarr;</b> at the bottom of the card to open the full sites list.</p>
-        <div class="tut-step-tip"><b>Want to add another site to your account?</b> Just buy another Starlink kit from us. Our team will link it to the same account so it shows up here automatically &mdash; no need for a second login.</div>
+        <div class="tut-step-tip"><b>Want to add another site to your account?</b> If the new Starlink is on a managed DishNet plan, our team adds it to your DishNet account so it appears here, with no second login. Ask us on WhatsApp. A Starlink registered in your own name is managed in your own Starlink account.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -178,7 +182,7 @@
         <p>Each row shows the site name (e.g. <i>Cinema Café</i>), the KIT number, and how much data it's used this cycle. The <b>WiFi</b> tag means we can manage that router's Wi-Fi from the app.</p>
         <div class="tut-step-tip"><b>Naming your sites:</b> the names you see (Cinema Café, Office, Lodge) come from how our team registered them. If you'd like a name changed, message us on WhatsApp and we'll rename it on our end &mdash; you'll see the new name on next login.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -262,7 +266,7 @@
         <p>Each site is independent. Changing the Wi-Fi password at one site doesn't affect the others. Granting hotspot time at one site doesn't grant it elsewhere.</p>
         <div class="tut-step-tip"><b>Quick tip for businesses with many sites:</b> bookmark the Sites tab as your starting point. From there you can jump straight to whichever location needs attention without going through the home screen first.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -321,9 +325,9 @@
         <div class="tut-help-inner">
             <div>
                 <div class="tut-help-t">Stuck on something?</div>
-                <div class="tut-help-s">Our team in Kampala is on WhatsApp 7 days a week.</div>
+                <div class="tut-help-s">WhatsApp support is available seven days a week.</div>
             </div>
-            <a href="https://wa.me/256705993348" class="btn btn-primary">
+            <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%20need%20help%20with%20the%20DishNet%20app." class="btn btn-primary">
                 <svg style="width:16px;height:16px"><use href="#i-wa"/></svg>
                 Message support
             </a>
@@ -337,16 +341,16 @@
         <div class="footer-grid">
             <div class="footer-brand">
                 <img src="../assets/img/favicon.svg" alt="DishNet">
-                <p>Connecting Uganda since 2013. Starlink, fiber, and LTE internet across all major cities.</p>
+                <p>ICT consultancy focused on Starlink, acquisition guidance, installation and support across Uganda — and, separately, CCTV and network security.</p>
             </div>
             <div>
-                <h4>Internet</h4>
+                <h4>Services</h4>
                 <ul class="footer-links">
-                    <li><a href="/#products">Starlink Kits</a></li>
-                    <li><a href="../fiber.html">Fiber Internet</a></li>
+                    <li><a href="../starlink-kits.html">Starlink Kits</a></li>
                     <li><a href="../services.html">All Services</a></li>
                     <li><a href="../coverage.html">Coverage Map</a></li>
                     <li><a href="../hotspot.html">Hotspot Setup</a></li>
+                    <li><a href="../security.html">CCTV &amp; Firewalls</a></li>
                     <li><a href="../reseller.html">Reseller Program</a></li>
                     <li><a href="../why-dishnet.html">Why DishNet</a></li>
                 </ul>
@@ -357,7 +361,6 @@
                     <li><a href="../about.html">About Us</a></li>
                     <li><a href="../contact.html">Contact</a></li>
                     <li><a href="../faq.html">FAQ</a></li>
-                    <li><a href="../why-dishnet.html">Reviews</a></li>
                     <li><a href="../careers.html">Careers</a></li>
                 </ul>
             </div>
@@ -396,7 +399,7 @@ window.addEventListener('scroll', () => {
     document.getElementById('header').classList.toggle('scrolled', window.scrollY > 40);
 });
 </script>
-<script src="../assets/js/chat.js?v=acdd9120" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
+<script src="../assets/js/chat.js?v=16733323" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
 <script src="../assets/js/nav.js?v=7c31eedf" defer></script>
 </body>
 </html>

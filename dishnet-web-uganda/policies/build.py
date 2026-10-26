@@ -33,7 +33,7 @@ PARAMS = {
     'ACK':            '1 working day',  # complaint and warranty-claim acknowledgement
     'RESOLVE':        '14 days',        # final written answer to a complaint
 }
-UPDATED = 'Last updated: 12 October 2026'
+UPDATED = 'Last updated: 26 October 2026'
 
 PAGES = [
     ('policies.html', 'Policies', 'Legal',
@@ -49,7 +49,7 @@ PAGES = [
     ('installation.html', 'Starlink Installation', 'Legal',
      'How DishNet Uganda installation jobs are approved, what a standard Starlink installation includes, and the cancellation rules.'),
     ('acceptable-use.html', 'Acceptable Use and Fair Use', 'Legal',
-     'Acceptable Use and Fair Use Policy for DishNet Uganda internet services, including Starlink-based plans and fiber.'),
+     'Acceptable Use and Fair Use Policy for DishNet Uganda internet services: Starlink-based plans and the networks we manage.'),
     ('privacy.html', 'Privacy Policy', 'Legal',
      'How DishNet Africa Limited collects, uses, shares and protects personal information in Uganda, and your rights.'),
     ('complaints.html', 'Complaints', 'Legal',

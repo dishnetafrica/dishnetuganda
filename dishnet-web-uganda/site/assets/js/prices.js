@@ -14,18 +14,17 @@
  *
  * Renders into:
  *   <div data-dishnet-plans></div>        the monthly plans grid
- *   <div data-dishnet-order-flow></div>   address-first order flow (homepage):
+ *   <div data-dishnet-order-flow></div>   address-first order flow (starlink-kits.html):
  *                                         step 1 hardware, step 2 plan, then a
  *                                         WhatsApp checkout carrying the
- *                                         visitor's address/pin (window.DN_ADDR)
+ *                                         visitor's address/pin (window.DN_ADDR);
+ *                                         with SELL_PLANS off, the kit only
  *   <span data-live-price="NAME"></span>  one product's price, by uCRM name
  *   <div data-dishnet-hardware></div>     every kit in uCRM, priced, as cards
  *   <span data-dishnet-from></span>       "from UGX X/month", cheapest live plan
  *
- * A price with no unit is the thing customers actually complained about: a
- * kit card read "UGX 1,850,000 / VAT inclusive" and nothing on the page said
- * whether that was once or every month, or that a monthly plan is due as well.
- * Hardware now always carries "one-off" and the monthly it sits alongside.
+ * Every price says what it is for: hardware always carries "one-off", so a
+ * kit price is never read as a monthly one.
  *
  * Nothing here is ever blank. A slot whose product is missing from the feed
  * keeps whatever the page already had inside it — so every slot in the HTML
@@ -35,9 +34,7 @@
  * One naming system: the DishNet name from uCRM IS the display name on every
  * channel (site, chat, WhatsApp, invoice). data-service-map on the script tag
  * maps each plan to its underlying Starlink service (e.g. "DishNet Home" ->
- * "Residential"), shown as a small transparency line — never as the headline,
- * which would invite a straight price comparison with starlink.com instead of
- * a comparison of the DishNet bundle.
+ * "Residential"), shown as a small line under the plan name.
  */
 (function () {
   'use strict';
@@ -47,6 +44,15 @@
   var WA = (script.getAttribute('data-whatsapp') || '').replace(/\D/g, '');
   var FEATURED = (script.getAttribute('data-featured') || 'DishNet Home').toLowerCase();
   if (!ENDPOINT) return;
+
+  // Managed DishNet plans are not offered on this site at present. Off: no plans grid, no monthly figure beside a
+  // price, no Flex, no "first month of internet", and the order flow sells the kit only, with the Starlink service in
+  // the customer's own name. Turning it back on also needs the page sections removed with it.
+  var SELL_PLANS = false;
+  // A kit's description is its uCRM invoice label, which can still describe the package with plans ("... + first
+  // month of internet"). While plans are off, a description that mentions a plan, a month, internet service, a
+  // subscription or Flex is not shown, and the page's own kit text stands in.
+  function kitDesc(d) { d = String(d || ''); return SELL_PLANS || !/month|plan|managed|flex|internet|subscription/i.test(d) ? d : ''; }
 
   function fmt(cur, n) {
     var whole = Math.round(n) === n;
@@ -60,7 +66,8 @@
   try { SVCMAP = JSON.parse(script.getAttribute('data-service-map') || '{}'); } catch (e) {}
   // "DishNet Business 500" -> "500 GB", "DishNet Business 1TB" -> "1 TB".
   // Business tiers are Starlink Local Priority: a priority-data block plus a
-  // public IP, with unlimited standard data after — never call them unlimited.
+  // public IP; when the priority data is used up the speed drops until more is
+  // bought (the sales assistant says the same) — never call them unlimited.
   function bizQty(name) {
     var m = name.match(/business\s*(\d+\s*tb|\d+)/i);
     if (!m) return '';
@@ -99,7 +106,7 @@
   // card just has no image, rather than a broken one.
   function kitImage(name) {
     if (/mini/i.test(name))                 return 'assets/img/products/mini-kit.webp';
-    if (/high\s*performance|performance/i.test(name)) return 'assets/img/products/hp-kit.webp';
+    if (/high\s*performance|performance/i.test(name)) return '';   // no High Performance photo exists; never another kit's
     if (/standard/i.test(name))             return 'assets/img/products/standard-kit.webp';
     return '';
   }
@@ -114,7 +121,7 @@
     return '<span class="lp-amount">' + fmt(cur, amount) + '</span>' +
            '<span class="lp-kind">one-off payment</span>' +
            (fromMonthly ? '<span class="lp-then">then internet from <strong>' + fromMonthly + '</strong></span>' : '') +
-           '<span class="lp-note">VAT inclusive &middot; includes delivery, installation and your first month</span>';
+           '<span class="lp-note">VAT inclusive &middot; includes delivery' + (SELL_PLANS ? ', installation and your first month' : ' and installation') + '</span>';
   }
 
   function render(data) {
@@ -124,7 +131,7 @@
     var home = (data.plans || []).filter(function (p) { return !isBusiness(p); })
                                  .sort(function (a, b) { return a.price - b.price; })[0] || null;
     var cheapest = home || (data.plans || [])[0] || null;
-    var fromMonthly = cheapest ? fmt(cur, cheapest.price) + '/month' : '';
+    var fromMonthly = (SELL_PLANS && cheapest) ? fmt(cur, cheapest.price) + '/month' : '';
     // A [data-dishnet-from-line] ships hidden and names home plans: show it only for a home-plan figure.
     Array.prototype.forEach.call(document.querySelectorAll('[data-dishnet-from]'), function (el) {
       if (!fromMonthly) return; el.textContent = fromMonthly; var line = el.closest ? el.closest('[data-dishnet-from-line]') : null; if (line && home) line.hidden = false;
@@ -132,7 +139,7 @@
 
     // Individual price slots (kit cards etc.)
     var byName = {}, kindOf = {};
-    (data.plans || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'month'; });
+    (SELL_PLANS ? data.plans || [] : []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'month'; });
     (data.hardware || []).forEach(function (i) { byName[i.name.toLowerCase()] = i; kindOf[i.name.toLowerCase()] = 'once'; });
 
     Array.prototype.forEach.call(document.querySelectorAll('[data-live-price]'), function (el) {
@@ -159,7 +166,7 @@
           (img ? '<div class="hw-shot"><img src="' + img + '" alt="' + esc(h.name) + '" loading="lazy"></div>' : '') +
           '<h3>' + esc(label) + '</h3>' +
           '<div class="live-price">' + priceBlock(cur, h.price, 'once', fromMonthly) + '</div>' +
-          (h.description ? '<p class="hw-desc">' + esc(h.description) + '</p>' : '') +
+          (kitDesc(h.description) ? '<p class="hw-desc">' + esc(kitDesc(h.description)) + '</p>' : '') +
           '<a class="btn btn-primary hw-cta" href="https://wa.me/' + WA + '?text=' +
             encodeURIComponent('Hello DishNet, I would like the ' + h.name + '. Please confirm the total and book installation.') +
           '">Order ' + esc(label) + '</a>' +
@@ -180,9 +187,11 @@
       // your first month". Accessories are their own list (shop.html) and
       // never reached this grid.
       var kits = (data.hardware || []).filter(function (h) { return /kit|package/i.test(h.name); });
-      if (!kits.length) return;
-      hwGrid.innerHTML = kits.map(hwCard).join('') + keep.join('');
-      hwGrid.setAttribute('data-rendered', '1');
+      // No kit in the feed: keep the page's own cards, and still go on to the plans and the order flow.
+      if (kits.length) {
+        hwGrid.innerHTML = kits.map(hwCard).join('') + keep.join('');
+        hwGrid.setAttribute('data-rendered', '1');
+      }
     }
 
     // Monthly plans grid, split into home and business.
@@ -192,19 +201,19 @@
     // the seven was theirs. The two products answer different questions and
     // now sit under their own headings.
     var grid = document.querySelector('[data-dishnet-plans]');
-    if (grid && (data.plans || []).length) {
+    if (SELL_PLANS && grid && (data.plans || []).length) {
       var card = function (p) {
         var flex = /flex/i.test(p.name);
         var biz  = isBusiness(p);
         var best = p.name.toLowerCase() === FEATURED;
         return '<article class="price-card' + (best ? ' price-card-best' : '') + '">' +
           (best ? '<span class="price-pill">Best value</span>' : '') +
-          (!best && flex ? '<span class="price-pill price-pill-soft">UGX 0 upfront</span>' : '') +
+          (!best && flex ? '<span class="price-pill price-pill-soft">Kit included</span>' : '') +
           (!best && biz ? '<span class="price-pill price-pill-soft">Public IP</span>' : '') +
           '<h3>' + esc(p.name) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
-          (flex ? '<p class="price-desc">UGX 0 hardware upfront — Starlink Mini + connectivity + professional installation + DishNet support.</p>'
-           : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP — unlimited standard data after · for offices, CCTV &amp; heavy users.</p>'
+          (flex ? '<p class="price-desc">No kit to buy upfront — Starlink Mini, connectivity, professional installation and DishNet support in one monthly price.</p>'
+           : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP · for offices, remote access &amp; heavy users. When the priority data is used up, the speed drops until more is bought.</p>'
                  : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
           (p.speed ? '<p class="price-speed">Up to ' + esc(String(p.speed)) + ' Mbps</p>' : '') +
           (SVCMAP[p.name] ? '<p class="price-map">Starlink service: ' + esc(SVCMAP[p.name]) + '</p>' : '') +
@@ -227,7 +236,7 @@
       var body = (homeP.length && bizP.length)
         ? head('Home internet', 'Unlimited data for households — professional installation and local support.')
           + homeP.map(card).join('')
-          + head('Business internet', 'Priority data with a public IP, for offices, CCTV and heavy users. Unlimited standard data after the priority block.')
+          + head('Business internet', 'Priority data with a public IP, for offices, remote access and heavy users. When the priority data is used up, the speed drops until more is bought — we explain the details before you choose.')
           + bizP.map(card).join('')
         : ordered.map(card).join('');
 
@@ -240,11 +249,15 @@
   // ── Address-first order flow (Starlink-style: hardware, then plan) ──
   function renderOrderFlow(data, cur) {
     var host = document.querySelector('[data-dishnet-order-flow]');
-    if (!host || !(data.plans || []).length) return;
-
-    var kits = (data.hardware || []).filter(function (h) { return /package/i.test(h.name); });
-    var flexPlans = data.plans.filter(function (p) { return /flex/i.test(p.name); });
-    var stdPlans  = headlineFirst(data.plans.filter(function (p) { return !/flex/i.test(p.name); }));
+    // The same kits as the hardware cards above it on starlink-kits.html (the
+    // live names are "Starlink Mini Kit" / "Starlink Standard Kit"; /package/
+    // alone matched none of them, so the flow offered no kit at all).
+    var kits = (data.hardware || []).filter(function (h) { return /kit|package/i.test(h.name); });
+    // Without plans for sale the flow needs a kit to sell; with them, a plan (as before).
+    if (!host || !(SELL_PLANS ? (data.plans || []).length : kits.length)) return;
+    var plans = SELL_PLANS ? (data.plans || []) : [];
+    var flexPlans = plans.filter(function (p) { return /flex/i.test(p.name); });
+    var stdPlans  = headlineFirst(plans.filter(function (p) { return !/flex/i.test(p.name); }));
     var state = { hw: null, plan: null };
 
     function kitImg(name) {
@@ -257,13 +270,13 @@
         return '<button type="button" class="of-card" data-hw="' + esc(k.name) + '">' +
           (kitImg(k.name) ? '<img src="' + kitImg(k.name) + '" alt="' + esc(k.name) + '" loading="lazy">' : '') +
           '<h4>' + esc(k.name) + '</h4>' +
-          '<div class="of-sub">' + esc(k.description || 'Kit + delivery + professional installation + first month of internet included.') + '</div>' +
+          '<div class="of-sub">' + esc(kitDesc(k.description) || (SELL_PLANS ? 'Kit + delivery + professional installation + first month of internet included.' : 'Kit + delivery to your town + professional installation.')) + '</div>' +
           '<div class="of-price">' + esc(fmt(cur, k.price)) + ' <small>one-time, VAT inclusive</small></div>' +
           '</button>';
       }).join('');
       if (flexPlans.length) {
         h += '<button type="button" class="of-card" data-hw="__flex">' +
-          '<span class="of-tag">' + esc(cur) + ' 0 upfront</span>' +
+          '<span class="of-tag">Kit included</span>' +
           '<h4>Rent with Flex</h4>' +
           '<div class="of-sub">No kit to buy — Starlink Mini, installation and internet in one monthly price.</div>' +
           '<div class="of-price">Pay monthly <small>choose your plan next</small></div>' +
@@ -271,8 +284,9 @@
       }
       h += '<button type="button" class="of-card" data-hw="__own">' +
         '<h4>I already have a kit</h4>' +
-        '<div class="of-sub">Bring your own Starlink — we connect it to a DishNet plan with local support and mobile-money billing.</div>' +
-        '<div class="of-price">No hardware needed</div>' +
+        '<div class="of-sub">' + (SELL_PLANS ? 'Ask us about installation and support, registering it in your own name, or a managed DishNet plan — each case is reviewed individually, subject to Starlink\'s terms.'
+          : 'Ask us about installation and support, and about registering it in your own name — each case is reviewed individually, subject to Starlink\'s terms.') + '</div>' +
+        '<div class="of-price">An enquiry <small>no price until we have talked</small></div>' +
         '</button>';
       return h;
     }
@@ -287,7 +301,7 @@
            : biz ? '<div class="of-sub">' + esc(bizQty(p.name)) + ' priority data · public IP included</div>'
                  : '<div class="of-sub">Monthly, cancel anytime</div>') +
           '<div class="of-price">' + esc(fmt(cur, p.price)) + ' <small>/' + esc(p.period || 'month') + '</small></div>' +
-          (biz ? '<div class="of-sub" style="margin-top:6px;">Unlimited standard data after priority data</div>'
+          (biz ? '<div class="of-sub" style="margin-top:6px;">When the priority data is used up, the speed drops until more is bought</div>'
                : p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
           '</button>';
       };
@@ -302,7 +316,7 @@
     }
 
     function hwLabel() {
-      if (state.hw === '__flex') return 'Flex (kit included, ' + cur + ' 0 upfront)';
+      if (state.hw === '__flex') return 'Flex (kit included in the monthly price)';
       if (state.hw === '__own') return 'Using my own Starlink kit';
       return state.hw;
     }
@@ -310,27 +324,28 @@
     // Starlink-receipt-style order lines: [label, amount-or-"Included"], plus totals.
     function receipt() {
       var kit = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
-      var rows = [], today = 0, monthly = state.plan.price, recurNote;
-      if (kit) {
+      var rows = [], today = 0, monthly = state.plan ? state.plan.price : 0, recurNote;
+      if (kit && !SELL_PLANS) {   // the kit only: the service is the customer's own Starlink subscription
+        rows.push([kit.name, fmt(cur, kit.price)]);
+        rows.push(['Delivery & professional installation', 'Included']);
+        rows.push(['Starlink service', 'In your own name, with Starlink']);
+        today = kit.price;
+        recurNote = 'Starlink controls registration approval, KYC verification and activation';
+      } else if (kit) {
         rows.push([kit.name, fmt(cur, kit.price)]);
         rows.push(['Delivery & professional installation', 'Included']);
         rows.push(['First month of internet', 'Included']);
         today = kit.price;
         recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
-      } else if (state.hw === '__flex') {
+      } else {   // Flex; the own-kit option never reaches a receipt (it is an enquiry, see paint())
         rows.push([state.plan.name + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
-        rows.push(['Hardware upfront', fmt(cur, 0)]);
-        today = monthly;
-        recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
-      } else {
-        rows.push([state.plan.name + ' — first month', fmt(cur, monthly)]);
-        rows.push(['Connecting your own Starlink kit', 'Our team confirms']);
+        rows.push(['Kit', 'Included in the monthly price']);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
       }
       return '<div class="of-receipt">' +
         rows.map(function (r) {
-          return '<div class="of-rrow' + (r[1] === 'Included' || r[1] === 'Our team confirms' ? ' inc' : '') + '">' +
+          return '<div class="of-rrow' + (r[1] === 'Included' ? ' inc' : '') + '">' +
             '<span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>';
         }).join('') +
         '<div class="of-rrow total"><span>Total today</span><span>' + esc(fmt(cur, today)) + '</span></div>' +
@@ -339,10 +354,13 @@
     }
 
     function paint() {
+      // Someone who already has a kit is asking, not ordering: what we can do with it is reviewed case by case, so no
+      // plan, price or total.
+      var own = state.hw === '__own';
       var html =
-        '<div class="of-step">Step 1</div><div class="of-title">Choose your hardware</div>' +
+        (SELL_PLANS ? '<div class="of-step">Step 1</div>' : '') + '<div class="of-title">Choose your hardware</div>' +
         '<div class="of-grid" data-of-hw>' + hwCards() + '</div>';
-      if (state.hw) {
+      if (SELL_PLANS && state.hw && !own) {
         html +=
           '<div class="of-step">Step 2</div><div class="of-title">Choose your plan</div>' +
           '<div class="of-grid" data-of-plan>' + planCards() + '</div>';
@@ -350,13 +368,15 @@
       html +=
         '<div class="of-summary">' +
           '<div class="of-sumtext" data-of-sum>' +
-            (state.hw && state.plan ? receipt() :
+            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support' + (SELL_PLANS ? ', registering it in your own name, or a managed DishNet plan' : ', and registering it in your own name') + '. No price is quoted until then.' :
+              state.hw && (state.plan || !SELL_PLANS) ? receipt() :
               state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +
           '</div>' +
-          '<button type="button" class="of-wa" data-of-wa' + (state.hw && state.plan ? '' : ' disabled') + '>Complete order on WhatsApp</button>' +
+          '<button type="button" class="of-wa" data-of-wa' + (own ? ' data-of-kind="enquiry"' : '') + (own || (state.hw && (state.plan || !SELL_PLANS)) ? '' : ' disabled') + '>' +
+            (own ? 'Send my enquiry on WhatsApp' : 'Complete order on WhatsApp') + '</button>' +
         '</div>' +
-        '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>';
+        (own ? '' : '<p class="of-vat">A team member confirms everything on WhatsApp before you pay.</p>');
       host.innerHTML = html;
       Array.prototype.forEach.call(host.querySelectorAll('[data-hw]'), function (el) {
         if (state.hw && el.getAttribute('data-hw') === state.hw) el.classList.add('sel');
@@ -374,8 +394,8 @@
         state.hw = hw.getAttribute('data-hw');
         state.plan = null;
         paint();
-        var p2 = host.querySelector('[data-of-plan]');
-        if (p2) p2.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        var p2 = host.querySelector(SELL_PLANS ? '[data-of-plan]' : '.of-summary');
+        if (p2) p2.scrollIntoView({ behavior: 'smooth', block: SELL_PLANS ? 'nearest' : 'center' });
         return;
       }
       var pl = t.closest('[data-plan]');
@@ -386,6 +406,25 @@
         return;
       }
       var wa = t.closest('[data-of-wa]');
+      if (wa && state.hw === '__own') {
+        var where = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
+        window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent('Hello DishNet, I already have a Starlink kit. ' +
+          (SELL_PLANS ? 'I would like to discuss installation and support, registering it in my own name, or a managed DishNet plan.'
+            : 'I would like to discuss installation and support, and registering it in my own name.') +
+          (where ? '\n' + where : '')), '_blank');
+        return;
+      }
+      if (wa && state.hw && !SELL_PLANS) {
+        var kitOnly = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
+        if (!kitOnly) return;
+        var at = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
+        window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent('Hello DishNet, I would like to order Starlink hardware.' +
+          '\nHardware: ' + kitOnly.name +
+          '\nTotal today: ' + fmt(cur, kitOnly.price) + ' (delivery and professional installation included)' +
+          '\nStarlink service: in my own name, with your guidance' +
+          (at ? '\n' + at : '')), '_blank');
+        return;
+      }
       if (wa && state.hw && state.plan) {
         var kit = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
         var today = kit ? kit.price : state.plan.price;

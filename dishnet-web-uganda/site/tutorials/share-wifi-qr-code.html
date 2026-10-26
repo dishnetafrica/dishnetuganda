@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>How to share Wi-Fi via QR code — DishNet Africa Tutorials</title>
+<title>How to share Wi-Fi via QR code | DishNet Uganda</title>
 <meta name="description" content="Show a guest a QR code, they scan it with their camera, they're connected. No typing the password, no spelling it out. Works for café customers, lodge guests, visitors at home.">
 <link rel="canonical" href="https://dishnetuganda.com/tutorials/share-wifi-qr-code.html">
 <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="../assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="../styles.css?v=31a8d2af">
-<link rel="stylesheet" href="tutorial-shared.css?v=9b1bcad1">
+<link rel="stylesheet" href="../assets/fonts/fonts.css?v=40474c18">
+<link rel="stylesheet" href="../styles.css?v=b0a39163">
+<link rel="stylesheet" href="tutorial-shared.css?v=9cada49f">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How to share Wi-Fi via QR code — DishNet Africa">
+<meta property="og:title" content="How to share Wi-Fi via QR code | DishNet Uganda">
 <meta property="og:description" content="Show a guest a QR code, they scan it with their camera, they're connected. No typing the password, no spelling it out. Works for café customers, lodge guests, visitors at home.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo","name":"How to share Wi-Fi via QR code","description":"Show a guest a QR code, they scan it with their camera, they're connected. No typing the password, no spelling it out. Works for café customers, lodge guests, visitors at home.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
@@ -20,7 +20,7 @@
 </head>
 <body>
 
-<!-- DishNet customer app icon sprite — matches portal.php icons exactly.
+<!-- DishNet customer app icon sprite.
      Include once per tutorial page. Use via <svg><use href="#i-NAME"/></svg>. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
     <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></symbol>
@@ -63,16 +63,17 @@
         <div class="header-inner">
             <a href="/" class="logo"><img src="../assets/img/favicon.svg" alt="DishNet Africa"></a>
                         <nav class="nav">
-                <a href="/#products">Products</a>
-                <a href="../fiber.html">Fiber</a>
-                <a href="../hotspot.html">Hotspot</a>
+                <a href="/">Home</a>
+                <a href="../services.html">Services</a>
+                <a href="../shop.html">Shop</a>
+                <a href="../security.html">Security</a>
                 <a href="../coverage.html">Coverage</a>
                 <a href="../get-the-app.html">App</a>
                 <a href="../contact.html">Contact</a>
             </nav>
             <div class="nav-actions">
                 <a href="/login" class="btn btn-outline" style="padding:10px 20px;font-size:14px">Customer Login</a>
-                <a href="https://wa.me/256705993348" class="header-cta">Get a Quote</a>
+                <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20" class="header-cta">Free consultation</a>
             </div>
             <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav"><span></span></button>
         </div>
@@ -81,16 +82,19 @@
 <div class="mobile-nav" id="mobileNav">
     <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
     <a href="/">Home</a>
-    <a href="../fiber.html">Fiber</a>
     <a href="../hotspot.html">Hotspot</a>
     <a href="../coverage.html">Coverage</a>
     <a href="../get-the-app.html">App</a>
     <a href="../contact.html">Contact</a>
     <a href="../services.html">Services</a>
+    <a href="../starlink-kits.html">Starlink Kits</a>
+    <a href="../shop.html">Shop Accessories</a>
+    <a href="../security.html">CCTV &amp; Security</a>
     <a href="../about.html">About</a>
     <a href="index.html">Tutorials</a>
-    <a href="../get-the-app.html">Live Demo</a>
     <a href="../faq.html">FAQ</a>
+    <a href="../pay.html">Pay a Bill</a>
+    <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20">Book a free consultation</a>
     <a href="/login">Customer Login</a>
 </div>
 
@@ -100,11 +104,11 @@
         <div class="tut-hero-inner">
             <span class="badge-label badge-accent">Hotspot Mode</span>
             <h1>How to share Wi-Fi via QR code</h1>
-            <p>Stop spelling out long passwords. Show a guest a QR code, they point their camera at it, they're connected. Works on every iPhone and modern Android.</p>
+            <p>Stop spelling out long passwords. Show a guest a QR code, they point their camera at it, they're connected. Works on most recent iPhones and Android phones.</p>
             <div class="tut-meta">
                 <div class="tut-meta-item"><svg><use href="#i-clock"/></svg> About 2 min to complete</div>
                 <div class="tut-meta-item"><svg><use href="#i-router"/></svg> 3 steps</div>
-                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Works on Android &amp; iOS</div>
+                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Android app or web portal</div>
             </div>
         </div>
     </div>
@@ -118,9 +122,9 @@
         <h2>Tap "Share Wi-Fi" on the Hotspot dashboard</h2>
         <p>Open <b>Hotspot Mode</b>. In the <b>Manage</b> section, tap the <b>Share Wi-Fi</b> tile (with the QR icon).</p>
         <p>You can also tap the small QR icon next to your Wi-Fi password in the dark card at the top &mdash; same result.</p>
-        <div class="tut-step-tip"><b>Why use a QR code instead of just telling them the password?</b> No misheard letters, no typos, and the password itself stays confidential &mdash; the guest's phone joins automatically without ever showing them the password text. They can't share it onward as easily.</div>
+        <div class="tut-step-tip"><b>Why use a QR code instead of just telling them the password?</b> No misheard letters and no typos. Note that the QR code contains your Wi-Fi password, so anyone who scans or photographs it can join &mdash; treat it like the password itself.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -177,7 +181,7 @@
         <p>Hold your phone up so the guest can see the QR clearly. They don't need to touch your phone.</p>
         <div class="tut-step-tip"><b>Want to print the QR?</b> Take a screenshot, send it to your printer, and stick it on the wall of your café. Customers can scan from a distance, no staff involvement needed. The QR stays valid as long as the password doesn't change.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -244,7 +248,7 @@
         <p>That's it &mdash; no typing, no fumbling, no mistakes.</p>
         <div class="tut-step-tip"><b>Doesn't work on really old Android phones.</b> Android added native Wi-Fi QR support in version 10 (2019). For older phones, Google Lens or Google Photos can scan QRs as a fallback. iPhone has supported this since iOS 11 (2017) so any iPhone made in the last 8 years works.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -301,9 +305,9 @@
         <div class="tut-help-inner">
             <div>
                 <div class="tut-help-t">Stuck on something?</div>
-                <div class="tut-help-s">Our team in Kampala is on WhatsApp 7 days a week.</div>
+                <div class="tut-help-s">WhatsApp support is available seven days a week.</div>
             </div>
-            <a href="https://wa.me/256705993348" class="btn btn-primary">
+            <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%20need%20help%20with%20the%20DishNet%20app." class="btn btn-primary">
                 <svg style="width:16px;height:16px"><use href="#i-wa"/></svg>
                 Message support
             </a>
@@ -317,16 +321,16 @@
         <div class="footer-grid">
             <div class="footer-brand">
                 <img src="../assets/img/favicon.svg" alt="DishNet">
-                <p>Connecting Uganda since 2013. Starlink, fiber, and LTE internet across all major cities.</p>
+                <p>ICT consultancy focused on Starlink, acquisition guidance, installation and support across Uganda — and, separately, CCTV and network security.</p>
             </div>
             <div>
-                <h4>Internet</h4>
+                <h4>Services</h4>
                 <ul class="footer-links">
-                    <li><a href="/#products">Starlink Kits</a></li>
-                    <li><a href="../fiber.html">Fiber Internet</a></li>
+                    <li><a href="../starlink-kits.html">Starlink Kits</a></li>
                     <li><a href="../services.html">All Services</a></li>
                     <li><a href="../coverage.html">Coverage Map</a></li>
                     <li><a href="../hotspot.html">Hotspot Setup</a></li>
+                    <li><a href="../security.html">CCTV &amp; Firewalls</a></li>
                     <li><a href="../reseller.html">Reseller Program</a></li>
                     <li><a href="../why-dishnet.html">Why DishNet</a></li>
                 </ul>
@@ -337,7 +341,6 @@
                     <li><a href="../about.html">About Us</a></li>
                     <li><a href="../contact.html">Contact</a></li>
                     <li><a href="../faq.html">FAQ</a></li>
-                    <li><a href="../why-dishnet.html">Reviews</a></li>
                     <li><a href="../careers.html">Careers</a></li>
                 </ul>
             </div>
@@ -376,7 +379,7 @@ window.addEventListener('scroll', () => {
     document.getElementById('header').classList.toggle('scrolled', window.scrollY > 40);
 });
 </script>
-<script src="../assets/js/chat.js?v=acdd9120" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
+<script src="../assets/js/chat.js?v=16733323" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
 <script src="../assets/js/nav.js?v=7c31eedf" defer></script>
 </body>
 </html>

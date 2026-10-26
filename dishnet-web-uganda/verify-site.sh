@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Serve site/ with the real nginx.conf and check it end to end.
-# Uganda edition: no _redirects section — dishnetuganda.com has no legacy URLs.
+# Uganda edition: no Netlify _redirects; nginx.conf redirects /login, /app and the
+# withdrawn fibre addresses (all asserted below).
 #
 # Worth re-running after the localisation pass: that rewrites hundreds of
 # links, and a broken one is invisible in production because the Netlify
@@ -119,6 +120,34 @@ fi
 n=$(grep -rlF 'href="/login"' "$HERE/site" --include='*.html' | wc -l)
 [ "$n" -gt 0 ] || { echo "  FAIL: no page links /login"; fail=1; }
 
+echo "== withdrawn pages =="
+# October 2026: DishNet Uganda does not currently sell fibre, so the fibre page and the Starlink-vs-fibre article
+# are gone and their URLs redirect (nginx.conf). Each must be a 301 to its target, relative, carrying the security
+# headers and exactly one Cache-Control from the server-level `expires 10m` (max-age=600), so a browser keeps the
+# redirect for ten minutes rather than for ever. The files themselves must be gone. /app (the plugin's Uganda
+# profile links it) is a 302 to the app page.
+wbad=0
+for pair in "/fiber.html /services.html 301" "/fiber /services.html 301" \
+            "/blog-starlink-vs-fiber-uganda.html /blog.html 301" "/blog-starlink-vs-fiber-uganda /blog.html 301" \
+            "/app /get-the-app.html 302"; do
+  set -- $pair
+  h=$(curl -sI "$B$1")
+  c=$(printf '%s\n' "$h" | head -1 | awk '{print $2}')
+  loc=$(printf '%s\n' "$h" | grep -i '^location:' | sed -E 's/^[Ll]ocation: *//' | tr -d '\r')
+  s=$(printf '%s\n' "$h" | grep -icE 'x-content-type-options|x-frame-options|referrer-policy')
+  n=$(printf '%s\n' "$h" | grep -ic '^cache-control:')
+  cc=$(printf '%s\n' "$h" | grep -i '^cache-control:' | tr -d '\r')
+  if [ "$c" != "$3" ] || [ "$loc" != "$2" ] || [ "$s" != 3 ] || [ "$n" != 1 ] || ! printf '%s' "$cc" | grep -q 'max-age=600'; then
+    echo "  FAIL: $1 returned $c (want $3), Location '$loc' (want $2), $s/3 security headers, $n Cache-Control '$cc'"; wbad=1
+  fi
+  t=$(curl -s -o /dev/null -w '%{http_code}' "$B$2")
+  [ "$t" = 200 ] || { echo "  FAIL: redirect target $2 returned $t"; wbad=1; }
+done
+for f in fiber.html blog-starlink-vs-fiber-uganda.html; do
+  [ -e "$HERE/site/$f" ] && { echo "  FAIL: site/$f still exists"; wbad=1; }
+done
+[ $wbad -eq 0 ] && echo "  fibre page and article: 301, 10-minute expiry, headers kept, targets 200; /app: 302 to the app page" || fail=1
+
 echo "== seo =="
 # A canonical pointing at another domain tells Google not to index this site at
 # all — the exact bug this build shipped with (uganda.dishnetafrica.com).
@@ -176,18 +205,142 @@ n=$(grep -rF 'https://crm.dishnetuganda.com/crm"' "$HERE/site" --include='*.html
 
 echo "== commercial rules =="
 # The house law: prices live in uCRM, never in this site. The only currency
-# figures allowed anywhere are inside tutorials/ — mock app screenshots.
+# figures allowed anywhere are inside the tutorials' mock app screens
+# (div.tut-step-mock); a figure in a tutorial's own text is a published price.
 python3 - "$HERE/site" <<'PYCOM' || fail=1
 import sys, re, glob, os
+from html.parser import HTMLParser
 root = sys.argv[1]; bad = 0
+PRICE = r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*'
+class OutsideMocks(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True); self.mock = 0; self.text = []
+    def handle_starttag(self, tag, attrs):
+        if tag == 'div':
+            if self.mock: self.mock += 1; return
+            if any(k == 'class' and v and 'tut-step-mock' in v.split() for k, v in attrs): self.mock = 1; return
+        if not self.mock: self.text.extend(v for _, v in attrs if v)   # descriptions, alt and titles count too
+    def handle_endtag(self, tag):
+        if tag == 'div' and self.mock: self.mock -= 1
+    def handle_data(self, d):
+        if not self.mock: self.text.append(d)
+def outside_mocks(t):
+    p = OutsideMocks(); p.feed(t); return ' '.join(p.text)
+# Controls: a figure inside a mock (nested divs included) is skipped; figures before and after it are not, so the filter
+# provably leaves the mock again; an attribute outside a mock is scanned, one inside is not.
+if (re.findall(PRICE, outside_mocks('<p>UGX 500 an hour</p><div class="tut-step-mock"><div>$80</div><div>UGX 9</div></div><p>UGX 7 a day</p>')) != ['UGX 500', 'UGX 7']
+        or re.findall(PRICE, outside_mocks('<meta content="UGX 3"><div class="tut-step-mock"><img alt="UGX 4"></div>')) != ['UGX 3']):
+    print('  CONTROL FAILED: the tutorial mock filter'); sys.exit(1)
 for f in glob.glob(os.path.join(root, '**', '*.html'), recursive=True):
-    if os.sep + 'tutorials' + os.sep in f: continue
     t = open(f, encoding='utf-8', errors='ignore').read()
-    for m in re.findall(r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*', t):
-        print(f"  price-like figure {m!r} outside tutorials: {os.path.relpath(f, root)}"); bad = 1
+    if os.sep + 'tutorials' + os.sep in f: t = outside_mocks(t)
+    for m in re.findall(PRICE, t):
+        print(f"  price-like figure {m!r} outside the tutorial mock screens: {os.path.relpath(f, root)}"); bad = 1
+# Scripts too, with their comments removed: a figure a script writes into a page is a published price. Prices from
+# the billing feed go through fmt(), never a literal. Control: the stripper keeps code and drops comments.
+def code(t):
+    t = re.sub(r'/\*.*?\*/', '', t, flags=re.S)
+    return '\n'.join(l for l in t.split('\n') if not l.lstrip().startswith('//'))
+if code("/* UGX 5 */ x = 'UGX 9';\n// $1\n") != " x = 'UGX 9';\n": print('  CONTROL FAILED: comment stripper'); sys.exit(1)
+for f in glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
+    for m in re.findall(r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*', code(open(f, encoding='utf-8').read())):
+        print(f"  price-like figure {m!r} in a script: {os.path.relpath(f, root)}"); bad = 1
 sys.exit(bad)
 PYCOM
-[ $fail -eq 0 ] && echo "  no price published anywhere outside tutorial mock screenshots"
+[ $fail -eq 0 ] && echo "  no price published anywhere outside the tutorial mock screens"
+
+echo "== positioning rules =="
+# The decisions of October 2026, enforced: DishNet Uganda offers Starlink only (no fibre, no LTE), and support
+# claims use the approved wording ("WhatsApp support is available seven days a week", "more than 40 towns"),
+# never "24/7", "four regions", "every region", "10+ years", "two countries" or "thousands of". Zero is the only
+# acceptable count, tutorials included.
+python3 - "$HERE/site" <<'PYPOS' || fail=1
+import sys, re, glob, os
+root = sys.argv[1]; bad = 0
+rules = [(re.compile(r'fib(?:er|re)', re.I), 'fibre'), (re.compile(r'\bLTE\b'), 'LTE'),
+         (re.compile(r'24/7|24x7|24 hours a day', re.I), '24/7 support'),
+         (re.compile(r'four regions|every region', re.I), 'an unapproved coverage claim'),
+         (re.compile(r'10\+ years|ten years|two countries|\b2 countries|thousands of', re.I), 'an unapproved company fact'),
+         (re.compile(r'answered every day|support every day|every day of the week', re.I), 'unapproved support-hours wording'),
+         (re.compile(r'Uganda since 2013', re.I), 'an unapproved company fact (the approved one is "DishNet Africa has operated since 2013")'),
+         (re.compile(r'\b4G\b|fixed wireless|data network', re.I), 'an alternative connectivity offer'),
+         (re.compile(r'\bwe activate\b|\bwe will activate\b|activate your (?:kit|dish)|5-15 minutes', re.I), 'an activation promise (Starlink controls activation)'),
+         (re.compile(r'within minutes|within the hour', re.I), 'a response-time promise'),
+         (re.compile(r'Stanbic|Equity Bank', re.I), 'a South Sudan payment remnant'),
+         (re.compile(r'working hours|outside (?:office|business) hours|team is back', re.I), 'unapproved support-hours wording')]
+# Control: each rule must match its own sample first, so a rule broken by an edit cannot pass by matching nothing.
+for (rx, name), sample in zip(rules, ('Fibre plans', 'Starlink, LTE', 'support 24/7', 'across all four regions',
+                                      'over 10+ years in two countries', 'WhatsApp, answered every day',
+                                      'Connecting Uganda since 2013', '4G backup', 'we activate your kit',
+                                      'We respond within minutes', 'Bank: Stanbic', 'If you message outside working hours')):
+    if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
+files = glob.glob(os.path.join(root, '**', '*.html'), recursive=True) + [os.path.join(root, f) for f in ('sitemap.xml', 'robots.txt')]
+for f in files:
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for rx, name in rules:
+        for m in rx.finditer(t):
+            print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+assert len(rules) == 12
+if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, company fact, support-hours wording,'
+                  ' alternative connectivity, activation or response-time promise or South Sudan payment remnant on any page'
+                  ' (rules self-checked)')
+sys.exit(bad)
+PYPOS
+
+echo "== launch hold-back and removed claims =="
+# docs/70 §10. Managed DishNet plans are held back until Starlink's position and the UCC licence are confirmed: no
+# marketing page may offer or name one (policies and the app tutorials are existing customers' contract and help, and
+# keep their wording), prices.js keeps SELL_PLANS off, and the shop and chat scripts name none. The claims removed for
+# launch because nothing establishes them stay removed on every page, policies and tutorials included.
+python3 - "$HERE/site" <<'PYHOLD' || fail=1
+import sys, re, glob, os
+root = sys.argv[1]; bad = 0
+EXEMPT = {'acceptable-use.html', 'complaints.html', 'installation.html', 'policies.html', 'privacy.html', 'returns.html',
+          'terms-of-sale.html', 'terms.html', 'warranty.html'}
+held = re.compile(r'managed DishNet|DishNet plan|managed plan|first month|DishNet (?:Lite|Home|Business|Flex)|Flex (?:package|24|12)', re.I)
+claims = [(re.compile(r'\bhosts? earn\b|\bearn from (?:it|internet)\b|earning assets|turn bandwidth into revenue', re.I), 'a WiFi-zone earnings claim'),
+          (re.compile(r'Airtel Money billing|billing,? (?:and )?vouchers|per-tenant billing|billing engine', re.I), 'a WiFi-zone billing claim'),
+          (re.compile(r'Hotspot zones — select towns|svc-hotspot">Hotspot<|hotspot zones are available', re.I), 'a hotspot availability claim'),
+          (re.compile(r'\bfranchising\b', re.I), 'franchising'),
+          (re.compile(r'Enquiries from your town come to you first', re.I), 'a territory promise'),
+          (re.compile(r'free of charge for you|Airtel does not charge|Airtel Money: free of charge', re.I), 'an Airtel tariff claim'),
+          (re.compile(r'Genuine Starlink'), 'an unestablished supply claim (marketing use; the Terms of Sale promise genuine kits)'),
+          (re.compile(r'the total shown is the total invoiced', re.I), 'a total-invoiced promise'),
+          (re.compile(r'Maintenance contracts', re.I), 'an unestablished maintenance offer')]
+for (rx, name), sample in zip(claims, ('and hosts earn', 'with Airtel Money billing and vouchers', 'Hotspot zones — select towns',
+                                       'WiFi zone franchising', 'Enquiries from your town come to you first',
+                                       'it is free of charge for you', 'Genuine Starlink hardware',
+                                       'the total shown is the total invoiced', 'Maintenance contracts')):
+    if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
+if not held.search('a managed DishNet plan') or not held.search('your first month of internet'):
+    print('  CONTROL FAILED: the hold-back rule does not match its samples'); sys.exit(1)
+pages = glob.glob(os.path.join(root, '**', '*.html'), recursive=True)
+marketing = [f for f in pages if os.path.relpath(f, root) not in EXEMPT and not os.path.relpath(f, root).startswith('tutorials' + os.sep)]
+genuine = re.compile(r'\bgenuine\b', re.I)   # a supply claim on marketing pages; the Terms of Sale promise genuine kits
+if not genuine.search('Genuine kits, delivered'): print('  CONTROL FAILED: the genuine rule does not match its sample'); sys.exit(1)
+for f in marketing + [os.path.join(root, 'assets', 'js', x) for x in ('shop.js', 'chat.js')]:
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for m in held.finditer(t):
+        print(f"  managed plan held back: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+    for m in genuine.finditer(t):
+        print(f"  an unestablished supply claim: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+pj = open(os.path.join(root, 'assets', 'js', 'prices.js'), encoding='utf-8').read()
+if pj.count('var SELL_PLANS = false;') != 1:
+    print('  managed plan held back: prices.js must hold exactly one "var SELL_PLANS = false;"'); bad = 1
+# The website chat answers from the same catalogue as WhatsApp, which quotes the monthly plans: it stays off with them.
+cj = open(os.path.join(root, 'assets', 'js', 'chat.js'), encoding='utf-8').read()
+if cj.count('var CHAT_ON = false;') != 1 or cj.count('if (!CHAT_ON) return;') != 1:
+    print('  managed plan held back: chat.js must hold "var CHAT_ON = false;" and return on it'); bad = 1
+for f in pages + glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for rx, name in claims:
+        for m in rx.finditer(t):
+            print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+assert len(claims) == 9 and len(marketing) >= 30, (len(claims), len(marketing))
+if not bad: print(f'  {len(marketing)} marketing pages offer no managed plan, SELL_PLANS and the website chat are off, and none of the 9 removed claims is'
+                  ' back on any page or script (rules self-checked)')
+sys.exit(bad)
+PYHOLD
 
 echo
 [ $fail -eq 0 ] && echo "PASS" || echo "FAIL"

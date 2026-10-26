@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>How to switch between accounts — DishNet Africa Tutorials</title>
+<title>How to switch between accounts | DishNet Uganda</title>
 <meta name="description" content="If you have a personal account and a business account on the same phone number, the app keeps both. Switch between them in two taps.">
 <link rel="canonical" href="https://dishnetuganda.com/tutorials/switch-between-accounts.html">
 <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="../assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="../styles.css?v=31a8d2af">
-<link rel="stylesheet" href="tutorial-shared.css?v=9b1bcad1">
+<link rel="stylesheet" href="../assets/fonts/fonts.css?v=40474c18">
+<link rel="stylesheet" href="../styles.css?v=b0a39163">
+<link rel="stylesheet" href="tutorial-shared.css?v=9cada49f">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How to switch between accounts — DishNet Africa">
+<meta property="og:title" content="How to switch between accounts | DishNet Uganda">
 <meta property="og:description" content="If you have a personal account and a business account on the same phone number, the app keeps both. Switch between them in two taps.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo","name":"How to switch between accounts","description":"If you have a personal account and a business account on the same phone number, the app keeps both. Switch between them in two taps.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
@@ -20,7 +20,7 @@
 </head>
 <body>
 
-<!-- DishNet customer app icon sprite — matches portal.php icons exactly.
+<!-- DishNet customer app icon sprite.
      Include once per tutorial page. Use via <svg><use href="#i-NAME"/></svg>. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
     <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></symbol>
@@ -63,16 +63,17 @@
         <div class="header-inner">
             <a href="/" class="logo"><img src="../assets/img/favicon.svg" alt="DishNet Africa"></a>
                         <nav class="nav">
-                <a href="/#products">Products</a>
-                <a href="../fiber.html">Fiber</a>
-                <a href="../hotspot.html">Hotspot</a>
+                <a href="/">Home</a>
+                <a href="../services.html">Services</a>
+                <a href="../shop.html">Shop</a>
+                <a href="../security.html">Security</a>
                 <a href="../coverage.html">Coverage</a>
                 <a href="../get-the-app.html">App</a>
                 <a href="../contact.html">Contact</a>
             </nav>
             <div class="nav-actions">
                 <a href="/login" class="btn btn-outline" style="padding:10px 20px;font-size:14px">Customer Login</a>
-                <a href="https://wa.me/256705993348" class="header-cta">Get a Quote</a>
+                <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20" class="header-cta">Free consultation</a>
             </div>
             <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav"><span></span></button>
         </div>
@@ -81,16 +82,19 @@
 <div class="mobile-nav" id="mobileNav">
     <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
     <a href="/">Home</a>
-    <a href="../fiber.html">Fiber</a>
     <a href="../hotspot.html">Hotspot</a>
     <a href="../coverage.html">Coverage</a>
     <a href="../get-the-app.html">App</a>
     <a href="../contact.html">Contact</a>
     <a href="../services.html">Services</a>
+    <a href="../starlink-kits.html">Starlink Kits</a>
+    <a href="../shop.html">Shop Accessories</a>
+    <a href="../security.html">CCTV &amp; Security</a>
     <a href="../about.html">About</a>
     <a href="index.html">Tutorials</a>
-    <a href="../get-the-app.html">Live Demo</a>
     <a href="../faq.html">FAQ</a>
+    <a href="../pay.html">Pay a Bill</a>
+    <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20">Book a free consultation</a>
     <a href="/login">Customer Login</a>
 </div>
 
@@ -104,7 +108,8 @@
             <div class="tut-meta">
                 <div class="tut-meta-item"><svg><use href="#i-clock"/></svg> About 2 min to complete</div>
                 <div class="tut-meta-item"><svg><use href="#i-router"/></svg> 3 steps</div>
-                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Works on Android &amp; iOS</div>
+                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Android app or web portal</div>
+                <div class="tut-meta-item"><svg><use href="#i-info"/></svg> App screens shown with sample data</div>
             </div>
         </div>
     </div>
@@ -118,9 +123,9 @@
         <h2>Look for the account pill on the home screen</h2>
         <p>If you have <b>2 or more accounts</b> linked to your phone number, you'll see a small pill below your name on the home screen. It shows the <b>currently active account</b> and says <b>&middot; X accounts &middot; switch ›</b>.</p>
         <p>Tap the pill to jump straight to the Account screen. Or tap the <b>Account</b> tab at the bottom right.</p>
-        <div class="tut-step-tip"><b>Don't see this pill?</b> That means only one account is linked to your phone. If you have a personal kit and a separate business kit and they're not both showing up, message us and we'll link them &mdash; both bind to the same phone number, no second login needed.</div>
+        <div class="tut-step-tip"><b>Don't see this pill?</b> That means only one account is linked to your phone. If you have a personal kit and a separate business kit and they're not both showing up, message us; once we have confirmed that both accounts are yours, we can link them to the same phone number, with no second login.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -136,7 +141,7 @@
     <div class="home-hello-sub">Residential &middot; Kampala</div>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);border-radius:100px;padding:3px 10px;margin-top:8px;font-size:10px;color:rgba(255,255,255,0.9);position:relative;z-index:2">
         <svg style="width:9px;height:9px;opacity:0.7"><use href="#i-user"/></svg>
-        <span>Daniel Akol</span>
+        <span>Daniel Okello</span>
         <span style="opacity:0.6">&middot; 2 accounts &middot; switch ›</span>
     </div>
 </div>
@@ -163,15 +168,15 @@
         <h2>Tap the account you want to switch to</h2>
         <p>The Account screen shows a section called <b>My Accounts</b> with all your linked accounts.</p>
         <p>Each row shows:</p>
-        <p>&bull; The <b>account name</b> (e.g. <i>Daniel Akol</i> for personal, <i>Akol Trading Co.</i> for business)<br>
-           &bull; The <b>plan</b> (Residential Unlimited, Business Plus, etc.)<br>
+        <p>&bull; The <b>account name</b> (e.g. <i>Daniel Okello</i> for personal, <i>Okello Trading Co.</i> for business)<br>
+           &bull; The <b>plan</b> (as shown on your invoice)<br>
            &bull; The <b>account ID</b> (#4287, #5612)<br>
            &bull; The <b>status</b> (active, suspended, etc.)<br>
            &bull; A <b>red tick</b> ✓ on whichever is currently active</p>
         <p>Tap the row of the account you want to switch to.</p>
         <div class="tut-step-tip"><b>Active accounts come first.</b> The list is sorted with active accounts at the top and suspended/terminated at the bottom, so the most-used ones are easy to reach.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -189,7 +194,7 @@
     <div style="display:flex;align-items:center;gap:12px;background:#fff;border-radius:14px;padding:14px;margin-top:-32px;position:relative;z-index:3;box-shadow:0 6px 20px rgba(0,0,0,0.06)">
         <div style="width:46px;height:46px;border-radius:50%;background:var(--app-red);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px">DA</div>
         <div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px">Daniel Akol</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px">Daniel Okello</div>
             <div style="font-size:10px;color:var(--app-gray-2)">+256 92 345 6789</div>
         </div>
     </div>
@@ -198,7 +203,7 @@
         <div class="list-row" style="background:rgba(212,28,28,0.04)">
             <div class="list-ic" style="background:rgba(212,28,28,0.1);color:var(--app-red)"><svg><use href="#i-user"/></svg></div>
             <div class="list-t">
-                <div class="list-tt">Daniel Akol <span style="font-size:9px;color:var(--app-gray-2);font-weight:400">&middot; Residential Unlimited</span></div>
+                <div class="list-tt">Daniel Okello <span style="font-size:9px;color:var(--app-gray-2);font-weight:400">&middot; Residential Unlimited</span></div>
                 <div class="list-ts">#4287 &middot; <span style="color:var(--app-green-mid);font-weight:600;text-transform:capitalize">active</span></div>
             </div>
             <div style="width:20px;height:20px;border-radius:50%;background:var(--app-red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">✓</div>
@@ -206,7 +211,7 @@
         <div class="list-row" style="position:relative">
             <div class="list-ic" style="background:rgba(212,28,28,0.1);color:var(--app-red)"><svg><use href="#i-user"/></svg></div>
             <div class="list-t">
-                <div class="list-tt">Akol Trading Co. <span style="font-size:9px;color:var(--app-gray-2);font-weight:400">&middot; Business Plus</span></div>
+                <div class="list-tt">Okello Trading Co. <span style="font-size:9px;color:var(--app-gray-2);font-weight:400">&middot; Business Plus</span></div>
                 <div class="list-ts">#5612 &middot; <span style="color:var(--app-green-mid);font-weight:600;text-transform:capitalize">active</span></div>
             </div>
             <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--app-gray-light);flex-shrink:0"></div>
@@ -228,9 +233,9 @@
            &bull; <b>Invoices</b> &mdash; only invoices for this account<br>
            &bull; <b>Hotspot Mode</b> &mdash; only routers on this account</p>
         <p>The pill on the home screen now shows the new account name. Tap it again any time to switch back.</p>
-        <div class="tut-step-tip"><b>The switcher uses the same login.</b> You don't have to log out, you don't enter a password again, you don't get a new OTP. It's instant. Behind the scenes, both accounts are linked to your phone number with our consent &mdash; we set this up when one phone owns multiple Starlinks.</div>
+        <div class="tut-step-tip"><b>The switcher uses the same login.</b> You don't have to log out, you don't enter a password again, you don't get a new OTP. It's instant. Behind the scenes, both accounts are linked to your phone number at your request &mdash; our team sets this up when one person holds more than one DishNet account.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -246,7 +251,7 @@
     <div class="home-hello-sub">Business Plus &middot; Multi-site</div>
     <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);border-radius:100px;padding:3px 10px;margin-top:8px;font-size:10px;color:rgba(255,255,255,0.9);position:relative;z-index:2">
         <svg style="width:9px;height:9px;opacity:0.7"><use href="#i-user"/></svg>
-        <span>Akol Trading Co.</span>
+        <span>Okello Trading Co.</span>
         <span style="opacity:0.6">&middot; 2 accounts &middot; switch ›</span>
     </div>
 </div>
@@ -263,7 +268,7 @@
         <div style="font-size:10px;color:var(--app-gray-2);margin-top:3px">4 sites &middot; 3 active &middot; 1 inactive</div>
     </div>
     <div style="background:#E6F5EC;border-radius:11px;padding:10px 12px;margin-top:12px;font-size:11px;color:var(--app-green-mid);line-height:1.5">
-        <b>Switched to Akol Trading Co.</b> All app screens now show this account's data.
+        <b>Switched to Okello Trading Co.</b> All app screens now show this account's data.
     </div>
 </div>
 </div></div></div>
@@ -285,9 +290,9 @@
         <div class="tut-help-inner">
             <div>
                 <div class="tut-help-t">Stuck on something?</div>
-                <div class="tut-help-s">Our team in Kampala is on WhatsApp 7 days a week.</div>
+                <div class="tut-help-s">WhatsApp support is available seven days a week.</div>
             </div>
-            <a href="https://wa.me/256705993348" class="btn btn-primary">
+            <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%20need%20help%20with%20the%20DishNet%20app." class="btn btn-primary">
                 <svg style="width:16px;height:16px"><use href="#i-wa"/></svg>
                 Message support
             </a>
@@ -301,16 +306,16 @@
         <div class="footer-grid">
             <div class="footer-brand">
                 <img src="../assets/img/favicon.svg" alt="DishNet">
-                <p>Connecting Uganda since 2013. Starlink, fiber, and LTE internet across all major cities.</p>
+                <p>ICT consultancy focused on Starlink, acquisition guidance, installation and support across Uganda — and, separately, CCTV and network security.</p>
             </div>
             <div>
-                <h4>Internet</h4>
+                <h4>Services</h4>
                 <ul class="footer-links">
-                    <li><a href="/#products">Starlink Kits</a></li>
-                    <li><a href="../fiber.html">Fiber Internet</a></li>
+                    <li><a href="../starlink-kits.html">Starlink Kits</a></li>
                     <li><a href="../services.html">All Services</a></li>
                     <li><a href="../coverage.html">Coverage Map</a></li>
                     <li><a href="../hotspot.html">Hotspot Setup</a></li>
+                    <li><a href="../security.html">CCTV &amp; Firewalls</a></li>
                     <li><a href="../reseller.html">Reseller Program</a></li>
                     <li><a href="../why-dishnet.html">Why DishNet</a></li>
                 </ul>
@@ -321,7 +326,6 @@
                     <li><a href="../about.html">About Us</a></li>
                     <li><a href="../contact.html">Contact</a></li>
                     <li><a href="../faq.html">FAQ</a></li>
-                    <li><a href="../why-dishnet.html">Reviews</a></li>
                     <li><a href="../careers.html">Careers</a></li>
                 </ul>
             </div>
@@ -360,7 +364,7 @@ window.addEventListener('scroll', () => {
     document.getElementById('header').classList.toggle('scrolled', window.scrollY > 40);
 });
 </script>
-<script src="../assets/js/chat.js?v=acdd9120" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
+<script src="../assets/js/chat.js?v=16733323" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
 <script src="../assets/js/nav.js?v=7c31eedf" defer></script>
 </body>
 </html>
