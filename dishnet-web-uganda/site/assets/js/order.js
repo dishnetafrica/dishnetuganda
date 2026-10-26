@@ -131,18 +131,20 @@
   // the capture phase on document: with no location left it stops the click,
   // so nothing is sent, says so in the status line and puts the visitor back
   // in the box. Enter and Space on the button arrive as this same click.
-  // With a location it does nothing.
+  // With a location it does nothing. The own-kit option is an enquiry, not an order (data-of-kind="enquiry"), and the
+  // prompt says so.
   var NEED = 'Type your town or address, or tap Detect, to complete your order.';
+  var NEED_ENQ = 'Type your town or address, or tap Detect, to send your enquiry.';
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest ? e.target.closest('[data-of-wa]') : null;
     if (!b || window.DN_ADDR()) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    say(NEED);
+    say(b.getAttribute('data-of-kind') === 'enquiry' ? NEED_ENQ : NEED);
     if (input) input.focus();
   }, true);
   // That prompt goes as soon as a location is typed, rather than staying under the box.
-  if (input) input.addEventListener('input', function () { if (msg && msg.textContent === NEED && typed()) say(''); });
+  if (input) input.addEventListener('input', function () { if (msg && (msg.textContent === NEED || msg.textContent === NEED_ENQ) && typed()) say(''); });
 
   // Back to the order. A keyboard user put back in the box would otherwise be
   // left there once the location is in, dozens of Tab stops from the button.

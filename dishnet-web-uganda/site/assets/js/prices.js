@@ -359,7 +359,7 @@
               state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +
           '</div>' +
-          '<button type="button" class="of-wa" data-of-wa' + (own || (state.hw && state.plan) ? '' : ' disabled') + '>' +
+          '<button type="button" class="of-wa" data-of-wa' + (own ? ' data-of-kind="enquiry"' : '') + (own || (state.hw && state.plan) ? '' : ' disabled') + '>' +
             (own ? 'Send my enquiry on WhatsApp' : 'Complete order on WhatsApp') + '</button>' +
         '</div>' +
         (own ? '' : '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>');
