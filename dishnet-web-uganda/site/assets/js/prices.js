@@ -49,6 +49,10 @@
   // price, no Flex, no "first month of internet", and the order flow sells the kit only, with the Starlink service in
   // the customer's own name. Turning it back on also needs the page sections removed with it.
   var SELL_PLANS = false;
+  // A kit's description is its uCRM invoice label, which can still describe the package with plans ("... + first
+  // month of internet"). While plans are off, a description that mentions a plan, a month, internet service, a
+  // subscription or Flex is not shown, and the page's own kit text stands in.
+  function kitDesc(d) { d = String(d || ''); return SELL_PLANS || !/month|plan|managed|flex|internet|subscription/i.test(d) ? d : ''; }
 
   function fmt(cur, n) {
     var whole = Math.round(n) === n;
@@ -162,7 +166,7 @@
           (img ? '<div class="hw-shot"><img src="' + img + '" alt="' + esc(h.name) + '" loading="lazy"></div>' : '') +
           '<h3>' + esc(label) + '</h3>' +
           '<div class="live-price">' + priceBlock(cur, h.price, 'once', fromMonthly) + '</div>' +
-          (h.description ? '<p class="hw-desc">' + esc(h.description) + '</p>' : '') +
+          (kitDesc(h.description) ? '<p class="hw-desc">' + esc(kitDesc(h.description)) + '</p>' : '') +
           '<a class="btn btn-primary hw-cta" href="https://wa.me/' + WA + '?text=' +
             encodeURIComponent('Hello DishNet, I would like the ' + h.name + '. Please confirm the total and book installation.') +
           '">Order ' + esc(label) + '</a>' +
@@ -266,7 +270,7 @@
         return '<button type="button" class="of-card" data-hw="' + esc(k.name) + '">' +
           (kitImg(k.name) ? '<img src="' + kitImg(k.name) + '" alt="' + esc(k.name) + '" loading="lazy">' : '') +
           '<h4>' + esc(k.name) + '</h4>' +
-          '<div class="of-sub">' + esc(k.description || (SELL_PLANS ? 'Kit + delivery + professional installation + first month of internet included.' : 'Kit + delivery to your town + professional installation.')) + '</div>' +
+          '<div class="of-sub">' + esc(kitDesc(k.description) || (SELL_PLANS ? 'Kit + delivery + professional installation + first month of internet included.' : 'Kit + delivery to your town + professional installation.')) + '</div>' +
           '<div class="of-price">' + esc(fmt(cur, k.price)) + ' <small>one-time, VAT inclusive</small></div>' +
           '</button>';
       }).join('');
