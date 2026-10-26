@@ -14,7 +14,7 @@
  *
  * Renders into:
  *   <div data-dishnet-plans></div>        the monthly plans grid
- *   <div data-dishnet-order-flow></div>   address-first order flow (homepage):
+ *   <div data-dishnet-order-flow></div>   address-first order flow (starlink-kits.html):
  *                                         step 1 hardware, step 2 plan, then a
  *                                         WhatsApp checkout carrying the
  *                                         visitor's address/pin (window.DN_ADDR)
@@ -60,7 +60,8 @@
   try { SVCMAP = JSON.parse(script.getAttribute('data-service-map') || '{}'); } catch (e) {}
   // "DishNet Business 500" -> "500 GB", "DishNet Business 1TB" -> "1 TB".
   // Business tiers are Starlink Local Priority: a priority-data block plus a
-  // public IP, with unlimited standard data after — never call them unlimited.
+  // public IP; when the priority data is used up the speed drops until more is
+  // bought (the sales assistant says the same) — never call them unlimited.
   function bizQty(name) {
     var m = name.match(/business\s*(\d+\s*tb|\d+)/i);
     if (!m) return '';
@@ -99,7 +100,7 @@
   // card just has no image, rather than a broken one.
   function kitImage(name) {
     if (/mini/i.test(name))                 return 'assets/img/products/mini-kit.webp';
-    if (/high\s*performance|performance/i.test(name)) return 'assets/img/products/hp-kit.webp';
+    if (/high\s*performance|performance/i.test(name)) return '';   // no High Performance photo exists; never another kit's
     if (/standard/i.test(name))             return 'assets/img/products/standard-kit.webp';
     return '';
   }
@@ -204,7 +205,7 @@
           '<h3>' + esc(p.name) + '</h3>' +
           '<div class="price-amount">' + fmt(cur, p.price) + '<small>/' + (p.period || 'month') + '</small></div>' +
           (flex ? '<p class="price-desc">UGX 0 hardware upfront — Starlink Mini + connectivity + professional installation + DishNet support.</p>'
-           : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP — unlimited standard data after · for offices, CCTV &amp; heavy users.</p>'
+           : biz ? '<p class="price-desc">' + esc(bizQty(p.name)) + ' priority data + public IP · for offices, remote access &amp; heavy users. When the priority data is used up, the speed drops until more is bought.</p>'
                  : '<p class="price-desc">Unlimited data · professional installation available · DishNet local support.</p>') +
           (p.speed ? '<p class="price-speed">Up to ' + esc(String(p.speed)) + ' Mbps</p>' : '') +
           (SVCMAP[p.name] ? '<p class="price-map">Starlink service: ' + esc(SVCMAP[p.name]) + '</p>' : '') +
@@ -227,7 +228,7 @@
       var body = (homeP.length && bizP.length)
         ? head('Home internet', 'Unlimited data for households — professional installation and local support.')
           + homeP.map(card).join('')
-          + head('Business internet', 'Priority data with a public IP, for offices, CCTV and heavy users. Unlimited standard data after the priority block.')
+          + head('Business internet', 'Priority data with a public IP, for offices, remote access and heavy users. When the priority data is used up, the speed drops until more is bought — we explain the details before you choose.')
           + bizP.map(card).join('')
         : ordered.map(card).join('');
 
@@ -242,7 +243,10 @@
     var host = document.querySelector('[data-dishnet-order-flow]');
     if (!host || !(data.plans || []).length) return;
 
-    var kits = (data.hardware || []).filter(function (h) { return /package/i.test(h.name); });
+    // The same kits as the hardware cards above it on starlink-kits.html (the
+    // live names are "Starlink Mini Kit" / "Starlink Standard Kit"; /package/
+    // alone matched none of them, so the flow offered no kit at all).
+    var kits = (data.hardware || []).filter(function (h) { return /kit|package/i.test(h.name); });
     var flexPlans = data.plans.filter(function (p) { return /flex/i.test(p.name); });
     var stdPlans  = headlineFirst(data.plans.filter(function (p) { return !/flex/i.test(p.name); }));
     var state = { hw: null, plan: null };
@@ -287,7 +291,7 @@
            : biz ? '<div class="of-sub">' + esc(bizQty(p.name)) + ' priority data · public IP included</div>'
                  : '<div class="of-sub">Monthly, cancel anytime</div>') +
           '<div class="of-price">' + esc(fmt(cur, p.price)) + ' <small>/' + esc(p.period || 'month') + '</small></div>' +
-          (biz ? '<div class="of-sub" style="margin-top:6px;">Unlimited standard data after priority data</div>'
+          (biz ? '<div class="of-sub" style="margin-top:6px;">When the priority data is used up, the speed drops until more is bought</div>'
                : p.speed ? '<div class="of-sub" style="margin-top:6px;">Unlimited data — up to ' + esc(String(p.speed)) + ' Mbps</div>' : '') +
           '</button>';
       };

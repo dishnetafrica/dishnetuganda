@@ -119,6 +119,34 @@ fi
 n=$(grep -rlF 'href="/login"' "$HERE/site" --include='*.html' | wc -l)
 [ "$n" -gt 0 ] || { echo "  FAIL: no page links /login"; fail=1; }
 
+echo "== withdrawn pages =="
+# October 2026: DishNet Uganda does not currently sell fibre, so the fibre page and the Starlink-vs-fibre article
+# are gone and their URLs redirect (nginx.conf). Each must be a 301 to its target, relative, carrying the security
+# headers and exactly one Cache-Control from the server-level `expires 10m` (max-age=600), so a browser keeps the
+# redirect for ten minutes rather than for ever. The files themselves must be gone. /app (the plugin's Uganda
+# profile links it) is a 302 to the app page.
+wbad=0
+for pair in "/fiber.html /services.html 301" "/fiber /services.html 301" \
+            "/blog-starlink-vs-fiber-uganda.html /blog.html 301" "/blog-starlink-vs-fiber-uganda /blog.html 301" \
+            "/app /get-the-app.html 302"; do
+  set -- $pair
+  h=$(curl -sI "$B$1")
+  c=$(printf '%s\n' "$h" | head -1 | awk '{print $2}')
+  loc=$(printf '%s\n' "$h" | grep -i '^location:' | sed -E 's/^[Ll]ocation: *//' | tr -d '\r')
+  s=$(printf '%s\n' "$h" | grep -icE 'x-content-type-options|x-frame-options|referrer-policy')
+  n=$(printf '%s\n' "$h" | grep -ic '^cache-control:')
+  cc=$(printf '%s\n' "$h" | grep -i '^cache-control:' | tr -d '\r')
+  if [ "$c" != "$3" ] || [ "$loc" != "$2" ] || [ "$s" != 3 ] || [ "$n" != 1 ] || ! printf '%s' "$cc" | grep -q 'max-age=600'; then
+    echo "  FAIL: $1 returned $c (want $3), Location '$loc' (want $2), $s/3 security headers, $n Cache-Control '$cc'"; wbad=1
+  fi
+  t=$(curl -s -o /dev/null -w '%{http_code}' "$B$2")
+  [ "$t" = 200 ] || { echo "  FAIL: redirect target $2 returned $t"; wbad=1; }
+done
+for f in fiber.html blog-starlink-vs-fiber-uganda.html; do
+  [ -e "$HERE/site/$f" ] && { echo "  FAIL: site/$f still exists"; wbad=1; }
+done
+[ $wbad -eq 0 ] && echo "  fibre page and article: 301, 10-minute expiry, headers kept, targets 200; /app: 302 to the app page" || fail=1
+
 echo "== seo =="
 # A canonical pointing at another domain tells Google not to index this site at
 # all — the exact bug this build shipped with (uganda.dishnetafrica.com).
@@ -188,6 +216,32 @@ for f in glob.glob(os.path.join(root, '**', '*.html'), recursive=True):
 sys.exit(bad)
 PYCOM
 [ $fail -eq 0 ] && echo "  no price published anywhere outside tutorial mock screenshots"
+
+echo "== positioning rules =="
+# The decisions of October 2026, enforced: DishNet Uganda offers Starlink only (no fibre, no LTE), and support
+# claims use the approved wording ("WhatsApp support is available seven days a week", "more than 40 towns"),
+# never "24/7", "four regions", "every region", "10+ years", "two countries" or "thousands of". Zero is the only
+# acceptable count, tutorials included.
+python3 - "$HERE/site" <<'PYPOS' || fail=1
+import sys, re, glob, os
+root = sys.argv[1]; bad = 0
+rules = [(re.compile(r'fib(?:er|re)', re.I), 'fibre'), (re.compile(r'\bLTE\b'), 'LTE'),
+         (re.compile(r'24/7|24x7|24 hours a day', re.I), '24/7 support'),
+         (re.compile(r'four regions|every region', re.I), 'an unapproved coverage claim'),
+         (re.compile(r'10\+ years|ten years|two countries|\b2 countries|thousands of', re.I), 'an unapproved company fact')]
+# Control: each rule must match its own sample first, so a rule broken by an edit cannot pass by matching nothing.
+for (rx, name), sample in zip(rules, ('Fibre plans', 'Starlink, LTE', 'support 24/7', 'across all four regions',
+                                      'over 10+ years in two countries')):
+    if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
+files = glob.glob(os.path.join(root, '**', '*.html'), recursive=True) + [os.path.join(root, f) for f in ('sitemap.xml', 'robots.txt')]
+for f in files:
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for rx, name in rules:
+        for m in rx.finditer(t):
+            print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim or company fact on any page (rules self-checked)')
+sys.exit(bad)
+PYPOS
 
 echo
 [ $fail -eq 0 ] && echo "PASS" || echo "FAIL"

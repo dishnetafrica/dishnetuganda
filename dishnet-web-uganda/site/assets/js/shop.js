@@ -45,7 +45,7 @@
   // Kits first, then the parts, in the order somebody shops for them.
   var ORDER = ['Kit', 'Router', 'Mount', 'Adapter', 'Cable', 'Power', 'Case'];
   var HEADING = {
-    Kit:     ['Starlink kits',      'The dish, its router and everything needed to get connected.'],
+    Kit:     ['Starlink kits',      'The dish and its router. Ask us about installation, and about registering in your own name or a managed DishNet plan.'],
     Router:  ['Routers and WiFi',   'Cover a bigger house or office, or add a mesh node to the router you already have.'],
     Mount:   ['Mounts',             'Wall, roof, pole and vehicle mounts. An item marked Mini fits the Starlink Mini; one marked Standard 4 or 4 X fits the Standard dish.'],
     Adapter: ['Adapters',           'Fit a dish to a pole you already have, or reuse an older mount.'],

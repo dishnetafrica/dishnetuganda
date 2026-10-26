@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Become a DishNet Distributor</title>
+<title>Become a DishNet Distributor | DishNet Uganda</title>
 <meta name="description" content="Partner with DishNet Uganda. Choose a partner model, tell us about your business, see your proposed training plan and submit an expression of interest. Subject to DishNet review and a written agreement.">
 <link rel="canonical" href="https://dishnetuganda.com/become-a-distributor.html">
 <meta property="og:type" content="website">
@@ -11,7 +11,7 @@
 <meta property="og:title" content="Become a DishNet Distributor — Uganda">
 <meta property="og:description" content="Grow your business with DishNet. Explore the partnership, choose a partner model, see your proposed training plan and submit an expression of interest.">
 <meta property="og:url" content="https://dishnetuganda.com/become-a-distributor.html">
-<meta property="og:image" content="https://dishnetuganda.com/assets/img/og-uganda.png">
+<meta property="og:image" content="https://dishnetuganda.com/assets/img/og-dishnet-uganda.png">
 <meta property="og:locale" content="en_UG">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Become a DishNet Distributor — Uganda">
@@ -19,7 +19,7 @@
 <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
 <link rel="stylesheet" href="assets/fonts/fonts.css?v=a4794a72">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/apple-touch-icon.png", "image": "https://dishnetuganda.com/assets/img/og-uganda.png", "telephone": "+256 705 993 348", "email": "info@dishnetafrica.com", "address": {"@type": "PostalAddress", "streetAddress": "4th floor, Acacia Mall, 14-18 Cooper Road, office TT06", "addressLocality": "Kampala", "addressCountry": "UG"}, "openingHoursSpecification": [{"@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], "opens": "08:30", "closes": "18:00"}], "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "Starlink satellite internet, fiber, managed WiFi zones, CCTV and network security across Uganda.", "sameAs": ["https://dishnetafrica.com"]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "DishNet Africa Ltd \u2014 Uganda", "url": "https://dishnetuganda.com", "logo": "https://dishnetuganda.com/assets/img/apple-touch-icon.png", "image": "https://dishnetuganda.com/assets/img/og-dishnet-uganda.png", "telephone": "+256 705 993 348", "email": "info@dishnetafrica.com", "address": {"@type": "PostalAddress", "streetAddress": "4th floor, Acacia Mall, 14-18 Cooper Road, office TT06", "addressLocality": "Kampala", "addressCountry": "UG"}, "openingHoursSpecification": [{"@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], "opens": "08:30", "closes": "18:00"}], "areaServed": ["Kampala", "Entebbe", "Wakiso", "Mukono", "Masaka", "Mityana", "Mubende", "Luwero", "Kayunga", "Mpigi", "Jinja", "Mbale", "Soroti", "Tororo", "Iganga", "Busia", "Kumi", "Kapchorwa", "Pallisa", "Bugiri", "Gulu", "Lira", "Arua", "Kitgum", "Adjumani", "Moyo", "Nebbi", "Pader", "Apac", "Koboko", "Mbarara", "Fort Portal", "Hoima", "Kasese", "Kabale", "Masindi", "Bushenyi", "Ntungamo", "Rukungiri", "Kisoro"], "description": "ICT consultancy and Starlink acquisition guidance, installation and support across Uganda; CCTV and network security as a separate service.", "sameAs": ["https://dishnetafrica.com"]}</script>
 <style>
 /* ============================================================
    Become a DishNet Distributor — interactive onboarding wizard
@@ -119,7 +119,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .notice-amber{border-color:rgba(180,83,9,.3);background:var(--amber-glow)}
 
 /* Service category cards */
-.svc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:36px}
+.svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:36px}
 .svc-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm)}
 .svc-card .ic{font-size:26px;margin-bottom:12px}
 .svc-card h3{font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:6px}
@@ -278,6 +278,11 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
 .wa-float svg{width:28px;height:28px;fill:#fff}
 
 @media (max-width:900px){
+  /* The same breakpoint as styles.css: below 900px the full menu and both header buttons do not fit (the header
+     was 811px wide in a 768px window). The menu button takes over; the Apply button stays. */
+  .nav{display:none}
+  .mobile-toggle{display:flex}
+  .nav-actions .btn{display:none}
   .svc-grid{grid-template-columns:1fr 1fr}
   .ben-grid{grid-template-columns:1fr}
   .pp-two{grid-template-columns:1fr}
@@ -317,7 +322,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
       </a>
       <nav class="nav" aria-label="Primary">
         <a href="/">Home</a>
-        <a href="services.html">Internet</a>
+        <a href="services.html">Services</a>
         <a href="shop.html">Shop</a>
         <a href="coverage.html">Coverage</a>
         <a href="#partners" class="active">Partners</a>
@@ -327,7 +332,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
         <a href="contact.html" class="btn btn-outline" style="padding:10px 18px;font-size:14px">Talk to Our Team</a>
         <a href="#apply" class="header-cta">Apply</a>
       </div>
-      <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false"><span></span></button>
+      <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav"><span></span></button>
     </div>
   </div>
 </header>
@@ -335,7 +340,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
 <div class="mobile-nav" id="mobileNav">
   <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
   <a href="/">Home</a>
-  <a href="services.html">Internet Services</a>
+  <a href="services.html">Services</a>
   <a href="shop.html">Shop</a>
   <a href="coverage.html">Coverage</a>
   <a href="#partners" data-close>Become a Partner</a>
@@ -349,7 +354,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
     <div class="container">
       <span class="badge-label badge-accent">DishNet Partner Program</span>
       <h1>Grow Your Business<br><span class="accent">with DishNet</span></h1>
-      <p class="lede">Partner with DishNet Uganda to bring connectivity solutions to businesses, communities and customers across Uganda.</p>
+      <p class="lede">Partner with DishNet Uganda to bring Starlink and related ICT services to businesses, communities and customers across Uganda.</p>
       <div class="hero-actions">
         <a href="#apply" class="btn btn-primary btn-lg">Explore the Partnership</a>
         <a href="contact.html" class="btn btn-outline btn-lg">Talk to Our Team</a>
@@ -370,9 +375,8 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
       <p class="section-subtitle">Partners help DishNet reach more of Uganda. The services available to a partner depend on the agreed model and the location — not every product is offered in every area.</p>
       <div class="svc-grid">
         <div class="svc-card"><div class="ic">📡</div><h3>Starlink</h3><p>Satellite connectivity and equipment for homes, businesses and remote sites.</p></div>
-        <div class="svc-card"><div class="ic">🌐</div><h3>Data Network</h3><p>DishNet managed data network services, including WiFi zones where offered.</p></div>
-        <div class="svc-card"><div class="ic">⚡</div><h3>Fibre &amp; fixed</h3><p>Fibre and other fixed-connectivity services where coverage is available.</p></div>
-        <div class="svc-card"><div class="ic">🏢</div><h3>Business connectivity</h3><p>Connectivity solutions for offices, branches, institutions and organisations.</p></div>
+        <div class="svc-card"><div class="ic">🌐</div><h3>Wi-Fi &amp; managed networks</h3><p>Wi-Fi setup and DishNet-managed networks on a Starlink connection, including WiFi zones where offered.</p></div>
+        <div class="svc-card"><div class="ic">🏢</div><h3>Business connectivity</h3><p>Starlink solutions for offices, branches, institutions and organisations.</p></div>
       </div>
     </div>
   </section>
@@ -388,11 +392,11 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
         <div class="ben"><h3>🛠️ Technical backup</h3><p>Partners escalate to authorised DishNet technicians. Complex installations can be handled jointly.</p></div>
         <div class="ben"><h3>📦 Genuine hardware</h3><p>Where a model includes hardware, it is genuine, supported equipment — handled under agreed terms.</p></div>
         <div class="ben"><h3>🧭 Clear processes</h3><p>Orders, onboarding, support and (where relevant) stock follow defined DishNet procedures.</p></div>
-        <div class="ben"><h3>🌍 Reach across Uganda</h3><p>DishNet installs and supports across four regions and 40+ towns, and keeps growing.</p></div>
+        <div class="ben"><h3>🌍 Reach across Uganda</h3><p>DishNet serves more than 40 towns, and keeps growing.</p></div>
       </div>
       <div class="notice notice-amber" style="margin-top:26px">
         <span class="ic">ℹ️</span>
-        <div><strong>This is an expression of interest, not an offer.</strong> Submitting an application does not guarantee approval, exclusivity, credit or appointment as an authorised distributor. Commercial terms, eligibility, the partner model and any stock or credit arrangements remain subject to DishNet review and a written agreement. DishNet does not publish or promise fixed discounts, commissions, margins, territories or earnings here.</div>
+        <div><strong>This is an expression of interest, not an offer.</strong> Submitting an application does not guarantee approval, exclusivity, credit or appointment as a DishNet distributor. Commercial terms, eligibility, the partner model and any stock or credit arrangements remain subject to DishNet review and a written agreement. DishNet does not publish or promise fixed discounts, commissions, margins, territories or earnings here.</div>
       </div>
     </div>
   </section>
@@ -447,7 +451,7 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
     <div class="footer-grid">
       <div class="footer-brand">
         <span class="wordmark">DishNet Uganda</span>
-        <p>Connecting Uganda — Starlink, fibre, managed WiFi zones, CCTV and network security with professional installation and local support.</p>
+        <p>ICT consultancy focused on Starlink, acquisition guidance, installation and support across Uganda — and, separately, CCTV and network security.</p>
         <div class="addr">4th floor, Acacia Mall, 14-18 Cooper Road, office TT06, Kampala, Uganda.</div>
       </div>
       <div>
@@ -542,8 +546,7 @@ var MODEL_NAME={};MODELS.forEach(function(m){MODEL_NAME[m.id]=m.name;});
 
 var SERVICES=[
   {id:'starlink',name:'Starlink'},
-  {id:'data',name:'Data Network'},
-  {id:'fibre',name:'Fibre & fixed connectivity'},
+  {id:'data',name:'Wi-Fi & managed networks'},
   {id:'business',name:'Business connectivity solutions'}
 ];
 var SERVICE_NAME={};SERVICES.forEach(function(s){SERVICE_NAME[s.id]=s.name;});
@@ -613,7 +616,7 @@ var TRAIN_TECH=[
 var RESP={
   corporate:{
     partner:['Coordinate outlets and nominate outlet contacts','Submit orders through the agreed process','Hand over equipment and onboard customers at outlets','Provide first-line assistance and report at outlet level'],
-    dishnet:['Approve the partner and each outlet','Provide training and account management','Create services and activate connectivity','Invoice, collect and own the customer billing relationship','Provide technical installation and escalation']
+    dishnet:['Approve the partner and each outlet','Provide training and account management','Set up the DishNet service and arrange Starlink activation, which Starlink approves','Invoice, collect and own the customer billing relationship','Provide technical installation and escalation']
   },
   regional:{
     partner:['Develop the territory and support outlets','Order, receive and move stock accurately','Report sales and stock back to DishNet','Collect and settle only where authorised in writing'],
@@ -621,7 +624,7 @@ var RESP={
   },
   retail:{
     partner:['Sell approved products and plans at the outlet','Place orders and onboard customers correctly','Handle hardware, payments and receipts properly','Provide first-line assistance and escalate'],
-    dishnet:['Approve the outlet','Provide training, product list and prices','Create services and activate connectivity','Invoice and own the billing relationship','Provide technical installation and escalation']
+    dishnet:['Approve the outlet','Provide training, product list and prices','Set up the DishNet service and arrange Starlink activation, which Starlink approves','Invoice and own the billing relationship','Provide technical installation and escalation']
   },
   referral:{
     partner:['Introduce and register genuine leads','Follow ethical sales and privacy rules','Hand the customer to DishNet to close and serve'],
@@ -644,8 +647,8 @@ function save(){try{sessionStorage.setItem(STORE_KEY,JSON.stringify({S:S,step:st
 function load(){try{var r=sessionStorage.getItem(STORE_KEY);if(r){var o=JSON.parse(r);if(o&&o.S){S=Object.assign(S,o.S);if(!S.coverage)S.coverage={outlets:[]};if(!S.coverage.outlets)S.coverage.outlets=[];}}}catch(e){}}
 
 /* ---------- step engine ---------- */
-var STEPS=['Model','Business','Coverage','Services','Readiness','Training','Review','Done'];
-var TITLES=['Choose your partner model','Tell us about your business','Coverage and outlets','Products and services','Readiness and training needs','Your proposed training plan','Review and submit','Application received'];
+var STEPS=['Model','Business','Coverage','Services','Readiness','Training','Review','Next steps'];
+var TITLES=['Choose your partner model','Tell us about your business','Coverage and outlets','Products and services','Readiness and training needs','Your proposed training plan','Review and submit','Next steps'];
 var step=0;
 var body=document.getElementById('wizBody'),btnNext=document.getElementById('btnNext'),btnBack=document.getElementById('btnBack'),btnRestart=document.getElementById('btnRestart');
 var pNum=document.getElementById('pNum'),pBar=document.getElementById('pBar'),pDots=document.getElementById('pDots');
@@ -900,7 +903,7 @@ STEP_HTML[6]=function(){
   html+=revBlock('Products and activities',3,'<div class="rev-dl">'+dd('Services',svc)+dd('Activities',act)+'</div>');
   html+=revBlock('Training needs',4,'<div class="rev-dl">'+dd('Sales experience',r.sales_exp)+dd('Telecom / IT experience',r.tech_exp)+dd('Staff to train',r.staff_count)+dd('Technical capability',r.tech_cap)+dd('Preferred format',r.fmt)+'</div>');
   html+=revBlock('Proposed training',5,'<div class="rev-dl">'+dd(mods.length+' modules',mods.join(', '))+'</div>');
-  html+='<div class="notice notice-amber" style="margin:16px 0"><span class="ic">⚠️</span><div>Submitting this form is an expression of interest only. It does not create an authorised distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms. DishNet will review and may contact you.</div></div>';
+  html+='<div class="notice notice-amber" style="margin:16px 0"><span class="ic">⚠️</span><div>Submitting this form is an expression of interest only. It does not appoint you as a DishNet distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms. DishNet will review and may contact you.</div></div>';
   html+='<div class="consent" id="consentBox"><input type="checkbox" id="f_consent" name="consent"'+(S.consent?' checked':'')+'><label for="f_consent">I confirm the information is accurate and I agree that DishNet Africa Ltd may contact me about this application and hold these details for that purpose, in line with the <a href="privacy.html" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">privacy policy</a>. <span class="req">*</span></label></div>'+
     '<p class="field err" id="consentErr">Please tick the box to submit.</p>';
   return html;
@@ -928,7 +931,7 @@ STEP_HTML[7]=function(){
     ? '<div class="confirm-check">✓</div><h2 class="step-title" style="text-align:center">Thank you'+esc(name)+'</h2>'+
       '<p class="step-intro" style="margin:6px auto 0;text-align:center">We’ve received your expression of interest'+(submitState.ref?(' — your reference is <b>'+esc(submitState.ref)+'</b>'):'')+'. Here is what happens next.</p>'
     : '<div class="confirm-check" style="background:var(--amber-glow);color:var(--amber)">!</div><h2 class="step-title" style="text-align:center">Almost done'+esc(name)+'</h2>'+
-      '<p class="step-intro" style="margin:6px auto 0;text-align:center">We couldn’t reach our system just now, so this wasn’t saved. Your answers are still here — send them to us on WhatsApp so nothing is lost.</p>';
+      '<p class="step-intro" style="margin:6px auto 0;text-align:center">Your application wasn’t saved just now. Your answers are still here — send them to us on WhatsApp so nothing is lost.</p>';
   var html='<div class="confirm-hero">'+hero+'</div>';
   if(!stored){
     html+='<div class="notice notice-amber"><span class="ic">⚠️</span><div>Tap the button below to send your details to DishNet on WhatsApp.</div></div>';
@@ -939,7 +942,7 @@ STEP_HTML[7]=function(){
     '<li><b>Commercial terms and the partner model are discussed separately.</b> Nothing is fixed by this form.</li>'+
     '<li><b>If approved, next steps follow.</b> A written agreement, training and operational onboarding, as applicable to your model.</li>'+
     '</ol>'+
-    '<div class="notice"><span class="ic">ℹ️</span><div>Submitting this form does not create an authorised distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms.</div></div>'+
+    '<div class="notice"><span class="ic">ℹ️</span><div>Submitting this form does not appoint you as a DishNet distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms.</div></div>'+
     '<div class="contact-inline">Talk to the DishNet partner team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
       '<a class="btn btn-primary" style="margin-top:12px" href='+JSON.stringify(waLink(msg))+' target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>'+
     '<p class="hint" style="text-align:center">You can reopen the DishNet Planning Preview below to see how your answers map to DishNet’s internal process.</p>';

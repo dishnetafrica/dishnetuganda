@@ -1,207 +1,116 @@
-/*
- * home.js — the homepage's own behaviour (index.html only).
- *
- * Moved out of an inline <script>, so the page carries no inline handlers.
- *
- *  - The header gains .scrolled once the page moves.
- *  - The address box: window.DN_ADDR() returns what the visitor typed and/or
- *    the GPS pin, for prices.js's order flow ("Complete order on WhatsApp");
- *    "Check My Options" opens the order panel only when there is a location
- *    to act on, and the panel names only the location the order will carry;
- *    a saved pin and every failure are said in the status line under the box
- *    (#ofGeoMsg, role=status), never in an alert().
- *  - Every WhatsApp link whose message ends "My location is ", and every
- *    plan button in the plans grid (the live "Get <plan>" buttons included),
- *    gets the typed address and pin appended when it is clicked. The link's
- *    original href is kept in data-wa-base, so a later click after the
- *    address changes carries the new one. With nothing typed the link is
- *    left as it is and the visitor finishes the sentence in WhatsApp. The
- *    click is never blocked.
- */
+/* home.js — the homepage only (index.html): menu, header, reveal, industry tabs, kit guide, and the
+   consultation form, which prepares a WhatsApp message and sends nothing itself. No inline handlers. */
 (function () {
   'use strict';
-  var WA = 'https://wa.me/256705993348';
-  var TAIL = 'My location is ';
+  document.body.classList.remove('no-js');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var WA = '256705993348';   // the one WhatsApp number every enquiry goes to (verify-site.sh asserts it)
 
-  window.addEventListener('scroll', function () {
-    var h = document.getElementById('header');
-    if (h) h.classList.toggle('scrolled', window.scrollY > 10);
-  }, { passive: true });
+  /* Header shadow once the page scrolls */
+  var header = document.querySelector('.site-header');
+  var onScroll = function () { header.classList.toggle('scrolled', window.scrollY > 8); };
+  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
-  var pin = '';
-  var auto = '';  // the exact text the Detect button wrote into the box, if it did
-  var input = document.getElementById('ofAddr');
-  var msg = document.getElementById('ofGeoMsg');
-  var geo = document.getElementById('ofGeo');
-  var geoLabel = document.getElementById('ofGeoLabel');
-  var whereBox = document.getElementById('ofWhere');
-  var whereLine = document.getElementById('ofWhereText');
-  var whereFirst = whereBox ? whereBox.textContent : '';
+  /* Mobile menu */
+  var menu = document.getElementById('mobile-menu');
+  var openBtn = document.querySelector('.nav-cta .menu-btn');
+  var closeBtn = menu.querySelector('.menu-close');
+  function setMenu(open) {
+    menu.classList.toggle('open', open);
+    menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+    openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.body.style.overflow = open ? 'hidden' : '';
+    if (open) { closeBtn.focus(); } else { openBtn.focus(); }
+  }
+  openBtn.addEventListener('click', function () { setMenu(true); });
+  closeBtn.addEventListener('click', function () { setMenu(false); });
+  menu.addEventListener('click', function (e) { if (e.target === menu) setMenu(false); });
+  menu.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { menu.classList.remove('open'); menu.setAttribute('aria-hidden', 'true'); openBtn.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.classList.contains('open')) setMenu(false); });
 
-  // What the visitor typed. The "My location pin (…)" text the Detect button
-  // wrote is not an address and is left out, but anything the visitor added
-  // after it (a landmark, directions) is kept.
-  function typed() {
-    var t = (input && input.value || '').trim();
-    if (auto && t.indexOf(auto) === 0) t = t.slice(auto.length).replace(/^[\s,;:.\u2013\u2014-]+/, '');
-    return located(t);
+  /* Reveal on scroll */
+  var items = document.querySelectorAll('.reveal');
+  if (reduce || !('IntersectionObserver' in window)) { items.forEach(function (el) { el.classList.add('in'); }); }
+  else {
+    var io = new IntersectionObserver(function (entries) { entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } }); }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    items.forEach(function (el) { io.observe(el); });
   }
 
-  window.DN_ADDR = function () {
-    var l = [], t = typed();
-    if (t) l.push('My address: ' + t);
-    if (pin) l.push('My pin: https://maps.google.com/?q=' + pin);
-    return l.join('\n');
-  };
-
-  function say(text) { if (msg) msg.textContent = text || ''; }
-  function geoText(text) { if (geoLabel) geoLabel.textContent = text; }
-
-  // The order panel names only the location the order will carry (DN_ADDR):
-  // it follows the box as it is edited, and goes back to its first wording
-  // when there is no location left.
-  function showWhere() {
-    var t = typed(), has = !!(t || pin);
-    if (whereBox) whereBox.textContent = has ? 'Location captured' : whereFirst;
-    if (whereLine) whereLine.textContent = has ? (t || ('GPS pin ' + pin)) : '';
+  /* Industry tabs (ARIA tabs: click, or the arrow / Home / End keys) */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab, focus) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) tab.focus();
   }
-
-  function reveal(e) {
-    var t = typed();
-    showWhere();
-    if (!t && !pin) {
-      say('Type your town or address, or tap Detect.');
-      if (input) input.focus();
-      return;
-    }
-    say('');
-    var panel = document.getElementById('orderFlow');
-    if (!panel) return;
-    panel.hidden = false;
-    if (!toOrder(e)) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  if (geo) geo.addEventListener('click', function (ev) {
-    if (!navigator.geolocation) {
-      geoText('GPS unavailable');
-      say('This browser cannot share your location — please type your town or address instead.');
-      if (input) input.focus();
-      return;
-    }
-    geoText('Locating…');
-    say('');
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      pin = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
-      geoText('Pin saved');
-      if (input && (!input.value || input.value === auto)) { auto = 'My location pin (' + pin + ')'; input.value = auto; }
-      reveal(ev);
-      say('Location pin saved.');
-    }, function (err) {
-      geoText('Detect');
-      say(err && err.code === 1
-        ? 'Location access was not allowed — please type your town or address instead.'
-        : 'Could not read your location — please type your town or address instead.');
-      if (input) input.focus();
-    }, { enableHighAccuracy: true, timeout: 12000 });
+  if (tabs.length) select(tabs[0], false);   // without JavaScript every panel stays visible, one under the other
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { select(t, false); });
+    t.addEventListener('keydown', function (e) {
+      var k = e.key, n = null;
+      if (k === 'ArrowDown' || k === 'ArrowRight') n = tabs[(i + 1) % tabs.length];
+      else if (k === 'ArrowUp' || k === 'ArrowLeft') n = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (k === 'Home') n = tabs[0]; else if (k === 'End') n = tabs[tabs.length - 1];
+      if (n) { e.preventDefault(); select(n, true); }
+    });
   });
 
-  var go = document.getElementById('ofGo');
-  if (go) go.addEventListener('click', reveal);
-  if (input) input.addEventListener('keydown', function (e) { if (e.key === 'Enter') reveal(e); });
-  if (input) input.addEventListener('input', showWhere);
-
-  // ── What counts as a location ──
-  // typed() passes its text through here last. Two kinds of box are empty:
-  //  - one with no letter or digit in it. trim() removes spaces but not a
-  //    pasted zero-width space, a soft hyphen or a direction mark, and a box
-  //    holding only those, or only punctuation, looks empty and is not a
-  //    location. So the panel does not open on it, does not name it, and no
-  //    order carries it. A browser without Unicode property escapes keeps
-  //    the trim() test alone;
-  //  - the Detect text cut short from its end (one Backspace too many). It
-  //    is still the pin, which the order carries anyway. Text that holds
-  //    anything more than the Detect text wrote is kept as typed.
-  // Invisible characters at either end of a real location are left out too.
-  // Nothing in the box is changed; only what the order and the panel use.
-  function located(t) {
-    if (auto && t.indexOf('My location pin (') === 0 && auto.indexOf(t) === 0) return '';
-    var word, edge;
-    try { word = new RegExp('[\\p{L}\\p{N}]', 'u'); edge = new RegExp('^[\\s\\p{Cf}]+|[\\s\\p{Cf}]+$', 'gu'); } catch (err) { return t; }
-    return word.test(t) ? t.replace(edge, '') : '';
+  /* Kit guide: the suggestions and their wording */
+  var guide = document.getElementById('kit-guide');
+  function kitGuide() {
+    var v = function (n) { var c = guide.querySelector('input[name="' + n + '"]:checked'); return c ? c.value : ''; };
+    var where = v('where'), users = v('users'), power = v('power'), pick, why;
+    if (where === 'multi' || users === 'critical') {
+      pick = 'High Performance, or a planned network, may suit you';
+      why = 'Several sites, many users or a connection that cannot go down call for planning: we look at each site, its users and the right plan before recommending equipment.';
+    } else if (where === 'move') {
+      pick = users === 'many' ? 'Mini or Standard — let us check' : 'Starlink Mini may suit you';
+      why = users === 'many' ? 'Mini is built for portability; for a larger group at a temporary site, Standard may serve you better. An adviser can compare the two for your use.' : 'Mini fits in a backpack and powers from USB-C or a solar bank — made for field teams, travel and temporary locations.';
+    } else {
+      pick = 'Starlink Standard may suit you';
+      why = users === 'many' ? 'For a fixed site with a bigger group, Standard is the usual starting point — and Wi-Fi coverage planned for every room or building that needs it.' : 'For a fixed home or office with a handful of users, Standard is the usual choice — mounted, aligned and connected to your Wi-Fi by our technicians.';
+    }
+    document.getElementById('guide-pick').textContent = pick;
+    document.getElementById('guide-why').textContent = why;
+    document.getElementById('guide-power').textContent = power === 'solar' ? 'Off-grid or unreliable power? We can advise on solar-plus-battery setups for your site.' : (power === 'unsure' ? 'Not sure about power? We check it as part of the consultation.' : '');
   }
+  guide.addEventListener('change', kitGuide); kitGuide();
+  var guideForm = guide.querySelector('form'); if (guideForm) guideForm.addEventListener('submit', function (e) { e.preventDefault(); });
 
-  // ── The order flow's checkout needs a location ──
-  // The order is never sent without one. The panel opens only with a
-  // location, but the box can be emptied afterwards. prices.js's "Complete
-  // order on WhatsApp" (data-of-wa) puts DN_ADDR() in the order; its handler
-  // sits on the flow and runs in the bubbling phase. This one runs first, in
-  // the capture phase on document: with no location left it stops the click,
-  // so nothing is sent, says so in the status line and puts the visitor back
-  // in the box. Enter and Space on the button arrive as this same click.
-  // With a location it does nothing.
-  var NEED = 'Type your town or address, or tap Detect, to complete your order.';
-  document.addEventListener('click', function (e) {
-    var b = e.target && e.target.closest ? e.target.closest('[data-of-wa]') : null;
-    if (!b || window.DN_ADDR()) return;
+  /* Consultation form: it validates, then prepares the WhatsApp message. The page sends and stores nothing;
+     the enquiry reaches DishNet only when the visitor sends that message in WhatsApp, so nothing here says it was received. */
+  var form = document.getElementById('consult-form');
+  var result = document.getElementById('consult-result');
+  form.addEventListener('submit', function (e) {
     e.preventDefault();
-    e.stopImmediatePropagation();
-    say(NEED);
-    if (input) input.focus();
-  }, true);
-  // That prompt goes as soon as a location is typed, rather than staying under the box.
-  if (input) input.addEventListener('input', function () { if (msg && msg.textContent === NEED && typed()) say(''); });
+    var ok = true, first = null;
+    form.querySelectorAll('.field').forEach(function (f) {
+      var el = f.querySelector('input, select, textarea'); if (!el) return;
+      var val = (el.value || '').trim();
+      var bad = (el.required && !val) || (el.type === 'email' && val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val));
+      f.classList.toggle('invalid', bad);
+      el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      if (bad) { ok = false; if (!first) first = el; }
+    });
+    if (!ok) { first.focus(); result.classList.remove('show'); return; }
+    var d = new FormData(form), g = function (k) { return (d.get(k) || '').toString().trim(); };
+    var lines = ['Hi DishNet, I would like to book my free ICT consultation.', '',
+      'Name: ' + g('name')];
+    if (g('organisation')) lines.push('Organisation: ' + g('organisation'));
+    lines.push('Phone/WhatsApp: ' + g('phone'));
+    if (g('email')) lines.push('Email: ' + g('email'));
+    lines.push('Location: ' + g('location'), 'Customer type: ' + g('customer_type'), 'Assistance needed: ' + g('assistance'), '', 'Requirements: ' + g('requirements'));
+    var text = lines.join('\n');
+    document.getElementById('consult-preview').textContent = text;
+    document.getElementById('consult-wa').href = 'https://wa.me/' + WA + '?text=' + encodeURIComponent(text);
+    result.classList.add('show'); result.focus();
+  });
+  form.querySelectorAll('input, select, textarea').forEach(function (el) {
+    el.addEventListener('input', function () { var f = el.closest('.field'); if (f && f.classList.contains('invalid')) { f.classList.remove('invalid'); el.setAttribute('aria-invalid', 'false'); } });
+  });
 
-  // Back to the order. A keyboard user put back in the box would otherwise be
-  // left there once the location is in, dozens of Tab stops from the button.
-  // So when reveal() comes from the keyboard (Enter in the box, or Check My
-  // Options or Detect pressed with a key; a mouse or touch click has
-  // e.detail of 1 or more) and the kit and plan are already chosen, focus
-  // goes to "Complete order on WhatsApp", which is scrolled to the middle of
-  // the screen with the order summary above it. Only while focus is still
-  // where the visitor acted. The Enter that got here is cancelled, or the
-  // button would take it as a press and send the order at once.
-  function toOrder(e) {
-    var b = document.querySelector('#orderFlow [data-of-wa]');
-    var keys = !!e && (e.type === 'keydown' || (e.type === 'click' && e.detail === 0));
-    if (!keys || !b || b.disabled || document.activeElement !== e.target) return false;
-    if (e.type === 'keydown') e.preventDefault();
-    b.focus({ preventScroll: true });
-    b.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return true;
-  }
-
-  // Holding Enter on that button would press it again with every key
-  // repeat, and open WhatsApp once for each. Only the first press counts.
-  document.addEventListener('keydown', function (e) {
-    var t = e.target;
-    if (e.repeat && e.key === 'Enter' && t && t.closest && t.closest('[data-of-wa]')) e.preventDefault();
-  }, true);
-
-  // ── WhatsApp links that carry the visitor's location ──
-  // Two kinds: a link whose message ends "My location is " (the tail is
-  // replaced by the location), and a plan button in the plans grid. Once the
-  // feed loads, prices.js writes those buttons with a fixed "sign up for
-  // <plan>" message; the location goes on a new line after it. A message
-  // that already holds the location is left as it is.
-  function messageOf(href) {
-    try { return new URL(href, window.location.href).searchParams.get('text'); }
-    catch (e) { return null; }
-  }
-
-  function fillLocation(e) {
-    var a = e.target && e.target.closest ? e.target.closest('a[href^="' + WA + '"]') : null;
-    if (!a) return;
-    var base = a.getAttribute('data-wa-base') || a.getAttribute('href');
-    var text = messageOf(base);
-    if (!text) return;
-    var tail = text.slice(-TAIL.length) === TAIL;
-    if (!tail && !a.closest('[data-dishnet-plans]')) return;
-    a.setAttribute('data-wa-base', base);
-    var where = window.DN_ADDR();
-    if (!where || text.indexOf(where) !== -1) { a.setAttribute('href', base); return; }
-    var lead = (tail ? text.slice(0, -TAIL.length) : text).replace(/\s+$/, '');
-    a.setAttribute('href', WA + '?text=' + encodeURIComponent(lead + '\n' + where));
-  }
-  document.addEventListener('click', fillLocation);
-  document.addEventListener('auxclick', fillLocation);
 })();

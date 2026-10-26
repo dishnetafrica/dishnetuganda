@@ -81,7 +81,7 @@
   var head = el('div', 'dnc-head');
   head.style.position = 'relative';
   head.appendChild(el('b', '', 'DishNet Assistant'));
-  head.appendChild(el('span', '', 'AI answers instantly — our team takes over anytime'));
+  head.appendChild(el('span', '', 'Automated answers first · WhatsApp support is available seven days a week'));
   var closeBtn = el('button', 'dnc-x', '×');
   closeBtn.setAttribute('aria-label', 'Close chat');
   head.appendChild(closeBtn);
@@ -125,7 +125,10 @@
     if (leadShown || haveLead || leadMode === 'off') return;
     leadShown = true;
     var card = el('div', 'dnc-lead');
-    card.appendChild(el('p', '', 'Want our team to follow up? Leave your WhatsApp number (optional).'));
+    var note = el('p', '', 'Want our team to follow up? Leave your WhatsApp number (optional). Our ');
+    var pol = el('a', '', 'Privacy Policy'); pol.href = '/privacy.html'; pol.target = '_blank'; pol.rel = 'noopener';
+    note.appendChild(pol); note.appendChild(document.createTextNode(' explains how we use it.'));
+    card.appendChild(note);
     var name = el('input'); name.placeholder = 'Name';
     var codes = [['+256', '🇺🇬 +256'], ['+254', '🇰🇪 +254'], ['+255', '🇹🇿 +255'],
                  ['+250', '🇷🇼 +250'], ['+211', '🇸🇸 +211'], ['+243', '🇨🇩 +243'],
@@ -157,9 +160,18 @@
         // National part: digits only, without the trunk 0 people dial locally.
         full = cc.value + raw.replace(/\D+/g, '').replace(/^0+/, '');
       }
-      post('', { name: name.value.trim(), phone: full });
-      haveLead = true; store.set('dn_chat_lead', '1');
-      card.remove(); bot('Thank you! Our team will reach out.');
+      // Thank the visitor only once the endpoint says the details were stored.
+      save.disabled = true; skip.disabled = true;
+      var failed = function () {
+        card.remove();
+        bot('Your details did not reach us. Please message us on WhatsApp and we will help you there.');
+        waBtn(); saveLog();
+      };
+      post('', { name: name.value.trim(), phone: full }).then(function (d) {
+        if (!(d && d.ok === true && d.lead_saved === true)) { failed(); return; }
+        haveLead = true; store.set('dn_chat_lead', '1');
+        card.remove(); bot('Thank you — your details reached our team, and we will be in touch.'); saveLog();
+      }, failed);
     };
   }
 
@@ -188,7 +200,7 @@
       if (d && d.lead_mode) leadMode = d.lead_mode;
       if (d && d.have_lead) { haveLead = true; store.set('dn_chat_lead', '1'); }
       if (d && d.reply) bot(d.reply);
-      if (d && d.ok === false && !d.reply) bot('Sorry, the chat hit a snag. Message us on WhatsApp and we will help right away.');
+      if (d && d.ok === false && !d.reply) bot('Sorry, the chat hit a snag. Message us on WhatsApp and our team will help.');
       if (d && (d.ok === false || d.escalate)) waBtn(d.escalate ? 'A teammate will help on WhatsApp' : 'Continue on WhatsApp');
       if (d && d.ok !== false && d.reply) leadCard();
       saveLog();

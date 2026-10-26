@@ -237,7 +237,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .svc-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .svc-badge { font-family: var(--font-display); font-size: 10.5px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-pill); }
 .svc-starlink { color: var(--accent); background: var(--accent-glow); }
-.svc-fiber { color: var(--blue); background: var(--blue-glow); }
 .svc-hotspot { color: var(--green); background: var(--green-glow); }
 .town-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .town-chip { font-family: var(--font-display); font-size: 13.5px; font-weight: 500; padding: 8px 18px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--border); transition: var(--transition); }
@@ -439,3 +438,20 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .cost-explain { padding: 26px 20px 22px; }
   .cost-explain h2 { font-size: 23px; }
 }
+
+/* ── Plans grid and order flow on starlink-kits.html: moved from home.css with the sections themselves
+   (October 2026, when the homepage became the consultancy-led design; home.css is now that page's alone). ── */
+.section-heading-row { display: flex; justify-content: space-between; gap: 28px; align-items: end; }
+.pricing-v2 { background: var(--surface); }
+.price-more { font-size: 13.5px; font-weight: 600; color: var(--accent); text-align: center; }
+.price-more:hover { text-decoration: underline; }
+.of-addr .of-geo { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.of-geo svg { width: 16px; height: 16px; flex: none; }
+.of-status { color: var(--text); }
+.of-status:empty { margin: 0; }
+.of-where { font-size: 15px; color: var(--text); margin: 4px 0 0; overflow-wrap: anywhere; }
+.of-where:empty { display: none; }
+.of-fallback-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 18px; }
+.plans-note { max-width: 860px; margin: 22px 0 0; font-size: 15px; line-height: 1.7; color: var(--text-secondary); }
+.plans-note a { color: var(--accent); font-weight: 600; }
+@media (max-width: 900px) { .section-heading-row { align-items: flex-start; flex-direction: column; } }
