@@ -455,3 +455,5 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .plans-note { max-width: 860px; margin: 22px 0 0; font-size: 15px; line-height: 1.7; color: var(--text-secondary); }
 .plans-note a { color: var(--accent); font-weight: 600; }
 @media (max-width: 900px) { .section-heading-row { align-items: flex-start; flex-direction: column; } }
+/* An anchor link (#plans, #order) lands below the sticky header, not under it. */
+section[id] { scroll-margin-top: 90px; }
