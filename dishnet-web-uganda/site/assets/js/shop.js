@@ -16,8 +16,7 @@
  * WhatsApp" card. Nothing here ever blanks the page or shows a stale number.
  *
  * Ordering is a WhatsApp message naming the product and the price the visitor
- * saw. A person confirms stock and delivery before any money moves, which is
- * the whole of part 1; a cart and online payment are part 2.
+ * saw. A person confirms stock and delivery before any money moves.
  */
 (function () {
   'use strict';
@@ -45,7 +44,7 @@
   // Kits first, then the parts, in the order somebody shops for them.
   var ORDER = ['Kit', 'Router', 'Mount', 'Adapter', 'Cable', 'Power', 'Case'];
   var HEADING = {
-    Kit:     ['Starlink kits',      'The dish, its router and everything needed to get connected.'],
+    Kit:     ['Starlink kits',      'The dish and its router. Ask us about installation, and about registering it in your own name.'],
     Router:  ['Routers and WiFi',   'Cover a bigger house or office, or add a mesh node to the router you already have.'],
     Mount:   ['Mounts',             'Wall, roof, pole and vehicle mounts. An item marked Mini fits the Starlink Mini; one marked Standard 4 or 4 X fits the Standard dish.'],
     Adapter: ['Adapters',           'Fit a dish to a pole you already have, or reuse an older mount.'],

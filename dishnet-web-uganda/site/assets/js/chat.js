@@ -13,6 +13,10 @@
   var ENDPOINT = tag.getAttribute('data-endpoint') || '';
   var WA = (tag.getAttribute('data-whatsapp') || '').replace(/\D+/g, '');
   if (!ENDPOINT) return;
+  // The website chat is off for now: the floating WhatsApp button is the way to reach us. Setting this to true shows
+  // the chat again (its server-side switch, the probe below, still applies).
+  var CHAT_ON = false;
+  if (!CHAT_ON) return;
 
   var store = {
     get: function (k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
@@ -81,7 +85,7 @@
   var head = el('div', 'dnc-head');
   head.style.position = 'relative';
   head.appendChild(el('b', '', 'DishNet Assistant'));
-  head.appendChild(el('span', '', 'AI answers instantly — our team takes over anytime'));
+  head.appendChild(el('span', '', 'Automated answers first · WhatsApp support is available seven days a week'));
   var closeBtn = el('button', 'dnc-x', '×');
   closeBtn.setAttribute('aria-label', 'Close chat');
   head.appendChild(closeBtn);
@@ -89,7 +93,7 @@
   var foot = el('div', 'dnc-foot');
   var input = el('input');
   input.type = 'text';
-  input.placeholder = 'Ask about plans, prices, coverage…';
+  input.placeholder = 'Ask about kits, prices, coverage…';
   input.setAttribute('aria-label', 'Your message');
   var send = el('button', 'dnc-send', 'Send');
   foot.appendChild(input); foot.appendChild(send);
@@ -125,7 +129,10 @@
     if (leadShown || haveLead || leadMode === 'off') return;
     leadShown = true;
     var card = el('div', 'dnc-lead');
-    card.appendChild(el('p', '', 'Want our team to follow up? Leave your WhatsApp number (optional).'));
+    var note = el('p', '', 'Want our team to follow up? Leave your WhatsApp number (optional). Our ');
+    var pol = el('a', '', 'Privacy Policy'); pol.href = '/privacy.html'; pol.target = '_blank'; pol.rel = 'noopener';
+    note.appendChild(pol); note.appendChild(document.createTextNode(' explains how we use it.'));
+    card.appendChild(note);
     var name = el('input'); name.placeholder = 'Name';
     var codes = [['+256', '🇺🇬 +256'], ['+254', '🇰🇪 +254'], ['+255', '🇹🇿 +255'],
                  ['+250', '🇷🇼 +250'], ['+211', '🇸🇸 +211'], ['+243', '🇨🇩 +243'],
@@ -157,9 +164,19 @@
         // National part: digits only, without the trunk 0 people dial locally.
         full = cc.value + raw.replace(/\D+/g, '').replace(/^0+/, '');
       }
-      post('', { name: name.value.trim(), phone: full });
-      haveLead = true; store.set('dn_chat_lead', '1');
-      card.remove(); bot('Thank you! Our team will reach out.');
+      // Thank the visitor only once the endpoint says the details were stored.
+      save.disabled = true; skip.disabled = true;
+      var failed = function () {
+        card.remove();
+        bot('Your details did not reach us. Please message us on WhatsApp and we will help you there.');
+        waBtn(); saveLog();
+      };
+      post('', { name: name.value.trim(), phone: full }).then(function (d) {
+        if (!(d && d.ok === true && d.lead_saved === true)) { failed(); return; }
+        if (d.session) { session = d.session; store.set('dn_chat_session', session); }
+        haveLead = true; store.set('dn_chat_lead', '1');
+        card.remove(); bot('Thank you — your details reached our team, and we will be in touch.'); saveLog();
+      }, failed);
     };
   }
 
@@ -188,7 +205,7 @@
       if (d && d.lead_mode) leadMode = d.lead_mode;
       if (d && d.have_lead) { haveLead = true; store.set('dn_chat_lead', '1'); }
       if (d && d.reply) bot(d.reply);
-      if (d && d.ok === false && !d.reply) bot('Sorry, the chat hit a snag. Message us on WhatsApp and we will help right away.');
+      if (d && d.ok === false && !d.reply) bot('Sorry, the chat hit a snag. Message us on WhatsApp and our team will help.');
       if (d && (d.ok === false || d.escalate)) waBtn(d.escalate ? 'A teammate will help on WhatsApp' : 'Continue on WhatsApp');
       if (d && d.ok !== false && d.reply) leadCard();
       saveLog();
@@ -210,7 +227,7 @@
     if (!panel.hidden) {
       if (!opened) {
         opened = true;
-        if (!restoreLog()) bot('Hello! 👋 Ask me anything about Starlink plans, prices, or coverage in Uganda.');
+        if (!restoreLog()) bot('Hello! 👋 Ask me anything about Starlink kits, prices, or coverage in Uganda.');
         if (leadMode === 'before') leadCard();
       }
       input.focus();

@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>How to send an invoice to WhatsApp — DishNet Africa Tutorials</title>
+<title>How to send an invoice to WhatsApp | DishNet Uganda</title>
 <meta name="description" content="Need to share an invoice with your accountant or forward it to a colleague? One tap sends the PDF straight to WhatsApp with a pre-filled message.">
 <link rel="canonical" href="https://dishnetuganda.com/tutorials/send-invoice-to-whatsapp.html">
 <link rel="icon" type="image/svg+xml" href="../assets/img/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
-<link rel="stylesheet" href="../assets/fonts/fonts.css?v=a4794a72">
-<link rel="stylesheet" href="../styles.css?v=31a8d2af">
-<link rel="stylesheet" href="tutorial-shared.css?v=9b1bcad1">
+<link rel="stylesheet" href="../assets/fonts/fonts.css?v=40474c18">
+<link rel="stylesheet" href="../styles.css?v=b0a39163">
+<link rel="stylesheet" href="tutorial-shared.css?v=9cada49f">
 <meta property="og:type" content="article">
-<meta property="og:title" content="How to send an invoice to WhatsApp — DishNet Africa">
+<meta property="og:title" content="How to send an invoice to WhatsApp | DishNet Uganda">
 <meta property="og:description" content="Need to share an invoice with your accountant or forward it to a colleague? One tap sends the PDF straight to WhatsApp with a pre-filled message.">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"HowTo","name":"How to send an invoice to WhatsApp","description":"Need to share an invoice with your accountant or forward it to a colleague? One tap sends the PDF straight to WhatsApp with a pre-filled message.","totalTime":"PT2M","tool":[{"@type":"HowToTool","name":"DishNet customer app"}]}
@@ -20,7 +20,7 @@
 </head>
 <body>
 
-<!-- DishNet customer app icon sprite — matches portal.php icons exactly.
+<!-- DishNet customer app icon sprite.
      Include once per tutorial page. Use via <svg><use href="#i-NAME"/></svg>. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
     <symbol id="i-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></symbol>
@@ -63,16 +63,17 @@
         <div class="header-inner">
             <a href="/" class="logo"><img src="../assets/img/favicon.svg" alt="DishNet Africa"></a>
                         <nav class="nav">
-                <a href="/#products">Products</a>
-                <a href="../fiber.html">Fiber</a>
-                <a href="../hotspot.html">Hotspot</a>
+                <a href="/">Home</a>
+                <a href="../services.html">Services</a>
+                <a href="../shop.html">Shop</a>
+                <a href="../security.html">Security</a>
                 <a href="../coverage.html">Coverage</a>
                 <a href="../get-the-app.html">App</a>
                 <a href="../contact.html">Contact</a>
             </nav>
             <div class="nav-actions">
                 <a href="/login" class="btn btn-outline" style="padding:10px 20px;font-size:14px">Customer Login</a>
-                <a href="https://wa.me/256705993348" class="header-cta">Get a Quote</a>
+                <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20" class="header-cta">Free consultation</a>
             </div>
             <button class="mobile-toggle" id="mToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileNav"><span></span></button>
         </div>
@@ -81,16 +82,19 @@
 <div class="mobile-nav" id="mobileNav">
     <button class="mobile-nav-close" id="mClose" aria-label="Close menu">&times;</button>
     <a href="/">Home</a>
-    <a href="../fiber.html">Fiber</a>
     <a href="../hotspot.html">Hotspot</a>
     <a href="../coverage.html">Coverage</a>
     <a href="../get-the-app.html">App</a>
     <a href="../contact.html">Contact</a>
     <a href="../services.html">Services</a>
+    <a href="../starlink-kits.html">Starlink Kits</a>
+    <a href="../shop.html">Shop Accessories</a>
+    <a href="../security.html">CCTV &amp; Security</a>
     <a href="../about.html">About</a>
     <a href="index.html">Tutorials</a>
-    <a href="../get-the-app.html">Live Demo</a>
     <a href="../faq.html">FAQ</a>
+    <a href="../pay.html">Pay a Bill</a>
+    <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%27d%20like%20to%20book%20my%20free%20ICT%20consultation.%20My%20location%20is%20">Book a free consultation</a>
     <a href="/login">Customer Login</a>
 </div>
 
@@ -104,7 +108,8 @@
             <div class="tut-meta">
                 <div class="tut-meta-item"><svg><use href="#i-clock"/></svg> About 2 min to complete</div>
                 <div class="tut-meta-item"><svg><use href="#i-router"/></svg> 3 steps</div>
-                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Works on Android &amp; iOS</div>
+                <div class="tut-meta-item"><svg><use href="#i-phone"/></svg> Android app or web portal</div>
+                <div class="tut-meta-item"><svg><use href="#i-info"/></svg> App screens shown with sample data</div>
             </div>
         </div>
     </div>
@@ -118,9 +123,9 @@
         <h2>Open the invoice you want to share</h2>
         <p>Tap the <b>Invoices</b> tab at the bottom. Pick the invoice you want to send &mdash; outstanding ones are at the top, paid ones below.</p>
         <p>This works for <b>any invoice</b>: unpaid, paid, current, or from months ago. The PDF reflects the invoice's current state including any payments already made.</p>
-        <div class="tut-step-tip"><b>Why send invoices?</b> Most common use cases: (1) sending to your accountant or bookkeeper for monthly records, (2) forwarding to a family member who pays the bill, (3) keeping a copy in a WhatsApp chat for easy reference, (4) sharing with our support team if you have a billing question.</div>
+        <div class="tut-step-tip"><b>Why send invoices?</b> For example: (1) sending to your accountant or bookkeeper for monthly records, (2) forwarding to a family member who pays the bill, (3) keeping a copy in a WhatsApp chat for easy reference, (4) sharing with our support team if you have a billing question.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -177,9 +182,9 @@
         <p>&bull; <b>View PDF</b> &mdash; opens the PDF on your screen so you can read it<br>
            &bull; <b>Send to WhatsApp</b> (red button with WhatsApp icon) &mdash; what we want here</p>
         <p>Tap <b>Send to WhatsApp</b>. The app generates a fresh PDF, then opens WhatsApp's share sheet.</p>
-        <div class="tut-step-tip"><b>What's in the PDF?</b> A clean, printable invoice with your name, billing address, the line items (e.g. "Residential Unlimited &mdash; April 2026"), the amount, due date, payment instructions, and our company details. It's the same PDF our team would email you, just generated on demand.</div>
+        <div class="tut-step-tip"><b>What's in the PDF?</b> A clean, printable invoice with your name, billing address, the line items, the amount, due date, payment instructions, and our company details. It's the same PDF our team would email you, just generated on demand.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -221,7 +226,7 @@
         <div class="list-row">
             <div class="list-ic" style="background:rgba(14,165,233,0.1);color:#0EA5E9"><svg><use href="#i-receipt"/></svg></div>
             <div class="list-t">
-                <div class="list-tt">Bank transfer</div>
+                <div class="list-tt">Airtel Money</div>
                 <div class="list-ts">Use INV-2026-0428 as reference</div>
             </div>
         </div>
@@ -240,7 +245,7 @@
         <p>The contact gets the PDF in their WhatsApp chat, ready to view, save, or forward further.</p>
         <div class="tut-step-tip"><b>Sending to multiple people:</b> WhatsApp allows attaching the same PDF to multiple chats, but you have to do it one chat at a time. If you regularly send invoices to the same accountant, just keep that chat open &mdash; you can send each new invoice in 3 taps from the DishNet app.</div>
     </div>
-    <div class="tut-step-mock"><div class="phone"><div class="phone-screen">
+    <div class="tut-step-mock" aria-hidden="true" inert><div class="phone"><div class="phone-screen">
 <div class="phone-status">
     <span>10:42</span>
     <div class="phone-status-icons">
@@ -258,7 +263,7 @@
         <div style="display:flex;align-items:center;gap:11px;padding:9px 14px;background:#fff;border-bottom:1px solid #f0f0f0">
             <div style="width:38px;height:38px;border-radius:50%;background:#FBBF24;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">SA</div>
             <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;color:var(--app-dark)">Sarah Akol (wife)</div>
+                <div style="font-size:12px;font-weight:600;color:var(--app-dark)">Sarah Nakato (wife)</div>
                 <div style="font-size:10px;color:var(--app-gray-2)">last seen 12:14</div>
             </div>
             <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--app-gray-light)"></div>
@@ -318,9 +323,9 @@
         <div class="tut-help-inner">
             <div>
                 <div class="tut-help-t">Stuck on something?</div>
-                <div class="tut-help-s">Our team in Kampala is on WhatsApp 7 days a week.</div>
+                <div class="tut-help-s">WhatsApp support is available seven days a week.</div>
             </div>
-            <a href="https://wa.me/256705993348" class="btn btn-primary">
+            <a href="https://wa.me/256705993348?text=Hi%20DishNet%2C%20I%20need%20help%20with%20the%20DishNet%20app." class="btn btn-primary">
                 <svg style="width:16px;height:16px"><use href="#i-wa"/></svg>
                 Message support
             </a>
@@ -334,16 +339,16 @@
         <div class="footer-grid">
             <div class="footer-brand">
                 <img src="../assets/img/favicon.svg" alt="DishNet">
-                <p>Connecting Uganda since 2013. Starlink, fiber, and LTE internet across all major cities.</p>
+                <p>ICT consultancy focused on Starlink, acquisition guidance, installation and support across Uganda — and, separately, CCTV and network security.</p>
             </div>
             <div>
-                <h4>Internet</h4>
+                <h4>Services</h4>
                 <ul class="footer-links">
-                    <li><a href="/#products">Starlink Kits</a></li>
-                    <li><a href="../fiber.html">Fiber Internet</a></li>
+                    <li><a href="../starlink-kits.html">Starlink Kits</a></li>
                     <li><a href="../services.html">All Services</a></li>
                     <li><a href="../coverage.html">Coverage Map</a></li>
                     <li><a href="../hotspot.html">Hotspot Setup</a></li>
+                    <li><a href="../security.html">CCTV &amp; Firewalls</a></li>
                     <li><a href="../reseller.html">Reseller Program</a></li>
                     <li><a href="../why-dishnet.html">Why DishNet</a></li>
                 </ul>
@@ -354,7 +359,6 @@
                     <li><a href="../about.html">About Us</a></li>
                     <li><a href="../contact.html">Contact</a></li>
                     <li><a href="../faq.html">FAQ</a></li>
-                    <li><a href="../why-dishnet.html">Reviews</a></li>
                     <li><a href="../careers.html">Careers</a></li>
                 </ul>
             </div>
@@ -393,7 +397,7 @@ window.addEventListener('scroll', () => {
     document.getElementById('header').classList.toggle('scrolled', window.scrollY > 40);
 });
 </script>
-<script src="../assets/js/chat.js?v=acdd9120" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
+<script src="../assets/js/chat.js?v=16733323" defer data-endpoint="https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=web_chat" data-whatsapp="256705993348"></script>
 <script src="../assets/js/nav.js?v=7c31eedf" defer></script>
 </body>
 </html>
