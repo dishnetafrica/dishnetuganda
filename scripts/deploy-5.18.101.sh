@@ -293,7 +293,7 @@ umask 077
 # A pipeline whose reader stops reading before its input ends — grep -q, grep -m, head, sed …q, awk …exit — can kill an
 # earlier stage still writing to it with SIGPIPE, and under pipefail the pipeline is then 141, "no match", although the
 # reader matched. Measured: printf '%s\n' "$LIST" | grep -qxF -- <an early line> failed 1 time in 3,000 (bash writes
-# such a printf once per line), and it made 5.18.94's script, inside this release's rehearsal, stop with "the pin lacks
+# such a printf once per line), and it made 5.18.94's script, inside 5.18.99's rehearsal, stop with "the pin lacks
 # files … tests/test_consent_identity.php" on a pin it had built correctly. A positive check (it expects a match) turns
 # into a false refusal; a negative one (… | grep -q PARTIAL && bad) into a missed detection, a false pass. So no status
 # this script judges comes from such a pipeline: a printf of a variable reaches its reader as a here-string — grep -q X
@@ -539,9 +539,9 @@ T1_TEST="tests/test_cash_in_hand_p3b.php"          # in process, on synthetic bo
 T4_TEST="tests/test_d1_bank_balance_readers.php"   # static, with 5.18.94's own tree as its positive control (R24)
 # T1's count is the release suite's own run of the release commit — the one number this script cannot read off the code.
 # Until it is pinned here the script refuses to run (below) rather than accept any count. 5.18.101 changes neither T1 nor
-# any file T1 reads (lib/CashbookService.php, ConfigVault, SqliteStore, StoreInterface, TenantProfile — each kept, by its
-# sha256 above), so the count is 5.18.100's. The release suite's two runs of the release commit said the same, and A22-T1
-# refuses, before anything changes, wherever this server's run does not.
+# any file T1 reads (lib/CashbookService.php, ConfigVault and TenantProfile, each kept by its sha256 above; SqliteStore
+# and StoreInterface outside the release delta, A0), so the count is 5.18.100's. The release suite's two runs of the
+# release commit said the same, and A22-T1 refuses, before anything changes, wherever this server's run does not.
 T1_SIGNATURE="548 passed, 0 failed rc=0"
 # T4 without its weakened copies (--no-mutants): its matcher and readers (6), the positive control on 5.18.94's tree (4),
 # the tree judged (4), the allowed list against the SPEC (6). 5.18.101 changes no tab page: the D1 guard sweeps every tab
@@ -4438,7 +4438,7 @@ case "$MODE" in
       || stop "--check-bank reads ECO Bank as $EXPECTED_VERSION has it: the container serves ${LIVE_BEFORE:-an unknown commit} (${LIVE_VERSION:-?}), not $EXPECTED_PLUGIN_COMMIT ($EXPECTED_VERSION) — deploy it first. Nothing was changed" ;;
   movelist)   # 5.18.99 (SPEC §6, OPS-10): before the deploy, while the release before this one is live (5.18.100 here) — Q-G1
     { [ "$LIVE_BEFORE" = "$BASELINE_COMMIT" ] && [ "$LIVE_VERSION" = "$BASELINE_VERSION" ]; } \
-      || stop "NO-GO (Q-G1): --move-list-only reads the app's clients before the deploy, while $BASELINE_VERSION is live — the container serves ${LIVE_BEFORE:-an unknown commit} (${LIVE_VERSION:-?}), not $BASELINE_COMMIT ($BASELINE_VERSION)$( [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ] && echo ": $EXPECTED_VERSION is deployed already, and its quoting guard ($BASELINE_VERSION's) names in the plugin's log, by id, every client it refuses at quote time")" ;;
+      || stop "NO-GO (Q-G1): --move-list-only reads the app's clients before the deploy, while $BASELINE_VERSION is live — the container serves ${LIVE_BEFORE:-an unknown commit} (${LIVE_VERSION:-?}), not $BASELINE_COMMIT ($BASELINE_VERSION)$( [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ] && echo ": $EXPECTED_VERSION is deployed already, and its quoting guard (5.18.99's, carried) names in the plugin's log, by id, every client it refuses at quote time")" ;;
 esac
 
 # Since 5.18.91: with the container's record on the rollback target (5.18.100 here), every file this release changes
@@ -5266,8 +5266,8 @@ if [ "$MODE" = "deploy" ]; then
   # The configuration files and the vault decide alone in a master run whose live store has lost its -wal and -shm —
   # possible only after the 02:00 maintenance copy (cron_maintenance.php copies the live database and its side files with
   # copy(), which releases master's locks: older than this release, docs/07 5.18.91), if another process then closes the
-  # database last. Said, not refused: it would cost one run of 5.18.90's job, as every run costs today.
-  case "$SLRS_A" in *"by-files+vault=uganda"*) ;; *) note "A12 the configuration files and the vault alone do not name Uganda (${SLRS_A#* | }): in a master run where the live store's -wal and -shm are missing — after the 02:00 maintenance copy, if another process then closes the database last — the gate could not read the store, and the retry job would run as $BASELINE_VERSION's that once" ;; esac
+  # database last. Said, not refused: it would cost one run of 5.18.90's job, as every run did before 5.18.91's gate.
+  case "$SLRS_A" in *"by-files+vault=uganda"*) ;; *) note "A12 the configuration files and the vault alone do not name Uganda (${SLRS_A#* | }): in a master run where the live store's -wal and -shm are missing — after the 02:00 maintenance copy, if another process then closes the database last — the gate could not read the store, and the retry job would run as 5.18.90's did, before the gate, that once" ;; esac
   if [ -n "$CHK_OK" ]; then
     SLR_LIVE_UG="$(slr_run "$IN_CONTAINER" uganda)"; SLR_LIVE_SS="$(slr_run "$IN_CONTAINER" south-sudan)"
     SLR_PIN_UG="$(slr_run "$PIN_ROOT" uganda)"; SLR_PIN_SS="$(slr_run "$PIN_ROOT" south-sudan)"
@@ -6906,7 +6906,7 @@ else bad "R17 the installed automated-send policy does not act as $EXPECTED_VERS
 SLRS_R="$(slr_server "$IN_CONTAINER")"
 if [ "${SLRS_R%% | *}" = "$SLR_SERVER_SIGNATURE" ]; then ok "R18 on this server's own configuration the installed gate stops the Starlink retry job before it touches <plugin>/data: the live directory outside the plugin folder, the live store read, Uganda, skip (${SLRS_R#* | })"
 else bad "R18 on this server's own configuration the installed gate would not stop the retry job: $SLRS_R (expected $SLR_SERVER_SIGNATURE)"; fi
-case "$SLRS_R" in *"by-files+vault=uganda"*) ;; *) note "R18 the configuration files and the vault alone do not name Uganda (${SLRS_R#* | }): in a master run where the live store's -wal and -shm are missing — after the 02:00 maintenance copy, if another process then closes the database last — the installed gate could not read the store, and the retry job would run as $BASELINE_VERSION's that once" ;; esac
+case "$SLRS_R" in *"by-files+vault=uganda"*) ;; *) note "R18 the configuration files and the vault alone do not name Uganda (${SLRS_R#* | }): in a master run where the live store's -wal and -shm are missing — after the 02:00 maintenance copy, if another process then closes the database last — the installed gate could not read the store, and the retry job would run as 5.18.90's did, before the gate, that once" ;; esac
 SLR_R_UG="$(slr_run "$IN_CONTAINER" uganda)"; SLR_R_SS="$(slr_run "$IN_CONTAINER" south-sudan)"
 if [ "${SLR_R_UG%% | *}" = "$SLR_STOPS" ] && [ "${SLR_R_SS%% | *}" = "$SLR_OPENS" ] && case "$SLR_R_UG|$SLR_R_SS" in *"locks=dropped"*) false;; *) true;; esac; then ok "R18 the installed retry job, on throwaway layouts: on Uganda it leaves \$dataDir on the live directory, no variable behind, the stray folder untouched ($SLR_R_UG); on South Sudan it is $BASELINE_VERSION's ($SLR_R_SS)"
 else bad "R18 the installed retry job does not act as $EXPECTED_VERSION's must: Uganda $SLR_R_UG (expected $SLR_STOPS); South Sudan $SLR_R_SS (expected $SLR_OPENS)"; fi

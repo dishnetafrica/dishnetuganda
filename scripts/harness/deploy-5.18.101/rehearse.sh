@@ -410,8 +410,8 @@ check "$(sed -n 's/^TN_A_P=//p' "$STATE101" | tail -1 | grep -c '^code=owners of
 check "$(grep -c "^COPY_AT=$(stat -c %Y "$PD/webhook.php")\$" "$STATE101")|$(epoch99 "$(sed -n 's/^COPY_AT=//p' "$STATE101" | tail -1)")" "1|epoch" \
   "4b the copy's time, as stamp_copy gave webhook.php — a file this release changes"
 SUM101="$(sed -n '/^== F\. Summary ==$/,$p' <<<"$OUT")"
-check "$(grep -cxF "      $EXP_AFTER101" <<<"$SUM101")$(grep -cxF "      $EXP_QCHECK" <<<"$SUM101")$(grep -cxF "      $EXP_ROLLBACK101" <<<"$SUM101")$(grep -cxF "      $EXP_PUTBACK101" <<<"$SUM101")$(grep -cE '(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh|deploy-hybrid\.sh).*(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh)' <<<"$OUT")" "11110" \
-  "4c the --after-only, the quarantine's --check, the rollback and the by-hand put-back, each printed exactly, alone on its line"
+check "$(grep -cxF "      $EXP_AFTER101" <<<"$SUM101")$(grep -cxF "      $EXP_QCHECK" <<<"$SUM101")$(grep -cxF "      $EXP_ROLLBACK101" <<<"$SUM101")$(grep -cxF "      $EXP_PUTBACK101" <<<"$SUM101")$(grep -cE '(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh|deploy-hybrid\.sh).*(deploy-5\.18\.101\.sh|quarantine-stray-store\.sh|deploy-hybrid\.sh)' <<<"$OUT")|$(awk '/^  5\.18\.101 \((deploy|after)\): / { v = 1 } index($0, "deploy-5.18.101.sh --rollback") { print (v ? "after" : "before") }' <<<"$OUT" | paste -sd, -)" "11110|after" \
+  "4c the --after-only, the quarantine's --check, the rollback and the by-hand put-back, each printed exactly, alone on its line; the rollback once, after the verdict"
 check "$(names100 "$R101/run-$T101D.txt" "$STATE101" "$OUT101"/*.log)|$(secrets99 "$R101/run-$T101D.txt" "$STATE101")|$(audit101 "$T101D" | sed -E 's/^copies=([0-9]+) /\1 /' | awk '{print ($1 >= 20 ? "many" : $1 " only") " " $2 " " $3}')|$(uother101 "$T101D")" "0|0|many novault=0 plugin=0|-" \
   "4d no staff record's name and no stand-in secret printed or recorded; every PHP process on a copy with a vault of its own; GETs only"
 check "$(ledger95)|$(both_copies "$BK97")|$(kept_state)$(oldname)$(host_code101)$(left_tmp101)$(evo_calls)" "$LEDGER101|11|${KEPT101}0000" \
@@ -447,7 +447,7 @@ check "$(has "$OUT" "--check is stage A before a deploy, and the container alrea
 
 echo; echo "== 101-6. the rollback, run exactly as printed — ROLLBACK typed; the sign-off 5.18.100's; --redeploy too soon =="
 RLINE="$(printed "$OUT101A" "cd $REPO && bash scripts/deploy-5.18.101.sh --rollback")"
-check "$RLINE" "$EXP_ROLLBACK101" "6 the rollback command, as the --after-only's summary printed it after its verdict"
+check "$RLINE|$(awk '/^  5\.18\.101 \((deploy|after)\): / { v = 1 } index($0, "deploy-5.18.101.sh --rollback") { print (v ? "after" : "before") }' <<<"$OUT101A" | paste -sd, -)" "$EXP_ROLLBACK101|after" "6 the rollback command, as the --after-only's summary printed it after its verdict"
 S101SHA="$(sha256sum "$STATE101" | cut -c1-64)"; DR0="$(data94)"
 fresh101; OUT="$(run_line101 ROLLBACK "$RLINE")"; RLOG="$(ls -1 "$OUT101"/rollback-*.log 2>/dev/null)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.101 (rollback): PASSED')$(live)$(installed101 "$P100")$(inst_ver)" "0yes${P100}05.18.100" "6a the rollback PASSES: 5.18.100 serving again, every file as it had them"
@@ -477,8 +477,8 @@ KEPT101="$(kept_state)"
 echo; echo "== 101-7. --redeploy after the rollback =="
 fresh101; OUT="$(run101 --answer DEPLOY --redeploy)"; OUT101R="$OUT"
 check "$(fails "$OUT")$(has "$OUT" '5.18.101 (deploy): PASSED')$(live)$(installed101 "$P101")$(inst_ver)" "0yes${P101}05.18.101" "7a --redeploy, DEPLOY typed: PASSED, $P101 serving, every file as the pin has it"
-check "$(okline "$OUT" BR1 'the installed plugin is live 5.18.100')$(has "$OUT" 'files 5.18.101 adds are already on disk')$(sed -n 's/^REDEPLOY=//p' "$STATE101" | tail -1)$(okline "$OUT" QS-CA1 'as text, installed')" "yesno1yes" \
-  "7b BR1 finds no file of this release's on disk (it adds none); --redeploy recorded; QS-CA1"
+check "$(okline "$OUT" BR1 'the installed plugin is live 5.18.100')$(sed -n 's/^REDEPLOY=//p' "$STATE101" | tail -1)$(okline "$OUT" QS-CA1 'as text, installed')" "yes1yes" \
+  "7b BR1 ok — the installed plugin is live 5.18.100 (5.18.101 adds no file, so none can be left on disk); --redeploy recorded; QS-CA1"
 copy_back101 30; COPY101R="$(sed -n 's/^COPY_AT=//p' "$STATE101" | tail -1)"
 [ "$(epoch99 "$COPY101R")" = "epoch" ] && set_sched $(( COPY101R + 300 )); base_log
 ALINE2="$(printed "$OUT101R" "cd $REPO && bash scripts/deploy-5.18.101.sh --after-only")"
