@@ -376,7 +376,7 @@
           '<button type="button" class="of-wa" data-of-wa' + (own ? ' data-of-kind="enquiry"' : '') + (own || (state.hw && (state.plan || !SELL_PLANS)) ? '' : ' disabled') + '>' +
             (own ? 'Send my enquiry on WhatsApp' : 'Complete order on WhatsApp') + '</button>' +
         '</div>' +
-        (own ? '' : '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>');
+        (own ? '' : '<p class="of-vat">A team member confirms everything on WhatsApp before you pay.</p>');
       host.innerHTML = html;
       Array.prototype.forEach.call(host.querySelectorAll('[data-hw]'), function (el) {
         if (state.hw && el.getAttribute('data-hw') === state.hw) el.classList.add('sel');

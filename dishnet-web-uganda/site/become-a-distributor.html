@@ -341,7 +341,6 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
       </div>
       <div class="hero-trust">
         <span>✓ Local Uganda team</span>
-        <span>✓ Training &amp; support</span>
         <span>✓ Genuine hardware</span>
       </div>
     </div>
@@ -352,10 +351,10 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
     <div class="container">
       <span class="badge-label badge-accent">What you could offer</span>
       <h2 class="section-title">Connectivity your customers need</h2>
-      <p class="section-subtitle">Partners help DishNet reach more of Uganda. The services available to a partner depend on the agreed model and the location — not every product is offered in every area.</p>
+      <p class="section-subtitle">The services available to a partner depend on the agreed model and the location — not every product is offered in every area.</p>
       <div class="svc-grid">
         <div class="svc-card"><div class="ic">📡</div><h3>Starlink</h3><p>Starlink equipment and acquisition guidance for homes, businesses and remote sites.</p></div>
-        <div class="svc-card"><div class="ic">🌐</div><h3>Wi-Fi &amp; managed networks</h3><p>Wi-Fi setup and DishNet-managed networks on a Starlink connection, including WiFi zones where offered.</p></div>
+        <div class="svc-card"><div class="ic">🌐</div><h3>Wi-Fi &amp; managed networks</h3><p>Wi-Fi setup and DishNet-managed networks on a Starlink connection.</p></div>
         <div class="svc-card"><div class="ic">🏢</div><h3>Business connectivity</h3><p>Starlink solutions for offices, branches, institutions and organisations.</p></div>
       </div>
     </div>
@@ -368,11 +367,11 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
       <h2 class="section-title">Built around a local team</h2>
       <div class="ben-grid">
         <div class="ben"><h3>🤝 One local team</h3><p>Sales, installation, billing and technical support are coordinated through DishNet's Uganda operation.</p></div>
-        <div class="ben"><h3>🎓 Training provided</h3><p>Partners receive structured training suited to their model before going live. Technical installation is separate training.</p></div>
-        <div class="ben"><h3>🛠️ Technical backup</h3><p>Partners escalate to authorised DishNet technicians. Complex installations can be handled jointly.</p></div>
+        <div class="ben"><h3>🎓 Training</h3><p>The application shows the training DishNet proposes for your model; any training is agreed in writing. Technical installation is separate training.</p></div>
+        <div class="ben"><h3>🛠️ Technical backup</h3><p>Partners escalate to authorised DishNet technicians.</p></div>
         <div class="ben"><h3>📦 Genuine hardware</h3><p>Where a model includes hardware, it is genuine, supported equipment — handled under agreed terms.</p></div>
-        <div class="ben"><h3>🧭 Clear processes</h3><p>Orders, onboarding, support and (where relevant) stock follow defined DishNet procedures.</p></div>
-        <div class="ben"><h3>🌍 Reach across Uganda</h3><p>DishNet serves more than 40 towns, and keeps growing.</p></div>
+        <div class="ben"><h3>🧭 Clear processes</h3><p>Orders, onboarding, support and (where relevant) stock follow procedures agreed in writing.</p></div>
+        <div class="ben"><h3>🌍 Reach across Uganda</h3><p>DishNet serves more than 40 towns.</p></div>
       </div>
       <div class="notice notice-amber" style="margin-top:26px">
         <span class="ic">ℹ️</span>
@@ -471,11 +470,6 @@ var WA_NUMBER='256705993348', WA_DISPLAY='+256 705 993 348', EMAIL='info@dishnet
 function waLink(msg){return 'https://wa.me/'+WA_NUMBER+(msg?('?text='+encodeURIComponent(msg)):'');}
 
 /* ---------- submission ---------- */
-/* The application is captured by the DishNet plugin's public intake endpoint.
-   Form-encoded POST = a CORS-safelisted request (no preflight). If the endpoint
-   is unreachable the page falls back to a WhatsApp hand-off so nothing is lost.
-   It creates no uCRM client, no partner and no account — approval is a separate
-   DishNet staff action. */
 var APPLY_ENDPOINT='https://crm.dishnetuganda.com/crm/_plugins/dishnet-hybrid-sudan/public.php?page=distributor_apply';
 var RENDERED_AT=Date.now();
 var submitState={busy:false,done:false,ok:false,ref:''};
@@ -881,7 +875,7 @@ STEP_HTML[7]=function(){
     '<li><b>If approved, next steps follow.</b> A written agreement, training and operational onboarding, as applicable to your model.</li>'+
     '</ol>'+
     '<div class="notice"><span class="ic">ℹ️</span><div>Submitting this form does not appoint you as a DishNet distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms.</div></div>'+
-    '<div class="contact-inline">Talk to the DishNet partner team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
+    '<div class="contact-inline">Talk to the DishNet team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
       '<a class="btn btn-primary" style="margin-top:12px" href='+JSON.stringify(waLink(msg))+' target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>';
   return html;
 };
@@ -891,7 +885,7 @@ var VALID=[validate0,validate1,validate2,validate3,validate4,validate5,validate6
 btnNext.addEventListener('click',function(){
   if(step<STEPS.length-1){
     if(VALID[step]&&!VALID[step]())return;
-    if(step===6){ /* submit → capture in the plugin, with a WhatsApp fallback */
+    if(step===6){
       if(submitState.busy)return;
       submitState.busy=true; btnNext.disabled=true; var _t=btnNext.textContent; btnNext.textContent='Sending…';
       submitApplication().then(function(res){

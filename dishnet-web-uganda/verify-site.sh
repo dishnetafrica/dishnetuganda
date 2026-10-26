@@ -287,6 +287,53 @@ if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, co
 sys.exit(bad)
 PYPOS
 
+echo "== launch hold-back and removed claims =="
+# docs/70 §10. Managed DishNet plans are held back until Starlink's position and the UCC licence are confirmed: no
+# marketing page may offer or name one (policies and the app tutorials are existing customers' contract and help, and
+# keep their wording), prices.js keeps SELL_PLANS off, and the shop and chat scripts name none. The claims removed for
+# launch because nothing establishes them stay removed on every page, policies and tutorials included.
+python3 - "$HERE/site" <<'PYHOLD' || fail=1
+import sys, re, glob, os
+root = sys.argv[1]; bad = 0
+EXEMPT = {'acceptable-use.html', 'complaints.html', 'installation.html', 'policies.html', 'privacy.html', 'returns.html',
+          'terms-of-sale.html', 'terms.html', 'warranty.html'}
+held = re.compile(r'managed DishNet|DishNet plan|managed plan|first month|DishNet (?:Lite|Home|Business|Flex)|Flex (?:package|24|12)', re.I)
+claims = [(re.compile(r'\bhosts? earn\b|\bearn from (?:it|internet)\b|earning assets|turn bandwidth into revenue', re.I), 'a WiFi-zone earnings claim'),
+          (re.compile(r'Airtel Money billing|billing,? (?:and )?vouchers|per-tenant billing|billing engine', re.I), 'a WiFi-zone billing claim'),
+          (re.compile(r'Hotspot zones — select towns|svc-hotspot">Hotspot<|hotspot zones are available', re.I), 'a hotspot availability claim'),
+          (re.compile(r'\bfranchising\b', re.I), 'franchising'),
+          (re.compile(r'Enquiries from your town come to you first', re.I), 'a territory promise'),
+          (re.compile(r'free of charge for you|Airtel does not charge|Airtel Money: free of charge', re.I), 'an Airtel tariff claim'),
+          (re.compile(r'Genuine Starlink'), 'an unestablished supply claim (marketing use; the Terms of Sale promise genuine kits)'),
+          (re.compile(r'the total shown is the total invoiced', re.I), 'a total-invoiced promise'),
+          (re.compile(r'Maintenance contracts', re.I), 'an unestablished maintenance offer')]
+for (rx, name), sample in zip(claims, ('and hosts earn', 'with Airtel Money billing and vouchers', 'Hotspot zones — select towns',
+                                       'WiFi zone franchising', 'Enquiries from your town come to you first',
+                                       'it is free of charge for you', 'Genuine Starlink hardware',
+                                       'the total shown is the total invoiced', 'Maintenance contracts')):
+    if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
+if not held.search('a managed DishNet plan') or not held.search('your first month of internet'):
+    print('  CONTROL FAILED: the hold-back rule does not match its samples'); sys.exit(1)
+pages = glob.glob(os.path.join(root, '**', '*.html'), recursive=True)
+marketing = [f for f in pages if os.path.relpath(f, root) not in EXEMPT and not os.path.relpath(f, root).startswith('tutorials' + os.sep)]
+for f in marketing + [os.path.join(root, 'assets', 'js', x) for x in ('shop.js', 'chat.js')]:
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for m in held.finditer(t):
+        print(f"  managed plan held back: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+pj = open(os.path.join(root, 'assets', 'js', 'prices.js'), encoding='utf-8').read()
+if pj.count('var SELL_PLANS = false;') != 1:
+    print('  managed plan held back: prices.js must hold exactly one "var SELL_PLANS = false;"'); bad = 1
+for f in pages + glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
+    t = open(f, encoding='utf-8', errors='ignore').read()
+    for rx, name in claims:
+        for m in rx.finditer(t):
+            print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+assert len(claims) == 9 and len(marketing) >= 30, (len(claims), len(marketing))
+if not bad: print(f'  {len(marketing)} marketing pages offer no managed plan, SELL_PLANS is off, and none of the 9 removed claims is'
+                  ' back on any page or script (rules self-checked)')
+sys.exit(bad)
+PYHOLD
+
 echo
 [ $fail -eq 0 ] && echo "PASS" || echo "FAIL"
 exit $fail
