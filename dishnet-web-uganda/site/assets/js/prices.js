@@ -395,7 +395,7 @@
         state.plan = null;
         paint();
         var p2 = host.querySelector(SELL_PLANS ? '[data-of-plan]' : '.of-summary');
-        if (p2) p2.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (p2) p2.scrollIntoView({ behavior: 'smooth', block: SELL_PLANS ? 'nearest' : 'center' });
         return;
       }
       var pl = t.closest('[data-plan]');

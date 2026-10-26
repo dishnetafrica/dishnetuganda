@@ -316,20 +316,28 @@ if not held.search('a managed DishNet plan') or not held.search('your first mont
     print('  CONTROL FAILED: the hold-back rule does not match its samples'); sys.exit(1)
 pages = glob.glob(os.path.join(root, '**', '*.html'), recursive=True)
 marketing = [f for f in pages if os.path.relpath(f, root) not in EXEMPT and not os.path.relpath(f, root).startswith('tutorials' + os.sep)]
+genuine = re.compile(r'\bgenuine\b', re.I)   # a supply claim on marketing pages; the Terms of Sale promise genuine kits
+if not genuine.search('Genuine kits, delivered'): print('  CONTROL FAILED: the genuine rule does not match its sample'); sys.exit(1)
 for f in marketing + [os.path.join(root, 'assets', 'js', x) for x in ('shop.js', 'chat.js')]:
     t = open(f, encoding='utf-8', errors='ignore').read()
     for m in held.finditer(t):
         print(f"  managed plan held back: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
+    for m in genuine.finditer(t):
+        print(f"  an unestablished supply claim: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
 pj = open(os.path.join(root, 'assets', 'js', 'prices.js'), encoding='utf-8').read()
 if pj.count('var SELL_PLANS = false;') != 1:
     print('  managed plan held back: prices.js must hold exactly one "var SELL_PLANS = false;"'); bad = 1
+# The website chat answers from the same catalogue as WhatsApp, which quotes the monthly plans: it stays off with them.
+cj = open(os.path.join(root, 'assets', 'js', 'chat.js'), encoding='utf-8').read()
+if cj.count('var CHAT_ON = false;') != 1 or cj.count('if (!CHAT_ON) return;') != 1:
+    print('  managed plan held back: chat.js must hold "var CHAT_ON = false;" and return on it'); bad = 1
 for f in pages + glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
     t = open(f, encoding='utf-8', errors='ignore').read()
     for rx, name in claims:
         for m in rx.finditer(t):
             print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
 assert len(claims) == 9 and len(marketing) >= 30, (len(claims), len(marketing))
-if not bad: print(f'  {len(marketing)} marketing pages offer no managed plan, SELL_PLANS is off, and none of the 9 removed claims is'
+if not bad: print(f'  {len(marketing)} marketing pages offer no managed plan, SELL_PLANS and the website chat are off, and none of the 9 removed claims is'
                   ' back on any page or script (rules self-checked)')
 sys.exit(bad)
 PYHOLD

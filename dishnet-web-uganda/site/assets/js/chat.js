@@ -13,6 +13,10 @@
   var ENDPOINT = tag.getAttribute('data-endpoint') || '';
   var WA = (tag.getAttribute('data-whatsapp') || '').replace(/\D+/g, '');
   if (!ENDPOINT) return;
+  // The website chat is off for now: the floating WhatsApp button is the way to reach us. Setting this to true shows
+  // the chat again (its server-side switch, the probe below, still applies).
+  var CHAT_ON = false;
+  if (!CHAT_ON) return;
 
   var store = {
     get: function (k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },

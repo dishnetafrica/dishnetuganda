@@ -293,7 +293,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
     .cta-band { padding: 40px 28px; }
 }
 
-/* Text wordmark beside the mark — stands in until the real logo file lands. */
+/* Text wordmark beside the mark. */
 .logo-lockup .wordmark { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.6px; color: var(--accent); line-height: 1; }
 .footer-brand .wordmark { font-family: var(--font-display); font-weight: 800; font-size: 21px; letter-spacing: -0.4px; color: #fff; display: block; margin: 0 0 2px; }
 
@@ -304,10 +304,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .price-card h3 { font-family: var(--font-display); font-size: 19px; margin: 0; }
 .price-pill { position: absolute; top: -12px; left: 20px; font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #fff; background: var(--accent); padding: 4px 12px; border-radius: 100px; }
 .price-pill-soft { background: var(--dark-bg); }
-/* The amount sizes to its own card, not to the page. At 1280px the grid packs
-   four narrow columns and a seven-figure business price broke between the
-   currency and the number — "UGX" on one line, "2,100,000/month" on the next,
-   while the home cards beside it sat on one line. cqi is the card's own width,
+/* The amount sizes to its own card, not to the page: in a narrow card a long
+   price could break between the currency and the number. cqi is the card's own width,
    so the type shrinks only in the cards that need it. Browsers without
    container queries drop the declaration and keep the flat 30px. */
 .price-amount { font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: -0.5px; }
@@ -327,9 +325,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .of-group:first-child { margin-top: 0; }
 .price-vat { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-secondary); text-align: center; margin: 4px 0 0; }
 /* ── Prices ────────────────────────────────────────────────────────────
-   A hardware price is stated as one-off and shown with the monthly it sits
-   beside. The amount alone read as ambiguous — customers could not tell
-   whether UGX 1,850,000 was once or every month, nor that a plan is due too. */
+   A hardware price always says it is one-off. */
 .live-price { margin: 6px 0 14px; }
 .live-price .lp-amount { font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.4px; display: block; line-height: 1.15; }
 .live-price .lp-amount small { font-size: 14px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0; }
@@ -417,9 +413,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .of-rnote { font-size: 12.5px; color: var(--text-secondary); margin-top: 8px; }
 
 /* ── "What it costs" explainer ──────────────────────────────────────────
-   Placed above any number, because the question customers arrived with was
-   not "how much is the kit" but "what will this cost me". Two payments,
-   numbered, with the monthly pulled live from the same feed as the kits. */
+   Placed above any number: the kit, paid once, and the Starlink subscription. */
 .cost-explain { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 34px 32px 28px; box-shadow: var(--shadow-sm); }
 .cost-explain h2 { font-family: var(--font-display); font-size: 27px; margin: 0 0 4px; letter-spacing: -0.5px; }
 .cost-lede { color: var(--text-secondary); font-size: 16px; margin: 0 0 26px; }

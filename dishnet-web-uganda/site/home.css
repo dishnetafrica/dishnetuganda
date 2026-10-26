@@ -180,6 +180,7 @@ section { scroll-margin-top: 84px; }
 .tag-hands { background: var(--red-soft); color: var(--red-dark); }
 .service-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: -22px 0 28px; font-size: 14.5px; color: var(--muted); }
 @media (min-width: 1001px) { .service-wide { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr auto; column-gap: 22px; align-items: center; } .service-wide .badge-ico { grid-row: span 2; } .service-wide .tag { grid-column: 3; grid-row: 1 / span 2; } }
+@media (min-width: 1001px) { .services > .service:nth-child(3n+2):nth-last-child(2) { grid-column: span 2; } }
 @media (max-width: 1000px) { .services { grid-template-columns: repeat(2, 1fr); } .service-wide .tag { justify-self: start; } }
 @media (max-width: 640px) { .services { grid-template-columns: 1fr; } }
 .boundaries { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -261,6 +262,7 @@ section { scroll-margin-top: 84px; }
 .availability { padding: 24px; border-radius: var(--radius); background: var(--red-soft); color: #4A0B16; font-size: 15px; }
 .availability h3 { color: var(--red-dark); font-size: 17px; display: flex; gap: 8px; align-items: center; }
 .availability p { margin: 0 0 8px; }
+@media (max-width: 1000px) { .plan-band .availability { grid-template-columns: 1fr; } .plan-band .availability h3 { grid-row: auto; margin-bottom: 6px; } }
 @media (max-width: 760px) { .plan-band { grid-template-columns: 1fr; } .plan-band .availability { grid-template-columns: 1fr; } .plan-band .availability h3 { grid-row: auto; margin-bottom: 6px; } }
 
 /* ═══ Industries ═════════════════════════════════════════════════════════════════════════════════════════ */
