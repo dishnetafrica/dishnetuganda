@@ -778,14 +778,25 @@ price" managed-plan cards, and the hold-back (§10.1) had removed those too and 
    - Every claim removal (§10.2) and every launch-review fix (§10.3) is kept. A check found none of the 41 distinctive
      held-back texts left, and all 56 original passages back.
 2. **The homepage shows the prices and links the shop.**
-   - **Menus:** "Prices" (`#plans`) and "Shop" (`shop.html`) in the top menu; "Plans and prices", "Starlink kits" and
-     "Shop" in the phone menu; "Shop" in the footer.
+   - **Menus:** "Shop" (`shop.html`) in the top menu; "Plans and prices", "Starlink kits" and "Shop" in the phone menu;
+     "Shop" in the footer. A "Prices" item was in the top menu for the first deploy and was taken out with the logo
+     change below, to make room.
    - **Plan grid:** `prices.js` fills it from the price feed (same markup as the kits page). The two managed-plan cards
      inside it stay when the feed does not answer.
    - **Hero line:** "Managed DishNet home plans from UGX …/month", shown only when the feed has a home plan.
    - **Band below:** the own-name card and the availability box.
-   - **Menu fit:** the two extra links did not fit between 1141 and 1169 px. So menu links are 2 px narrower on each
+   - **Menu fit:** the extra links did not fit between 1141 and 1169 px. So menu links are 2 px narrower on each
      side, and the phone menu now takes over at 1180 px instead of 1140 px (in `home.css` and `home.js`).
+   - **The logo (owner, after the first deploy: "on landing page i am not seeing DishNet Logo properly").** The homepage
+     header, phone menu and footer drew a red icon beside a black "DishNet". They now show the same wordmark as every
+     other page and the old homepage: a red **DishNet** with a red **UGANDA** badge (white "DishNet" on the dark
+     footer).
+     - The wordmark is wider than the icon, so "Prices" left the top menu; the hero price line and the phone menu
+       still lead to the prices.
+     - Measured on the elements themselves, not on the page width (items spilling into the header's side padding do not
+       widen the page), the desktop header has 29 px to spare at every width from 1181 px.
+     - The browser test checks that spare (at least 10 px) and the three wordmarks. Its logo check fails on the previous
+       homepage, as a control.
 3. **`verify-site.sh`:** the hold-back rule becomes its opposite, which requires:
    - `SELL_PLANS` on;
    - the plans grid on the kits page and on the homepage;
@@ -803,6 +814,7 @@ price" managed-plan cards, and the hold-back (§10.1) had removed those too and 
 - `node --check` on every script;
 - the browser test, rewritten for the plans: **808 passed, 0 failed**, with a held-back `prices.js` as the control for
   every plans assertion. Of the 70 files changed, 48 differ only by an asset stamp.
+- after the logo change: the same five checks exit 0 again, and the browser test passes **810, 0 failed**.
 
 **Still true, and the owner's decision:**
 - The reason for §10.1 is unchanged. There is no written position from Starlink and no authorised-reseller agreement,
