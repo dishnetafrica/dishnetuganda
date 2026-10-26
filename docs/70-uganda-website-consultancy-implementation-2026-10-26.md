@@ -27,6 +27,7 @@ are **undecided by the owner, so they are kept** (§9) and their open points are
 | Policy source | `dishnet-web-uganda/policies/` (`build.py` + `bodies/`); the nine policy pages are generated, never edited by hand |
 | Checks | `verify-site.sh`, `verify-address.py`, `policies/build.py --check`, `stamp-assets.sh --check` |
 | The diff | `git diff e01696a2..claude/uganda-site-consultancy -- dishnet-web-uganda docs/70-*` |
+| Commits | `1db9c1ec` the implementation · `8e2b2505` kits cost box and wording · `c3274ca4` this record (draft) · `aa7759ac` tutorials, residual policy items, guards · `b499a6af` independent-review fixes · later commits: this record and any second-review fixes (§6.3) |
 
 ## 2. Implementation plan — in the existing structure and release process
 
@@ -49,7 +50,12 @@ that process exactly as it is: no new service, no new host, no build step, no da
    data on all 63 pages; the body text where a page said something the decisions rule out (§3.3–§3.9).
 5. Two defects found during the review fixed in the scripts: the chat thanked a visitor whose details had not been
    stored (decision 11), and the order flow could offer no kit at all with the product names recorded for uCRM (§3.7).
-6. The checks extended so the decisions stay enforced (§6.1).
+6. The checks extended so the decisions stay enforced (§4.4).
+7. The 19 app tutorials brought into line (§3.10): the standard header, menu and footer; the approved support
+   sentence; South Sudan remnants and activation promises removed from the location tutorial.
+8. The residual policy, tooling and price-feed items of the policies-and-integrations audit (§3.9, §5).
+9. An independent review of the whole diff, each finding checked by a separate sceptic; the confirmed findings fixed
+   and proven in a browser (§6.2), and a second review of the second round (§6.3).
 
 ### 2.3 Release sequence — for when the owner approves (not done)
 
@@ -61,7 +67,9 @@ Each step needs the one before it. Steps 1–3 are decisions; nothing in them is
    managed-plan wording held back. Holding it back is a small, separate change on this branch (the places are listed in
    §8.1); it is not built, because the owner approved the plan's wording.
 3. **Outside the site (§5):** the uCRM and plugin items marked *before release*.
-4. **Final checks on the branch**, the same commands as §6, with every result read.
+4. **Final checks on the branch**, the same commands as §6, with every result read. If the release is on a later day
+   than 26 October 2026, first set `UPDATED` in `policies/build.py` to the publication date and run `python3
+   policies/build.py`, so the nine policy pages carry the date they took effect.
 5. **Release:** a pull request from `claude/uganda-site-consultancy` into `main`, reviewed and merged by the owner.
    EasyPanel rebuilds from `main`. Nothing else is touched.
 6. **After the release:** load the homepage, `starlink-kits.html`, one town page and `/fiber.html` (it must answer
@@ -76,15 +84,15 @@ The rollback is in §7, deliberately apart from these steps.
 | # | Decision (owner-approved) | What it changed |
 |---|---|---|
 | 1 | DishNet Uganda does not sell fibre; a historical reference only with place and time | `fiber.html` and the fibre article removed; fibre gone from every menu, footer, title, description, JSON-LD block, FAQ answer, town page, programme page, tutorial and policy |
-| 2 | The managed DishNet plan is DishNet's own service; never implied to be approved by Starlink; kept apart from own-name registration | homepage *Ways to get Starlink*; kits page `#plans`; FAQ *What is a managed DishNet plan?* (the contract is with DishNet); About; the installation-day article |
+| 2 | The managed DishNet plan is DishNet's own service; never implied to be approved by Starlink; kept apart from own-name registration | homepage *Ways to get Starlink*; kits page `#plans`; FAQ *What is a managed DishNet plan?* (the contract is with DishNet); About (now its own sentence); the installation-day article; Terms of Service §3 and Terms of Sale §7: "A DishNet plan is DishNet's own service, provided under DishNet's own terms; it is not a Starlink product."; the location tutorial is labelled *Managed DishNet plan* and points own-name customers to Starlink |
 | 3 | Restricted registrations: individual review, never an automatic offer or refusal, never a bypass | the FAQ no longer says "Or choose a managed DishNet plan instead" after "restricted"; it uses the homepage's wording, including "We will never help anyone bypass verification…" |
-| 4 | Own-name registration: "Starlink controls registration approval, KYC verification and activation." No approval promised | FAQ (own-name, installation time, moving), Terms of Sale, Starlink Installation, town pages; "we activate your kit" became "we arrange the activation" |
+| 4 | Own-name registration: "Starlink controls registration approval, KYC verification and activation." No approval promised | FAQ (own-name, installation time, moving), Terms of Sale, Terms of Service §3 (now with the sentence), Starlink Installation, town pages, the installation-day article (word for word); "we activate your kit" became "we arrange the activation"; the location tutorial lost "we activate", "5-15 minutes" and "Activating your dish now" |
 | 5 | "Your first ICT consultation is free and carries no obligation." | homepage, services, about, contact, WhatsApp, FAQ, security, why DishNet, town pages, blog articles; every header button and phone menu now opens the free-consultation WhatsApp message |
 | 6 | Connectivity: Starlink only | no fibre, LTE, "4G-linked", "Data Network" or "Internet" menu label ("Services" instead) |
 | 7 | CCTV and network security: a separate service, not a Starlink product, not needing Starlink | security page, FAQ, why DishNet, town pages; a brand note: "Listing a brand does not mean a partnership with it." |
-| 8 | Approved facts, word for word: "DishNet Africa has operated since 2013"; "DishNet serves more than 40 towns"; "WhatsApp support is available seven days a week" | "10+ years", "ten years", "two countries", "all four regions", "every day", "any time", "24/7", "answered every day", unconfirmed hours and on-call claims removed |
+| 8 | Approved facts, word for word: "DishNet Africa has operated since 2013"; "DishNet serves more than 40 towns"; "WhatsApp support is available seven days a week" | "10+ years", "ten years", "two countries", "all four regions", "every day", "any time", "24/7", "answered every day", unconfirmed hours and on-call claims removed; the tutorials' "Our team in Kampala is on WhatsApp 7 days a week" (18 pages), "within minutes", "8 AM – 8 PM" and "We respond within minutes" replaced by the approved sentence; the social card now states both facts word for word |
 | 9 | Email `info@dishnetafrica.com` | unchanged everywhere; the FAQ's new consultation answer names it |
-| 10 | Existing product photos only, never presented as DishNet installations | the High Performance card no longer shows the Standard kit's photo; a new social card (`og-dishnet-uganda.png`) shows the product, not an installation |
+| 10 | Existing product photos only, never presented as DishNet installations | the High Performance card no longer shows the Standard kit's photo; a new social card (`og-dishnet-uganda.png`) shows the product, not an installation; the tutorials' "Real screens from the app" became "App screens shown with sample data" |
 | 11 | WhatsApp first; the form prepares a WhatsApp message; no false success message | the homepage form says it prepares a message and that nothing is sent until the visitor sends it; **the chat now thanks a visitor only when the server confirms it stored the details** (§3.7) |
 
 ### 3.2 Fibre — every place it was
@@ -128,6 +136,7 @@ description in the approved positioning; social image `og-dishnet-uganda.png`. T
 | `404.html` | its chat script loaded from the site root (on a nested address it was requested from the wrong folder and blocked); Shop, Security, Hotspot and Pay a Bill links as on every other page; a template leftover pointing at `why-dishnet.html` removed |
 | `get-the-app.html`, `guides.html`, `pay.html`, `careers.html` | the app title no longer claims bill payment; wrong menu highlight removed; no "right away", "two countries", "ISP-grade" or unverified language claims |
 | blog, hotspot, reseller, distributor pages | see §3.8 |
+| 19 app tutorials | see §3.10 |
 
 ### 3.6 Town pages
 
@@ -152,7 +161,7 @@ wording (per-tenant billing, tenants each with "their own login and bill") and C
 replaced by what DishNet can do, with the review of Starlink's terms stated where sharing a connection is involved.
 Hotspot content stays (owner undecided); its comparisons with mobile data and its payback claim were softened.
 
-### 3.7 Two defects in the scripts, found by this review and fixed
+### 3.7 Defects in the scripts, found by the reviews and fixed
 
 - **The website chat confirmed details it had not stored** (`assets/js/chat.js`). It said "Thank you! Our team will
   reach out." and remembered the visitor as a lead before the request finished, whatever the answer. It now waits: only
@@ -164,6 +173,17 @@ Hotspot content stays (owner undecided); its comparisons with mobile data and it
   recorded for uCRM are "Starlink Mini Kit" and "Starlink Standard Kit". Now on the same page as the kit cards, it
   uses the cards' own rule (`kit` or `package`). Proved both ways in a browser (§6). The live product names are an open
   point (§8.1).
+- **The homepage's closed phone menu could still be reached with Tab** (`assets/js/home.js`; review C5). It was only
+  faded out, and the page behind the open menu stayed reachable. The closed menu is now inert, and while it is open the
+  rest of the page is inert, as `nav.js` already does on every other page.
+- **A feed with plans but no kit left the plans grid and the order flow unbuilt** (`prices.js`; review C6). The kit
+  section returned from the whole function; it now keeps the page's own kit cards and goes on.
+- **The chat dropped the session id that a stored lead's answer carries** (`chat.js`; review C8), so a lead given
+  before the first question started a second conversation. It now keeps it, as a question's answer already did.
+- **Hard-coded "UGX 0 upfront"** in `prices.js` for any Flex plan (a figure that does not come from the billing feed)
+  became "Kit included" / "No kit to buy upfront"; the own-kit card no longer says "we connect it to a DishNet plan"
+  but offers installation and support, own-name registration or a managed plan, "each case reviewed individually,
+  subject to Starlink's terms" (decisions 2 and 3).
 
 ### 3.8 Blog, WiFi-zone, reseller and distributor pages (kept; claims corrected)
 
@@ -188,8 +208,56 @@ service requirements) and the Acceptable Use policy (summary; scope; fair use; p
 → "WhatsApp support is available seven days a week" (Terms; Complaints); own-name activation in the Terms of Sale now
 says Starlink controls registration approval, KYC verification and activation; "we activate your kit" → "we arrange the
 activation of your kit" (Terms of Sale; Starlink Installation); the Privacy Policy no longer says the site loads its
-fonts from Google — **it serves its own fonts; no page loads a font service** (checked across all pages). These pages
-are still not legally reviewed (`docs/67`); the edits above should go to that review.
+fonts from Google — **it serves its own fonts; no page loads a font service** (checked across all pages).
+
+Second round (the policies-and-integrations audit and the independent review):
+
+- **Terms of Service §3** now ends the own-name paragraph with "Starlink controls registration approval, KYC
+  verification and activation, so we cannot promise that a registration is approved." (as the Terms of Sale already
+  did), and the managed-plan sentence continues "A DishNet plan is DishNet's own service, provided under DishNet's own
+  terms; it is not a Starlink product. Whether a DishNet plan is available to you is reviewed individually, subject to
+  Starlink's terms, requirements and approvals." The Terms of Sale §7 carries the same "DishNet's own service" sentence.
+- §4 "before activating a service" → "before a service is activated"; §5 "because Starlink or another network
+  provider changes or withdraws the service" → "because Starlink changes…" (decision 6); §14 "ask us about a backup
+  connection. We are glad to design one with you." → "tell us before you buy, so that we can plan the installation,
+  power supply and equipment with you." (a backup connection implies a second, non-Starlink link; the sceptic thought a
+  second Starlink kit could be meant, so this one is flagged for the legal review too).
+- **Not changed, deliberately:** Terms of Sale §7's remedy "we replace it with one that Starlink activates or refund
+  everything you paid for it, as you choose". It was changed during the round and **restored**: the sceptic showed it is
+  a remedy for a kit-level refusal with a full refund always available, not a promise of registration. Whether to
+  reword a customer remedy is a legal decision (§8.2).
+- `Last updated: 26 October 2026` on all nine pages (it said 12 October although six bodies changed); see §2.3 step 4.
+
+These pages are still not legally reviewed (`docs/67`); every edit above should go to that review.
+
+### 3.10 The 19 app tutorials
+
+Audited page by page, then edited by a script that asserts every replacement (and refuses any new text carrying a
+long number other than the published WhatsApp number, so no merchant ID, account or phone number can enter):
+
+- **Shared parts, all 19:** the standard inner-page menu (Home, Services, Shop, Security, Coverage, App, Contact); the
+  phone menu gains *Starlink Kits* and *CCTV & Security* and loses *Live Demo*; the footer gains *CCTV & Firewalls* and
+  loses *Reviews* (it pointed at Why DishNet); the help band says "WhatsApp support is available seven days a week."
+  and its button opens a help message; the phone mock screens are `aria-hidden` and `inert` (they hold buttons that do
+  nothing); the tap-pulse animation stops for visitors who ask for reduced motion; titles end "| DishNet Uganda".
+- **"Works on Android & iOS"** became "Android app or web portal" (there is no iOS app; the login tutorial says so);
+  the WhatsApp-only location tutorial says "Works with WhatsApp on any phone".
+- **The location tutorial** (`activate-starlink-send-location.html`, URL kept) is now *How to send us your
+  installation location* for a managed DishNet plan, with own-name customers pointed to Starlink. Removed: the Juba
+  examples (Hai Cinema, Munuki, St Bakhita School) and coordinates (now Ntinda / Kira, 0.354° N, 32.612° E), "DishNet
+  Activations", "Activation Required", "we activate", "This takes 5-15 minutes", "within minutes during working hours
+  (8 AM – 8 PM)", the default Wi-Fi password promise and a comment naming the plugin template. Starlink controls
+  activation and how long it takes; the privacy paragraph links the Privacy Policy.
+- **Invoices:** the bank-transfer block named the South Sudan banks; the mock now shows Airtel Money with "see Pay a
+  Bill" and **no merchant ID**; the text sends people to Pay a Bill for the merchant ID; "within 24 hours" became "check
+  the payment, apply it to your account" (no timing promise).
+- **Other pages:** speed figures removed from the speed test (Starlink does not guarantee a speed); dish status "asks
+  Starlink", not the dish; "Suggested pricing: 500 UGX per hour" removed (the operator sets their own price);
+  "ask us about a managed WiFi zone" became "message us on WhatsApp to talk through the options for your business";
+  account linking happens "once we have confirmed that both accounts are yours"; sample names are Ugandan.
+- **Not done (open, §8.3):** a sentence saying the app's Starlink features are for managed plans only, because whether
+  they work for own-name customers is not established; Open Graph images and the index's list of all 18 tutorials
+  (optional SEO).
 
 ## 4. Files
 
@@ -199,12 +267,12 @@ All under `dishnet-web-uganda/`. Every page's `?v=` asset stamps were refreshed 
 
 | Group | Files |
 |---|---|
-| Homepage | `site/index.html`, `site/home.css`, `site/assets/js/home.js` |
+| Homepage | `site/index.html`, `site/home.css`, `site/assets/js/home.js` (also the phone-menu fix, §3.7) |
 | Scripts and styles | `site/assets/js/chat.js`, `prices.js`, `shop.js`; `site/styles.css` |
 | Main pages | `services.html`, `starlink-kits.html`, `coverage.html`, `about.html`, `contact.html`, `whatsapp.html`, `faq.html`, `security.html`, `why-dishnet.html`, `shop.html`, `careers.html`, `get-the-app.html`, `guides.html`, `pay.html`, `404.html` (all in `site/`) |
 | Town pages (12) | `site/starlink-{arua,entebbe,fort-portal,gulu,hoima,jinja,kampala,lira,masaka,mbale,mbarara,soroti}.html` |
 | Blog and programmes | `blog.html`, `blog-starlink-installation-day-uganda.html`, `blog-starlink-solar-uganda.html`, `blog-wifi-hotspot-business-uganda.html`, `hotspot.html`, `reseller.html`, `become-a-distributor.html` |
-| Tutorials (19) | `site/tutorials/*.html` — the shared header and footer; `login-to-dishnet.html`, `grant-time-access.html` and `get-help-on-whatsapp.html` also in their text |
+| Tutorials (19) | `site/tutorials/*.html` — every page in its shared parts and title, most in their text (§3.10); `site/tutorials/tutorial-shared.css` (reduced motion) |
 | Policies | sources `policies/bodies/{terms,terms-of-sale,installation,acceptable-use,privacy,complaints}.html` and `policies/build.py`; generated `site/{terms,terms-of-sale,installation,acceptable-use,privacy,complaints}.html`; `site/{policies,warranty,returns}.html` (shared parts only) |
 | Site files | `site/sitemap.xml`, `nginx.conf` |
 | Checks and notes | `verify-site.sh`, `README-DEPLOY.md` |
@@ -224,14 +292,28 @@ remembers them for ten minutes, not for ever.
 ### 4.3 Added
 
 `site/assets/js/order.js` (the order flow's location box, moved from the old homepage script),
-`site/assets/img/og-dishnet-uganda.png` (1200 × 630 social card), and this record.
+`site/assets/img/og-dishnet-uganda.png` (1200 × 630 social card, rendered from an HTML card with the site's own fonts
+and the Standard kit product photo; it states the approved facts word for word), and this record.
 
 ### 4.4 Checks changed
 
 `verify-site.sh` gains **withdrawn pages** (each redirect's status, target, headers and cache lifetime, the target
-answering 200, the files gone) and **positioning rules** (no fibre, LTE, 24/7, "four regions", "every region",
-"10+ years", "ten years", "two countries" or "thousands of" on any page, the sitemap or robots; each rule first proven
-able to match a sample, so a broken rule cannot pass by matching nothing).
+answering 200, the files gone) and **positioning rules** — on every page, the sitemap and robots, tutorials included,
+zero matches for: fibre; LTE; 24/7; "four regions" / "every region"; "10+ years", "ten years", "two countries",
+"thousands of"; support-hours wording ("answered every day", "support every day", "every day of the week"); "Uganda
+since 2013" (the approved fact is "DishNet Africa has operated since 2013"); 4G, "fixed wireless", "data network";
+activation promises ("we activate", "we will activate", "activate your kit/dish", "5-15 minutes"); response-time
+promises ("within minutes", "within the hour"); and the South Sudan bank names. Each rule first proves it matches a
+sample, so a broken rule cannot pass by matching nothing.
+
+The **commercial rule** now also scans the scripts (comments removed first, so a figure a script writes into a page is
+caught), and the tutorials are exempt only inside their phone mock screens: an HTML parser drops `div.tut-step-mock`
+blocks (nested divs included) and scans the rest, so a price in a tutorial's own text fails. Both have controls.
+
+**Control on the controls:** a throwaway copy with one planted violation of each new rule (a tutorial body price, a
+script price, "answered every day", "Connecting Uganda since 2013", "4G backup", "We activate your kit", "We respond
+within minutes", a bank name) made `verify-site.sh` fail on every one by name, and a price inside a mock was not
+flagged. The copy was deleted.
 
 ## 5. Database, application and integration changes
 
@@ -242,13 +324,17 @@ able to match a sample, so a broken rule cannot pass by matching nothing).
 | Database | none — the site stores nothing. Old distributor applications may hold the label "Fibre & fixed connectivity"; they are historical staff records and stay | — |
 | uCRM catalogue | confirm the live plan and product names (§8.1): the site's plan-to-Starlink-service map and its "Best value" badge use the older *DishNet Lite / Home / Business / Flex* names | before release |
 | uCRM catalogue | product **descriptions** are printed verbatim on the kit cards and in the order flow; read them against the decisions (no fibre, no approval or activation promise, approved facts only) | before release |
-| uCRM / plugin config | the price feed publishes every priced plan; if any **Flex** plan is priced, the site shows "UGX 0 upfront" and a Flex option. Either settle Flex (§8.1) or exclude it with `public_price_exclude` | before release |
-| Plugin knowledge (the WhatsApp assistant and the website chat) | the live knowledge items should be read against the decisions: the seed file `dishnet-hybrid-sudan/tools/knowledge_seed.json` says "supports customers 24/7 on WhatsApp" (line 20) and "Starlink covers all of Uganda — every district, town and village in all four regions" (line 32). The live items are edited in the CRM, not here | before release |
-| Plugin config | the website chat's teaser (`web_chat_teaser`) is set in the CRM; read it against the decisions | before release |
+| uCRM catalogue / plugin config | **the public price feed publishes every uCRM service plan that has a name and a price — it ignores *active/archived*, category and organisation** (`lib/PublicPriceFeed.php`; the plugin's own assistant does skip inactive plans). A fibre, LTE or fixed plan or product in Uganda uCRM, archived or not, would appear on the kits page and in its order flow. Check uCRM read-only; delete such an item, or add its exact name to `public_price_exclude` on the Uganda install, then read the feed again. Do not rely on archiving | before release |
+| uCRM / plugin config | if any **Flex** plan is priced, the site shows a Flex card and option ("Kit included"); settle Flex (§8.1) or exclude it with `public_price_exclude` | before release |
+| Plugin config (website chat) | `web_chat_origins` must list `https://dishnetuganda.com` and `https://www.dishnetuganda.com` (the default is the South Sudan site; without them every chat message and lead from this site is refused, and the chat now says honestly that the details did not reach us); `web_chat_enabled`; the WhatsApp hand-off number; the teaser text (`web_chat_teaser`) read against the decisions | before release |
+| Plugin knowledge (the WhatsApp assistant and the website chat share it) | in the Uganda Knowledge Base, edit the items that carry unapproved claims: "supports customers 24/7 on WhatsApp" and "operating since 2013, with operations in South Sudan, Sudan and Uganda" (company identity); "every district, town and village in all four regions" and "Starlink reaches everywhere in Uganda" (coverage); "DishNet purchases directly from Starlink in Uganda" and "genuine Uganda-channel stock" (a Starlink relationship); "installs it properly, activates it" and "activation" as included (activation promises). Add items with the approved facts and the managed-plan / own-name / KYC / restricted-registration wording, the free consultation and CCTV as a separate service. The seeder never overwrites an item an operator has edited; correcting `tools/knowledge_seed.json` only helps future installs. Also read `ai_identity_line`, `bot_custom_instructions`, `wa_flyer_caption` and the `ai_fact_*` values (configuration; `php tools/ai_facts.php` shows them) | before release |
 | Plugin (sales assistant) | the pre-filled WhatsApp openers change from "I'd like a quote …" to "I'd like to book my free ICT consultation …"; confirm nothing keys on the old openers | before release |
-| Plugin (optional, separate release) | `DistributorApplicationService::SERVICES`: drop `fibre` (the site no longer offers it, but a hand-made request could still store it); relabel `data` to match the site ("Wi-Fi & managed networks"), with `tests/test_distributor_apply.php` | any time |
+| Plugin (separate release) | `DistributorApplicationService::SERVICES`: relabel `data` to match the site ("Wi-Fi & managed networks"; today staff see "Data Network", which is not what the applicant chose — review C7) and drop `fibre` (the site no longer offers it, but a hand-made request could still store it), with `tests/test_distributor_apply.php`. The endpoint's default origins are the Uganda site only | recommended before release |
 | Plugin | `profiles/uganda.json` `app_url` and the customer messages link `/app`; the site now answers it (302 → the app page). No plugin change | — |
-| n8n assistant prompt | already says DishNet does not sell fibre; no change | — |
+| Plugin (separate release, Uganda-gated) | `lib/LifecycleService.php` kit-collected / location / welcome WhatsApp templates are not tenant-gated and are South Sudan's (+211 number, a Juba office, "We activate remotely", activation timings, speed and data claims, a fixed default Wi-Fi password). The location tutorial used to copy them. **Confirm whether this flow messages Uganda customers**; if it does, a Uganda template set is needed without those claims, South Sudan unchanged | confirm before release |
+| Plugin (separate release, Uganda-gated) | the customer portal shows "We respond within minutes" (`tabs/customer_app/portal.php`), and the WhatsApp balance auto-reply names the South Sudan banks (`lib/WaAutoReplyService.php`). If Uganda customers see them, give Uganda its own text, so the app and the site agree | confirm before release |
+| Customer portal legal text | `profiles/uganda.json` legal v1.2 has no own-name, KYC or managed-plan sentence. Aligning it with the new website sentences means bumping the legal version, which asks every Uganda customer to accept again — an owner and legal decision (§8.2) | owner's decision |
+| n8n Uganda bot (`n8n/DishNet_Uganda_AI_Bot_v1.0.json`; whether it runs live is not established in the repository) | it says DishNet does not sell fibre, but also: "operating in Uganda since 2013", support hours "Mon–Sun 7 AM – 10 PM", "Mon–Sat 9 AM – 6 PM", "We target 99.9% uptime", "Reaches all 10 Uganda states", same-day and free installation, "every district, town and village", "within the hour", bank transfer only, a second WhatsApp number for Sales; its QA judge describes "an ISP in Uganda selling Starlink kits, FTTH fiber, and LTE" and a node tags leads "Fiber"; it calls `prices.php` directly, not `public.php?page=prices`. **If the workflow is active**, correct the prompt and nodes in n8n and the repository copy | if active, before release |
 | Google Search Console | submit the sitemap; request removal of `/fiber.html` and the fibre article | after release |
 | EasyPanel | none until the release; the release is the merge (§2.3) | — |
 
@@ -258,18 +344,46 @@ Run on the branch, in this container, against a local copy served by nginx with 
 (never against the live site). Every request to another host (the price feed, the chat, the distributor endpoint,
 WhatsApp) was answered by a mock or refused, so nothing reached the live plugin.
 
+### 6.1 Checks (latest run, on `b499a6af`)
+
 | Check | Result |
 |---|---|
-| `./verify-site.sh` | **PASS** (exit 0): 63 pages, 0 non-200; 76 references, 0 broken; real 404; `/login` 302; withdrawn pages 301 with headers and ten-minute expiry, `/app` 302; canonicals and sitemap; no price outside tutorial screenshots; positioning rules (self-checked) |
+| `./verify-site.sh` | **PASS** (exit 0): 3/3 security headers and one Cache-Control everywhere; 63 pages, 0 non-200; 76 references, 0 broken; real 404; `/login` 302; withdrawn pages 301 with headers and ten-minute expiry, `/app` 302; canonicals and sitemap; one WhatsApp number; no price outside the tutorial mock screens or in a script; positioning rules (self-checked, §4.4) |
 | `python3 verify-address.py` | exit 0: 91 JSON-LD blocks parse; one address, one phone, one 40-town list |
 | `python3 policies/build.py --check` | exit 0: "policies: up to date" (the FAQ's structured data equals its visible questions) |
 | `bash stamp-assets.sh --check` | exit 0 |
 | `node --check` on every script in `assets/js/` | no syntax error |
-| Browser journeys (Playwright, Chromium) | **740 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect |
-| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; each positioning rule must match a sample before it scans |
+| Browser journeys (Playwright, Chromium) | **754 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect; and for the review fixes: the homepage's closed phone menu unreachable by 40 Tab presses and the page behind the open menu inert (360, 390, 768 px), a feed with plans but no kit still filling the plans grid and building the order flow, a stored lead's session id kept |
+| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; the pre-fix `home.js` lets Tab reach the closed menu; the pre-fix `prices.js` never fills the plans grid when the feed has no kit; the pre-fix `chat.js` drops a stored lead's session id; each positioning rule must match a sample before it scans, and every new rule failed on a planted violation (§4.4) |
 | Layout | the distributor page's header was 811 px wide in a 768 px window, on `main` too; fixed (its menu now folds below 900 px, as everywhere else) and measured at 761–1024 px |
 
-[The independent review and the final rerun are added when they finish.]
+### 6.2 Independent review of the whole diff (`e01696a2..c3274ca4`)
+
+Four reviewers (decisions; links and SEO; scripts and forms; policies and consistency), each finding then checked by a
+separate sceptic told to refute it. **10 confirmed, 14 rejected.**
+
+| # | Confirmed finding | Outcome |
+|---|---|---|
+| C0–C4 | location tutorial: "5-15 minutes" and "we activate"; "within minutes … (8 AM – 8 PM)"; get-help: "Replies come back within minutes", "We respond within minutes"; the 18 help bands and the tutorials index paraphrase the support fact | fixed by the tutorial round (§3.10) |
+| C5 | homepage: the closed phone menu is reachable with Tab | fixed (§3.7), browser test with control |
+| C6 | `prices.js`: no kit in the feed → no plans grid, no order flow | fixed (§3.7), browser test with control |
+| C7 | distributor form: the site labels service `data` "Wi-Fi & managed networks"; the plugin stores it as "Data Network" | **outside the site**: the plugin change in §5 (*any time* → recommended before release, so staff see what the applicant chose) |
+| C8 | `chat.js`: a stored lead's session id is dropped | fixed (§3.7), browser test with control |
+| C9 | About: one dash clause nested in another | fixed (the managed plan has its own sentence) |
+
+Rejected findings were rejected for one of three reasons, recorded so nobody re-raises them blindly: already fixed in
+the working tree when checked (Terms "another network provider", "before activating", the missing own-name KYC
+sentence, the policy date, the blog card ending); not contradictory (the business-plan wording on the kits page and the
+Acceptable Use policy — both say service continues more slowly after the priority data; the owner still confirms the
+exact behaviour, §8.1 item 10); or not a defect under the decisions (the Terms of Sale replacement-kit remedy — restored
+after being changed, §3.9; "backup connection" — changed anyway on three other agents' reading, flagged for legal
+review; the KYC wording variant — aligned to the approved sentence anyway; the Gulu cross-border FAQ; the first month
+included in kit packages, already §8.1 item 9).
+
+### 6.3 Second review, of the second round (`c3274ca4..b499a6af`)
+
+Three reviewers (tutorial text after the automated replacements; policies and claims; scripts and checks), each
+finding checked by a sceptic. The result and any fixes are recorded below.
 
 ## 7. Rollback plan
 
@@ -312,10 +426,12 @@ way:
 5. **Liability.** What DishNet answers for when Starlink's service fails, against what Starlink's own terms allow it to
    promise.
 6. **Data protection.** Customer data sent to Starlink (SpaceX) and held outside Uganda.
-7. **Flex packages** (kit included, monthly) depend on Starlink's leasing terms; the site prints "UGX 0 upfront" for
-   any priced Flex plan (§5).
-8. **Bring your own kit.** The order flow offers "I already have a kit"; can a kit bought elsewhere join a managed
-   account? The Terms of Sale say imported kits might not be accepted for activation.
+7. **Flex packages** (kit included, monthly) depend on Starlink's leasing terms; the site shows a Flex card ("Kit
+   included") for any priced Flex plan (§5). The sales assistant's knowledge says Flex may be quoted but not contracted
+   until management confirms.
+8. **Bring your own kit.** The order flow's "I already have a kit" option now offers installation and support,
+   own-name registration or a managed plan, each reviewed individually. Can a kit bought elsewhere join a managed
+   account at all? The Terms of Sale say imported kits might not be accepted for activation.
 9. **The first month included.** Kit packages say "your first month of internet" is included; for an own-name
    registration, is that a Starlink subscription DishNet pays? The Terms of Service limit it to kit packages; uCRM
    prices installation separately.
@@ -334,7 +450,20 @@ describe DishNet plans on the live site.
 
 ### 8.2 Policies and legal
 
-- The policy pages are still not legally reviewed (`docs/67`); add this release's edits (§3.9) to that review.
+- The policy pages are still not legally reviewed (`docs/67`); add this release's edits (§3.9) to that review,
+  including the new Terms of Service §3 sentences and the "backup connection" change.
+- **Terms of Sale §7 remedy:** "If Starlink will not activate a kit you bought from us, for a reason that is not your
+  fault, we replace it with one that Starlink activates or refund everything you paid for it, as you choose." Two
+  reviewers read "one that Starlink activates" as an activation promise; the sceptic read it as a kit-level remedy with
+  a refund always available. Kept as it is; reword only on legal advice (for example "a replacement kit or a refund of
+  everything you paid for it, as you choose").
+- **Does any change need advance notice?** The Terms of Service promise notice before changes that are worse for the
+  customer; decide whether this release's policy edits are such a change.
+- **The customer portal's legal text** (v1.2): realign it with the new website sentences (a version bump asks every
+  Uganda customer to accept again), or leave it.
+- **Privacy statements in the tutorials:** the location tutorial (location kept with the account records, never live
+  tracking) and the connected-devices tutorial (device names, IP and MAC addresses, not browsing) should be read
+  against the Privacy Policy in the legal review.
 - The Terms of Sale say "We deliver anywhere in Uganda" and the warranty pays transport "anywhere in Uganda", while the
   marketing pages now say "delivered to your town". Keep both, or align?
 - **Careers:** "We keep every CV on file" — the Privacy Policy has no section on job applicants or a CV retention
@@ -355,7 +484,16 @@ describe DishNet plans on the live site.
 - Whether DishNet Uganda supplies or installs solar or backup power (the FAQ and the solar article now say *advise*).
 - Speed and power figures were removed because no source was recorded; publish figures only from Starlink's current
   specifications, with the date.
-- The app: which features it will offer in Uganda, and whether everything in it is also in the customer portal.
+- The app: which features it will offer in Uganda, and whether everything in it is also in the customer portal. Is an
+  iOS app planned (the tutorials now say "Android app or web portal")? **Do the app's Starlink features (Wi-Fi
+  password, Hotspot Mode, devices, dish status, usage, sites) work for customers registered in their own name, or only
+  on managed plans?** The tutorials assume a DishNet-managed account.
+- Payments: does DishNet Uganda take bank transfer, and to which bank? (The tutorials no longer show any bank.) How
+  soon is a payment confirmed after "I've paid" (the "24 hours" promise was removed)?
+- The location tutorial says that replying **CALL ME** gets a phone call from the team; the assistant does treat "call
+  me" as a request for a person. Does someone actually phone?
+- Approved office or support hours: the site's structured data says Mon–Sat 08:30–18:00; the n8n bot says otherwise
+  (§5). Only "WhatsApp support is available seven days a week" is approved.
 - The blog articles' publication dates (needed for search results; the structured data has the month only).
 - Town pages: are there DishNet installers based in Kampala, Mbarara, the north and the east? Does DishNet already
   serve lodges or tea estates near Fort Portal, coffee washing stations near Mbale, or refugee-response agencies in
@@ -369,7 +507,8 @@ describe DishNet plans on the live site.
 
 ### 8.4 The programmes the owner has not decided (kept as they are)
 
-- **WiFi zones / hotspot:** do Starlink's terms allow a connection to be shared with or resold to the public, and on
+- **WiFi zones / hotspot** (the hotspot pages, and the tutorials on Hotspot Mode and selling time access): do
+  Starlink's terms allow a connection to be shared with or resold to the public, and on
   which plans? Does a public pay-as-you-go zone need a UCC licence, and whose? Are Airtel Money billing, vouchers, the
   captive portal, per-user limits and monitoring available in production today (repository records say the platform is
   not deployed)? Does the "written zone agreement" exist? Per-tenant billing in buildings is the same question.
