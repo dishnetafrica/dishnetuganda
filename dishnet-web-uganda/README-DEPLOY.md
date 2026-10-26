@@ -24,6 +24,10 @@ Built from the "Full Site Build v2" drop, then localised in-repo:
 1. **+ Service → App** in the `web` project, name `web-uganda`.
 2. Source: this GitHub repo, branch `main`, **build path `/dishnet-web-uganda`**,
    Build = Dockerfile. (Or upload this folder.)
+   **As configured (26 Oct 2026), the live app builds branch
+   `claude/study-this-jhe2eg`, not `main`**: a website change reaches the live
+   site only once it is on that branch and the app is redeployed
+   (`docs/70` §10.7).
 3. Deploy, then in **Domains**: add `dishnetuganda.com`.
    - `dishnetuganda.com` currently belongs to the `web-sudan` app — remove it
      there first, and give `web-sudan` its real domain (`dishnetsudan.com`)

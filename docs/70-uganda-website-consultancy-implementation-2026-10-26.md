@@ -1,11 +1,10 @@
 # 70 — Uganda website: the consultancy-led implementation (26 Oct 2026)
 
-**Status: LAUNCH APPROVED by the owner on 26 Oct 2026 and PREPARED (§10): the managed DishNet plan is held back, the
-unverified claims are removed, an independent review's findings are fixed and every check passes. NOT MERGED, NOT
-DEPLOYED.** The release pull request waits for the checks against the live systems (§10.4), which this session cannot
-reach. Production is untouched: nothing was merged into `main`, nothing was deployed to EasyPanel, the live server was
-not contacted. Until §10 the record below describes the build as the owner approved it; where §10 differs, §10
-applies.
+**Status: LAUNCH APPROVED by the owner on 26 Oct 2026, PREPARED (§10) and MERGED: into `main` by PR #26 (`647faccf`),
+then into `claude/study-this-jhe2eg` (`0de69559`), the branch EasyPanel's `web-uganda` app actually builds (§10.7). LIVE NOT
+VERIFIED from this session:** the live systems answer this session's proxy with 403, and the four checks of §10.4 were
+not run before the merge (the owner chose to proceed). Until §10 the record below describes the build as the owner
+approved it; where §10 differs, §10 applies.
 
 The owner reviewed revision 2 of the website demo and its content change report and asked for the next stage: a
 production implementation in the existing site structure and release process, keeping the approved consultancy-led
@@ -36,8 +35,9 @@ are **undecided by the owner, so they are kept** (§9) and their open points are
 ### 2.1 How the site is released today (unchanged)
 
 The site is a static nginx container (`nginx:1.27-alpine`; `Dockerfile` copies `nginx.conf` and `site/`). EasyPanel's
-`web-uganda` app builds branch **`main`**, build path **`/dishnet-web-uganda`**. **A merge into `main` is therefore a
-release**: EasyPanel rebuilds and serves it. There is no CI workflow; the checks in §6 are run by hand. This plan keeps
+`web-uganda` app builds branch **`claude/study-this-jhe2eg`**, build path **`/dishnet-web-uganda`** (corrected in §10.7:
+this section first said `main`, as `README-DEPLOY.md` does; `docs/07` records the branch). **A push to that branch is
+therefore a release** once EasyPanel redeploys. There is no CI workflow; the checks in §6 are run by hand. This plan keeps
 that process exactly as it is: no new service, no new host, no build step, no database.
 
 ### 2.2 What the implementation consists of
@@ -442,10 +442,11 @@ Kept apart from the release steps on purpose: they are never to be run together.
 
 **Before the release** there is nothing to roll back: `main` and the live site are unchanged.
 
-**After the release** (the branch merged into `main`, EasyPanel rebuilt):
+**After the release** (merged into `claude/study-this-jhe2eg`, EasyPanel rebuilt; §10.7):
 
-1. Revert the merge on `main` with a pull request (a `git revert -m 1` of the merge commit, reviewed like any change).
-   EasyPanel rebuilds from `main` and serves the site as it was at `e01696a2`. Or, in EasyPanel, redeploy the build
+1. Revert the merge on `claude/study-this-jhe2eg` (a `git revert -m 1` of `0de69559`), push, and redeploy in EasyPanel; it
+   then serves the site as it was at `e01696a2` (the branch's site tree before the merge equals it). Revert `647faccf`
+   on `main` too, by pull request, so the two branches agree. Or, in EasyPanel, redeploy the build
    made from `e01696a2`, if it is still listed.
 2. Check: the old homepage loads; `/fiber.html` answers 200 again; `og-uganda.png` answers 200.
 3. What a rollback cannot undo: a browser that followed a redirect keeps it for at most ten minutes; search engines
@@ -712,9 +713,9 @@ immediately after the merge:
    this record, nothing else (no plugin change). It is reviewed as `main`'s pull requests are, including the automatic
    review.
 2. **Before the merge:** the four checks in §10.4, by the owner or by a session that can reach the live systems.
-3. **The merge** is the release: EasyPanel's `web-uganda` app builds from `main` (`/dishnet-web-uganda`). Whether it
-   rebuilds by itself on a push is not established in the repository; if the site does not change within a few
-   minutes, redeploy the app in EasyPanel.
+3. **The merge** was meant to be the release, but EasyPanel's `web-uganda` app builds from `claude/study-this-jhe2eg`,
+   not `main` (§10.7). Whether it rebuilds by itself on a push is not established in the repository; if the site does
+   not change within a few minutes, redeploy the app in EasyPanel.
 4. **After the deploy, on the live site:** the homepage, `starlink-kits.html` (kit prices from the feed, no plans, the
    order flow to a WhatsApp message), the phone menu, `contact.html`, a policy page, `sitemap.xml`, `/fiber.html` →
    301 `/services.html`, `/login` → 302 to the CRM; no script error; no managed-plan text. The site is reported live
@@ -737,3 +738,15 @@ immediately after the merge:
 - **The programmes the owner has not decided** (§8.4): WiFi zones, reseller, distributor and shop. Their pages now
   describe what DishNet would scope, not what runs today.
 - The remaining items of §8.2 and §8.3.
+
+### 10.7 The deploy branch (26 Oct 2026)
+
+PR #26 was merged into `main` (`647faccf`) and the owner redeployed `web-uganda`, but the homepage did not change. The
+cause: the app builds from **`claude/study-this-jhe2eg`**, as `docs/07` records, not from `main` as §2.1, §10.5 and
+`README-DEPLOY.md` said; that branch did not contain the merge, so EasyPanel rebuilt the old site. At the owner's
+instruction `main` was merged into `claude/study-this-jhe2eg` (`0de69559`), conflict-free. Main brought only
+`dishnet-web-uganda/` and this record; the deployed tree (`site/`, `nginx.conf`, `Dockerfile`) is byte-identical to
+`main`'s, and the branch's only other difference there is `redesign-demo/`, which the `Dockerfile` does not copy. On
+the merged tree `verify-site.sh`, `verify-address.py`, `policies/build.py --check`, `stamp-assets.sh --check` and
+`node --check` all passed (exit 0). Future website releases go to `claude/study-this-jhe2eg` as well as `main`, or the
+app's source branch is changed to `main` in EasyPanel; the owner decides.
