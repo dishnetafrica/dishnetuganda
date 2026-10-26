@@ -27,7 +27,7 @@ are **undecided by the owner, so they are kept** (§9) and their open points are
 | Policy source | `dishnet-web-uganda/policies/` (`build.py` + `bodies/`); the nine policy pages are generated, never edited by hand |
 | Checks | `verify-site.sh`, `verify-address.py`, `policies/build.py --check`, `stamp-assets.sh --check` |
 | The diff | `git diff e01696a2..claude/uganda-site-consultancy -- dishnet-web-uganda docs/70-*` |
-| Commits | `1db9c1ec` the implementation · `8e2b2505` kits cost box and wording · `c3274ca4` this record (draft) · `aa7759ac` tutorials, residual policy items, guards · `b499a6af` independent-review fixes · later commits: this record and any second-review fixes (§6.3) |
+| Commits | `1db9c1ec` the implementation · `8e2b2505` kits cost box and wording · `c3274ca4` this record (draft) · `aa7759ac` tutorials, residual policy items, guards · `b499a6af` independent-review fixes · `9cee1265` this record · `d1a63dbc` second-review fixes · later commits: this record (§6.4) |
 
 ## 2. Implementation plan — in the existing structure and release process
 
@@ -181,9 +181,14 @@ Hotspot content stays (owner undecided); its comparisons with mobile data and it
 - **The chat dropped the session id that a stored lead's answer carries** (`chat.js`; review C8), so a lead given
   before the first question started a second conversation. It now keeps it, as a question's answer already did.
 - **Hard-coded "UGX 0 upfront"** in `prices.js` for any Flex plan (a figure that does not come from the billing feed)
-  became "Kit included" / "No kit to buy upfront"; the own-kit card no longer says "we connect it to a DishNet plan"
-  but offers installation and support, own-name registration or a managed plan, "each case reviewed individually,
-  subject to Starlink's terms" (decisions 2 and 3).
+  became "Kit included" / "No kit to buy upfront".
+- **"I already have a kit" was an order for a DishNet plan** (decisions 2 and 3; the card said "we connect it to a
+  DishNet plan", and after a first rewording the flow behind it still forced a plan, printed "Total today" and sent "I
+  would like to order Starlink … Plan: … Total today"; second review C3/C6). It is now an **enquiry**: no plan step, no
+  price or total, the button reads *Send my enquiry on WhatsApp*, and the message asks about "installation and support,
+  registering it in my own name, or a managed DishNet plan", with the location the visitor typed (still required).
+- **Widening the window with the homepage menu open left the page inert** behind a menu that the wider layout hides
+  (second review C5); the menu now closes when the phone layout ends.
 
 ### 3.8 Blog, WiFi-zone, reseller and distributor pages (kept; claims corrected)
 
@@ -236,7 +241,8 @@ Audited page by page, then edited by a script that asserts every replacement (an
 long number other than the published WhatsApp number, so no merchant ID, account or phone number can enter):
 
 - **Shared parts, all 19:** the standard inner-page menu (Home, Services, Shop, Security, Coverage, App, Contact); the
-  phone menu gains *Starlink Kits* and *CCTV & Security* and loses *Live Demo*; the footer gains *CCTV & Firewalls* and
+  phone menu gains *Starlink Kits*, *Shop Accessories*, *CCTV & Security* and *Pay a Bill* and loses *Live Demo*, as on
+  every other page; the footer gains *CCTV & Firewalls* and
   loses *Reviews* (it pointed at Why DishNet); the help band says "WhatsApp support is available seven days a week."
   and its button opens a help message; the phone mock screens are `aria-hidden` and `inert` (they hold buttons that do
   nothing); the tap-pulse animation stops for visitors who ask for reduced motion; titles end "| DishNet Uganda".
@@ -254,7 +260,9 @@ long number other than the published WhatsApp number, so no merchant ID, account
 - **Other pages:** speed figures removed from the speed test (Starlink does not guarantee a speed); dish status "asks
   Starlink", not the dish; "Suggested pricing: 500 UGX per hour" removed (the operator sets their own price);
   "ask us about a managed WiFi zone" became "message us on WhatsApp to talk through the options for your business";
-  account linking happens "once we have confirmed that both accounts are yours"; sample names are Ugandan.
+  account linking happens "once we have confirmed that both accounts are yours"; sample names are Ugandan; the help
+  page's "If you message outside working hours … as soon as the team is back" became "You can send your message at
+  any time."; the location tutorial's own-name aside uses the approved sentence and promises no approval.
 - **Not done (open, §8.3):** a sentence saying the app's Starlink features are for managed plans only, because whether
   they work for own-name customers is not established; Open Graph images and the index's list of all 18 tutorials
   (optional SEO).
@@ -303,12 +311,16 @@ zero matches for: fibre; LTE; 24/7; "four regions" / "every region"; "10+ years"
 "thousands of"; support-hours wording ("answered every day", "support every day", "every day of the week"); "Uganda
 since 2013" (the approved fact is "DishNet Africa has operated since 2013"); 4G, "fixed wireless", "data network";
 activation promises ("we activate", "we will activate", "activate your kit/dish", "5-15 minutes"); response-time
-promises ("within minutes", "within the hour"); and the South Sudan bank names. Each rule first proves it matches a
-sample, so a broken rule cannot pass by matching nothing.
+promises ("within minutes", "within the hour"); the South Sudan bank names; and "working hours", "outside office /
+business hours", "team is back". Each of the 12 rules first proves it matches a sample, so a broken rule cannot pass
+by matching nothing.
 
 The **commercial rule** now also scans the scripts (comments removed first, so a figure a script writes into a page is
 caught), and the tutorials are exempt only inside their phone mock screens: an HTML parser drops `div.tut-step-mock`
-blocks (nested divs included) and scans the rest, so a price in a tutorial's own text fails. Both have controls.
+blocks (nested divs included) and scans the rest — text and attribute values (descriptions, alt text, titles) — so a
+price in a tutorial's own text fails. Both have controls; the mock filter's control has figures before and after a
+mock, so it also proves the filter leaves the mock (a copy whose filter never left it, and a copy that skipped
+attributes, each failed the control).
 
 **Control on the controls:** a throwaway copy with one planted violation of each new rule (a tutorial body price, a
 script price, "answered every day", "Connecting Uganda since 2013", "4G backup", "We activate your kit", "We respond
@@ -344,7 +356,7 @@ Run on the branch, in this container, against a local copy served by nginx with 
 (never against the live site). Every request to another host (the price feed, the chat, the distributor endpoint,
 WhatsApp) was answered by a mock or refused, so nothing reached the live plugin.
 
-### 6.1 Checks (latest run, on `b499a6af`)
+### 6.1 Checks (latest run, on `d1a63dbc`)
 
 | Check | Result |
 |---|---|
@@ -353,8 +365,8 @@ WhatsApp) was answered by a mock or refused, so nothing reached the live plugin.
 | `python3 policies/build.py --check` | exit 0: "policies: up to date" (the FAQ's structured data equals its visible questions) |
 | `bash stamp-assets.sh --check` | exit 0 |
 | `node --check` on every script in `assets/js/` | no syntax error |
-| Browser journeys (Playwright, Chromium) | **754 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect; and for the review fixes: the homepage's closed phone menu unreachable by 40 Tab presses and the page behind the open menu inert (360, 390, 768 px), a feed with plans but no kit still filling the plans grid and building the order flow, a stored lead's session id kept |
-| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; the pre-fix `home.js` lets Tab reach the closed menu; the pre-fix `prices.js` never fills the plans grid when the feed has no kit; the pre-fix `chat.js` drops a stored lead's session id; each positioning rule must match a sample before it scans, and every new rule failed on a planted violation (§4.4) |
+| Browser journeys (Playwright, Chromium) | **762 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect; and for the review fixes: the homepage's closed phone menu unreachable by 40 Tab presses and the page behind the open menu inert (360, 390, 768 px), a feed with plans but no kit still filling the plans grid and building the order flow, a stored lead's session id kept; the own-kit option as an enquiry (no plan step, no price or total, location still required, a WhatsApp text that orders nothing); widening from 1024 to 1300 px with the menu open closes it and releases the page |
+| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; the pre-fix `home.js` lets Tab reach the closed menu; the pre-fix `prices.js` never fills the plans grid when the feed has no kit; the pre-fix `chat.js` drops a stored lead's session id; the `b499a6af` `prices.js` forces a plan step for an own kit; the `b499a6af` `home.js` leaves the page inert after widening; each positioning rule must match a sample before it scans, and every new rule failed on a planted violation (§4.4) |
 | Layout | the distributor page's header was 811 px wide in a 768 px window, on `main` too; fixed (its menu now folds below 900 px, as everywhere else) and measured at 761–1024 px |
 
 ### 6.2 Independent review of the whole diff (`e01696a2..c3274ca4`)
@@ -383,7 +395,31 @@ included in kit packages, already §8.1 item 9).
 ### 6.3 Second review, of the second round (`c3274ca4..b499a6af`)
 
 Three reviewers (tutorial text after the automated replacements; policies and claims; scripts and checks), each
-finding checked by a sceptic. The result and any fixes are recorded below.
+finding checked by a sceptic. **10 confirmed (8 distinct), 7 rejected.** All fixed in `d1a63dbc`:
+
+| # | Confirmed finding | Fix |
+|---|---|---|
+| C0 | help page: "If you message outside working hours … as soon as the team is back" (hours beyond the approved fact) | "You can send your message at any time."; a *working hours* rule in `verify-site.sh` |
+| C1 | location tutorial: "Starlink handles registration approval, KYC verification and activation in your own Starlink account" | the approved sentence, "No approval or activation is promised", and "On a managed plan, send your location…" |
+| C2 | the tutorials' phone menu had no Shop link (Pay a Bill only in the footer) | *Shop Accessories* and *Pay a Bill* added on all 19 |
+| C3, C6 | the own-kit card offered options but the flow still ordered a plan with a total | an enquiry (§3.7), browser test with control |
+| C4, C9 | README said the email is on "every page"; it is on 44 of 63 | the measured count |
+| C5 | widening with the homepage menu open left the page inert | the menu closes when the phone layout ends; browser test with control |
+| C7 | the tutorial-mock filter's control could not show the filter leaving a mock | figures before and after the mock; a weakened copy now fails it |
+| C8 | attribute text outside the mocks was not scanned for prices | attributes scanned; control; a weakened copy fails it |
+
+Rejected, and why (kept for the record): the location mock "Starlink completes activation once the address is
+registered" (the sceptic read it as describing who activates, beside "Starlink controls activation and how long it
+takes" — the owner may still prefer "Starlink then decides on activation"); the get-help mock reply "I can see your
+account" (sample data in a mock); the Terms §3 sentence order (reads correctly); positioning rules not scanning
+scripts (a coverage gap, not a defect of this round; the scripts' visible strings were reviewed by hand); the no-kit
+order flow now offering own kit and Flex (intended); a support-hours rule that matched nothing before this round (it
+guards against reintroduction); the rule/sample count assertion (both lists are equal today).
+
+### 6.4 Third review, of the second-review fixes (`b499a6af..d1a63dbc`)
+
+Two reviewers (order-flow and menu behaviour; text and checks), each finding checked by a sceptic. The result is
+recorded below.
 
 ## 7. Rollback plan
 
@@ -429,9 +465,10 @@ way:
 7. **Flex packages** (kit included, monthly) depend on Starlink's leasing terms; the site shows a Flex card ("Kit
    included") for any priced Flex plan (§5). The sales assistant's knowledge says Flex may be quoted but not contracted
    until management confirms.
-8. **Bring your own kit.** The order flow's "I already have a kit" option now offers installation and support,
-   own-name registration or a managed plan, each reviewed individually. Can a kit bought elsewhere join a managed
-   account at all? The Terms of Sale say imported kits might not be accepted for activation.
+8. **Bring your own kit.** The order flow's "I already have a kit" option is now an enquiry about installation and
+   support, own-name registration or a managed plan, each reviewed individually; it quotes no plan or price. Can a kit
+   bought elsewhere join a managed account at all, and on what terms? The Terms of Sale say imported kits might not be
+   accepted for activation.
 9. **The first month included.** Kit packages say "your first month of internet" is included; for an own-name
    registration, is that a Starlink subscription DishNet pays? The Terms of Service limit it to kit packages; uCRM
    prices installation separately.
