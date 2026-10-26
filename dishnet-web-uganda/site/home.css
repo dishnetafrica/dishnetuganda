@@ -196,7 +196,7 @@ section { scroll-margin-top: 84px; }
 @media (max-width: 760px) { .boundaries { grid-template-columns: 1fr; } }
 
 /* ═══ Two ways ═══════════════════════════════════════════════════════════════════════════════════════════ */
-.ways { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.ways { display: grid; grid-template-columns: minmax(0, 880px); gap: 20px; }
 .way { padding: 30px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); }
 .way h3 { font-size: 22px; }
 .way .kicker { font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--red); margin-bottom: 8px; }
@@ -252,8 +252,8 @@ section { scroll-margin-top: 84px; }
 .helper-result .small-print { color: #9EA1A8; margin-top: auto; }
 @media (max-width: 860px) { .helper { grid-template-columns: 1fr; } }
 
-.plan-band { margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: stretch; }
-.plan-band .availability { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: 4px 28px; align-items: start; }
+.plan-band { margin-top: 16px; display: grid; grid-template-columns: 1fr 2fr; gap: 18px; align-items: stretch; }
+.plan-band .availability { grid-column: auto; display: grid; grid-template-columns: auto 1fr; gap: 4px 28px; align-items: start; }
 .plan-band .availability h3 { grid-row: span 2; margin: 0; }
 .plan { padding: 24px; border-radius: var(--radius); background: #fff; border: 1px solid var(--line); }
 .plan h3 { font-size: 19px; margin-bottom: 6px; }

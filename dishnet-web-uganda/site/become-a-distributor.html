@@ -240,25 +240,6 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
 .wiz-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 32px 26px;border-top:1px solid var(--border);margin-top:14px;flex-wrap:wrap}
 .wiz-foot .spacer{flex:1}
 
-/* planning preview */
-.planning{max-width:860px;margin:26px auto 0;border:1.5px dashed var(--accent);border-radius:16px;background:var(--surface);overflow:hidden}
-.planning-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;background:var(--accent-glow)}
-.planning-head h3{font-family:var(--font-display);font-size:15px;font-weight:800;color:var(--accent);display:flex;align-items:center;gap:8px}
-.planning-head .lock{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent)}
-.planning-body{padding:18px 22px}
-.planning .pp-note{font-size:12.5px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px}
-.pp-sec{margin-bottom:16px}
-.pp-sec h4{font-family:var(--font-display);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-secondary);margin-bottom:8px}
-.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.pp-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 15px}
-.pp-card h5{font-family:var(--font-display);font-size:13px;font-weight:700;margin-bottom:7px}
-.pp-card ul{list-style:none;display:flex;flex-direction:column;gap:5px}
-.pp-card li{font-size:13px;color:var(--text-secondary);line-height:1.5;padding-left:16px;position:relative}
-.pp-card li::before{content:'›';position:absolute;left:0;color:var(--accent);font-weight:700}
-.pp-kv{font-size:13.5px;line-height:1.7}
-.pp-kv b{font-family:var(--font-display)}
-.pp-next{background:var(--accent-glow);border-radius:var(--radius-sm);padding:12px 15px;font-size:13.5px;line-height:1.6}
-
 /* footer */
 .footer{background:var(--dark-bg);color:rgba(255,255,255,.7);padding:46px 0 0;margin-top:0}
 .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;padding-bottom:30px;border-bottom:1px solid rgba(255,255,255,.1)}
@@ -285,7 +266,6 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
   .nav-actions .btn{display:none}
   .svc-grid{grid-template-columns:1fr 1fr}
   .ben-grid{grid-template-columns:1fr}
-  .pp-two{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
 }
 @media (max-width:760px){
@@ -428,20 +408,6 @@ legend.flabel{font-family:var(--font-display);font-size:13px;font-weight:600;mar
         </form>
       </div>
 
-      <!-- INTERNAL PLANNING PREVIEW -->
-      <aside class="planning" id="planning" hidden>
-        <div class="planning-head">
-          <h3>🔒 DishNet Planning Preview</h3>
-          <span class="lock">Internal · not shown to applicants</span>
-        </div>
-        <div class="planning-body" id="planningBody">
-          <p class="pp-note">A planning aid for the DishNet team to read what this application would require. It is generated from the answers on this screen only. It is not an administrative system, it does not store anything, and it is not a real approval. In production this view is for DishNet staff and never exposes an applicant's details publicly.</p>
-          <div id="planningContent"></div>
-        </div>
-      </aside>
-      <div style="max-width:860px;margin:14px auto 0;text-align:center">
-        <button type="button" class="btn btn-ghost" id="btnPlanning" style="font-size:13px;padding:9px 18px">Show DishNet Planning Preview (internal)</button>
-      </div>
     </div>
   </section>
 </main>
@@ -611,34 +577,6 @@ var TRAIN_TECH=[
   M('Escalation to authorised DishNet technicians','When a job must go to a trained DishNet technician.','Technical / support staff','~30 min',false),
   M('Safety & customer-premises requirements','Working safely on a customer’s premises.','Technical staff','~45 min',true)
 ];
-
-/* responsibilities matrix by model: partner vs DishNet */
-var RESP={
-  corporate:{
-    partner:['Coordinate outlets and nominate outlet contacts','Submit orders through the agreed process','Hand over equipment and onboard customers at outlets','Provide first-line assistance and report at outlet level'],
-    dishnet:['Approve the partner and each outlet','Provide training and account management','Set up the DishNet service and arrange Starlink activation, which Starlink approves','Invoice, collect and own the customer billing relationship','Provide technical installation and escalation']
-  },
-  regional:{
-    partner:['Develop the territory and support outlets','Order, receive and move stock accurately','Report sales and stock back to DishNet','Collect and settle only where authorised in writing'],
-    dishnet:['Approve the distributor and its territory','Supply stock under agreed terms and ownership','Provide training, pricing and settlement rules','Invoice and reconcile; own the billing relationship','Provide technical installation and escalation']
-  },
-  retail:{
-    partner:['Sell approved products and plans at the outlet','Place orders and onboard customers correctly','Handle hardware, payments and receipts properly','Provide first-line assistance and escalate'],
-    dishnet:['Approve the outlet','Provide training, product list and prices','Set up the DishNet service and arrange Starlink activation, which Starlink approves','Invoice and own the billing relationship','Provide technical installation and escalation']
-  },
-  referral:{
-    partner:['Introduce and register genuine leads','Follow ethical sales and privacy rules','Hand the customer to DishNet to close and serve'],
-    dishnet:['Approve the referral partner','Provide lead-handling training and tracking','Qualify, quote, sell and onboard the customer','Own the customer, billing and support entirely','Recognise referrals under agreed terms']
-  }
-};
-
-/* approvals DishNet would make, by model */
-var APPROVALS={
-  corporate:['Partner (company) approval','Each outlet approval','Services and locations offered','Any stock / credit arrangement (separate, in writing)'],
-  regional:['Partner (company) approval','Territory definition','Stock supply and ownership terms','Settlement and collection authority (separate, in writing)'],
-  retail:['Partner (outlet) approval','Products and plans the outlet may sell','Any stock / payment handling terms'],
-  referral:['Referral partner approval','Lead-handling and attribution terms']
-};
 
 /* ---------- state ---------- */
 var S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false};
@@ -944,47 +882,9 @@ STEP_HTML[7]=function(){
     '</ol>'+
     '<div class="notice"><span class="ic">ℹ️</span><div>Submitting this form does not appoint you as a DishNet distributor, activate credit, allocate stock or grant portal access, and does not guarantee approval or any commercial terms.</div></div>'+
     '<div class="contact-inline">Talk to the DishNet partner team:<span class="big">'+esc(WA_DISPLAY)+'</span>WhatsApp / phone &nbsp;·&nbsp; <span style="user-select:all">'+esc(EMAIL)+'</span><br>'+
-      '<a class="btn btn-primary" style="margin-top:12px" href='+JSON.stringify(waLink(msg))+' target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>'+
-    '<p class="hint" style="text-align:center">You can reopen the DishNet Planning Preview below to see how your answers map to DishNet’s internal process.</p>';
+      '<a class="btn btn-primary" style="margin-top:12px" href='+JSON.stringify(waLink(msg))+' target="_blank" rel="noopener">'+(stored?'Message DishNet on WhatsApp':'Send my details on WhatsApp')+'</a></div>';
   return html;
 };
-wire[7]=function(){ renderPlanning(); };
-
-/* ---------- planning preview ---------- */
-function renderPlanning(){
-  var host=document.getElementById('planningContent');if(!host)return;
-  if(!S.model){host.innerHTML='<p class="rev-empty">Choose a partner model and fill in the application to populate this preview.</p>';return;}
-  var p=S.profile,c=S.coverage;
-  var resp=RESP[S.model]||{partner:[],dishnet:[]};
-  var appr=APPROVALS[S.model]||[];
-  var groups=computeTraining();var modCount=groups.reduce(function(n,g){return n+g.mods.length;},0);
-  var needsStock=(S.activities.indexOf('stock')>-1||S.activities.indexOf('outlet')>-1||S.model==='regional'||S.model==='corporate');
-  var needsColl=(S.model==='regional'||S.model==='corporate');
-  var h='';
-  h+='<div class="pp-sec"><h4>Application summary</h4><div class="pp-kv">'+
-    '<b>Model:</b> '+esc(MODEL_NAME[S.model])+'<br>'+
-    '<b>Business:</b> '+esc(p.biz_name||'—')+(p.city?(' · '+esc(p.city)):'')+'<br>'+
-    '<b>Contact:</b> '+esc([p.contact_name,p.email,p.phone].filter(Boolean).join(' · ')||'—')+'<br>'+
-    '<b>Services:</b> '+esc(S.services.map(function(x){return SERVICE_NAME[x];}).join(', ')||'—')+'<br>'+
-    '<b>Activities:</b> '+esc(S.activities.map(function(x){return ACT_NAME[x];}).join(', ')||'—')+'</div></div>';
-  h+='<div class="pp-sec"><h4>Responsibilities</h4><div class="pp-two">'+
-    '<div class="pp-card"><h5>The partner would</h5><ul>'+resp.partner.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>'+
-    '<div class="pp-card"><h5>DishNet would</h5><ul>'+resp.dishnet.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div></div></div>';
-  h+='<div class="pp-sec"><h4>Operational requirements</h4><div class="pp-two">'+
-    '<div class="pp-card"><h5>Stock &amp; outlets</h5><ul>'+(needsStock?['A stock location per outlet / partner warehouse','Dispatch and receipt tracking','Ownership vs custody (if consignment is agreed)'].map(function(x){return '<li>'+esc(x)+'</li>';}).join(''):'<li>Not required for this model</li>')+'</ul></div>'+
-    '<div class="pp-card"><h5>Collections &amp; settlement</h5><ul>'+(needsColl?['Settlement rules and statements','Collection authority only where agreed in writing','Reconciliation against DishNet invoices'].map(function(x){return '<li>'+esc(x)+'</li>';}).join(''):'<li>DishNet owns billing; no partner collection needed</li>')+'</ul></div></div></div>';
-  h+='<div class="pp-sec"><h4>Training to assign</h4><div class="pp-kv">'+modCount+' modules across '+groups.length+' group'+(groups.length>1?'s':'')+' — '+groups.map(function(g){return esc(g.label)+' ('+g.mods.length+')';}).join('; ')+'.</div></div>';
-  h+='<div class="pp-sec"><h4>Approvals DishNet would need</h4><div class="pp-card"><ul>'+appr.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div></div>';
-  var next='Create one uCRM <b>company client</b> for the partner legal entity and tag it as a partner (not a retail customer), then record the partner, outlets and training plan in the distribution module. Do not activate credit, allocate stock or grant portal access until approved. See the integration notes (docs/48) for the field-by-field mapping.';
-  h+='<div class="pp-sec"><h4>Suggested next internal step</h4><div class="pp-next">'+next+'</div></div>';
-  host.innerHTML=h;
-}
-var btnPlanning=document.getElementById('btnPlanning');
-btnPlanning.addEventListener('click',function(){
-  var pl=document.getElementById('planning');var open=!pl.hidden;
-  if(open){pl.hidden=true;btnPlanning.textContent='Show DishNet Planning Preview (internal)';}
-  else{renderPlanning();pl.hidden=false;btnPlanning.textContent='Hide DishNet Planning Preview';pl.scrollIntoView({behavior:'smooth',block:'start'});}
-});
 
 /* ---------- validation dispatch ---------- */
 var VALID=[validate0,validate1,validate2,validate3,validate4,validate5,validate6];
@@ -999,7 +899,6 @@ btnNext.addEventListener('click',function(){
         btnNext.disabled=false; btnNext.textContent=_t;
         try{sessionStorage.removeItem(STORE_KEY);}catch(e){}
         step=7; renderStep();
-        if(!document.getElementById('planning').hidden)renderPlanning();
       });
       return;
     }
@@ -1008,7 +907,7 @@ btnNext.addEventListener('click',function(){
 });
 btnBack.addEventListener('click',function(){ if(step>0){ if(step<=6&&VALID[step-0]){/* capture current without blocking */ try{captureSoft();}catch(e){}} step--; renderStep(); }});
 function captureSoft(){ if(step===1)grabProfile(); else if(step===2)grabCoverage(); else if(step===3){S.services=Array.prototype.map.call(body.querySelectorAll('input[name=services]:checked'),function(x){return x.value;});S.activities=Array.prototype.map.call(body.querySelectorAll('input[name=activities]:checked'),function(x){return x.value;});} else if(step===4)grabReadiness(); save(); }
-btnRestart.addEventListener('click',function(){ S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false}; submitState={busy:false,done:false,ok:false,ref:''}; try{sessionStorage.removeItem(STORE_KEY);}catch(e){} step=0; document.getElementById('planning').hidden=true; btnPlanning.textContent='Show DishNet Planning Preview (internal)'; renderStep(); });
+btnRestart.addEventListener('click',function(){ S={model:'',profile:{},coverage:{outlets:[]},services:[],activities:[],readiness:{},consent:false}; submitState={busy:false,done:false,ok:false,ref:''}; try{sessionStorage.removeItem(STORE_KEY);}catch(e){} step=0; renderStep(); });
 
 /* ---------- boot ---------- */
 load();
