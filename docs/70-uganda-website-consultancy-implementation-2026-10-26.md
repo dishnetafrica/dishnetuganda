@@ -27,7 +27,7 @@ are **undecided by the owner, so they are kept** (§9) and their open points are
 | Policy source | `dishnet-web-uganda/policies/` (`build.py` + `bodies/`); the nine policy pages are generated, never edited by hand |
 | Checks | `verify-site.sh`, `verify-address.py`, `policies/build.py --check`, `stamp-assets.sh --check` |
 | The diff | `git diff e01696a2..claude/uganda-site-consultancy -- dishnet-web-uganda docs/70-*` |
-| Commits | `1db9c1ec` the implementation · `8e2b2505` kits cost box and wording · `c3274ca4` this record (draft) · `aa7759ac` tutorials, residual policy items, guards · `b499a6af` independent-review fixes · `9cee1265` this record · `d1a63dbc` second-review fixes · later commits: this record (§6.4) |
+| Commits | `1db9c1ec` the implementation · `8e2b2505` kits cost box and wording · `c3274ca4` this record (draft) · `aa7759ac` tutorials, residual policy items, guards · `b499a6af` independent-review fixes · `9cee1265` this record · `d1a63dbc` second-review fixes · `3ad5a20d` this record · `1ae1d57b` third-review fix · the commit after it: this record, final |
 
 ## 2. Implementation plan — in the existing structure and release process
 
@@ -186,7 +186,8 @@ Hotspot content stays (owner undecided); its comparisons with mobile data and it
   DishNet plan", and after a first rewording the flow behind it still forced a plan, printed "Total today" and sent "I
   would like to order Starlink … Plan: … Total today"; second review C3/C6). It is now an **enquiry**: no plan step, no
   price or total, the button reads *Send my enquiry on WhatsApp*, and the message asks about "installation and support,
-  registering it in my own name, or a managed DishNet plan", with the location the visitor typed (still required).
+  registering it in my own name, or a managed DishNet plan", with the location the visitor typed (still required; with
+  the box emptied, the prompt asks for a location "to send your enquiry", not "to complete your order").
 - **Widening the window with the homepage menu open left the page inert** behind a menu that the wider layout hides
   (second review C5); the menu now closes when the phone layout ends.
 
@@ -356,7 +357,7 @@ Run on the branch, in this container, against a local copy served by nginx with 
 (never against the live site). Every request to another host (the price feed, the chat, the distributor endpoint,
 WhatsApp) was answered by a mock or refused, so nothing reached the live plugin.
 
-### 6.1 Checks (latest run, on `d1a63dbc`)
+### 6.1 Checks (final run, on `1ae1d57b`)
 
 | Check | Result |
 |---|---|
@@ -365,8 +366,8 @@ WhatsApp) was answered by a mock or refused, so nothing reached the live plugin.
 | `python3 policies/build.py --check` | exit 0: "policies: up to date" (the FAQ's structured data equals its visible questions) |
 | `bash stamp-assets.sh --check` | exit 0 |
 | `node --check` on every script in `assets/js/` | no syntax error |
-| Browser journeys (Playwright, Chromium) | **762 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect; and for the review fixes: the homepage's closed phone menu unreachable by 40 Tab presses and the page behind the open menu inert (360, 390, 768 px), a feed with plans but no kit still filling the plans grid and building the order flow, a stored lead's session id kept; the own-kit option as an enquiry (no plan step, no price or total, location still required, a WhatsApp text that orders nothing); widening from 1024 to 1300 px with the menu open closes it and releases the page |
-| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; the pre-fix `home.js` lets Tab reach the closed menu; the pre-fix `prices.js` never fills the plans grid when the feed has no kit; the pre-fix `chat.js` drops a stored lead's session id; the `b499a6af` `prices.js` forces a plan step for an own kit; the `b499a6af` `home.js` leaves the page inert after widening; each positioning rule must match a sample before it scans, and every new rule failed on a planted violation (§4.4) |
+| Browser journeys (Playwright, Chromium) | **763 passed, 0 failed** (exit 0): every page at 360, 390, 768, 1024 and 1440 px loads with no script error, no failed same-site request, no sideways scroll and no fibre / LTE / 24-7 / region claim; homepage wording, CCTV separation, menu, the WhatsApp button and chat launcher not overlapping; the consultation form refuses an empty form and a malformed e-mail, then prepares the WhatsApp message and claims nothing was sent; the kit guide; the kits page order flow with the recorded uCRM names (kits offered, location required, the WhatsApp order carries kit and location), with older names, business and Flex plans, and with the price feed down; the chat (stored, refused, network failure); the distributor wizard walked to a stored submission; the 404 page at a nested address; the header button and phone menu on every page; every redirect; and for the review fixes: the homepage's closed phone menu unreachable by 40 Tab presses and the page behind the open menu inert (360, 390, 768 px), a feed with plans but no kit still filling the plans grid and building the order flow, a stored lead's session id kept; the own-kit option as an enquiry (no plan step, no price or total, location still required with an enquiry prompt, a WhatsApp text that orders nothing); widening from 1024 to 1300 px with the menu open closes it and releases the page |
+| Controls (the checks can fail) | the main-branch `prices.js` offers **no kit** in the order flow for the recorded names; the main-branch `chat.js` **thanks a visitor whose details were refused**; the pre-fix `home.js` lets Tab reach the closed menu; the pre-fix `prices.js` never fills the plans grid when the feed has no kit; the pre-fix `chat.js` drops a stored lead's session id; the `b499a6af` `prices.js` forces a plan step for an own kit; the `d1a63dbc` `prices.js` tells an enquirer to "complete your order"; the `b499a6af` `home.js` leaves the page inert after widening; each positioning rule must match a sample before it scans, and every new rule failed on a planted violation (§4.4) |
 | Layout | the distributor page's header was 811 px wide in a 768 px window, on `main` too; fixed (its menu now folds below 900 px, as everywhere else) and measured at 761–1024 px |
 
 ### 6.2 Independent review of the whole diff (`e01696a2..c3274ca4`)
@@ -418,8 +419,20 @@ guards against reintroduction); the rule/sample count assertion (both lists are 
 
 ### 6.4 Third review, of the second-review fixes (`b499a6af..d1a63dbc`)
 
-Two reviewers (order-flow and menu behaviour; text and checks), each finding checked by a sceptic. The result is
-recorded below.
+Two reviewers (order-flow and menu behaviour; text and checks), each finding checked by a sceptic. **1 confirmed,
+4 rejected.**
+
+- **Confirmed and fixed (`1ae1d57b`):** with the location box emptied, the own-kit button (rightly still gated on a
+  location by `order.js`) said "to complete your order". The button now carries `data-of-kind="enquiry"` and the
+  prompt says "to send your enquiry"; browser test with control.
+- **Rejected:** no scroll to the summary after choosing the own kit (the summary sits directly under the card, which
+  is marked selected — polish, not a defect); focus falling to the page after widening with the menu open (the wider
+  layout hides the focused button whatever the script does; the page is released, which was the defect); "You can send
+  your message at any time" read as an hours claim (it describes sending, not answering, and sits after the approved
+  sentence); the working-hours rule's sample exercising only one of its three alternatives (the rule works; a sample
+  per alternative would be stricter, recorded as an optional improvement).
+
+Every confirmed finding of the three reviews is fixed or, where it lies outside the site (review 1 C7), listed in §5.
 
 ## 7. Rollback plan
 
