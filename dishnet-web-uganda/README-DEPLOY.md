@@ -68,7 +68,7 @@ Prices and the product list live in uCRM only.
 
 | Item | Where |
 | --- | --- |
-| Email `info@dishnetafrica.com` | every page — confirmed by the owner as the consultation address (`docs/70`, decision 9) |
+| Email `info@dishnetafrica.com` | 44 of the 63 HTML files (all but `shop.html` and 18 of the 19 tutorials) — confirmed by the owner as the consultation address (`docs/70`, decision 9) |
 | APK | not published (operator, 25 Sep 2026). `get-the-app.html` says *coming soon* with a WhatsApp "tell me" button instead of a download that 404'd. When the signed app exists: drop it at `site/dishnet-africa.apk` and put the download button back (nginx already serves `.apk` with the right MIME type) |
 | Testimonials / gallery | deliberately absent — send real Ugandan quotes and photos and the pages get built; invented ones are fake reviews |
 | Portal deep-link | DONE 26 Sep 2026: every "Customer Login" opens `public.php?page=customer_login`, which sends a customer with a live session straight to the portal. Since 16 Oct 2026 the 197 links on 64 pages point at `/login` and nginx redirects (302) to that URL; `verify-site.sh` fails on any page that links `page=customer_login` directly and checks the 302 and its `Location`. A short address on the CRM host (`/customer-login`, one Traefik file) is optional and separate |

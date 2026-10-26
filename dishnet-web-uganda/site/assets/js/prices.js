@@ -277,8 +277,8 @@
       }
       h += '<button type="button" class="of-card" data-hw="__own">' +
         '<h4>I already have a kit</h4>' +
-        '<div class="of-sub">Already have a Starlink kit? Ask us about installation and support, about registering in your own name, or about a managed DishNet plan — each case is reviewed individually, subject to Starlink\'s terms.</div>' +
-        '<div class="of-price">No hardware needed</div>' +
+        '<div class="of-sub">Ask us about installation and support, registering it in your own name, or a managed DishNet plan — each case is reviewed individually, subject to Starlink\'s terms.</div>' +
+        '<div class="of-price">An enquiry <small>no price until we have talked</small></div>' +
         '</button>';
       return h;
     }
@@ -323,20 +323,15 @@
         rows.push(['First month of internet', 'Included']);
         today = kit.price;
         recurNote = 'Then ' + fmt(cur, monthly) + '/month from month 2';
-      } else if (state.hw === '__flex') {
+      } else {   // Flex; the own-kit option never reaches a receipt (it is an enquiry, see paint())
         rows.push([state.plan.name + ' — Starlink Mini + installation + internet', fmt(cur, monthly) + '/month']);
         rows.push(['Kit', 'Included in the monthly price']);
-        today = monthly;
-        recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
-      } else {
-        rows.push([state.plan.name + ' — first month', fmt(cur, monthly)]);
-        rows.push(['Connecting your own Starlink kit', 'Our team confirms']);
         today = monthly;
         recurNote = 'Then ' + fmt(cur, monthly) + ' every month';
       }
       return '<div class="of-receipt">' +
         rows.map(function (r) {
-          return '<div class="of-rrow' + (r[1] === 'Included' || r[1] === 'Our team confirms' ? ' inc' : '') + '">' +
+          return '<div class="of-rrow' + (r[1] === 'Included' ? ' inc' : '') + '">' +
             '<span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>';
         }).join('') +
         '<div class="of-rrow total"><span>Total today</span><span>' + esc(fmt(cur, today)) + '</span></div>' +
@@ -345,10 +340,13 @@
     }
 
     function paint() {
+      // Someone who already has a kit is asking, not ordering: whether it can be installed, registered in their own
+      // name or put on a managed plan is reviewed case by case (decisions 2 and 3), so no plan, price or total.
+      var own = state.hw === '__own';
       var html =
         '<div class="of-step">Step 1</div><div class="of-title">Choose your hardware</div>' +
         '<div class="of-grid" data-of-hw>' + hwCards() + '</div>';
-      if (state.hw) {
+      if (state.hw && !own) {
         html +=
           '<div class="of-step">Step 2</div><div class="of-title">Choose your plan</div>' +
           '<div class="of-grid" data-of-plan>' + planCards() + '</div>';
@@ -356,13 +354,15 @@
       html +=
         '<div class="of-summary">' +
           '<div class="of-sumtext" data-of-sum>' +
-            (state.hw && state.plan ? receipt() :
+            (own ? '<b>' + esc(hwLabel()) + '</b> — our team goes through your kit and your options with you on WhatsApp: installation and support, registering it in your own name, or a managed DishNet plan. No price is quoted until then.' :
+              state.hw && state.plan ? receipt() :
               state.hw ? '<b>' + esc(hwLabel()) + '</b> — now choose a plan' :
               'Pick your hardware to get started — prices are live from our billing system.') +
           '</div>' +
-          '<button type="button" class="of-wa" data-of-wa' + (state.hw && state.plan ? '' : ' disabled') + '>Complete order on WhatsApp</button>' +
+          '<button type="button" class="of-wa" data-of-wa' + (own || (state.hw && state.plan) ? '' : ' disabled') + '>' +
+            (own ? 'Send my enquiry on WhatsApp' : 'Complete order on WhatsApp') + '</button>' +
         '</div>' +
-        '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>';
+        (own ? '' : '<p class="of-vat">A team member confirms everything on WhatsApp before you pay — the total shown is the total invoiced.</p>');
       host.innerHTML = html;
       Array.prototype.forEach.call(host.querySelectorAll('[data-hw]'), function (el) {
         if (state.hw && el.getAttribute('data-hw') === state.hw) el.classList.add('sel');
@@ -392,6 +392,13 @@
         return;
       }
       var wa = t.closest('[data-of-wa]');
+      if (wa && state.hw === '__own') {
+        var where = (typeof window.DN_ADDR === 'function') ? window.DN_ADDR() : '';
+        window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent('Hello DishNet, I already have a Starlink kit. ' +
+          'I would like to discuss installation and support, registering it in my own name, or a managed DishNet plan.' +
+          (where ? '\n' + where : '')), '_blank');
+        return;
+      }
       if (wa && state.hw && state.plan) {
         var kit = kits.filter(function (k) { return k.name === state.hw; })[0] || null;
         var today = kit ? kit.price : state.plan.price;

@@ -42,6 +42,12 @@
   closeBtn.addEventListener('click', function () { setMenu(false); });
   menu.addEventListener('click', function (e) { if (e.target === menu) setMenu(false); });
   menu.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setMenu(false, true); }); });
+  // Widened past the phone layout (home.css hides the menu above 1140px) with the menu open: close it, or the page
+  // would stay inert behind a menu nobody can see.
+  var narrow = window.matchMedia ? window.matchMedia('(max-width: 1140px)') : null;
+  var onWide = function (e) { if (!e.matches && menu.classList.contains('open')) setMenu(false, true); };
+  if (narrow && narrow.addEventListener) narrow.addEventListener('change', onWide);
+  else if (narrow && narrow.addListener) narrow.addListener(onWide);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.classList.contains('open')) setMenu(false); });
 
   /* Reveal on scroll */

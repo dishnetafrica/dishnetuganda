@@ -216,17 +216,20 @@ class OutsideMocks(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True); self.mock = 0; self.text = []
     def handle_starttag(self, tag, attrs):
-        if tag != 'div': return
-        if self.mock: self.mock += 1
-        elif any(k == 'class' and v and 'tut-step-mock' in v.split() for k, v in attrs): self.mock = 1
+        if tag == 'div':
+            if self.mock: self.mock += 1; return
+            if any(k == 'class' and v and 'tut-step-mock' in v.split() for k, v in attrs): self.mock = 1; return
+        if not self.mock: self.text.extend(v for _, v in attrs if v)   # descriptions, alt and titles count too
     def handle_endtag(self, tag):
         if tag == 'div' and self.mock: self.mock -= 1
     def handle_data(self, d):
         if not self.mock: self.text.append(d)
 def outside_mocks(t):
     p = OutsideMocks(); p.feed(t); return ' '.join(p.text)
-# Control: a figure inside a mock (nested divs included) is skipped; one in the text around it is not.
-if re.findall(PRICE, outside_mocks('<p>UGX 500 an hour</p><div class="tut-step-mock"><div>$80</div><div>UGX 9</div></div><p>x</p>')) != ['UGX 500']:
+# Controls: a figure inside a mock (nested divs included) is skipped; figures before and after it are not, so the filter
+# provably leaves the mock again; an attribute outside a mock is scanned, one inside is not.
+if (re.findall(PRICE, outside_mocks('<p>UGX 500 an hour</p><div class="tut-step-mock"><div>$80</div><div>UGX 9</div></div><p>UGX 7 a day</p>')) != ['UGX 500', 'UGX 7']
+        or re.findall(PRICE, outside_mocks('<meta content="UGX 3"><div class="tut-step-mock"><img alt="UGX 4"></div>')) != ['UGX 3']):
     print('  CONTROL FAILED: the tutorial mock filter'); sys.exit(1)
 for f in glob.glob(os.path.join(root, '**', '*.html'), recursive=True):
     t = open(f, encoding='utf-8', errors='ignore').read()
@@ -263,12 +266,13 @@ rules = [(re.compile(r'fib(?:er|re)', re.I), 'fibre'), (re.compile(r'\bLTE\b'), 
          (re.compile(r'\b4G\b|fixed wireless|data network', re.I), 'an alternative connectivity offer'),
          (re.compile(r'\bwe activate\b|\bwe will activate\b|activate your (?:kit|dish)|5-15 minutes', re.I), 'an activation promise (Starlink controls activation)'),
          (re.compile(r'within minutes|within the hour', re.I), 'a response-time promise'),
-         (re.compile(r'Stanbic|Equity Bank', re.I), 'a South Sudan payment remnant')]
+         (re.compile(r'Stanbic|Equity Bank', re.I), 'a South Sudan payment remnant'),
+         (re.compile(r'working hours|outside (?:office|business) hours|team is back', re.I), 'unapproved support-hours wording')]
 # Control: each rule must match its own sample first, so a rule broken by an edit cannot pass by matching nothing.
 for (rx, name), sample in zip(rules, ('Fibre plans', 'Starlink, LTE', 'support 24/7', 'across all four regions',
                                       'over 10+ years in two countries', 'WhatsApp, answered every day',
                                       'Connecting Uganda since 2013', '4G backup', 'we activate your kit',
-                                      'We respond within minutes', 'Bank: Stanbic')):
+                                      'We respond within minutes', 'Bank: Stanbic', 'If you message outside working hours')):
     if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
 files = glob.glob(os.path.join(root, '**', '*.html'), recursive=True) + [os.path.join(root, f) for f in ('sitemap.xml', 'robots.txt')]
 for f in files:
@@ -276,7 +280,7 @@ for f in files:
     for rx, name in rules:
         for m in rx.finditer(t):
             print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
-assert len(rules) == 11
+assert len(rules) == 12
 if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, company fact, support-hours wording,'
                   ' alternative connectivity, activation or response-time promise or South Sudan payment remnant on any page'
                   ' (rules self-checked)')
