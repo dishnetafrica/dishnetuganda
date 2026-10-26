@@ -150,7 +150,7 @@ is_(strpos($tab, 'CrmApiClient') === false, 'the tab calls no uCRM');
 
 echo "\nG. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.100', 'manifest version is 5.18.71');   // 5.18.100 (was 5.18.99)
+is_(($mani['information']['version'] ?? '') === '5.18.101', 'manifest version is 5.18.71');   // 5.18.101 (was 5.18.100)
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

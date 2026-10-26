@@ -1905,7 +1905,8 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
         [$mn, hash('sha256', $mw) === hash('sha256', $mr)], [1, true]);
     // This tree against 5.18.98: it removes none of 5.18.98's files, keeps every file 5.18.98 added or changed exactly as
     // 5.18.98 left it, and moves only the version line of manifest.json (5.18.99; a later release moves this pin on —
-    // 5.18.100 did: neither 5.18.99 nor 5.18.100 touches 5.18.98's six files, and 5.18.99 moved only the version line).
+    // 5.18.100 and 5.18.101 did: none of 5.18.99, 5.18.100 or 5.18.101 touches 5.18.98's six files, and 5.18.99 moved only
+    // the version line).
     t('this tree removes none of ' . PL_REL . "'s files (" . count($curFiles) . ' outside tests/ and docs/)',
         [array_values(array_diff($relFiles, $curFiles)), count($curFiles) > 300], [[], true]);
     $since = [];
@@ -1916,8 +1917,8 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     }
     t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
         [$since, count($held)], [[], 6]);
-    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.100",', $mr, $mtn);
-    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.100",
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.101",', $mr, $mtn);
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.101",
         [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {

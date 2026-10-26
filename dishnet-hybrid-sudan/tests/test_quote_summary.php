@@ -311,6 +311,23 @@ is_(strpos($t, "🏷️ *Total: UGX 2,648,000*\n" . $TAXLINE . "\n") !== false,
 $ssHas = array_keys(array_filter($ss, fn($x) => strpos($x, 'All prices include all taxes') !== false));
 is_($ssHas === [], 'South Sudan: none of its four summaries carries it (section A proves them byte for byte)', implode(', ', $ssHas));
 
+// ── L. 5.18.101: the sign-off ──────────────────────────────────────────────
+echo "\nL. 5.18.101 — a Uganda summary ends with the owner's sign-off; South Sudan's ends as before\n";
+// The owner's choice, 26 Oct 2026 ("instead of dishnet internet services use relevant wording"), pinned here as
+// written — not read from the code under test.
+$SIGNOFF = '🛰️ *DishNet Uganda — Starlink, installation & support*';
+$OLDSIGN = '🚀 *DishNet Internet Services*';
+$endsWith = fn(string $t, string $s): bool => $s !== '' && substr($t, -strlen("\n\n" . $s)) === "\n\n" . $s;
+[$t, $count, ] = summary($UG, $Q_ORDER, 50);
+is_($count === 1 && $endsWith($t, $SIGNOFF) && substr_count($t, $SIGNOFF) === 1,
+    'order 000114: the summary ends with the owner\'s sign-off, once', $t);
+is_(strpos($t, 'DishNet Internet Services') === false, 'and no longer says "DishNet Internet Services"', $t);
+[$t, , ] = summary($UG, $Q_ORDER, 51, ['plans_down' => true]);
+is_($endsWith($t, $SIGNOFF), 'uCRM cannot list its plans: the same sign-off — the quotation is Uganda\'s either way', $t);
+$ssOld = array_keys(array_filter($ss, fn($x) => !$endsWith($x, $OLDSIGN) || strpos($x, $SIGNOFF) !== false));
+is_($ssOld === [], 'South Sudan: all four summaries still end "DishNet Internet Services" (section A proves them byte for byte)',
+    implode(', ', $ssOld));
+
 // ── J. weakened copies of webhook.php must each fail ──────────────────────
 echo "\nJ. Weakened copies of webhook.php — each must be caught\n";
 $MUTS = [];
@@ -380,6 +397,20 @@ $weakened('the tax line never sent',
         [$t, , ] = summary($UG, $Q_ORDER, $n++);
         return strpos($t, $TAXLINE) === false;
     });
+$weakened('the Uganda sign-off sent to South Sudan too',
+    '. ($ugPlans !== false ? \'🛰️ *DishNet Uganda — Starlink, installation & support*\' : \'🚀 *DishNet Internet Services*\');',
+    '. \'🛰️ *DishNet Uganda — Starlink, installation & support*\';',
+    function () use (&$n, $SS_USD, $Q_ORDER, $gold): bool {
+        [$t, , ] = summary($SS_USD, $Q_ORDER, $n++);
+        return $t !== (string)$gold['summaries']['usd-order'];
+    });
+$weakened('the old sign-off kept for Uganda',
+    '. ($ugPlans !== false ? \'🛰️ *DishNet Uganda — Starlink, installation & support*\' : \'🚀 *DishNet Internet Services*\');',
+    '. \'🚀 *DishNet Internet Services*\';',
+    function () use (&$n, $UG, $Q_ORDER, $SIGNOFF, $endsWith): bool {
+        [$t, , ] = summary($UG, $Q_ORDER, $n++);
+        return !$endsWith($t, $SIGNOFF);
+    });
 is_(glob($root . '/webhook.qsmut-*.php') === [], 'no weakened copy is left beside webhook.php');
 
 // ── I. the source ─────────────────────────────────────────────────────────
@@ -388,6 +419,69 @@ $src = (string)file_get_contents($root . '/webhook.php');
 is_(strpos($src, 'PublicPriceFeed::planKey(') !== false, 'Uganda finds the plan with the same rule as the price feed and the assistant');
 is_(substr_count($src, "\"💰 Hardware: \"") === 1 && substr_count($src, "\"💰 Monthly: \"") === 1,
     'the old two lines remain, once — South Sudan\'s');
+
+// ── M. 5.18.101's release boundary ─────────────────────────────────────────
+// Measured against the 5.18.100 release commit from Git, as tests/test_sales_numbers.php R measured 5.18.100's against
+// 5.18.99's. It reads this checkout; a later release re-points it.
+echo "\nM. 5.18.101's release boundary: this tree against 8ff469f5 (the 5.18.100 release commit), from Git\n";
+const QS_M_BASE = '8ff469f5';
+const QS_M_CODE = ['manifest.json', 'webhook.php'];
+const QS_M_DOCS = ['SAFETY.md', 'tests/test_bank_boundaries.php', 'tests/test_cashbook_physical_list.php',
+    'tests/test_distributor_apply.php', 'tests/test_distributor_link_ucrm.php', 'tests/test_distributor_notify.php',
+    'tests/test_distributor_registry.php', 'tests/test_distributor_territory.php', 'tests/test_quote_company.php',
+    'tests/test_quote_summary.php', 'tests/test_sales_numbers.php'];
+$gitM = function (string $args) use ($root): ?array {
+    $o = []; exec('git -C ' . escapeshellarg($root) . ' ' . $args . ' 2>/dev/null', $o, $rc);
+    return $rc === 0 ? $o : null;
+};
+$showM = function (string $rel) use ($root): ?string {
+    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg(QS_M_BASE . ':dishnet-hybrid-sudan/' . $rel)
+                           . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
+    if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
+    return substr($o, 0, -strlen($m[0]));
+};
+$gdM = $gitM('diff --name-only --relative ' . escapeshellarg(QS_M_BASE) . ' -- .');
+$guM = $gitM('ls-files --others --exclude-standard -- .');
+$wbM = $showM('webhook.php');
+$mbM = $showM('manifest.json');
+if ($gdM === null || $guM === null || $wbM === null || $mbM === null) {
+    is_(false, 'M Git supplies ' . QS_M_BASE . ' — without it the boundary cannot be measured: a failure, never a skip');
+} else {
+    $allM = array_values(array_unique(array_filter(array_merge($gdM, $guM), 'strlen')));
+    sort($allM);
+    $isDocM = function (string $rel): bool { return substr($rel, -3) === '.md' || in_array(explode('/', $rel)[0], ['tests', 'docs'], true); };
+    $codeM = array_values(array_filter($allM, function ($r) use ($isDocM) { return !$isDocM($r); }));
+    $docsM = array_values(array_filter($allM, $isDocM));
+    $wantM = QS_M_DOCS; sort($wantM);
+    is_($codeM === QS_M_CODE, 'M outside tests and documents it changes exactly manifest.json and webhook.php: no migration, no other runtime file',
+        json_encode($codeM));
+    is_($docsM === $wantM, 'M … and exactly the ' . count(QS_M_DOCS) . ' declared tests and documents',
+        json_encode(['not declared' => array_values(array_diff($docsM, $wantM)), 'not changed' => array_values(array_diff($wantM, $docsM))]));
+    $mwM = str_replace('    "version": "5.18.100",', '    "version": "5.18.101",', $mbM, $mnM);
+    is_($mnM === 1 && $mwM === (string)@file_get_contents($root . '/manifest.json'),
+        'M manifest.json is ' . QS_M_BASE . '\'s with one line changed, its version, 5.18.100 → 5.18.101');
+    // webhook.php: put 5.18.100's line back in place of this release's block, and the file must be 8ff469f5's, byte for byte.
+    $newM = (string)@file_get_contents($root . '/webhook.php');
+    $oldLineM = '            $msg .= "\n\n🚀 *DishNet Internet Services*";' . "\n";
+    $endMarkM = ": '🚀 *DishNet Internet Services*');\n";
+    $startM = strpos($newM, '            // 5.18.101: Uganda signs off');
+    $endM = $startM === false ? false : strpos($newM, $endMarkM, $startM);
+    $spanM = ($startM === false || $endM === false) ? '' : substr($newM, $startM, $endM + strlen($endMarkM) - $startM);
+    $backM = $spanM === '' ? null : substr($newM, 0, $startM) . $oldLineM . substr($newM, $startM + strlen($spanM));
+    is_($backM !== null && substr_count($spanM, "\n") === 3 && substr_count($wbM, $oldLineM) === 1 && $backM === $wbM,
+        'M webhook.php is ' . QS_M_BASE . '\'s with one change: the sign-off line and its two lines of comment (3 lines for 1)');
+    $lintM = [];
+    $binsM = ['php ' . PHP_VERSION => PHP_BINARY];
+    $w74M = trim((string)shell_exec('command -v php7.4 2>/dev/null'));
+    if ($w74M !== '') $binsM['php7.4'] = $w74M;
+    else echo "  note M limitation: php7.4 is not installed here; webhook.php's new line is plain string concatenation and a ternary, "
+            . "valid PHP 5 — linted under PHP " . PHP_VERSION . " only, a stated limitation, not a pass\n";
+    foreach ($binsM as $bn => $bin) {
+        $o = []; exec(escapeshellarg($bin) . ' -l ' . escapeshellarg($root . '/webhook.php') . ' 2>&1', $o, $rc);
+        if ($rc !== 0) $lintM[] = $bn;
+    }
+    is_($lintM === [], 'M php -l passes on webhook.php under ' . implode(', ', array_keys($binsM)), json_encode($lintM));
+}
 
 printf("\n%d passed, %d failed\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

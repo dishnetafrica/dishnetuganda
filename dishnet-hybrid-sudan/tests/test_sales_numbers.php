@@ -1405,8 +1405,11 @@ is_(!isset($z['_raw']) && $z['z_card'] === false && $z['z_leads'] === true && $z
 
 // ── R ──
 // 5.18.100: the release's own boundary, measured against the 5.18.99 release commit from Git — as
-// tests/test_quote_company.php I measures 5.18.99's on its own commit. It reads this checkout; a later release re-points it.
+// tests/test_quote_company.php I measures 5.18.99's on its own commit. 5.18.101 re-pointed it (on purpose, never weakened):
+// R measures 5.18.100's delta between its two release commits, both from Git, and holds this tree's two code files to
+// 5.18.100's byte for byte; 5.18.101's own boundary is tests/test_quote_summary.php M.
 const SN_R_BASE = 'ca05ada5';
+const SN_R_REL  = '8ff469f5';   // the 5.18.100 release commit
 const SN_R_CODE = ['lib/SalesNumbersAdmin.php', 'manifest.json', 'tabs/engage/wa_ai_setup.php'];
 const SN_R_DOCS = ['SAFETY.md', 'tests/test_bank_boundaries.php', 'tests/test_cashbook_physical_list.php',
     'tests/test_distributor_apply.php', 'tests/test_distributor_link_ucrm.php', 'tests/test_distributor_notify.php',
@@ -1451,22 +1454,23 @@ const SN_R_PHP8_SAMPLES = [
     '::class on an object' => ['$n = $obj::class;', '$n = get_class($obj) . self::class;'],
     'a trailing comma in a parameter or use list' => ['$f = function ($a, $b, ) {', '$f = function ($a, $b) use ($c) { return g($a, ); };'],
 ];
-echo "\nR. The release boundary (5.18.100), against " . SN_R_BASE . " (the 5.18.99 release commit)\n";
+echo "\nR. 5.18.100's release boundary: " . SN_R_REL . " against " . SN_R_BASE . " (the 5.18.99 release commit), both from Git\n";
 $gitR = function (string $args) use ($root): ?array {
     $o = []; exec('git -C ' . escapeshellarg($root) . ' ' . $args . ' 2>/dev/null', $o, $rc);
     return $rc === 0 ? $o : null;
 };
-$showR = function (string $rel) use ($root): ?string {
-    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg(SN_R_BASE . ':dishnet-hybrid-sudan/' . $rel)
+$showR = function (string $rel, string $at = SN_R_BASE) use ($root): ?string {
+    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg($at . ':dishnet-hybrid-sudan/' . $rel)
                            . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
     if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
     return substr($o, 0, -strlen($m[0]));
 };
-$gd = $gitR('diff --name-only --relative ' . escapeshellarg(SN_R_BASE) . ' -- .');
-$gu = $gitR('ls-files --others --exclude-standard -- .');
+$gd = $gitR('diff --name-only --relative ' . escapeshellarg(SN_R_BASE) . ' ' . escapeshellarg(SN_R_REL) . ' -- .');
+$gu = [];   // two commits, measured from Git: nothing untracked can be in either
 $mbR = $showR('manifest.json');
-if ($gd === null || $gu === null || $mbR === null) {
-    is_(false, 'R Git supplies ' . SN_R_BASE . ' — without it the boundary cannot be measured: a failure, never a skip');
+$mrR = $showR('manifest.json', SN_R_REL);
+if ($gd === null || $mbR === null || $mrR === null) {
+    is_(false, 'R Git supplies ' . SN_R_BASE . ' and ' . SN_R_REL . ' — without them the boundary cannot be measured: a failure, never a skip');
 } else {
     $allR = array_values(array_unique(array_filter(array_merge($gd, $gu), 'strlen')));
     sort($allR);
@@ -1479,10 +1483,13 @@ if ($gd === null || $gu === null || $mbR === null) {
     is_($docsR === $wantDocs, 'R … and exactly the ' . count(SN_R_DOCS) . ' declared tests and documents',
         $j(['not declared' => array_values(array_diff($docsR, $wantDocs)), 'not changed' => array_values(array_diff($wantDocs, $docsR))]));
     $mwR = str_replace('    "version": "5.18.99",', '    "version": "5.18.100",', $mbR, $mnR);
-    is_($mnR === 1 && hash('sha256', $mwR) === hash_file('sha256', $root . '/manifest.json'),
+    is_($mnR === 1 && hash('sha256', $mwR) === hash('sha256', $mrR),
         'R manifest.json is ' . SN_R_BASE . '\'s with one line changed, its version, 5.18.99 → 5.18.100');
     $sbR = (string)$showR('lib/SalesNumbersAdmin.php');
-    $snR = (string)@file_get_contents($root . '/lib/SalesNumbersAdmin.php');
+    $snR = (string)$showR('lib/SalesNumbersAdmin.php', SN_R_REL);
+    $treeR = array_map(function ($rel) use ($root, $showR) { $r = $showR($rel, SN_R_REL); return $r !== null && $r === (string)@file_get_contents($root . '/' . $rel); },
+                       ['lib/SalesNumbersAdmin.php', 'tabs/engage/wa_ai_setup.php']);
+    is_($treeR === [true, true], 'R this tree holds 5.18.100\'s two code files as ' . SN_R_REL . ' left them, byte for byte (5.18.101 changes neither)', $j($treeR));
     $keepR = ["    const SALES_ROLES = ['sales', 'sales_staff', 'field_agent'];\n", "    const ID_PREFIX = 'sales-';\n",
               "    const ACTIONS = ['sn_add', 'sn_pair', 'sn_verify', 'sn_webhook', 'sn_ai', 'sn_status', 'sn_owner', 'sn_verify_department'];\n",
               "            'role'            => 'sales',\n", "            'owner_type'      => 'staff',\n", "            'portfolio_scope' => 'own',\n",

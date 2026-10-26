@@ -542,6 +542,54 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.101 (2026-10-26) — the WhatsApp quotation summary signs off as DishNet Uganda (Uganda); South Sudan unchanged; no migration
+
+### Why
+The owner, 26 Oct: *"also can we update our wroding on whatsapp message we are sending instead of dishent internet
+services use relevant wording ?"*. Every Quotation & Order Summary the quote.add webhook sends ended with
+"🚀 *DishNet Internet Services*". Asked to choose, the owner picked
+**"🛰️ *DishNet Uganda — Starlink, installation & support*"**, for Uganda only. South Sudan, which also sells fibre and
+LTE, keeps its line.
+
+### What
+- **`webhook.php`, one line:** the summary's sign-off is the owner's wording when `$ugPlans !== false`, the gate the tax
+  line already uses (5.18.49), and the old line otherwise. Nothing else in the message or its PDF changes, and
+  neither `cron_quote_wa.php` nor `QuotationService` changes. The webhook sends that summary for a quote made in uCRM;
+  on Uganda also for a KYC customer's quote (`kyc_messages_like_crm`, on since 25 Sep), and for a quote made on the
+  quote screens (Send Quotation) whenever the webhook claims it first. QuotationService's own message
+  (`buildProformaMessage()`) is the one the quote screens send when they claim it first, and the one
+  `cron_quote_wa.php` sends as the fallback for a KYC or uCRM quote the webhook did not send. It ends "Thank you for
+  choosing {company}!" and never carried the phrase.
+- **No migration**, no setting, no new file. `manifest.json` moves to 5.18.101, and the tests that pin the version move
+  with it.
+
+### Operator action
+None after the deploy. The next quotation made in uCRM for a Uganda customer, or by the KYC form, ends with the new
+line when the webhook sends its summary, the usual way (see the known limitation below).
+
+### SAFETY
+- South Sudan: `tests/test_quote_summary.php` section A still proves its four summaries byte for byte against the
+  goldens taken before 5.18.46, and section L that each still ends "DishNet Internet Services".
+- Uganda: section L pins the owner's wording as written, not read from the code under test: once, at the very end,
+  also when uCRM cannot list its plans, and with no "DishNet Internet Services" left.
+- Section J gains two weakened copies of `webhook.php`, each caught: the Uganda line sent to South Sudan, and the old
+  line kept for Uganda. Control: against 5.18.100's `webhook.php` the test fails (49 passed, 7 failed): L's three
+  Uganda checks, J's two new copies whose anchor is not there, and M's code set and webhook span.
+- Section M holds the release to its boundary, measured from Git against the 5.18.100 release commit (`8ff469f5`):
+  outside tests and documents exactly `manifest.json` and `webhook.php` change; the manifest by its version line only;
+  `webhook.php` by the sign-off alone (5.18.100's line put back gives `8ff469f5`'s file byte for byte); the 11
+  declared tests and documents and no other; `php -l` passes. Seven planted faults — another runtime file, an untracked
+  one, an undeclared test, a second manifest line, a second change in `webhook.php`, the old line kept beside the new,
+  a syntax error — each fail it.
+
+### Known limitations (recorded, accepted)
+- Messages already sent are not changed.
+- A quote whose WhatsApp the webhook does not send itself goes with QuotationService's own message, which carries
+  neither line — as under 5.18.100: from the quote screens when they claim it first, or later from `cron_quote_wa.php`
+  when the webhook's send record could not be written, the webhook never ran for it, or the cron reached it first.
+- The "Welcome to DishNet Internet!" template on the WhatsApp screen (`ops_kyc_customer_welcome`, South Sudan numbers)
+  is a separate, staff-editable template and is not touched.
+
 ## 5.18.100 (2026-10-23) — a technician can own a WhatsApp number on the WhatsApp AI screen (Uganda); the number stays a sales line; no migration
 
 ### Why

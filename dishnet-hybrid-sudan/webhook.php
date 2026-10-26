@@ -3045,7 +3045,9 @@ switch ($changeType) {
             // Contact info
             $msg .= "📞 " . CustomerContact::sales($config) . " | 🛒 " . CustomerContact::shop($config);
             if ($email) $msg .= "\n📧 {$email}";
-            $msg .= "\n\n🚀 *DishNet Internet Services*";
+            // 5.18.101: Uganda signs off with the owner's wording of 26 Oct 2026 ("instead of dishnet internet services use
+            // relevant wording"); South Sudan's summary ends as before, byte for byte. Same gate as the tax line above.
+            $msg .= "\n\n" . ($ugPlans !== false ? '🛰️ *DishNet Uganda — Starlink, installation & support*' : '🚀 *DishNet Internet Services*');
             // Use full rich message as caption (WhatsApp Web supports ~4096 chars)
             $shortCaption = $msg;
 
