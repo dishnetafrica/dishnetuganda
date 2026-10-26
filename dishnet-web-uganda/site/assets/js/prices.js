@@ -181,9 +181,11 @@
       // your first month". Accessories are their own list (shop.html) and
       // never reached this grid.
       var kits = (data.hardware || []).filter(function (h) { return /kit|package/i.test(h.name); });
-      if (!kits.length) return;
-      hwGrid.innerHTML = kits.map(hwCard).join('') + keep.join('');
-      hwGrid.setAttribute('data-rendered', '1');
+      // No kit in the feed: keep the page's own cards, and still go on to the plans and the order flow.
+      if (kits.length) {
+        hwGrid.innerHTML = kits.map(hwCard).join('') + keep.join('');
+        hwGrid.setAttribute('data-rendered', '1');
+      }
     }
 
     // Monthly plans grid, split into home and business.

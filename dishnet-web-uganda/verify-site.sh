@@ -205,15 +205,34 @@ n=$(grep -rF 'https://crm.dishnetuganda.com/crm"' "$HERE/site" --include='*.html
 
 echo "== commercial rules =="
 # The house law: prices live in uCRM, never in this site. The only currency
-# figures allowed anywhere are inside tutorials/ — mock app screenshots.
+# figures allowed anywhere are inside the tutorials' mock app screens
+# (div.tut-step-mock); a figure in a tutorial's own text is a published price.
 python3 - "$HERE/site" <<'PYCOM' || fail=1
 import sys, re, glob, os
+from html.parser import HTMLParser
 root = sys.argv[1]; bad = 0
+PRICE = r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*'
+class OutsideMocks(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True); self.mock = 0; self.text = []
+    def handle_starttag(self, tag, attrs):
+        if tag != 'div': return
+        if self.mock: self.mock += 1
+        elif any(k == 'class' and v and 'tut-step-mock' in v.split() for k, v in attrs): self.mock = 1
+    def handle_endtag(self, tag):
+        if tag == 'div' and self.mock: self.mock -= 1
+    def handle_data(self, d):
+        if not self.mock: self.text.append(d)
+def outside_mocks(t):
+    p = OutsideMocks(); p.feed(t); return ' '.join(p.text)
+# Control: a figure inside a mock (nested divs included) is skipped; one in the text around it is not.
+if re.findall(PRICE, outside_mocks('<p>UGX 500 an hour</p><div class="tut-step-mock"><div>$80</div><div>UGX 9</div></div><p>x</p>')) != ['UGX 500']:
+    print('  CONTROL FAILED: the tutorial mock filter'); sys.exit(1)
 for f in glob.glob(os.path.join(root, '**', '*.html'), recursive=True):
-    if os.sep + 'tutorials' + os.sep in f: continue
     t = open(f, encoding='utf-8', errors='ignore').read()
-    for m in re.findall(r'(?:\$|UGX|USh)\s?[0-9][0-9,.]*', t):
-        print(f"  price-like figure {m!r} outside tutorials: {os.path.relpath(f, root)}"); bad = 1
+    if os.sep + 'tutorials' + os.sep in f: t = outside_mocks(t)
+    for m in re.findall(PRICE, t):
+        print(f"  price-like figure {m!r} outside the tutorial mock screens: {os.path.relpath(f, root)}"); bad = 1
 # Scripts too, with their comments removed: a figure a script writes into a page is a published price. Prices from
 # the billing feed go through fmt(), never a literal. Control: the stripper keeps code and drops comments.
 def code(t):
@@ -225,7 +244,7 @@ for f in glob.glob(os.path.join(root, 'assets', 'js', '*.js')):
         print(f"  price-like figure {m!r} in a script: {os.path.relpath(f, root)}"); bad = 1
 sys.exit(bad)
 PYCOM
-[ $fail -eq 0 ] && echo "  no price published anywhere outside tutorial mock screenshots"
+[ $fail -eq 0 ] && echo "  no price published anywhere outside the tutorial mock screens"
 
 echo "== positioning rules =="
 # The decisions of October 2026, enforced: DishNet Uganda offers Starlink only (no fibre, no LTE), and support
@@ -242,11 +261,14 @@ rules = [(re.compile(r'fib(?:er|re)', re.I), 'fibre'), (re.compile(r'\bLTE\b'), 
          (re.compile(r'answered every day|support every day|every day of the week', re.I), 'unapproved support-hours wording'),
          (re.compile(r'Uganda since 2013', re.I), 'an unapproved company fact (the approved one is "DishNet Africa has operated since 2013")'),
          (re.compile(r'\b4G\b|fixed wireless|data network', re.I), 'an alternative connectivity offer'),
-         (re.compile(r'\bwe activate\b|\bwe will activate\b|activate your (?:kit|dish)|5-15 minutes', re.I), 'an activation promise (Starlink controls activation)')]
+         (re.compile(r'\bwe activate\b|\bwe will activate\b|activate your (?:kit|dish)|5-15 minutes', re.I), 'an activation promise (Starlink controls activation)'),
+         (re.compile(r'within minutes|within the hour', re.I), 'a response-time promise'),
+         (re.compile(r'Stanbic|Equity Bank', re.I), 'a South Sudan payment remnant')]
 # Control: each rule must match its own sample first, so a rule broken by an edit cannot pass by matching nothing.
 for (rx, name), sample in zip(rules, ('Fibre plans', 'Starlink, LTE', 'support 24/7', 'across all four regions',
                                       'over 10+ years in two countries', 'WhatsApp, answered every day',
-                                      'Connecting Uganda since 2013', '4G backup', 'we activate your kit')):
+                                      'Connecting Uganda since 2013', '4G backup', 'we activate your kit',
+                                      'We respond within minutes', 'Bank: Stanbic')):
     if not rx.search(sample): print(f'  CONTROL FAILED: the {name} rule does not match {sample!r}'); sys.exit(1)
 files = glob.glob(os.path.join(root, '**', '*.html'), recursive=True) + [os.path.join(root, f) for f in ('sitemap.xml', 'robots.txt')]
 for f in files:
@@ -254,9 +276,10 @@ for f in files:
     for rx, name in rules:
         for m in rx.finditer(t):
             print(f"  {name}: {os.path.relpath(f, root)}: ...{t[max(0, m.start() - 40):m.end() + 40]!r}..."); bad = 1
-assert len(rules) == 9
+assert len(rules) == 11
 if not bad: print('  no fibre, no LTE, no 24/7, no unapproved coverage claim, company fact, support-hours wording,'
-                  ' alternative connectivity or activation promise on any page (rules self-checked)')
+                  ' alternative connectivity, activation or response-time promise or South Sudan payment remnant on any page'
+                  ' (rules self-checked)')
 sys.exit(bad)
 PYPOS
 

@@ -15,17 +15,33 @@
   var menu = document.getElementById('mobile-menu');
   var openBtn = document.querySelector('.nav-cta .menu-btn');
   var closeBtn = menu.querySelector('.menu-close');
-  function setMenu(open) {
+  // Closed, the menu is inert (it is only faded out, so Tab would otherwise still reach its links); open, everything
+  // beside it, at every level up to <body>, is inert instead. Only what this script made inert is released (as nav.js).
+  var held = [];
+  function background(off) {
+    if (!off) { held.forEach(function (el) { el.inert = false; }); held = []; return; }
+    for (var node = menu; node.parentElement && node !== document.body; node = node.parentElement) {
+      Array.prototype.forEach.call(node.parentElement.children, function (el) {
+        if (el === node || el.inert || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(el.tagName)) return;
+        el.inert = true; held.push(el);
+      });
+    }
+  }
+  function setMenu(open, keepFocus) {
     menu.classList.toggle('open', open);
     menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+    menu.inert = !open;
+    background(open);
     openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     document.body.style.overflow = open ? 'hidden' : '';
+    if (keepFocus) return;
     if (open) { closeBtn.focus(); } else { openBtn.focus(); }
   }
+  menu.inert = true;
   openBtn.addEventListener('click', function () { setMenu(true); });
   closeBtn.addEventListener('click', function () { setMenu(false); });
   menu.addEventListener('click', function (e) { if (e.target === menu) setMenu(false); });
-  menu.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { menu.classList.remove('open'); menu.setAttribute('aria-hidden', 'true'); openBtn.setAttribute('aria-expanded', 'false'); document.body.style.overflow = ''; }); });
+  menu.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setMenu(false, true); }); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.classList.contains('open')) setMenu(false); });
 
   /* Reveal on scroll */

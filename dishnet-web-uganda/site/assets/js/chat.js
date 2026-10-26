@@ -169,6 +169,7 @@
       };
       post('', { name: name.value.trim(), phone: full }).then(function (d) {
         if (!(d && d.ok === true && d.lead_saved === true)) { failed(); return; }
+        if (d.session) { session = d.session; store.set('dn_chat_session', session); }
         haveLead = true; store.set('dn_chat_lead', '1');
         card.remove(); bot('Thank you — your details reached our team, and we will be in touch.'); saveLog();
       }, failed);
