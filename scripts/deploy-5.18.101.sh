@@ -7,13 +7,15 @@
 #   5.18.101 One line of webhook.php changes. The summary's last line is the owner's wording when $ugPlans !== false — the
 #            gate the tax line already uses (5.18.49): TenantProfile::current()->id() is 'uganda' — and the old line
 #            otherwise, so South Sudan's summary ends as before, byte for byte. Nothing else in the message or its PDF
-#            changes, and neither cron_quote_wa.php nor QuotationService changes: the cron builds its own message through
-#            QuotationService (the app and KYC quotes, and any uCRM quote the webhook did not send itself) and re-sends a
-#            pending PDF with its own caption; that message never carried the phrase, so a quote the cron sends ends with
-#            neither line, as under 5.18.100. No migration, no setting, no new file: the brain, the hand-over, the
-#            leads, the follow-ups, the Inbox, the channel registry and its owners, the quoting organization, the
-#            Cashbook, ECO Bank and every Balance exactly 5.18.100's. Files, against 8ff469f: 13 changed, none added (the
-#            webhook, the manifest, SAFETY.md, and the tests that name the version or the release's boundary).
+#            changes, and neither cron_quote_wa.php nor QuotationService changes. The webhook sends that summary for a
+#            quote made in uCRM — on Uganda also for a KYC customer's quote (kyc_messages_like_crm, on since 25 Sep) and
+#            for one made on the quote screens whenever it claims it first. QuotationService's own message, which never
+#            carried the phrase, is the one the quote screens send when they claim first and the one cron_quote_wa.php
+#            sends as the fallback for a KYC or uCRM quote the webhook did not send: it ends with neither line, as under
+#            5.18.100. No migration, no setting, no new file: the brain, the hand-over, the leads, the follow-ups, the
+#            Inbox, the channel registry and its owners, the quoting organization, the Cashbook, ECO Bank and every Balance
+#            exactly 5.18.100's. Files, against 8ff469f: 13 changed, none added (the webhook, the manifest, SAFETY.md, and
+#            the tests that name the version or the release's boundary).
 #
 #   THE FIGURES GO TO A CASH SHEET, NEVER TO THE TERMINAL OR THE LOG. Each run writes its own sheet,
 #            /root/dnb-5.18.101/cash-<mode>-<UTC stamp>.txt, mode 0600, in a folder of mode 700. It holds the book's cash in
@@ -306,8 +308,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="39a0b0d"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
-EXPECTED_PLUGIN_COMMIT_FULL="39a0b0db1feff2ee2aee18a663a1ba88355fe4a3"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="f2055ba"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
+EXPECTED_PLUGIN_COMMIT_FULL="f2055baf97325cd912f70b6c6ed19d2dce5adad5"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.101"
 BASELINE_COMMIT="8ff469f"          # 5.18.100 (release, a technician may own a WhatsApp number; the live plugin since 25 Oct, docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on each card
 BASELINE_COMMIT_FULL="8ff469f5055e120e876033cea485419c1b13b0f4"
@@ -472,10 +474,10 @@ df8e3a72cd6d9b927c5f6aed9ad47db06ee6dbbdf1a0b419a515e9c60df3ebf6  webhook.php
 SUMS
 )"
 PREV_CHANGED_N=13
-# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (39a0b0d) gives it: the delta,
+# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (f2055ba) gives it: the delta,
 # exactly — A0 reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-93bf144ae22f8eed1667680a6faea366ed4f1296c2302cbc6e0d25a70f81a3d4  SAFETY.md
+ced4aaa4272413a2b6d390e155786e94c8652a4d510dbd9a9c579320221a12c7  SAFETY.md
 ec118dbde413cfa390e35b75d338ea02c311f61a44783705c1d3cd9a5674bbe3  manifest.json
 c838327aa8045c339c3232a3f690ef80394c0060640f3a234b33fbb7d13f0111  tests/test_bank_boundaries.php
 ba1f64b4e7e8ffd8741dbd55cbdba5cd593025da7a7dbaec3f7686f88d37cbd4  tests/test_cashbook_physical_list.php
@@ -7613,7 +7615,7 @@ if [ "$MODE" != "rollback" ]; then
     *)     F_SW="ECO Bank's switch is NOT on in the configuration files ($( [ -n "${V3J_WBB:-}" ] && echo "--without-bank-balance, the operator's choice" || echo "V3j says why"))" ;;
   esac
   F_QORG="$(qo_org "${QO_G2:-}")"
-  echo "  what changed      on this Uganda server (Q-G2), the WhatsApp Quotation & Order Summary the plugin sends when a quote is made in uCRM now ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" instead of \"🚀 *DishNet Internet Services*\" (QS-CA1); every line above it and its PDF as before. A quote the webhook does not send itself is still sent by cron_quote_wa.php with QuotationService's own message, which carries neither line, as before. Summaries already sent are not changed. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
+  echo "  what changed      on this Uganda server (Q-G2), the WhatsApp Quotation & Order Summary the plugin sends when a quote is made in uCRM now ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" instead of \"🚀 *DishNet Internet Services*\" (QS-CA1) — on Uganda a KYC customer's quote too, when the webhook sends it; every line above it and its PDF as before. A quote whose WhatsApp the webhook does not send itself goes, as before, with QuotationService's own message — from the quote screens, or later from cron_quote_wa.php — which carries neither line. Summaries already sent are not changed. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
   if [ "$MN_BEFORE|$OL_BEFORE|$FH_BEFORE|$HC_BEFORE" = "${MN_AFTER:-}|${OL_AFTER:-}|${FH_AFTER:-}|${HC_AFTER:-}" ]; then F_PILOT="as the operator left them, unchanged by this run"; else F_PILOT="CHANGED during this run, or not read"; fi
   echo "  the pilot         $MN_FLAG ${MN_AFTER#mn=}, $OL_KEY ${OL_AFTER#ol=}, $FH_KEY ${FH_AFTER#fh=}, $HC_KEY ${HC_AFTER#hc=} (files/store) — the salesperson pilot's switches, $F_PILOT (A5, A5b, V3f, V3h): the registry $(sw_both_on "$MN_AFTER" && echo "ON" || { sw_off "$MN_AFTER" && echo "OFF" || echo "with its two copies disagreeing"; }); 087's rows and trail, the registry, 5.18.89's rules, the routing and the automated-send policy as the code reads them, compared before and after (A8, R3, R11, R2b, R12, R2c)"
   echo "  the switches      $LC_KEY ${LC_AFTER#lc=}, $LS_KEY ${LS_AFTER#ls=}, $QU_KEY ${QU_AFTER#qu=}, $SA_KEY ${SA_AFTER#sa=}; install_auth_enabled ${IA_AFTER#ia=}, $WA_KEY ${WA_AFTER#wa=}; $BK_KEY ${BK_AFTER#bk=} — as the operator left them (V3b–V3e, V3j, R2)"
@@ -7645,9 +7647,10 @@ if [ "$MODE" != "rollback" ]; then
   echo "  the screens       none changes: the Salesperson numbers card, the Cashbook, ECO Bank, Send Quotation and the KYC"
   echo "                    form as before. Do NOT make a test quote for a real customer: the plugin WhatsApps every new"
   echo "                    quote. The proof is the next real quote made in uCRM for a Uganda customer — its WhatsApp"
-  echo "                    summary ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" when the webhook sends it;"
-  echo "                    one the webhook did not send comes later from cron_quote_wa.php with QuotationService's own"
-  echo "                    message, which ends \"Thank you for choosing …!\" and carries neither line, as before"
+  echo "                    summary ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" when the webhook sends it"
+  echo "                    (a KYC customer's quote too); one the webhook did not send goes with QuotationService's own"
+  echo "                    message — from the quote screens, or later from cron_quote_wa.php — which ends \"Thank you for"
+  echo "                    choosing …!\" and carries neither line, as before"
   echo
   echo "  your steps        none: no setting to change, no number to touch"
 else
