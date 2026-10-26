@@ -6,9 +6,11 @@
 #
 #   5.18.101 One line of webhook.php changes. The summary's last line is the owner's wording when $ugPlans !== false — the
 #            gate the tax line already uses (5.18.49): TenantProfile::current()->id() is 'uganda' — and the old line
-#            otherwise, so South Sudan's summary ends as before, byte for byte. Nothing else in the message, the PDF, the
-#            retry path (cron_quote_wa.php sends the message it is given) or QuotationService changes; the app and KYC
-#            quotation never carried the phrase. No migration, no setting, no new file: the brain, the hand-over, the
+#            otherwise, so South Sudan's summary ends as before, byte for byte. Nothing else in the message or its PDF
+#            changes, and neither cron_quote_wa.php nor QuotationService changes: the cron builds its own message through
+#            QuotationService (the app and KYC quotes, and any uCRM quote the webhook did not send itself) and re-sends a
+#            pending PDF with its own caption; that message never carried the phrase, so a quote the cron sends ends with
+#            neither line, as under 5.18.100. No migration, no setting, no new file: the brain, the hand-over, the
 #            leads, the follow-ups, the Inbox, the channel registry and its owners, the quoting organization, the
 #            Cashbook, ECO Bank and every Balance exactly 5.18.100's. Files, against 8ff469f: 13 changed, none added (the
 #            webhook, the manifest, SAFETY.md, and the tests that name the version or the release's boundary).
@@ -304,8 +306,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="25af93b"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
-EXPECTED_PLUGIN_COMMIT_FULL="25af93b42eec69477c705826ec61239e8b05a9f1"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="5127a78"   # 5.18.101 (release) — the WhatsApp Quotation & Order Summary sent on uCRM's quote.add signs off on Uganda as "🛰️ *DishNet Uganda — Starlink, installation & support*" (webhook.php, one line behind the tax line's gate, $ugPlans !== false); South Sudan's line as before; cut on 5.18.100; branch release/5.18.101
+EXPECTED_PLUGIN_COMMIT_FULL="5127a78e6c4de1fd33c61539088fe6b977db677a"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.101"
 BASELINE_COMMIT="8ff469f"          # 5.18.100 (release, a technician may own a WhatsApp number; the live plugin since 25 Oct, docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on each card
 BASELINE_COMMIT_FULL="8ff469f5055e120e876033cea485419c1b13b0f4"
@@ -470,10 +472,10 @@ df8e3a72cd6d9b927c5f6aed9ad47db06ee6dbbdf1a0b419a515e9c60df3ebf6  webhook.php
 SUMS
 )"
 PREV_CHANGED_N=13
-# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (25af93b) gives it: the delta,
+# 5.18.101 — the release's own files, each with the sha256 release/5.18.101 (5127a78) gives it: the delta,
 # exactly — A0 reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-6f05b0f38371440584dadb3712860f3ad69bd57a368fa7b4ee6255b1f9b317e2  SAFETY.md
+78d79137742a4c75afd4be5b13be92101d861080a33b143d19a8035a583aa9fc  SAFETY.md
 ec118dbde413cfa390e35b75d338ea02c311f61a44783705c1d3cd9a5674bbe3  manifest.json
 c838327aa8045c339c3232a3f690ef80394c0060640f3a234b33fbb7d13f0111  tests/test_bank_boundaries.php
 ba1f64b4e7e8ffd8741dbd55cbdba5cd593025da7a7dbaec3f7686f88d37cbd4  tests/test_cashbook_physical_list.php
@@ -4887,7 +4889,7 @@ if [ "$MODE" = "deploy" ]; then
     sw_agree "$A5B_V" "$A5B_D" || stop "NO-GO: $A5B_K reads '$A5B_V' (files/store) — this script must find it readable, its two copies agreeing as the plugin judges them (absent counts as $A5B_D), before it deploys: the tools and the pages would act differently. On or off is the operator's setting, and either is accepted; this script never switches it. Nothing was changed. Send the log file"
   done
   ok "A5b 5.18.89's switches, as the operator left them, each's two copies agreeing: $OL_KEY $(sw_word "$OL_BEFORE" off) ($OL_BEFORE), $FH_KEY $(sw_word "$FH_BEFORE" off) ($FH_BEFORE), $HC_KEY $(sw_word "$HC_BEFORE" on) ($HC_BEFORE) — files/store; reported, and this run changes none of them (V3h)"
-  # A8 — migration 087 (refusals 3 and 4). This release adds 088 beside it (BR2, BA1); the live code reads 087's tables, and with the
+  # A8 — migration 087 (refusals 3 and 4). 088 (5.18.97's) stands beside it (BR2, BA1); the live code reads 087's tables, and with the
   # registry on — the salesperson pilot, as the operator left it (docs/66) — routes the numbers through them. 5.18.88's 087
   # must be applied and complete: the ledger row matching the installed file, every object, both CHECKs (the second keeps
   # every instance off a department's row), its three department rows and its own three trail rows first (rows that are
@@ -4902,7 +4904,7 @@ if [ "$MODE" = "deploy" ]; then
       A8_ST="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* dstate=([^ ]*) .*/\1/p')"; A8_N="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* other=([0-9]+) .*/\1/p')"
       A8_A="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* active=([0-9]+) .*/\1/p')"; A8_O="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* oai=([0-9]+) .*/\1/p')"
       A8_V="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* over=([0-9]+) .*/\1/p')"; A8_T="$(printf '%s' "$WA87_BEFORE" | sed -nE 's/.* rows=[0-9]+:([0-9]+) .*/\1/p')"
-      ok "A8 migration 087 (5.18.88's) is applied and complete on this server — 2 tables, 3 indexes, 3 triggers, both CHECKs, the ledger row matching the installed file, its three department rows and its own trail rows first; $EXPECTED_VERSION adds 088 beside it (BR2, BA1). Its rows, as the operator left them: the department rows ${A8_ST:-?} (status, assistant, number: v verified, n not verified, - none)$([ "${A8_N:-0}" = "0" ] && echo ', no other channel' || echo "; ${A8_N} salesperson number(s) added through the card — ${A8_A:-?} switched on, ${A8_O:-?} with the assistant on, ${A8_V:-?} verified"); the trail ${A8_T:-?} row(s) — reported, and never changed by this run (V3i, R3)"
+      ok "A8 migration 087 (5.18.88's) is applied and complete on this server — 2 tables, 3 indexes, 3 triggers, both CHECKs, the ledger row matching the installed file, its three department rows and its own trail rows first; 088 (5.18.97's) stands beside it, unchanged by $EXPECTED_VERSION (BR2, BA1). Its rows, as the operator left them: the department rows ${A8_ST:-?} (status, assistant, number: v verified, n not verified, - none)$([ "${A8_N:-0}" = "0" ] && echo ', no other channel' || echo "; ${A8_N} salesperson number(s) added through the card — ${A8_A:-?} switched on, ${A8_O:-?} with the assistant on, ${A8_V:-?} verified"); the trail ${A8_T:-?} row(s) — reported, and never changed by this run (V3i, R3)"
       case "$WA87_BEFORE" in
         *" seed=ok "*" trail=ok "*) ;;
         *) note "A8 087's department rows or their trail are not as 087 seeds them and the card's own verification leaves them ($(printf '%s' "$WA87_BEFORE" | sed -E 's/.* (seed=[^ ]*) .* (trail=[^ ]*) .*/\1 \2/')) — reported as found; this run changes none of them. Say so with the log file" ;;
@@ -4914,7 +4916,7 @@ if [ "$MODE" = "deploy" ]; then
   esac
 fi
 if [ "$MODE" = "rollback" ] && [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ]; then
-  note "after the rollback the code is $BASELINE_VERSION's again: the card's owner list offers salespeople only, as $BASELINE_VERSION did; a number given to a technician keeps its owner — the rollback rewrites no registry row — and works as before, counted after the rollback (RB). The quoting organization and every quote stay as they are: $EXPECTED_VERSION changes none of them. The Cashbook, its tab \"Bank & other accounts\" and cash in hand stay exactly as they are: $EXPECTED_VERSION changes none of them. ECO Bank stays exactly as it is — its switch, its screen, its links, 088's tables and every statement kept: $EXPECTED_VERSION changes none of them, so there is no switch to clear. A later deploy of $EXPECTED_VERSION goes with --redeploy. 5.18.95's security fixes stay; 5.18.94's documents too; master keeps 5.18.92's lock, main.php 5.18.93's change and the retry job 5.18.91's gate"
+  note "after the rollback the code is $BASELINE_VERSION's again: the next quote's WhatsApp summary ends \"🚀 *DishNet Internet Services*\" again (summaries already sent are not changed); the card's owner lists, every number and its owner stay exactly as they are — the rollback rewrites no registry row — and a number given to a technician is counted after the rollback (RB). The quoting organization and every quote stay as they are: $EXPECTED_VERSION changes none of them. The Cashbook, its tab \"Bank & other accounts\" and cash in hand stay exactly as they are: $EXPECTED_VERSION changes none of them. ECO Bank stays exactly as it is — its switch, its screen, its links, 088's tables and every statement kept: $EXPECTED_VERSION changes none of them, so there is no switch to clear. A later deploy of $EXPECTED_VERSION goes with --redeploy. 5.18.95's security fixes stay; 5.18.94's documents too; master keeps 5.18.92's lock, main.php 5.18.93's change and the retry job 5.18.91's gate"
 fi
 
 # A9 — the three department numbers, as the code installed now routes them on this server's own configuration, through
@@ -5550,12 +5552,12 @@ if [ "$MODE" = "deploy" ]; then
   else echo "  G3              no account offered — no active bank account in a book currency"; fi
   [ "$G3_NN" = "0" ] || note "G3 $G3_NN offered bank account(s) not named Ecobank hold no statement — each has a card showing no figure; never a refusal: the operator decides whether the book should offer it"
   if [ -z "$G3_WHY" ]; then
-    ok "G3 both ECO BANK cards show a figure, through the live $BASELINE_VERSION classes on the copy: BankGate::open() true (PluginConfig::read(), the switch ON, Uganda without SSP), and for UGX and for USD an offered account named Ecobank, each with its last statement line kept ($(bn5_say "$G3_OFF")) — the bank money that has been off the Cashbook's list since $BASELINE_VERSION is shown on ECO Bank"
+    ok "G3 both ECO BANK cards show a figure, through the live $BASELINE_VERSION classes on the copy: BankGate::open() true (PluginConfig::read(), the switch ON, Uganda without SSP), and for UGX and for USD an offered account named Ecobank, each with its last statement line kept ($(bn5_say "$G3_OFF")) — the bank money that has been off the Cashbook's list since 5.18.98 is shown on ECO Bank"
   elif [ -n "$WITHOUT_BANK" ]; then
     G3_NOTED=1
     note "G3 --without-bank-balance, the operator's explicit choice: not both ECO BANK cards show a figure ($(printf '%s' "$G3_WHY" | sed 's/^ //')) — the bank rows stay off the Cashbook's list, on the tab \"Bank & other accounts\", as under $BASELINE_VERSION, and ECO Bank shows no balance for$( [ "$(kv "$BK_A_KI" open)" = "yes" ] && echo " the account(s) above" || echo " anyone until its switch is ON")"
   else
-    stop "NO-GO (G3): not both ECO BANK cards show a figure ($(printf '%s' "$G3_WHY" | sed 's/^ //')) — since $BASELINE_VERSION the bank rows are off the Cashbook's list, so each currency's Ecobank balance must be on ECO Bank: keep each card's Account Details CSV there (and its switch ON), then run this again. Nothing was changed. To deploy without it — the operator's explicit choice, said as such in the log — its own command, alone:$(printf '\n      %s' "$(with_flags --without-bank-balance)")"
+    stop "NO-GO (G3): not both ECO BANK cards show a figure ($(printf '%s' "$G3_WHY" | sed 's/^ //')) — since 5.18.98 the bank rows are off the Cashbook's list, so each currency's Ecobank balance must be on ECO Bank: keep each card's Account Details CSV there (and its switch ON), then run this again. Nothing was changed. To deploy without it — the operator's explicit choice, said as such in the log — its own command, alone:$(printf '\n      %s' "$(with_flags --without-bank-balance)")"
   fi
   # The pin's code reads the cards as the live classes do — 5.18.101 changes no file of ECO Bank's (A0, Q-G1).
   [ "$(printf '%s' "$BK_A_KF" | sed -E 's/^switch=[^ ]* //')" = "$(printf '%s' "$BK_A_KI" | sed -E 's/^switch=[^ ]* //')" ] \
@@ -5598,7 +5600,7 @@ if [ "$MODE" = "deploy" ]; then
     [ -n "$n1t" ] && [ "$n1t" = "$(subkv "$N_NC" "$n1p")" ] || N1_BAD="$N1_BAD $n1p(this-script's-SQL:${n1t:-?},the-new-code's-tab:$(subkv "$N_NC" "$n1p"))"
   done
   [ -z "$N1_BAD" ] || stop "NO-GO (N1): the rows that leave the Cashbook's list, counted with this script's own SQL, are not the rows $EXPECTED_VERSION's code puts on its non-cash list on the same copy:$N1_BAD — the two readings of SPEC-separate-v2 §2.1 disagree. Nothing was changed. Send the log file"
-  note "N1 the rows off the Cashbook's list, on the tab \"Bank & other accounts\" (since $BASELINE_VERSION), per project — on bank accounts / on accounts of another kind / naming no account / a negative or text id: $(printf '%s' "$N_N1" | sed 's/,/; /g') (the same totals as C3's, counted with this script's own SQL)"
+  note "N1 the rows off the Cashbook's list, on the tab \"Bank & other accounts\" (since 5.18.98), per project — on bank accounts / on accounts of another kind / naming no account / a negative or text id: $(printf '%s' "$N_N1" | sed 's/,/; /g') (the same totals as C3's, counted with this script's own SQL)"
   note "N2 approved rows with no account that stay on the list and look like bank money, each counted on its own: uCRM's online $(subkv "$N_N2" crm), Bank Transfer in $(subkv "$N_N2" btin), Bank Transfer out (cash really banked) $(subkv "$N_N2" btout), Bank Charges $(subkv "$N_N2" charges)"
   note "N3 rows with no currency on the list: $(subkv "$N_N3" blank), $(subkv "$N_N3" cash) of them on the physical-cash side (they count in the book's base, as before)"
   note "N4 bank accounts ECO Bank does not offer (inactive, or in a currency the book does not list) that hold rows: $(subkv "$N_N4" accounts), with $(subkv "$N_N4" rows) row(s) — their rows go to the tab like every bank row; which accounts, by row id, is on the sheet"
@@ -6268,8 +6270,9 @@ IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's
 [ "$IV" = "$EXPECTED_VERSION" ] && ok "R1 the installed manifest says $IV" || bad "R1 the installed manifest says ${IV:-?}"
 # Q-CA1 — 5.18.99 (SPEC-quote-company §6), carried: the installed files are this release's by the sha256 THIS SCRIPT pins
 # for each of its 13 (R1 compared them with Git); the 5.18.100 files this release must not touch — ECO Bank's module, its
-# links, the Cashbook's service, its page, its tab, its export and its routes, webhook.php, api/index.php and the rest —
-# are still 5.18.98's by theirs, and master.php and main.php are the reviewed ones byte for byte; and php -l, under the
+# links, the Cashbook's service, its page, its tab, its export and its routes, api/index.php, cron_quote_wa.php,
+# lib/SalesNumbersAdmin.php and its page and the rest — are still 5.18.100's by theirs (webhook.php is this release's
+# own), and master.php and main.php are the reviewed ones byte for byte; and php -l, under the
 # container's own PHP, passes on every changed or new PHP file as installed (the test files said apart: copied, never
 # run on the server). 5.18.98's CA1 is this check, carried.
 CA1_BAD=""; CA1_P=0; CA1_K=0; CA1_L=0; CA1_T=""
@@ -7610,7 +7613,7 @@ if [ "$MODE" != "rollback" ]; then
     *)     F_SW="ECO Bank's switch is NOT on in the configuration files ($( [ -n "${V3J_WBB:-}" ] && echo "--without-bank-balance, the operator's choice" || echo "V3j says why"))" ;;
   esac
   F_QORG="$(qo_org "${QO_G2:-}")"
-  echo "  what changed      on this Uganda server (Q-G2), the WhatsApp Quotation & Order Summary the plugin sends when a quote is made in uCRM now ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" instead of \"🚀 *DishNet Internet Services*\" (QS-CA1); every line above it, the PDF and the retry of a failed send as before. Summaries already sent are not changed. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
+  echo "  what changed      on this Uganda server (Q-G2), the WhatsApp Quotation & Order Summary the plugin sends when a quote is made in uCRM now ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" instead of \"🚀 *DishNet Internet Services*\" (QS-CA1); every line above it and its PDF as before. A quote the webhook does not send itself is still sent by cron_quote_wa.php with QuotationService's own message, which carries neither line, as before. Summaries already sent are not changed. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
   if [ "$MN_BEFORE|$OL_BEFORE|$FH_BEFORE|$HC_BEFORE" = "${MN_AFTER:-}|${OL_AFTER:-}|${FH_AFTER:-}|${HC_AFTER:-}" ]; then F_PILOT="as the operator left them, unchanged by this run"; else F_PILOT="CHANGED during this run, or not read"; fi
   echo "  the pilot         $MN_FLAG ${MN_AFTER#mn=}, $OL_KEY ${OL_AFTER#ol=}, $FH_KEY ${FH_AFTER#fh=}, $HC_KEY ${HC_AFTER#hc=} (files/store) — the salesperson pilot's switches, $F_PILOT (A5, A5b, V3f, V3h): the registry $(sw_both_on "$MN_AFTER" && echo "ON" || { sw_off "$MN_AFTER" && echo "OFF" || echo "with its two copies disagreeing"; }); 087's rows and trail, the registry, 5.18.89's rules, the routing and the automated-send policy as the code reads them, compared before and after (A8, R3, R11, R2b, R12, R2c)"
   echo "  the switches      $LC_KEY ${LC_AFTER#lc=}, $LS_KEY ${LS_AFTER#ls=}, $QU_KEY ${QU_AFTER#qu=}, $SA_KEY ${SA_AFTER#sa=}; install_auth_enabled ${IA_AFTER#ia=}, $WA_KEY ${WA_AFTER#wa=}; $BK_KEY ${BK_AFTER#bk=} — as the operator left them (V3b–V3e, V3j, R2)"
@@ -7642,7 +7645,9 @@ if [ "$MODE" != "rollback" ]; then
   echo "  the screens       none changes: the Salesperson numbers card, the Cashbook, ECO Bank, Send Quotation and the KYC"
   echo "                    form as before. Do NOT make a test quote for a real customer: the plugin WhatsApps every new"
   echo "                    quote. The proof is the next real quote made in uCRM for a Uganda customer — its WhatsApp"
-  echo "                    summary ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\""
+  echo "                    summary ends \"🛰️ *DishNet Uganda — Starlink, installation & support*\" when the webhook sends it;"
+  echo "                    one the webhook did not send comes later from cron_quote_wa.php with QuotationService's own"
+  echo "                    message, which ends \"Thank you for choosing …!\" and carries neither line, as before"
   echo
   echo "  your steps        none: no setting to change, no number to touch"
 else

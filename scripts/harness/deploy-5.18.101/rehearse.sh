@@ -378,7 +378,7 @@ fresh101; OUT="$(run101 --answer NO)"
 check "$(has "$OUT" "NO-GO: the container's record says $P100 (5.18.100), but these installed files are not 5.18.100's: webhook.php — a copy that did not complete")$(has "$OUT" 'Nothing was changed.')$(went101 "$OUT")|$(live)|$(backups101)" "yesyesnono|$P100|0" \
   "1e the installed webhook.php edited by hand: refused before anything changes, the file named, the put-back printed; nothing deployed or backed up"
 cp -p "$SB/webhook101.kept" "$PD/webhook.php"; rm -f "$SB/webhook101.kept"
-check "$(installed100 "$P100")|$(data94)|$(live)" "0|$D101|$P100" "…the installed webhook.php put back: every file 5.18.100's, the data as before, 5.18.100 serving"
+check "$(installed101 "$P100")|$(data94)|$(live)" "0|$D101|$P100" "…the installed webhook.php put back: every file 5.18.101 touches 5.18.100's again, the data as before, 5.18.100 serving"
 
 echo; echo "== 101-4. the deploy, as the operator runs it — DEPLOY typed =="
 LEDGER101="$(ledger95)"
@@ -391,6 +391,7 @@ for l in "ok    A0 the release delta is exactly 5.18.101's 13 files — 0 added,
          "ok    A14 the stray store is quarantined and the quarantine holds" "ok    A22-T1 under this server's own PHP" "ok    G3 both ECO BANK cards show a figure" \
          "ok    Q-G2 the tenant is Uganda" "ok    Q-G3 quoting organization #1 (from the Uganda profile)" "ok    Q-G4 uCRM's organizations, read once through the plugin's own client" \
          "ok    TN-G1 as text" "ok    TN-G2 on one copy of the book" "ok    TN-G3 wa_inbox_roles is unset" "ok    QS-G1 as text" "GO — evidence recorded" \
+         "088 (5.18.97's) stands beside it, unchanged by 5.18.101 (BR2, BA1)" \
          "ok    container serves $P101" "ok    R1 the installed manifest says 5.18.101" \
          "ok    Q-CA1 installed = 5.18.101's release: all 13 of its files carry the sha256 this script pins; all 63 files of 5.18.100 it must not touch" \
          "ok    Q-CA2 the INSTALLED QuoteOrganization::setting() on a copy reads what stage A read through the pin's: on:1:profile:-" \
@@ -451,7 +452,8 @@ fresh101; OUT="$(run_line101 ROLLBACK "$RLINE")"; RLOG="$(ls -1 "$OUT101"/rollba
 check "$(fails "$OUT")$(has "$OUT" '5.18.101 (rollback): PASSED')$(live)$(installed101 "$P100")$(inst_ver)" "0yes${P100}05.18.100" "6a the rollback PASSES: 5.18.100 serving again, every file as it had them"
 for l in "ok    RB the installed manifest says 5.18.100" \
          "ok    RB all 13 files 5.18.101 changed are 5.18.100's again, byte for byte" \
-         "ok    RB 5.18.99's quoting code is in place" \
+         "ok    RB 5.18.100's quoting code is in place" \
+         "note  after the rollback the code is 5.18.100's again: the next quote's WhatsApp summary ends \"🚀 *DishNet Internet Services*\" again" \
          "ok    RB the owner rule is 5.18.100's, as text: owners() defined and called, the technician roles once, an admin technician account refused (tech=1 decl=1 sales=1 kind=1 role=1 page=1 old=0)" \
          "ok    RB on a copy of the book, through the installed code: owners() offers the $(qj "$O101_0" sales) active salesperson account(s) and the $(qj "$O101_0" tech) active technician account(s)" \
          "note  RB 1 number(s) in the registry are owned by a technician account, as 5.18.100 allows" \
