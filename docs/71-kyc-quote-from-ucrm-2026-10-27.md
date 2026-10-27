@@ -683,6 +683,13 @@ Recorded during the build on `quote-102` (cut on `f2055baf`). Each item says wha
   rules read PHP only (a JavaScript object literal in the form is not a named argument); the S journey extended as §L.2
   says, with one normaliser entry (the run's own plugin path, which Settings prints). `test_quote_company_mutants`: W19
   re-anchored (retry_quote now has two gated blocks); every other anchor still occurs once.
+- **Three of 5.18.99's weakened copies became equivalent, and were re-pointed.** W11, W12 and W57 weakened only
+  postQuote's own company check. On Uganda 5.18.102 runs that check, and records its refusal, before postQuote —
+  `KycService::ugQuoteNew` for a new customer (Q2), `KycCrmSync::ugQuote` for the retry (Q3) — and then tells postQuote
+  the organization, so postQuote's check never refuses. The full run measured all three surviving (76 passed, 3 failed).
+  Each now weakens the check where it refuses; W11b is added for the new customer's check alone. The retry keeps two
+  guards on purpose (ugQuote, and postQuote's check behind it), so a copy removing only one of them there would survive:
+  W11 removes both.
 - §L.1's "a handleExisting Cash application retried" is an existing customer's Cash application saved before 5.18.102
   and retried through `retry_quote` (`test_quote_from_ucrm` C8: 409, no quote, the reason recorded).
 
