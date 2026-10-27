@@ -5,7 +5,8 @@
 // repository gave it to uCRM before 5.18.48 (commit 2bfad82), so a template that renders here uses nothing that
 // template did not already use. Output is a list of checks; exit 1 on any failure.
 // The Service Agreement (pages 3–4, docs/67 §L) is checked on its own, then cut out at its two markers before the
-// rest of the page is compared with the baseline's.
+// rest of the page is compared with the baseline's. The numbers it and page 2 quote are read from build.py's PARAMS,
+// and the policy sections they cite from the published pages, so neither can drift from its source unnoticed.
 require $argv[1] . '/vendor/autoload.php';
 
 // 5.18.49: every quotation without uCRM tax lines says this — the operator's sentence of 27 Sep 2026 (docs/42 §9).
@@ -19,25 +20,68 @@ const AGR_END   = '<!-- ═══ SERVICE AGREEMENT — UGANDA (pages 3–4) —
 const AGR_KEEPS = 'Nothing in this Agreement takes away or reduces a right the CUSTOMER has under those terms and policies or under the '
                  . 'law of Uganda:</b> where this Agreement and any of them deal with the same matter, the provision more favourable to '
                  . 'the CUSTOMER applies.';
-const AGR_TERM  = 'For a DishNet service plan on this quotation: monthly, with no fixed term and no cancellation fee; it continues month '
-                 . 'to month until cancelled (clause 6). Equipment and installation alone carry no recurring charge from DISHNET.';
-const AGR_FLEX  = 'This quotation includes a Flex package.';
+const AGR_TERM  = 'For a DishNet service plan on this quotation, other than a Flex package: monthly, with no fixed term and no '
+                 . 'cancellation fee; it continues month to month until cancelled (clause 6). Equipment and installation alone carry '
+                 . 'no recurring charge from DISHNET.';
+const AGR_FLEX  = 'This quotation includes a Flex package. It is a quotation only:';
+const FLEX_SAMPLES = ['flex', 'flex_lower', 'flex_upper'];
+// On every quotation, whether or not the Flex row prints: no Flex package before its agreement, and the 7-day right stays.
+const AGR_FLEX_GATE = 'No Flex package is in force until its agreement is signed by both parties';
+// docs/67 §J: no claim of a UCC authorisation, licence, approval or registration as an installer, in any word order.
+const AGR_UCC_CLAIM = '/\b(?:authori[sz](?:ed|ation|ing)|licen[cs](?:e|ed|ing)|accredit\w*|approv(?:ed|al)|certif\w*|registered|permit(?:ted)?)\b'
+                    . '[^.;]{0,80}\b(?:uganda communications commission|ucc)\b|\b(?:uganda communications commission|ucc)\b[\s-]{0,3}'
+                    . '(?:authori[sz](?:ed|ation)|licen[cs](?:e|ed)|accredit\w*|approv(?:ed|al)|certif\w*|registered)\b/';
 // South Sudan's terms that Uganda's published policies do not allow, claims the pages never make (docs/67 §J), words the
 // PDF doctor reads as South Sudan content, and clauses the review removed (docs/67 §L).
 const AGR_NEVER = ['termination fee', 'arbitration', 'merchantability', 'fitness for a particular purpose', 'sole and entire remedy',
                    'south sudan', 'juba', '+211', 'dishnetafrica', 'ucc authorised', 'ucc-authorised', 'authorised starlink installer',
                    'licensed by', 'licence', 'license', 'security deposit is needed', 'interest', 'entire agreement', 'whole agreement',
-                   'confidential'];
-// The agreement as reviewed, pinned per sample quote: sha256 of the rendered agreement, comments removed. A change to its
-// text must change these deliberately (docs/67 §L).
-const AGR_SHA = [];
-/** The numbers the agreement quotes, from their single source: PARAMS in the website's policies/build.py. */
+                   'confidential', 'best-effort', 'best effort', 'without further notice', 'deemed accepted', '48 hours', 'sole remedy',
+                   'early termination', 'passed on at cost', '24/7'];
+// The agreement as reviewed, pinned per sample quote: sha256 of the rendered agreement, comments removed; and its source
+// between the markers, which also covers branches no sample renders. A change to its text must change these
+// deliberately (docs/67 §L).
+const AGR_SHA = [
+    'kit'          => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'kit_last'     => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'kit_lower'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'kit_upper'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'no_kit'       => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'starlink_svc' => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'travel_kit'   => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'kit_taxed'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'business'     => 'a64552754ad5e7fbfb5cbde15fd200ea5dd36e218b73f78cb63fa59debeee824',
+    'flex'         => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
+    'flex_lower'   => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
+    'flex_upper'   => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
+    'not_flex'     => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'cctv'         => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
+    'no_address'   => 'fa364bf62e7a5108ac464e1ec8888785f22ffab05a97e1d45ec392460d7f8753',
+    'street2'      => 'e3c1a5b276cc097ea28502583b064e557b0d1218f1fb087d9f307dd179dcc99c',
+    'company_same' => '1e85bb608517f3a12864ce8ca82381ed69592f63f64e26f4a6b6d4c10e2d3622',
+    'org_ids'      => 'a57fb477851838b2a34b66f5ba658c1f4bef3c9d6b0e524e459c978a9ca71b22',
+];
+const AGR_SRC_SHA = '2ddcbec06f6fa4f9b4c81a4f211b973662170f0db1b1a79ad9b363d246497818';
+/** The numbers the agreement and page 2 quote, from their single source: PARAMS in the website's policies/build.py. */
+const PARAM_KEYS = ['PRICE_NOTICE', 'OUTAGE', 'RETURN_DAYS', 'KIT_WARRANTY'];
 function params(): array {
     $src = (string)@file_get_contents(dirname(__DIR__, 3) . '/dishnet-web-uganda/policies/build.py');
     $o = [];
-    foreach (['PRICE_NOTICE', 'OUTAGE'] as $k) if (preg_match("/'$k':\\s*'([^']+)'/", $src, $m) === 1) $o[$k] = $m[1];
+    foreach (PARAM_KEYS as $k) if (preg_match("/'$k':\\s*'([^']+)'/", $src, $m) === 1) $o[$k] = $m[1];
     return $o;
 }
+/** A published page's numbered sections, id => number, read from its headings (<h3 id="…">N. …). */
+function sections(string $page): array {
+    $src = (string)@file_get_contents(dirname(__DIR__, 3) . "/dishnet-web-uganda/policies/bodies/$page.html");
+    preg_match_all('/<h3 id="([a-z0-9-]+)">(\d+)\./', $src, $m, PREG_SET_ORDER);
+    $o = []; foreach ($m as $x) $o[$x[1]] = $x[2];
+    return $o;
+}
+// Every section the agreement and page 2 cite, by the page's own heading id: [page, id, the number cited].
+const CITED = [['terms', 'who', '1'], ['terms', 'documents', '2'], ['terms', 'cancel', '8'], ['terms', 'equipment', '9'],
+               ['terms', 'faults', '11'], ['terms', 'liability', '14'], ['terms', 'outside', '15'], ['terms', 'ending', '16'],
+               ['returns', 'change', '2'], ['returns', 'orders', '4'], ['returns', 'installation', '5'], ['returns', 'plans', '6'],
+               ['privacy', 'share', '5'], ['acceptable-use', 'action', '5']];
 
 // Withdrawn from the end of clause 2 on 12 Oct 2026: the website says all taxes are included and nothing is added.
 const NEW_TAX      = ' Any new or increased government tax, levy or regulatory fee introduced after acceptance may be '
@@ -46,9 +90,9 @@ const NEW_TAX      = ' Any new or increased government tax, levy or regulatory f
 function item(string $label, string $price, string $type = 'product'): array {
     return ['label' => $label, 'type' => $type, 'unit' => '', 'quantity' => '1', 'price' => $price, 'total' => $price];
 }
-function ctx(array $items, array $taxes = [], array $client = []): array {
+function ctx(array $items, array $taxes = [], array $client = [], array $org = []): array {
     return [
-        'organization' => ['name' => 'DishNet Africa Limited', 'street1' => 'Acacia Mall, 4th floor', 'street2' => '', 'city' => 'Kampala', 'state' => '',
+        'organization' => $org + ['name' => 'DishNet Africa Limited', 'street1' => 'Acacia Mall, 4th floor', 'street2' => '', 'city' => 'Kampala', 'state' => '',
                            'phone' => '+256 700 000 000', 'email' => 'sales@example.invalid', 'website' => 'www.dishnetuganda.com',
                            'taxId' => null, 'registrationNumber' => null],
         'client' => $client + ['name' => 'Sample Customer', 'companyName' => '', 'street1' => 'Plot 1', 'street2' => '', 'city' => 'Kampala', 'state' => '',
@@ -96,11 +140,21 @@ $QUOTES = [
     'starlink_svc' => ctx([item('Starlink Residential (up to 400 Mbps)', 'UGX 329,000', 'service')]),
     'travel_kit'   => ctx([item('Travel Kit | Mini', 'UGX 301,000')]),
     'kit_taxed'    => ctx([item('Starlink Standard Kit', 'UGX 2,649,000')], [['label' => 'VAT 18%', 'price' => 'UGX 404,085']]),
-    // docs/67 §L: a business with only a city on file, a Flex quotation, and a quotation with no Starlink item at all
+    // docs/67 §L: a business with only a city on file, Flex quotations in uCRM's three spellings, a label that only
+    // looks like Flex, a quotation with no Starlink item at all, and every branch of the party and site cells
     'business'     => ctx([item('Starlink Standard Kit', 'UGX 2,649,000'), item('Business (up to 400 Mbps)', 'UGX 1,200,000', 'service')], [],
                           ['companyName' => 'Example Traders Limited', 'street1' => '', 'street2' => '']),
-    'flex'         => ctx([item('Starlink Flex 12 Package', 'UGX 450,000', 'service')]),
+    'flex'         => ctx([item('DishNet Flex 12', 'UGX 450,000', 'service')]),
+    'flex_lower'   => ctx([item('dishnet flex 24', 'UGX 450,000', 'service')]),
+    'flex_upper'   => ctx([item('DISHNET FLEX 12', 'UGX 450,000', 'service')]),
+    'not_flex'     => ctx([item('Flexible conduit (per metre)', 'UGX 5,000'), item('Installation', 'UGX 100,000', 'service')]),
     'cctv'         => ctx([item('CCTV camera', 'UGX 300,000'), item('Installation', 'UGX 100,000', 'service')]),
+    'no_address'   => ctx([item('Starlink Standard Kit', 'UGX 2,649,000')], [], ['street1' => '', 'street2' => '', 'city' => '']),
+    'street2'      => ctx([item('Starlink Standard Kit', 'UGX 2,649,000')], [], ['street2' => 'Block B', 'country' => '']),
+    'company_same' => ctx([item('Starlink Standard Kit', 'UGX 2,649,000')], [],
+                          ['name' => 'Example Traders Limited', 'companyName' => 'Example Traders Limited']),
+    'org_ids'      => ctx([item('Starlink Standard Kit', 'UGX 2,649,000')], [], [],
+                          ['taxId' => 'TIN-EXAMPLE-1', 'registrationNumber' => 'REG-EXAMPLE-1']),
 ];
 $render = function (string $file) use ($policy, $QUOTES): ?array {
     if (trim((string)@file_get_contents($file)) === '') { echo "  FAIL " . basename($file) . " is missing or empty\n"; return null; }
@@ -156,8 +210,14 @@ function agreement(string $html): string {
     if ($s < 0 || $e <= $s || substr($html, $s, 2) !== '  ' || substr($html, $e - 2, 2) !== "\n\n") return '';
     return substr($html, $s, $e - $s);
 }
-$P = params(); $bizSite = null;
-t('the policy numbers are read from build.py (PRICE_NOTICE, OUTAGE)', count($P), 2);
+$P = params(); $sites = []; $ids = [];
+t('the policy numbers are read from build.py (' . implode(', ', PARAM_KEYS) . ')', array_keys($P), PARAM_KEYS);
+$sec = []; foreach (CITED as [$pg, $id, $n]) $sec[] = [$pg, $id, (sections($pg)[$id] ?? '')];
+t('every section the agreement and page 2 cite still has that number on its published page', $sec, CITED);
+$tosCited = array_values(array_map(fn($c) => $c[2], array_filter(CITED, fn($c) => $c[0] === 'terms')));
+$src = (string)file_get_contents($argv[2]); $s0 = strpos($src, AGR_START); $e0 = strpos($src, AGR_END);
+t("the agreement's source is the reviewed text (pinned)", ($s0 !== false && $e0 !== false && $e0 > $s0)
+    ? hash('sha256', substr($src, $s0, $e0 + strlen(AGR_END) - $s0)) : '', AGR_SRC_SHA);
 foreach ($QUOTES as $k => $c) {
     $a = agreement($new[$k]); $p = page($a); $lc = strtolower(html_entity_decode(strip_tags($p), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     $cl = $c['client']; $party = ($cl['companyName'] !== '' && $cl['companyName'] !== $cl['name'])
@@ -169,18 +229,33 @@ foreach ($QUOTES as $k => $c) {
         && substr_count($p, 'Quotation <b>' . $c['quote']['number'] . '</b>') === 1, true);
     t("{$k}: …it takes away nothing the Terms of Service, the policies and the law give", substr_count($p, AGR_KEEPS), 1);
     t("{$k}: …monthly, with no fixed term and no cancellation fee, for a DishNet service plan only", substr_count($p, AGR_TERM), 1);
-    t("{$k}: …a Flex package is left to its own agreement exactly when the quotation has one", substr_count($p, AGR_FLEX), $k === 'flex' ? 1 : 0);
-    t("{$k}: …the notice and outage numbers are build.py's", count($P) === 2 && substr_count($p, 'at least ' . $P['PRICE_NOTICE'] . '&rsquo; notice') === 1
+    t("{$k}: …a Flex package is quoted only, exactly when the quotation has one", substr_count($p, AGR_FLEX), in_array($k, FLEX_SAMPLES, true) ? 1 : 0);
+    t("{$k}: …no Flex package is in force before its agreement is signed, and the 7-day cancellation stays", count($P) === 4
+        && substr_count($p, AGR_FLEX_GATE) === 1 && substr_count($p, 'within ' . $P['RETURN_DAYS'] . ' of receiving the kit') === 1, true);
+    t("{$k}: …the notice and outage numbers are build.py's", count($P) === 4 && substr_count($p, 'at least ' . $P['PRICE_NOTICE'] . '&rsquo; notice') === 1
         && substr_count($p, 'more than ' . $P['OUTAGE'] . ' in a row') === 1, true);
     $site = preg_match('/Site \/ installation address<\/td><td[^>]*>(.*?)<\/td>/s', $p, $m) === 1 ? $m[1] : '';
     t("{$k}: …the site address has no stray comma", $site !== '' && !preg_match('/^\s*,|,\s*,/', $site), true);
-    if ($k === 'business') $bizSite = $site;
+    $sites[$k] = $site;
+    $ids[$k] = preg_match('/\(a\) <b>[^<]*<\/b>, a company registered in Uganda \((registration number [^)]*)\)/', $p, $m) === 1 ? $m[1] : '';
     $bad = array_values(array_filter(AGR_NEVER, fn($w) => strpos($lc, $w) !== false));
     t("{$k}: …and none of the terms or claims Uganda's policies do not allow", $bad, []);
+    t("{$k}: …and no UCC authorisation or licence claim (docs/67 §J)", preg_match(AGR_UCC_CLAIM, $lc), 0);
+    preg_match_all('/section (\d+) of (?:the |DishNet\'s )?Terms of Service/', page($new[$k]), $mm);
+    t("{$k}: …the agreement and page 2 cite only Terms of Service sections the harness maps", array_values(array_diff(array_unique($mm[1]), $tosCited)), []);
     t("{$k}: …its text is the reviewed one (pinned)", hash('sha256', $p), AGR_SHA[$k] ?? '');
     $new[$k] = str_replace($a, '', $new[$k]);
+    $p2 = page($new[$k]);
+    t("{$k}: page 2's notice, return and warranty periods are build.py's", count($P) === 4
+        && substr_count($p2, 'Prices may change with ' . $P['PRICE_NOTICE'] . "' notice.") === 1
+        && substr_count($p2, 'may be returned within ' . $P['RETURN_DAYS'] . ' of delivery') === 1
+        && substr_count($p2, '(' . $P['KIT_WARRANTY'] . ' on Starlink kits from delivery)') === 1, true);
 }
-t('business: a city alone prints as the site, without a leading comma', $bizSite, 'Kampala, Uganda &mdash; or the address confirmed in writing before installation');
+t('business: a city alone prints as the site, without a leading comma', $sites['business'] ?? null, 'Kampala, Uganda &mdash; or the address confirmed in writing before installation');
+t('no_address: no street or city prints the site as to be confirmed', $sites['no_address'] ?? null, 'To be confirmed in writing before installation');
+t('street2: a second street line and no country print in order', $sites['street2'] ?? null, 'Plot 1, Block B, Kampala &mdash; or the address confirmed in writing before installation');
+t("org_ids: uCRM's registration number and TIN print in party (a)", $ids['org_ids'] ?? null, 'registration number REG-EXAMPLE-1, TIN TIN-EXAMPLE-1');
+t('…and a quotation without them prints the fallback numbers, not those', ($ids['kit'] ?? '') !== '' && ($ids['kit'] ?? '') !== ($ids['org_ids'] ?? ''), true);
 t('the baseline has no Service Agreement', agreement($old['kit']), '');
 
 $TC = require __DIR__ . '/tc_changes.php';
