@@ -159,7 +159,7 @@ is_($rc === 0 && strpos($out, 'Nothing to VOID: no Manual Entry collection and n
 $h1 = $plantOne($s, $tech, '70000', 'Collection', 'the only record of this money');
 $h2 = $plantOne($s, $tech, '30000', 'USD Received', 'the only record, with a ledger row', true);
 $pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
-is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 100,000\.00/si', $pgA) !== 1, 'control: stamped USD, neither counts in the UGX tile');
+is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 0\.00</si', $pgA) === 1, 'control: stamped USD, neither counts in the UGX tile: it reads UGX 0.00');
 [$rc, $out] = $s->run($s->plug . $TOOL, ['--relabel', '--yes']);
 is_($rc === 0 && strpos($out, "cash-in #$h1 relabelled USD → UGX (70,000.00, Collection, Sandbox Tech)") !== false && strpos($out, "staff_ledger CIN-$h2: currency → UGX") !== false,
     'RELABEL exits 0, names each row and the ledger row it relabelled', $rc . ' ' . substr($out, -500));

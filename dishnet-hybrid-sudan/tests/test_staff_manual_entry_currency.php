@@ -26,6 +26,10 @@ $UG = ['tenant_profile' => 'uganda', 'timezone' => 'Africa/Kampala', 'currency_s
        'cashbook_base_currency' => 'UGX', 'cashbook_currencies' => 'UGX,USD'];
 $SS = ['tenant_profile' => 'south-sudan'];
 $today = date('Y-m-d');
+// the planted collections are dated 2026-09-25 and the Staff Cashbooks page shows the last 30 days unless asked, so the
+// loads that look at them (section D) ask for a window that holds them. Without it the tile dropped them from 26 Oct 2026
+// (Kampala) on: D's relabel assertion failed, and its control passed only because the row was out of range.
+$plantWindow = '&sc_from=2026-09-25&sc_to=2099-12-31';
 
 $people = function (SjSandbox $s): void {
     $s->staff('acct', ['name' => 'Sandbox Accountant', 'email' => 'acct@example.test', 'role' => 'accountant']);
@@ -95,7 +99,7 @@ $plant($s);
 [$rc, $out] = $s->run($s->plug . '/__plant_col.php', [(string)$tech, '50000', 'USD', 'hand copy of an advance']);
 is_($rc === 0 && strpos($out, 'planted #') === 0, 'planted: a USD-stamped manual collection of 50,000 (as the old form wrote it)', $out);
 $ghostId = (int)substr($out, 9);
-$pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 170,000\.00/si', $pg) === 1, 'control: the USD-stamped row does not count — the UGX received tile (every base-bag IN: 20,000 + the 150,000 advance) still reads 170,000.00');
 $before = json_encode($cols($s));
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php');
@@ -122,7 +126,7 @@ is_($rc === 0 && strpos($out, "collection #$keepId relabelled USD → UGX (70,00
 $k = null; foreach ($cols($s) as $x) if ($x['_id'] === $keepId) $k = $x;
 is_($k !== null && ($k['currency'] ?? '') === 'UGX' && ($k['status'] ?? '') === 'approved' && end($k['audit_log'])['action'] === 'relabel' && end($k['audit_log'])['from'] === 'USD',
     'the row now reads UGX, still approved, with a relabel entry in its audit log', json_encode($k));
-$pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pg = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 240,000\.00/si', $pg) === 1, 'the relabelled row counts: the tile reads 240,000.00 (170,000 + 70,000); the voided one does not');
 [$rc, $out] = $s->run($s->plug . '/tools/staff_records_currency.php', ['--void', '--relabel']);
 is_($rc === 2, '--void and --relabel together are refused (exit 2)');
