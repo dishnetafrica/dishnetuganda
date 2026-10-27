@@ -42,26 +42,26 @@ const AGR_NEVER = ['termination fee', 'arbitration', 'merchantability', 'fitness
 // between the markers, which also covers branches no sample renders. A change to its text must change these
 // deliberately (docs/67 §L).
 const AGR_SHA = [
-    'kit'          => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'kit_last'     => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'kit_lower'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'kit_upper'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'no_kit'       => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'starlink_svc' => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'travel_kit'   => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'kit_taxed'    => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'business'     => 'a64552754ad5e7fbfb5cbde15fd200ea5dd36e218b73f78cb63fa59debeee824',
-    'flex'         => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
-    'flex_lower'   => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
-    'flex_upper'   => 'c3cb032d4da18fd52bb64cd7eeff1466259ebece7d57cac6621f97336824eccf',
-    'not_flex'     => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'cctv'         => 'ec6cbdfd94c581dea722bfd34845b9d020d283e845c708d5c629f890b6747c1d',
-    'no_address'   => 'fa364bf62e7a5108ac464e1ec8888785f22ffab05a97e1d45ec392460d7f8753',
-    'street2'      => 'e3c1a5b276cc097ea28502583b064e557b0d1218f1fb087d9f307dd179dcc99c',
-    'company_same' => '1e85bb608517f3a12864ce8ca82381ed69592f63f64e26f4a6b6d4c10e2d3622',
-    'org_ids'      => 'a57fb477851838b2a34b66f5ba658c1f4bef3c9d6b0e524e459c978a9ca71b22',
+    'kit'          => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'kit_last'     => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'kit_lower'    => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'kit_upper'    => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'no_kit'       => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'starlink_svc' => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'travel_kit'   => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'kit_taxed'    => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'business'     => '732bb64f86e6d17c1569c1437360ef3e93315feb8572784a716bfb44a6e32235',
+    'flex'         => 'e019e75f1218f4bc0e0ce941be5034cbcc58baad950d31efafadd1817f4286eb',
+    'flex_lower'   => 'e019e75f1218f4bc0e0ce941be5034cbcc58baad950d31efafadd1817f4286eb',
+    'flex_upper'   => 'e019e75f1218f4bc0e0ce941be5034cbcc58baad950d31efafadd1817f4286eb',
+    'not_flex'     => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'cctv'         => 'edf054a7f8b82e1eebc4058acf8a9f5b669220ca7de83617a726cf6276ae4cbd',
+    'no_address'   => 'cbba1161ba90f1ad7106c68477952b5aa19c6538df8ed7520de106f0fe6cf1bc',
+    'street2'      => '11f8d5e55ebb93c8cf7064765fd1c480d6b4d0bcfe9a60501491c9af08efb063',
+    'company_same' => '45c79a0d0b96a0034fa4d6112fc4bdefd82b5924655be685c4932eaf02ce488b',
+    'org_ids'      => 'b743496709ae47ff06fa52885e6da5075430cf2fb3516bee33b45fc1438b560b',
 ];
-const AGR_SRC_SHA = '2ddcbec06f6fa4f9b4c81a4f211b973662170f0db1b1a79ad9b363d246497818';
+const AGR_SRC_SHA = 'ae7e3593bff3b3e9e9cf86d2f3e2c10f22b5e1da588a527132a381d4a61d90e1';
 /** The numbers the agreement and page 2 quote, from their single source: PARAMS in the website's policies/build.py. */
 const PARAM_KEYS = ['PRICE_NOTICE', 'OUTAGE', 'RETURN_DAYS', 'KIT_WARRANTY'];
 function params(): array {
@@ -69,6 +69,22 @@ function params(): array {
     $o = [];
     foreach (PARAM_KEYS as $k) if (preg_match("/'$k':\\s*'([^']+)'/", $src, $m) === 1) $o[$k] = $m[1];
     return $o;
+}
+/** Every policy section a page cites, as [page, number], sorted and unique. Read from the decoded text in any case and
+ *  in any of the template's spellings ("the", "its", "DishNet's", "DISHNET's"); "sections 2, 4 and 5" is read as three.
+ *  A "section N" that names no document listed here, or a "§", comes back as ['?', …], so that it fails. */
+const CITE_DOCS = ['terms' => 'terms of service', 'returns' => 'returns, refunds and cancellations', 'privacy' => 'privacy policy',
+                   'acceptable-use' => 'acceptable use', 'installation' => 'installation terms', 'warranty' => 'warranty policy',
+                   'terms-of-sale' => 'terms of sale'];
+function citations(string $html): array {
+    $x = preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(page($html)), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    preg_match_all('/\bsections?\s+(\d+(?:(?:,\s*|\s+and\s+)\d+)*)(?:\s+of\s+(?:the\s+|its\s+|dishnet[\'’]s\s+)?(?=(.{0,40})))?/iu', $x, $m, PREG_SET_ORDER);
+    $o = strpos($x, '§') !== false ? [['?', '§']] : [];
+    foreach ($m as $c) {
+        $pg = '?'; foreach (CITE_DOCS as $k => $name) if (stripos($c[2] ?? '', $name) === 0) $pg = $k;
+        foreach (preg_split('/,\s*|\s+and\s+/', $c[1]) as $n) $o[] = [$pg, $n];
+    }
+    sort($o); return array_values(array_unique($o, SORT_REGULAR));
 }
 /** A published page's numbered sections, id => number, read from its headings (<h3 id="…">N. …). */
 function sections(string $page): array {
@@ -81,7 +97,8 @@ function sections(string $page): array {
 const CITED = [['terms', 'who', '1'], ['terms', 'documents', '2'], ['terms', 'cancel', '8'], ['terms', 'equipment', '9'],
                ['terms', 'faults', '11'], ['terms', 'liability', '14'], ['terms', 'outside', '15'], ['terms', 'ending', '16'],
                ['returns', 'change', '2'], ['returns', 'orders', '4'], ['returns', 'installation', '5'], ['returns', 'plans', '6'],
-               ['privacy', 'share', '5'], ['acceptable-use', 'action', '5']];
+               ['privacy', 'share', '5'], ['acceptable-use', 'action', '5'], ['warranty', 'workmanship', '4'],
+               ['terms-of-sale', 'delivery', '5']];
 
 // Withdrawn from the end of clause 2 on 12 Oct 2026: the website says all taxes are included and nothing is added.
 const NEW_TAX      = ' Any new or increased government tax, levy or regulatory fee introduced after acceptance may be '
@@ -214,7 +231,13 @@ $P = params(); $sites = []; $ids = [];
 t('the policy numbers are read from build.py (' . implode(', ', PARAM_KEYS) . ')', array_keys($P), PARAM_KEYS);
 $sec = []; foreach (CITED as [$pg, $id, $n]) $sec[] = [$pg, $id, (sections($pg)[$id] ?? '')];
 t('every section the agreement and page 2 cite still has that number on its published page', $sec, CITED);
-$tosCited = array_values(array_map(fn($c) => $c[2], array_filter(CITED, fn($c) => $c[0] === 'terms')));
+// The Installation Terms are not a published page: the agreement and page 2 cite their section 25 for the installation
+// cap (docs/67 §J item 5), so it must stay that section in every version a job can have been accepted under.
+require_once dirname(__DIR__, 3) . '/dishnet-hybrid-sudan/lib/InstallationTerms.php';
+$inst = []; foreach (InstallationTerms::VERSIONS as $v) foreach (InstallationTerms::sections($v) as $s) if ($s['n'] === 25) $inst[$v] = $s['title'];
+t('section 25 of the Installation Terms is still their limitation of liability, in every version', $inst,
+  array_fill_keys(InstallationTerms::VERSIONS, 'Limitation of liability'));
+$citedPairs = array_map(fn($c) => [$c[0], $c[2]], CITED); sort($citedPairs); $citedPairs = array_values(array_unique($citedPairs, SORT_REGULAR));
 $src = (string)file_get_contents($argv[2]); $s0 = strpos($src, AGR_START); $e0 = strpos($src, AGR_END);
 t("the agreement's source is the reviewed text (pinned)", ($s0 !== false && $e0 !== false && $e0 > $s0)
     ? hash('sha256', substr($src, $s0, $e0 + strlen(AGR_END) - $s0)) : '', AGR_SRC_SHA);
@@ -241,8 +264,9 @@ foreach ($QUOTES as $k => $c) {
     $bad = array_values(array_filter(AGR_NEVER, fn($w) => strpos($lc, $w) !== false));
     t("{$k}: …and none of the terms or claims Uganda's policies do not allow", $bad, []);
     t("{$k}: …and no UCC authorisation or licence claim (docs/67 §J)", preg_match(AGR_UCC_CLAIM, $lc), 0);
-    preg_match_all('/section (\d+) of (?:the |DishNet\'s )?Terms of Service/', page($new[$k]), $mm);
-    t("{$k}: …the agreement and page 2 cite only Terms of Service sections the harness maps", array_values(array_diff(array_unique($mm[1]), $tosCited)), []);
+    t("{$k}: …the agreement and page 2 cite exactly the policy sections the harness maps",
+      array_values(array_filter(citations($new[$k]), fn($c) => $c[0] !== 'installation')), $citedPairs);
+    t("{$k}: …it cites section 25 of the Installation Terms, and page 2 does, once each", substr_count(page($new[$k]), 'section 25 of the Installation Terms'), 2);
     t("{$k}: …its text is the reviewed one (pinned)", hash('sha256', $p), AGR_SHA[$k] ?? '');
     $new[$k] = str_replace($a, '', $new[$k]);
     $p2 = page($new[$k]);
@@ -255,7 +279,10 @@ t('business: a city alone prints as the site, without a leading comma', $sites['
 t('no_address: no street or city prints the site as to be confirmed', $sites['no_address'] ?? null, 'To be confirmed in writing before installation');
 t('street2: a second street line and no country print in order', $sites['street2'] ?? null, 'Plot 1, Block B, Kampala &mdash; or the address confirmed in writing before installation');
 t("org_ids: uCRM's registration number and TIN print in party (a)", $ids['org_ids'] ?? null, 'registration number REG-EXAMPLE-1, TIN TIN-EXAMPLE-1');
-t('…and a quotation without them prints the fallback numbers, not those', ($ids['kit'] ?? '') !== '' && ($ids['kit'] ?? '') !== ($ids['org_ids'] ?? ''), true);
+// The fallbacks are read from the template's own {% set %} lines, so no company number is copied into the harness.
+$fb = 'registration number ' . (preg_match_all('/\{% set org_reg = \'(\d+)\' %\}/', $src, $m) === 1 ? $m[1][0] : '?')
+    . ', TIN ' . (preg_match_all('/\{% set org_tin = \'(\d+)\' %\}/', $src, $m) === 1 ? $m[1][0] : '?');
+t('…and a quotation without them prints the fallback numbers, not those', array_keys(array_filter($ids, fn($v) => $v !== $fb)), ['org_ids']);
 t('the baseline has no Service Agreement', agreement($old['kit']), '');
 
 $TC = require __DIR__ . '/tc_changes.php';

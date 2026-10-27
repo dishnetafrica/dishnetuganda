@@ -590,3 +590,186 @@ quotation still says loaned equipment is returnable "within 7 days of terminatio
 no fixed number of days. Clause 1 already makes the website prevail where the quotation is less favourable, so nothing
 is untrue meanwhile. But the next reload of the template in uCRM should drop "within 7 days of termination". This
 release keeps the repository copy as the operator loaded it on 12 Oct.
+
+## L. The Service Agreement on the Uganda quotation (27 Oct)
+
+The operator asked for the service agreement DishNet uses in South Sudan to be adapted for Uganda and printed with the
+quotation. The Uganda quotation template now carries it as pages 3–4, after the quotation (page 1) and its Service
+Process and Terms & Conditions (page 2). The South Sudan agreement, and the customer and staff named in the copy the
+operator supplied, are not reproduced here.
+
+**The operator's decisions (27 Oct).**
+1. **Term:** monthly, with no fixed term and no cancellation fee, as Terms §8 and Returns §6 already say.
+2. **When:** printed with every Uganda quotation, filled from the quote.
+
+**Why it must take nothing away.** Terms §2 ranks "a written agreement signed by you and DishNet for your service" above
+the Terms and the policies. A signed quotation with this agreement is such a document. Clause 1 therefore says that
+nothing in it takes away or reduces a right the customer has under the Terms, the policies or the law of Uganda, and
+that where it and any of them deal with the same matter, the provision more favourable to the customer applies. The
+harness requires that sentence on every quotation.
+
+**What it holds.**
+- **The parties.** DishNet, with the registration number and TIN page 1 already prints (uCRM's Organization values when
+  set). The customer is the company where uCRM holds one, "acting through" its contact (Terms §4: "for a business, its
+  registered name"), or the person.
+- **When it binds:** on acceptance of the quotation while it is valid, as page 2 describes.
+- **Service details:** the quotation, the site (or "to be confirmed in writing before installation"), the network
+  (Starlink only where the quotation has Starlink), the start date and term "for a DishNet service plan on this
+  quotation, other than a Flex package", the charges and billing (prepaid), no security deposit, and who owns the
+  equipment.
+- **Sixteen clauses,** each following the published page it names:
+
+| Clause | Follows |
+|---|---|
+| 1 Documents | Terms §2 (order); Returns §6 (Flex: 7 days from receiving the kit) |
+| 2 Provision of services | Terms §3; Privacy §5 ("authorised DishNet partners") |
+| 3 Information and changes in the law | Terms §4 (proof of identity), §16; Acceptable Use §5 |
+| 4 Payment | Terms §5 (30 days' notice), §6, §7 |
+| 5 Term | Terms §8; Terms of Sale; Warranty Policy; Installation Terms (Starlink installation); Returns §5 (other installation) |
+| 6 Cancellation and ending | Terms §8, §9, §16; Returns §2, §4, §5, §6; Terms of Sale §5 (late delivery); Installation Terms |
+| 7 Faults and service credits | Terms §11 (more than 3 days in a row) |
+| 8 Maintenance | none: advance notice of DishNet's own planned work (below) |
+| 9 Equipment and warranty | Warranty Policy; page-2 clause 12 |
+| 10 Events outside DishNet's control | Terms §15 |
+| 11 Data protection | Privacy Policy |
+| 12 Responsibility and indemnity | Terms §14; Installation Terms §25 (below), never for property damage from negligence (Warranty §4); page-2 clause 16 |
+| 13 Transfer | none: neither party transfers it without consent; DishNet to a successor on notice, and the customer may then cancel |
+| 14 Notices | Terms §1 (DishNet's contacts); the customer's notice details in the signature block |
+| 15 Changes and general | Terms §5, §8, §17 |
+| 16 Complaints and governing law | Complaints page; Terms §18 |
+
+- **Signature blocks** for both parties, with a line each for the customer's notice phone and e-mail, and "Customer
+  initials" on both pages.
+
+**Left out of the South Sudan agreement, and why:** the fixed term and its termination fee (decision 1); arbitration
+(Uganda's complaint routes and courts, Terms §18); the warranty disclaimers and "sole and entire remedy" (§I); a
+security deposit (the service details say none); confidentiality (no policy has it, and it would have stopped a customer
+showing the quotation to the UCC or a court); "whole agreement" (it would displace the policies); any statement that
+DishNet is authorised or licensed by the UCC (§J: none until the licence is issued); DishNet's address from uCRM (page 1
+prints it).
+
+**Pages 1 and 2.** Page 1's "governed by" line and page 2's acceptance line name the agreement. On page 2:
+- **Clause 1** lists the agreement.
+- **Clause 7:** refunds of a started month follow the Returns page and the law, as Terms §8 says, no longer only what
+  the law cannot exclude.
+- **Clause 10:** DishNet may end the service only as Terms §16 says: "impossible or unlawful", no longer
+  "impracticable". It offers an equivalent service where it has one, rather than migrating the customer.
+- **Clause 12** covers equipment DishNet supplies and drops "within 7 days of termination", which closes §K's follow-up.
+- **Clause 15** keeps the Installation Terms' cap for a Starlink installation (below).
+- **Clause 17** follows Terms §15 and states its remedies, as agreement clause 10 does.
+- **Clause 18** follows Terms §16.
+
+**Flex.** No Flex agreement document is in the repository. The knowledge base lists its termination, pause and
+equipment-return terms as unanswered (TBC_FLEX_TERMS), and no Flex contract may be promised until management confirms
+(RULE_FLEX_GATE). So:
+- every monthly row and clause says "other than a Flex package";
+- clause 1 says on every quotation that no Flex package is in force until its agreement is signed by both parties, and
+  that the agreement does not take away the 7-day cancellation (Returns §6) or any right the law gives;
+- where an item's label contains "Flex 12" or "Flex 24" (as written, in lower case or in capitals: the template cannot
+  change case), a Flex row says the package is a quotation only until DishNet confirms it in a written Flex agreement
+  signed by both parties.
+
+If a real Flex label does not match, only that row is missing; everything else above still prints.
+
+**Defaults the operator may change.** Each is the reading that keeps an earlier decision or makes no new promise:
+1. **The installation cap.** Clause 12 and page-2 clause 15 keep Installation Terms §25 for a Starlink installation, as
+   §J item 5 decided. Clause 12 adds that the cap never applies to damage to the customer's property from negligence,
+   whichever version was accepted (Warranty §4): v1.0's §25 has no such exception. Clause 12 already keeps death,
+   personal injury and fraud outside any limit. Without those words, clause 1 would remove the cap for every customer
+   who accepts a quotation.
+2. **Planned work (clause 8).** DishNet "tells the customer in advance, as early as it reasonably can". No published
+   policy says this; it is a new commitment, kept because it is mild. The draft's promise to work "outside business
+   hours where possible" was removed. Clause 2 names "authorised DishNet partners" as Privacy §5 does; the draft's
+   "qualified subcontractors" was removed.
+3. **Flex wording** (above). Confirm the item label a real Flex quotation carries in uCRM.
+4. **Which party form prints for a company.** Whether uCRM's `client.name` differs from `companyName` for a company
+   client is not established. The next company quotation shows "<company>, acting through <contact>" or the company
+   alone. Both forms are tested.
+
+**Known limits, not fixed here.**
+- **The plugin's fallback PDF.** When uCRM serves no PDF in time, the plugin renders its own (`PluginQuotePdf`) and
+  sends it. That PDF has no agreement, and its terms say "penalties or reconnection fees follow your service agreement",
+  "best-effort" and a 3-month cap, which §K withdrew. It needs a plugin release: send nothing for a non-USD tenant, or
+  point those lines at the policies. Until then, a quotation sent by that path is not "printed with every quotation".
+- **The PDF doctor.** `tools/pdf_template_doctor.php` treats "dishnetafrica" as a South Sudan marker. If uCRM's Uganda
+  Organization e-mail is set to the address Terms §1 publishes, every correct Uganda quotation is reported as South
+  Sudan's. Remove that marker in a plugin release before changing the e-mail. The agreement itself prints no e-mail
+  address.
+- **uCRM's renderer is not Chromium.** The page counts below are Chromium's. The next real quotation is the proof.
+- **No lawyer has read the agreement**, as for the pages (§J item 8). It is a contract customers sign; a Ugandan
+  advocate's reading is recommended before relying on it.
+
+**Reviews.** The first draft (`7ae64745`) had three independent reviews:
+1. The first upheld 51 findings, applied in `60f7004a`.
+2. The second checked each of them and read the result fresh. It upheld 43 of 54 open items after adversarial
+   verification, applied in `3f620cdc`.
+3. The third, on `3f620cdc`, found all 43 of the second review's items resolved, or left open by design. It upheld 9 of
+   15 new findings after adversarial verification:
+   - page-2 clauses 7, 10 and 17 (above);
+   - clause 12's property-damage sentence and clause 6's Terms of Sale §5;
+   - four harness gaps: a fallback-numbers check that could not fail, a citation check with no positive control, two
+     missing controls, and §25 untied to its source.
+
+   All nine are applied in the commit that adds this section.
+
+**The harness** (`scripts/harness/quotation-template/`, §G, §I) now checks the agreement on 18 sample quotations
+before cutting it out for the byte comparison with the 27 Sep baseline. The samples cover:
+- kits in any spelling, a plan alone, a quote with VAT lines and CCTV;
+- a business with only a city on file, the company as its own contact, no address, and a second street line with no
+  country;
+- uCRM's own registration number and TIN;
+- three Flex spellings, and a label that only looks like Flex.
+
+On each sample, the checks are:
+- the agreement is present once, on two pages of its own;
+- the parties and the quotation number;
+- the "takes away nothing" sentence;
+- the monthly term;
+- the Flex row exactly on the Flex quotes, and clause 1's Flex sentence on all;
+- the notice, outage, return and warranty periods against `build.py`'s PARAMS, on the agreement and on page 2;
+- every section the page cites, read in any spelling, equal to the list the harness maps, and each of those still
+  that number on its published page (Installation Terms §25 against `InstallationTerms.php`, in every version);
+- no stray comma in the site;
+- a deny-list of South Sudan's terms and of claims the pages withdrew;
+- a pattern that catches a UCC authorisation or licence claim in any word order;
+- the registration number and TIN: uCRM's where set, otherwise the template's own fallbacks;
+- the rendered text's sha256.
+
+A further sha256 pins the agreement's source, which covers branches no sample renders. Page 2 may differ from the
+baseline only in the pairs `tc_changes.php` lists. Twenty-eight weakened copies each fail, and each by the check that
+guards it. Results:
+- the rehearsal gives 64 ok, 0 failed;
+- Twig 3 and Twig 2 pass 353 checks each, with 0 failures;
+- `test_quote_tax_line` passes 31/0 and `test_kit_tax_note` 68/0.
+
+**Layout** (Chromium, A4; the heights are px of 1,123, with about 1,089 above the footer):
+- Five sample quotations print as 4 pages at 100% and at 108%.
+- Page 2 is 936 px, and its tallest T&C column, measured as the sum of its clauses, is 542 px. §J's 947/554 figure was
+  taken differently.
+- Page 3 is at most 965 px, on a Flex quotation for a business with a long address.
+- Page 4 is 847 px.
+- To fit, page 3 holds clauses 1–2 and 3–5, and page 4 holds 6–11 and 12–16, in reading order.
+
+**Loading it.** The template in use is the `template-v5.zip` the operator sent on 27 Oct. Its `template.html.twig` is
+byte-identical to the repository copy §I recorded (`419eb068…`), and its `template.css` likewise (`654e406a…`). So
+upload the new ZIP whole; no paste is needed:
+1. Upload `template-quotation-uganda-2026-10-27.zip` in uCRM's quote templates. If asked for a name: "Quotation Uganda
+   with Service Agreement".
+2. Give it to the organization as its quote template, replacing v5.
+3. The proof is the next real quotation:
+   - 4 pages, with page 3 starting at SERVICE AGREEMENT;
+   - page 2 not spilling;
+   - page 4 ending at the signature blocks.
+
+   `php tools/pdf_template_doctor.php --quote <id> --keep` keeps the PDF to open. **Do not make a test quote for a real
+   customer**: every new quotation goes to the client on WhatsApp.
+4. To go back, give the v5 template back to the organization; if it is no longer in uCRM's list, upload
+   `template-v5.zip` first.
+
+The ZIP is built like uCRM's exports: `template.html.twig`, then `template.css`, deflated, at a fixed timestamp.
+
+| File | sha256 |
+|---|---|
+| `template-quotation-uganda-2026-10-27.zip` | `7c34632b9f6992c0b37f58dc89d10e44fb4edaff880cf3a32b05bfd500b4d380` |
+| — its `template.html.twig` | `bac5646c071d0bab7b49459f7ddde6021e42a2fff747925cffb1184d8a31588b` |
+| — its `template.css` (unchanged) | `654e406a5ebccb0fe44b059bf45170890b69f3e8190e1fbb7aedf825748c846e` |

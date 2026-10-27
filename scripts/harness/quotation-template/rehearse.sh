@@ -4,14 +4,16 @@
 #
 # The baseline is the template as the repository gave it before 5.18.48 (commit 2bfad82), so the sandbox permits
 # only constructs that template already used. Needs composer and the network (Packagist) the first time; TWIG_CACHE
-# keeps the two installs between runs. The controls: twenty-one weakened copies must each fail, each by the check that
+# keeps the two installs between runs. The controls: twenty-eight weakened copies must each fail, each by the check that
 # guards it — the all-taxes sentence never printed, the tax-lines branch dropped, a filter the baseline never used, and
-# eighteen on the Service Agreement and page 2 (docs/67 §L): its 'takes away nothing' sentence removed, South Sudan's
-# termination fee, the agreement removed, a fixed term, a clause deleted (only the pins see it), the notice, outage and
-# return periods off build.py's (agreement and page 2), the site cell's stray comma back, a 24/7 claim, a UCC
+# twenty-five on the Service Agreement and page 2 (docs/67 §L): its 'takes away nothing' sentence removed, South Sudan's
+# termination fee, the agreement removed, a fixed term, a clause deleted (only the pins see it), the notice period off
+# build.py's (agreement and page 2), the outage figure off it (agreement), the return period off it (page 2, and the
+# agreement's 7-day cancellation), the kit warranty off it (page 2), the site cell's stray comma back, a 24/7 claim, a UCC
 # authorisation claim, the Flex row removed, the party named as the contact instead of the company, clause 1's Flex
-# sentence removed, a Terms of Service section misnumbered, the no-address branch changed, and an edit no sample
-# renders (only the source pin sees it).
+# sentence removed and its Flex gate reversed, a Terms of Service section misnumbered, an unmapped one cited in another
+# spelling, a Returns section misnumbered, another Installation Terms section cited, the fallback company numbers
+# dropped, the no-address branch changed, and an edit no sample renders (only the source pin sees it).
 set -u
 R="$(cd "$(dirname "$0")/../../.." && pwd)"; H="$R/scripts/harness/quotation-template"
 TPL="${TPL:-$R/dishnet-hybrid-sudan/ucrm_pdf_templates/quotation_uganda/template.html.twig}"
@@ -88,6 +90,13 @@ w(18, fg, "")                                                                   
 w(19, "as section 11 of the Terms of Service sets out", "as section 12 of the Terms of Service sets out")   # a section misnumbered
 w(20, "{% else %}To be confirmed in writing before installation{% endif %}", "{% else %}Kampala{% endif %}")   # the no-address branch changed
 w(21, "  {% set is_flex = false %}", "  <!-- an edit that no sample renders -->\n  {% set is_flex = false %}")   # only the source pin sees it
+w(22, "registration number {{ org_reg }}, TIN {{ org_tin }}", "registration number {{ organization.registrationNumber }}, TIN {{ organization.taxId }}")   # the fallback numbers dropped
+w(23, k, "Work outside the quotation is quoted before it begins, as Section 12 of DISHNET&rsquo;s Terms of Service sets out.")   # an unmapped citation, spelt otherwise
+w(24, "(section 6 of the Returns, Refunds and Cancellations page)", "(section 7 of the Returns, Refunds and Cancellations page)")   # a Returns section misnumbered
+w(25, "within 7 days of receiving the kit", "within 3 days of receiving the kit")   # agreement: a return period build.py does not give
+w(26, "No Flex package is in force until its agreement is signed by both parties", "A Flex package may start before its agreement is signed by both parties")   # the Flex gate reversed
+w(27, "(12 months on Starlink kits from delivery)", "(6 months on Starlink kits from delivery)")   # page 2: a kit warranty build.py does not give
+w(28, "section 25 of the Installation Terms accepted for it set out; whichever", "section 24 of the Installation Terms accepted for it set out; whichever")   # another Installation Terms section
 PY
 run() { out="$(php "$H/render.php" "$CACHE/twig3" "$SB/w$1.twig" "$SB/base.twig" 2>&1)"; rc=$?; check "$rc" "1" "$2"; }
 run 1 "a copy that never prints the all-taxes sentence fails"
@@ -130,12 +139,26 @@ check "$(count 'FAIL .*: …it names the customer as the party')" "1" "…on the
 run 18 "an agreement without clause 1's Flex sentence fails"
 check "$(count 'FAIL .*: …no Flex package is in force before its agreement is signed, and the 7-day cancellation stays')" "$NS" "…on every sample quote"
 run 19 "an agreement citing a Terms of Service section the harness does not map fails"
-check "$(count 'FAIL .*: …the agreement and page 2 cite only Terms of Service sections the harness maps')" "$NS" "…on every sample quote"
+check "$(count 'FAIL .*: …the agreement and page 2 cite exactly the policy sections the harness maps')" "$NS" "…on every sample quote"
 run 20 "an agreement whose no-address branch changed fails"
 check "$(count 'FAIL no_address: no street or city prints the site as to be confirmed')" "1" "…on the no-address sample"
 run 21 "an agreement edited where no sample renders fails"
 check "$(count "FAIL the agreement's source is the reviewed text (pinned)")" "1" "…by the source pin"
 check "$(count 'FAIL')" "1" "…and by nothing else"
+run 22 "an agreement that prints uCRM's company numbers without the fallbacks fails"
+check "$(count 'FAIL …and a quotation without them prints the fallback numbers')" "1" "…by the fallback check"
+run 23 "an agreement citing an unmapped Terms of Service section in another spelling fails"
+check "$(count 'FAIL .*: …the agreement and page 2 cite exactly the policy sections the harness maps')" "$NS" "…on every sample quote"
+run 24 "an agreement citing a Returns section the harness does not map fails"
+check "$(count 'FAIL .*: …the agreement and page 2 cite exactly the policy sections the harness maps')" "$NS" "…on every sample quote"
+run 25 "an agreement with a return period build.py does not give fails"
+check "$(count 'FAIL .*: …no Flex package is in force before its agreement is signed, and the 7-day cancellation stays')" "$NS" "…on every sample quote"
+run 26 "an agreement that lets a Flex package start before its agreement fails"
+check "$(count 'FAIL .*: …no Flex package is in force before its agreement is signed, and the 7-day cancellation stays')" "$NS" "…on every sample quote"
+run 27 "a page 2 with a kit warranty build.py does not give fails"
+check "$(count "FAIL .*: page 2's notice, return and warranty periods are build.py's")" "$NS" "…on every sample quote, by the build.py check"
+run 28 "an agreement citing another section of the Installation Terms fails"
+check "$(count 'FAIL .*: …it cites section 25 of the Installation Terms')" "$NS" "…on every sample quote"
 
 echo; echo "REHEARSAL: $PASS ok, $FAILN failed"
 [ "$FAILN" = "0" ]
