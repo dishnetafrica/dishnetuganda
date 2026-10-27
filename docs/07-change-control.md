@@ -14490,3 +14490,470 @@ the server, of the command step 3 of the runbook gives.
   - his number, only after those checks, by root `docs/66` *"A technician's number (5.18.100)"*;
   - the five clients moved to organization #1 in uCRM;
   - Q-N3's `?:http404`, to be looked at, read-only.
+
+## 26–27 Oct — 5.18.101: the WhatsApp Quotation & Order Summary signs off as DishNet Uganda (Uganda) — when a quote is made in uCRM, the summary the plugin sends ends *"🛰️ \*DishNet Uganda — Starlink, installation & support\*"* instead of *"🚀 \*DishNet Internet Services\*"*; one line of `webhook.php`, behind the gate the tax line already uses; South Sudan's summary byte for byte as before; no migration; no switch. `release/5.18.101` = `f2055ba`, cut on live 5.18.100 (`8ff469f`); `scripts/deploy-5.18.101.sh` pinned to it; the release suite twice (27 Oct): 298 files, 16,608 passed and 2 failed in each pass — two old tests whose planted dates the calendar overtook, failing the same way on live 5.18.100 and fixed on the development branch (known limit 8); the rehearsal PASSED, a clean trial (trial 4, 27 Oct: 1,630 ok, 0 failed); NOT deployed
+
+**Request.** The owner, 26 Oct: *"also can we update our wroding on whatsapp message we are sending instead of dishent
+internet services use relevant wording ?"*. Asked to choose, the owner picked *"Starlink, installation & support
+(Recommended)"*, that is **"🛰️ \*DishNet Uganda — Starlink, installation & support\*"**, for Uganda only. South Sudan,
+which also sells fibre and LTE, keeps its line. Then: *"ok go ahed push relased branch when its ready"*.
+
+### Release notes
+
+**In plain words.** On the Uganda installation, the WhatsApp *Quotation & Order Summary* that goes to the customer when
+a quote is made in uCRM now ends with *"🛰️ DishNet Uganda — Starlink, installation & support"*.
+- **What changes:** that last line alone, in the summary the webhook sends. Every line above it and the quote PDF that
+  goes with it are as before.
+- **Who sees it:** Uganda's customers, from the next quote on. The gate is the tax line's (5.18.49): `$ugPlans !== false`,
+  that is `TenantProfile::current()->id() === 'uganda'`. The webhook sends that summary:
+  - for a quote made in uCRM;
+  - on Uganda, for a KYC customer's quote too, because `kyc_messages_like_crm` has been on since 25 Sep (its entry
+    above), so the webhook sends it exactly as one made in uCRM;
+  - for a quote made on the quote screens (Send Quotation) that also made a uCRM quote, whenever the webhook claims it
+    first (QUOTE_ONCE, Uganda only).
+
+  South Sudan's summaries end *"🚀 DishNet Internet Services"*, byte for byte as before.
+- **What does not change:**
+  - summaries already sent;
+  - QuotationService's own message (`buildProformaMessage()`), which ends *"Thank you for choosing {company}!"* and
+    never carried the phrase, so it carries neither line, as under 5.18.100. It is the message:
+    - the quote screens send when they claim the quote first;
+    - `cron_quote_wa.php` sends as the fallback, for a KYC quote (Flow A) or a uCRM quote (Flow B) the webhook did not
+      send;
+  - the pending PDF the cron re-sends, with its own caption;
+  - the *"Welcome to DishNet Internet!"* template on the WhatsApp screen (a separate, staff-editable template);
+  - the Salesperson numbers card, the quoting organization, the Cashbook, ECO Bank.
+- **Nothing to switch on.** There is no setting; the next quote shows the line.
+
+### Files — 13 against `8ff469f`: none added, 13 changed, none removed
+
+The release is one commit on the 5.18.100 release commit itself.
+- **The code (1):** `webhook.php` (+3 −1): the sign-off line and its two lines of comment.
+- **The record (1):** `SAFETY.md`: its 5.18.101 entry, the owner's words verbatim.
+- **Tests, on purpose (5):**
+  - `tests/test_quote_summary.php` (+94):
+    - section **L** pins the owner's wording as written, not read from the code under test: once, at the very end,
+      also when uCRM cannot list its plans, and no *"DishNet Internet Services"* left; South Sudan still ends with its
+      line;
+    - **J** gains two weakened webhooks, each caught: the Uganda line sent to South Sudan, and the old line kept for
+      Uganda;
+    - section **M** holds the release to its boundary against `8ff469f5`, from Git:
+      - outside tests and documents, exactly `manifest.json` and `webhook.php` change;
+      - the manifest by its version line only;
+      - `webhook.php` by the sign-off alone: 5.18.100's line put back gives `8ff469f5`'s file byte for byte;
+      - the 11 declared tests and documents change, and no other;
+      - `php -l` passes.
+  - `tests/test_sales_numbers.php` R: now measures 5.18.100's delta between its own two release commits (`ca05ada5` →
+    `8ff469f5`) and checks this tree still holds 5.18.100's class and page byte for byte.
+  - `tests/test_quote_company.php` I5: the version pin and its label.
+  - `tests/test_bank_boundaries.php`, `tests/test_cashbook_physical_list.php`: the version rule.
+- **The version alone (6):** `manifest.json` (5.18.101) and the pins in the five `tests/test_distributor_*.php`.
+- **Untouched:** `migrations/`, `master.php`, `main.php`, `public.php`, `cron_quote_wa.php`, `lib/QuotationService.php`,
+  `lib/QuoteTaxLine.php`, `lib/TenantProfile.php`, `lib/SalesNumbersAdmin.php` and its page, every other runtime file,
+  South Sudan and Domain B. Nothing outside the plugin folder changes.
+- 13 files changed, 177 insertions(+), 27 deletions(-).
+
+### Ancestry
+
+`f2055ba` (5.18.101, release) ← `8ff469f` (5.18.100, release, live since 25 Oct) ← `ca05ada` (5.18.99). Built on the
+release commit itself, in the worktree `rel101-wip`; there is no development branch for it. The commit was amended
+three times before any push, each time for `SAFETY.md` alone, and nothing was pushed before the last:
+- `25af93b` → `5127a78`: its *What* bullet said `cron_quote_wa.php` re-sends the webhook's message. It does not: the cron
+  builds its own message (above). The first review found the same claim in the deploy script's header.
+- `5127a78` → `39a0b0d`: its control figures. Against 5.18.100's `webhook.php` the test fails **49 passed, 7 failed** —
+  L's three Uganda checks, J's two new copies whose anchor is not there, and M's code set and webhook span — not the
+  46/5 first written. Measured again on `8ff469f`'s `webhook.php` in a separate worktree.
+- `39a0b0d` → `f2055ba`: who sends the summary. Its parenthesis said the cron sends *"the app and KYC quotes"*. The
+  code says otherwise:
+  - the quote screens send QuotationService's own message themselves when they claim first;
+  - on Uganda, a KYC customer's quote goes from the webhook, with the new line (`kyc_messages_like_crm`);
+  - the cron's message is only the fallback.
+
+  An independent check of this entry's draft against the code found it; the deploy script's header and summary said
+  the same and were corrected with it.
+
+The release suite runs on `25af93b`, `5127a78` and `39a0b0d` were stopped when the commit changed, the last after 30 of
+298 files of its first pass. They are not counted.
+
+### Tests
+
+- **On the release tree, the 14 test files it changes or that name it** (one at a time, before the last amend):
+  - `test_quote_summary` 56/0;
+  - section M's seven planted faults each caught: another runtime file, an untracked one, an undeclared test, a second
+    manifest line, a second change in `webhook.php`, the old line kept beside the new, and a syntax error;
+  - `test_sales_numbers` 163/0, `test_sales_numbers_mutants` 21/0, `test_quote_company` 277/0;
+  - `test_bank_boundaries` 158/0, `test_bank_screen` 341/0, `test_cashbook_physical_list` 496/0;
+  - the five distributor tests 61, 33, 66, 59 and 47, each with 0 failed;
+  - `test_sl_block_retry_scope` 86/0 and `test_starlink_connector` 97/0.
+- **On `f2055ba`, the seven that read `SAFETY.md` or the version, again** (as on `39a0b0d` before it, with the same
+  counts):
+  - `test_quote_summary` 56/0, `test_sales_numbers` 163/0, `test_quote_company` 277/0;
+  - `test_sl_block_retry_scope` 86/0, `test_starlink_connector` 97/0;
+  - `test_bank_boundaries` 158/0, `test_cashbook_physical_list` 496/0.
+- **The release, the full suite twice** (by the resumable equivalent of `tests/run.sh`), on `f2055ba` in the worktree
+  `rel101-wip`, its tree with no local change: **pass A** 00:48:03–03:08:17 UTC and **pass B** 03:08:17–05:28:15 UTC,
+  each **298 files, 16,608 passed, 2 failed, EXIT=1**, the same file by file.
+  - **The two failures are known limit 8's**, one assertion each: `test_field_cash_in_currency` 47/1 and
+    `test_staff_manual_entry_currency` 35/1. Nothing else failed.
+  - **Against 5.18.100's release suite** (24 Oct: the same 298 files, 16,598 passed, 0 failed), four files differ, and
+    only these:
+    - `test_quote_summary` 45 → 56: this release's sections L and M, and J's two new weakened copies;
+    - `test_sales_numbers` 162 → 163: this release changes it;
+    - the two date tests, 48/0 → 47/1 and 36/0 → 35/1.
+  - **Nothing heavy ran beside them.** No trial ran during either pass, and no other suite. During pass A, single test
+    files ran beside it, one at a time, for the investigation in known limit 8. During pass B, nothing ran. The two
+    passes agree file by file.
+  - **`test_customer_pwa`'s `php -S` server outlived the test** in each pass. Each leftover server's parent was process
+    1, and both were stopped by hand after the suite. This predates the release: the test is not one of the 13
+    files.
+- **The script's sign-off checks, outside the suite:** the QS readers, taken from the script itself (its QS block byte
+  for byte), on the release's and 5.18.100's `webhook.php` and six weakened copies: 10/0, each weakened copy caught —
+  - the Uganda line sent to South Sudan too;
+  - the old line kept beside the new;
+  - the gate gone;
+  - the wording changed;
+  - the phrase elsewhere in the file;
+  - the new line twice.
+
+### `scripts/deploy-5.18.101.sh` — 7,694 lines, sha256 `eeb7e17849b79832…`
+
+**How it is made.** Derived from 5.18.100's script, the one that PASSED on 25 Oct, by 120 asserted edits. Each anchor
+must be found exactly the stated number of times, or nothing is written. Its two release tokens are then filled with
+the release commit, short and full, by a second asserted step. That step checks the release's own 13 pinned sha256
+(`PIN_SHA256S`) against Git at that commit. On the server, A0 itself checks the rest against Git before anything
+changes: the 63 kept files in both commits, the 13 changed files' 5.18.100 forms, the two migrations and `main.php`.
+Here, the three lists were also checked by hand against Git: 63/63 at both commits, 13/13 at 5.18.100 and 13/13 at
+the release. 5.18.100's, 5.18.99's and 5.18.98's
+checks are carried with their names.
+
+**New:**
+- **A0, pinned:** the 13 files by sha256, none added; the 63 files it must not touch by theirs in both commits; the 13 it
+  changes by their 5.18.100 form (Q-G1 installed, before anything changes). The copy's time is read off `webhook.php`
+  (COPY_MARK), a file this release changes.
+- **QS-G1, stage A, before anything changes (a refusal).** `webhook.php` is read as text, counting whole lines:
+  - the new line;
+  - the old line on its own;
+  - the old phrase anywhere;
+  - the line that sets the gate.
+
+  The pin's file from Git must read `new=1 old=0 phrase=1 gate=1`: the phrase only inside the new line. The installed
+  file must still be 5.18.100's, `new=0 old=1 phrase=1 gate=1`. None of `webhook.php` is ever run.
+- **QS-CA1, after the copy (R; `--after-only` too):** the installed `webhook.php` reads as the pin's.
+- **RB, after a rollback:** it reads as 5.18.100's again.
+- **Whether this server sees the new line** is Q-G2's question, carried: the tenant is Uganda through the installed code
+  on a copy, the gate's own rule.
+- **5.18.100's TN checks**, now against 5.18.100 as the baseline: the installed owner rule and the pin's are the same
+  rule, so TN-G1 and TN-G2 compare it with itself in both, and RB expects 5.18.100's rule after a rollback.
+- **The summary** prints, before the verdict:
+  - the `--after-only` and the quarantine's `--check`, each on its own line;
+  - the screens, none of which changes, with **no test quote** for a real customer;
+  - *your steps: none*.
+
+  After the verdict, alone in its own block: the rollback, then the by-hand put-back.
+
+**Reviews before the trial.** Three independent read-only reviews of the script and its rehearsal. A second reader
+verified each finding before it was acted on.
+- **Round 1: eight confirmed, all fixed; two refuted.** The fixes:
+  - the rollback's stage-A note said the card would offer salespeople only;
+  - G3 and N1 said *"since $BASELINE_VERSION"* for the bank rows (5.18.98's);
+  - Q-CA1's comment listed `webhook.php` among the kept files;
+  - A8 said this release adds 088 (5.18.97's);
+  - the header and the summary said `cron_quote_wa.php` re-sends the webhook's message (the release's `SAFETY.md` was
+    amended for the same claim);
+  - in the rehearsal, the RB line named 5.18.100's quoting code wrongly;
+  - in the rehearsal, 1e's put-back check never looked at `webhook.php`.
+- **Round 2: three confirmed, all fixed; three refuted.** The fixes:
+  - `SAFETY.md`'s control figures (the release amended);
+  - Q-CA5's and Q-CA4's failure messages credited 5.18.99's pages and gate to this release;
+  - the by-hand put-back line was never asserted, in 1e's refusal or in the summary.
+- **Round 3: nine confirmed, all fixed; two refuted.** The fixes:
+  - six carried comments and messages named the baseline where they meant an older release: the SIGPIPE stop (5.18.99's
+    rehearsal); T1's files, three pinned and two held by A0; the quoting guard (5.18.99's); and A12's and R18's notes and
+    A12's comment (the ungated job is 5.18.90's);
+  - in the rehearsal, 7b carried a part that could never fail;
+  - in the rehearsal, 4c's joined-line test missed the put-back on its right-hand side;
+  - in the rehearsal, 4c and 6 never asserted that the rollback is printed after the verdict, as root docs/44 §16.9
+    requires. Both now do, each tested against 5.18.100's real outputs with two controls: the line moved before the
+    verdict, and the line printed twice.
+
+- **The record, checked against the code** (this entry's draft; three readers, a verifier for each finding): ten
+  confirmed, one refuted. One reached the release and the script: who sends the summary (Ancestry, `39a0b0d` →
+  `f2055ba`), corrected in `SAFETY.md`, the script's header and its summary. The other nine were this entry's own
+  wording, corrected here. Among them was known limit 6, which first said the lock reading could never pass falsely.
+
+### The rehearsal — `scripts/harness/deploy-5.18.101/rehearse.sh` (551 lines, sha256 `16495d63595e7eb6…` at `2ff5294d`)
+
+**The sandbox.** It is 5.18.100's rehearsal's, built by its own code up to just before its last section (the cut
+asserted), and that rehearsal builds every earlier sandbox from their own rehearsals. By the time 5.18.101's sections
+begin, the sandbox matches production on the day:
+- 5.18.100 serving after its `--redeploy`, its copy moved back;
+- its `--after-only` and the quarantine's `--check` passed;
+- its four staff records in place, with a technician's number in the registry.
+
+**What each section proves:**
+- **101-pre** 5.18.100 serving, every file as its pin has it.
+- **101-0** the pins against Git (short and full; the 13, the 63, the 13), T1's pinned count as 5.18.100's, the
+  header's two commands alone, COPY_MARK on `webhook.php`, and the QS and owner-rule readers on the pin, 5.18.100 and
+  5.18.99.
+- **101-c** `--check` GO: QS-G1 and TN-G1–TN-G3 ok. Nothing changed, no name printed, GETs only.
+- **101-1** refusals, each before anything changes, nothing changed by any of them:
+  - a release that sends the Uganda line to every tenant: refused at A0, then re-pinned so A0 lets it through, refused
+    at QS-G1, and with QS-G1 weakened, caught;
+  - TN-G3, carried, refuses `wa_inbox_roles` naming a technician role;
+  - a hand-edited installed `webhook.php` is refused (BASE_DIFFERS), with the by-hand put-back printed exactly.
+- **101-4** the deploy, DEPLOY typed: PASSED.
+  - QS-G1, QS-CA1 and the carried lines;
+  - the state file without a keyed hash, and the copy's time;
+  - the `--after-only`, the quarantine's `--check`, the rollback and the put-back each printed alone on its line, the
+    rollback once and after the verdict;
+  - no name, no stand-in secret; the ledger, ECO Bank and the quarantine as they were.
+- **101-5** `--after-only` as printed: PASSED.
+  - `webhook.php` hand-edited back to the old line: QS-CA1 FAILS, and its weakened copy says ok (caught);
+  - `--check` with 5.18.101 live is refused.
+- **101-6** the rollback as printed (after its verdict), ROLLBACK typed: PASSED.
+  - 5.18.100's files and sign-off are back;
+  - the technician's number is counted;
+  - `--redeploy` too soon is refused at A14.
+- **101-7** `--redeploy`: PASSED, and its `--after-only` PASSED.
+- **101-10** the sweeps:
+  - observers quiet, token copies gone, GETs only, the vault as it was;
+  - no figure, secret, client id, staff name or bash runtime error in any output;
+  - nothing left in /tmp, every anchor found, and the checkout as found.
+
+**The trials: one clean trial is required**, under 5.18.99's rule of 23 Oct.
+- Each trial runs from a worktree frozen at a fixed commit, with an early stop at the first FAIL from 101-pre on.
+- Any failure, or one that cannot be shown, means the trial is not clean.
+- A clean trial is evidence for the rehearsal only. It authorises no push and no deploy by itself.
+
+- **Trial 1 (26 Oct 13:00–13:09 UTC, `dep-101` at `07b9364a`): stopped by hand, not clean.** It ran beside the release
+  suite. In 5.18.94's inherited section 94-2, cases 2d and 2h failed. Those variants never reached the check they test:
+  `deploy-5.18.94.sh`'s A13 read `locks=dropped` first (2 of the 19 runs that reached A13).
+  - The cause was found and reproduced (known limit 6): a duplicated entry in a read of `/proc/locks` while other
+    processes changed their locks.
+  - From then on, a trial runs alone and the suite waits.
+- **Trial 2 (26 Oct 13:24–17:23 UTC, `dep-101b` at `2ff5294d`, the script pinned to `39a0b0d`): clean — 1,630 ok, 0
+  failed, exit 0.**
+  - 1,521 ok in the inherited sections and 109 in 5.18.101's own; no `locks=dropped` reading in any run.
+  - It is not the final script's trial: the release was amended afterwards for `SAFETY.md` (Ancestry), which moved its
+    pins, and the script's header and summary changed with it.
+- **Trial 3 (26 Oct 17:40 UTC, `dep-101c` at `ef728a62`): killed by a container restart** in 5.18.100's first
+  section, at 1,355 ok and 0 FAIL. It is not a result. Its leftovers in /tmp were moved aside, not deleted.
+- **Trial 4 (26 Oct 21:11 – 27 Oct 00:47 UTC, `dep-101c` at `ef728a62`, the final script pinned to `f2055ba`): PASSED,
+  a clean trial — 1,630 ok, 0 failed, exit 0** (*"RESULT: 1630 ok, 0 failed (the script: the committed script)"*), in
+  3 h 36 min, alone.
+  - 1,521 ok in the inherited sections and 109 in 5.18.101's own. **0 FAIL anywhere**, and no `locks=dropped` reading
+    in any kept run. 16 runs of the 5.18.101 script were kept.
+  - **101-1:** each refusal before anything changed, 1e with the by-hand put-back printed exactly.
+  - **The deploy (101-4) PASSED: 177 ok, 0 failed, 24 notes.** In 4c each command was printed exactly and alone, the
+    put-back included, and the rollback once, after the verdict.
+  - **101-5:** `--after-only` PASSED, and a hand-edited `webhook.php` fails QS-CA1.
+  - **101-6:** the rollback PASSED, 5.18.100's sign-off back; `--redeploy` too soon was refused at A14.
+  - **101-7:** `--redeploy` PASSED, with its `--after-only`.
+  - **101-10:** the sweeps clean, and the checkout as found.
+
+### Runbook
+
+1. **Pushed with this entry:** `release/5.18.101` at `f2055ba`, and the development branch with the script, its
+   rehearsal and this record. Step 3's `git pull origin claude/study-this-jhe2eg` brings the script, and its
+   `git fetch origin release/5.18.101` the release.
+2. **First, while 5.18.100 is still live: its own after-checks** (5.18.100's DEPLOYED entry, *Still to come*). They can
+   run only while 5.18.100 is live, because its script refuses once the container serves anything but `8ff469f`.
+   **5.18.101's A14 refuses until a quarantine `--check` begun after 5.18.100's copy (25 Oct 11:24:06 UTC) has PASSED.**
+   No such `--check` is recorded here yet.
+   - `--after-only`, then the quarantine's `--check`, each its own command, each with its own log file to send:
+
+         cd /opt/dishnet && bash scripts/deploy-5.18.100.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.100/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+     Then, on its own:
+
+         ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   - 5.18.100's day-later `--after-only` (due after 15:10 UTC on 26 Oct), if it has not been run: the same first
+     command once more. 5.18.101's own `--after-only` carries 5.18.100's checks (TN-CA1–TN-CA3, R19), so a deploy
+     before it loses nothing, but running it first keeps 5.18.100's record whole.
+3. **The deploy.** Run it as root on the server, as its own command, outside 14:55–15:10 UTC (the evening WhatsApp,
+   18:00 Kampala). Type `DEPLOY` when asked, and send back **the log file**: never a copy of the terminal, never the
+   cash sheet. While it runs, and during every `--after-only` and the rollback, do not use any of these:
+   - the Salesperson numbers card;
+   - ECO Bank (keep no statement);
+   - Send Quotation or the KYC form;
+   - `tools/set_config.php` or Settings.
+
+   A change made then fails the checks that compare before and after. **Make no quote in uCRM to try the line**: the
+   plugin WhatsApps every new quote to its customer.
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.101 && mkdir -p /root/dnb-5.18.101 && bash scripts/deploy-5.18.101.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.101/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   **Expected: PASSED, 0 failed, with notes.** None is 5.18.101's own. Each is carried with its name, as the summary's
+   *names* line says:
+   - 5.18.100's TN-N1 and TN-N2;
+   - 5.18.99's Q-G4, Q-G5, Q-N1–Q-N7 and Q-CA3's;
+   - 5.18.98's N1–N4;
+   - the older A17, R3 and R19.
+
+   When each appears:
+   - TN-N1 always. TN-N2 only if no active technician account without `is_admin` exists, or if one with `is_admin` is
+     left out. Never change a role or `is_admin` to fit the card;
+   - A17 if requests made under v1.0 are still pending;
+   - N1–N4;
+   - Q-G4 when uCRM gives no currency for organization 1;
+   - Q-G5 INCONCLUSIVE when there is no Lead or Manual quote with a uCRM client in 30 days;
+   - Q-N1–Q-N7: Q-N2 the app's clients outside organization 1, on the sheet; Q-N3's `?:http404`;
+   - R3 (no `migration.log` line for 087);
+   - R19 (not yet conclusive right after the copy);
+   - Q-CA3's.
+
+   **If QS-G1 or any other check refuses, nothing was changed:** send the log file and stop. A note you cannot place:
+   send the log file and stop.
+4. **Right after PASSED there is nothing to look at.** No screen changes. The proof is the next real quote made in uCRM
+   for a Uganda customer: its WhatsApp summary ends *"🛰️ DishNet Uganda — Starlink, installation & support"* when the
+   webhook sends it. A quote whose summary the cron sends later ends *"Thank you for choosing …!"*, as before (known
+   limit 2). Report only what the customer's message shows; never paste the customer's number or name.
+5. **At least 20 minutes after the copy** (the summary's *check it* line prints the time), run `--after-only`, then the
+   quarantine's `--check`, each its own command, each with its own log file to send. If R19 still says not yet
+   conclusive, run `--after-only` again after the time it prints.
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.101.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.101/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+6. **The next day after 15:10 UTC** (18:10 Kampala): `--after-only` again, as in step 5. The script's header and
+   summary say "after 15:00 UTC", the WhatsApp's own time; follow 15:10.
+
+There is no switch to set, and the summary prints no switch command.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, under "only if it is ever needed", and
+then the by-hand put-back, each its own command. On a failure, send the log file. Do not roll back on your own unless
+staff or customers are affected.
+
+It is one step. `--rollback` asks you to type `ROLLBACK` before it changes anything, puts 5.18.100 (`8ff469f`) back
+through `deploy-hybrid.sh` and checks it (RB). There is no switch to clear first. As root on the server, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.101.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.101/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+What changes and what stays:
+- **Goes:** the new sign-off. The next quote's summary ends *"🚀 DishNet Internet Services"* again. Summaries already
+  sent are not changed either way.
+- **Stays exactly as it is:**
+  - the card's owner lists, every number and its owner (the rollback rewrites no registry row);
+  - the quoting organization and every quote;
+  - the Cashbook's list, its tab and cash in hand (D2 = A);
+  - ECO Bank: its switch, screen and links, 088's tables and every statement kept;
+  - 5.18.95's fixes, 5.18.94's documents and every other switch.
+
+Afterwards:
+- Run the quarantine's own `--check`, its own command, as the rollback's summary prints it.
+- A later deploy of 5.18.101 uses `--redeploy`. A14 refuses it until a quarantine `--check` begun after the rollback's
+  copy has passed.
+- If the script cannot run, the deploy's summary also prints the by-hand put-back, its own command.
+
+### Known limits
+
+1. **Summaries already sent are not changed.**
+2. **A quote whose WhatsApp the webhook does not send itself goes with QuotationService's own message.** That message
+   ends *"Thank you for choosing {company}!"* and carries neither line, as under 5.18.100. It is sent:
+   - by the quote screens (Send Quotation), when they claim the quote before the webhook does;
+   - later by `cron_quote_wa.php`, when the webhook's send record could not be written, when the webhook never ran for
+     it, or when the cron's five-minute run claimed it first.
+
+   Which of the two messages a Send Quotation customer receives depends on which side claims first, as before.
+3. **The deploy proves the line as text, not on a message.** QS-G1, QS-CA1 and RB read `webhook.php` and run none of it;
+   Q-G2 shows the tenant is Uganda through the installed code. The message itself is proved in the suite, by
+   `tests/test_quote_summary.php` against a fake uCRM: section L, J's two new weakened copies, and A for South Sudan
+   byte for byte. M holds the change to that one line, from Git. The live proof is the next real quote; no test quote is
+   made.
+4. **The wording is in the code, not a setting.** Changing it again is a release.
+5. **The *"Welcome to DishNet Internet!"* template** on the WhatsApp screen (`ops_kyc_customer_welcome`) is separate,
+   staff-editable and not touched.
+6. **A13's and R18's lock reading can refuse falsely, and one missed entry can let a dropped lock through** (found in
+   this release's first trial; it predates this release; RB runs the same probe after a rollback but only prints its
+   reading and never judges it).
+   - **How it reads.** Carried unchanged since 5.18.91, the probe counts master's POSIX locks on the live database and
+     on its -shm by reading `/proc/locks` once before the retry job and once after. On throwaway layouts, master holds
+     one entry on each.
+   - **What goes wrong.** When other processes on the machine take and release locks during that read, the kernel's
+     listing can show an entry twice or miss one. Measured with a background process churning POSIX locks on throwaway
+     files, as `deploy-5.18.94.sh`'s own probe:
+     - an entry shown twice: the count rises (before 1, after 2) and reads as `dropped`, and a re-read a moment later
+       shows 1 again;
+     - the database's own entry missed before the job: the reading is `n/a`.
+
+     The probe is single-threaded and takes no lock between its reads, so no lock was lost.
+   - **The consequences**, from the rule `before[db] <= 0 ? n/a : (after === before ? kept : dropped)`:
+     - a duplicate, a missed -shm entry before the job, or any entry missed after it, reads `dropped`. That is a false
+       **NO-GO at A13, before anything changes**, or a false **FAIL at R18 after the copy**;
+     - an `n/a` refuses nothing. At A13 it adds the note that the lock is measured by the test and the rehearsal, not
+       here, and a pin run's ok line reads *"not measurable here"*. At R18 it passes with no note, shown only as
+       `locks=n/a` in R18's ok line.
+   - **A duplicate alone never lets a dropped lock pass:** it can only raise a count. **A single missed entry can.** If
+     the database's entry is missed before the job, a real drop reads `n/a` and is not refused. If the -shm's entry is
+     missed before a real -shm drop, the reading is `[1,0]` before and `[1,0]` after, which reads `kept`.
+   - **How often.** In this release's first trial, run beside the release suite, 2 of the 19 runs of
+     `deploy-5.18.94.sh` that reached A13 read `dropped`. In isolation, the pin's reading did so in 2 of 60, 1 of 80 and
+     0 of 120 runs while the suite ran, and in 1 of 120 under the lock churn. It has never happened in a production run.
+   - **What to do.** A false refusal or failure on the server means: send the log file and run again. Reading
+     `/proc/locks` until two readings agree, and counting entries without duplicates, would remove both errors; that is
+     a separate change, not this release's.
+7. **Q-N3's `?:http404`**, seen since 24 Oct, is carried as it was: a note, a comparison of two readings, not yet looked
+   at.
+8. **Two files of the release suite fail on this release's tree, and on live 5.18.100's, because of the calendar.**
+   The two files are:
+   - `tests/test_field_cash_in_currency.php`: section E's *"both now count in the UGX tile: UGX 100,000.00 (70,000 +
+     30,000)"* fails (47 passed, 1 failed);
+   - `tests/test_staff_manual_entry_currency.php`: section D's *"the relabelled row counts: the tile reads
+     240,000.00"* fails (35 passed, 1 failed).
+   - **Why.** Both tests plant records dated 25 Sep 2026: cash-ins in the first, a manual collection in the second.
+     The Staff Cashbooks page shows the last 30 days unless it is asked for other dates
+     (`tabs/accounts/staff_cashbooks.php:726`, filtered at `:806`, in the tenant's own zone, Africa/Kampala).
+     - Since 26 Oct (Kampala), which is 25 Oct 21:00 UTC, the planted rows are out of range and the tile leaves them
+       out.
+     - The "does not count" checks beside those assertions kept passing, but only because the rows were not counted
+       at all: C, D and E in the first test, and D in the second.
+     - 5.18.100's release suite ran on 24 Oct, when the rows were still in range.
+   - **Not this release.** This release changes neither test nor the page. Run alone on `8ff469f`, the first test fails
+     the same assertion. Run alone twice on `f2055ba`, it fails the same way both times. The second, run alone on the
+     development tip (whose copy is `f2055ba`'s), fails 35/1.
+   - **The fix is in the two tests, on the development branch** (`fa509fc` and `7377847`). No product code changes. The
+     first commit fixed the first test. An independent read-only review of it, which ran no test while the suite ran,
+     found the second test and the half check below; the second commit fixed both.
+     - The page loads that look at planted rows now ask for dates from 25 Sep: four in the first test, two in the
+       second. The loads that count only entries made that day keep the page's default view.
+     - Section E's "before" check in the first test now asserts that the tile reads `UGX 0.00`. It used to assert only
+       that the tile did not read 100,000, so it could not catch one of the two rows being counted.
+     - The fixed tests pass 48/0 and 36/0, run alone on the development tip. A copy of the fixed first test, run in a
+       worktree of `f2055ba`, also passes 48/0.
+   - **The fix proves itself**, each by a single test run:
+     - copies whose window starts on 26 Sep fail the same assertions again (47/1 and 35/1);
+     - a page copy that counts USD rows in the UGX tile is caught by the fixed tests and missed by the unfixed ones;
+     - a page copy that counts only the 30,000 USD row is caught by the new E check and missed by the one before it.
+   - **This release is not re-cut for them.**
+     - The server never runs either test.
+     - The release commit is the one the deploy script pins and trial 4 deployed. The reviews were of its earlier
+       amendments, which differ from it only in `SAFETY.md`.
+     - Section M of the release's own test refuses any changed file it does not declare.
+
+     The fix goes with the next release.
+   - **The five tests the script does run on the server do not depend on the date.** They are:
+     - T1, `test_cash_in_hand_p3b`, at A22 and R25;
+     - T4, `test_d1_bank_balance_readers`, at R24;
+     - `test_master_lock_release`, at A15 and R20;
+     - `test_main_auto_pull_retired`, at A16 and R21;
+     - `test_legal_overrides`, at A17 and R22.
+
+     What each depends on:
+     - T1's data all carry fixed dates. `CashbookService` does have windows counted from today:
+       `getLastExchangeContext` (7 days), `getOpenExchangeBatches` (30 days, 90 from `deductFromBatchesFIFO`),
+       `getAllExchangeBatchSummary` (60 days) and `getStaffCashPosition`'s 30-day overdue mark. T1 calls none of them,
+       and nothing it calls reaches them.
+     - The lock and documents tests read no clock.
+     - The auto-pull test picks a zone in which the hour is the one it needs.
+     - T4's only `date()` calls are inside the source text it reads.
+
+     In this release suite they read the same in both passes: T1 548/0, as `T1_SIGNATURE` pins it; `test_master_lock_release` 78/0, `test_main_auto_pull_retired` 47/0 and `test_legal_overrides` 80/0, each as its signature pins it; and T4 34/0. The script runs T4 with `--no-mutants` against a baseline and pins that run at 20/0.
+   - **Unrelated, and recorded before** (the 5.18.93 entry): the follow-up tests that look for a zone inside the
+     sending hours find none on a Sunday. Between about 07:00 and 19:00 UTC, `test_pilot_safety` fails and two others
+     skip their follow-up cases. This release suite did not run on a Sunday.
