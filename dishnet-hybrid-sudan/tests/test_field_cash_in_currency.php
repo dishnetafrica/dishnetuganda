@@ -48,6 +48,10 @@ $ledger = function (SjSandbox $s, string $key): array {
 };
 // what the page's JavaScript submits for the base pill, read off the served page — so the test posts what a browser would
 $pillSubmits = function (string $html): string { return preg_match('/var _fr3Base = "([A-Z]{3})";/', $html, $m) ? $m[1] : ''; };
+// the planted cash-ins are dated 2026-09-25 and the Staff Cashbooks page shows the last 30 days unless asked, so every load
+// that looks at them asks for a window that holds them. Without it the tile dropped them from 26 Oct 2026 (Kampala) on: E's
+// assertion failed, and the controls in C, D and E passed only because the rows were out of range.
+$plantWindow = '&sc_from=2026-09-25&sc_to=2099-12-31';
 // what the Field Register's base pill wrote until 5.18.70: a cash-in stamped 'USD' on a UGX book, approved on the spot
 $plant = function (SjSandbox $s): void {
     file_put_contents($s->plug . '/__plant_cin.php', '<?php
@@ -107,7 +111,7 @@ is_(($L['currency'] ?? '') === 'USD' && ($L['status'] ?? '') === 'active', "cont
 $pg = $s->page('tech', $Q);
 is_(preg_match('/Collections<\/span><span>UGX\s?320,000\.00/u', $pg) === 1,
     "control: the wallet's Collections line counts the three mislabelled rows too — UGX 320,000.00 (20,000 + 300,000): the label lied and the figure followed");
-$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pgA) === 1, 'control: the Staff Cashbooks UGX tile does not count them (still 20,000.00) — the two screens disagreed by 300,000');
 $s->store()->load('cash_expenses.json');   // a table that exists and is empty
 $before = json_encode($cins($s));
@@ -138,7 +142,7 @@ $al = implode("\n", array_column($s->q("SELECT data FROM activity_log ORDER BY i
 is_(substr_count($al, '"void_cash_in"') === 4 && strpos($al, '"staff_records_currency"') !== false, "four void_cash_in activity lines (the page's shape) and the tool's own summary", substr($al, 0, 400));
 $pg = $s->page('tech', $Q);
 is_(preg_match('/Collections<\/span><span>UGX\s?20,000\.00/u', $pg) === 1, "the wallet's Collections line is back to UGX 20,000.00");
-$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 20,000\.00/si', $pgA) === 1, 'the Staff Cashbooks UGX tile is unchanged (20,000.00) — the two screens agree again');
 [$rc, $out] = $s->run($s->plug . $TOOL);
 is_($rc === 0 && strpos($out, 'cash-ins stamped in a currency other than UGX: 4 (0 not yet voided)') !== false, 'LIST now reads 4 (0 not yet voided)', $out);
@@ -154,7 +158,7 @@ is_($rc === 0 && strpos($out, 'Nothing to VOID: no Manual Entry collection and n
     'with nothing in scope, VOID says so — not "already voided" — and exits 0', $rc . ' ' . substr($out, -300));
 $h1 = $plantOne($s, $tech, '70000', 'Collection', 'the only record of this money');
 $h2 = $plantOne($s, $tech, '30000', 'USD Received', 'the only record, with a ledger row', true);
-$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 100,000\.00/si', $pgA) !== 1, 'control: stamped USD, neither counts in the UGX tile');
 [$rc, $out] = $s->run($s->plug . $TOOL, ['--relabel', '--yes']);
 is_($rc === 0 && strpos($out, "cash-in #$h1 relabelled USD → UGX (70,000.00, Collection, Sandbox Tech)") !== false && strpos($out, "staff_ledger CIN-$h2: currency → UGX") !== false,
@@ -165,7 +169,7 @@ is_(($w['currency'] ?? '') === 'UGX' && ($w['status'] ?? '') === 'approved' && (
     "cash-in #$h1 now reads UGX, still approved, with a relabel entry in its audit_log", json_encode($w));
 $L = $ledger($s, 'CIN-' . $h2);
 is_(($L['currency'] ?? '') === 'UGX' && ($L['status'] ?? '') === 'active', "the staff_ledger row CIN-$h2 reads UGX and is still live", json_encode($L));
-$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech);
+$pgA = $s->page('acct', 'page=dashboard&tab=staff_cashbooks&sc_staff=' . $tech . $plantWindow);
 is_(preg_match('/cb3-stat-lbl">UGX received<\/div>\s*<div class="cb3-stat-val g">UGX 100,000\.00/si', $pgA) === 1, 'both now count in the UGX tile: UGX 100,000.00 (70,000 + 30,000)');
 $s->stop();
 
