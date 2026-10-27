@@ -693,6 +693,28 @@ Recorded during the build on `quote-102` (cut on `f2055baf`). Each item says wha
 - §L.1's "a handleExisting Cash application retried" is an existing customer's Cash application saved before 5.18.102
   and retried through `retry_quote` (`test_quote_from_ucrm` C8: 409, no quote, the reason recorded).
 
+### P.4 The build's review
+
+An independent review of the built code against `f2055baf` — five lenses (money, the uCRM contract, the gate and South
+Sudan, security and logs, the agent's and staff's flows), each followed by an adversarial verifier — confirmed three
+defects and found a fourth plausible. Each is fixed, with a test that fails without the fix:
+- **M1/U1 — a retried existing customer's sale was under-priced.** handleExisting stores no `hw_cart_json` or `kitQty`,
+  so an existing customer's sale that uCRM could not price at submission was resolved on `retry_quote` as the device row
+  × 1: the cart's other items and the kit quantity were lost, and the read-back, comparing with the same wrong lines,
+  could not see it. An unpriced Uganda application now keeps the sale it was resolved from (`quote_sale_cart`,
+  `quote_sale_kit_qty`), and the retry resolves that (`test_quote_from_ucrm` C9; copies MC9, MC10).
+- **G1/X1 — the staff messages never said who installs.** `post_kyc.php` and the mobile API hand the staff messages the
+  handler's answer, not the stored application, and the answer did not carry the "Who installs?" answer: no install line
+  at registration, and a paid kit-only sale told the agent "Next: Schedule installation". The answer's data now carries
+  `install_by` where the gate is on and the sale asked (B11; MB11).
+- **X2 — "prices changed, reload the form" could reload the old prices.** The page cache (up to 60 s) is now dropped by
+  that refusal, so the reload reads uCRM (B12; MB12).
+- **X4 (plausible) — a read-back that failed was shown as a mismatch**, and lines that differ at the same total read
+  "totals X, not the X sent". The Orders card now says which of the three happened (G6; MG20, MG21).
+
+Refuted after verification: the page cache shared between the KYC form's and Send Quotation's credentials (no request or
+money uses the cache), and the outage text for a refused Cash sale (it names its cause and the remedy).
+
 ## O. The review
 
 The first design (`60bf7ed6`) had four independent reviews: money, uCRM, the agent and the release. They upheld 53
