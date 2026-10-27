@@ -690,6 +690,10 @@ Recorded during the build on `quote-102` (cut on `f2055baf`). Each item says wha
   Each now weakens the check where it refuses; W11b is added for the new customer's check alone. The retry keeps two
   guards on purpose (ugQuote, and postQuote's check behind it), so a copy removing only one of them there would survive:
   W11 removes both.
+- `test_bank_boundaries` A, rewritten on purpose: `includes/post/post_sync.php` leaves its list of files kept as 5.18.97
+  left them (5.18.102 refuses the save-time product push on Uganda, D12), as `tools/set_config.php` left it in 5.18.99;
+  `test_quote_from_ucrm` I and G hold it instead, and the bank test still asserts that the admin backup names no bank
+  folder.
 - §L.1's "a handleExisting Cash application retried" is an existing customer's Cash application saved before 5.18.102
   and retried through `retry_quote` (`test_quote_from_ucrm` C8: 409, no quote, the reason recorded).
 
