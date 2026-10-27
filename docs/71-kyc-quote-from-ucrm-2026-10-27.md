@@ -1,8 +1,9 @@
 # 71 — Uganda: the plugin's quotations take their lines and prices from uCRM (5.18.102 design, 27 Oct 2026)
 
-Status: **design, reviewed (§O); the build is under way on `quote-102` (not yet committed there); what it has changed so far is in §P.** The release is cut on 5.18.101 (`f2055baf`), which is live
-according to the operator (D6). Its deployment record is still pending in docs/07, and the deploy script cannot be
-pinned until it is recorded (§M).
+Status: **design, reviewed (§O); built and committed as `release/5.18.102` = `00d2be1` (local, not pushed); what the
+build changed from this design is in §P; the deploy script's own decisions are in §Q.** The release is cut on 5.18.101
+(`f2055baf`), which is live according to the operator (D6). Its deployment record is still pending in docs/07, and the
+deploy script cannot be handed over until it is recorded (§M).
 
 ## A. Why
 
@@ -761,3 +762,58 @@ already in the design, or resting on a misreading of the code). Every upheld fin
 | G12 — the product push | D12, §K.3 |
 | G13 — LTE | §C, §F.1 |
 | G14 — 5.18.101's deployment record | Status, §M |
+
+## Q. The deploy script: decisions taken for it
+
+`scripts/deploy-5.18.102.sh` is derived from 5.18.101's by asserted edits, as every release's script is. A read-only map of
+5.18.101's script and its rehearsal, with a completeness critic, found these questions. §L.3 leaves them open; each is
+settled here by precedent or on the side of caution.
+
+- **D-R1 — the added files on a rollback: they stay.** A rollback puts 5.18.101's files back and leaves the 21 files
+  5.18.102 adds on disk, as every earlier release has done (`deploy-hybrid.sh` never deletes; 5.18.99 left
+  `lib/QuoteOrganization.php`). The rollback then proves that nothing in 5.18.101 reaches them, file by file.
+- **D-R2 — the rollback hazard: a refusal, with a stated way past it.** On Uganda, 5.18.102 saves an application it
+  cannot price with no lines and no plan price. 5.18.101 would rebuild that plan line at price 0. If such an application
+  is still waiting for uCRM, its cron retry would make that quotation, and uCRM's quote.add webhook would WhatsApp it to
+  the customer.
+  - Stage A of `--rollback` counts these applications, read-only, on a copy.
+  - It refuses while any of them is still pending, unless `--rollback-unpriced-pending` is typed. That is the operator's
+    explicit choice, and the log says so.
+  - Two further counts are notes: such applications awaiting a person's retry, and refusals P1–P3 with a uCRM client.
+- **D-R3 — the catalogue before and after.**
+  - **Within a deploy run:** the reading after the copy must equal stage A's. The two are compared as a keyed hash
+    (HMAC) under the run's own key, which is never printed and never stored.
+  - **In a later `--after-only`:** a difference from stage A's counts is a note that names its direction. The operator
+    may have fixed uCRM as §M step 3 asks.
+  - **Failures, in either run:** an unreadable catalogue, a reason the script cannot classify, and any request that is
+    not a GET.
+- **D-R4 — what counts toward the preflight's NO-GO.**
+  - **What is checked:** the active plans and kits the KYC form offers, and the installation product. They are read
+    through the plugin's client and, when the admin token is set, through the token client.
+  - **Refusals:** an unpriced row is a NO-GO unless `--accept-unpriced` is typed. An unreadable catalogue and an
+    unclassified reason are NO-GOs that no flag lifts.
+  - **Notes only:** Fiber rows, which are unpriced by design on Uganda (§D.4) and counted apart; the debug retry's own
+    client; and the `kyc_packages` rows that the retailer app and the mobile API price.
+- **D-R5 — privacy.** The log carries only counts, read states, HTTP codes and uCRM attribute ids. Row names, product ids,
+  units and the resolver's reason texts go only to the run's own sheet (mode 0600), because a reason can carry a price.
+- **D-R6 — the kept files.** The script pins 55 files: 5.18.101's 63 kept files minus the 14 that 5.18.102 changes;
+  `webhook.php` and `tests/test_sales_numbers.php`; and four files 5.18.102 reads or §L.4 names (`lib/PublicPriceFeed.php`,
+  `lib/EfrisClientField.php`, `includes/api/api_retailer.php`, `retailer/index.html`).
+- **D-R7 to D-R15 — mechanics.**
+  - The copy's time is read off `lib/KycService.php`.
+  - The preflight builds its own GET-only clients with `withTimeouts(5, 30)`. It never calls `quoteClient()` or
+    `forPage()`.
+  - Quotation 000314 is read back by its stored quote id. The log shows each item's type, whether it has a product id,
+    and its unit: no label and no price.
+  - The other notes of §L.3:
+    - the `salesPerson` attribute;
+    - line shapes by sale type;
+    - an entry point, which the record does not carry, so the note says "not measurable";
+    - the last plan save and kit creation, as dates only (the plugin records no push);
+    - the settings the customer's notes and P3 depend on, as set or unset only.
+  - The check ids are QL-G1, QL-N1–QL-N7, QL-CA1, QL-CA2, QL-RB1 and QL-RB2. 5.18.101's QS checks are carried; with
+    `webhook.php` kept, their before, after and rollback readings are all 5.18.101's line.
+  - The event-processor, persona and T4 signatures are measured again on the release by the rehearsal before they are
+    pinned.
+  - The release's hash is filled into the script only by a separate re-pin step, which checks the release's 59 sha256
+    values against Git.
