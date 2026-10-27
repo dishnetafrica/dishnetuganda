@@ -1,6 +1,6 @@
 # 71 — Uganda: the plugin's quotations take their lines and prices from uCRM (5.18.102 design, 27 Oct 2026)
 
-Status: **design, reviewed (§O); the build has started.** The release is cut on 5.18.101 (`f2055baf`), which is live
+Status: **design, reviewed (§O); the build is under way on `quote-102` (not yet committed there); what it has changed so far is in §P.** The release is cut on 5.18.101 (`f2055baf`), which is live
 according to the operator (D6). Its deployment record is still pending in docs/07, and the deploy script cannot be
 pinned until it is recorded (§M).
 
@@ -569,16 +569,19 @@ asserted edits; the rehearsal chained on 5.18.101's; one clean trial on its own;
 
 ### L.4 Declared files
 
-**Added:** `lib/UcrmQuoteLines.php`, `tests/test_quote_from_ucrm.php`, and its harness or fixture files if any.
+**Added:** `lib/UcrmQuoteLines.php`, `tests/test_quote_from_ucrm.php`, and its directory `tests/quote_from_ucrm/` (its
+sections, their weakened copies, and the form's browser check).
 
 **Changed:**
 - `lib/KycService.php`, `lib/KycCrmSync.php`, `lib/UcrmClientTarget.php`, `lib/QuotationService.php`,
   `lib/PluginQuotePdf.php`, `lib/DeliveryPdfService.php`, `lib/CrmApiClient.php` (the timeout option),
   `lib/NotificationService.php` (§E.2);
 - `tabs/sales/kyc_form.php`, `tabs/sales/send_quote.php`, `tabs/sales/applications.php`, `tabs/admin/settings.php`;
+- **amended during the build (§P.1):** `tabs/sales/subscription_plans.php`, `tabs/sales/hardware.php`,
+  `tabs/sales/product_mapping.php` — their push buttons read §K.3's refusal as "✅ Done / Push complete — 0 created";
 - `includes/api/api_cron_debug.php`, `includes/api/api_products_admin.php`, `includes/post/post_sync.php`;
 - `manifest.json` (its version line), `SAFETY.md`;
-- the fixtures and the tests §L.2 names.
+- the fixtures and the tests §L.2 names, and `tests/fixtures/quote_company_journey.php` (the S journey's extension).
 
 **Kept byte for byte**, among everything else: `webhook.php` (QS-G1 must still read it), `QuoteOrganization.php`,
 `QuoteTaxLine.php`, `TenantProfile.php`, `PublicPriceFeed.php`, `cron_quote_wa.php`, `CashbookService.php`,
@@ -625,6 +628,63 @@ If the build finds it must change another file, the list is amended here first, 
 - The retailer app: showing the server's message, and asking "Who installs".
 - A Uganda delivery note (§K.2).
 - Whether the release environment can run the browser check of the form (§L.1).
+
+## P. The build: what differs from this design, and why
+
+Recorded during the build on `quote-102` (cut on `f2055baf`). Each item says what was measured; none changes a decision.
+
+### P.1 Code
+
+- **The product screens' push buttons (§L.4, amended).** Refused with 409 on Uganda (D12), the bulk buttons on the
+  Plans and Hardware screens alerted "✅ Done! Created: 0 …" and reloaded, and Product Mapping said "✅ Push complete —
+  0 created": none of them read the answer's status. On Uganda each now shows the server's message instead. The lines are
+  emitted only where the gate is on, so South Sudan's pages stay byte for byte (`test_quote_company` G).
+- **`post_leads.php` is unchanged** (it is not in §L.4). Its manual-quote handler drops a line priced 0 or less before the
+  service sees it, so on Uganda the server's refusal (§J) covers the lead form and both API actions, and the panel's
+  manual form is stopped by the page's own check on submit. To refuse on the server there too, the handler would have to
+  keep a labelled 0-priced line on Uganda: a later change, declared first.
+- **No read-back for Send Quotation's quotes** (`createCrmQuote`, §F.6): a lead or manual quote has no application to
+  record a mismatch on. The KYC quotes are read back.
+- **The catalogue stops at the first failed read.** Against a uCRM that never answers, reading service plans after
+  products had already timed out took the form 10.05 s to show its banner (§L.1 asks for 10). Products is read first;
+  a failure there is the answer, and plans are not read.
+- **The second PATCH in the retry's request log** (`{"clientType": 2}`) is 5.18.101's payment code, not "Prepared by";
+  the tests count only the PATCH that carries attributes.
+- **`tabs/sales/send_quote.php` loads `QuoteOrganization.php` itself** — 5.18.99's rule that every file naming the class
+  loads it (`test_quote_company` I7), which the page first met only through `QuotationService`.
+- **Marker comments** in `CrmApiClient.php`, `KycCrmSync.php` and `KycService.php`: four changed lines sat more than 30
+  lines from any 5.18.102 marker, which the boundary check (`test_quote_from_ucrm` I3) requires. Comments only.
+- **The fallback PDF's tax rows** are read as an invoice carries them (`taxes[{name, totalValue}]`, `totalTaxAmount`).
+  That a uCRM quote carries the same shape is **assumed, not measured**; with no tax row the PDF prints `QuoteTaxLine`'s
+  sentence as before.
+
+### P.2 What D9 (no Delivery PDF on Uganda) also changes — recorded, not changed
+
+`DeliveryPdfService::generateAndSend` returns "not sent" on Uganda before anything is generated. Its callers read that:
+- **The payment webhook** (`webhook.php`, kept byte for byte): a Uganda credit KYC customer is never marked
+  `delivery_pdf_sent`, so each of their payments reads `clients/{id}/payments` once more (after the webhook has already
+  answered uCRM) and logs "Delivery PDF generation failed for {name}: skipped: …" — a line that already carried the
+  customer's name.
+- **`post_kyc.php`** (kept byte for byte): a Uganda Cash customer is not marked either, so with `kyc_messages_like_crm`
+  off they would get the plugin's "Request Confirmed!" welcome instead of the PDF's caption. docs/07 records that setting
+  on in Uganda since 25 Sep; that is not re-measured here.
+- An existing customer's kit-only additional service still tells the agent "Bidal has been notified to schedule the new
+  install." Bidal's job says "Kit only, no installation" (§E.2); the agent's line is not changed.
+
+### P.3 Tests (§L.2 corrected)
+
+- `test_notify_kyc_race` was **rewritten** (its Uganda post now says who installs), not run unchanged.
+- `test_kyc_crm_create` **runs unchanged and passes**: its books carry no Uganda tenant profile, so the gate is off there
+  (`uganda` is the fake's scenario name). `test_notify_quote_once` runs unchanged and passes.
+- `test_quote_company`, rewritten on purpose: G's Uganda control (an admin past the admin gate now meets D12's 409);
+  I1 (postQuote has four callers); I4 narrowed — the nine files of 5.18.99's that 5.18.102 changes must still carry each
+  of 5.18.99's hunks verbatim, with two declared amendments in `KycCrmSync.php` (the retry's company check and "Prepared
+  by", afterCreate's new parameter), and a control that the check finds those hunks missing from `ce7ac388`; I6's PHP 7.4
+  rules read PHP only (a JavaScript object literal in the form is not a named argument); the S journey extended as §L.2
+  says, with one normaliser entry (the run's own plugin path, which Settings prints). `test_quote_company_mutants`: W19
+  re-anchored (retry_quote now has two gated blocks); every other anchor still occurs once.
+- §L.1's "a handleExisting Cash application retried" is an existing customer's Cash application saved before 5.18.102
+  and retried through `retry_quote` (`test_quote_from_ucrm` C8: 409, no quote, the reason recorded).
 
 ## O. The review
 
