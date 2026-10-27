@@ -1,9 +1,14 @@
 <?php
-// The T&C wording changed on 12 Oct 2026 (docs/67 §I): clauses 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 20, 21, handover step 5, support step 6, the header badge, and clause 14 moved to the third column.
+// The T&C wording changed on 12 Oct 2026 (docs/67 §I), and on 27 Oct the two lines that name the Service Agreement (§L): clauses 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 20, 21, handover step 5, support step 6, the header badge, and clause 14 moved to the third column.
 // Each pair is [the line as the baseline renders it, the line as the template now renders it]. render.php sets each
 // new line back to the old one, after asserting each occurs exactly once, and then requires the rest of the page to be
 // byte-identical to the baseline's: these lines may change, nothing else on the page may.
 return [
+    // docs/67 §L (27 Oct 2026): the Service Agreement on pages 3–4, named where page 1 and page 2 say what governs the quotation
+    ['This quotation is governed by the Service Process and Terms &amp; Conditions on page 2, which form part of it.',
+     'This quotation is governed by the Service Process and Terms &amp; Conditions on page 2 and the Service Agreement on pages 3&ndash;4, which form part of it.'],
+    ['the customer accepts the Service Process and Terms &amp; Conditions above.</div>',
+     'the customer accepts the Service Process and Terms &amp; Conditions above and the Service Agreement that follows.</div>'],
     ['<div style="font-size:9px;color:#bbb;margin-top:4px;letter-spacing:0.3px;">IT Solutions Provider &middot; UCC Authorised Starlink Installer &middot; Kampala, Uganda</div>',
      '<div style="font-size:9px;color:#bbb;margin-top:4px;letter-spacing:0.3px;">IT Solutions Provider &middot; Starlink Installation &middot; Kampala, Uganda</div>'],
     ['<div style="font-size:9px;color:#444;line-height:1.45;margin-top:2px;">We activate the service, demonstrate it working at handover, and hand you the connection details. The work is accepted at handover unless a defect is reported in writing within 48 hours.</div>',

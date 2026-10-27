@@ -4,6 +4,8 @@
 // The sandbox allows exactly the tags, filters and functions the baseline uses. The baseline is the template as the
 // repository gave it to uCRM before 5.18.48 (commit 2bfad82), so a template that renders here uses nothing that
 // template did not already use. Output is a list of checks; exit 1 on any failure.
+// The Service Agreement (pages 3–4, docs/67 §L) is checked on its own, then cut out at its two markers before the
+// rest of the page is compared with the baseline's.
 require $argv[1] . '/vendor/autoload.php';
 
 // 5.18.49: every quotation without uCRM tax lines says this — the operator's sentence of 27 Sep 2026 (docs/42 §9).
@@ -11,6 +13,16 @@ const ALL_TAXES    = 'All prices include all taxes &mdash; URA taxes and UCC cha
                    . 'Nothing is added on top.';
 const NO_VAT       = 'No VAT is charged on this quotation.';
 const VAT_ITEMISED = 'VAT is itemised in the totals on page 1.';
+// The Service Agreement's markers, and what it must and must not say (docs/67 §L).
+const AGR_START = '<!-- ═══ SERVICE AGREEMENT — UGANDA (pages 3–4) — start ═══ -->';
+const AGR_END   = '<!-- ═══ SERVICE AGREEMENT — UGANDA (pages 3–4) — end ═══ -->';
+const AGR_KEEPS = 'This Agreement does not take away anything those terms and policies give the CUSTOMER:</b> where any of these '
+                 . 'documents is less favourable to the CUSTOMER than another, the more favourable one applies.';
+const AGR_TERM  = 'Monthly, with no fixed term and no cancellation fee; the service continues month to month until cancelled (clause 6)';
+// South Sudan's terms that Uganda's published policies do not allow, and claims the pages never make.
+const AGR_NEVER = ['termination fee', 'arbitration', 'merchantability', 'fitness for a particular purpose', 'sole and entire remedy',
+                   'south sudan', 'juba', 'ucc authorised', 'licensed by', 'licence', 'security deposit is needed', 'interest'];
+
 // Withdrawn from the end of clause 2 on 12 Oct 2026: the website says all taxes are included and nothing is added.
 const NEW_TAX      = ' Any new or increased government tax, levy or regulatory fee introduced after acceptance may be '
                    . 'passed on at cost.';
@@ -112,6 +124,33 @@ t('the baseline said no VAT is charged on a quote without tax lines (the contrad
 // Nothing else on the page moves: every quote renders as before once clause 2's sentence is set back, and the T&C lines
 // changed on 12 Oct 2026 (tc_changes.php, docs/67 §I) are set back too — each found exactly once on both sides first,
 // so a pair that no longer matches, or a line that changed beyond its pair, fails here.
+// The Service Agreement: on every quote, once, filled from the quote, saying what the policies require, and never
+// what they forbid. Then it is cut out at its markers so the rest of the page can be compared with the baseline's.
+/** The agreement exactly as it was inserted — the two spaces before its start marker, through its end marker and the
+ *  blank line after it — or '' when the markers are not there exactly once, in order, with that spacing. */
+function agreement(string $html): string {
+    if (substr_count($html, AGR_START) !== 1 || substr_count($html, AGR_END) !== 1) return '';
+    $s = strpos($html, AGR_START) - 2; $e = strpos($html, AGR_END) + strlen(AGR_END) + 2;
+    if ($s < 0 || $e <= $s || substr($html, $s, 2) !== '  ' || substr($html, $e - 2, 2) !== "\n\n") return '';
+    return substr($html, $s, $e - $s);
+}
+$STARLINK = ['kit', 'kit_last', 'kit_lower', 'kit_upper', 'starlink_svc', 'travel_kit', 'kit_taxed'];
+foreach ($QUOTES as $k => $c) {
+    $a = agreement($new[$k]); $p = page($a); $lc = strtolower(html_entity_decode(strip_tags($p), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    t("{$k}: the Service Agreement is there, once, between its markers", $a !== '', true);
+    t("{$k}: …it starts on a page of its own and has a second page", substr_count($p, 'page-break-before:always'), 2);
+    t("{$k}: …it names the customer and the quotation", substr_count($p, '<b>Sample Customer</b>') === 1 && substr_count($p, 'For the CUSTOMER: Sample Customer') === 1
+        && substr_count($p, 'Quotation <b>000200</b>') === 1, true);
+    t("{$k}: …it never takes away what the Terms of Service and policies give", substr_count($p, AGR_KEEPS), 1);
+    t("{$k}: …monthly, with no fixed term and no cancellation fee", substr_count($p, AGR_TERM), 1);
+    t("{$k}: …the network line follows the quote", substr_count($p, 'Starlink satellite network, owned and operated by Starlink, not by DISHNET'),
+        in_array($k, $STARLINK, true) ? 1 : 0);
+    $bad = array_values(array_filter(AGR_NEVER, fn($w) => strpos($lc, $w) !== false));
+    t("{$k}: …and none of the South Sudan terms Uganda's policies do not allow", $bad, []);
+    $new[$k] = str_replace($a, '', $new[$k]);
+}
+t('the baseline has no Service Agreement', agreement($old['kit']), '');
+
 $TC = require __DIR__ . '/tc_changes.php';
 foreach ($QUOTES as $k => $_) {
     $n = str_replace(ALL_TAXES, NO_VAT, page($new[$k]));

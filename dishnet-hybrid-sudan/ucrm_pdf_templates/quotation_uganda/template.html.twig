@@ -1,4 +1,5 @@
-<!-- ═══ DishNet Smart Quote Template — UGANDA EDITION v1 (derived from SS v5) ═══ -->
+<!-- ═══ DishNet Smart Quote Template — UGANDA EDITION v2 (derived from SS v5) ═══ -->
+<!-- v2: the Service Agreement as pages 3–4, adapted from South Sudan's for Uganda (docs/67 §L).            -->
 <!-- Uganda positioning: IT solutions company & Starlink installer (no UCC licence claimed: docs/67 §E). -->
 <!-- Not an ISP; prices UGX; service prepaid; kits are SOLD. VAT wording follows   -->
 <!-- the quote's own tax lines, so it stays true before and after registration.    -->
@@ -220,7 +221,7 @@
   {% endif %}
 
   <div style="font-size:9px;color:#6B6B6B;margin-top:2px;">
-    This quotation is governed by the Service Process and Terms &amp; Conditions on page 2, which form part of it.
+    This quotation is governed by the Service Process and Terms &amp; Conditions on page 2 and the Service Agreement on pages 3&ndash;4, which form part of it.
   </div>
 
   <!-- ═══ PAGE 2 — SERVICE PROCESS & TERMS ═══ -->
@@ -298,7 +299,7 @@
     </tr>
   </table>
 
-  <div style="font-size:8px;font-weight:700;color:#141414;margin-top:6px;">By signing, confirming in writing, or paying against this quotation, the customer accepts the Service Process and Terms &amp; Conditions above.</div>
+  <div style="font-size:8px;font-weight:700;color:#141414;margin-top:6px;">By signing, confirming in writing, or paying against this quotation, the customer accepts the Service Process and Terms &amp; Conditions above and the Service Agreement that follows.</div>
 
   <!-- SIGNATURE (dynamic sales person) -->
   <table style="width:100%;border-collapse:collapse;margin-top:14px;border-top:1px solid #eee;">
@@ -320,5 +321,102 @@
       </td>
     </tr>
   </table>
+
+  <!-- ═══ SERVICE AGREEMENT — UGANDA (pages 3–4) — start ═══ -->
+  <!-- Adapted from DishNet's South Sudan service agreement for Uganda (docs/67 §L). Monthly, no fixed term, no        -->
+  <!-- cancellation fee; printed with every quotation; it never takes away what the Terms of Service and policies give. -->
+  <div style="page-break-before:always;"></div>
+  <div style="padding-top:14px;">
+    <div style="font-size:9px;color:#999;">DishNet &mdash; Quotation {{ quote.number }} &middot; Service Agreement</div>
+    <div style="height:2px;background:#D41C1C;margin:4px 0 10px;width:120px;"></div>
+  </div>
+  <div style="font-size:15px;font-weight:900;color:#141414;text-align:center;letter-spacing:1px;margin-bottom:8px;">SERVICE AGREEMENT</div>
+  <div style="font-size:9px;color:#333;line-height:1.5;">
+    This Service Agreement (the &ldquo;Agreement&rdquo;) is made between:
+    <div style="padding:3px 0 0 10px;">(a) <b>{{ organization.name }}</b>, a company registered in Uganda (registration number {{ org_reg }}, TIN {{ org_tin }}), of {{ organization.street1 }}{% if organization.street2 %}, {{ organization.street2 }}{% endif %}, {{ organization.city }} (&ldquo;<b>DISHNET</b>&rdquo;); and</div>
+    <div style="padding:3px 0 0 10px;">(b) <b>{{ client.name }}</b>{% if client.companyName and client.companyName != client.name %} ({{ client.companyName }}){% endif %}, the customer named on page 1 of this quotation (the &ldquo;<b>CUSTOMER</b>&rdquo;).</div>
+    <div style="padding-top:5px;">The CUSTOMER wishes to obtain from DISHNET the equipment, installation and services set out in Quotation <b>{{ quote.number }}</b>, and DISHNET is willing to provide them on the terms of this Agreement. This Agreement takes effect when the CUSTOMER signs it, confirms acceptance of the quotation in writing, or pays against the quotation, whichever comes first.</div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;margin:8px 0 6px;font-size:9px;">
+    <tr><td colspan="2" style="background:#141414;color:#fff;font-weight:800;letter-spacing:1px;padding:5px 8px;text-align:center;">SERVICE DETAILS</td></tr>
+    <tr><td style="width:34%;padding:4px 8px;border:1px solid #ddd;font-weight:700;">Quotation</td><td style="padding:4px 8px;border:1px solid #ddd;">{{ quote.number }} of {{ quote.createdDate }} &mdash; equipment, installation and services as itemised on page 1</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Site / installation address</td><td style="padding:4px 8px;border:1px solid #ddd;">{% if client.street1 or client.city %}{{ client.street1 }}{% if client.street2 %}, {{ client.street2 }}{% endif %}{% if client.city %}, {{ client.city }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %} &mdash; or the address confirmed in writing before installation{% else %}To be confirmed in writing before installation{% endif %}</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Network</td><td style="padding:4px 8px;border:1px solid #ddd;">{% if is_starlink %}Starlink satellite network, owned and operated by Starlink, not by DISHNET{% else %}As itemised on page 1{% endif %}</td></tr>
+    <tr><td colspan="2" style="background:#141414;color:#fff;font-weight:800;letter-spacing:1px;padding:5px 8px;text-align:center;">SERVICE TERM</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Service start date</td><td style="padding:4px 8px;border:1px solid #ddd;">The day the service is activated and shown working at handover</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Term</td><td style="padding:4px 8px;border:1px solid #ddd;">Monthly, with no fixed term and no cancellation fee; the service continues month to month until cancelled (clause 6)</td></tr>
+    <tr><td colspan="2" style="background:#141414;color:#fff;font-weight:800;letter-spacing:1px;padding:5px 8px;text-align:center;">CHARGES</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Charges</td><td style="padding:4px 8px;border:1px solid #ddd;">As itemised on page 1, in Ugandan Shillings; taxes as clause 2 of the Terms &amp; Conditions states</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Billing</td><td style="padding:4px 8px;border:1px solid #ddd;">Prepaid: one-time charges and the first service month before delivery or installation is scheduled; each later month in advance</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Security deposit</td><td style="padding:4px 8px;border:1px solid #ddd;">None</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:700;">Equipment</td><td style="padding:4px 8px;border:1px solid #ddd;">Equipment bought from DISHNET becomes the CUSTOMER&rsquo;s when paid in full; equipment DISHNET provides with a plan, such as a router, stays DISHNET&rsquo;s</td></tr>
+  </table>
+
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="vertical-align:top;padding:0 6px 0 0;width:50%;font-size:9px;color:#333;line-height:1.45;">
+        <div style="padding:2px 0;"><b style="color:#141414;">1. Documents that form this Agreement.</b> This Agreement, Quotation {{ quote.number }} with its Service Process and Terms &amp; Conditions (pages 1&ndash;2), the Installation Terms accepted for a Starlink installation job, and DISHNET&rsquo;s published Terms of Service, Terms of Sale, Warranty Policy, Returns, Refunds and Cancellations, Acceptable Use and Fair Use Policy, Privacy Policy and Complaints page (dishnetuganda.com/policies.html). <b>This Agreement does not take away anything those terms and policies give the CUSTOMER:</b> where any of these documents is less favourable to the CUSTOMER than another, the more favourable one applies. A Flex package (12 or 24 months, kit included) has its own written agreement and is not governed by this one.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">2. Provision of services.</b> DISHNET supplies, installs and supports what the quotation lists, as the Service Process on page 2 describes. Where the quotation includes a DishNet service plan, DISHNET registers and manages the Starlink account serving the CUSTOMER&rsquo;s kit on the CUSTOMER&rsquo;s behalf, and the CUSTOMER&rsquo;s contract for that service is with DISHNET only. Where the CUSTOMER holds the Starlink account in its own name, Starlink&rsquo;s terms govern that account. The service depends on Starlink&rsquo;s network and its registration and activation approvals, a clear view of the sky and a working power supply at the site. DISHNET may use qualified subcontractors for installation work and remains responsible for their work.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">3. Compliance with laws.</b> Each party complies with the laws of Uganda that apply to it. The CUSTOMER gives correct information and, where the law, the Uganda Communications Commission or Starlink requires it, proof of identity before activation. If a change in the law or a regulator&rsquo;s directive materially affects the service, the parties will agree any needed change in writing, and the CUSTOMER may cancel without charge.</div>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 6px;width:50%;font-size:9px;color:#333;line-height:1.45;">
+        <div style="padding:2px 0;"><b style="color:#141414;">4. Payment.</b> Payment is by bank transfer to the account on page 1, or as DISHNET&rsquo;s Pay a Bill page lists, quoting the quotation or invoice number. DISHNET sends a reminder before each month is due. Service pauses automatically at the end of an unpaid period and resumes when payment is applied; it is not paused over an amount the CUSTOMER disputes while DISHNET checks it, as long as the rest is paid. DISHNET gives at least 30 days&rsquo; notice of a price change that is worse for the CUSTOMER, who may cancel before it takes effect without charge.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">5. Term.</b> This Agreement has no fixed term. The service starts on the service start date and continues month to month until it ends as clause 6 says.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">6. Cancellation and ending.</b> The CUSTOMER may cancel at any time, by WhatsApp, e-mail or at DISHNET&rsquo;s office, with no cancellation fee. The service continues to the end of the month already paid for; notice before the next billing date avoids the next month&rsquo;s bill. Refunds follow section 8 of the Terms of Service and the Returns, Refunds and Cancellations page. DISHNET may suspend or end the service only as section 16 of the Terms of Service sets out. When the service ends, equipment that belongs to DISHNET is returned as section 9 of the Terms of Service says. Rights and obligations that arose before the end survive it.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">7. Faults, support and service credits.</b> The CUSTOMER reports faults on WhatsApp +256 705 993 348, by phone or by e-mail. DISHNET fixes at no charge a fault it is responsible for, and states the cost before charging for a visit needed for another cause. If the service is down for more than 3 days in a row after a reported fault, DISHNET credits one day&rsquo;s share of the monthly charge for each full day it was down after the report, as section 11 of the Terms of Service sets out. Work outside the quotation is quoted before it begins.</div>
+      </td>
+    </tr>
+  </table>
+  <div style="font-size:8px;color:#6B6B6B;text-align:right;margin-top:4px;">Customer initials ________</div>
+
+  <div style="page-break-before:always;"></div>
+  <div style="padding-top:14px;">
+    <div style="font-size:9px;color:#999;">DishNet &mdash; Quotation {{ quote.number }} &middot; Service Agreement (continued)</div>
+    <div style="height:2px;background:#D41C1C;margin:4px 0 10px;width:120px;"></div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="vertical-align:top;padding:0 6px 0 0;width:50%;font-size:9px;color:#333;line-height:1.45;">
+        <div style="padding:2px 0;"><b style="color:#141414;">8. Maintenance and network changes.</b> Maintenance and changes on the Starlink network are made by Starlink and are outside DISHNET&rsquo;s control. Where DISHNET&rsquo;s own planned work will interrupt the service, DISHNET tells the CUSTOMER in advance, as early as it reasonably can, and does the work outside the CUSTOMER&rsquo;s business hours where possible.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">9. Equipment and warranty.</b> Equipment is covered by DISHNET&rsquo;s Warranty Policy, in addition to the manufacturer&rsquo;s warranty, and installation work by its workmanship warranty, as clause 12 of the Terms &amp; Conditions and the Warranty Policy set out. The CUSTOMER looks after equipment that belongs to DISHNET, keeps it at the site, and does not open, modify or repair it.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">10. Events outside DISHNET&rsquo;s control.</b> DISHNET is not responsible for a delay or failure caused by events outside its reasonable control, as section 15 of the Terms of Service sets out. The CUSTOMER does not pay for whole months in which the service could not be provided, and if an interruption lasts more than 30 days the CUSTOMER may cancel without charge and is refunded any whole months paid in advance.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">11. Data protection.</b> DISHNET handles the CUSTOMER&rsquo;s personal information as its Privacy Policy describes and the Data Protection and Privacy Act requires. It shares with Starlink only the details needed to activate and support the service, and registers equipment or account details with the Uganda Communications Commission where the law requires it.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">12. Responsibility and indemnity.</b> DISHNET provides the service with reasonable care and skill. Its responsibility for loss or damage, and the limits on it, are as section 14 of the Terms of Service sets out; nothing in this Agreement limits responsibility for death or personal injury caused by negligence, for fraud, or for anything else the law does not allow to be limited, and nothing in it takes away a right under the Sale of Goods and Supply of Services Act, the Electronic Transactions Act or any other law of Uganda that cannot be excluded. The CUSTOMER&rsquo;s indemnity is as clause 16 of the Terms &amp; Conditions sets out.</div>
+      </td>
+      <td style="vertical-align:top;padding:0 0 0 6px;width:50%;font-size:9px;color:#333;line-height:1.45;">
+        <div style="padding:2px 0;"><b style="color:#141414;">13. Confidentiality.</b> Each party keeps confidential the commercial terms of this Agreement and the information it receives from the other under it, except as needed to provide the service, as the law or a regulator requires, or for its professional advisers on a confidential basis.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">14. Transfer.</b> Neither party may transfer this Agreement without the other&rsquo;s written consent, except that DISHNET may transfer it to a successor of its business on written notice, without reducing the CUSTOMER&rsquo;s rights; the CUSTOMER may then cancel without charge.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">15. Notices.</b> Notices to DISHNET go to {{ organization.street1 }}{% if organization.street2 %}, {{ organization.street2 }}{% endif %}, {{ organization.city }}{% if organization.email %}, or by e-mail to {{ organization.email }}{% endif %}. Notices to the CUSTOMER go to the contact details on page 1. WhatsApp, SMS and e-mail may be used for routine notices.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">16. Whole agreement and changes.</b> The documents in clause 1 are the whole agreement for the service. No verbal statement or promise binds DISHNET unless confirmed in writing by an authorised DISHNET representative, and a change to this Agreement binds only when made in writing and signed by authorised representatives of both parties. If any clause is held invalid, the rest stays in force. Not enforcing a clause on one occasion does not waive it. This Agreement may be signed in counterparts and by electronic signature.</div>
+        <div style="padding:2px 0;"><b style="color:#141414;">17. Complaints and governing law.</b> Complaints are handled as DISHNET&rsquo;s Complaints page sets out, and the CUSTOMER may also take a complaint to the Uganda Communications Commission. This Agreement is governed by the laws of the Republic of Uganda, and the courts of Uganda may decide disputes about it, without limiting any complaint or dispute process the law gives the CUSTOMER.</div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="font-size:9px;font-weight:700;color:#141414;margin-top:10px;">Signed by the parties&rsquo; authorised representatives:</div>
+  <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:9px;">
+    <tr>
+      <td style="width:48%;vertical-align:top;border:1px solid #ddd;padding:8px 10px;">
+        <div style="font-weight:800;color:#141414;margin-bottom:4px;">For {{ organization.name }}</div>
+        <div style="padding:6px 0 0;">Name: ______________________________</div>
+        <div style="padding:6px 0 0;">Designation: ________________________</div>
+        <div style="padding:6px 0 0;">Signature: __________________________</div>
+        <div style="padding:6px 0 0;">Date: ______________________________</div>
+        <div style="padding:14px 0 18px;color:#6B6B6B;">Company seal</div>
+      </td>
+      <td style="width:4%;border:none;"></td>
+      <td style="width:48%;vertical-align:top;border:1px solid #ddd;padding:8px 10px;">
+        <div style="font-weight:800;color:#141414;margin-bottom:4px;">For the CUSTOMER: {{ client.name }}</div>
+        <div style="padding:6px 0 0;">Name: ______________________________</div>
+        <div style="padding:6px 0 0;">Designation: ________________________</div>
+        <div style="padding:6px 0 0;">Signature: __________________________</div>
+        <div style="padding:6px 0 0;">Date: ______________________________</div>
+        <div style="padding:14px 0 18px;color:#6B6B6B;">Company seal (if any)</div>
+      </td>
+    </tr>
+  </table>
+  <div style="font-size:8px;color:#6B6B6B;text-align:right;margin-top:4px;">Customer initials ________</div>
+  <!-- ═══ SERVICE AGREEMENT — UGANDA (pages 3–4) — end ═══ -->
 
 </div>
