@@ -14551,7 +14551,7 @@ The release is one commit on the 5.18.100 release commit itself.
 - **Untouched:** `migrations/`, `master.php`, `main.php`, `public.php`, `cron_quote_wa.php`, `lib/QuotationService.php`,
   `lib/QuoteTaxLine.php`, `lib/TenantProfile.php`, `lib/SalesNumbersAdmin.php` and its page, every other runtime file,
   South Sudan and Domain B. Nothing outside the plugin folder changes.
-- 13 files changed, 177 insertions(+), 27 deletions(-).
+- 13 files changed, 179 insertions(+), 27 deletions(-).
 
 ### Ancestry
 
@@ -14572,8 +14572,9 @@ three times before any push, each time for `SAFETY.md` alone, and nothing was pu
   An independent check of this entry's draft against the code found it; the deploy script's header and summary said
   the same and were corrected with it.
 
-The release suite runs on `25af93b`, `5127a78` and `39a0b0d` were stopped when the commit changed, the last after 30 of
-298 files of its first pass. They are not counted.
+The release suite runs on `25af93b` and `5127a78` were stopped when the commit changed. The run on `39a0b0d` was paused
+by hand after 30 of 298 files of its first pass, so that trial 2 could run alone, and the commit changed before it was
+resumed. None of them is counted.
 
 ### Tests
 
@@ -14601,8 +14602,8 @@ The release suite runs on `25af93b`, `5127a78` and `39a0b0d` were stopped when t
     - `test_sales_numbers` 162 → 163: this release changes it;
     - the two date tests, 48/0 → 47/1 and 36/0 → 35/1.
   - **Nothing heavy ran beside them.** No trial ran during either pass, and no other suite. During pass A, single test
-    files ran beside it, one at a time, for the investigation in known limit 8. During pass B, nothing ran. The two
-    passes agree file by file.
+    files ran beside it, one at a time, for the investigation in known limit 8. During pass B nothing else was started;
+    only pass A's leftover server (next bullet) was still up, idle. The two passes agree file by file.
   - **`test_customer_pwa`'s `php -S` server outlived the test** in each pass. Each leftover server's parent was process
     1, and both were stopped by hand after the suite. This predates the release: the test is not one of the 13
     files.
@@ -14737,7 +14738,8 @@ begin, the sandbox matches production on the day:
   - It is not the final script's trial: the release was amended afterwards for `SAFETY.md` (Ancestry), which moved its
     pins, and the script's header and summary changed with it.
 - **Trial 3 (26 Oct 17:40 UTC, `dep-101c` at `ef728a62`): killed by a container restart** in 5.18.100's first
-  section, at 1,355 ok and 0 FAIL. It is not a result. Its leftovers in /tmp were moved aside, not deleted.
+  section, at 1,424 ok and 0 FAIL: everything before that section, whose header was the log's last line. It is not a
+  result. Its leftovers in /tmp were moved aside, not deleted.
 - **Trial 4 (26 Oct 21:11 – 27 Oct 00:47 UTC, `dep-101c` at `ef728a62`, the final script pinned to `f2055ba`): PASSED,
   a clean trial — 1,630 ok, 0 failed, exit 0** (*"RESULT: 1630 ok, 0 failed (the script: the committed script)"*), in
   3 h 36 min, alone.
@@ -14906,7 +14908,7 @@ Afterwards:
      30,000)"* fails (47 passed, 1 failed);
    - `tests/test_staff_manual_entry_currency.php`: section D's *"the relabelled row counts: the tile reads
      240,000.00"* fails (35 passed, 1 failed).
-   - **Why.** Both tests plant records dated 25 Sep 2026: cash-ins in the first, a manual collection in the second.
+   - **Why.** Both tests plant records dated 25 Sep 2026: cash-ins in the first, two manual collections in the second.
      The Staff Cashbooks page shows the last 30 days unless it is asked for other dates
      (`tabs/accounts/staff_cashbooks.php:726`, filtered at `:806`, in the tenant's own zone, Africa/Kampala).
      - Since 26 Oct (Kampala), which is 25 Oct 21:00 UTC, the planted rows are out of range and the tile leaves them
@@ -14915,8 +14917,8 @@ Afterwards:
        at all: C, D and E in the first test, and D in the second.
      - 5.18.100's release suite ran on 24 Oct, when the rows were still in range.
    - **Not this release.** This release changes neither test nor the page. Run alone on `8ff469f`, the first test fails
-     the same assertion. Run alone twice on `f2055ba`, it fails the same way both times. The second, run alone on the
-     development tip (whose copy is `f2055ba`'s), fails 35/1.
+     the same assertion. Run alone twice on `f2055ba`, it fails the same way both times. The second fails its assertion
+     (35/1) run alone on `8ff469f`, and the same way as a copy of the unfixed file run in the development tree.
    - **The fix is in the two tests, on the development branch** (`fa509fc` and `7377847`). No product code changes. The
      first commit fixed the first test. An independent read-only review of it, which ran no test while the suite ran,
      found the second test and the half check below; the second commit fixed both.
@@ -14924,10 +14926,10 @@ Afterwards:
        second. The loads that count only entries made that day keep the page's default view.
      - Section E's "before" check in the first test now asserts that the tile reads `UGX 0.00`. It used to assert only
        that the tile did not read 100,000, so it could not catch one of the two rows being counted.
-     - The fixed tests pass 48/0 and 36/0, run alone on the development tip. A copy of the fixed first test, run in a
-       worktree of `f2055ba`, also passes 48/0.
+     - The fixed tests, as `7377847` leaves them, pass 48/0 and 36/0, run alone on the development tip and again as
+       copies in a worktree of `f2055ba`.
    - **The fix proves itself**, each by a single test run:
-     - copies whose window starts on 26 Sep fail the same assertions again (47/1 and 35/1);
+     - copies of the fixed tests whose window starts on 26 Sep fail the same assertions again (47/1 and 35/1);
      - a page copy that counts USD rows in the UGX tile is caught by the fixed tests and missed by the unfixed ones;
      - a page copy that counts only the 30,000 USD row is caught by the new E check and missed by the one before it.
    - **This release is not re-cut for them.**
@@ -14938,7 +14940,7 @@ Afterwards:
 
      The fix goes with the next release.
    - **The five tests the script does run on the server do not depend on the date.** They are:
-     - T1, `test_cash_in_hand_p3b`, at A22 and R25;
+     - T1, `test_cash_in_hand_p3b`, at A22-T1 and R25;
      - T4, `test_d1_bank_balance_readers`, at R24;
      - `test_master_lock_release`, at A15 and R20;
      - `test_main_auto_pull_retired`, at A16 and R21;
@@ -14953,7 +14955,15 @@ Afterwards:
      - The auto-pull test picks a zone in which the hour is the one it needs.
      - T4's only `date()` calls are inside the source text it reads.
 
-     In this release suite they read the same in both passes: T1 548/0, as `T1_SIGNATURE` pins it; `test_master_lock_release` 78/0, `test_main_auto_pull_retired` 47/0 and `test_legal_overrides` 80/0, each as its signature pins it; and T4 34/0. The script runs T4 with `--no-mutants` against a baseline and pins that run at 20/0.
+     In this release suite they read the same in both passes:
+     - T1 548/0, as `T1_SIGNATURE` pins it;
+     - `test_master_lock_release` 78/0, `test_main_auto_pull_retired` 47/0 and `test_legal_overrides` 80/0, each as
+       its signature pins it;
+     - T4 34/0. The script runs T4 with `--no-mutants` against a baseline and pins that run at 20/0.
    - **Unrelated, and recorded before** (the 5.18.93 entry): the follow-up tests that look for a zone inside the
-     sending hours find none on a Sunday. Between about 07:00 and 19:00 UTC, `test_pilot_safety` fails and two others
-     skip their follow-up cases. This release suite did not run on a Sunday.
+     sending hours find none on a Sunday. Then:
+     - `test_pilot_safety` fails between about 07:00 and 19:00 UTC;
+     - `test_sales_pilot` and `test_multi_number_routing` leave their follow-up cases out from about 06:00;
+     - `test_notify_evo_retry` counts its three as skips, about 08:00–18:00.
+
+     This release suite did not run on a Sunday.
