@@ -9,14 +9,18 @@
 #            form's new question, "Who installs?"). A Cash sale collects exactly the quotation's total, and is refused
 #            before anything is written when the sale cannot be priced or the total changed since the form read it; an
 #            unpriced Credit sale is registered with no quotation (P1) and the agent is told; over the auto-quote limit,
-#            P3; a retry never re-prices a Cash sale (P2). "Prepared by" is the client attribute keyed salesPerson,
+#            P3; a retry never re-prices a Cash sale (P2). An application saved before 5.18.102 carries no "Who
+#            installs?" answer, so at its retry a Starlink sale other than a Shifting Connection or an Ownership Change
+#            is unpriced whatever uCRM holds, and a Fiber one is never priced: no quotation is made, and the Orders card
+#            shows P1 (Credit, or no cash collected) or P2 (Cash with cash collected) — its quotation is made by hand in
+#            uCRM, or not at all (D11; QL-N3 counts them). "Prepared by" is the client attribute keyed salesPerson,
 #            PATCHed after the create and the company check. Internal text goes to adminNotes; the customer's notes hold
-#            only Settings' prefix (kyc_quote_notes_prefix). The created quote is read back (GET billing/quotes/{id}) and a
-#            mismatch is recorded for the Orders card. Send Quotation and the lead quotes refuse a line priced 0 and take
-#            their plan prices from uCRM. The fallback PDF has Uganda's header and five terms. No Delivery Acknowledgment
-#            PDF on Uganda (D9: a Uganda credit customer's payment now logs "Delivery PDF generation failed … skipped").
-#            The product push — Sync All, the per-row sync and the sync when a plan or kit is saved — is refused on
-#            Uganda: prices are set in uCRM Products (D12). All of it sits behind one gate (D7),
+#            only Settings' prefix (kyc_quote_notes_prefix). The created quote is read back (GET billing/quotes/{id})
+#            and a mismatch is recorded for the Orders card. Send Quotation and the lead quotes refuse a line priced 0
+#            and take their plan prices from uCRM. The fallback PDF has Uganda's header and five terms. No Delivery
+#            Acknowledgment PDF on Uganda (D9: a Uganda credit customer's payment now logs "Delivery PDF generation
+#            failed … skipped"). The product push — Sync All, the per-row sync and the sync when a plan or kit is saved
+#            — is refused on Uganda: prices are set in uCRM Products (D12). All of it sits behind one gate (D7),
 #            QuoteOrganization::setting(...)['on']: off when ucrm_quote_organization_id is 0/off, and never on South
 #            Sudan, whose requests, texts, PDFs, pages and store stay byte for byte 5.18.101's. No migration, no new
 #            setting; webhook.php (the quotation summary's sign-off), cron_quote_wa.php, QuoteOrganization, QuoteTaxLine,
@@ -89,9 +93,10 @@
 #            subscription_plans and kyc_devices row (the form's own rule, !empty(is_active)) and the installation product
 #            (installLine()) — through the PIN's resolver on a copy of the book, read through the plugin's own client and,
 #            when crm_auth_token is set, through the token client (the clients the form, the submission and the retries
-#            use): a row that does not resolve — not a product, ambiguous, its price differs from its service plan's,
-#            taxable, more than 2 decimals, its invoice label differs, not priced above 0 — is a NO-GO unless
-#            --accept-unpriced; an unreadable catalogue (either client), and a reason the script cannot classify
+#            use): a row that does not resolve — not a product in uCRM (or one with no id, or a name that cannot be
+#            matched to one), ambiguous, no matching service plan or no 1-month price or a price that differs from its
+#            service plan's, taxable, more than 2 decimals, its invoice label differs, not priced above 0 — is a NO-GO
+#            unless --accept-unpriced; an unreadable catalogue (either client), and a reason the script cannot classify
 #            ("other": the release's text and this script's disagree), are NO-GOs that no flag lifts. A Fiber row is
 #            counted apart — unpriced by design on Uganda (docs/71 §D.4), never toward the NO-GO; the debug retry's own
 #            client, read only when its base URL differs, is a note. With the gate off
@@ -139,7 +144,9 @@
 #            rollback (V1, when the public sign-in page redirects) never waits on it — the public address must never
 #            redirect — but counts after it and says the counts and the hazard in its notes and its stop line. The
 #            by-hand put-back counts nothing, and every message that prints it says so. Counts only — never an id, a
-#            name or an amount.
+#            name or an amount. When V1's rollback does not verify, its stop says the rollback did not complete —
+#            5.18.102 may still serve — and prints the by-hand put-back; the counts are said as made after the attempt,
+#            and 5.18.101's cron only as what follows once it serves.
 #
 #   5.18.101'S CHECKS, CARRIED (QS, "quotation sign-off"), each reading webhook.php as TEXT, counting whole lines: the
 #            new line (the owner's wording for Uganda, the old line otherwise, behind $ugPlans !== false), the old line on
@@ -197,19 +204,24 @@
 #            changes or adds; Q-CA2 setting() through the installed code equals Q-G3's, with its two controls; Q-CA3
 #            organizations() and checkClient() through the installed code, as 5.18.99 had it; Q-CA4 the Sync All gate —
 #            still admin-only, the push refused on Uganda only after it (D12); Q-CA5 the KYC, quotation, order and LTE
-#            pages refuse a visitor with no session (5.18.102 changes three of them). 5.18.99's company rule stays in
-#            force — QuoteOrganization.php is kept byte for byte — while 5.18.102 changes the quoting code around it; with
-#            the setting off, Uganda quotes as 5.18.101 does.
+#            pages refuse a visitor with no session (5.18.102 changes three of them). Q-CA6 the installed profile,
+#            through the installed TenantProfile, gives Uganda organization 1 and South Sudan none, and the installed
+#            tools/set_config.php lists ucrm_quote_organization_id and refuses --value disabled (exit 1, nothing saved)
+#            on a throwaway data folder, never the live one. 5.18.99's company rule stays in force —
+#            QuoteOrganization.php is kept byte for byte — while 5.18.102 changes the quoting code around it; with the
+#            setting off, Uganda quotes as 5.18.101 does.
 #
 #   5.18.98'S CHECKS, CARRIED, AGAINST 5.18.101'S CODE. Its copy checks C1–C5, on ONE VACUUM INTO copy, 5.18.101's code and
 #            5.18.102's from Git (A23), then 5.18.101's from Git and the installed (CA2): C1 cash in hand per currency ×
 #            project, old = new; C2 the list with no key per project × view — ids, Balance and its currency — old = new;
 #            C3 on the new code the partition per project × view, the split itself and the tab's buttons old = new; C4
-#            countEntries, getPendingDisbursements and plByPeriod, old = new; C5 the copy's digests unchanged by every read
-#            of the new code — the proof that the release writes nothing to the book. G2 (rule A in force through the
-#            installed code) and G3 (both ECO Bank cards show a figure, --without-bank-balance its note) are kept; N1 is
-#            kept as the cross-check of C3 from outside the code; CA3 (the drift since the before-copy, a note) and CA4
-#            (the Cashbook page, its tab and both exports refuse a visitor with no session) are kept, with their names.
+#            countEntries, getPendingDisbursements and plByPeriod, old = new; C5 the copy's digests (cb_ledger,
+#            cb_accounts, the schema) unchanged by every read of the new code — the proof that its Cashbook reads write
+#            nothing there; what 5.18.102 writes at use is its own keys on Uganda applications (R7). G2 (rule A in force
+#            through the installed code) and G3 (both ECO Bank cards show a figure, --without-bank-balance its note) are
+#            kept; N1 is kept as the cross-check of C3 from outside the code; CA3 (the drift since the before-copy, a
+#            note) and CA4 (the Cashbook page, its tab and both exports refuse a visitor with no session) are kept, with
+#            their names.
 #
 #   ECO BANK STAYS EXACTLY AS IT IS. 5.18.97's and 5.18.98's checks of it, carried: BR1 the installed plugin is live
 #            5.18.101 (f2055ba), every file it tracks byte for byte; BR2 088 applied on the copy exactly as its file makes
@@ -302,9 +314,17 @@
 # The rollback is a separate command, printed at the end of the deploy's log, after the verdict. It is never pasted
 # together with the ones above: pasted together, the shell runs both (root docs/44 §16.9). It is one step — 5.18.101 put
 # back — and leaves ECO Bank, every statement kept, its switch, the quoting organization, the channel registry and every
-# number's owner exactly as they are. After it, on Uganda, the quotations and the Cash amount come again from the
-# plugin's own plans and kits, saving a plan or kit and Sync All write uCRM's Products again, and the Delivery
-# Acknowledgment PDF is sent again; the quotation summary's sign-off stays 5.18.101's (5.18.102 never changed
+# number's owner exactly as they are. After it, on Uganda, where the quoting organization is in force, the quotations
+# and the Cash amount come again from the plugin's own plans and kits, saving a plan or kit and Sync All write uCRM's
+# Products again, the Delivery Acknowledgment PDF is sent again, and a Cash sale from the retailer app or the mobile API
+# is accepted again. There the customer sees 5.18.101's quotation again: the internal "Auto-generated on KYC
+# registration … Sales: … | Connection: … | Priority: …" text back in the quotation's customer notes (docs/71 §A.1);
+# "Prepared by" no longer set on a new KYC customer (one already set keeps its attribute: uCRM is not changed); Send
+# Quotation and the lead quotes again take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to
+# its old header and terms (§K.1). The created quote is no longer read back, so the Orders card records no mismatch
+# (§F.6, staff only). The Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number
+# (§K.2), and a Uganda Credit customer who paid while 5.18.102 was live was not sent it, nor marked as sent, so gets it
+# at their next payment (webhook.php, kept). The quotation summary's sign-off stays 5.18.101's (5.18.102 never changed
 # webhook.php). Quotes already made in uCRM are not changed, what 5.18.102 wrote on applications stays as written, and
 # the 21 files it adds stay on disk, reached by nothing under 5.18.101 (QL-RB1). It refuses before anything changes
 # while an application waiting for uCRM with no plan price recorded — as 5.18.102 saves the sales it cannot price; an
@@ -411,9 +431,10 @@
 #            copy's time on each file
 #          V as 5.18.101: the public pages and the anonymous refusals (V1–V13, BA4, CA4) — a deploy whose public sign-in
 #            page redirects rolls itself back (V1), then counts QL-RB2 on a copy and says the counts and the hazard, as
-#            notes and in its stop line, never holding the rollback up; the Sync All route and the gate naming it
-#            (Q-CA4); the KYC, quotation, order and LTE pages refuse a visitor with no session (Q-CA5); every switch
-#            unchanged, ECO Bank's ON (V3–V3j); no fatal since the deploy started (V4)
+#            notes and in its stop line, never holding the rollback up; one that does not verify says it did not
+#            complete and prints the by-hand put-back; the Sync All route and the gate naming it (Q-CA4); the KYC,
+#            quotation, order and LTE pages refuse a visitor with no session (Q-CA5); every switch unchanged, ECO Bank's
+#            ON (V3–V3j); no fatal since the deploy started (V4)
 #          R 5.18.102 installed: R1 the files byte for byte and the version; Q-CA1 the release by its pinned sha256,
 #            5.18.101's kept files by theirs, php -l on every PHP file it changes or adds; R2–R22 as 5.18.101 (R3 with 088
 #            beside 086 and 087: BA1, every row unchanged; R7 the database's ledger unchanged — no migration — and its size;
@@ -3164,6 +3185,15 @@ try {
         // QL-N3 — Q-N4 extended: the pending and review applications by line shape — 5.18.102's mark (quote_lines_source
         // 'ucrm-5.18.102') or not; quote_items with an item carrying a productId, without one, or none — and by sale type
         // (sales_type 'Cash', else Credit). The cells that are not 0: "<status>.<marked|unmarked>.<pid|nopid|none>.<cash|credit>:n".
+        // And (L1, review 2; docs/71 D11, §F.4) of the same applications, those the retry cannot price after the deploy
+        // whatever uCRM holds, by the release's own rules (KycService::retryLines and saleFromApp, UcrmQuoteLines::resolve
+        // and needsInstallAnswer): not marked (quote_items an array that is not empty, as retryLines tests it), no
+        // quotation made yet (ugQuote asks nothing then), and either a Fiber sale (never priced from uCRM) or a Starlink
+        // one (customer_type, trimmed, StarLink in any case) whose connection (trimmed; New Connection when absent) is
+        // neither a Shifting Connection nor an Ownership Change, with no "Who installs?" answer (install_by a string,
+        // exactly dishnet or customer — 5.18.101 writes none). The Starlink ones by status and by the refusal retryLines
+        // records: P2 a Cash one with cash collected (amount_charged above 0, to 2 dp), P1 the rest; Fiber apart. Counts.
+        $ql_d11 = ["pending" => 0, "review" => 0, "p1" => 0, "p2" => 0, "fiber" => 0];
         $ql_n3 = [];
         foreach ($apps as $r) {
             $ql_st = (string)($r["crm_sync_status"] ?? ""); if ($ql_st !== "pending" && $ql_st !== "review") continue;
@@ -3172,6 +3202,15 @@ try {
             if (is_array($ql_it) && $ql_it !== []) { $ql_sh = "nopid"; foreach ($ql_it as $ql_i) if (is_array($ql_i) && $posInt($ql_i["productId"] ?? null) > 0) { $ql_sh = "pid"; break; } }
             $ql_c = $ql_st . "." . (($r["quote_lines_source"] ?? null) === "ucrm-5.18.102" ? "marked" : "unmarked") . "." . $ql_sh . "." . (($r["sales_type"] ?? null) === "Cash" ? "cash" : "credit");
             $ql_n3[$ql_c] = ($ql_n3[$ql_c] ?? 0) + 1;
+            $ql_mk = ($r["quote_lines_source"] ?? null) === "ucrm-5.18.102" && is_array($r["quote_items"] ?? null) && $r["quote_items"] !== [];
+            if ($ql_mk || !empty($r["quote_created"])) continue;
+            $ql_ty = $r["customer_type"] ?? ""; $ql_ty = trim(is_scalar($ql_ty) ? (string)$ql_ty : "");
+            $ql_cn = $r["connectivity_type"] ?? "New Connection"; $ql_cn = trim(is_scalar($ql_cn) ? (string)$ql_cn : "");
+            $ql_by = is_string($r["install_by"] ?? null) ? $r["install_by"] : "";
+            if (strcasecmp($ql_ty, "Fiber") === 0) { $ql_d11["fiber"]++; continue; }
+            if (strcasecmp($ql_ty, "StarLink") !== 0 || in_array($ql_cn, ["Shifting Connection", "Ownership Change"], true) || $ql_by === "dishnet" || $ql_by === "customer") continue;
+            $ql_d11[$ql_st]++;
+            $ql_d11[(($r["sales_type"] ?? "") === "Cash" && round((float)($r["amount_charged"] ?? 0), 2) > 0) ? "p2" : "p1"]++;
         }
         ksort($ql_n3); $ql_n3s = []; foreach ($ql_n3 as $ql_k => $ql_v) $ql_n3s[] = $ql_k . ":" . $ql_v;
         // QL-N4 — the last 90 days' applications (submitted_at, saveApplication's stamp) by entry point: the record carries
@@ -3252,7 +3291,8 @@ try {
              " qn5=", $q5s ? implode(",", $q5s) : "-", " qn6=", $q6, " qn7=pm:", $pm, ",plans:", $pl, ",hw:", $hw, " keys=", $keys, ":", $keysA,
              " qloffer=plans:", count($offer["plans"]), ",kits:", count($offer["kits"]), ",packages:", count($offer["packages"]), ",written:", is_string($ql_ofs) ? 1 : 0,
              " qln3=", $ql_n3s ? implode(",", $ql_n3s) : "none", " qln4=all:", $ql_n4["all"], ",existing:", $ql_n4["existing"], ",nodate:", $ql_n4["nodate"], ",ep:unmeasurable",
-             " qln5=plan:", $ql_newest($ql_plans, "updated_at"), ",kit:", $ql_newest($ql_kits, "created_at");
+             " qln5=plan:", $ql_newest($ql_plans, "updated_at"), ",kit:", $ql_newest($ql_kits, "created_at"),
+             " qln3d11=pending:", $ql_d11["pending"], ",review:", $ql_d11["review"], ",p1:", $ql_d11["p1"], ",p2:", $ql_d11["p2"], ",fiber:", $ql_d11["fiber"];
         exit(0);
     }
     if ($mode === "remote") {
@@ -3380,7 +3420,10 @@ try {
                     $qlRows[] = ["install", ["id" => "", "name" => UcrmQuoteLines::INSTALL_NAME, "fiber" => false]];
                     foreach ($qlOffer["packages"] as $o) if (is_array($o)) $qlRows[] = ["package", $o];
                     $qlc = []; $qlr = []; $qlpk = []; $qlrd = []; $qlBad = []; $qlH = [];
-                    $S[] = ""; $S[] = "== QL-G1 the catalogue the KYC form offers — " . (string)($A["label"] ?? "") . " (names, uCRM product ids, units and the resolver's reasons: never paste) ==";
+                    // The sheet's section carries the check's own name (D-R11): only the after-copy reading (qo_run r)
+                    // asks for "check" — QL-CA1 — and stage A's, which asks for q314, is QL-G1 (E2-7, review 2).
+                    $qlName = isset($what["check"]) ? "QL-CA1" : "QL-G1";
+                    $S[] = ""; $S[] = "== " . $qlName . " the catalogue the KYC form offers — " . (string)($A["label"] ?? "") . " (names, uCRM product ids, units and the resolver's reasons: never paste) ==";
                     foreach (["plug" => $qlPlug, "tok" => $qlTok, "dbg" => $qlDbg] as $nm => $c) {
                         if ($c === null) {
                             $v = $nm === "dbg" && $qlTok !== null ? "same" : "unset";
@@ -3451,7 +3494,10 @@ try {
             // through the plugin's own client, read as UcrmClientTarget::clientFields() reads it — one GET custom-attributes;
             // client attributes only (attributeType, 'client' when absent), keyed by id; EfrisClientField's tax fields
             // skipped — then the release's own answer, salesPersonFieldId(), its own GET (it uses none but exactly one, never
-            // id 1). The attribute's id alone; never its name or a value.
+            // id 1). The attribute's id alone; never its name or a value. The release's lookup is asked under the gate this
+            // reading runs with (qorg: Q-G3's before the copy, Q-CA2's after it), never a forced "on": with no quoting
+            // organization in force it answers nothing and sets no "Prepared by" (UcrmClientTarget::salesPersonFieldId and
+            // patchSalesPerson return first), so qlattrrel is then "off" (E2-1, review 2).
             try {
                 $qa = $plug->get("custom-attributes");
                 if (!is_array($qa) || isset($qa["raw"])) $out[] = "qlattr=unread:" . (is_array($qa) ? "notjson" : $http($raw));
@@ -3466,8 +3512,8 @@ try {
                     }
                     $sp = array_keys($sp);
                     $out[] = "qlattr=" . (count($sp) === 0 ? "absent" : (count($sp) === 1 ? "one:" . $sp[0] : "ambig:" . count($sp)));
-                    $rel = method_exists("UcrmClientTarget", "salesPersonFieldId") ? (new UcrmClientTarget($plug, $setting))->salesPersonFieldId() : null;
-                    $out[] = "qlattrrel=" . ($rel === null ? "none" : (string)(int)$rel);
+                    $rel = method_exists("UcrmClientTarget", "salesPersonFieldId") ? (new UcrmClientTarget($plug, ["on" => $m > 0] + $setting))->salesPersonFieldId() : null;
+                    $out[] = "qlattrrel=" . ($m <= 0 ? "off" : ($rel === null ? "none" : (string)(int)$rel));
                 }
                 $qa = null;
             } catch (Throwable $e) { $out[] = "qlattr=?" . get_class($e); }
@@ -3742,6 +3788,29 @@ qo_set_of() { local s; s="$(kv "$1" setting)"; printf '%s' "${s%%/*}"; }        
 qo_row_of() { local s; s="$(kv "$1" setting)"; case "$s" in */*) printf '%s' "${s#*/}" ;; esac; }   # the store row's
 qo_org() { local s; s="$(qo_set_of "$1")"; case "$s" in on:[0-9]*:*:-) s="${s#on:}"; printf '%s' "${s%%:*}" ;; esac; }   # the quoting organization's id, when it is in force
 qo_src() { case "$(qo_set_of "$1")" in *:profile:-) echo "from the Uganda profile" ;; *:setting:-) echo "from the setting ucrm_quote_organization_id" ;; *) echo "?" ;; esac; }
+# qo_gate_state GATE-LINE / qo_gate_a — 5.18.102 (E2-2, L2, review 2): a gate reading in one word, so that a reading
+# that was never made cannot read as "off" — on:<id> (the quoting organization in force, the files and the store row
+# alike), off (0/off, or not Uganda: the files and the store row alike), other (read, and neither: invalid, or the two
+# copies disagree), unread (no reading: the probe was not run, or answered no setting); qo_gate_a says stage A's Q-G3
+# (QG3_A, a bare setting, the same in both copies or stage A stopped) the same way, unknown when it is not known.
+qo_gate_state() {   # qo_gate_state GATE-LINE
+  local s r; s="$(qo_set_of "$1")"; r="$(qo_row_of "$1")"
+  case "$s" in
+    ''|'?'*) echo unread ;;
+    on:[0-9]*:*:-) [ "$s" = "$r" ] && echo "on:$(qo_org "$1")" || echo other ;;
+    off:-:*:-) [ "$s" = "$r" ] && echo off || echo other ;;
+    *) echo other ;;
+  esac
+}
+qo_gate_a() {   # qo_gate_a — QG3_A in qo_gate_state's words: on:<id>, off, other, or unknown
+  local x
+  case "${QG3_A:-}" in
+    '') echo unknown ;;
+    on:[0-9]*:*:-) x="${QG3_A#on:}"; echo "on:${x%%:*}" ;;
+    off:-:*:-) echo off ;;
+    *) echo other ;;
+  esac
+}
 # with_flags EXTRA — the deploy as this run was asked, with EXTRA added, one command on its own line, its own log: what a
 # refusal that an explicit flag would lift prints, so that a second refusal never drops the first one's flag. 5.18.102:
 # --accept-unpriced (QL-G1) among them, carried as --quote-create-unproven is.
@@ -3792,6 +3861,7 @@ qo_gate() {
 QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_LOGSTAFF=""; QO_CPROBE=""; QO_SINCE=""; QO_AT=""; QO_ERR=""; QO_LABEL=""
 QO_A_IN=""; QO_A_OUT=""; QO_A_OUTORG=""
 QO_QLH=""; QO_KIND=""   # 5.18.102: the catalogue's verdicts under this run's key (never printed), and which reading QO_R is
+QO_GATE_R=""; QO_GATE_A=""   # 5.18.102: the quoting organization after the copy and at stage A, one word each (qo_after; for F)
 qo_run() {
   local kind="$1" inst="$2" pin="${3:-}" sub o size free need qorg what code plog n0 n1 cin cout since lg lids x
   QO_G2=""; QO_G3=""; QO_C0=""; QO_C1=""; QO_L=""; QO_R=""; QO_TOK=""; QO_ORGS=""; QO_PICK_IN=""; QO_PICK_OUT=""; QO_PICK_OUTORG=""; QO_SINK=""; QO_LOGHIT=""; QO_LOGSTAFF=""; QO_CPROBE=""; QO_SINCE=""; QO_AT=""; QO_ERR=""
@@ -4101,6 +4171,12 @@ qo_after() {
       else bad "Q-CA6 the installed tools/set_config.php on a throwaway data folder, --value disabled: ${rc:-no exit status}, $( grep -qF 'is not an organization number or 0/off' <<<"$o" && echo "the refusal printed" || echo "the refusal NOT printed"), ${t:-?} file(s) left in the folder — it must refuse with exit 1 and write nothing"; fi
     fi
   fi
+  # 5.18.102 (E2-2, L2, review 2): the quoting organization in one word each, for the summary (F). QO_GATE_R: as the
+  # INSTALLED code read it after the copy — unread when no reading was made after it (no code copy: QO_G2 may then still
+  # hold stage A's reading of the code installed before the deploy; or qo_run r stopped before its gate probe: QO_G2 is
+  # empty). QO_GATE_A: as stage A read it through the pin's (QG3_A, this run's or the deploy's state file).
+  QO_GATE_A="$(qo_gate_a)"; QO_GATE_R=unread
+  [ -z "$inst" ] || QO_GATE_R="$(qo_gate_state "$QO_G2")"
   return 0
 }
 # ── 5.18.102: the catalogue the KYC form offers, and the notes (QL, "quote lines"; docs/71 §L.3, §Q) ────────────────────
@@ -4111,8 +4187,11 @@ ql_n() { local v; v="$(subkv "$1" "$2")"; case "$v" in ''|*[!0-9]*) ;; *) printf
 ql_well() { local f; for f in rows ok unpriced fiber unread other; do [ -n "$(ql_n "$1" "$f")" ] || return 1; done; return 0; }   # all six counts
 ql_say() { printf '%s row(s) — %s resolve, %s unpriced, %s Fiber (apart)' "$(ql_n "$1" rows)" "$(ql_n "$1" ok)" "$(ql_n "$1" unpriced)" "$(ql_n "$1" fiber)"; }
 ql_why() {   # ql_why PART — a client's part of qlr= in words, the categories that are not 0
+  # Each category said as what it holds (L3, review 2): "differs" is also "not a service plan" and "no 1-month price",
+  # "notprod" also "no product id" and a name that cannot be matched — the release's own reasons, verbatim on the sheet.
   printf '%s' "$1" | tr ',' '\n' | awk -F: '$2 > 0 { w = $1
-      if ($1 == "notprod") w = "not a product"; else if ($1 == "ambig") w = "ambiguous"; else if ($1 == "differs") w = "price differs from its service plan"
+      if ($1 == "notprod") w = "not a product in uCRM, one with no id, or a name that cannot be matched to one"; else if ($1 == "ambig") w = "ambiguous"
+      else if ($1 == "differs") w = "no matching service plan, no 1-month price, or a price that differs from its service plan"
       else if ($1 == "taxable") w = "taxable"; else if ($1 == "decimals") w = "more than 2 decimals"; else if ($1 == "label") w = "invoice label differs"
       else if ($1 == "zero") w = "not priced above 0"
       printf "%s%s %s", (n++ ? ", " : ""), w, $2 } END { if (!n) printf "none" }'
@@ -4155,6 +4234,19 @@ ql_q314_say() {   # "read:<n>items:<type>.pid<0|1>.unit<0|1>,…" in words
   printf '%s item(s)' "$n"
   [ "$l" = "-" ] || printf ' — %s' "$(printf '%s' "$l" | tr ',' '\n' | awk -F. '{ printf "%s%s, %s, %s", (n++ ? "; " : ""), $1, ($2 == "pid1" ? "a productId" : "no productId"), ($3 == "unit1" ? "a unit" : "no unit") }')"
 }
+ql_d11_say() {   # ql_d11_say QLN3D11 — QL-N3's applications the retry cannot price after the deploy (D11), in words
+  # (L1, review 2): "pending:<n>,review:<n>,p1:<n>,p2:<n>,fiber:<n>" — the Starlink ones with no "Who installs?" answer
+  # by status and by what retryLines answers for them (P1, P2), the Fiber ones apart. Counts only.
+  local p r a b f
+  p="$(ql_n "$1" pending)"; r="$(ql_n "$1" review)"; a="$(ql_n "$1" p1)"; b="$(ql_n "$1" p2)"; f="$(ql_n "$1" fiber)"
+  if [ -z "$p" ] || [ -z "$r" ] || [ -z "$a" ] || [ -z "$b" ] || [ -z "$f" ] || [ $((p + r)) -ne $((a + b)) ]; then
+    printf 'How many of them the retry cannot price after the deploy, whatever uCRM holds (D11), was not counted (%s)' "${1:-not read}"
+    return 0
+  fi
+  printf 'Whatever uCRM holds, the retry makes no quotation for %s of them (D11, docs/71 §F.4): %s Starlink sale(s) other than a Shifting Connection or an Ownership Change with no "Who installs?" answer — none saved before %s carries one — so unpriced (pending %s, review %s; P1, Credit or no cash recorded, %s; P2, Cash with cash collected, %s), and %s Fiber sale(s), never priced from uCRM on this installation%s' \
+    "$((p + r + f))" "$((p + r))" "$EXPECTED_VERSION" "$p" "$r" "$a" "$b" "$f" \
+    "$( [ $((p + r + f)) = 0 ] || echo " — each one's quotation is then made by hand in uCRM, or not at all (docs/71 §F.4, §F.5)")"
+}
 # ql_stage — QL-G1 and QL-N1–QL-N7, stage A (a deploy and --check), on qo_stage's reading (qo_run a: the PIN's code from
 # Git — its UcrmQuoteLines — on the copies, and uCRM with GETs only, in the probe whose requests Q-G4's refusal counted).
 # QL-G1 refuses (docs/71 §Q D-R4): a row that does not resolve through the plugin's own client or, when crm_auth_token is
@@ -4165,8 +4257,9 @@ ql_q314_say() {   # "read:<n>items:<type>.pid<0|1>.unit<0|1>,…" in words
 # by reason, for the state file), QLG1_H_A (this run's HMAC of every row's verdict — in memory only, never printed, never
 # written), QLATTR_A, and QLG1_NOTED only when --accept-unpriced decided QL-G1.
 QLG1_A=""; QLG1_H_A=""; QLATTR_A=""; QLG1_NOTED=""; QL_QN1=""
+QLN3_D11_A=""   # QL-N3's count of the applications the retry cannot price (D11): this run's stage A only, never the state file
 ql_stage() {
-  local c r p t d u x a q why
+  local c r p t d u x a q why y
   case "$QO_KIND:$QO_R" in a:*" gets="*" other="*) ;; *) stop "NO-GO (QL-G1): stage A's quoting reading is not in this run (${QO_KIND:-none}) — the catalogue cannot be judged. Nothing was changed. Send the log file" ;; esac
   c="$(kv "$QO_R" qlc)"; r="$(kv "$QO_R" qlr)"
   case "$c" in
@@ -4189,8 +4282,8 @@ ql_stage() {
       u="$(ql_unp "$c")"
       if [ "$u" = "0" ]; then ok "QL-G1 every row the KYC form offers resolves through the RELEASE's UcrmQuoteLines on a copy, GET-only — GET products?limit=500, then GET service-plans?limit=500, nothing else asked: through the plugin's own client $(ql_say "$p")$( [ "$t" = "unset" ] && echo " (crm_auth_token unset: the form, the submission and the retries read with it)" || echo "; through the token client $(ql_say "$t")") — its active plans and kits and the installation product; names on the sheet"
       elif [ -n "$ACCEPT_UNPRICED" ]; then QLG1_NOTED=1
-        note "QL-G1 --accept-unpriced, the operator's explicit choice: row(s) the KYC form offers do not resolve in uCRM — $(ql_unp_say "$c" "$r") (each by name, with the resolver's reason, on the sheet). After the deploy a Cash sale of one is refused, and a Credit one registered with no quotation (P1), the agent told — fix them in uCRM Products (docs/71 §M step 3)"
-      else stop "NO-GO (QL-G1): row(s) the KYC form offers do not resolve in uCRM through the RELEASE's resolver — $(ql_unp_say "$c" "$r"); each by name, with the resolver's reason, on the cash sheet (less $SHEET). After the deploy a Cash sale of one would be refused, and a Credit one registered with no quotation (P1). Fix them in uCRM Products (docs/71 §M step 3) and run this again; or, to deploy with them unpriced — the operator's explicit choice, said as such in the log — its own command, alone:$(printf '\n      %s' "$(with_flags --accept-unpriced)")"; fi
+        note "QL-G1 --accept-unpriced, the operator's explicit choice: row(s) the KYC form offers do not resolve in uCRM — $(ql_unp_say "$c" "$r") (each by name, with the resolver's reason, on the sheet). After the deploy a Cash sale of one is refused, and a Credit one registered with no quotation (P1), the agent told — fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says"
+      else stop "NO-GO (QL-G1): row(s) the KYC form offers do not resolve in uCRM through the RELEASE's resolver — $(ql_unp_say "$c" "$r"); each by name, with the resolver's reason, on the cash sheet (less $SHEET). After the deploy a Cash sale of one would be refused, and a Credit one registered with no quotation (P1). Fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says, and run this again; or, to deploy with them unpriced — the operator's explicit choice, said as such in the log — its own command, alone:$(printf '\n      %s' "$(with_flags --accept-unpriced)")"; fi
       case "$d" in
         unset|same|'') ;;
         *) note "QL-G1 the debug retry's own client (read only where its base URL differs from the KYC path's): $(ql_say "$d"), unreadable $(ql_n "$d" unread), unclassified $(ql_n "$d" other)$( [ "$(ql_n "$d" unpriced)" = "0" ] || echo " — $(ql_why "$(ql_of "$r" dbg)")") — a note, never toward the NO-GO (docs/71 §Q D-R4)" ;;
@@ -4199,8 +4292,13 @@ ql_stage() {
       case "$c" in nolib) why=": the pin's code has no lib/UcrmQuoteLines.php" ;; nooffer) why=": the rows the form offers were not read from the copy" ;; '?'*) why=": the resolver threw" ;; esac
       stop "NO-GO (QL-G1): the catalogue could not be resolved on the copy (${c:-not read}$why). No flag lifts it. Nothing was changed. Send the log file" ;;
   esac
-  # QL-N1 — the salesPerson client attribute (docs/71 §I, §M step 2), through the plugin's own client: its id alone.
+  # QL-N1 — the salesPerson client attribute (docs/71 §I, §M step 2), through the plugin's own client: its id alone. With
+  # no quoting organization in force (Q-G3) the release sets no "Prepared by" at all — UcrmClientTarget's lookup and its
+  # PATCH return first, and their two callers run only with the gate on: the attribute is said, its use is not (E2-1,
+  # review 2; the probe's qlattrrel is then "off").
   a="$(kv "$QO_R" qlattr)"; QLATTR_A="$a"; x="$(kv "$QO_R" qlattrrel)"
+  if [ "$c" = "off" ] || [ "$x" = "off" ]; then note "QL-N1 the client attribute keyed salesPerson: $(ql_attr_say "$a") — not used: no quoting organization is in force (Q-G3), so $EXPECTED_VERSION sets no \"Prepared by\" on a new KYC customer; it does so only where the quoting organization is in force (docs/71 §I, D7)"
+  else
   case "$a" in
     one:1) note "QL-N1 the client attribute keyed salesPerson: exactly one, #1 — the release never uses id 1, so \"Prepared by\" is not set on a new KYC customer; the release's own lookup answers ${x:-?} (docs/71 §I)" ;;
     one:*) note "QL-N1 the client attribute keyed salesPerson: exactly one, #${a#one:} — \"Prepared by\" is PATCHed on each new KYC customer after its create and the company check (docs/71 §I); the release's own lookup (UcrmClientTarget::salesPersonFieldId) answers $( [ "$x" = "${a#one:}" ] && echo "the same" || echo "${x:-?}, not the same: say so with the log file")" ;;
@@ -4208,6 +4306,7 @@ ql_stage() {
     ambig:*) note "QL-N1 ${a#ambig:} client attributes are keyed salesPerson — ambiguous: the release sets none of them, so \"Prepared by\" is not set; keep exactly one (docs/71 §M step 2)" ;;
     *) note "QL-N1 the salesPerson attribute could not be read through the plugin's own client (${a:-not read}) — said, never a reason to stop" ;;
   esac
+  fi
   # QL-N2 — quotation 000314, read back (docs/71 §N): per item its type, whether it carries a productId, whether a unit.
   q="$(kv "$QO_R" ql314)"
   case "$q" in
@@ -4216,12 +4315,16 @@ ql_stage() {
     read:*) note "QL-N2 quotation 000314, read back once through the plugin's own client (GET billing/quotes/{the quote id its application stores}): $(ql_q314_say "$q") — the first measurement of what uCRM does with a line (docs/71 §N); never a label or a price, the units on the sheet" ;;
     *) note "QL-N2 quotation 000314 could not be read back (${q:-not read}) — said, never a reason to stop" ;;
   esac
-  # QL-N3 — Q-N4 extended, by line shape and sale type.
-  q="$(kv "$QO_L" qln3)"
+  # QL-N3 — Q-N4 extended, by line shape and sale type. With the quoting organization in force, also the applications
+  # the retry cannot price after the deploy whatever uCRM holds (L1, review 2; D11, docs/71 §F.4: the probe's qln3d11 —
+  # kept in QLN3_D11_A for the summary); with none in force the retry quotes them as 5.18.101 does (D7; E2-1, review 2).
+  q="$(kv "$QO_L" qln3)"; QLN3_D11_A="$(kv "$QO_L" qln3d11)"
   case "$q" in
     ''|'?'*) note "QL-N3 the pending and review applications could not be counted by line shape (${q:-not read}) — said, never a reason to stop" ;;
     *) x="$(printf '%s' "$q" | tr ',' '\n' | awk -F'[.:]' '$2 == "marked" { m += $5 } END { print m + 0 }')"
-      note "QL-N3 Q-N4 by line shape and sale type — the applications saved here and not yet in uCRM, which the retry quotes after the deploy from uCRM's prices alone (marked lines confirmed again, the rest resolved again; a Cash one only at exactly the cash collected, docs/71 §F.4): pending $(ql_n3_say "$q" pending); review $(ql_n3_say "$q" review) — $( [ "$x" = "0" ] && echo "none carries $EXPECTED_VERSION's mark (quote_lines_source): the expected reading before the deploy, $BASELINE_VERSION writing none" || echo "$x carry $EXPECTED_VERSION's mark (quote_lines_source): written by an earlier $EXPECTED_VERSION here, rolled back since")" ;;
+      y="pending $(ql_n3_say "$q" pending); review $(ql_n3_say "$q" review) — $( [ "$x" = "0" ] && echo "none carries $EXPECTED_VERSION's mark (quote_lines_source): the expected reading before the deploy, $BASELINE_VERSION writing none" || echo "$x carry $EXPECTED_VERSION's mark (quote_lines_source): written by an earlier $EXPECTED_VERSION here, rolled back since")"
+      if [ "$c" = "off" ]; then note "QL-N3 Q-N4 by line shape and sale type — the applications saved here and not yet in uCRM: $y. With no quoting organization in force (Q-G3) the retry quotes them after the deploy as $BASELINE_VERSION does: nothing is priced from uCRM (D7)"
+      else note "QL-N3 Q-N4 by line shape and sale type — the applications saved here and not yet in uCRM: $y. After the deploy the retry takes them from uCRM's prices alone (docs/71 §F.4): marked lines are confirmed again and the rest resolved again; a Cash one with cash collected is quoted only at exactly that cash, else not at all (P2). $(ql_d11_say "$QLN3_D11_A")"; fi ;;
   esac
   # QL-N4 — the last 90 days by entry point; QL-N5 — the newest plan save and kit, as dates.
   q="$(kv "$QO_L" qln4)"
@@ -4277,7 +4380,7 @@ ql_after() {
           if [ -z "$QLG1_H_A" ]; then bad "QL-CA1 stage A's verdicts are not known to this run$( [ "$QLG1_A" = "off" ] && echo " (stage A read no catalogue: no quoting organization was in force then, Q-G3)") — the installed resolver's ($(ql_say "$p")) have nothing to equal"
           elif [ "$QO_QLH" = "$QLG1_H_A" ]; then
             ok "QL-CA1 the INSTALLED UcrmQuoteLines, on a fresh copy and GET-only, gives every row the verdict stage A's pin gave it — the same product, price and unit where it resolves, the same reason where it does not (compared under this run's key, never printed): through the plugin's own client $(ql_say "$p")$( [ "$t" = "unset" ] || echo "; through the token client $(ql_say "$t")")"
-            [ "${u1:-0}" = "0" ] || note "QL-CA1 row(s) the KYC form offers are still unpriced, as stage A read them$( [ -n "$QLG1_NOTED" ] && echo " under --accept-unpriced"): $(ql_unp_say "$c" "$r") — a Cash sale of one is refused, a Credit one gets no quotation (P1): fix them in uCRM Products (docs/71 §M step 3)"
+            [ "${u1:-0}" = "0" ] || note "QL-CA1 row(s) the KYC form offers are still unpriced, as stage A read them$( [ -n "$QLG1_NOTED" ] && echo " under --accept-unpriced"): $(ql_unp_say "$c" "$r") — a Cash sale of one is refused, a Credit one gets no quotation (P1): fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says; each row's own reason is on the sheet"
           else bad "QL-CA1 the INSTALLED resolver's verdicts are not stage A's (compared under this run's key): now through the plugin's own client $(ql_say "$p")$( [ "$t" = "unset" ] || echo "; through the token client $(ql_say "$t")"), stage A ${QLG1_A%%/*} — uCRM's Products or Service Plans changed while the deploy ran (a price, or why a row is unpriced), a plan or kit was saved in the plugin, or the installed resolver is not the pin's; each row by name on the sheet, both readings"; fi
         else
           ok "QL-CA1 the catalogue through the INSTALLED UcrmQuoteLines, on a fresh copy, GET-only: through the plugin's own client $(ql_say "$p")$( [ "$t" = "unset" ] || echo "; through the token client $(ql_say "$t")") — readable, every answer classified, nothing asked but the two lists; names on the sheet"
@@ -4289,19 +4392,22 @@ ql_after() {
               elif [ -n "$u0" ] && [ -n "$u1" ] && [ "$u1" -gt "$u0" ]; then note "QL-CA1 more unpriced than stage A read, over both clients: now $(ql_unp_say "$c"); at stage A $(ql_unp_say "${QLG1_A%%/*}") — uCRM's Products or Service Plans changed since the deploy, or a plan or kit was saved: each row by name on the sheet"
               else note "QL-CA1 the counts differ from stage A's: unpriced now $(ql_unp_say "$c"); at stage A $(ql_unp_say "${QLG1_A%%/*}") (the state file: ${QLG1_A%%/*}) — the rows the form offers, or the clients read, changed since"; fi ;;
           esac
-          [ "${u1:-0}" = "0" ] || note "QL-CA1 row(s) the KYC form offers are unpriced now: $(ql_unp_say "$c" "$r") — a Cash sale of one is refused, a Credit one gets no quotation (P1): fix them in uCRM Products (docs/71 §M step 3)"
+          [ "${u1:-0}" = "0" ] || note "QL-CA1 row(s) the KYC form offers are unpriced now: $(ql_unp_say "$c" "$r") — a Cash sale of one is refused, a Credit one gets no quotation (P1): fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says; each row's own reason is on the sheet"
         fi ;;
       *) bad "QL-CA1 the catalogue could not be resolved through the installed code (${c:-not read})" ;;
     esac
   fi
-  # QL-CA2 — the salesPerson attribute again, through the installed code's reading (a note when it differs).
+  # QL-CA2 — the salesPerson attribute again, through the installed code's reading (a note when it differs). With no
+  # quoting organization in force through the installed code (qlc off; the probe's qlattrrel "off"), the installed
+  # release sets no "Prepared by": a note, never an ok (E2-1, review 2). c is read whenever a is: both need the reading.
   a="$( [ -n "$ok_r" ] && [ -n "$inst" ] && kv "$QO_R" qlattr)"; rel="$( [ -n "$ok_r" ] && [ -n "$inst" ] && kv "$QO_R" qlattrrel)"
   if [ -z "$a" ]; then note "QL-CA2 the salesPerson attribute was not read after the copy"
+  elif [ "$c" = "off" ] || [ "$rel" = "off" ]; then note "QL-CA2 the client attribute keyed salesPerson, through the installed code's reading: $(ql_attr_say "$a") — not used: no quoting organization is in force (Q-CA2), so $EXPECTED_VERSION sets no \"Prepared by\" on a new KYC customer$( [ -n "$QLATTR_A" ] && [ "$a" != "$QLATTR_A" ] && echo "; stage A read $(ql_attr_say "$QLATTR_A")")"
   elif [ -z "$QLATTR_A" ]; then note "QL-CA2 the client attribute keyed salesPerson, through the installed code's reading: $(ql_attr_say "$a") — stage A's answer is not known to this run$( [ "$MODE" = "after" ] && echo " (the state file $STATE holds none)")"
   elif [ "$a" = "$QLATTR_A" ]; then
     case "$a" in
       one:1) note "QL-CA2 the client attribute keyed salesPerson reads as stage A read it: exactly one, #1 — an id the release never uses, so \"Prepared by\" is not set (docs/71 §M step 2)" ;;
-      one:*) if [ "$rel" = "${a#one:}" ]; then ok "QL-CA2 the client attribute keyed salesPerson reads as stage A read it: exactly one, #${a#one:} — the installed release's own lookup answers the same: \"Prepared by\" is set on each new KYC customer"
+      one:*) if [ "$c" != "off" ] && [ "$rel" != "off" ] && [ "$rel" = "${a#one:}" ]; then ok "QL-CA2 the client attribute keyed salesPerson reads as stage A read it: exactly one, #${a#one:} — the installed release's own lookup answers the same: \"Prepared by\" is set on each new KYC customer"
              else note "QL-CA2 the client attribute keyed salesPerson reads as stage A read it (exactly one, #${a#one:}), and the installed release's own lookup answers ${rel:-?} — say so with the log file"; fi ;;
       *) note "QL-CA2 the client attribute keyed salesPerson reads as stage A read it: $(ql_attr_say "$a") — \"Prepared by\" is not set until there is exactly one (docs/71 §M step 2)" ;;
     esac
@@ -5753,7 +5859,7 @@ if [ "$MODE" = "rollback" ] && [ "$LIVE_BEFORE" = "$EXPECTED_PLUGIN_COMMIT" ]; t
   # log, after its verdict (root docs/44 §16.9).
   qlrb_judge
   QLRB_SAY="$( [ -n "$QL_UNP_102" ] && echo "on the copy: $(subkv "$QL_UNP_102" marked) with lines it resolved, $(subkv "$QL_UNP_102" refused) refused P1–P3, $(subkv "$QL_UNP_102" mismatch) with a mismatch recorded" || echo "not counted")"
-  note "after the rollback the code is $BASELINE_VERSION's again. On Uganda the quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION makes them; saving a plan or kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again; a Cash sale from the retailer app or the mobile API is accepted again. The quotation summary's sign-off stays $BASELINE_VERSION's — $EXPECTED_VERSION never changed webhook.php. Quotes already made in uCRM are not changed. What $EXPECTED_VERSION wrote on applications stays as written — its lines and their mark, the installation answer, its refusals P1–P3 ($QLRB_SAY) — and under $BASELINE_VERSION an application with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted from the plugin's own prices with its plan line at 0, and uCRM's quote.add webhook WhatsApps it (QL-RB2: pending for uCRM ${QL_UNP_PENDING:-not counted}, in review or failed ${QL_UNP_MANUAL:-not counted}, refused P1–P3 with a uCRM client ${QL_UNP_P1:-not counted}). The $N_ADDED files it adds stay on disk, reached by nothing under $BASELINE_VERSION (QL-RB1). The card's owner lists, every number and its owner stay exactly as they are — the rollback rewrites no registry row — and a number given to a technician is counted after the rollback (RB). The quoting organization stays as it is: 5.18.99's rule, which neither release changes. The Cashbook, its tab \"Bank & other accounts\" and cash in hand stay exactly as they are: $EXPECTED_VERSION changes none of them. ECO Bank stays exactly as it is — its switch, its screen, its links, 088's tables and every statement kept: $EXPECTED_VERSION changes none of them, so there is no switch to clear. A later deploy of $EXPECTED_VERSION goes with --redeploy. 5.18.95's security fixes stay; 5.18.94's documents too; master keeps 5.18.92's lock, main.php 5.18.93's change and the retry job 5.18.91's gate"
+  note "after the rollback the code is $BASELINE_VERSION's again. On Uganda, where the quoting organization is in force, the quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION makes them; saving a plan or kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again; a Cash sale from the retailer app or the mobile API is accepted again. There the customer sees $BASELINE_VERSION's quotation again: the internal \"Auto-generated on KYC registration … Sales: … | Connection: … | Priority: …\" text back in the quotation's customer notes (docs/71 §A.1); \"Prepared by\" no longer set on a new KYC customer (one already set keeps its attribute: uCRM is not changed); Send Quotation and the lead quotes again take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to its old header and terms (§K.1). The created quote is no longer read back, so the Orders card records no mismatch (§F.6, staff only). The Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number (§K.2), and a Uganda Credit customer who paid while $EXPECTED_VERSION was live was not sent it, nor marked as sent, so gets it at their next payment (webhook.php, kept). The quotation summary's sign-off stays $BASELINE_VERSION's — $EXPECTED_VERSION never changed webhook.php. Quotes already made in uCRM are not changed. What $EXPECTED_VERSION wrote on applications stays as written — its lines and their mark, the installation answer, its refusals P1–P3 ($QLRB_SAY) — and under $BASELINE_VERSION an application with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted from the plugin's own prices with its plan line at 0, and uCRM's quote.add webhook WhatsApps it (QL-RB2: pending for uCRM ${QL_UNP_PENDING:-not counted}, in review or failed ${QL_UNP_MANUAL:-not counted}, refused P1–P3 with a uCRM client ${QL_UNP_P1:-not counted}). The $N_ADDED files it adds stay on disk, reached by nothing under $BASELINE_VERSION (QL-RB1). The card's owner lists, every number and its owner stay exactly as they are — the rollback rewrites no registry row — and a number given to a technician is counted after the rollback (RB). The quoting organization stays as it is: 5.18.99's rule, which neither release changes. The Cashbook, its tab \"Bank & other accounts\" and cash in hand stay exactly as they are: $EXPECTED_VERSION changes none of them. ECO Bank stays exactly as it is — its switch, its screen, its links, 088's tables and every statement kept: $EXPECTED_VERSION changes none of them, so there is no switch to clear. A later deploy of $EXPECTED_VERSION goes with --redeploy. 5.18.95's security fixes stay; 5.18.94's documents too; master keeps 5.18.92's lock, main.php 5.18.93's change and the retry job 5.18.91's gate"
 fi
 
 # A9 — the three department numbers, as the code installed now routes them on this server's own configuration, through
@@ -6426,7 +6532,7 @@ if [ "$MODE" = "deploy" ]; then
   ok "C2 the Cashbook's list with no key — getEntries() with a limit above the row count, per project × view (All and each currency): every row's id, Balance and stream currency the same under both codes, $(kv "$CIH_C" c2) lists"
   ok "C3 on $EXPECTED_VERSION's code: per project × view the physical-cash list and the non-cash list apart, together the whole list with no key, each in its order, their counts countFiltered()'s ($(c3f "$CIH_C" parts) and $(c3f "$CIH_C" counts)); every non-cash row without a Balance in the list with no key ($(c3f "$CIH_C" nulls)); the tab's buttons together holding the non-cash rows each exactly once, each button's count its rows ($(c3f "$CIH_C" chips) projects); and the split and the tab's buttons exactly $BASELINE_VERSION's ($(kv "$CIH_C" c3same) views, buttons $(kv "$CIH_C" c3chips))"
   ok "C4 countEntries(), getPendingDisbursements() (its days_pending left out: today's date, not the book's) and plByPeriod(), per project: the same under both codes, $(kv "$CIH_C" c4) cells"
-  ok "C5 the copy's row digest (every row of cb_ledger, its id and every column), its cb_accounts digest and its sqlite_master digest, taken after both codes' constructors had run once, are unchanged by every read of $EXPECTED_VERSION's code ($(printf '%s' "$CIH_C0" | sed -E 's/rows=([^:]*):([0-9]*).*/rows \2, digest \1…/')) — $EXPECTED_VERSION reads, and writes nothing"
+  ok "C5 the copy's row digest (every row of cb_ledger, its id and every column), its cb_accounts digest and its sqlite_master digest, taken after both codes' constructors had run once, are unchanged by every read of $EXPECTED_VERSION's code ($(printf '%s' "$CIH_C0" | sed -E 's/rows=([^:]*):([0-9]*).*/rows \2, digest \1…/')) — $EXPECTED_VERSION's reads write nothing there"
   [ "$(kv "$CIH_C" c5old)" = "same" ] || note "C5 the digests moved under $BASELINE_VERSION's reads, after $EXPECTED_VERSION's (the old code's, not the release's; both on the sheet) — said, not judged"
   # N1–N4 — 5.18.98's notes (SPEC-separate-v2 §2.10), carried, counts only, the accounts by row id on the sheet. N1's
   # totals are counted with SQL of this script's own, and must be the rows C3 found on the new code's non-cash list.
@@ -6723,20 +6829,30 @@ if [ -n "$PLUGIN_BASE" ]; then
       # consistent copy of the book, read-only (qlrb_count; counts only, never an id, a name or an amount). An application
       # waiting for uCRM with no plan price recorded — as 5.18.102 saves the sales it cannot price; an older one can be so
       # too — is quoted by 5.18.101's cron with its plan line at price 0, and uCRM's quote.add webhook WhatsApps it to the
-      # customer. The notes and the stop line say the counts and the hazard; nothing here refuses, and no command is printed.
-      if [ "$MODE" = "deploy" ] && [ "${HTTP_REDIRECTS:-0}" != "0" ]; then echo; echo "  ROLLING BACK — the public address must never redirect"; do_rollback || true
+      # customer. The notes and the stop line say the counts and the hazard; nothing here refuses. Review 2 (E2-3):
+      # do_rollback's own answer decides the words. Verified, no command is printed. Not verified — the checkout,
+      # deploy-hybrid.sh, or a record that did not turn to 5.18.101 — 5.18.102 may still serve: the counts are said as
+      # made after the attempt, 5.18.101's cron only as what follows once it serves, and the stop says the rollback did
+      # not complete and prints the by-hand put-back, the hazard first, alone on its own line, as B's failed rollback does.
+      if [ "$MODE" = "deploy" ] && [ "${HTTP_REDIRECTS:-0}" != "0" ]; then echo; echo "  ROLLING BACK — the public address must never redirect"; if do_rollback; then QLV1_RB=ok; else QLV1_RB=failed; fi
+        if [ "$QLV1_RB" = "ok" ]; then QLV1_WHEN="after this automatic rollback"; QLV1_AFTER="after it"; QLV1_NOTLIVE=""; QLV1_ONCE=""; QLV1_RBW="The rollback"
+          QLV1_PEND="each pending one is quoted by $BASELINE_VERSION's cron with its plan line at price 0, and uCRM WhatsApps it (the note above)"
+        else QLV1_WHEN="after this automatic rollback attempt, which did not complete — $EXPECTED_VERSION may still serve"; QLV1_AFTER="after the attempt"; QLV1_ONCE=" once $BASELINE_VERSION serves"; QLV1_RBW="The rollback attempt"
+          QLV1_NOTLIVE=" $BASELINE_VERSION may not be serving yet: the put-back printed below, run by hand, puts it back."
+          QLV1_PEND="each pending one would be quoted by $BASELINE_VERSION's cron with its plan line at price 0 once it serves, and uCRM would WhatsApp it (the note above)"; fi
         if qlrb_count; then
-          echo "  unpriced apps   after this automatic rollback, on a copy of the book, read-only (QL-RB2): pending for uCRM $QL_UNP_PENDING, in review or failed $QL_UNP_MANUAL, refused P1–P3 with a uCRM client $QL_UNP_P1 — counts only"
-          QLV1_SAY="QL-RB2 counted after it, on a copy of the book: pending for uCRM $QL_UNP_PENDING, in review or failed $QL_UNP_MANUAL, refused P1–P3 with a uCRM client $QL_UNP_P1"
-          if [ "$QL_UNP_PENDING" != "0" ]; then QLV1_SAY="$QLV1_SAY — each pending one is quoted by $BASELINE_VERSION's cron with its plan line at price 0, and uCRM WhatsApps it (the note above)"
-            note "QL-RB2 after this automatic rollback: $QL_UNP_PENDING application(s) still waiting for uCRM with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too (on a copy of the book, read-only). Once $BASELINE_VERSION serves, its cron (KycCrmSync) retries each within minutes, rebuilds its plan line at price 0 and makes the quotation, and uCRM's quote.add webhook WhatsApps it to the customer. The rollback did not wait for them: the public address must never redirect"; fi
-          [ "$QL_UNP_MANUAL" = "0" ] || note "QL-RB2 after this automatic rollback: $QL_UNP_MANUAL application(s) in review or failed with no plan price recorded: a person's retry under $BASELINE_VERSION would quote one with its plan line at price 0, and uCRM's quote.add webhook would WhatsApp it — make their quotations in uCRM, and retry none of them by hand under $BASELINE_VERSION"
-          [ "$QL_UNP_P1" = "0" ] || note "QL-RB2 after this automatic rollback: $QL_UNP_P1 application(s) $EXPECTED_VERSION refused a quotation (P1, P2 or P3) have a uCRM client: the debug retry (retry_quote) could quote one from $BASELINE_VERSION's own prices — make their quotations in uCRM, never through that retry"
+          echo "  unpriced apps   $QLV1_WHEN, on a copy of the book, read-only (QL-RB2): pending for uCRM $QL_UNP_PENDING, in review or failed $QL_UNP_MANUAL, refused P1–P3 with a uCRM client $QL_UNP_P1 — counts only"
+          QLV1_SAY="QL-RB2 counted $QLV1_AFTER, on a copy of the book: pending for uCRM $QL_UNP_PENDING, in review or failed $QL_UNP_MANUAL, refused P1–P3 with a uCRM client $QL_UNP_P1"
+          if [ "$QL_UNP_PENDING" != "0" ]; then QLV1_SAY="$QLV1_SAY — $QLV1_PEND"
+            note "QL-RB2 $QLV1_WHEN: $QL_UNP_PENDING application(s) still waiting for uCRM with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too (on a copy of the book, read-only).$QLV1_NOTLIVE Once $BASELINE_VERSION serves, its cron (KycCrmSync) retries each within minutes, rebuilds its plan line at price 0 and makes the quotation, and uCRM's quote.add webhook WhatsApps it to the customer. $QLV1_RBW did not wait for them: the public address must never redirect"; fi
+          [ "$QL_UNP_MANUAL" = "0" ] || note "QL-RB2 $QLV1_WHEN: $QL_UNP_MANUAL application(s) in review or failed with no plan price recorded: a person's retry under $BASELINE_VERSION would quote one with its plan line at price 0, and uCRM's quote.add webhook would WhatsApp it — make their quotations in uCRM, and retry none of them by hand under $BASELINE_VERSION"
+          [ "$QL_UNP_P1" = "0" ] || note "QL-RB2 $QLV1_WHEN: $QL_UNP_P1 application(s) $EXPECTED_VERSION refused a quotation (P1, P2 or P3) have a uCRM client: the debug retry (retry_quote) could quote one from $BASELINE_VERSION's own prices$QLV1_ONCE — make their quotations in uCRM, never through that retry"
         else
-          QLV1_SAY="QL-RB2 could not count after it the applications waiting for uCRM with no plan price recorded ($QL_UNP_ERR; the note above)"
-          note "QL-RB2 after this automatic rollback, the applications waiting for uCRM with no plan price recorded could not be counted on a copy of the book ($QL_UNP_ERR). One still pending for uCRM — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted by $BASELINE_VERSION's cron with its plan line at price 0 within minutes of it serving, and uCRM's quote.add webhook WhatsApps it to the customer. The rollback did not wait for the count: the public address must never redirect"
+          QLV1_SAY="QL-RB2 could not count $QLV1_AFTER the applications waiting for uCRM with no plan price recorded ($QL_UNP_ERR; the note above)"
+          note "QL-RB2 $QLV1_WHEN, the applications waiting for uCRM with no plan price recorded could not be counted on a copy of the book ($QL_UNP_ERR).$QLV1_NOTLIVE One still pending for uCRM — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted by $BASELINE_VERSION's cron with its plan line at price 0 within minutes of it serving, and uCRM's quote.add webhook WhatsApps it to the customer. $QLV1_RBW did not wait for the count: the public address must never redirect"
         fi
-        stop "rolled back (serves $(live_commit)); $QLV1_SAY; send the log file"; fi
+        if [ "$QLV1_RB" = "ok" ]; then stop "rolled back (serves $(live_commit)); $QLV1_SAY; send the log file"; fi
+        stop "the automatic rollback did not complete — it did not verify (live=$(live_commit)): $EXPECTED_VERSION may still serve, or some installed files may already be $BASELINE_VERSION's, and the public address may still redirect. $QLV1_SAY. $PUTBACK_HAZARD Put $BASELINE_VERSION back by hand, with its own command — then send this log file and that command's log:$PUTBACK_SHOW"; fi
     fi
     http GET "$PLUGIN_BASE?page=customer_portal&view=home"
     case "$HTTP_CODE" in 302|401) ok "V1 the portal without a session still refuses ($HTTP_CODE)";; *) bad "V1 the portal without a session → $HTTP_CODE";; esac
@@ -7574,8 +7690,9 @@ grep -qF "    'email_badge_line'       => 'Starlink Installation'," "$DEST/tools
 [ -f "$DEST/$LEGAL_TEST" ] || R6_BAD="$R6_BAD $LEGAL_TEST:missing"
 [ -z "$R6_BAD" ] && ok "R6 every earlier surface is installed as before (the photo surface, the 5.18.67 card, the 5.18.68 chain, the 5.18.69–5.18.72 fixes, 5.18.74's hand-off setting and \"How to pay\", 5.18.83's authorisation — the record and its one rule, the activation step, the uCRM-side check, the page behind its gate, the staff actions, the four guards, the link kept out of every store, the e-mails off by default, the job-page panel), 5.18.84's booking WhatsApp (the class with its switch, Uganda gate and once-per-job claim, its call in job.add beside the e-mail, the setting), 5.18.85's quotation form (the reader, the prefill's read of uCRM's quotations, the form's note and transport guard, the technician's name), 5.18.86's Inbox (the route and its South Sudan rule, all four Inbox sends through it, the channel send that never falls back, forStore() and the constructor's rule, the registry's switch), 5.18.87's Batch 0 (the capture's pin from the context, the uCRM worker reading its payload, the sales context's pin, the guard's audit ids), 5.18.88's Batch 1 (the webhook, the AI worker and the follow-ups through forStore(), a switched-off channel refused, the assistant's switch per number, the reply route behind the registry, the event processor's two lists and EventBus's exclusion, the lead's origin, the registry's switch in set_config.php, the read-only CLI and 087), and 5.18.89's salesperson numbers are in place: the five libraries; the persona in the identity line and rule 4a from one answer, WhatsApp only, carried by the context and the payload; the owner resolved by the AI worker, the new lead given to them, the hand-over through AlertService with the central copy's switch; the registry's two writers; owned leads in the 72-hour cron, smart distribution, the rota and the admin's reassignment note; own leads only on the page, the picker, the menu count, the four handlers and the call log; the follow-up hold at its three steps; the guard's watch list; the card; the three switches in set_config.php; and 5.18.90's safety fix is in place: the policy and the internal numbers, acting only where the registry's switch is on; the AI worker's DishNet-number step, the policy before the model and its refusal at the send never retried; the policy at both of EvolutionApiService's automated sends and the typing indicator, only with the registry on; the webhook's DishNet-number step; the follow-up scan, run and send and the watchdog asking the policy; the guard recording Evolution's numbers only with the registry on; the department numbers' Verify number and its gate on the card; set_config.php refusing the registry until they are verified; the CLI's department line; and 5.18.91's gate is in place: the retry job asks StarlinkRetryScope first, in a closure of its own; and 5.18.94's documents' date and e-mail badge preset are in place" || bad "R6 incomplete:$R6_BAD"
 
-# R7 — the database (5.18.95 to 5.18.102): 5.18.102 adds no migration and writes nothing to the book (C5 proves it on a
-# copy) — what its code writes at use is the plugin's own use, as every page's is: 5.18.99's quote refusal on an
+# R7 — the database (5.18.95 to 5.18.102): 5.18.102 adds no migration, and its Cashbook reads write nothing to
+# cb_ledger, cb_accounts or the schema (C5 proves it on a copy; review 2, L4) — what its code writes at use is the
+# plugin's own use, as every page's is: 5.18.99's quote refusal on an
 # application or flag on a lead, and 5.18.102's own keys on Uganda applications (quote_items, quote_items_total,
 # quote_lines_source 'ucrm-5.18.102', quote_lines_read_at, install_by, quote_sale_cart, quote_sale_kit_qty,
 # quote_readback, quote_mismatch, and the refusals P1–P3 in quote_refused: docs/71 §F.3, §F.5) — and nothing in this
@@ -7942,7 +8059,7 @@ else
       printf '    changed %s: %s\n' "${2:-?}" "$(cih_drift_ids "$R23_PREV" "$CIH_ROWS" changed)"
       printf '    removed %s: %s\n' "${3:-?}" "$(cih_drift_ids "$R23_PREV" "$CIH_ROWS" removed)"; } >> "$SHEET"
     if [ "${1:-x}${2:-x}${3:-x}" = "000" ]; then ok "CA3 no drift since A23 (${R23_PREV_AT:-?}): every row of the book as it was then — the move between the two readings is the release alone"
-    else note "CA3 the book moved since A23 (${R23_PREV_AT:-?}): ${1:-?} row(s) added, ${2:-?} changed, ${3:-?} removed (ids on the sheet only) — webhooks, the gap-fill, the evening pull and staff write all the time; C5 and CA2 prove the code writes nothing, and every equality above holds on this copy"; fi
+    else note "CA3 the book moved since A23 (${R23_PREV_AT:-?}): ${1:-?} row(s) added, ${2:-?} changed, ${3:-?} removed (ids on the sheet only) — webhooks, the gap-fill, the evening pull and staff write all the time; C5 and CA2 prove the code's Cashbook reads write none of it, and every equality above holds on this copy"; fi
     set --
   else note "CA3 no A23 row digest to set this copy against (${R23_PREV:-none recorded in $STATE}) — the drift since the deploy's reading cannot be counted"; fi
   # BA2 — since 5.18.97 (SPEC §2.10b A2): BK2 again on this new copy, through the INSTALLED code, each switch state in a
@@ -8255,6 +8372,9 @@ note "RB run the quarantine's --check next, its own command (printed at the end,
 # (PREV_CHANGED_SHA256S, Q-G1's set read again: 38) — and the 21 files it added stay on disk (docs/71 §Q, D-R1:
 # deploy-hybrid.sh never deletes, nor can the by-hand put-back; 5.18.99 left lib/QuoteOrganization.php so). Git's loop
 # below passes over them, since 5.18.101 has none of them; QL-RB1 (below) proves nothing in 5.18.101 reaches them.
+# The files 5.18.102 adds, as they are on disk now — counted here, before any line says how many (E2-6, review 2):
+# N_ADDED is Git's count of them, never the disk's; RB below, QL-RB1, RB's last note and the summary say this count.
+QLRB1_LEFT=0; for rel in $EXPECTED_ADDED; do [ -e "$DEST/$rel" ] && QLRB1_LEFT=$((QLRB1_LEFT + 1)); done
 RB_SHA_BAD=""; RB_SHA_N=0; RB_PC_N=0
 for f in $CHANGED; do
   git -C "$REPO" cat-file -e "$BASELINE_COMMIT:$f" 2>/dev/null || continue
@@ -8267,7 +8387,7 @@ while read -r rbp_sum rbp_rel; do
   [ "$(sha256sum "$DEST/$rbp_rel" 2>/dev/null | cut -c1-64)" = "$rbp_sum" ] || RB_SHA_BAD="$RB_SHA_BAD $rbp_rel(not-the-pinned-$BASELINE_VERSION)"
 done <<< "$PREV_CHANGED_SHA256S"
 [ "$RB_PC_N" = "$PREV_CHANGED_N" ] || RB_SHA_BAD="$RB_SHA_BAD count:$RB_PC_N/$PREV_CHANGED_N"
-if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte — by Git's sha256 and by the $RB_PC_N this script pins (Q-G1's set); the $N_ADDED files it added stay on disk, reached by nothing (QL-RB1, below)"
+if [ -z "$RB_SHA_BAD" ] && [ "$RB_SHA_N" -gt 0 ]; then ok "RB all $RB_SHA_N files $EXPECTED_VERSION changed are $BASELINE_VERSION's again, byte for byte — by Git's sha256 and by the $RB_PC_N this script pins (Q-G1's set); $QLRB1_LEFT of the $N_ADDED files it adds are on disk (deploy-hybrid.sh never deletes), reached by nothing (QL-RB1, below)"
 else bad "RB installed files that are not $BASELINE_VERSION's after the rollback:${RB_SHA_BAD:- none could be compared}"; fi
 RB_BK=""; RB_KEEP=""; RB_KEEP_N=0; RB_QO=""
 # 5.18.99's quoting code is in place: the rollback target has it. 5.18.102 changed nine of its files — six of the seven
@@ -8340,10 +8460,9 @@ while IFS='|' read -r qr_rel qr_mark qr_pin; do
   [ "$qr_in" = "0" ] || QLRB1_BAD="$QLRB1_BAD $qr_rel:names-it×${qr_in:-?}"
 done <<< "$QL_RB1_MARKS"
 [ "$QLRB1_N" = "8" ] || QLRB1_BAD="$QLRB1_BAD count:$QLRB1_N/8"
-QLRB1_LEFT=0; for rel in $EXPECTED_ADDED; do [ -e "$DEST/$rel" ] && QLRB1_LEFT=$((QLRB1_LEFT + 1)); done
 if [ -z "$QLRB1_BAD" ]; then ok "QL-RB1 nothing in $BASELINE_VERSION reaches the files $EXPECTED_VERSION adds: none of the $QLRB1_N installed files that name its markers in $EXPECTED_VERSION names one now — UcrmQuoteLines in includes/api/api_cron_debug.php, lib/KycCrmSync.php, lib/KycService.php, lib/QuotationService.php and tabs/sales/kyc_form.php; the product push's refusal in includes/api/api_products_admin.php and includes/post/post_sync.php; the Delivery PDF's in lib/DeliveryPdfService.php — each read as text beside its control, the pin's file from Git, which names it exactly as pinned"
 else bad "QL-RB1 $BASELINE_VERSION's installed code reaches what $EXPECTED_VERSION added, or its readers could not see the release:$QLRB1_BAD — the rollback leaves the added files on disk, so nothing installed may name them. Send the log file"; fi
-note "QL-RB1 $QLRB1_LEFT of the $N_ADDED files $EXPECTED_VERSION adds stay on disk (deploy-hybrid.sh never deletes) — lib/UcrmQuoteLines.php, the resolver $EXPECTED_VERSION ran on Uganda while it was live, where the quoting organization was in force, and its tests, tests/test_quote_from_ucrm.php and tests/quote_from_ucrm/, which never ran on the server; none is reached by anything under $BASELINE_VERSION (above); a later --redeploy expects them (BR1)"
+note "QL-RB1 $QLRB1_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — lib/UcrmQuoteLines.php, the resolver $EXPECTED_VERSION ran on Uganda while it was live, where the quoting organization was in force, and its tests, tests/test_quote_from_ucrm.php and tests/quote_from_ucrm/, which never ran on the server; none is reached by anything under $BASELINE_VERSION (above); a later --redeploy expects them (BR1)"
 # The quoting records, as they are: quote_refused* on applications, quote_org_missing on leads, an explicit
 # ucrm_quote_organization_id in kyc_config.json or the store row — 5.18.99's quoting code writes and reads them, before
 # and after the rollback alike; 5.18.100 and 5.18.101 wrote none of their own. 5.18.102 writes its own on Uganda
@@ -8518,7 +8637,7 @@ grep -qF 'Cash in hand — per currency' "$DEST/tabs/accounts/accounts_dashboard
 grep -qF 'var _fr3Base' "$DEST/tabs/sales/wallet.php" 2>/dev/null && grep -qF '(5.18.70)' "$DEST/$RECORDS_TOOL" 2>/dev/null && grep -qF "'currency'        => \$manCur," "$DEST/tabs/accounts/staff_cashbooks.php" 2>/dev/null && ok "RB the 5.18.70 Field Register fix and records tool and the 5.18.69 Manual Entry stamp are still there" || bad "RB the installed plugin lost 5.18.69/5.18.70 code"
 grep -qF 'CASH IN HAND</div>' "$DEST/tabs/accounts/cashbook.php" 2>/dev/null && grep -qF "dn_book_base(null)" "$DEST/lib/StaffCashPositionService.php" 2>/dev/null && ok "RB the 5.18.68 staff-cash chain and card are still there" || bad "RB the installed plugin lost 5.18.68 code"
 grep -qF 'var UG_PHOTOS' "$DEST/tabs/support/scheduling.php" 2>/dev/null && grep -qF -- "$LAYOUT_MARK" "$DEST/tabs/support/scheduling.php" 2>/dev/null && ok "RB the 5.18.66 photo surface and the 5.18.67 card are still there" || bad "RB the installed job page lost 5.18.66/5.18.67 code"
-note "RB the code is $BASELINE_VERSION again. The rollback restores code only. The $N_ADDED files $EXPECTED_VERSION added stay on disk (deploy-hybrid.sh never deletes) — lib/UcrmQuoteLines.php, the resolver that ran on Uganda while $EXPECTED_VERSION was live, where the quoting organization was in force, and its tests, which never ran on the server: $(printf '%s ' $EXPECTED_ADDED); $BASELINE_VERSION reads none of them (QL-RB1), nor the resolver's page cache (ucrm_quote_catalogue_cache.json), which stays in the data folder where a draw of the KYC form or Send Quotation left one. On Uganda, where the quoting organization is in force, the KYC quotations and the Cash amount come again from the plugin's own plans and kits; saving a plan or a kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again; a Cash sale from the retailer app or the mobile API is taken again. The quotation summary's sign-off stays $BASELINE_VERSION's: $EXPECTED_VERSION never changed webhook.php (RB above). Quotes already made in uCRM are not changed, and what $EXPECTED_VERSION wrote on applications stays as written — its lines and their source, who installs, its refusals P1–P3; one waiting for uCRM with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted by $BASELINE_VERSION's cron with the plan line at price 0, and uCRM's quote.add webhook WhatsApps it to the customer (QL-RB2 above). A number given to a technician keeps its owner (RB above). ECO Bank stays as it was: its switch, its screen, its links, 088's tables and every statement kept (RB above). 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
+note "RB the code is $BASELINE_VERSION again. The rollback restores code only. $QLRB1_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above, QL-RB1) — lib/UcrmQuoteLines.php, the resolver that ran on Uganda while $EXPECTED_VERSION was live, where the quoting organization was in force, and its tests, which never ran on the server: $(printf '%s ' $EXPECTED_ADDED); $BASELINE_VERSION reads none of them (QL-RB1), nor the resolver's page cache (ucrm_quote_catalogue_cache.json), which stays in the data folder where a draw of the KYC form or Send Quotation left one. On Uganda, where the quoting organization is in force, the KYC quotations and the Cash amount come again from the plugin's own plans and kits; saving a plan or a kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again; a Cash sale from the retailer app or the mobile API is taken again. There the customer sees $BASELINE_VERSION's quotation again: the internal \"Auto-generated on KYC registration … Sales: … | Connection: … | Priority: …\" text back in the quotation's customer notes (docs/71 §A.1); \"Prepared by\" no longer set on a new KYC customer (one already set keeps its attribute: uCRM is not changed); Send Quotation and the lead quotes again take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to its old header and terms (§K.1). The created quote is no longer read back, so the Orders card records no mismatch (§F.6, staff only). The Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number (§K.2), and a Uganda Credit customer who paid while $EXPECTED_VERSION was live was not sent it, nor marked as sent, so gets it at their next payment (webhook.php, kept). The quotation summary's sign-off stays $BASELINE_VERSION's: $EXPECTED_VERSION never changed webhook.php (RB above). Quotes already made in uCRM are not changed, and what $EXPECTED_VERSION wrote on applications stays as written — its lines and their source, who installs, its refusals P1–P3; one waiting for uCRM with no plan price recorded — as $EXPECTED_VERSION saves the sales it cannot price; an older one can be so too — is quoted by $BASELINE_VERSION's cron with the plan line at price 0, and uCRM's quote.add webhook WhatsApps it to the customer (QL-RB2 above). A number given to a technician keeps its owner (RB above). ECO Bank stays as it was: its switch, its screen, its links, 088's tables and every statement kept (RB above). 087's tables stay, with every row and trail entry the operator's card wrote — the rollback writes none — and so does the store's wa_evo_numbers, if a verification made it; $(sw_both_on "${MN_AFTER:-}" && echo "the registry is on, as the operator left it, and $BASELINE_VERSION reads them exactly as $EXPECTED_VERSION did (RB above)" || echo "the registry's switch reads ${MN_AFTER:-?} (files/store), and with it off $BASELINE_VERSION's registry does not read them (RB above)"). Leads, conversations, events, consents and authorisation records stay as they are; so does the quarantine, which this run never touches"
 fi
 
 # 5.18.93: the salesperson pilot against the deploy's own record of it. A run compares the pilot only with what it read
@@ -8614,7 +8733,7 @@ fi
 LIVE_NOW="$(live_commit)"
 case "$MODE" in
   rollback) echo "  serving           ${LIVE_NOW:-?}  (plugin $BASELINE_VERSION)"
-            echo "  what it means     on Uganda, where the quoting organization is in force, the KYC quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION has them; saving a plan or a kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again (RB). Quotes already made in uCRM are not changed, and what $EXPECTED_VERSION wrote on applications stays as written; ${QLRB2_SAY:-the applications waiting for uCRM with no plan price recorded were not counted with $BASELINE_VERSION in place} (QL-RB2). The $N_ADDED files $EXPECTED_VERSION adds stay on disk, reached by nothing (QL-RB1). The quotation summary's sign-off, the card's owner lists, every number and its owner and the quoting organization stay exactly as they were: $EXPECTED_VERSION changed none of them (RB). The Cashbook's list, its tab \"Bank & other accounts\" and cash in hand read exactly as before: D2 = A, which $EXPECTED_VERSION never changed (RB). ECO Bank stays exactly as it was — its switch, its screen, its links, 088's tables and every statement kept (RB, V3j). 5.18.95's security fixes stay (RB). Deploy $EXPECTED_VERSION again only once the cause of the rollback is understood, and with --redeploy" ;;
+            echo "  what it means     on Uganda, where the quoting organization is in force, the KYC quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION has them; saving a plan or a kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again (RB). There the customer sees $BASELINE_VERSION's quotation again: the internal \"Auto-generated on KYC registration … Sales: … | Connection: … | Priority: …\" text back in the quotation's customer notes (docs/71 §A.1); \"Prepared by\" no longer set on a new KYC customer (one already set keeps its attribute: uCRM is not changed); Send Quotation and the lead quotes again take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to its old header and terms (§K.1). The created quote is no longer read back, so the Orders card records no mismatch (§F.6, staff only). The Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number (§K.2), and a Uganda Credit customer who paid while $EXPECTED_VERSION was live was not sent it, nor marked as sent, so gets it at their next payment (webhook.php, kept). Quotes already made in uCRM are not changed, and what $EXPECTED_VERSION wrote on applications stays as written; ${QLRB2_SAY:-the applications waiting for uCRM with no plan price recorded were not counted with $BASELINE_VERSION in place} (QL-RB2). ${QLRB1_LEFT:-?} of the $N_ADDED files $EXPECTED_VERSION adds are on disk, $( [ -z "${QLRB1_BAD:-}" ] && echo "reached by nothing" || echo "and QL-RB1 FAILED: what is installed may reach them") (QL-RB1). The quotation summary's sign-off, the card's owner lists, every number and its owner and the quoting organization stay exactly as they were: $EXPECTED_VERSION changed none of them (RB). The Cashbook's list, its tab \"Bank & other accounts\" and cash in hand read exactly as before: D2 = A, which $EXPECTED_VERSION never changed (RB). ECO Bank stays exactly as it was — its switch, its screen, its links, 088's tables and every statement kept (RB, V3j). 5.18.95's security fixes stay (RB). Deploy $EXPECTED_VERSION again only once the cause of the rollback is understood, and with --redeploy" ;;
   *)        echo "  deployed commit   ${LIVE_NOW:-?}  (plugin $EXPECTED_VERSION, the release commit on $RELEASE_BRANCH)" ;;
 esac
 [ -n "$BK" ] && echo "  backup            $BK"
@@ -8623,23 +8742,107 @@ if [ "$MODE" != "rollback" ]; then
     on/*)  F_SW="ECO Bank's switch is ON in the configuration files, as the operator left it" ;;
     *)     F_SW="ECO Bank's switch is NOT on in the configuration files ($( [ -n "${V3J_WBB:-}" ] && echo "--without-bank-balance, the operator's choice" || echo "V3j says why"))" ;;
   esac
-  F_QORG="$(qo_org "${QO_G2:-}")"
-  # 5.18.102 (docs/71 §A–§K, §P.2): said only where the quoting organization is in force — with
-  # ucrm_quote_organization_id 0/off (Q-G3) the release quotes as 5.18.101 does (D7). --accept-unpriced is said where it
-  # decided QL-G1: this run's QLG1_NOTED, or in an --after-only run the deploy's, from its state file (counts and flags only).
+  # 5.18.102 (E2-2, L2, review 2): which quoting organization the summary speaks of. As the INSTALLED code read it after
+  # the copy (QO_GATE_R, set by qo_after: on:<id> or off) — and only that reading may say "not in force". Where nothing
+  # was read after the copy (unread: no code copy, or qo_run r stopped before its gate probe) or what was read is neither
+  # (other: an invalid setting, or the files and the store row disagree), stage A's reading through the pin's stands in
+  # for "in force", said as such (QO_GATE_A, from QG3_A: this run's, or in --after-only the deploy's state file); a
+  # stage-A "off", or no usable stage-A reading, leaves it NOT ESTABLISHED. A reading that failed is never read as "off":
+  # 5.18.101 let an empty one say "none in force" in one clause, and 5.18.102 hangs its whole summary on it. A reading
+  # after the copy that differs from stage A's, or has no stage-A reading to equal (Q-CA2 fails), is said beside it,
+  # never "as under 5.18.101". Ids and fixed words only.
+  F_QGR="${QO_GATE_R:-unread}"; F_QGA="${QO_GATE_A:-$(qo_gate_a)}"
+  F_QORG=""; F_QST=unknown; F_QNR=""; F_QDIFF=""; F_QSA=""; F_QSAW=""; F_QIN=" (Q-G3, Q-CA2)"; F_QD9=""
+  case "$F_QGA" in
+    on:[0-9]*) F_QSA="#${F_QGA#on:} in force" ;;
+    off) F_QSA="not in force (0/off)" ;;
+    other) F_QSAW="stage A's reading (Q-G3) was neither in force nor off" ;;
+    *) F_QSAW="stage A's reading (Q-G3) is not known to this run" ;;
+  esac
+  case "$F_QGR" in
+    on:[0-9]*) F_QORG="${F_QGR#on:}"; F_QST=on ;;
+    off) F_QST=off ;;
+    other) F_QNR="read after the copy as neither in force nor off (Q-CA2 above says why)" ;;
+    *) F_QNR="not read after the copy (Q-CA2 above says why)" ;;
+  esac
+  case "$F_QST" in
+    on|off) if [ -z "$F_QSA" ]; then F_QDIFF="; $F_QSAW (Q-CA2 above)"
+            elif [ "$F_QGA" != "$F_QGR" ]; then F_QDIFF="; stage A read it $F_QSA (Q-G3) — Q-CA2 above"; fi ;;
+    *) case "$F_QGA" in on:[0-9]*) F_QORG="${F_QGA#on:}"; F_QST=stageA ;; esac ;;
+  esac
+  case "$F_QST" in
+    on)     if [ -z "$F_QDIFF" ]; then F_QWHAT="#$F_QORG, as under $BASELINE_VERSION (Q-G3, Q-CA2)"
+            else F_QIN=" after the copy (Q-CA2)$F_QDIFF"; F_QWHAT="#$F_QORG after the copy (Q-CA2)$F_QDIFF"; fi ;;
+    off)    if [ -z "$F_QDIFF" ]; then F_QOFF="Q-G3: ucrm_quote_organization_id 0/off, the operator's choice"; F_QWHAT="none in force, as under $BASELINE_VERSION (Q-G3, Q-CA2)"
+            else F_QOFF="Q-CA2: 0/off through the installed code after the copy$F_QDIFF"; F_QWHAT="none in force after the copy (Q-CA2)$F_QDIFF"; fi ;;
+    stageA) F_QIN=" as stage A read it (Q-G3) — $F_QNR; the --after-only below reads it again"
+            F_QWHAT="#$F_QORG as stage A read it (Q-G3), $F_QNR — not shown unchanged by this run" ;;
+    *)      F_QWHAT="$F_QNR, and $( [ -n "$F_QSA" ] && echo "stage A read it $F_QSA (Q-G3)" || echo "$F_QSAW") — not shown unchanged by this run" ;;
+  esac
+  case "$F_QST" in
+    on|stageA) F_QD9=" — though, with the quoting organization in force, what webhook.php and post_kyc.php do on Uganda changes through D9, the Delivery PDF not sent (above)" ;;
+    unknown) F_QD9=" — though, if the quoting organization is in force, what webhook.php and post_kyc.php do on Uganda changes through D9, the Delivery PDF not sent" ;;
+  esac
+  # 5.18.102 (docs/71 §A–§K, §P.2): said where the quoting organization is in force — as read after the copy, or as
+  # stage A read it where nothing was read after it (above); with ucrm_quote_organization_id 0/off read after the copy
+  # the release quotes as 5.18.101 does (D7); otherwise NOT ESTABLISHED, and said so. --accept-unpriced is said where it
+  # decided QL-G1: this run's QLG1_NOTED, or in an --after-only run the deploy's, from its state file (counts and flags
+  # only) — beside this run's own reading of the catalogue after the copy (L6, review 2): F_U1, the unpriced verdicts of
+  # QL-CA1's reading, taken only where ql_after could judge that reading (the installed code's, every count well formed,
+  # readable and classified, nothing asked but the two lists, nothing but GETs; QL-CA1 above gives the verdict), so that
+  # step 3 is never "required now" over rows fixed since, nor silent over rows unpriced since.
   F_QLN="${QLG1_NOTED:-}"
   [ -n "$F_QLN" ] || [ "$MODE" != "after" ] || F_QLN="$(sed -n 's/^QLG1_NOTED=//p' "$STATE" 2>/dev/null | tail -n1)"
+  F_U1=""
+  case "${QO_KIND:-}:${QO_R:-}" in
+    r:*" gets="*" other="*)
+      F_QC="$(kv "$QO_R" qlc)"; F_QP="$(ql_of "$F_QC" plug)"; F_QT="$(ql_of "$F_QC" tok)"
+      case "$F_QC" in
+        plug:*)
+          if [ -n "${ICODE_R:-}" ] && [ "$(kv "$QO_R" qlpath)" = "ok" ] && [ "$QO_OTHER" = "0" ] && [ -z "$QO_COUNT_BAD" ] \
+             && ql_well "$F_QP" && [ "$(ql_n "$F_QP" unread):$(ql_n "$F_QP" other)" = "0:0" ]; then
+            if [ "$QO_TOK" = "token=unset" ]; then [ "$F_QT" != "unset" ] || F_U1="$(ql_unp "$F_QC")"
+            elif ql_well "$F_QT" && [ "$(ql_n "$F_QT" unread):$(ql_n "$F_QT" other)" = "0:0" ]; then F_U1="$(ql_unp "$F_QC")"; fi
+          fi ;;
+      esac ;;
+  esac
+  F_UNPR=""; F_STEP3=";"
+  if [ -n "$F_U1" ] && [ "$F_U1" -gt 0 ]; then
+    if [ -n "$F_QLN" ]; then F_UNPR=" The deploy went ahead over catalogue rows uCRM does not price, on --accept-unpriced — the operator's explicit choice (QL-G1) — and this run's reading after the copy finds rows unpriced (QL-CA1): until each is fixed in uCRM (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1)."
+    else F_UNPR=" This run's reading after the copy finds catalogue rows uCRM does not price (QL-CA1): until each is fixed in uCRM (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1)."; fi
+    F_STEP3=" — required now: this run's reading after the copy (QL-CA1) finds rows unpriced, each on the sheet$( [ -n "$F_QLN" ] && echo "; the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1)");"
+  elif [ -n "$F_U1" ] && [ -n "$F_QLN" ]; then
+    F_UNPR=" The deploy went ahead over catalogue rows uCRM did not price, on --accept-unpriced — the operator's explicit choice (QL-G1); this run's reading after the copy finds none unpriced now (QL-CA1)."
+    F_STEP3=" — the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1); this run's reading after the copy (QL-CA1) finds none unpriced now;"
+  elif [ -n "$F_QLN" ]; then
+    F_UNPR=" The deploy went ahead over catalogue rows uCRM did not price, on --accept-unpriced — the operator's explicit choice (QL-G1); this run's reading after the copy gives no count to judge (QL-CA1 above), so whether each is fixed is not known: until it is (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1)."
+    F_STEP3=" — required unless fixed since: the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1), and this run's reading after the copy gives no count to judge (QL-CA1 above);"
+  elif [ -z "$F_U1" ]; then
+    F_STEP3=" — this run's reading after the copy gives no count to judge (QL-CA1 above);"
+  fi
+  # L1 (review 2; D11, docs/71 §F.4): an application saved before the deploy carries no "Who installs?" answer (5.18.101
+  # asks none), so its retry — KycCrmSync's, from the cron or an admin's Retry — prices no Starlink sale but a Shifting
+  # Connection or an Ownership Change, and no Fiber one (the release's KycService::retryLines → UcrmQuoteLines::resolve):
+  # no quotation; P1 when Credit or no cash was collected, P2 when Cash with cash collected. Said with QL-N3's count of
+  # them where this run's stage A made one (QLN3_D11_A, counts only; never in the state file).
+  F_DP="$(ql_n "${QLN3_D11_A:-}" pending)"; F_DR="$(ql_n "${QLN3_D11_A:-}" review)"; F_D1="$(ql_n "${QLN3_D11_A:-}" p1)"; F_D2="$(ql_n "${QLN3_D11_A:-}" p2)"; F_DF="$(ql_n "${QLN3_D11_A:-}" fiber)"
+  if [ -n "$F_DP" ] && [ -n "$F_DR" ] && [ -n "$F_D1" ] && [ -n "$F_D2" ] && [ -n "$F_DF" ] && [ $((F_DP + F_DR)) -eq $((F_D1 + F_D2)) ]; then
+    F_D11S="; QL-N3 counted $((F_DP + F_DR + F_DF)) at stage A"
+    F_D11N="; QL-N3 counted $((F_DP + F_DR + F_DF)) such waiting at stage A — $((F_DP + F_DR)) Starlink (P1 $F_D1, P2 $F_D2) and $F_DF Fiber"
+  elif [ "$MODE" = "after" ]; then F_D11S="; the deploy's QL-N3 said how many, where it could count them"; F_D11N="$F_D11S"
+  else F_D11S="; QL-N3 could not count them"; F_D11N="$F_D11S"; fi
+  F_D11=" An application saved before the deploy carries no \"Who installs?\" answer, so at its retry (the cron's, or an admin's Retry) a Starlink sale other than a Shifting Connection or an Ownership Change is unpriced whatever uCRM holds, and a Fiber one is never priced: no quotation is made, and the Orders card shows P1 (Credit, or no cash collected) or P2 (Cash with cash collected) — its quotation is made by hand in uCRM, or not at all (D11, docs/71 §F.4$F_D11N)."
   if [ -n "$F_QORG" ]; then
-    F_UNPR=""
-    [ -z "$F_QLN" ] || F_UNPR=" The deploy went ahead over catalogue rows uCRM does not price, on --accept-unpriced — the operator's explicit choice (QL-G1): until each is fixed in uCRM (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1)."
-    echo "  what changed      on this Uganda server (Q-G2), the quoting organization #$F_QORG in force (Q-G3, Q-CA2): the KYC quotations take their lines and prices from uCRM's Products and Service Plans, through one resolver, lib/UcrmQuoteLines.php (QL-G1, QL-CA1: the catalogue's counts above) — a plan from the one Product that mirrors exactly one Service Plan, at its 1-month price; a kit from its own Product; \"Professional Installation\" only when DishNet installs (the form's new \"Who installs?\"). A Cash sale collects exactly the quotation's total, and is refused before anything is saved when an item has no usable uCRM price, during a uCRM outage, when the prices changed since the form read them, or from a form opened before the deploy, the retailer app or the mobile API; an unpriced Credit sale is registered with no quotation (P1) and, on the KYC form, the agent told why — a Credit Starlink New Connection from the retailer app or the mobile API, which send no \"Who installs?\", always is, and the app does not say so: only the Orders card shows it (docs/71 §E.3); a quote held back by the auto-quote limit records P3; a retry never re-prices a Cash sale (P2). \"Prepared by\" is the client attribute keyed salesPerson (QL-N1, QL-CA2); internal text goes to adminNotes, and the customer's notes hold only the Settings prefix (QL-N6); the created quote is read back, and a mismatch is shown on the Orders card. Send Quotation and lead quotes refuse a line priced 0; the fallback PDF carries Uganda's header and five terms. No Delivery Acknowledgment PDF on Uganda (D9): at a payment of a Uganda Credit KYC customer the webhook's log now records \"Delivery PDF generation failed for …: skipped: no Delivery Acknowledgment PDF on Uganda (docs/71 §K.2)\", after one more read of their payments from uCRM — expected, not a fault. A Uganda Cash customer is not marked delivery_pdf_sent either: with kyc_messages_like_crm off they would get the plugin's \"Request Confirmed!\" welcome instead of the PDF's caption (docs/07 records it on in Uganda since 25 Sep; this run does not read it). An existing customer's kit-only additional service still tells the agent that the new install is being scheduled (docs/71 §P.2). Saving a plan or a kit, Sync All and the per-row sync no longer write uCRM's Products: prices are set there (D12). A Product marked Taxable in uCRM — the VAT plan's step 3 — stops automatic quotes until a VAT release (docs/71 §M).$F_UNPR South Sudan as before. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
+    echo "  what changed      on this Uganda server (Q-G2), the quoting organization #$F_QORG in force$F_QIN: the KYC quotations take their lines and prices from uCRM's Products and Service Plans, through one resolver, lib/UcrmQuoteLines.php (QL-G1, QL-CA1: the catalogue's counts above) — a plan from the one Product that mirrors exactly one Service Plan, at its 1-month price; a kit from its own Product; \"Professional Installation\" only when DishNet installs (the form's new \"Who installs?\"). A Cash sale collects exactly the quotation's total, and is refused before anything is saved when an item has no usable uCRM price, during a uCRM outage, when the prices changed since the form read them, or from a form opened before the deploy, the retailer app or the mobile API; an unpriced Credit sale is registered with no quotation (P1) and, on the KYC form, the agent told why — a Credit Starlink New Connection from the retailer app or the mobile API, which send no \"Who installs?\", always is, and the app does not say so: only the Orders card shows it (docs/71 §E.3); a quote held back by the auto-quote limit records P3; a retry never re-prices a Cash sale (P2).$F_D11 \"Prepared by\" is the client attribute keyed salesPerson (QL-N1, QL-CA2); internal text goes to adminNotes, and the customer's notes hold only the Settings prefix (QL-N6); the created quote is read back, and a mismatch is shown on the Orders card. Send Quotation and lead quotes refuse a line priced 0; the fallback PDF carries Uganda's header and five terms. No Delivery Acknowledgment PDF on Uganda (D9): at a payment of a Uganda Credit KYC customer the webhook's log now records \"Delivery PDF generation failed for …: skipped: no Delivery Acknowledgment PDF on Uganda (docs/71 §K.2)\", after one more read of their payments from uCRM — expected, not a fault. A Uganda Cash customer is not marked delivery_pdf_sent either: with kyc_messages_like_crm off they would get the plugin's \"Request Confirmed!\" welcome instead of the PDF's caption (docs/07 records it on in Uganda since 25 Sep; this run does not read it). An existing customer's kit-only additional service still tells the agent that the new install is being scheduled (docs/71 §P.2). Saving a plan or a kit, Sync All and the per-row sync no longer write uCRM's Products: prices are set there (D12). A Product marked Taxable in uCRM — the VAT plan's step 3 — stops automatic quotes until a VAT release (docs/71 §M).$F_UNPR South Sudan as before. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
+  elif [ "$F_QST" = "off" ]; then
+    echo "  what changed      on this server the quoting organization is not in force ($F_QOFF), so $EXPECTED_VERSION quotes as $BASELINE_VERSION does (D7): the KYC quotations, the Cash amount, the product push, the Delivery Acknowledgment PDF and every screen as before; turning the setting on turns all of docs/71 on (your steps, below). No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
   else
-    echo "  what changed      on this server the quoting organization is not in force (Q-G3: ucrm_quote_organization_id 0/off, the operator's choice), so $EXPECTED_VERSION quotes as $BASELINE_VERSION does (D7): the KYC quotations, the Cash amount, the product push, the Delivery Acknowledgment PDF and every screen as before; turning the setting on turns all of docs/71 on (your steps, below). No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
+    echo "  what changed      whether the quoting organization is in force through the installed code is NOT ESTABLISHED: it was $F_QNR, and $( [ -n "$F_QSA" ] && echo "stage A read it $F_QSA (Q-G3)" || echo "$F_QSAW") — so this run does not say what $EXPECTED_VERSION changes here. With it in force, the KYC quotations take their lines and prices from uCRM's Products and Service Plans, a Cash sale is refused when they cannot price it, \"Prepared by\" is set from the salesPerson attribute, the product push is refused and no Delivery Acknowledgment PDF is sent on Uganda (docs/71 §A–§K, D9, D12); with it 0/off, $EXPECTED_VERSION quotes as $BASELINE_VERSION does (D7). The --after-only below reads it again. No migration, no entry, no setting, no number and no staff row changed (R7, R11, TN-N1)"
   fi
   if [ "$MN_BEFORE|$OL_BEFORE|$FH_BEFORE|$HC_BEFORE" = "${MN_AFTER:-}|${OL_AFTER:-}|${FH_AFTER:-}|${HC_AFTER:-}" ]; then F_PILOT="as the operator left them, unchanged by this run"; else F_PILOT="CHANGED during this run, or not read"; fi
   echo "  the pilot         $MN_FLAG ${MN_AFTER#mn=}, $OL_KEY ${OL_AFTER#ol=}, $FH_KEY ${FH_AFTER#fh=}, $HC_KEY ${HC_AFTER#hc=} (files/store) — the salesperson pilot's switches, $F_PILOT (A5, A5b, V3f, V3h): the registry $(sw_both_on "$MN_AFTER" && echo "ON" || { sw_off "$MN_AFTER" && echo "OFF" || echo "with its two copies disagreeing"; }); 087's rows and trail, the registry, 5.18.89's rules, the routing and the automated-send policy as the code reads them, compared before and after (A8, R3, R11, R2b, R12, R2c)"
   echo "  the switches      $LC_KEY ${LC_AFTER#lc=}, $LS_KEY ${LS_AFTER#ls=}, $QU_KEY ${QU_AFTER#qu=}, $SA_KEY ${SA_AFTER#sa=}; install_auth_enabled ${IA_AFTER#ia=}, $WA_KEY ${WA_AFTER#wa=}; $BK_KEY ${BK_AFTER#bk=} — as the operator left them (V3b–V3e, V3j, R2)"
-  echo "  what did not      the WhatsApp AI screen's Salesperson numbers card — its owner lists the salespeople and technicians exactly as $BASELINE_VERSION offers them (TN-G2, TN-CA2); the quoting organization — $( [ -n "$F_QORG" ] && echo "#$F_QORG" || echo "none in force"), as under $BASELINE_VERSION (Q-G3, Q-CA2) — the company every quote is made on, as 5.18.99 made it; the quotation summary's sign-off, $BASELINE_VERSION's byte for byte (QS-G1, QS-CA1); webhook.php, QuoteOrganization.php, QuoteTaxLine.php, TenantProfile.php, PublicPriceFeed.php, cron_quote_wa.php, includes/post/post_kyc.php, includes/api/api_retailer.php and retailer/index.html, $BASELINE_VERSION's byte for byte (Q-G1, Q-CA1)$( [ -n "$F_QORG" ] && echo " — though, with the quoting organization in force, what webhook.php and post_kyc.php do on Uganda changes through D9, the Delivery PDF not sent (above)"); every number in the registry, its owner, its role and its switches (R11, TN-N1); wa_inbox_roles — read, never set (TN-G3, TN-CA3); every staff row, its role and is_admin — read on copies only; $F_SW (V3j); both ECO BANK cards show a figure (G3, BA2)$( [ -n "${V3J_WBB:-}" ] && echo " — or, with --without-bank-balance, said otherwise"); the Cashbook — its list, its tab \"Bank & other accounts\", both exports and cash in hand: D2 = A, read by both codes on the same copy and the same to the last digit in every currency and project (BK1, C1, A23, R23, BA2, CA2); the split itself and the tab's buttons $BASELINE_VERSION's (C3, CA2); every Balance, the counts, the pending disbursements and the P&L (C2, C4); the Cashbook's card, the landing page, the CEO page's tiles, the evening WhatsApp and tools/cash_in_hand.php as before; ECO Bank — every file of it, its two links, 088 and every statement kept, byte for byte and row for row (Q-G1, Q-CA1, BK3, BR2, BA1, BA2); the phone's More menu, byte for byte (BK3); 5.18.95's security fixes — the photo route, the repair page, the EFRIS links, the Splynx credentials — in the pin, the live code and the installed code alike (A22, A22L, R23a–R23g); the quarantine — the kept file and the stray store's old name, never opened, moved or written by this run: ${R19_SUM:-?} (A14, R19); the database — nothing written by the release to the book (C5, CA2) or by this run (R7, BA1); every figure of the book read on copies only, the live vault never written by a run on a copy (A23, R23, Q-G2, Q-CA2, Z1, Z2); 5.18.94's documents and every authorisation record (A17, R22, V13); the operator's three settings and the recordings' retention, read and said only (A18, A21); South Sudan (A6, A13, A17, A24, R13, R15, R17, R18, R22, R26, Q-CA2); Domain B (A7, R14); every switch and AI setting (V3–V3j); ucrm_quote_organization_id and every other key — read, never set (Q-G3, Q-CA6); every number's routing — the three departments' and any salesperson's (A9, R12); the assistant's prompt (A10, R16); the registry, 5.18.89's rules and the automated-send policy as the code judges them on this server's own configuration, the pilot as the operator left it (A11, R2b, R2c, R11); 087's rows and trail (A8, R3); cliDataDir() and getDataDir()'s rescue copy; uCRM: GETs only — no quote, no client, no product and no attribute created, changed or deleted (Q-G4, Q-CA3, QL-G1, QL-CA1); Evolution, WhatsApp, Splynx: nothing called or sent by this run — no number verified, switched or messaged"
+  echo "  what did not      the WhatsApp AI screen's Salesperson numbers card — its owner lists the salespeople and technicians exactly as $BASELINE_VERSION offers them (TN-G2, TN-CA2); the quoting organization — $F_QWHAT — the company every quote is made on, as 5.18.99 made it; the quotation summary's sign-off, $BASELINE_VERSION's byte for byte (QS-G1, QS-CA1); webhook.php, QuoteOrganization.php, QuoteTaxLine.php, TenantProfile.php, PublicPriceFeed.php, cron_quote_wa.php, includes/post/post_kyc.php, includes/api/api_retailer.php and retailer/index.html, $BASELINE_VERSION's byte for byte (Q-G1, Q-CA1)$F_QD9; every number in the registry, its owner, its role and its switches (R11, TN-N1); wa_inbox_roles — read, never set (TN-G3, TN-CA3); every staff row, its role and is_admin — read on copies only; $F_SW (V3j); both ECO BANK cards show a figure (G3, BA2)$( [ -n "${V3J_WBB:-}" ] && echo " — or, with --without-bank-balance, said otherwise"); the Cashbook — its list, its tab \"Bank & other accounts\", both exports and cash in hand: D2 = A, read by both codes on the same copy and the same to the last digit in every currency and project (BK1, C1, A23, R23, BA2, CA2); the split itself and the tab's buttons $BASELINE_VERSION's (C3, CA2); every Balance, the counts, the pending disbursements and the P&L (C2, C4); the Cashbook's card, the landing page, the CEO page's tiles, the evening WhatsApp and tools/cash_in_hand.php as before; ECO Bank — every file of it, its two links, 088 and every statement kept, byte for byte and row for row (Q-G1, Q-CA1, BK3, BR2, BA1, BA2); the phone's More menu, byte for byte (BK3); 5.18.95's security fixes — the photo route, the repair page, the EFRIS links, the Splynx credentials — in the pin, the live code and the installed code alike (A22, A22L, R23a–R23g); the quarantine — the kept file and the stray store's old name, never opened, moved or written by this run: ${R19_SUM:-?} (A14, R19); the database — no migration added and nothing written by this run (R7, BA1); the Cashbook's tables (cb_ledger, cb_accounts) and the schema unchanged by every read of $EXPECTED_VERSION's code on the copies (C5, CA2); what a live plugin writes at use is the plugin's own ($EXPECTED_VERSION's keys on Uganda applications among it: R7, QL-RB2); every figure of the book read on copies only, the live vault never written by a run on a copy (A23, R23, Q-G2, Q-CA2, Z1, Z2); 5.18.94's documents and every authorisation record (A17, R22, V13); the operator's three settings and the recordings' retention, read and said only (A18, A21); South Sudan (A6, A13, A17, A24, R13, R15, R17, R18, R22, R26, Q-CA2); Domain B (A7, R14); every switch and AI setting (V3–V3j); ucrm_quote_organization_id and every other key — read, never set (Q-G3, Q-CA6); every number's routing — the three departments' and any salesperson's (A9, R12); the assistant's prompt (A10, R16); the registry, 5.18.89's rules and the automated-send policy as the code judges them on this server's own configuration, the pilot as the operator left it (A11, R2b, R2c, R11); 087's rows and trail (A8, R3); cliDataDir() and getDataDir()'s rescue copy; uCRM: GETs only — no quote, no client, no product and no attribute created, changed or deleted (Q-G4, Q-CA3, QL-G1, QL-CA1); Evolution, WhatsApp, Splynx: nothing called or sent by this run — no number verified, switched or messaged"
   echo "  migrations        none added (A0, R7): the ledger the same before and after; 088 (${MIG88#migrations/}, 5.18.97's) applied as before, exactly as the reviewed file makes it, every row unchanged by this run (BR2, BA1); 087 (5.18.88's) complete before and after (A8, R3); 086 still complete"
 fi
 echo
@@ -8666,6 +8869,7 @@ if [ "$MODE" != "rollback" ]; then
   echo "      $QCHECK_CMD"
   echo
   if [ -n "$F_QORG" ]; then
+    [ "$F_QST" != "stageA" ] || echo "  quoting org.      #$F_QORG in force as stage A read it (Q-G3) — $F_QNR: the screens and your steps below are said on that reading"
     echo "  the screens       on Uganda, signed in: the KYC form draws each plan and kit at uCRM's price, a row uCRM does not"
     echo "                    price as \"not priced in uCRM\", asks \"Who installs?\", and disables Cash, with its reason,"
     echo "                    while its total is unpriced; Send Quotation's plan picker shows uCRM's prices and refuses a"
@@ -8676,7 +8880,6 @@ if [ "$MODE" != "rollback" ]; then
     echo "                    quote for a real customer: the plugin WhatsApps every new quote. The proof is the catalogue's"
     echo "                    reading (QL-G1, QL-CA1), then the next real KYC quotation (docs/71 §M)"
     echo
-    F_STEP3=";"; [ -z "$F_QLN" ] || F_STEP3=" — required now: the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1);"
     echo "  your steps        yours alone — this script does none of them (docs/71 §M):"
     echo "                    2. in uCRM, a client attribute \"Sales Person\" whose key is exactly salesPerson — System →"
     echo "                       Customisation → Custom attributes → Client (the deploy's QL-N1, and QL-CA2, say whether it"
@@ -8688,25 +8891,59 @@ if [ "$MODE" != "rollback" ]; then
     echo "                       Taxable off, its invoice label empty or its name$F_STEP3"
     echo "                    4. Settings → \"Quote notes prefix\" left empty, or holding only text meant for customers — it"
     echo "                       is printed on the customer's quotation (the deploy's QL-N6 says whether it is set)."
-    echo "                    5. no catalogue Product marked Taxable in uCRM (the VAT plan's step 3) until a VAT release: it"
-    echo "                       stops automatic quotes (docs/71 §M)."
+    echo "                    And, as §M's \"what changes\" says: no catalogue Product marked Taxable in uCRM (the VAT plan's"
+    echo "                    step 3) until a VAT release — it stops automatic quotes (docs/71 §M)."
+    echo "                    After the deploy: each application saved before it that the Orders card shows refused P1 or"
+    echo "                    P2 gets no quotation from its retry (D11, docs/71 §F.4$F_D11S) — make it by hand in uCRM,"
+    echo "                    which the plugin WhatsApps to the customer as every new quote, or make none."
     echo "                    And tell the agents: on Uganda a Cash sale is refused when an item has no usable uCRM price,"
     echo "                    during a uCRM outage and from a form opened before the deploy — register it as Credit, or"
     echo "                    wait; a Cash sale from the retailer app or the mobile API is refused, and a Credit Starlink"
     echo "                    New Connection from them gets no quotation, which the app does not say — the Orders card"
     echo "                    shows it (docs/71 §E.3)"
-  else
+  elif [ "$F_QST" = "off" ]; then
     echo "  the screens       none changes: with the quoting organization not in force, the KYC form, Send Quotation, the"
     echo "                    Orders card, Settings and the push buttons are as under $BASELINE_VERSION; the Salesperson"
     echo "                    numbers card, the Cashbook and ECO Bank as before; no screen of uCRM's changes. Do NOT make a"
     echo "                    test quote for a real customer: the plugin WhatsApps every new quote"
     echo
     echo "  your steps        none now: with the quoting organization not in force, $EXPECTED_VERSION quotes as"
-    echo "                    $BASELINE_VERSION does. Before ucrm_quote_organization_id is turned on: docs/71 §M steps 2–4 —"
-    echo "                    the \"Sales Person\" attribute, the catalogue fixed in uCRM, the Quote notes prefix — and the"
-    echo "                    agents told of the Cash refusals and that a Credit Starlink New Connection from the retailer"
-    echo "                    app or the mobile API then gets no quotation, the app not saying so; and no catalogue Product"
-    echo "                    marked Taxable in uCRM until a VAT release (docs/71 §E.3, §M)"
+    if [ "$MODE" = "deploy" ] && case "$F_QGA" in on:[0-9]*) true ;; *) false ;; esac; then
+      echo "                    $BASELINE_VERSION does. Stage A read the catalogue with #${F_QGA#on:} in force (QL-G1, its"
+      echo "                    rows on the sheet), but after the copy the installed code reads no quoting organization in"
+      echo "                    force (Q-CA2 above), so QL-CA1 read none. No later run of this script can read it while the"
+      echo "                    setting is off: --check"
+    else
+      echo "                    $BASELINE_VERSION does. This run did NOT read the catalogue: with no quoting organization in"
+      echo "                    force its probe reads none ($( [ "$MODE" = "after" ] && echo "QL-CA1 above" || echo "QL-G1, QL-N7 and QL-CA1 above")), and its sheet names"
+      echo "                    no catalogue row. No later run of this script can read it while the setting is off: --check"
+    fi
+    echo "                    refuses once $EXPECTED_VERSION serves, and an --after-only's probe reads none either — so"
+    echo "                    docs/71 §M step 3's \"the deploy's preflight measures all of this\" does not hold on this path."
+    echo "                    Before ucrm_quote_organization_id is turned on, check by hand docs/71 §M steps 2–4 — the"
+    echo "                    \"Sales Person\" attribute and the catalogue in uCRM (step 3's rules: every plan the form"
+    echo "                    offers, every kit and accessory, the \"Professional Installation\" Product), the Quote notes"
+    echo "                    prefix in Settings — and tell the agents of the Cash refusals and that a Credit Starlink New"
+    echo "                    Connection from the retailer app or the mobile API then gets no quotation, the app not saying"
+    echo "                    so; and no catalogue Product marked Taxable in uCRM until a VAT release (docs/71 §E.3, §M)."
+    echo "                    Once it is on, an --after-only reads the catalogue (QL-CA1), but only after the fact: by then"
+    echo "                    a Cash sale of an unpriced row is already refused and a Credit one gets no quotation (P1);"
+    echo "                    and an application saved before it was turned on carries no \"Who installs?\" answer, so its"
+    echo "                    retry makes no quotation for a Starlink sale other than a Shifting Connection or an Ownership"
+    echo "                    Change, nor for a Fiber one (D11): each is quoted by hand in uCRM, or not at all"
+  else
+    echo "  the screens       not stated: whether the quoting organization is in force through the installed code is not"
+    echo "                    established by this run (what changed, above). With it in force, the KYC form, Send"
+    echo "                    Quotation, the Orders card, Settings and the push buttons change as docs/71 §G, §J and §K"
+    echo "                    say; with it 0/off, they are as under $BASELINE_VERSION. The Salesperson numbers card, the"
+    echo "                    Cashbook and ECO Bank as before; no screen of uCRM's changes. Do NOT make a test quote for a"
+    echo "                    real customer: the plugin WhatsApps every new quote"
+    echo
+    echo "  your steps        not stated until the quoting organization is read again (the --after-only above): with it"
+    echo "                    in force, docs/71 §M steps 2–4, the agents told of the Cash refusals (§E.3, §M), and each"
+    echo "                    application saved before the deploy that the Orders card shows refused P1 or P2 quoted by"
+    echo "                    hand in uCRM, or not at all (D11, docs/71 §F.4); with it 0/off, §M's steps before it is turned"
+    echo "                    on, by hand in uCRM — no run of this script reads the catalogue while it is off"
   fi
 else
   echo
@@ -8728,7 +8965,8 @@ else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file
 # cannot price; an older one can be so too — RH-1, review 1: QL-RB2) and stops while one is, or while the count cannot
 # be made — and names its explicit choice, --rollback-unpriced-pending, on a line of its own, never inside a command: a
 # command printed with it would be the hazard ready to paste. The count itself is the rollback's own (its stage A and
-# RB); this run reads no application to print one. The by-hand put-back counts nothing, and says so.
+# RB); this run reads no application to print one. The by-hand put-back counts nothing, and says so. What else comes
+# back on Uganda is said in part B's words (W_RB, L5 review 2), wrapped: the joined lines carry them word for word.
 if [ "$MODE" != "rollback" ] && [ "$FAIL" = "0" ] && [ -n "${V3J_WBB:-}" ]; then
   echo
   echo "  ECO Bank's own check, read-only, once a statement is kept on each card — its own command, alone: one line per"
@@ -8745,11 +8983,18 @@ if [ "$MODE" != "rollback" ]; then
   echo "  that quotation to the customer — to clear it, let them sync under $EXPECTED_VERSION first (they retry on the"
   echo "  cron), or do not roll back. On Uganda, with the quoting organization in force, the KYC"
   echo "  quotations and the Cash amount then come again from the plugin's own plans and kits, saving a plan or a kit and"
-  echo "  Sync All write uCRM's Products again, and the Delivery Acknowledgment PDF is sent again. Quotes already made in"
-  echo "  uCRM are not changed, what $EXPECTED_VERSION wrote on applications stays as written, and the $N_ADDED files it"
-  echo "  adds stay on disk, reached by nothing (QL-RB1). The summary's sign-off, the card's owner lists, every number"
-  echo "  and its owner, the quoting organization, the Cashbook, cash in hand, ECO Bank, its switch, 088's tables and"
-  echo "  every statement kept stay exactly as they are;"
+  echo "  Sync All write uCRM's Products again, and the Delivery Acknowledgment PDF is sent again. There the customer sees"
+  echo "  $BASELINE_VERSION's quotation again: the internal \"Auto-generated on KYC registration … Sales: … | Connection: …"
+  echo "  | Priority: …\" text back in the quotation's customer notes (docs/71 §A.1); \"Prepared by\" no longer set on a new"
+  echo "  KYC customer (one already set keeps its attribute: uCRM is not changed); Send Quotation and the lead quotes again"
+  echo "  take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to its old header and terms"
+  echo "  (§K.1). The created quote is no longer read back, so the Orders card records no mismatch (§F.6, staff only). The"
+  echo "  Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number (§K.2), and a"
+  echo "  Uganda Credit customer who paid while $EXPECTED_VERSION was live was not sent it, nor marked as sent, so gets it"
+  echo "  at their next payment (webhook.php, kept). Quotes already made in uCRM are not changed, what $EXPECTED_VERSION"
+  echo "  wrote on applications stays as written, and the $N_ADDED files it adds stay on disk, reached by nothing (QL-RB1)."
+  echo "  The summary's sign-off, the card's owner lists, every number and its owner, the quoting organization, the"
+  echo "  Cashbook, cash in hand, ECO Bank, its switch, 088's tables and every statement kept stay exactly as they are;"
   echo "  5.18.95's security fixes, 5.18.94's documents and every other switch stay as they are. Then run the quarantine's"
   echo "  own --check."
   echo "      $ROLLBACK_CMD"

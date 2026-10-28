@@ -78,8 +78,9 @@ elif cmd == 'salts':
 elif cmd == 'apps':
     # the store's applications (kyc_applications, read-only): QL-N3's cells — <status>.<marked|unmarked>.<pid|nopid|none>.
     # <cash|credit>:n over the pending and review ones; QL-N4's counts — the last 90 days by submitted_at, of them an
-    # existing customer's, and those with no date; and QL-RB2's — pending for uCRM with no uCRM client, no quote made, no
-    # lines and no plan price; the same in review or failed; refused P1–P3 with a uCRM client. JSON, counts only.
+    # existing customer's, and those with no date; QL-RB2's — pending for uCRM with no uCRM client, no quote made, no
+    # lines and no plan price; the same in review or failed; refused P1–P3 with a uCRM client; and QL-N3's D11 count (d11,
+    # below: the applications the retry cannot price after the deploy whatever uCRM holds). JSON, counts only.
     con = sqlite3.connect('file:' + sys.argv[2] + '?mode=ro', uri=True)
     rows = []
     for (d,) in con.execute('SELECT data FROM kyc_applications'):
@@ -142,8 +143,65 @@ elif cmd == 'apps':
     up = sum(1 for r in rows if r.get('crm_sync_status') == 'pending' and unpriced(r))
     um = sum(1 for r in rows if r.get('crm_sync_status') in ('review', 'failed') and unpriced(r))
     u1 = sum(1 for r in rows if r.get('quote_refused') in ('P1', 'P2', 'P3') and not no_client(r.get('crm_client_id')))
+
+    # QL-N3's second count (review 2, L1; docs/71 D11, §F.4), written here from the release's own rules, not from the
+    # script's probe: KycCrmSync::ugQuote asks nothing of an application whose quotation was made (empty() in PHP);
+    # KycService::retryLines re-confirms marked lines (quote_lines_source 'ucrm-5.18.102' and quote_items an array that
+    # is not empty — the stored value, never decoded) and resolves the rest through saleFromApp → UcrmQuoteLines::resolve,
+    # where a Fiber sale (customer_type, trimmed, any case) is never priced and a Starlink one (trimmed, any case) whose
+    # connection (trimmed; 'New Connection' when absent or null) is neither 'Shifting Connection' nor 'Ownership Change'
+    # needs install_by exactly 'dishnet' or 'customer' (a string; anything else is not answered): without it, no lines —
+    # P2 for a Cash sale with cash collected (round(amount_charged, 2) > 0, PHP's (float)), P1 otherwise. Over the pending
+    # and review applications, as QL-N3 counts them. Counts only.
+    def php_empty(v):
+        return v is None or v is False or v == 0 and not isinstance(v, str) or v in ('', '0') or (isinstance(v, (list, dict)) and not v)
+
+    def php_str(v):
+        if v is None or v is False:
+            return ''
+        if v is True:
+            return '1'
+        if isinstance(v, (int, float, str)):
+            return str(v)
+        return ''
+
+    def php_float(v):
+        if isinstance(v, bool):
+            return 1.0 if v else 0.0
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            m = re.match(r'\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?', v)
+            return float(m.group(0)) if m else 0.0
+        return 0.0
+
+    ws = ' \t\n\r\0\x0b'
+    d11 = {'pending': 0, 'review': 0, 'p1': 0, 'p2': 0, 'fiber': 0}
+    for r in rows:
+        st = r.get('crm_sync_status')
+        st = '' if st is None else str(st)
+        if st not in ('pending', 'review'):
+            continue
+        it = r.get('quote_items')
+        if r.get('quote_lines_source') == 'ucrm-5.18.102' and isinstance(it, (list, dict)) and it:
+            continue
+        if not php_empty(r.get('quote_created')):
+            continue
+        ty = php_str(r.get('customer_type')).strip(ws).lower()
+        cn = r.get('connectivity_type')
+        cn = 'New Connection' if cn is None else php_str(cn)
+        cn = cn.strip(ws)
+        by = r.get('install_by') if isinstance(r.get('install_by'), str) else ''
+        if ty == 'fiber':
+            d11['fiber'] += 1
+            continue
+        if ty != 'starlink' or cn in ('Shifting Connection', 'Ownership Change') or by in ('dishnet', 'customer'):
+            continue
+        d11[st] += 1
+        d11['p2' if r.get('sales_type') == 'Cash' and round(php_float(r.get('amount_charged', 0)), 2) > 0 else 'p1'] += 1
     print(json.dumps({'n3': ','.join('%s:%d' % (k, n3[k]) for k in sorted(n3)) or 'none', 'all': n4['all'],
-                      'existing': n4['existing'], 'nodate': n4['nodate'], 'unp': 'pending:%d,manual:%d,p1:%d' % (up, um, u1)}))
+                      'existing': n4['existing'], 'nodate': n4['nodate'], 'unp': 'pending:%d,manual:%d,p1:%d' % (up, um, u1),
+                      'd11': 'pending:%d,review:%d,p1:%d,p2:%d,fiber:%d' % (d11['pending'], d11['review'], d11['p1'], d11['p2'], d11['fiber'])}))
 elif cmd == 'kv':
     # one field of a JSON object given as text: kv JSON KEY
     print(json.loads(sys.argv[2])[sys.argv[3]])

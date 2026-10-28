@@ -12,49 +12,67 @@
 # copy moved half an hour back, its --after-only passed (R19 conclusive) and the quarantine's own --check passed after it:
 # production's state on the day. The stand-in uCRM of 5.18.99's rehearsal (rh99-ucrm.php, its sandbox copy) learns, by an
 # asserted insertion before its final 404, the four reads 5.18.102's checks make — GET products?limit, service-plans?limit,
-# custom-attributes and billing/quotes/{id} — and its base state a catalogue that prices every plan and kit this rehearsal
-# seeds in the store (through the installed plugin's own writer, rh102-seed.php), and "Professional Installation".
+# custom-attributes and billing/quotes/{id} — two answers below 400 the release must refuse (500 Products, an HTML page),
+# and its base state a catalogue that prices every plan and kit this rehearsal seeds in the store (through the installed
+# plugin's own writer, rh102-seed.php), and "Professional Installation". The fake docker learns, by an asserted hook, two
+# triggers armed by this rehearsal's files: a read of the container's record answered wrong once after the deploy's own
+# rollback copied (6w), and the folder of the quoting reading after the copy refused once (8).
 #
 # This rehearsal proves:
 #   · the script is pinned to the release commit on release/5.18.102 (short and full), cut on 5.18.101; the delta is
 #     exactly the 21 added and 38 changed reviewed files, each file's sha256 as the script pins it, computed here from Git;
 #     the 55 kept files by theirs in both commits, the 38 changed ones by their previous form; no migration; T1 carried;
 #     the header's two commands between its two marker lines, each alone, neither a rollback; the header saying QL-RB2's
-#     two counts (stage A and as ROLLBACK is typed), V1's count after its automatic rollback and the put-back's none;
+#     two counts (stage A and as ROLLBACK is typed), V1's count after its automatic rollback and the put-back's none, and
+#     review 2's words (D11, Q-CA6, C5's, the rollback's on Uganda, V1's unverified rollback, the reasons' categories);
 #     QL-RB1's markers counted in Git as the script pins them at the release and absent at 5.18.101; the sign-off reader
 #     QS-G1 carries, with its control on 5.18.100 (0);
 #   · the seeded catalogue really resolves: the RELEASE's own UcrmQuoteLines, run here on the store's offered rows against
 #     the stand-in, prices every row, and one price set to 0 makes exactly one row unpriced (pre);
-#   · --check is GO: QL-G1 ok with the counts the release's resolver gives, the notes QL-N1–QL-N7 as seeded, the stand-in
-#     asked only GETs of the two lists, once per client, with limit=500; the names on the 0600 sheet and nowhere else;
+#   · --check is GO: QL-G1 ok with the counts the release's resolver gives, the notes QL-N1–QL-N7 as seeded — QL-N3's D11
+#     count as this rehearsal's own reading of the release's rules gives it — the stand-in asked only GETs of the two
+#     lists, once per client, with limit=500; the names on the 0600 sheet and nowhere else, under QL-G1's own name;
 #     nothing changed (c);
 #   · a NO-GO on one unpriced row — said client by client ("1 row(s) through the plugin's own client … and 1 through the
-#     token client …, the same rows judged by each"), never as a sum of rows — the deploy-with-flag command printed
-#     alone; the same with --accept-unpriced GO and its note, in the same words; an unreadable catalogue (products,
-#     service plans, the token client) a NO-GO the flag does not lift; the
-#     toggles (two salesPerson attributes, none, quotation 000314's application) read as notes; each refusal weakened and
-#     caught; nothing changed by any of them (1);
+#     token client …, the same rows judged by each"), never as a sum of rows, and where it is fixed (uCRM's Products and
+#     Service Plans, or the row's name) — the deploy-with-flag command printed alone; the same with --accept-unpriced GO
+#     and its note, in the same words; a plan with no Service Plan said under "differs" by all it holds; an unreadable
+#     catalogue (products, service plans, the token client) a NO-GO the flag does not lift, and so 500 Products and an
+#     HTML page, said as answers the release cannot use, never "no answer"; the toggles (two salesPerson attributes, none,
+#     quotation 000314's application) read as notes; eight applications planted for D11, counted as the release's rules
+#     count them; each refusal weakened and caught; nothing changed by any of them (1);
 #   · the deploy, DEPLOY typed, PASSES: QL-G1 ok, QL-CA1 equal to stage A's, Q-CA3's GETs only and the stand-in's record
 #     the same count, QS-G1/QS-CA1, Q-CA*, TN-CA* carried, stage A's catalogue counts in the state file; Z2 naming the
 #     catalogue files; F's summary as fixed — the Uganda Cash customer's welcome, the app's Credit New Connection, the
-#     kit-only additional service, Taxable, D9's qualifier, step 5 — and the rollback's choice and the put-back's hazard
-#     each on lines of their own (4);
+#     kit-only additional service, Taxable (no step 5), D9's qualifier, D11 with QL-N3's count, the database's line —
+#     the sheet's two catalogue sections each under its own check's name, and the printed rollback's block saying what the
+#     customer sees again, the rollback's choice and the put-back's hazard each on lines of their own (4);
 #   · --after-only as printed PASSES, its counts said client by client; after a catalogue change in the stand-in it
-#     PASSES with a NOTE naming the direction, over both clients; an unreadable catalogue FAILS QL-CA1, and its weakened
-#     copy says ok; the quarantine's --check after them (5);
-#   · the rollback: QL-RB2 ok and the question reached (NO typed); an unpriced pending application saved AFTER stage A
+#     PASSES with a NOTE naming the direction, over both clients, F's step 3 "required now"; an unreadable catalogue FAILS
+#     QL-CA1, step 3 "no count to judge", and its weakened copy says ok; the quarantine's --check after them (5);
+#   · the rollback: QL-RB2 ok and the question reached (NO typed), stage A's note qualified as RB's and F's are (and its
+#     weakened copy caught); an unpriced pending application saved AFTER stage A
 #     counted none and while the question waits (planted by the harness's typed-answer step, then ROLLBACK typed) —
 #     refused by the count made as ROLLBACK is typed, before the copy, nothing changed; the same with that count
 #     replaced by a stop, caught: the copy would have begun over it; planted before the run — refused at stage A, and
 #     with --rollback-unpriced-pending stage A's notes, NO typed; QL-RB2 weakened, caught; then planted at the question
 #     again with --rollback-unpriced-pending, ROLLBACK typed: stage A ok, the count as ROLLBACK is typed noted as the
 #     operator's choice, PASSED, RB's counts set beside that last count, 5.18.101's 38 files back, QL-RB1's absences,
-#     the 21 added files on disk and reached by nothing; a --redeploy too soon refused at A14; QL-RB1 made to fail by a
-#     planted reference, and its weakened copy, RB saying that run rolled nothing back (6);
+#     the 21 added files on disk — counted, never taken from Git — and reached by nothing; a --redeploy too soon refused
+#     at A14; QL-RB1 made to fail by a planted reference with one added file gone (20 of the 21, said so by QL-RB1, RB and
+#     F), and its weakened copy, RB saying that run rolled nothing back (6);
 #   · a deploy (--redeploy) whose public sign-in page redirects: V1 FAILS and it rolls itself back without waiting, then
 #     counts QL-RB2 on a copy — the counts line, the hazard notes and the stop line carrying the count, no command
-#     printed, the flag never named; 5.18.101 serving; the quarantine's --check after it (6v);
+#     printed, the flag never named; 5.18.101 serving; the quarantine's --check after it (6v); the same with the deploy's
+#     own rollback not verifying: the counts and notes said as after an attempt that did not complete, the stop saying
+#     so with the put-back's hazard and the put-back alone on its line — and a copy ignoring do_rollback's answer caught (6w);
 #   · --redeploy: PASSED with BR1's "21 of the 21" clause; its --after-only PASSES (7);
+#   · the quoting reading after the copy refused: F keeps stage A's narrative, said as stage A's — in an --after-only and in
+#     a deploy over an unpriced row on --accept-unpriced ("required unless fixed since") — and a summary gate reading it as
+#     "off" caught; then, the row unpriced and fixed, F from that run's own reading (8);
+#   · the quoting organization off, --quote-company-off: --check GO, then a deploy and its --after-only PASS with QL-N1 and
+#     QL-CA2 notes that "Prepared by" is not used — never an ok — QL-N3 without D11, nothing of the catalogue read, F's own
+#     words for it; QL-N1's and QL-CA2's gate guards each weakened, caught; the setting put back (9);
 #   · nothing reaches Evolution; across every run of the 5.18.102 script the copy observers were quiet, every token copy
 #     gone, the stand-in given GETs only, the live vault as it was; no seeded name, price, stand-in token or run key in any
 #     output, log, state file or terminal; no page cache; no code copy or run folder left in /tmp or on the host; the
@@ -114,7 +132,7 @@ PY
 # shellcheck disable=SC1090
 . "$H102_PREFIX"
 rm -f "$H102_PREFIX"
-for f102 in mutant checkout_state row_set row_unset sqx sq qj okline failline noteline has fails live data94 kept_state oldname printed qrun \
+for f102 in mutant checkout_state row_set row_unset cfg_keep cfg_back file_set sqx sq qj okline failline noteline has fails live data94 kept_state oldname printed qrun \
             fp99 secrets99 noids99 bankhits98 vt_host ledger95 both_copies evo_calls inst_ver ver dl o100 names100 row_keep100 row_back100 \
             u99_set rows_add99 set99 spent99 set_sched base_log utc epoch99 settle96 \
             run101 run_line101 fresh101 installed101 copy_back101 weak101 a101 r101 qs_read101 tn_read101 checkgo101 nogo101 states101 \
@@ -271,6 +289,15 @@ qlrb2	deploy	    else stop "NO-GO (QL-RB2): ${at}$QL_UNP_PENDING application(s) 
 qlrb2again	deploy	    qlrb_judge "counted again as ROLLBACK was typed, right before the copy: "	    stop "REHEARSAL-102: the copy would begin here — no count was made as the answer was typed"
 qlrb1	deploy	  [ "$qr_in" = "0" ] || QLRB1_BAD="$QLRB1_BAD $qr_rel:names-it×${qr_in:-?}"	  true || QLRB1_BAD="$QLRB1_BAD $qr_rel:names-it×${qr_in:-?}"
 copymark	deploy	COPY_MARK="lib/KycService.php"	COPY_MARK="webhook.php"
+qlunusable	deploy	if ($rd === "noanswer" && count($GLOBALS["dnbP"]) > $n0) $rd = "unusable";	if (false) $rd = "unusable";
+qln1off	deploy	  if [ "$c" = "off" ] || [ "$x" = "off" ]; then note "QL-N1 the client attribute keyed salesPerson:	  if false; then note "QL-N1 the client attribute keyed salesPerson:
+qlca2off	deploy	  elif [ "$c" = "off" ] || [ "$rel" = "off" ]; then note "QL-CA2 the client attribute keyed salesPerson, through the installed code's reading:	  elif false; then note "QL-CA2 the client attribute keyed salesPerson, through the installed code's reading:
+qlca2ok	deploy	      one:*) if [ "$c" != "off" ] && [ "$rel" != "off" ] && [ "$rel" = "${a#one:}" ]; then ok "QL-CA2	      one:*) if [ "$rel" = "${a#one:}" ]; then ok "QL-CA2
+qlattron	deploy	(new UcrmClientTarget($plug, ["on" => $m > 0] + $setting))->salesPersonFieldId()	(new UcrmClientTarget($plug, $setting))->salesPersonFieldId()
+qlattrrel	deploy	$out[] = "qlattrrel=" . ($m <= 0 ? "off" : ($rel === null ? "none" : (string)(int)$rel));	$out[] = "qlattrrel=" . ($rel === null ? "none" : (string)(int)$rel);
+v1rb	deploy	if do_rollback; then QLV1_RB=ok; else QLV1_RB=failed; fi	do_rollback || true; QLV1_RB=ok
+rbnote	deploy	On Uganda, where the quoting organization is in force, the quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION makes them;	On Uganda the quotations and the Cash amount come again from the plugin's own plans and kits, as $BASELINE_VERSION makes them;
+fgate	deploy	    off) F_QST=off ;;	    off|unread) F_QST=off ;;
 ANCH
 a102() { awk -F'\t' -v k="$1" '$1 == k { print $3; exit }' "$ANCH102"; }
 r102() { awk -F'\t' -v k="$1" '$1 == k { print $4; exit }' "$ANCH102"; }
@@ -318,14 +345,82 @@ s = s.replace(old2, 'printf \'%s %s\\n\' "$(find /tmp/dnb-5.18.99-cih-* /tmp/dnb
 assert s.count('/tmp/dnb-5.18.102-') == 7
 open(p, 'w').write(s)
 PY
+# Two triggers of this release's own, in the fake docker's prelude beside 5.18.96's and 5.18.99's hooks (inserted, as theirs
+# were, before its row() line — asserted), each armed only by a file of this rehearsal's and spent once:
+#   .rbfail102 — the first read of the container's record (exec ucrm cat …/.deployed-commit) that names 5.18.101 after one
+#     that named 5.18.102 answers another commit: deploy-hybrid.sh, run by the deploy's own rollback after V1, sees the
+#     copy land and its record read back wrong, and exits 1 — the rollback does not verify, while 5.18.101's files are in
+#     place and the next read names it (102-6w);
+#   .qorfail102 — the first folder the quoting checks make for their reading after the copy (qo_run r: mkdir -m 700
+#     …/qo-r-N) refused: that reading stops before its gate probe, and stage A's (qo-a-N) is never touched (102-8).
+cat > "$SB/docker102.hook" <<'HOOK'
+# ── the next release's rehearsal (5.18.102): two triggers, each armed by a file of the rehearsal's, each spent once ──
+if [ -f "@SB@/.rbfail102" ] && [ "$*" = "exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit" ]; then
+  _rh_r="$(tail -n1 "@PD@/.deployed-commit" 2>/dev/null | tr -cd '0-9a-f')"
+  if [ "$_rh_r" = "@P102@" ]; then : > "@SB@/.rbfail102.seen"
+  elif [ "$_rh_r" = "@P101@" ] && [ -f "@SB@/.rbfail102.seen" ]; then rm -f "@SB@/.rbfail102" "@SB@/.rbfail102.seen"; echo 0000000; exit 0; fi
+fi
+if [ -f "@SB@/.qorfail102" ]; then
+  case "$*" in *" mkdir -m 700 /tmp/dnb-5.18.102-cih-"*"/qo-r-"*) rm -f "@SB@/.qorfail102"; echo "mkdir: cannot create directory: refused by the rehearsal (102-8)" >&2; exit 1 ;; esac
+fi
+HOOK
+python3 - "$SB/bin/docker" "$SB/docker102.hook" "$SB" "$PD" "$P101" "$P102" <<'PY' || echo "fakedocker:hook102" >> "$SB/anchor-missing"
+import sys
+p, hook, sb, pd, p101, p102 = sys.argv[1:7]
+assert p101 and p102 and p101 != p102 and all(c in '0123456789abcdef' for c in p101 + p102), (p101, p102)
+s = open(p).read()
+h = open(hook).read().replace('@SB@', sb).replace('@PD@', pd).replace('@P101@', p101).replace('@P102@', p102)
+assert '@' not in h.replace('"$@"', ''), 'a placeholder left'
+lines = s.split('\n')
+at = [i for i, l in enumerate(lines) if l.startswith('row() { grep "^$1|" ')]
+assert len(at) == 1, len(at)
+assert s.count('.rbfail102') == 0 and s.count('.qorfail102') == 0 and s.count('FAKE_TOK_HITS') == 3
+lines[at[0]:at[0]] = h.rstrip('\n').split('\n')
+s2 = '\n'.join(lines)
+assert s2.count('.rbfail102') == 5 and s2.count('.qorfail102') == 2 and s2.count('/qo-r-') == 1 and s2.count('FAKE_TOK_HITS') == 3
+assert s2.index('FAKE_TOK_HITS') < s2.index('.rbfail102') < s2.index('row() { grep "^$1|" ')
+open(p, 'w').write(s2)
+PY
+rm -f "$SB/docker102.hook"
 check "$(bash -n "$SB/bin/docker" && echo parses)|$(python3 -c 'import ast, sys; [ast.parse(open(f).read()) for f in sys.argv[1:]]; print("parses")' "$H102/rh102.py" "$H102/rh102q.py" 2>&1)|$(for f in "$H102"/rh102-*.php; do php -l "$f" 2>&1 | grep -c '^No syntax errors'; done | tr -d '\n')|$(grep -c '5\.18\.101-' "$H102/rh102.py")" \
       "parses|parses|11|0" \
   "control: the fake docker with this release's folders, this rehearsal's readers (5.18.101's derived, naming none of its folders, and its own) and its two PHP helpers parse"
+# …and its two triggers, each fired here by hand: unarmed nothing happens; armed, the record's read answers the truth until
+# one that named 5.18.102 has been seen, then another commit once; stage A's folder is never refused, the reading after
+# the copy's once. The container's record is put back byte for byte, mtime included.
+dk102() { env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" "$@" 2>/dev/null; }
+DC102=/data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit
+cp -p "$PD/.deployed-commit" "$SB/dc102.kept"
+HK1="$(dk102 exec ucrm cat "$DC102" | tail -n1)"; : > "$SB/.rbfail102"; HK2="$(dk102 exec ucrm cat "$DC102" | tail -n1)"
+printf '%s\n' "$P102" > "$PD/.deployed-commit"; HK3="$(dk102 exec ucrm cat "$DC102" | tail -n1):$( [ -f "$SB/.rbfail102.seen" ] && echo seen)"
+cp -p "$SB/dc102.kept" "$PD/.deployed-commit"; HK4="$(dk102 exec ucrm cat "$DC102" | tail -n1)"; HK5="$(dk102 exec ucrm cat "$DC102" | tail -n1)"
+: > "$SB/.qorfail102"
+dk102 exec -u 1000:1000 ucrm true mkdir -m 700 /tmp/dnb-5.18.102-cih-rhctl/qo-a-1; HK6="$?:$( [ -f "$SB/.qorfail102" ] && echo kept || echo spent)"
+dk102 exec -u 1000:1000 ucrm true mkdir -m 700 /tmp/dnb-5.18.102-cih-rhctl/qo-r-1; HK7="$?:$( [ -f "$SB/.qorfail102" ] && echo kept || echo spent)"
+check "$HK1|$HK2|$HK3|$HK4|$HK5|$(ls -A "$SB" | grep -cE '^\.(rbfail102|rbfail102\.seen|qorfail102)$')|$HK6|$HK7|$(cmp -s "$SB/dc102.kept" "$PD/.deployed-commit" && [ "$(stat -c %Y "$SB/dc102.kept")" = "$(stat -c %Y "$PD/.deployed-commit")" ] && echo same)" \
+      "$P101|$P101|$P102:seen|0000000|$P101|0|0:kept|1:spent|same" \
+  "control: the fake docker's two triggers — the record read truly, unarmed and armed alike, until 5.18.102's has been seen; then another commit once, and the truth again; stage A's folder made, the reading after the copy's refused once; both spent, the record as it was"
+rm -f "$SB/dc102.kept"
 # The sign-off reader and the owner-rule reader are 5.18.101's rehearsal's (qs_read101, tn_read101 SCRIPT COMMIT): each
 # takes the reader from the script it is given, between that script's own anchors — here 5.18.102's.
 n3say102() {   # n3say102 CELLS STATUS — QL-N3's words for one status, from this rehearsal's own cells (rh102q.py apps)
   printf '%s' "$1" | tr ',' '\n' | awk -F'[.:]' -v s="$2" '$1 == s { t += $5; m[$2] += $5; l[$3] += $5; c[$4] += $5 }
       END { printf "%d (marked by 5.18.102 %d, not %d; lines with a productId %d, without one %d, none %d; Cash %d, Credit %d)", t, m["marked"], m["unmarked"], l["pid"], l["nopid"], l["none"], c["cash"], c["credit"] }'
+}
+d11say102() {   # d11say102 D11 — QL-N3's D11 sentence (the script's words, ql_d11_say), from this rehearsal's own count (rh102q.py
+                # apps' d11: pending:<n>,review:<n>,p1:<n>,p2:<n>,fiber:<n>, the release's rules written out there)
+  local p r a b f
+  p="$(sed -nE 's/.*(^|,)pending:([0-9]+).*/\2/p' <<<"$1")"; r="$(sed -nE 's/.*(^|,)review:([0-9]+).*/\2/p' <<<"$1")"
+  a="$(sed -nE 's/.*(^|,)p1:([0-9]+).*/\2/p' <<<"$1")"; b="$(sed -nE 's/.*(^|,)p2:([0-9]+).*/\2/p' <<<"$1")"; f="$(sed -nE 's/.*(^|,)fiber:([0-9]+).*/\2/p' <<<"$1")"
+  [ -n "$p" ] && [ -n "$r" ] && [ -n "$a" ] && [ -n "$b" ] && [ -n "$f" ] || { printf 'd11say102: no count in %s' "${1:-nothing}"; return 0; }
+  printf 'Whatever uCRM holds, the retry makes no quotation for %s of them (D11, docs/71 §F.4): %s Starlink sale(s) other than a Shifting Connection or an Ownership Change with no "Who installs?" answer — none saved before 5.18.102 carries one — so unpriced (pending %s, review %s; P1, Credit or no cash recorded, %s; P2, Cash with cash collected, %s), and %s Fiber sale(s), never priced from uCRM on this installation%s' \
+    "$((p + r + f))" "$((p + r))" "$p" "$r" "$a" "$b" "$f" "$( [ $((p + r + f)) = 0 ] || echo " — each one's quotation is then made by hand in uCRM, or not at all (docs/71 §F.4, §F.5)")"
+}
+d11n102() {   # d11n102 D11 — F's own clause for the same count (F_D11N): "QL-N3 counted N such waiting at stage A — S Starlink (P1 a, P2 b) and f Fiber"
+  local p r a b f
+  p="$(sed -nE 's/.*(^|,)pending:([0-9]+).*/\2/p' <<<"$1")"; r="$(sed -nE 's/.*(^|,)review:([0-9]+).*/\2/p' <<<"$1")"
+  a="$(sed -nE 's/.*(^|,)p1:([0-9]+).*/\2/p' <<<"$1")"; b="$(sed -nE 's/.*(^|,)p2:([0-9]+).*/\2/p' <<<"$1")"; f="$(sed -nE 's/.*(^|,)fiber:([0-9]+).*/\2/p' <<<"$1")"
+  printf 'QL-N3 counted %s such waiting at stage A — %s Starlink (P1 %s, P2 %s) and %s Fiber' "$((p + r + f))" "$((p + r))" "$a" "$b" "$f"
 }
 
 echo; echo "== 102-pre. the sandbox as production is: 5.18.101 serving; the catalogue in the stand-in uCRM and the KYC form's rows in the store =="
@@ -397,9 +492,10 @@ def w(p, text):
 w(seedf, json.dumps(seed))
 w(names, ''.join(v + '\n' for v in list(N.values()) + [Z] + Q))
 w(offered, ''.join(N[k] + '\n' for k in ('Plan-Alpha', 'Plan-Beta', 'Fiber-Delta', 'Kit-Standard', 'Router-Mesh', 'Package-Omega')))
-w(nowhere, ''.join(v + '\n' for v in [N['Plan-Gamma'], N['Kit-Old'], N['Package-Sigma'], Z] + Q))
+w(nowhere, ''.join(v + '\n' for v in [N['Plan-Gamma'], N['Kit-Old'], N['Package-Sigma'], Z] + Q + ['RH102QSECRET-filler-']))   # the last: the 500 Products of products_n500 (1j), never read into a verdict
 w(amounts, ''.join('%.2f\n' % a for a in (418273.55, 529384.65, 1634275.45, 347281.35, 152637.85, 111111.11, 222222.22, 333333.33, 1254363.75,
-                                          6352615.85, 99999.95, 313131.35, 212121.25, 121212.15, 777777.75, 666666.65, 555555.55, 444444.45)))
+                                          6352615.85, 99999.95, 313131.35, 212121.25, 121212.15, 777777.75, 666666.65, 555555.55, 444444.45,
+                                          287654.35)))   # the last: the cash of 1m's Cash sale with cash collected (D11, P2)
 PY
 chmod 644 "$H102/seed102.json"   # the store's user reads it through rows_add102's argument, never this file; kept readable for the rehearsal alone
 NSECRET102="RH102QSECRET-prefix-$(openssl rand -hex 6)"; printf '%s\n' "$NSECRET102" >> "$NOWHERE102"   # QL-N6's text, typed into the store row once: never printed
@@ -427,13 +523,17 @@ add = r'''
 // products?limit, service-plans?limit, custom-attributes and billing/quotes/{id} — answered from the state, nothing
 // written but limits.log beside this file: the limit VALUE each list read asked for (requests.log keeps the keys only).
 // Toggles, each off unless set: products_500 and plans_500 (that list unreadable), token_products_403 (the token client
-// refused the products list), price_of ({"<product id>": <price>} — that product's price as uCRM shows it after an edit;
-// 0 makes its row unpriced), attrs_none (no client attribute keyed salesPerson), attrs_two (a second one).
+// refused the products list), products_n500 (200 with a list of 500 Products — the release's LIMIT, so it refuses the
+// page: QL-5, review 1), products_html (200 with an HTML page, as a proxy's sign-in page would answer: not a JSON list),
+// price_of ({"<product id>": <price>} — that product's price as uCRM shows it after an edit; 0 makes its row unpriced),
+// attrs_none (no client attribute keyed salesPerson), attrs_two (a second one).
 if ($p === '/rh102/ping') $out(['rh102' => 'catalogue-ready']);
 if ($p === '/products' || $p === '/service-plans') {
     @file_put_contents($dir . '/limits.log', substr($p, 1) . ' ' . (is_scalar($q['limit'] ?? null) ? (string)$q['limit'] : '-') . "\n", FILE_APPEND | LOCK_EX);
 }
 if ($p === '/products') {
+    if (!empty($st['products_html'])) { http_response_code(200); header('Content-Type: text/html; charset=UTF-8'); echo "<!DOCTYPE html>\n<html><head><title>Sign in</title></head><body><form method=\"post\"><input name=\"username\"></form></body></html>\n"; exit; }
+    if (!empty($st['products_n500'])) { $f = []; for ($i = 1; $i <= 500; $i++) $f[] = ['id' => 20000 + $i, 'name' => 'RH102QSECRET-filler-' . $i, 'price' => 1000 + $i, 'unit' => 'piece', 'taxable' => false]; $out($f); }
     if (!empty($st['products_500'])) $out(['code' => 500, 'message' => 'Internal Server Error'], 500);
     if ($kind === 'token' && !empty($st['token_products_403'])) $out(['code' => 403, 'message' => 'Forbidden'], 403);
     $l = array_values((array)($st['products'] ?? []));
@@ -466,11 +566,23 @@ open(p, 'w', encoding='utf-8').write(s)
 PY
 for i in $(seq 1 60); do [ "$(curl -s --noproxy '*' -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/rh102/ping" 2>/dev/null)" = '{"rh102":"catalogue-ready"}' ] && break; sleep 0.1; done   # PHP re-reads the edited router
 ug102() { curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "$@"; }
+u99_state_102() { python3 -c 'import json, sys; print("base" if json.load(open(sys.argv[1])) == json.load(open(sys.argv[2])) else "changed")' "$U99/base.json" "$U99/state.json" 2>/dev/null || echo unread; }   # the stand-in's state: its base, or changed
 : > "$U99/requests.log"; : > "$U99/limits.log"
 UC102="$(ug102 -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/products?limit=500")|$(ug102 -H "x-auth-token: $TOKEN99" "$U99_URL/api/v2.1/service-plans?limit=500")|$(ug102 -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/custom-attributes")|$(ug102 -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/billing/quotes/88017409")|$(ug102 -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/billing/quotes/88017401")|$(ug102 -X POST -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/products")"
 check "$UC102|$(python3 "$H102/rh102q.py" u102req "$U99/requests.log")|$(python3 "$H102/rh102q.py" limits "$U99/limits.log")|$(python3 "$H99/rh99.py" u99other "$U99/requests.log")|$(secrets99 "$U99/requests.log" "$U99/limits.log")" \
       "200|200|200|200|404|404|total=6 other=1 products=1/0 plans=0/1 attrs=1 quote=2 odd=0|n=2 bad=0|POST /products app-key|0" \
   "control: the stand-in answers the four new reads with its key and the token (an unknown quote 404), a POST 404 — and records each by method, path and key, the limit values apart, never a value"
+# …and its two answers below 400 that the release must refuse (QL-5, review 1): 500 Products — the release's LIMIT — and an
+# HTML page; each through either client, the rows read into this check alone (counted, never printed); the base again after.
+u99_set 'products_n500=true'
+QN500102="$(curl -s --noproxy '*' -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/products?limit=500" | python3 -c 'import json, sys; d = json.load(sys.stdin); print(len(d) if isinstance(d, list) else "notlist")' 2>/dev/null)|$(ug102 -H "x-auth-token: $TOKEN99" "$U99_URL/api/v2.1/products?limit=500")"
+u99_set 'products_html=true'
+QHTML102="$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}:%{content_type}' -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/products?limit=500")|$(curl -s --noproxy '*' -H "x-auth-token: $TOKEN99" "$U99_URL/api/v2.1/products?limit=500" | python3 -c 'import json, sys
+try: json.loads(sys.stdin.read()); print("json")
+except ValueError: print("notjson")' 2>/dev/null)"
+u99_set
+check "$QN500102|${QHTML102%%;*}|${QHTML102##*|}|$(ug102 -H "X-Auth-App-Key: $APPKEY99" "$U99_URL/api/v2.1/products?limit=500")" "500|200|200:text/html|notjson|200" \
+  "control: the stand-in's products_n500 answers 200 with a list of exactly 500 Products, and products_html 200 with an HTML page that is not JSON, through the plugin's key and the token alike; the base state answers 200 again"
 : > "$U99/requests.log"; : > "$U99/limits.log"
 # ── The RELEASE's own resolver on the store's offered rows and the stand-in — not the script's probe: the reference the
 # probe's counts are set against (c3), and the proof that the seeded catalogue really resolves. Its code from Git, in a
@@ -487,6 +599,7 @@ O102_0="$(o100)"
 check "$( [ "$(qj "$O102_0" sales)" -gt 0 ] && echo sales)|$( [ "$(qj "$O102_0" tech)" -ge 2 ] && echo tech)|$(qj "$O102_0" inbox)|$(set99 kyc_quote_notes_prefix)|$(set99 crm_auth_token)|$(set99 crm_base_url)" "sales|tech|unset|unset/unset|unset/set|unset/unset" \
   "pre-e 5.18.100's rehearsal's staff records for the carried owner checks; kyc_quote_notes_prefix unset in both copies; the admin token in the store row alone, no crm_base_url: the token client reads through the plugin's base URL"
 D102="$(data94)"; KEPT102="$(kept_state)"; U102_A="$(apps102)"; N3_102="$(python3 "$H102/rh102q.py" kv "$U102_A" n3)"
+D11_102="$(python3 "$H102/rh102q.py" kv "$U102_A" d11)"   # QL-N3's D11 count of the store as seeded, by this rehearsal's own reading (review 2, L1)
 PLAN_D102="$(sq "SELECT MAX(substr(json_extract(data, '\$.updated_at'), 1, 10)) FROM subscription_plans")"
 KIT_D102="$(sq "SELECT MAX(substr(json_extract(data, '\$.created_at'), 1, 10)) FROM kyc_devices")"
 # What every reading of the catalogue must say, as the release's resolver says it (pre-d) and the probe prints it.
@@ -535,6 +648,9 @@ check "$(grep -cxF '#   cd /opt/dishnet && git pull origin claude/study-this-jhe
 check "$(for s102 in '--rollback counts in stage A and again as ROLLBACK is typed, right before the copy' 'rollback (V1, when the public sign-in page redirects) never waits on it' 'redirect — but counts after it and says the counts and the hazard in its notes and its stop line' 'by-hand put-back counts nothing, and every message that prints it says so'; do grep -cF -- "$s102" <<<"$H102H"; done | paste -sd' ' -)|$( [ "$(grep -cF 'waiting for uCRM with no plan price' <<<"$H102H")" -ge 1 ] && echo named)|$(grep -cE 'could not price|saved unpriced|left unpriced' <<<"$H102H")" \
       "1 1 1 1|named|0" \
   "…and the header says QL-RB2's two counts — stage A's and the one as ROLLBACK is typed, before the copy — the deploy's own rollback (V1) counting after it and never waiting, and the by-hand put-back counting nothing; it names the applications as waiting for uCRM with no plan price recorded, never as ones 5.18.102 could not price"
+check "$(for s102 in 'An application saved before 5.18.102 carries no "Who' 'Q-CA6 the installed profile,' 'the proof that its Cashbook reads write' 'After it, on Uganda, where the quoting organization is in force, the quotations' "When V1's rollback does not verify, its stop says the rollback did not complete" 'not a product in uCRM (or one with no id, or a name that cannot be'; do grep -cF -- "$s102" <<<"$H102H"; done | paste -sd' ' -)|$(grep -cF 'the proof that the release writes nothing to the book' <<<"$H102H")" \
+      "1 1 1 1 1 1|0" \
+  "…and review 2's words in the header, each once: D11 (L1), Q-CA6 described (L10), C5's proof as its Cashbook reads (L4), the rollback's on Uganda where the quoting organization is in force (E2-5), V1's rollback that does not verify (E2-3), the reasons' categories by all they hold (L3) — never \"the release writes nothing to the book\""
 echo "  …    the sign-off and the owner rule as text, at the pin, at 5.18.101 and at 5.18.100, by the script's own readers:"
 check "$(qs_read101 "$DEPLOY102" "$P102")|$(qs_read101 "$DEPLOY102" "$P101")|$(qs_read101 "$DEPLOY102" "$P100")" \
       "$(sed -n 's/^QS_TEXT_PIN="\([^"]*\)".*/\1/p' "$DEPLOY102")|$(sed -n 's/^QS_TEXT_BASE="\([^"]*\)".*/\1/p' "$DEPLOY102")|$(sed -n 's/^QS_TEXT_CONTROL="\([^"]*\)".*/\1/p' "$DEPLOY102")" \
@@ -562,6 +678,9 @@ check "$(qol102 "$OUT" qloffer)|$(qol102 "$OUT" qln3)|$(qol102 "$OUT" qln4)|$(qo
 check "$(noteline "$OUT" QL-N1 'exactly one, #47' 'answers the same')$(noteline "$OUT" QL-N2 'quotation 000314: not found in the book' 'no request was made')$(noteline "$OUT" QL-N3 "pending $(n3say102 "$N3_102" pending); review $(n3say102 "$N3_102" review)" 'none carries 5.18.102')$(noteline "$OUT" QL-N4 "(submitted_at): $(python3 "$H102/rh102q.py" kv "$U102_A" all) — of them an existing customer's $(python3 "$H102/rh102q.py" kv "$U102_A" existing) (a request carrying a customer_id" "$( [ "$(python3 "$H102/rh102q.py" kv "$U102_A" nodate)" = "0" ] && echo 'the record carries none' || echo "; $(python3 "$H102/rh102q.py" kv "$U102_A" nodate) with no date, not counted")")$(noteline "$OUT" QL-N5 "(subscription_plans updated_at) $PLAN_D102, the newest kit added (kyc_devices created_at) $KIT_D102")$(noteline "$OUT" QL-N6 'kyc_quote_notes_prefix unset/unset')$(noteline "$OUT" QL-N7 "through the plugin's own client 1 row(s) — 0 resolve, 1 unpriced, 0 Fiber (apart), unclassified 0" 'never toward the NO-GO')" \
       "yesyesyesyesyesyesyes" \
   "c4 QL-N1–QL-N7 as seeded: the salesPerson attribute #47 (the service field and the tax-named one left out), 000314 not in the book, the pending and review applications by shape and the 90 days as this rehearsal's own reading counts them, the dates, the notes prefix unset, the unpriced package a note only"
+check "$(qol102 "$OUT" qln3d11)|$(noteline "$OUT" QL-N3 "After the deploy the retry takes them from uCRM's prices alone (docs/71 §F.4): marked lines are confirmed again and the rest resolved again; a Cash one with cash collected is quoted only at exactly that cash, else not at all (P2). $(d11say102 "$D11_102")")|$(grep '^  note  QL-N3 ' <<<"$OUT" | grep -c "which the retry quotes after the deploy from uCRM's prices alone")" \
+      "$D11_102|yes|0" \
+  "c4b QL-N3, the quoting organization in force: the retry takes the applications from uCRM's prices alone — and, of them, those it cannot price whatever uCRM holds (no \"Who installs?\" answer saved before 5.18.102; Fiber) counted as this rehearsal's own reading of the release's rules counts them, said with the probe's own count (review 2, L1; D11, docs/71 §F.4); never round 1's \"which the retry quotes … from uCRM's prices alone\""
 check "$(okline "$OUT" QS-G1 'as text: the pin')$(okline "$OUT" TN-G1 'as text')$(okline "$OUT" TN-G2 "offer the same $(qj "$O102_0" sales) active salesperson account(s) and the same $(qj "$O102_0" tech) active technician account(s)")$(okline "$OUT" TN-G3 'wa_inbox_roles is unset')$(okline "$OUT" A6 'South Sudan stays exactly as it is')$(okline "$OUT" A22-T1 "under this server's own PHP")$(okline "$OUT" Q-G3 'quoting organization #1')" \
       "yesyesyesyesyesyesyes" \
   "c5 the carried checks ok — QS-G1 (5.18.101's), TN-G1–TN-G3 (5.18.100's), and A6 and A22-T1, whose signatures 5.18.102 carries from 5.18.101 (SS/UG, B2, P90; T1), measured here on the release commit"
@@ -573,6 +692,8 @@ check "$(ureq102 "$TC" | sed -E 's/^total=[0-9]+ //')|$TOT102C|$(lim102 "$TC")|$
 check "$(stat -c %a "$SH102C" 2>/dev/null)|$(stat -c %a "$OUT102")|$(grep -cF -f "$OFFERED102" "$SH102C" 2>/dev/null | awk '{print ($1 >= 6 ? "names" : "few:" $1)}')|$(while IFS= read -r n; do grep -qF -- "$n" "$SH102C" && echo y || echo n; done < "$OFFERED102" | sort -u | paste -sd, -)|$(grep -lF -f "$NOWHERE102" "$SH102C" 2>/dev/null | grep -c .)|$(grep -c '→ uCRM product #910[1-5], ' "$SH102C" 2>/dev/null)" \
       "600|700|names|y|0|10" \
   "c7 the sheet, 0600 in a folder of mode 700, holds every offered row by name — each priced row with its uCRM product and unit through both clients — and none of the inactive rows, the unoffered plan or 000314's lines"
+check "$(grep -c '^== QL-G1 the catalogue the KYC form offers — ' "$SH102C" 2>/dev/null)|$(grep -c '^== QL-CA1 the catalogue the KYC form offers — ' "$SH102C" 2>/dev/null)" "1|0" \
+  "c7b the sheet's catalogue section carries the check's own name — stage A's reading is QL-G1's (review 2, E2-7); a --check makes no reading after a copy, so no QL-CA1 section"
 check "$(fp99)|$(grep -lF -f "$NAMES102" "$R102/run-$TC.txt" "$OUT102"/*.log 2>/dev/null | grep -c .)|$(names100 "$R102/run-$TC.txt")|$(audit102 "$TC" | sed -E 's/^copies=[0-9]+ //; s/ adj=.*//')|$(vault102 "$TC" | awk -F'>' '{print ($1 == $2 ? "same" : "moved")}')|$(cache102)" \
       "$FP102|0|0|novault=0 plugin=0|same|0" \
   "c8 nothing changed — tree, store, vault, settings, ucrm.json; no seeded name in the terminal or the log; every PHP process on a copy with a vault of its own; no page cache written anywhere"
@@ -585,8 +706,10 @@ check "$(grep -cxF "      $EXP_ACCEPT102" <<<"$OUT")|$(qor102 "$OUT" 1 qlc)|$(qo
   "…the deploy with --accept-unpriced printed alone, its own command; the counts the release's resolver gave (pre-d); the row by name, with its reason, on the sheet alone (through both clients)"
 check "$(grep -cE '[0-9]+ row\(s\) the KYC form offers' <<<"$OUT")|$(grep -c 'row(s) the KYC form offers do not resolve' <<<"$OUT")" "0|1" \
   "…the unpriced row said client by client, never as the two clients' verdicts summed into a number of rows (\"2 row(s) the KYC form offers\")"
+check "$(has "$OUT" "Fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says, and run this again")$(has "$OUT" 'Fix them in uCRM Products (docs/71 §M step 3)')" "yesno" \
+  "…and where it is fixed: uCRM's Products and Service Plans, or the row's name in the plugin (review 2, L3) — never round 1's \"uCRM Products\" alone"
 u99_set 'price_of={"9104":0}' 'attrs_none=true'; fresh102; OUT="$(run102 --check --accept-unpriced)"
-check "$(checkgo102 "$OUT" | cut -d'|' -f1)|$(has "$OUT" "  note  QL-G1 --accept-unpriced, the operator's explicit choice: row(s) the KYC form offers do not resolve in uCRM — $SAYU_ONE (each by name, with the resolver's reason, on the sheet). After the deploy a Cash sale of one is refused, and a Credit one registered with no quotation (P1), the agent told — fix them in uCRM Products (docs/71 §M step 3)")|$(has "$OUT" '  --check           stage A alone, every refusal and note of a deploy with --accept-unpriced:')|$(grep -cxF "      $(runbook_with102 --accept-unpriced)" <<<"$OUT")|$(noteline "$OUT" QL-N1 'no client attribute is keyed salesPerson in uCRM')" \
+check "$(checkgo102 "$OUT" | cut -d'|' -f1)|$(has "$OUT" "  note  QL-G1 --accept-unpriced, the operator's explicit choice: row(s) the KYC form offers do not resolve in uCRM — $SAYU_ONE (each by name, with the resolver's reason, on the sheet). After the deploy a Cash sale of one is refused, and a Credit one registered with no quotation (P1), the agent told — fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says")|$(has "$OUT" '  --check           stage A alone, every refusal and note of a deploy with --accept-unpriced:')|$(grep -cxF "      $(runbook_with102 --accept-unpriced)" <<<"$OUT")|$(noteline "$OUT" QL-N1 'no client attribute is keyed salesPerson in uCRM')" \
       "yesyesnono0|yes|yes|1|yes" \
   "1b the same with --check --accept-unpriced: GO, QL-G1 a note naming the flag as the operator's choice; the deploy it hands over carries the flag; no salesPerson attribute a note (QL-N1)"
 u99_set 'products_500=true'; fresh102; OUT="$(run102 --answer NO --accept-unpriced)"
@@ -615,6 +738,57 @@ check "$(has "$OUT" '(typed and not needed: --accept-unpriced — each check hel
   "…--accept-unpriced typed over a catalogue that resolves changes nothing — said, and the deploy handed over without it; the quote asked once by its id; its lines' labels and the notes prefix nowhere, not even on the sheet, which carries the units alone"
 row_back100; QD102="$(sqn102 "DELETE FROM kyc_applications WHERE json_extract(data, '\$._rh102q314') = 1")"; u99_set
 check "$QD102|$(data94)|$(set99 kyc_quote_notes_prefix)" "1|$D102|unset/unset" "…000314's application and the notes prefix taken out again: the data as before, byte for byte"
+# ── 1i (review 2, L3): a plan the form offers whose Product has no Service Plan in uCRM — the release's "… is not a service
+# plan in uCRM", which the probe counts under "differs": the log names that category by all it holds, never as a price
+# that differs alone. The stand-in's service plans without the plan's mirror (502), the base read for its other rows. ────
+PLANS102="$(python3 -c 'import json, sys; s = json.load(open(sys.argv[1])); print(json.dumps([p for p in s["plans"] if p.get("id") != 502]))' "$U99/base.json")"
+SAYU_PLAN="1 row(s) through the plugin's own client (no matching service plan, no 1-month price, or a price that differs from its service plan 1) and 1 through the token client (no matching service plan, no 1-month price, or a price that differs from its service plan 1), the same rows judged by each"
+u99_set "plans=$PLANS102"; fresh102; OUT="$(run102 --answer NO)"; SH102I="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+nogo102 "1i a plan the form offers with no Service Plan in uCRM: NO-GO at QL-G1, its reason's category said as what it holds" "NO-GO (QL-G1): row(s) the KYC form offers do not resolve in uCRM through the RELEASE's resolver — $SAYU_PLAN; each by name, with the resolver's reason, on the cash sheet (less " "$OUT"
+check "$(qor102 "$OUT" 1 qlc)|$(qor102 "$OUT" 1 qlr)|$(grep -c "not priced (differs): RH102SECRET-Plan-Beta-[0-9a-f]* is not a service plan in uCRM\$" "$SH102I" 2>/dev/null)|$(grep -c 'price differs from its service plan' <<<"$OUT")|$(grep -lF -f "$NAMES102" "$R102/run-$(last102).txt" 2>/dev/null | grep -c .)" \
+      "$QLC_ONE|plug:notprod:0,ambig:0,differs:1,taxable:0,decimals:0,label:0,zero:0;tok:notprod:0,ambig:0,differs:1,taxable:0,decimals:0,label:0,zero:0;dbg:same|2|0|0" \
+  "…counted under differs through both clients; the row by name with the release's own words on the sheet alone (\"… is not a service plan in uCRM\", through both clients); the log never says \"price differs from its service plan\" of it (review 2, L3)"
+u99_set
+# ── 1j–1l (review 1, QL-5): uCRM answering below 400 with what the release refuses — 500 Products (its LIMIT) and an HTML
+# page — is said as an answer it cannot use, never "no answer", and the flag does not lift it. ──────────────────────────
+QL5_SAY="uCRM answered, but not with a list the release can use: 500 rows or more in Products or Service Plans, or a body that is not a JSON list"
+u99_set 'products_n500=true'; fresh102; OUT="$(run102 --answer NO --accept-unpriced)"; T1J="$(last102)"; SH102J="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+nogo102 "1j uCRM answers 200 with 500 Products — the release's limit: NO-GO at QL-G1 that --accept-unpriced does not lift, the read said as an answer the release cannot use" "NO-GO (QL-G1): uCRM's Products and Service Plans could not be read through the plugin's own client, GET-only ($QL5_SAY) — the release reads them so for Send Quotation" "$OUT"
+check "$(has "$OUT" 'No flag lifts it.')|$(qor102 "$OUT" 1 qlread)|$(ureq102 "$T1J" | sed -E 's/^total=[0-9]+ //')|$(grep -c 'uCRM answered, but not with a list the release can use (500 rows or more, or not a JSON list): no row is judged$' "$SH102J" 2>/dev/null)|$(has "$OUT" 'no answer recorded')$(has "$OUT" 'noanswer')|$(grep -lF -e 'RH102QSECRET-filler-' "$R102/run-$T1J.txt" "$SH102J" 2>/dev/null | grep -c .)" \
+      "yes|plug:unusable;tok:unusable;dbg:same|other=0 products=1/1 plans=0/0 attrs=2 quote=0 odd=0|2|nono|0" \
+  "…said so; each client's read recorded as unusable, never \"noanswer\"; the service plans not asked once the products were refused; the sheet says the same of both clients and judges no row — none of the 500 names anywhere"
+u99_set 'products_html=true'; fresh102; OUT="$(run102 --answer NO)"; T1K="$(last102)"
+nogo102 "1k uCRM answers 200 with an HTML page — a body that is not a JSON list: NO-GO at QL-G1, said the same way" "NO-GO (QL-G1): uCRM's Products and Service Plans could not be read through the plugin's own client, GET-only ($QL5_SAY)" "$OUT"
+check "$(qor102 "$OUT" 1 qlread)|$(ureq102 "$T1K" | sed -E 's/^total=[0-9]+ //')|$(has "$OUT" 'no answer recorded')" "plug:unusable;tok:unusable;dbg:same|other=0 products=1/1 plans=0/0 attrs=2 quote=0 odd=0|no" \
+  "…both clients' reads unusable, the service plans not asked"
+M="$(weak102 ql5w qlunusable)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --check)"; rm -f "$M"
+check "$(has "$OUT" "GET-only ($QL5_SAY)")$(has "$OUT" 'GET-only (no answer recorded)')$(has "$OUT" '5.18.102 (check): GO')" "noyesno" \
+  "1l the probe's \"unusable\" weakened: the same HTML answer said as \"no answer recorded\" — 1j's and 1k's assertion does not hold on it (caught; still a NO-GO, nothing changed)"
+u99_set
+# ── 1m (review 2, L1; docs/71 D11, §F.4): eight applications saved before the deploy, as 5.18.101 saves them — none with a
+# "Who installs?" answer but one — through the installed code's own writer. The release's rules leave five unpriced at
+# their retry whatever uCRM holds: a pending Credit Starlink New Connection (P1), a Starlink in review spelled with spaces
+# and another case, Cash with cash collected (P2), a pending Cash one with none collected (P1), a Fiber one in review —
+# and not a Shifting Connection, one DishNet installs, one already quoted or one whose lines carry 5.18.102's mark. Each
+# carries a plan price (offer_price), so that QL-RB2 counts none of them. Taken out again after. ─────────────────────────
+PLANTD11='{"kyc_applications.json":[
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"pending","customer_type":"StarLink","sales_type":"Credit","offer_price":1,"submitted_at":"rel:-2 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"review","customer_type":" starlink ","connectivity_type":" New Connection ","sales_type":"Cash","amount_charged":287654.35,"offer_price":1,"submitted_at":"rel:-3 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"pending","customer_type":"StarLink","sales_type":"Cash","amount_charged":0,"offer_price":1,"submitted_at":"rel:-4 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"review","customer_type":"Fiber","offer_price":1,"submitted_at":"rel:-5 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"pending","customer_type":"StarLink","connectivity_type":"Shifting Connection","offer_price":1,"submitted_at":"rel:-6 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"pending","customer_type":"StarLink","install_by":"dishnet","offer_price":1,"submitted_at":"rel:-7 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"review","customer_type":"StarLink","quote_created":1,"offer_price":1,"submitted_at":"rel:-8 days"},
+ {"_rh102":true,"_rh102d11":true,"crm_sync_status":"pending","customer_type":"StarLink","quote_lines_source":"ucrm-5.18.102","quote_items":[{"productId":9101,"price":1,"quantity":1}],"offer_price":1,"submitted_at":"rel:-9 days"}]}'
+d11add102() { awk -F'[,:]' -v a="$2" -v b="$3" -v c="$4" -v d="$5" -v e="$6" '{ printf "pending:%d,review:%d,p1:%d,p2:%d,fiber:%d", $2 + a, $4 + b, $6 + c, $8 + d, $10 + e }' <<<"$1"; }   # d11add102 D11 +PENDING +REVIEW +P1 +P2 +FIBER
+RD11="$(rows_add102 "$PLANTD11")"; D11P="$(python3 "$H102/rh102q.py" kv "$(apps102)" d11)"
+check "$RD11|$D11P|$(python3 "$H102/rh102q.py" kv "$(apps102)" unp)" "{\"rows\":8}|$(d11add102 "$D11_102" 2 1 2 1 1)|pending:0,manual:0,p1:0" \
+  "1m the plant: eight applications through the installed code's own writer — this rehearsal's own reading of the release's rules counts exactly five more the retry cannot price (pending 2, review 1; P1 2, P2 1; Fiber 1), and QL-RB2's kind none"
+fresh102; OUT="$(run102 --check)"
+check "$(checkgo102 "$OUT" | cut -d'|' -f1)|$(qol102 "$OUT" qln3d11)|$(noteline "$OUT" QL-N3 "After the deploy the retry takes them from uCRM's prices alone (docs/71 §F.4)" "$(d11say102 "$D11P")")" "yesyesnono0|$D11P|yes" \
+  "1m' --check over them: GO, the probe's count of them this rehearsal's own, and QL-N3 says it — whatever uCRM holds, no quotation for each; made by hand in uCRM or not at all (D11)"
+check "$(sqn102 "DELETE FROM kyc_applications WHERE json_extract(data, '\$._rh102d11') = 1")|$(data94)|$(python3 "$H102/rh102q.py" kv "$(apps102)" d11)" "8|$D102|$D11_102" \
+  "…the eight taken out again: the data and the count as before, byte for byte"
 
 echo; echo "== 102-4. the deploy, as the operator runs it — DEPLOY typed =="
 LEDGER102="$(ledger95)"
@@ -647,8 +821,12 @@ for l in "ok    A0 the release delta is exactly 5.18.102's 59 files — 21 added
          "An existing customer's kit-only additional service still tells the agent that the new install is being scheduled (docs/71 §P.2)." \
          "A Product marked Taxable in uCRM — the VAT plan's step 3 — stops automatic quotes until a VAT release (docs/71 §M)." \
          "byte for byte (Q-G1, Q-CA1) — though, with the quoting organization in force, what webhook.php and post_kyc.php do on Uganda changes through D9, the Delivery PDF not sent (above); every number in the registry" \
-         "                    5. no catalogue Product marked Taxable in uCRM (the VAT plan's step 3) until a VAT release: it" \
-         "                       stops automatic quotes (docs/71 §M)." \
+         "                    And, as §M's \"what changes\" says: no catalogue Product marked Taxable in uCRM (the VAT plan's" \
+         "                    step 3) until a VAT release — it stops automatic quotes (docs/71 §M)." \
+         "                    After the deploy: each application saved before it that the Orders card shows refused P1 or" \
+         "                    which the plugin WhatsApps to the customer as every new quote, or make none." \
+         "ok    C5 the copy's row digest (every row of cb_ledger, its id and every column), its cb_accounts digest and its sqlite_master digest" \
+         "the database — no migration added and nothing written by this run (R7, BA1); the Cashbook's tables (cb_ledger, cb_accounts) and the schema unchanged by every read of 5.18.102's code on the copies (C5, CA2); what a live plugin writes at use is the plugin's own (5.18.102's keys on Uganda applications among it: R7, QL-RB2);" \
          "                    wait; a Cash sale from the retailer app or the mobile API is refused, and a Credit Starlink" \
          "                    New Connection from them gets no quotation, which the app does not say — the Orders card" \
          "                    shows it (docs/71 §E.3)"; do
@@ -672,6 +850,24 @@ check "$(ureq102 "$T102D" | sed -E 's/^total=[0-9]+ //')|$(ureq102 "$T102D" | se
   "4f the stand-in was asked the two lists twice through each client — stage A and after the copy — the attributes four times, every request a GET with limit=500, as many as F counts"
 check "$(ledger95)|$(both_copies "$BK97")|$(kept_state)$(oldname)$(host_code102)$(left_tmp102)$(evo_calls)$(cache102)" "$LEDGER102|11|${KEPT102}00000" \
   "4g the migration ledger unchanged; ECO Bank's switch on in both places; the quarantine as it was; no code copy or run folder left; Evolution never called; no page cache"
+# Review 2's wording, as this deploy says it (the quoting organization in force, no flag, nothing unpriced): D11 in "what
+# changed" and its step, with QL-N3's count of this run's stage A as this rehearsal's own reading gives it (L1); step 3
+# ending plainly and the Taxable item no longer numbered (L6); the database's line (DI-1) and C5's (L4); the sheet's two
+# catalogue sections each under its own check's name (E2-7); the printed rollback's own block saying what the customer
+# sees again on Uganda, the rollback command alone after it (L5). ─────────────────────────────────────────────────────
+RBW102="There the customer sees 5.18.101's quotation again: the internal \"Auto-generated on KYC registration … Sales: … | Connection: … | Priority: …\" text back in the quotation's customer notes (docs/71 §A.1); \"Prepared by\" no longer set on a new KYC customer (one already set keeps its attribute: uCRM is not changed); Send Quotation and the lead quotes again take the plugin's prices and accept a line priced 0 (§J); the fallback PDF back to its old header and terms (§K.1). The created quote is no longer read back, so the Orders card records no mismatch (§F.6, staff only). The Delivery Acknowledgment PDF comes back with South Sudan's terms and a South Sudan phone number (§K.2), and a Uganda Credit customer who paid while 5.18.102 was live was not sent it, nor marked as sent, so gets it at their next payment (webhook.php, kept)."
+d11t102() { awk -F'[,:]' '{ print $2 + $4 + $10 }' <<<"$1"; }   # d11t102 D11 — pending + review + Fiber
+check "$(has "$SUM102" " An application saved before the deploy carries no \"Who installs?\" answer, so at its retry (the cron's, or an admin's Retry) a Starlink sale other than a Shifting Connection or an Ownership Change is unpriced whatever uCRM holds, and a Fiber one is never priced: no quotation is made, and the Orders card shows P1 (Credit, or no cash collected) or P2 (Cash with cash collected) — its quotation is made by hand in uCRM, or not at all (D11, docs/71 §F.4; $(d11n102 "$D11_102")).")|$(grep -cxF "                    P2 gets no quotation from its retry (D11, docs/71 §F.4; QL-N3 counted $(d11t102 "$D11_102") at stage A) — make it by hand in uCRM," <<<"$SUM102")|$(grep -cxF '                       Taxable off, its invoice label empty or its name;' <<<"$SUM102")|$(grep -cE '^ +5\. no catalogue Product marked Taxable' <<<"$OUT")" \
+      "yes|1|1|0" \
+  "4h F's D11 — an application saved before the deploy is unpriced at its retry whatever uCRM holds — with QL-N3's count of this run's stage A, in \"what changed\" and in its own step (review 2, L1); step 3 ends plainly (no flag, nothing unpriced) and the Taxable item is §M's \"what changes\", no step 5 (L6)"
+check "$(has "$OUT" 'nothing written by the release to the book')$(okline "$OUT" C5 "are unchanged by every read of 5.18.102's code" "— 5.18.102's reads write nothing there")$(has "$OUT" '5.18.102 reads, and writes nothing')" "noyesno" \
+  "4i the database said as it is — the Cashbook's tables and the schema unchanged by 5.18.102's reads, its own keys on Uganda applications the plugin's (review 2, DI-1, L4) — never \"nothing written by the release to the book\""
+SH102D="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+check "$(grep -c '^== QL-G1 the catalogue the KYC form offers — ' "$SH102D" 2>/dev/null)|$(grep -c '^== QL-CA1 the catalogue the KYC form offers — ' "$SH102D" 2>/dev/null)|$(awk '/^== QL-G1 the catalogue/ { a = NR } /^== QL-CA1 the catalogue/ { b = NR } END { print ((a && b && a < b) ? "in order" : "a" a "b" b) }' "$SH102D" 2>/dev/null)" "1|1|in order" \
+  "4j the deploy's sheet: stage A's catalogue under QL-G1, the reading after the copy under QL-CA1, in that order — each section under its own check's name (review 2, E2-7)"
+RBJ102="$(awk 'index($0, "  Only if it is ever needed — the rollback") == 1 { on = 1 } on && index($0, "      ") == 1 { exit } on { sub(/^  /, ""); printf "%s%s", (n++ ? " " : ""), $0 }' <<<"$SUM102")"
+check "$(has "$RBJ102" "On Uganda, with the quoting organization in force, the KYC quotations and the Cash amount then come again from the plugin's own plans and kits, saving a plan or a kit and Sync All write uCRM's Products again, and the Delivery Acknowledgment PDF is sent again. $RBW102 Quotes already made in uCRM are not changed")|$(grep -c '+211' <<<"$SUM102")|$(awk -v c="      $EXP_ROLLBACK102" 'index($0, "  Only if it is ever needed — the rollback") == 1 { on = 1 } on && index($0, "      ") == 1 { print ($0 == c ? "alone" : "other"); exit }' <<<"$SUM102")" "yes|0|alone" \
+  "4k the printed rollback's own block, its wrapped lines joined: on Uganda, with the quoting organization in force, what the customer sees again — 5.18.101's internal notes text, no \"Prepared by\", lines priced 0, the old PDFs, South Sudan's Delivery PDF terms and phone (review 2, L5) — fixed words, no digit of a phone; the rollback command alone on the line after it"
 
 echo; echo "== 102-5. --after-only as printed; the catalogue changed in uCRM after the deploy; uCRM unreadable =="
 copy_back102 30; COPY102="$(sed -n 's/^COPY_AT=//p' "$STATE102" | tail -1)"
@@ -682,13 +878,22 @@ fresh102; OUT="$(run_line102 '' "$ALINE")"; OUT102A="$OUT"; TA="$(last102)"
 check "$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(okline "$OUT" R19 'the quarantine holds: master ran the retry job at' "after the copy (at $(utc "$COPY102"))")$(okline "$OUT" QS-CA1 'as text, installed')$(okline "$OUT" TN-CA2 'the same counts as stage A')$(okline "$OUT" QL-CA1 "the catalogue through the INSTALLED UcrmQuoteLines, on a fresh copy, GET-only: through the plugin's own client $SAY_OK; through the token client $SAY_OK" 'nothing asked but the two lists')$(has "$OUT" "  QL-CA1          the same counts as stage A read through the pin's (the state file): unpriced $UNP_NONE")$(okline "$OUT" QL-CA2 'reads as stage A read it: exactly one, #47')" \
       "0yesyesyesyesyesyesyes" \
   "5a --after-only PASSES, R19 conclusive; QS-CA1; TN-CA2; QL-CA1 readable and classified, the same counts as the state file's stage A; QL-CA2 as stage A read it"
+SH102A5="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+check "$(grep -cxF '                       Taxable off, its invoice label empty or its name;' <<<"$OUT")|$(grep -cxF "                    P2 gets no quotation from its retry (D11, docs/71 §F.4; the deploy's QL-N3 said how many, where it could count them) — make it by hand in uCRM," <<<"$OUT")|$(has "$OUT" "the quoting organization #1 in force (Q-G3, Q-CA2): the KYC quotations")|$(grep -c '^== QL-CA1 the catalogue the KYC form offers — ' "$SH102A5" 2>/dev/null)|$(grep -c '^== QL-G1 the catalogue the KYC form offers — ' "$SH102A5" 2>/dev/null)" \
+      "1|1|yes|1|0" \
+  "5a' F: step 3 ends plainly — this run's reading after the copy finds nothing unpriced, and the deploy took no flag (review 2, L6); D11's step names the deploy's count; the quoting organization in force as the installed code read it; the sheet's one catalogue section is QL-CA1's (E2-7)"
 u99_set 'price_of={"9104":0}'; fresh102; OUT="$(run_line102 '' "$ALINE")"
 check "$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(okline "$OUT" QL-CA1 "through the plugin's own client $SAY_ONE; through the token client $SAY_ONE")$(noteline "$OUT" QL-CA1 "more unpriced than stage A read, over both clients: now $UNP_ONE; at stage A $UNP_NONE")$(noteline "$OUT" QL-CA1 "row(s) the KYC form offers are unpriced now: $SAYU_ONE")$(has "$OUT" '  FAIL  QL-CA1')|$(grep -cE '[0-9]+ row\(s\) the KYC form offers|unpriced than stage A read: [0-9]+ now' <<<"$OUT")" \
       "0yesyesyesyesno|0" \
   "5b a Product priced 0 in uCRM after the deploy: --after-only PASSES — QL-CA1 a NOTE naming the direction (more unpriced now than stage A read), over both clients, each client's count said apart and with its reason, never a sum of the two as rows; never a FAIL: the operator may fix uCRM, as docs/71 §M step 3 asks"
+check "$(noteline "$OUT" QL-CA1 'row(s) the KYC form offers are unpriced now:' "fix them in uCRM's Products and Service Plans, or in the row's name in the plugin, as docs/71 §M step 3 says; each row's own reason is on the sheet")|$(has "$OUT" " This run's reading after the copy finds catalogue rows uCRM does not price (QL-CA1): until each is fixed in uCRM (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1).")|$(grep -cxF "                       Taxable off, its invoice label empty or its name — required now: this run's reading after the copy (QL-CA1) finds rows unpriced, each on the sheet;" <<<"$OUT")|$(has "$OUT" 'on --accept-unpriced')" \
+      "yes|yes|1|no" \
+  "5b' …and F says this run's reading: rows unpriced since the deploy make step 3 required now, with no word of a flag the deploy never took (review 2, L6); the note says where they are fixed (L3)"
 u99_set 'products_500=true'; fresh102; OUT="$(run_line102 '' "$ALINE")"
 check "$(failline "$OUT" QL-CA1 "the catalogue through the INSTALLED resolver: unreadable through the plugin's own client (http500); unreadable through the token client (http500) — each row by name on the sheet")$(has "$OUT" '5.18.102 (after): 1 FAILED')|$(grep -E '^  FAIL  ' <<<"$OUT" | grep -vc '^  FAIL  QL-CA1 ')" \
       "yesyes|0" "5c uCRM's Products unreadable at an --after-only: QL-CA1 FAILS, naming both clients — and nothing else fails"
+check "$(grep -cxF "                       Taxable off, its invoice label empty or its name — this run's reading after the copy gives no count to judge (QL-CA1 above);" <<<"$OUT")|$(has "$OUT" 'required now')" "1|no" \
+  "5c' …and F's step 3 says this run's reading gives no count to judge — never \"required now\" over a catalogue it could not read (review 2, L6)"
 M="$(weak102 qlca1w qlca1)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --after-only)"; rm -f "$M"
 check "$(failline "$OUT" QL-CA1 'unreadable through')$(okline "$OUT" QL-CA1 'the catalogue through the INSTALLED resolver:' 'unreadable through')" "noyes" "5d QL-CA1's failure weakened: it says ok over an unreadable catalogue (caught)"
 u99_set
@@ -726,6 +931,12 @@ fresh102; OUT="$(run_line102 NO "$RLINE")"
 check "$(okline "$OUT" QL-RB2 "$RB2_OK")$(has "$OUT" "$(rb2_counts '' 0 0 0)")$(has "$OUT" 'Type ROLLBACK')$(has "$OUT" 'STOP: not confirmed')$(has "$OUT" 'Nothing was changed. Send the log file.')$(has "$OUT" "$RB2_AGAIN")|$(live)|$(installed102 "$P102")|$(data94)|$(sha256sum "$STATE102" | cut -c1-64)" \
       "yesyesyesyesyesno|$P102|0|$DR0|$S102SHA" \
   "6a the rollback with no application waiting for uCRM with no plan price recorded: QL-RB2 ok, the question reached; NO typed — no second count, nothing changed, 5.18.102 serving, the deploy's state file as it was"
+RBA102="  note  after the rollback the code is 5.18.101's again. On Uganda, where the quoting organization is in force, the quotations and the Cash amount come again from the plugin's own plans and kits, as 5.18.101 makes them;"
+check "$(has "$OUT" "$RBA102")$(grep '^  note  after the rollback the code is ' <<<"$OUT" | grep -cF "$RBW102")" "yes1" \
+  "6a' stage A's note on what the rollback brings back says it of Uganda where the quoting organization is in force, as RB and F do (review 2, E2-5) — and what the customer then sees again (L5)"
+M="$(weak102 rbnotew rbnote)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --answer NO --rollback)"; rm -f "$M"
+check "$(has "$OUT" "$RBA102")$(has "$OUT" "  note  after the rollback the code is 5.18.101's again. On Uganda the quotations and the Cash amount come again")$(has "$OUT" 'STOP: not confirmed')|$(live)|$(data94)" "noyesyes|$P102|$DR0" \
+  "6a'' the note's qualifier weakened back to round 1's words: 6a' does not hold on it (caught; NO typed, nothing changed)"
 # ── 6b: an application saved AFTER stage A's count, while the question waits (review 1, S1): the backup and a prompt with
 # no timeout make stage A's reading minutes old. The harness's typed-answer step (feed102) waits until the run's own log
 # shows the question, plants the three through the installed code's own writer, and only then types ROLLBACK. Stage A
@@ -775,10 +986,14 @@ check "$(okline "$OUT" QL-RB2 "$RB2_OK")$(has "$OUT" "$(rb2_counts '' 0 0 0)")$(
       "yesyesyes|0|1yesyes|before|0|0" \
   "6e: stage A counted none and said ok — no note; the count as ROLLBACK was typed read 1, 1, 1 and noted each in its own words, the pending ones as the operator's choice — before the copy; no command carries the flag; nothing says \"could not price\" (RH-1)"
 for l in "ok    RB the installed manifest says 5.18.101" \
-         "ok    RB all 38 files 5.18.102 changed are 5.18.101's again, byte for byte — by Git's sha256 and by the 38 this script pins (Q-G1's set); the 21 files it added stay on disk, reached by nothing (QL-RB1, below)" \
+         "ok    RB all 38 files 5.18.102 changed are 5.18.101's again, byte for byte — by Git's sha256 and by the 38 this script pins (Q-G1's set); 21 of the 21 files it adds are on disk (deploy-hybrid.sh never deletes), reached by nothing (QL-RB1, below)" \
          "ok    RB 5.18.101's quoting code is in place" \
          "ok    QL-RB1 nothing in 5.18.101 reaches the files 5.18.102 adds: none of the 8 installed files that name its markers in 5.18.102 names one now" \
-         "note  QL-RB1 21 of the 21 files 5.18.102 adds stay on disk (deploy-hybrid.sh never deletes) — lib/UcrmQuoteLines.php, the resolver 5.18.102 ran on Uganda while it was live, where the quoting organization was in force, and its tests, tests/test_quote_from_ucrm.php and tests/quote_from_ucrm/, which never ran on the server; none is reached by anything under 5.18.101 (above); a later --redeploy expects them (BR1)" \
+         "note  QL-RB1 21 of the 21 files 5.18.102 adds are on disk (deploy-hybrid.sh never deletes; counted above) — lib/UcrmQuoteLines.php, the resolver 5.18.102 ran on Uganda while it was live, where the quoting organization was in force, and its tests, tests/test_quote_from_ucrm.php and tests/quote_from_ucrm/, which never ran on the server; none is reached by anything under 5.18.101 (above); a later --redeploy expects them (BR1)" \
+         "note  RB the code is 5.18.101 again. The rollback restores code only. 21 of the 21 files 5.18.102 adds are on disk (deploy-hybrid.sh never deletes; counted above, QL-RB1) — lib/UcrmQuoteLines.php" \
+         "a Cash sale from the retailer app or the mobile API is taken again. $RBW102 The quotation summary's sign-off stays 5.18.101's: 5.18.102 never changed webhook.php (RB above)." \
+         "  what it means     on Uganda, where the quoting organization is in force, the KYC quotations and the Cash amount come again from the plugin's own plans and kits, as 5.18.101 has them; saving a plan or a kit, and Sync All, write uCRM's Products again; the Delivery Acknowledgment PDF is sent again (RB). $RBW102 Quotes already made in uCRM are not changed" \
+         "(QL-RB2). 21 of the 21 files 5.18.102 adds are on disk, reached by nothing (QL-RB1). The quotation summary's sign-off" \
          "note  QL-RB2 with 5.18.101 in place, the applications waiting for uCRM with no plan price recorded — no uCRM client, no quote, no lines, no plan price: as 5.18.102 saves the sales it cannot price; an older one can be so too — counted, read-only: 1 still pending for uCRM, 1 awaiting a person's retry (review or failed), 1 refused P1, P2 or P3 with a uCRM client; before the copy, this run's last count (QL-RB2's, before or as ROLLBACK was typed) read 1 pending, 1 awaiting a person's retry and 1 refused P1–P3 with a uCRM client. The rollback rewrites none of them" \
          "5.18.101's cron retries a pending one within minutes and makes its quotation with the plan line at price 0, which uCRM's quote.add webhook WhatsApps to the customer — the rollback went ahead over them on --rollback-unpriced-pending, the operator's explicit choice" \
          "lib/UcrmQuoteLines.php, the resolver that ran on Uganda while 5.18.102 was live, where the quoting organization was in force, and its tests, which never ran on the server:" \
@@ -829,6 +1044,10 @@ check "$(pubget page=rh102_probe)$(ls -A "$SB/web" | grep -c '^\.left102m$')" "r
 cp -p "$PD/includes/api/api_cron_debug.php" "$SB/cron102.kept"
 git -C "$REPO" show "$P102:$P/includes/api/api_cron_debug.php" > "$SB/cron102.left"; chmod 644 "$SB/cron102.left"
 printf '%s\t%s\n' "$SB/cron102.left" "includes/api/api_cron_debug.php" > "$SB/web/.left102m"; chmod 644 "$SB/web/.left102m"
+# …and one of the 21 added files gone from disk (review 2, E2-6): what RB, QL-RB1 and F say of the added files is the
+# count on disk, never Git's. Put back byte for byte after 6i, before 7's --redeploy (BR1) needs it.
+GONE102=tests/quote_from_ucrm/mutants_I.php; cp -p "$PD/$GONE102" "$SB/gone102.kept"; rm -f "$PD/$GONE102"
+check "$(left102)|$(git -C "$REPO" show "$P102:$P/$GONE102" | cmp -s - "$SB/gone102.kept" && echo kept)" "20|kept" "control: one added file taken off disk (kept aside, byte for byte the pin's): 20 of the 21 there"
 fresh102; OUT="$(run102 --rollback)"
 check "$(has "$OUT" "the container already serves $P101 (5.18.101) — nothing to roll back; running the rollback checks")$(spent99 .left102m)|$(cmp -s "$PD/includes/api/api_cron_debug.php" "$SB/cron102.left" && echo left)|$(failline "$OUT" QL-RB1 "reaches what 5.18.102 added, or its readers could not see the release:" 'includes/api/api_cron_debug.php:names-it×1')$(failline "$OUT" RB "installed files that are not 5.18.101's after the rollback:" 'includes/api/api_cron_debug.php')|$( [ "$(fails "$OUT")" -ge 2 ] && echo failed)" \
       "yesspent|left|yesyes|failed" \
@@ -836,11 +1055,15 @@ check "$(has "$OUT" "the container already serves $P101 (5.18.101) — nothing t
 check "$(noteline "$OUT" QL-RB2 'with 5.18.101 in place, the applications waiting for uCRM with no plan price recorded' "counted, read-only: 0 still pending for uCRM, 0 awaiting a person's retry (review or failed), 0 refused P1, P2 or P3 with a uCRM client; this run rolled nothing back — 5.18.101 ($P101) was already live when it began, put back by hand (which counts nothing) or by an earlier rollback — so it typed no ROLLBACK, made no copy and counted none before. The rollback rewrites none of them")$(has "$OUT" "before the copy, this run's last count")$(has "$OUT" "$(rb2_counts '' 0 0 0)")$(has "$OUT" 'Type ROLLBACK')$(has "$OUT" "wrote on applications stays as written; none still waiting for uCRM with no plan price recorded, with 5.18.101 in place (QL-RB2).")" \
       "yesnononoyes" \
   "…and RB's QL-RB2 says this run rolled nothing back — it typed no ROLLBACK, made no copy and counted none before — never a stage-A reading it did not make (review 1, QL-2/S3); no count before it, no question; F's \"what it means\" says none is waiting"
+check "$(noteline "$OUT" QL-RB1 '20 of the 21 files 5.18.102 adds are on disk (deploy-hybrid.sh never deletes; counted above)')$(noteline "$OUT" RB 'The rollback restores code only. 20 of the 21 files 5.18.102 adds are on disk (deploy-hybrid.sh never deletes; counted above, QL-RB1)')$(has "$OUT" '20 of the 21 files 5.18.102 adds are on disk, and QL-RB1 FAILED: what is installed may reach them (QL-RB1)')|$(has "$OUT" '21 of the 21 files')$(has "$OUT" 'reached by nothing (QL-RB1). The quotation')" \
+      "yesyesyes|nono" \
+  "6h' with one added file gone, QL-RB1, RB and F each say the count on disk — 20 of the 21 — never Git's, and F, QL-RB1 having failed, never \"reached by nothing\" (review 2, E2-6)"
 M="$(weak102 qlrb1w qlrb1)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --rollback)"; rm -f "$M"
 check "$(okline "$OUT" QL-RB1 'nothing in 5.18.101 reaches the files 5.18.102 adds')$(failline "$OUT" RB "installed files that are not 5.18.101's after the rollback:" 'includes/api/api_cron_debug.php')" "yesyes" \
   "6i QL-RB1's count weakened: it says nothing reaches the added files while one 5.18.101 file names UcrmQuoteLines (caught; RB's sha256 still fails)"
 cp -p "$SB/cron102.kept" "$PD/includes/api/api_cron_debug.php"; rm -f "$SB/cron102.kept" "$SB/cron102.left"
-check "$(installed102 "$P101")|$(reach102)|$(live)" "0|0|$P101" "…the installed file put back: every file 5.18.102 changed 5.18.101's again, nothing reaching the added files"
+cp -p "$SB/gone102.kept" "$PD/$GONE102"; rm -f "$SB/gone102.kept"
+check "$(installed102 "$P101")|$(reach102)|$(live)|$(left102)" "0|0|$P101|21" "…the installed file put back: every file 5.18.102 changed 5.18.101's again, nothing reaching the added files; the added file taken off put back, 21 of the 21 on disk"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "6j the quarantine's own --check after the rollback, as RB asks: PASSED"
 KEPT102="$(kept_state)"
@@ -881,9 +1104,9 @@ check "$(failline "$OUT" V1 'the sign-in page on the public address → 200 afte
 check "$(has "$OUT" "  unpriced apps   after this automatic rollback, on a copy of the book, read-only (QL-RB2): pending for uCRM 1, in review or failed 1, refused P1–P3 with a uCRM client 1 — counts only")$(noteline "$OUT" QL-RB2 "after this automatic rollback: 1 application(s) still waiting for uCRM with no plan price recorded — as 5.18.102 saves the sales it cannot price; an older one can be so too (on a copy of the book, read-only). Once 5.18.101 serves, its cron (KycCrmSync) retries each within minutes, rebuilds its plan line at price 0 and makes the quotation, and uCRM's quote.add webhook WhatsApps it to the customer. The rollback did not wait for them: the public address must never redirect")$(noteline "$OUT" QL-RB2 'after this automatic rollback: 1 application(s) in review or failed with no plan price recorded: a person' 'make their quotations in uCRM, and retry none of them by hand under 5.18.101')$(noteline "$OUT" QL-RB2 'after this automatic rollback: 1 application(s) 5.18.102 refused a quotation (P1, P2 or P3) have a uCRM client: the debug retry (retry_quote) could quote one')" \
       "yesyesyesyes" \
   "6v2 after the rollback, QL-RB2 counted on a copy: the counts line, and the hazard said for each kind — the pending one quoted at price 0 by 5.18.101's cron and WhatsApped, the review one by a person's retry, the P1 one by the debug retry"
-check "$(has "$OUT" "  STOP: rolled back (serves $P101); QL-RB2 counted after it, on a copy of the book: pending for uCRM 1, in review or failed 1, refused P1–P3 with a uCRM client 1 — each pending one is quoted by 5.18.101's cron with its plan line at price 0, and uCRM WhatsApps it (the note above); send the log file")$(has "$OUT" 'Nothing further was done. Send the log file.')|$(awk -v a='  ROLLING BACK — the public address must never redirect' -v b="  the container now serves $P101;" -v c='  unpriced apps   after this automatic rollback, ' -v d='  STOP: rolled back (serves ' 'index($0, a) == 1 && !w { w = NR } index($0, b) == 1 && !x { x = NR } index($0, c) == 1 && !y { y = NR } index($0, d) == 1 && !z { z = NR } END { print ((w && x && y && z && w < x && x < y && y < z) ? "in order" : "w" w "x" x "y" y "z" z) }' <<<"$OUT")" \
-      "yesyes|in order" \
-  "6v3 its stop line carries the count and the hazard — and the order is the rollback first, then the count, then the stop: the rollback never waited on QL-RB2"
+check "$(has "$OUT" "  STOP: rolled back (serves $P101); QL-RB2 counted after it, on a copy of the book: pending for uCRM 1, in review or failed 1, refused P1–P3 with a uCRM client 1 — each pending one is quoted by 5.18.101's cron with its plan line at price 0, and uCRM WhatsApps it (the note above); send the log file")$(has "$OUT" 'Nothing further was done. Send the log file.')$(has "$OUT" 'did not complete')$(has "$OUT" 'may not be serving yet')|$(awk -v a='  ROLLING BACK — the public address must never redirect' -v b="  the container now serves $P101;" -v c='  unpriced apps   after this automatic rollback, ' -v d='  STOP: rolled back (serves ' 'index($0, a) == 1 && !w { w = NR } index($0, b) == 1 && !x { x = NR } index($0, c) == 1 && !y { y = NR } index($0, d) == 1 && !z { z = NR } END { print ((w && x && y && z && w < x && x < y && y < z) ? "in order" : "w" w "x" x "y" y "z" z) }' <<<"$OUT")" \
+      "yesyesnono|in order" \
+  "6v3 its stop line carries the count and the hazard — and the order is the rollback first, then the count, then the stop: the rollback never waited on QL-RB2; verified, nothing says it did not complete (6w's words)"
 check "$(grep -c -- '--rollback-unpriced-pending' <<<"$OUT")|$(grep -cE '^ {6}(cd |\( cd )' <<<"$OUT")|$(has "$OUT" 'NO-GO (QL-RB2)')$(has "$OUT" 'could not price')$(has "$OUT" '== F. Summary ==')|$(sed -n 's/^RB_COPY_AT=//p' "$STATE102" | tail -1 | grep -cx "$(stat -c %Y "$PD/lib/KycService.php")")|$(uother102 "$T102V")|$(grep -lF -f "$NAMES102" "$R102/run-$T102V.txt" 2>/dev/null | grep -c .)|$(evo_calls)" \
       "0|0|nonono|1|-|0|0" \
   "6v4 the path prints no command — none to copy, the flag never named, no refusal of its own; the deploy's state file holds the rollback's copy time (RB_COPY_AT, as do_rollback writes it when a deploy rolls itself back, for A14); GETs only; no seeded name printed; Evolution never called"
@@ -891,6 +1114,46 @@ check "$(unplant102)|$(data94)|$(python3 "$H102/rh102q.py" kv "$(apps102)" unp)"
   "…the three taken out: the data as before the plants, byte for byte — the deploy and its own rollback changed no data"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "6v5 the quarantine's own --check after the deploy's own rollback, as A14 asks of the next deploy: PASSED"
+KEPT102="$(kept_state)"
+
+echo; echo "== 102-6w. the same, with the deploy's own rollback not verifying: it says so, and prints the by-hand put-back, the hazard first =="
+# The redirect planted again, and the fake docker's .rbfail102 armed (its control at the start): deploy-hybrid.sh, run by
+# the deploy's own rollback after V1, sees the copy land and its record read back wrong once, and exits 1 — do_rollback
+# does not verify, while 5.18.101's files are in place and the next read names it. The words must then be the attempt's
+# (review 2, E2-3): the counts said as made after it, 5.18.101's cron only as what follows once it serves, and the stop
+# saying the rollback did not complete — never "rolled back" — then the put-back's hazard and the put-back alone on its
+# own line, as B's failed rollback prints them; the flag never named. Then a copy that ignores do_rollback's answer, as
+# round 2's "do_rollback || true" did, run the same way: it says "rolled back" — caught. ──────────────────────────────────
+RB2_NC="after this automatic rollback attempt, which did not complete — 5.18.102 may still serve"
+PUTBACK_HAZARD102="The put-back below counts nothing before it copies: an application waiting for uCRM with no plan price recorded — as 5.18.102 saves the sales it cannot price; an older one can be so too — is quoted by 5.18.101's cron with its plan line at price 0 once 5.18.101 serves again, and uCRM's quote.add webhook WhatsApps that quotation to the customer."
+printf 'x\n' > "$SB/web/.redirect102"; chmod 644 "$SB/web/.redirect102"; : > "$SB/.rbfail102"
+RW102="$(rows_add102 "$PLANT102")"
+check "$RW102|$(python3 "$H102/rh102q.py" kv "$(apps102)" unp)|$(inst_ver)|$(live)|$(v1read102)|$(ls -A "$SB" | grep -cE '^\.rbfail102(\.seen)?$')" "{\"rows\":3}|pending:1,manual:1,p1:1|5.18.101|$P101|200:0|1" \
+  "6w the redirect planted again (unspent while 5.18.101's manifest is installed: 200, no redirect), the rollback's failed read armed and not yet seen, and the three applications: 1, 1, 1"
+fresh102; OUT="$(run102 --answer DEPLOY --redeploy)"; T102W="$(last102)"
+check "$(failline "$OUT" V1 'the sign-in page on the public address → 200 after 1 redirect(s)')$(has "$OUT" '  ROLLING BACK — the public address must never redirect')$(spent99 .redirect102)|$(ls -A "$SB" | grep -cE '^\.rbfail102(\.seen)?$')|$(has "$OUT" "container still reports '0000000', expected '$P101'")$(has "$OUT" "the checkout is back on ")|$(live)|$(installed102 "$P101")|$(inst_ver)|$(left102)|$(reach102)" \
+      "yesyesspent|0|yesyes|$P101|0|5.18.101|21|0" \
+  "6w1 V1 FAILS on the redirect and the deploy's own rollback runs — and does not verify: deploy-hybrid.sh read the record back wrong once (the trigger spent) and the checkout returned; the files are 5.18.101's and the record names it again"
+check "$(has "$OUT" "  unpriced apps   $RB2_NC, on a copy of the book, read-only (QL-RB2): pending for uCRM 1, in review or failed 1, refused P1–P3 with a uCRM client 1 — counts only")$(noteline "$OUT" QL-RB2 "$RB2_NC: 1 application(s) still waiting for uCRM with no plan price recorded — as 5.18.102 saves the sales it cannot price; an older one can be so too (on a copy of the book, read-only). 5.18.101 may not be serving yet: the put-back printed below, run by hand, puts it back. Once 5.18.101 serves, its cron (KycCrmSync) retries each within minutes, rebuilds its plan line at price 0 and makes the quotation, and uCRM's quote.add webhook WhatsApps it to the customer. The rollback attempt did not wait for them: the public address must never redirect")$(noteline "$OUT" QL-RB2 "$RB2_NC: 1 application(s) in review or failed with no plan price recorded: a person's retry under 5.18.101 would quote one")$(noteline "$OUT" QL-RB2 "$RB2_NC: 1 application(s) 5.18.102 refused a quotation (P1, P2 or P3) have a uCRM client: the debug retry (retry_quote) could quote one from 5.18.101's own prices once 5.18.101 serves — make their quotations in uCRM, never through that retry")|$(grep -c 'after this automatic rollback[:,]' <<<"$OUT")" \
+      "yesyesyesyes|0" \
+  "6w2 the counts and the three notes said as made after an attempt that did not complete — 5.18.101's cron only as what follows once it serves; never \"after this automatic rollback\" as of one that did (review 2, E2-3)"
+check "$(has "$OUT" "  STOP: the automatic rollback did not complete — it did not verify (live=$P101): 5.18.102 may still serve, or some installed files may already be 5.18.101's, and the public address may still redirect. QL-RB2 counted after the attempt, on a copy of the book: pending for uCRM 1, in review or failed 1, refused P1–P3 with a uCRM client 1 — each pending one would be quoted by 5.18.101's cron with its plan line at price 0 once it serves, and uCRM would WhatsApp it (the note above). $PUTBACK_HAZARD102 Put 5.18.101 back by hand, with its own command — then send this log file and that command's log:")|$(awk -v s='  STOP: the automatic rollback did not complete' -v c="      $EXP_PUTBACK102" 'index($0, s) == 1 { n = NR } n && NR == n + 1 { print ($0 == c ? "next-line" : "other"); exit }' <<<"$OUT")|$(grep -cE '^ {6}(cd |\( cd )' <<<"$OUT")|$(grep -cxF "      $EXP_PUTBACK102" <<<"$OUT")|$(has "$OUT" 'STOP: rolled back')$(has "$OUT" 'Nothing further was done. Send the log file.')$(has "$OUT" '== F. Summary ==')|$(grep -c -- '--rollback-unpriced-pending' <<<"$OUT")|$(grep -c 'deploy-5\.18\.102\.sh --rollback' <<<"$OUT")|$(has "$OUT" 'could not price')" \
+      "yes|next-line|1|1|noyesno|0|0|no" \
+  "6w3 the stop says the rollback did not complete — never \"rolled back\" — with the counts, the put-back's hazard first and the by-hand put-back alone on the next line: the one command printed; no rollback command, the flag never named (review 2, E2-3)"
+check "$(sed -n 's/^RB_COPY_AT=//p' "$STATE102" | tail -1 | grep -cx "$(stat -c %Y "$PD/lib/KycService.php")")|$(uother102 "$T102W")|$(grep -lF -f "$NAMES102" "$R102/run-$T102W.txt" 2>/dev/null | grep -c .)|$(evo_calls)" "1|-|0|0" \
+  "6w4 the state file holds the attempt's copy time (RB_COPY_AT, for A14); GETs only; no seeded name printed; Evolution never called"
+check "$(unplant102)|$(data94)|$(python3 "$H102/rh102q.py" kv "$(apps102)" unp)" "3|$D102|pending:0,manual:0,p1:0" \
+  "…the three taken out: the data as before the plants, byte for byte"
+OUT="$(qrun -- --check)"
+check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "6w5 the quarantine's own --check after the attempt, as A14 asks of the next deploy: PASSED"
+KEPT102="$(kept_state)"
+M="$(weak102 v1rbw v1rb)"; printf 'x\n' > "$SB/web/.redirect102"; chmod 644 "$SB/web/.redirect102"; : > "$SB/.rbfail102"
+fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --answer DEPLOY --redeploy)"; rm -f "$M"
+check "$(has "$OUT" "container still reports '0000000', expected '$P101'")$(spent99 .redirect102)|$(ls -A "$SB" | grep -cE '^\.rbfail102(\.seen)?$')|$(has "$OUT" 'STOP: rolled back (serves ')$(has "$OUT" 'did not complete')|$(grep -cxF "      $EXP_PUTBACK102" <<<"$OUT")|$(live)" \
+      "yesspent|0|yesno|0|$P101" \
+  "6w6 control: with do_rollback's answer ignored again (round 2's \"do_rollback || true\"), the same failed rollback says \"rolled back\" and prints no put-back — 6w3 does not hold on it (caught)"
+OUT="$(qrun -- --check)"
+check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "6w7 the quarantine's own --check after it: PASSED"
 KEPT102="$(kept_state)"
 
 echo; echo "== 102-7. --redeploy after the rollback =="
@@ -906,6 +1169,104 @@ fresh102; OUT="$(run_line102 '' "$ALINE2")"
 check "$ALINE2|$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(okline "$OUT" QL-CA1 'nothing asked but the two lists')" "$EXP_AFTER102|0yesyes" "7c its --after-only, as printed: PASSED, QL-CA1 readable"
 OUT="$(qrun -- --check)"
 check "$(has "$OUT" 'stray-store quarantine (check): PASSED.')" "yes" "7d the quarantine's own --check, as the runbook orders: PASSED"
+KEPT102="$(kept_state)"
+rb102() {   # rb102 LABEL — the rollback, ROLLBACK typed, nothing waiting: PASSED, 5.18.101 serving; then the quarantine's --check
+  local o; fresh102; o="$(run102 --answer ROLLBACK --rollback)"
+  check "$(fails "$o")$(has "$o" '5.18.102 (rollback): PASSED')$(live)$(installed102 "$P101")|$(left102)|$(reach102)" "0yes${P101}0|21|0" "$1 the rollback, ROLLBACK typed: PASSED — 5.18.101 serving, its files back, the 21 added on disk and reached by nothing"
+  o="$(qrun -- --check)"
+  check "$(has "$o" 'stray-store quarantine (check): PASSED.')" "yes" "…the quarantine's own --check after it, as A14 asks of the next deploy: PASSED"
+  KEPT102="$(kept_state)"
+}
+after_back102() {   # after_back102 — the copy thirty minutes back and master's retry job after it, as 5 does, so that R19 is conclusive
+  copy_back102 30; local c; c="$(sed -n 's/^COPY_AT=//p' "$STATE102" | tail -1)"
+  [ "$(epoch99 "$c")" = "epoch" ] && set_sched $(( c + 300 )); base_log
+}
+QNR102="not read after the copy (Q-CA2 above says why)"
+QORF102="  FAIL  Q-CA2 Q-CA3 the quoting checks could not be read on a copy and from uCRM — this reading's folder could not be made. Every copy is removed"
+QLRF102="  FAIL  QL-CA1 the catalogue could not be read after the copy: the quoting checks' reading through the installed code did not complete (this reading's folder could not be made)"
+fq102() { grep -E '^  FAIL  ' <<<"$1" | grep -vxF -e "$QORF102" -e "$QLRF102" | grep -c .; }   # fq102 OUTPUT — FAIL lines other than the reading's two
+stagea102() {   # stagea102 OUTPUT — F said on stage A's reading (review 2, E2-2, L2): what changed, the quoting org. line, the screens, what did not, D9; then how many off/unknown words
+  echo "$(has "$1" "  what changed      on this Uganda server (Q-G2), the quoting organization #1 in force as stage A read it (Q-G3) — $QNR102; the --after-only below reads it again: the KYC quotations take their lines and prices from uCRM's Products and Service Plans")$(grep -cxF "  quoting org.      #1 in force as stage A read it (Q-G3) — $QNR102: the screens and your steps below are said on that reading" <<<"$1")$(has "$1" "  the screens       on Uganda, signed in: the KYC form draws each plan and kit at uCRM's price")$(has "$1" "  your steps        yours alone — this script does none of them (docs/71 §M):")$(has "$1" "the quoting organization — #1 as stage A read it (Q-G3), $QNR102 — not shown unchanged by this run — the company every quote is made on")$(has "$1" "(Q-G1, Q-CA1) — though, with the quoting organization in force, what webhook.php and post_kyc.php do on Uganda changes through D9, the Delivery PDF not sent (above); every number")|$(grep -cE '^  what changed      on this server the quoting organization is not in force|^  the screens       none changes|^  your steps        none now|^  the screens       not stated|none in force|NOT ESTABLISHED' <<<"$1")"
+}
+
+echo; echo "== 102-8. the quoting reading after the copy failing: F says so and keeps stage A's narrative — an --after-only and a deploy; --accept-unpriced, then rows fixed since =="
+# The fake docker's .qorfail102 (its control at the start): the folder of the reading after the copy (qo_run r) refused
+# once, so that reading stops before its gate probe — Q-CA2 and QL-CA1 FAIL, nothing is read after the copy, and F must
+# say the quoting organization as stage A read it, said as such, never as "not in force" (review 2, E2-2, L2). In an
+# --after-only run stage A's reading is the deploy's state file's. Then a copy of the summary's gate that reads a reading
+# not made as "off" — caught. ────────────────────────────────────────────────────────────────────────────────────────────
+: > "$SB/.qorfail102"; fresh102; OUT="$(run_line102 '' "$ALINE2")"
+check "$(ls -A "$SB" | grep -c '^\.qorfail102$')|$(grep -cxF "$QORF102" <<<"$OUT")$(grep -cxF "$QLRF102" <<<"$OUT")$(noteline "$OUT" QL-CA2 'the salesPerson attribute was not read after the copy')|$(fq102 "$OUT")|$(has "$OUT" '5.18.102 (after): 2 FAILED')" "0|11yes|0|yes" \
+  "8a the --after-only with the reading after the copy refused (the trigger spent): Q-CA2/Q-CA3 and QL-CA1 FAIL saying why, QL-CA2 not read — and nothing else fails"
+check "$(stagea102 "$OUT")|$(grep -cxF "                       Taxable off, its invoice label empty or its name — this run's reading after the copy gives no count to judge (QL-CA1 above);" <<<"$OUT")" "yes1yesyesyesyes|0|1" \
+  "8a' F keeps stage A's narrative, said as stage A's (the deploy's state file) and as not read after the copy — what changed, the screens and the steps of a quoting organization in force, D9 — never \"not in force\", \"none changes\", \"none now\" or NOT ESTABLISHED; step 3 says there is no count to judge (review 2, E2-2, L2, L6)"
+M="$(weak102 fgatew fgate)"; : > "$SB/.qorfail102"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --after-only)"; rm -f "$M"
+check "$(ls -A "$SB" | grep -c '^\.qorfail102$')|$(stagea102 "$OUT" | cut -c1-2)|$(has "$OUT" '  what changed      on this server the quoting organization is not in force')$(has "$OUT" '  your steps        none now')" "0|no|yesyes" \
+  "8a'' the summary's gate weakened to read a reading not made as \"off\": the same run says the quoting organization is not in force, and no steps — 8a' does not hold on it (caught)"
+rb102 "8b"
+# 8c: a deploy over an unpriced row on --accept-unpriced, the reading after its copy refused: F's step 3 and the unpriced
+# sentence say the deploy went ahead over them and this run has no count to judge — "required unless fixed since", never
+# "required now" (L6) — on stage A's narrative (E2-2). Then two --after-only runs: the row still unpriced (required now,
+# the flag said beside it), and fixed in uCRM (none unpriced now). ─────────────────────────────────────────────────────
+u99_set 'price_of={"9104":0}'; : > "$SB/.qorfail102"; fresh102; OUT="$(run102 --answer DEPLOY --redeploy --accept-unpriced)"; OUT102X="$OUT"
+check "$(ls -A "$SB" | grep -c '^\.qorfail102$')|$(live)|$(noteline "$OUT" QL-G1 "--accept-unpriced, the operator's explicit choice: row(s) the KYC form offers do not resolve in uCRM — $SAYU_ONE")|$(grep -cxF "$QORF102" <<<"$OUT")$(grep -cxF "$QLRF102" <<<"$OUT")|$(fq102 "$OUT")|$(has "$OUT" '5.18.102 (deploy): 2 FAILED')|$(grep -c '^QLG1_NOTED=1$' "$STATE102")" \
+      "0|$P102|yes|11|0|yes|1" \
+  "8c the deploy (--redeploy --accept-unpriced, one row priced 0), the reading after its copy refused: QL-G1 the flag's note; 5.18.102 serving; Q-CA2/Q-CA3 and QL-CA1 FAIL and nothing else; the state file records that the flag decided QL-G1"
+check "$(stagea102 "$OUT")|$(has "$OUT" " The deploy went ahead over catalogue rows uCRM did not price, on --accept-unpriced — the operator's explicit choice (QL-G1); this run's reading after the copy gives no count to judge (QL-CA1 above), so whether each is fixed is not known: until it is (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1).")|$(grep -cxF "                       Taxable off, its invoice label empty or its name — required unless fixed since: the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1), and this run's reading after the copy gives no count to judge (QL-CA1 above);" <<<"$OUT")|$(has "$OUT" 'required now')" \
+      "yes1yesyesyesyes|0|yes|1|no" \
+  "8c' F on stage A's reading (E2-2, L2): the deploy went ahead over unpriced rows on the flag, and this run's reading gives no count to judge — step 3 \"required unless fixed since\", never \"required now\" (L6)"
+after_back102; ALINE3="$(printed "$OUT102X" "cd $REPO && bash scripts/deploy-5.18.102.sh --after-only")"
+fresh102; OUT="$(run_line102 '' "$ALINE3")"
+check "$ALINE3|$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(has "$OUT" "  QL-CA1          the same counts as stage A read through the pin's (the state file): unpriced $UNP_ONE")$(has "$OUT" "the quoting organization #1 in force (Q-G3, Q-CA2): the KYC quotations")|$(has "$OUT" " The deploy went ahead over catalogue rows uCRM does not price, on --accept-unpriced — the operator's explicit choice (QL-G1) — and this run's reading after the copy finds rows unpriced (QL-CA1): until each is fixed in uCRM (your steps, 3, below), a Cash sale of one is refused and a Credit one is registered with no quotation (P1).")|$(grep -cxF "                       Taxable off, its invoice label empty or its name — required now: this run's reading after the copy (QL-CA1) finds rows unpriced, each on the sheet; the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1);" <<<"$OUT")" \
+      "$EXP_AFTER102|0yesyesyes|yes|1" \
+  "8d its --after-only as printed, the row still unpriced: PASSES, the quoting organization read again after the copy; QL-CA1 the state file's counts — and F, from this run's own reading and the deploy's flag, \"required now\", the flag said beside it (review 2, L6)"
+u99_set; fresh102; OUT="$(run_line102 '' "$ALINE3")"
+check "$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(noteline "$OUT" QL-CA1 "fewer unpriced than stage A read, over both clients: now $UNP_NONE; at stage A $UNP_ONE")|$(has "$OUT" " The deploy went ahead over catalogue rows uCRM did not price, on --accept-unpriced — the operator's explicit choice (QL-G1); this run's reading after the copy finds none unpriced now (QL-CA1).")|$(grep -cxF "                       Taxable off, its invoice label empty or its name — the deploy went ahead over unpriced rows on --accept-unpriced (QL-G1); this run's reading after the copy (QL-CA1) finds none unpriced now;" <<<"$OUT")|$(has "$OUT" 'required now')$(has "$OUT" 'required unless fixed since')" \
+      "0yesyes|yes|1|nono" \
+  "8e the row fixed in uCRM since, the same --after-only: PASSES, QL-CA1 a note of fewer unpriced — and F says the deploy went ahead over them and this run finds none unpriced now, never \"required now\" over rows fixed since (review 2, L6)"
+rb102 "8f"
+
+echo; echo "== 102-9. the quoting organization off — --quote-company-off: nothing priced from uCRM, no \"Prepared by\"; QL-N1 and QL-CA2 notes, never an ok; F's own words for it =="
+# ucrm_quote_organization_id 0 in both copies of the configuration, one client attribute keyed salesPerson (#47) in uCRM,
+# as throughout. With the gate off the release sets no "Prepared by" — UcrmClientTarget::salesPersonFieldId() and
+# patchSalesPerson() return first — and quotes as 5.18.101 does (D7): QL-N1 and QL-CA2 say the attribute and that it is
+# not used, never an ok; the probe's own reading of the release's lookup is "off"; nothing of the catalogue is read
+# (review 2, E2-1, L8). Each weakened, caught. The setting put back at the end. ──────────────────────────────────────────
+QLN1_OFF="QL-N1 the client attribute keyed salesPerson: exactly one, #47 — not used: no quoting organization is in force (Q-G3), so 5.18.102 sets no \"Prepared by\" on a new KYC customer; it does so only where the quoting organization is in force (docs/71 §I, D7)"
+QLCA2_OFF="QL-CA2 the client attribute keyed salesPerson, through the installed code's reading: exactly one, #47 — not used: no quoting organization is in force (Q-CA2), so 5.18.102 sets no \"Prepared by\" on a new KYC customer"
+QLCA1_OFF="  QL-CA1          not asked: no quoting organization is in force (Q-CA2) — 5.18.102 quotes as 5.18.101 does, and nothing is priced from uCRM"
+cfg_keep; file_set ucrm_quote_organization_id 0; row_set ucrm_quote_organization_id 0; D9Q="$(data94)"
+fresh102; OUT="$(run102 --check)"
+nogo102 "9a ucrm_quote_organization_id 0 in both copies, --check: NO-GO at Q-G3 (5.18.99's, carried)" "NO-GO (Q-G3): ucrm_quote_organization_id is 0/off on this server (off:-:explicit-off:-; files/store row)" "$OUT" "$D9Q"
+check "$(grep -cxF "      cd $REPO && bash scripts/deploy-5.18.102.sh --quote-company-off $(LOGW102 deploy)" <<<"$OUT")" "1" "9a' …the deploy with --quote-company-off printed alone, its own command — the operator's choice"
+fresh102; S9C="$(states102)"; OUT="$(run102 --check --quote-company-off)"; T9C="$(last102)"; SH9C="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+check "$(checkgo102 "$OUT")|$(noteline "$OUT" Q-G3 "--quote-company-off, the operator's explicit choice")$(has "$OUT" "  note  QL-G1 not asked: no quoting organization is in force (Q-G3) — 5.18.102 then quotes as 5.18.101 does, nothing is priced from uCRM, and there is nothing to measure (docs/71 D7)")$(grep -cxF "  note  $QLN1_OFF" <<<"$OUT")$(noteline "$OUT" QL-N3 'With no quoting organization in force (Q-G3) the retry quotes them after the deploy as 5.18.101 does: nothing is priced from uCRM (D7)')$(has "$OUT" '  note  QL-N7 not asked: no quoting organization is in force (Q-G3)')|$(grep -E '^  note  QL-N[13] ' <<<"$OUT" | grep -cE 'PATCHed|Whatever uCRM holds|prices alone|\(D11')|$(qor102 "$OUT" 1 qlc)|$(qor102 "$OUT" 1 qlattr)|$(qor102 "$OUT" 1 qlattrrel)" \
+      "yesyesnono0|0|$S9C|yesyes1yesyes|0|off|one:47|off" \
+  "9b --check --quote-company-off: GO; Q-G3 the flag's note; QL-G1 and QL-N7 not asked; QL-N1 the one attribute, #47, not used — no \"Prepared by\" with the gate off; QL-N3 the retry as 5.18.101's, nothing from uCRM, no D11 sentence (review 2, E2-1); the probe's catalogue off and the release's own lookup off"
+check "$(ureq102 "$T9C" | sed -E 's/^total=[0-9]+ //')|$(lim102 "$T9C")|$(grep -cE '^== QL-(G1|CA1) the catalogue' "$SH9C" 2>/dev/null)|$(grep -cxF "      $(runbook_with102 --quote-company-off)" <<<"$OUT")" "other=0 products=0/0 plans=0/0 attrs=1 quote=0 odd=0|n=0 bad=0|0|1" \
+  "9b' …uCRM asked no list — the attributes once, the probe's own reading (the release's lookup asks nothing with the gate off), all GETs; the sheet names no catalogue row; the deploy it hands over carries the flag"
+M="$(weak102 qln1offw qln1off)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --check --quote-company-off)"; rm -f "$M"
+check "$(grep -cxF "  note  $QLN1_OFF" <<<"$OUT")$(noteline "$OUT" QL-N1 '"Prepared by" is PATCHed on each new KYC customer')" "0yes" \
+  "9c QL-N1's gate-off branch weakened: with the quoting organization off it says \"Prepared by\" is PATCHed on each new KYC customer — 9b does not hold on it (caught)"
+fresh102; OUT="$(run102 --answer DEPLOY --redeploy --quote-company-off)"; OUT102Q="$OUT"; T9D="$(last102)"; SH9D="$(ls -1 "$OUT102"/cash-*.txt 2>/dev/null | head -1)"
+check "$(fails "$OUT")$(has "$OUT" '5.18.102 (deploy): PASSED')$(live)$(installed102 "$P102")" "0yes${P102}0" "9d the deploy with --quote-company-off, DEPLOY typed: PASSES, 5.18.102 serving"
+check "$(okline "$OUT" Q-CA2 'reads what stage A read through the pin' 'off:-:explicit-off:-')$(grep -cxF "  note  $QLN1_OFF" <<<"$OUT")$(grep -cxF "$QLCA1_OFF" <<<"$OUT")$(grep -cxF "  note  $QLCA2_OFF" <<<"$OUT")|$(grep -c '^  ok    QL-CA2 ' <<<"$OUT")|$(grep -c '"Prepared by" is set on each new KYC customer' <<<"$OUT")|$(qor102 "$OUT" 2 qlattrrel)|$(ureq102 "$T9D" | sed -E 's/^total=[0-9]+ //')|$(grep -cE '^== QL-(G1|CA1) the catalogue' "$SH9D" 2>/dev/null)" \
+      "yes111|0|0|off|other=0 products=0/0 plans=0/0 attrs=2 quote=0 odd=0|0" \
+  "9d' Q-CA2 the installed gate off, as stage A read it; QL-N1 at stage A and QL-CA2 after the copy each the attribute and that it is not used — never an ok, never \"Prepared by\" set (review 2, E2-1); QL-CA1 not asked; no list asked of uCRM; no catalogue section on the sheet"
+check "$(has "$OUT" "  what changed      on this server the quoting organization is not in force (Q-G3: ucrm_quote_organization_id 0/off, the operator's choice), so 5.18.102 quotes as 5.18.101 does (D7)")$(grep -cxF "  the screens       none changes: with the quoting organization not in force, the KYC form, Send Quotation, the" <<<"$OUT")$(grep -cxF "  your steps        none now: with the quoting organization not in force, 5.18.102 quotes as" <<<"$OUT")$(grep -cxF "                    5.18.101 does. This run did NOT read the catalogue: with no quoting organization in" <<<"$OUT")$(grep -cxF "                    force its probe reads none (QL-G1, QL-N7 and QL-CA1 above), and its sheet names" <<<"$OUT")$(grep -cxF "                    refuses once 5.18.102 serves, and an --after-only's probe reads none either — so" <<<"$OUT")$(grep -cxF "                    Change, nor for a Fiber one (D11): each is quoted by hand in uCRM, or not at all" <<<"$OUT")|$(has "$OUT" "the quoting organization — none in force, as under 5.18.101 (Q-G3, Q-CA2) — the company every quote is made on")$(has "$OUT" "5.18.101's byte for byte (Q-G1, Q-CA1); every number in the registry")$(has "$OUT" 'NOT ESTABLISHED')$(has "$OUT" '  quoting org.      ')" \
+      "yes111111|yesyesnono" \
+  "9d'' F's own words for the gate off: 5.18.102 quotes as 5.18.101 does, no screen changes, no step now — and that this run read no catalogue, that no later run can while the setting is off, and what to check by hand before it is turned on (review 2, L8); the quoting organization none in force, as under 5.18.101; no D9 clause"
+after_back102; ALINE9="$(printed "$OUT102Q" "cd $REPO && bash scripts/deploy-5.18.102.sh --after-only")"
+fresh102; OUT="$(run_line102 '' "$ALINE9")"
+check "$ALINE9|$(fails "$OUT")$(has "$OUT" '5.18.102 (after): PASSED')$(grep -cxF "$QLCA1_OFF" <<<"$OUT")$(grep -cxF "  note  $QLCA2_OFF" <<<"$OUT")|$(grep -c '^  ok    QL-CA2 ' <<<"$OUT")|$(grep -cxF "                    force its probe reads none (QL-CA1 above), and its sheet names" <<<"$OUT")$(grep -cxF "  your steps        none now: with the quoting organization not in force, 5.18.102 quotes as" <<<"$OUT")" \
+      "$EXP_AFTER102|0yes11|0|11" \
+  "9e its --after-only as printed: PASSES; QL-CA1 not asked; QL-CA2 the attribute, not used — never an ok; F's off words, this run's probe named alone (QL-CA1)"
+M="$(weak102 qlca2w qlca2off qlca2ok qlattron qlattrrel)"; fresh102; OUT="$(R102_MUTANT_OUT=1 run102 --script "$M" --after-only)"; rm -f "$M"
+check "$(okline "$OUT" QL-CA2 'reads as stage A read it: exactly one, #47' '"Prepared by" is set on each new KYC customer')$(grep -cxF "  note  $QLCA2_OFF" <<<"$OUT")|$(qor102 "$OUT" 1 qlattrrel)" "yes0|47" \
+  "9f QL-CA2's gate weakened back to round 1 — the probe's lookup forced on, the two guards of the shell gone: an ok saying \"Prepared by\" is set over a quoting organization that is off — 9d' and 9e do not hold on it (caught)"
+rb102 "9g"
+cfg_back
+check "$(data94)|$(set99 ucrm_quote_organization_id)" "$D102|unset/unset" "…the quoting organization's setting put back in both copies: the data as before, byte for byte"
 
 echo; echo "== 102-10. what the rehearsal left behind, and what it never reached =="
 fresh102   # the last logs and sheets into the sweeps' folders
@@ -986,8 +1347,8 @@ printf '%s\n' '  note  QL-RB2 1 application(s) 5.18.102 could not price are in r
 check "$(sweep_files102 | xargs grep -lE 'could not price|saved unpriced|left unpriced' 2>/dev/null | grep -c .)|$(grep -lE 'could not price|saved unpriced|left unpriced' "$R102/zz-rh1-control.txt" | grep -c .)" "0|1" \
   "10f no terminal or log of any run of the 5.18.102 script calls an application one 5.18.102 \"could not price\" (RH-1); control: the old words are caught"
 rm -f "$R102/zz-rh1-control.txt"
-check "$(ls -A "$SB/web" | grep -cE '^\.(redirect102|left102m)$')|$(cat "$R102"/plant-*.txt 2>/dev/null | sort | uniq -c | tr -s ' ' | paste -sd, -)" "0| 3 {\"rows\":3}" \
-  "10g no trigger of this rehearsal's left in the stand-in; every plant at the question (6b, 6b2, 6e) was made — none noprompt or timeout"
+check "$(ls -A "$SB/web" | grep -cE '^\.(redirect102|left102m)$')|$(ls -A "$SB" | grep -cE '^\.(rbfail102|rbfail102\.seen|qorfail102)$')|$(cat "$R102"/plant-*.txt 2>/dev/null | sort | uniq -c | tr -s ' ' | paste -sd, -)|$(live)|$(left102)|$(set99 ucrm_quote_organization_id)|$(u99_state_102)" "0|0| 3 {\"rows\":3}|$P101|21|unset/unset|base" \
+  "10g no trigger of this rehearsal's left in the stand-in or the fake docker; every plant at the question (6b, 6b2, 6e) was made — none noprompt or timeout; the sandbox left as 9g's rollback left it: 5.18.101 serving, the 21 added files on disk, the quoting organization's setting unset again, the stand-in uCRM at its base"
 # The printed rollback, after the verdict and never in a block with another command (4d, 6) — the two readers those checks
 # used, each shown able to fail: a summary that printed the rollback before its verdict, and one line holding two scripts.
 printf '%s\n' "      $EXP_ROLLBACK102" "" "  5.18.102 (deploy): PASSED. Send this LOG FILE back" > "$SB/order102.txt"
