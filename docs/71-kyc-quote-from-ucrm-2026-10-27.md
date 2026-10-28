@@ -1,6 +1,6 @@
 # 71 — Uganda: the plugin's quotations take their lines and prices from uCRM (5.18.102 design, 27 Oct 2026)
 
-Status: **design, reviewed (§O); built and committed as `release/5.18.102` = `00d2be1` (local, not pushed); what the
+Status: **design, reviewed (§O); built and committed as `release/5.18.102` = `9e66565` (local, not pushed; re-cut from `00d2be1`, see §P.5); what the
 build changed from this design is in §P; the deploy script's own decisions are in §Q.** The release is cut on 5.18.101
 (`f2055baf`), which is live according to the operator (D6). Its deployment record is still pending in docs/07, and the
 deploy script cannot be handed over until it is recorded (§M).
@@ -719,6 +719,19 @@ defects and found a fourth plausible. Each is fixed, with a test that fails with
 
 Refuted after verification: the page cache shared between the KYC form's and Send Quotation's credentials (no request or
 money uses the cache), and the outage text for a refused Cash sale (it names its cause and the remedy).
+
+### P.5 The release suite's first pass, and the re-cut
+
+The first release-suite pass on `00d2be1` gave 299 files: 17,129 passed and 1 failed. The failure was `test_timezone`'s
+"no executable line pins a timezone identifier", raised by `tests/quote_from_ucrm/F_send_quote.php:51`.
+
+That section file named `Africa/Kampala` for the journey fixture's book. `test_timezone` exempts only files whose name
+starts with `test_`, and the fixture's own rule says the same: a test file may pin a zone, a fixture may not. So the zone
+is now named once, in `tests/test_quote_from_ucrm.php` (`QFU_TZ`), and the section uses the constant.
+
+The release was re-cut as `9e66565`, still on `f2055baf`; it differs from `00d2be1` by these two test files only. On the
+new tree `test_timezone` passes (31, 0 failed), and so do sections F and I (62, 0 failed). The suite was stopped in its
+second pass and started again, twice, on `9e66565`.
 
 ## O. The review
 
