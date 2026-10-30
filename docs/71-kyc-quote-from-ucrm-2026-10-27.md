@@ -1,6 +1,6 @@
 # 71 — Uganda: the plugin's quotations take their lines and prices from uCRM (5.18.102 design, 27 Oct 2026)
 
-Status: **being re-cut for D14 (§R, the operator's decision of 28 Oct): designed, not yet built.** The release as it stood before D14: **design, reviewed (§O); built and committed as `release/5.18.102` = `9e66565` (local, not pushed; re-cut from `00d2be1`, see §P.5); what the
+Status: **being re-cut for D14 (§R, the operator's decision of 28 Oct): designed; built and reviewed on the local branch `quote-102-d14` (§R.17); not yet re-cut as the release.** The release as it stood before D14: **design, reviewed (§O); built and committed as `release/5.18.102` = `9e66565` (local, not pushed; re-cut from `00d2be1`, see §P.5); what the
 build changed from this design is in §P; the deploy script's own decisions are in §Q.** The release is cut on 5.18.101
 (`f2055baf`), which is live according to the operator (D6). Its deployment record is still pending in docs/07, and the
 deploy script cannot be handed over until it is recorded (§M). §R cites this file's lines as they stood before §R and the D14 row were added (`f60f1663`): from line 55 on, add one.
@@ -975,7 +975,9 @@ Five things decide against it anyway:
   writes in one transaction. A link and the end of every active record of the item are therefore one write, and two
   admins cannot leave two active records.
 - **The order of a save. The uCRM read is never inside the lock.**
-  1. **Outside any transaction, first:** §R.3.1 rule 1; rule 2, which reads the row and keeps its id and `row_stamp`;
+  1. **Outside any transaction, first:** the quoting-organization setting, which must be valid (5.18.99 R6; amended
+     by §R.17, G2). Otherwise the save answers *"The company the app quotes under is not set correctly, so nothing
+     was linked. Tell an admin."*, with no uCRM read and no lock. Then §R.3.1 rule 1; rule 2, which reads the row and keeps its id and `row_stamp`;
      rule 3, the fresh read through `quoteClient`; rules 4–8. Any failure refuses with its reason and writes nothing.
   2. **Then `UcrmQuoteLinks::set()` calls `withLock('ucrm_quote_links.json', …)`.** The callback does no network I/O and
      calls no uCRM client. It makes only store checks:
@@ -1378,6 +1380,11 @@ function, so save and use cannot apply different rules.
    - A kit's link takes part in rule 8 only when it is that offered row's single active record, with the row's current
      stamp, under the quoting organization whose id the caller hands the method (F-4). A leftover link on an inactive
      or Fiber kit row, or one with another stamp, does not block; QL-LK1 notes it (§R.7.3).
+   - **At use, the kit half applies to every kit row, offered or not** (amended by §R.17, D14-R8-INACTIVE-KIT). A kit
+     line whose own in-force link names the installation's product is refused with rule 8's at-use reason, so a row
+     deactivated with its link left in force never prices beside the installation: not in a stored cart at a retry,
+     not through Make the quotation, not in `confirmLines`. It never blocks the installation: `installLine` still
+     counts offered kit rows only, and the save is unchanged.
    - Why: `resolve()` appends the installation line after the kit lines (`:368-372`), and `total()` sums every line
      (`:402-410`). Nothing refuses two lines with one `productId`. Such a link would add a kit-priced line, labelled
      with the kit's name, to every "DishNet installs" sale, and Cash would collect it.
@@ -1523,7 +1530,7 @@ remedy is.
 | plan: prices differ | "<row>'s price in Products (X) differs from its service plan (Y)" | **unchanged** (`:246-247`). **The only reason that carries figures, as today** |
 | plan: product and service plan spelled apart | "<row>'s uCRM product and service plan are not spelled alike, so the quotation's WhatsApp summary could not show it as monthly — an admin fixes the names in uCRM" | — (new) |
 | kit or installation spelled like a service plan, counted or not | "<row> is spelled like a service plan in uCRM, so it cannot be quoted as hardware" | unchanged (`:277`) |
-| the installation and an offered kit linked to one product (rule 8) | "<row> and the installation are linked to the same uCRM product — an admin links one of them again" | — |
+| the installation and an offered kit linked to one product (rule 8); at use, for a kit line, any kit row (§R.17) | "<row> and the installation are linked to the same uCRM product — an admin links one of them again" | — |
 | `badProduct` | "<row> has no price in uCRM" / "'s price in uCRM is 0" / "… more than 2 decimals" / "is set as taxable …" / "has no product id …" / "'s invoice label in uCRM differs from its name" | unchanged texts (`:440-451`), now about the linked product |
 | Fiber | "Fiber is not priced from uCRM on this installation" | unchanged (`:332`) |
 | uCRM unreadable; a cart item not in the plugin; no install answer | unchanged (`:169`, `:349`, `:61`) | — |
@@ -1533,11 +1540,14 @@ remedy is.
   (§R.2.3) and on the deploy sheet (§R.7.1). Two *service plans* spelled alike still refuse (`:232`, restated above).
 - **No reason carries a money figure beyond today's one** (the plan-against-service-plan comparison). A reason that
   needs to say a price changed says it in words, never with the figure (§R.4.4).
-- **Three texts lose their "fix the product in uCRM" tail.** A link reason carries its own remedy ("an admin links
+- **Four texts lose their "fix the product in uCRM" tail** (the fourth added by §R.17, D14-UI-2). A link reason
+  carries its own remedy ("an admin links
   it…"). So:
   - `TEXTS['CASH_UNPRICED']` (`UcrmQuoteLines.php:74`) ends "Register as Credit, or ask an admin.";
   - the form's Cash note (`kyc_form.php:938`) ends the same way;
-  - its submit alert (`kyc_form.php:2252`) ends the same way.
+  - its submit alert (`kyc_form.php:2252`) ends the same way;
+  - Send Quotation's picker alert (`send_quote.php`), which wraps the reason of a plan or kit picked from its list,
+    ends "ask an admin, or type the item and its price yourself."
 
   P1 to P3 keep their texts (`:71-73`), and only the reason inside P1 changes, except in the one case below.
 - **The entry reason and the `kyc_packages` reason end at their cause** (E-3). Each is only ever a `{REASON}` inside a
@@ -1755,6 +1765,10 @@ step**: from the lead's `interest_plan` to a plugin row by `planKey`.
 - Only the step from that row to uCRM is by link.
 - It pre-fills only when **exactly one** plugin plan row has that key. Two rows → no pre-fill, and the existing "add
   items manually" message (`QuotationService.php:160-162`).
+- **The page names that cause** (amended by §R.17, D14-UI-1). `quotePlanPicker` also returns `shared_keys`, the keys
+  two or more plan rows hold, and a lead whose key is one of them is told *"More than one plan on the Plans screen
+  is spelled like this lead's interest (…), so no line was added — add the items yourself."*, never that no plan is
+  spelled like it.
 - Operator question Q15.
 
 #### R.4.6 What the resolver no longer does
@@ -1808,7 +1822,9 @@ linked. It needs no `crm_auth_token`, and no list outside the card has to name t
 - for an admin (`$isAdmin`, as the card's Retry is at `:322`);
 - for an application that meets **five conditions**: `quote_sale_entry` exactly `web`, a `crm_client_id`,
   `quote_refused` `P1`, no `quote_created`, and **no `quote_found_in_ucrm`** (F-10). Where the guard has found a
-  quotation the card shows its line (§R.4.4) and no button, since a press there could only be refused.
+  quotation the card shows its line (§R.4.4) and no button, since a press there could only be refused. It shows that
+  line in place of the refusal text, never above *"No quotation was made: … an admin makes it from the Orders card"*
+  (amended by §R.17, D14-UI-4).
 
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
@@ -1860,7 +1876,10 @@ And the handler's own:
   was changed. Open the Orders screen again and retry."*;
 - step 5, the conditions no longer hold: *"Make the quotation does not apply to application #<id> now. Nothing was
   changed."*;
-- a Throwable from the method, caught: *"No quotation was made for application #<id> — try again."*
+- a Throwable from the method, caught: *"Making the quotation for application #<id> did not finish. Open the Orders
+  screen again before you retry: uCRM may already have it, and Make the quotation never makes a second one."*
+  (amended by §R.17, D14-MQ-THROW-AFTER-POST: the Throwable may come after the POST made the quotation, so the
+  answer never says none exists; the log line says the same, ids only).
 
 **The shared implementation.** One public method of `KycService`, extracted from `retry_quote`'s gated block so that
 block calls it, and Make the quotation calls the same code (F-1):
@@ -1905,6 +1924,10 @@ In order:
    - `quote_made_by_id`, `$actor`'s id, and `quote_made_via`, `$via` (F-13). Both keys are added, never renamed
      (§F.3). They are written only here, so only on the gated path, only with a quotation made, and never by the cron
      retry.
+   - **The write sits in its own try** (amended by §R.17, D14-MQ-THROW-AFTER-POST). By then `postQuote` has stored
+     `quote_id`, `quote_created` and `wa_quote_pending`, so the answer is `made` whatever the write does. A failure
+     is logged with ids only (the quotation's, the application's and the link ids), so an admin can restore
+     `quote_link_ids`.
 
 **What it returns** (F-7) is one array:
 
@@ -1938,7 +1961,8 @@ The button's flashes and `retry_quote`'s answers are chosen by `kind`, never by 
   - `claimed` → 409 *"another quotation is being made for this application"* (F-9);
   - `found`, `unreadable` and `refused` → 409 with the method's text;
   - `error` → 500 with the method's text;
-  - a Throwable from the method, caught → 500 *"No quotation was made — try again."*, the log carrying ids only (F-9).
+  - a Throwable from the method, caught → 500 *"The quotation may not have been made — open the application before
+    you retry; a retry never makes a second one."*, the log carrying ids only (F-9; amended by §R.17).
 
   On the gated path the work of `:1064-1075` (the lines) and of `:1097-1122` (the notes, the POST, the read-back, the
   writes and the send) is the method's, and nothing after the call posts, writes or sends. Its gate-off path stays
@@ -2006,7 +2030,7 @@ The reasons for not writing uCRM's name into the row:
 | the quotation's lines (uCRM PDF, read-back) | uCRM's product name. Unchanged: the line label (`UcrmQuoteLines.php:249-255`, `:456-466`) |
 | the KYC form, a linked row that resolves | **uCRM's product name**. The cell gains `l`, the label, for plans and kits as it has for the installation (`kyc_form.php:16-18`, `:39`), and `k`, its link record id (§R.4.7). The row is drawn with it, and `data-name`/`data-title` (`:1576`, `:1297`) carry it. So it also reaches the JS total's labels (`:905-907`), steps 3 and 5, the order summary, `hw_cart_json`'s titles (`:1814`), `selected_plan_name` (`:1617`) and the `kyc_hardware` CSV that reads them (`post_leads.php:794-814`) |
 | the KYC form, an unlinked or broken row | the plugin row's name, "not priced in uCRM", and the reason |
-| the KYC form, "DishNet installs" | the linked installation product's name (`kyc_form.php:1252`) |
+| the KYC form, "DishNet installs" | the linked installation product's name (`kyc_form.php:1252`). When the installation does not resolve, its reason is drawn as text on the card, not only in its title, which a phone never shows (§R.17, D14-UI-3) |
 | Send Quotation's plan picker | uCRM's name when priced (`QuotationService.php:894-903`, as built); the plugin's name with the reason when not |
 | the existing customer's job description | the plugin row's name with "not priced in uCRM". On the gated path every existing-customer sale the form or the apps make is `app` and never priced (§R.4.2), so uCRM's plan line label, which the description would carry when priced, reaches it only from a hand-made post carrying the marker. Today it pairs the plugin's name with uCRM's price (`KycService.php:2450-2452`, `:2470-2472`) |
 | the staff messages (`kycSubmitted`, `kycCrmCreated`, `kycAdditionalService`) | no item names: amount and "Who installs" only (`NotificationService.php:220-240`, `:246`, `:330`). Unchanged |
@@ -2015,6 +2039,11 @@ The reasons for not writing uCRM's name into the row:
 | the uCRM client's `note` | the plugin's device title and plan name (`KycService.php:786`). Unchanged: it records what the agent picked, and the create body stays as built (§I) |
 | the application's `offer_name` / `device_title` snapshots | the plugin's names (`KycService.php:1146-1150`), unchanged. uCRM's names are in `quote_items`. The installation-authorisation form already prefers the uCRM quotation and falls back to the snapshots (`includes/api/api_install_auth.php:103-111`) |
 | the retailer app | the plugin's titles and prices (`retailer/index.html`, kept byte for byte). A recorded limit, as in §E.3 |
+
+**The form's default plan and kit are chosen by the row's own name** (amended by §R.17, D14-UI-5). `applyDefaults`
+matches its keywords on `data-row-name` and `data-row-title`, which carry the plugin row's name on the gated page, so
+a uCRM rename never moves the default to another row, an unpriced one among them. `data-name`, `data-title`,
+`selPlan` and `hwCart` keep uCRM's names, as the table says.
 
 An explicit per-row "use uCRM's name for this plugin row" button is not built. Operator question Q6.
 
@@ -2096,7 +2125,8 @@ step 3 replaces §M step 3, the spelling rule (`docs/71:600-605`).
 7. **Link once the deploy has printed its last line**, as an admin, on Plans (each active, non-Fiber plan), on Hardware
    (each active, non-Fiber kit) and on the installation card. The deploy prints the counts still to link.
    - A kit row the import tool made for the installation product is deactivated rather than linked, since rule 8
-     refuses it. `tools/import-from-ucrm.php:131-165` copies into `kyc_devices`, as an active row, every uCRM product
+     refuses it. If it was linked first, it is also unlinked: deactivating a row ends none of its links, and a sale
+     still holding the row is then unpriced at use rather than quoted with the installation twice (§R.17). `tools/import-from-ucrm.php:131-165` copies into `kyc_devices`, as an active row, every uCRM product
      that is not a plan or an accessory.
 8. **`--after-only`** judges every link (QL-LK1, §R.7.3). Pass it only when every offered item resolves, or carry
    `--accept-unpriced` for items left unlinked on purpose. Then an admin presses **Make the quotation** on the Orders
@@ -2635,7 +2665,15 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
   - the quotation list unreadable → 409, nothing written;
   - another client's quotation in the answer → ignored;
   - an app-origin unpriced application stays unpriced on `retry_quote` and on the cron retry (`KycCrmSync.php:364`)
-    after the plan is linked, and the Orders card draws no Make the quotation for it.
+    after the plan is linked, and the Orders card draws no Make the quotation for it;
+  - **added by §R.17:** the cron retry of an unmarked web application stores `quote_link_ids` (C26, T3); an existing
+    customer's sale without the marker is stored `app` with its sale kept, and `retry_quote` answers 409 with the
+    entry reason and no POST (C9, T7); a kit row deactivated with its link to the installation's product left in
+    force, in a stored cart and in marked lines, through the cron retry, `retry_quote` and Make the quotation, is
+    unpriced with rule 8's reason, never two lines with one `productId` (C28, D14-R8-INACTIVE-KIT); a Throwable after
+    the POST — the step-5 write failing, or one inside `postQuote` after its POST — never answers "No quotation was
+    made", and a second press is answered `found` with still one POST (C22, D14-MQ-THROW-AFTER-POST); the found card
+    draws its line and not the refusal text (C17, D14-UI-4).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -2839,7 +2877,14 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 - **The link column:** a linked row that does not resolve shows the product's `#id 🔗` link and, for a plan, the service
   plan's id, beside the reason.
 - **The gate off never opens the store:** after every page and action is rendered and posted on `ss` and `ug_off`,
-  `sqlite_master` has no `ucrm_quote_links`.
+  `sqlite_master` has no `ucrm_quote_links`. Each post's outcome and flash is asserted first, so a post that never
+  reached its handler cannot pass (§R.17, T6). **L19b:** the KYC submission (new and existing), `syncOne`,
+  `retry_quote`, Send Quotation and a lead quote's lines leave no `ucrm_quote_links` either, each with its Uganda
+  control (§R.17, T1).
+- **The setting invalid** (L-R6, §R.17, G2): a save with `ucrm_quote_organization_id` `abc` or `1x` refuses naming
+  the setting, for a plan, two kits and the installation, with no uCRM read and the store unchanged. Control: the
+  setting 1 links after a uCRM read.
+- **The Hardware picker** pre-selects nothing but the kit's current link, as the Plans picker does (L14, §R.17, T2).
 
 #### R.9.2 The other suites
 
@@ -2894,9 +2939,11 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML14 the save accepts a kit or installation product spelled like a service plan | L |
 | ML15 the save writes the plugin row (its `ucrm_product_id`, or its name) | L, G3 |
 | ML16 a relink leaves the old record active | L |
-| ML17 the picker pre-selects the spelled-alike product, or `ucrm_product_id` | L |
+| ML17 the picker pre-selects the spelled-alike product, or `ucrm_product_id` | L (Plans; and Hardware, §R.17 T2) |
 | ML18 a picker, column or action emitted or handled with the gate off | G8, `test_quote_company` G |
 | ML19 a gate-off path loads the link store (the table created on South Sudan) | L |
+| ML19b–ML19g a gate-off KYC path (`handleNew`, `handleExisting`, `syncOne`, `retry_quote`, a lead quote, Send Quotation) loads the link store before its gate (§R.17, T1) | L (L19b) |
+| ML19h–ML19i an L19 post never reaches its handler (§R.17, T6) | L (L19) |
 | ML20 `quotePlanKeys` keeps one answer per key | F |
 | ML21 `confirmLines` ignores an ended link, or a changed price | C |
 | ML22 the form draws the plugin's name for a priced, linked row | H |
@@ -2915,8 +2962,9 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML35 a relink, an unlink or a delete hook ends only one active record, or a save no-ops while two are active | L (L-two-active, state (c), and the unlink and delete cases over two active records) |
 | ML36 the save accepts an installation link to an offered kit's product, or the reverse | L |
 | ML37 the resolver prices such an installation. Its second half, QL-LK1 reporting it "resolves", is the deploy script's: §R.7.7 item 6 | A |
+| ML37b the resolver prices an inactive kit row linked to the installation's product beside the installation (§R.17) | A (A32), C (C28) |
 | ML38 the entry point ignored, or a post without the marker taken as web (an app sale priced through a plan link) | A, C |
-| ML39 a retry does not record `quote_link_ids` | L |
+| ML39 a retry does not record `quote_link_ids` | L (`retry_quote`, Make the quotation), C (the cron retry; §R.17, T3) |
 | ML40 the count reads the active record instead of the ended one | L |
 | ML41 the own-page check (`fromOwnPage`) removed from a link action | L (ii)–(v) |
 | ML42 a link action relies on the global gate alone (all three checks removed) | L (i) |
@@ -2960,6 +3008,12 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML80 `retry_quote`'s gated path judges the API guard's record instead of the fresh one (§R.16) | C (admin, at `retry_quote`) |
 | ML81 the guard records more than `quote_found_in_ucrm` (a P1, a `quote_refused_text`) when it finds a quotation (F-10) | C (the guard) |
 | ML82 the claim's removal unsets a claim it did not take, so a press answered `claimed` frees the first request's claim (F-9) | C (the claim's removal: a press answered `claimed`) |
+| ML83a–ML83c a Throwable after the POST answered as "no quotation": the step-5 write let through, and the button's and `retry_quote`'s old texts (§R.17) | C (C22) |
+| ML-R6 the link save reads uCRM with the quoting-organization setting invalid (§R.17, G2) | L (L-R6) |
+| ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
+| MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
+| ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
+| MC9b–MC9c C9's unmarked half (§R.17, T7); MI11 SAFETY.md's entry not describing D14 (§R.17, G3) | C (C9); I (I6b) |
 
 No copy removes `CustomerSession::crossSite()` alone: with `fromOwnPage` present it would survive, and a weakened copy
 that cannot be caught proves nothing.
@@ -3465,3 +3519,65 @@ other decision has at least one: ML53, ML56 and ML64–ML82 (§R.9.3).
 - **Three §R.15 lines are marked**, as §R.13's and §R.14's are: the claim's 300 s (F-9), the button beside a found
   quotation (F-10), and `retry_quote` through `postQuote`, whose `quote_error` difference F-10 removes. §R.15's E-1
   line carried §R.4.2's misplaced cross-reference, and is corrected with it.
+
+### R.17 What the build's review changed
+
+The build on `quote-102-d14` (`220c4480` and its tests, to `38991cbb`) was reviewed through five lenses: money, the
+gate and South Sudan, the screens, security, and the tests. Each finding was verified adversarially before it was
+fixed. **Fourteen were confirmed and five refuted.** Each confirmed one is fixed in its own commit, with a test that
+fails without the fix and a weakened copy that the test catches (`38991cbb..` on `quote-102-d14`). One line each.
+
+**Confirmed, and fixed:**
+- **D14-R8-INACTIVE-KIT** (major, money). A kit row deactivated with its link to the installation's product left in
+  force was priced beside the installation, so a "DishNet installs" sale holding it was quoted with the installation
+  twice — through a retry of a stored cart, Make the quotation, the cron retry, or marked lines. The kit half of rule 8
+  now applies at use to every kit row (§R.3.1 rule 8, §R.4.1, §R.6 step 7). Tests A32 and C28; copy ML37b.
+- **D14-MQ-THROW-AFTER-POST** (minor). A Throwable after `postQuote`'s POST had made the quotation was answered "No
+  quotation was made — try again". Step 5's write is now in its own try, and the two Throwable texts and their log
+  lines no longer say that none exists (§R.4.8). Test C22; copies ML83a–ML83c.
+- **G2** (minor). With the gate on and the quoting-organization setting invalid, every link save refused with a false
+  "changed while it was being linked … try again". It now refuses first, naming the setting (§R.1.4). Test L-R6; copy
+  ML-R6.
+- **G3** (minor). The release's `SAFETY.md` entry still described matching by name. It is rewritten for D14. Test I6b,
+  with 5.18.102's first cut as its control; copy MI11.
+- **D14-UI-1** (minor). Send Quotation told a lead whose plan two rows share that no plan is spelled like it. It now
+  names the cause (§R.4.5). Test F7; copies ML-UI1a and ML-UI1b.
+- **D14-UI-2** (minor). Send Quotation's "not priced" alert ended "fix the product in uCRM" after a link reason that
+  names another remedy (§R.4.1). Test F5; copy MF-alert.
+- **D14-UI-3** (minor). The KYC form's "DishNet installs" card showed the installation's reason only as a tooltip,
+  which a phone never shows (§R.5). Test H10; copy MH-UI3.
+- **D14-UI-4** (minor). The Orders card drew the found-quotation line above "No quotation was made: … an admin makes it
+  from the Orders card" (§R.4.8). Test C17; copy ML-UI4.
+- **D14-UI-5** (minor). The KYC form's default plan and kit were chosen by matching uCRM's names, and could fall on an
+  unpriced row. They are chosen by the row's own name (§R.5). Browser block 10 and H13; copies MH-UI5a–MH-UI5c.
+- **T1** (major, tests). The "gate off never opens the store" check did not run the KYC submission, the retries or
+  Send Quotation. L19b does (§R.9.1 L); copies ML19b–ML19g.
+- **T2** (major, tests). No test showed that the Hardware screen's picker pre-selects nothing. L14 does (§R.9.1 L);
+  two ML17 copies on `hardware.php`.
+- **T3** (major, tests). The cron retry's `quote_link_ids` write was untested. C26 tests it (§R.9.1 C); copy ML39 (C).
+- **T6** (minor, tests). L19 did not assert that its gate-off posts reached their handlers. It does (§R.9.1 L); copies
+  ML19h and ML19i.
+- **T7** (minor, tests). C9's "without the marker it stays unpriced" half was untested. It is (§R.9.1 C); copies MC9b
+  and MC9c.
+
+**Refuted as defects of this change, with the reason the verification gave:**
+- **SEC-D14-1**, Make the quotation and `retry_quote`'s gated path logging uCRM's whole quote answer (the staff's
+  notes with the salesperson's name, item labels, prices). The mechanics hold: `postQuote` logs the answer. But every
+  KYC quotation already logs it through that same line, in 5.18.101 (live) and before D14, and §R chose one
+  implementation (F-1, F-10). D14 adds two callers of an existing log line with the same kind of data. **Recorded as
+  pre-existing, not changed by 5.18.102**, for a later release.
+- **SEC-D14-2**, the shared path reachable cross-site by a GET to `retry_quote`, with no own-page check. The
+  reachability holds: the session cookie is `SameSite=None` and the API path checks who is signed in, not where the
+  request came from. But 5.18.101's `retry_quote` already made a quotation the same way, as does every state-changing
+  GET admin action in `api_cron_debug.php`; D14 narrows it, adding R-M4's guard, the claim and the fresh admin re-read.
+  **Recorded as a pre-existing exposure of the API guard**, for a later release.
+- **G1**, `P1_UNLINKED`'s "Do not make it by hand" stored where gate-off code draws it: §R.4.1 stores it there on
+  purpose, the gate-off card must stay 5.18.101's byte for byte (§R.4.8, §R.8), and §R.7.4 records the consequence in
+  the rollback note.
+- **T4**, copies split per section: deliberate and documented in each copy file; the runner requires every section a
+  copy names to fail, so each half is judged where §R.9.3 places it, and no coverage is lost.
+- **T5**, section C's router standing without the global CSRF gate: deliberate (§R.4.8 step 3, "made by the handler
+  itself and never left to the global gate"); in production the global gate refuses the same two posts first.
+
+**Also found while fixing, and recorded:** T6's proposed copy names ML19b and ML19c were already T1's, so T6's are
+ML19h and ML19i. The two Throwable log lines were reworded with their texts, and ML76's anchor with them.
