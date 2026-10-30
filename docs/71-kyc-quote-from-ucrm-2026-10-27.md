@@ -2581,6 +2581,114 @@ the release, or a rule of this design.
     `QLG1_APP_MAX`. One with P1 planted between stage A and the code copy has a higher id, and the correct script
     counts it too. *Fix:* state the fixture's timing in MD8's scenario.
 
+#### R.7.8 The derivation (new)
+
+The D14 deploy script is **derived**, not edited by hand. Four part modules apply asserted edits to
+`scripts/deploy-5.18.102.sh` as it stands at `661bd5c7`: A (the probes, the offer file, QL-G1/QL-CA1/QL-LK1's readings),
+B (the verdicts, the sheet, the state file), C (the operator's texts, §R.7.5) and E (three texts outside the other
+regions). Every edit names its anchor and how often it must occur; after the last part, every new text is checked present
+and every superseded text absent, then `bash -n` runs. Nothing is written unless all of it passes. The pins (the release
+commit, the four lists, the added/changed counts, QL-RB1's and QL-RB3's marks) are left to a separate re-pin tool, which
+recomputes them from Git at the re-cut commit and refuses a mark that reads 0 there (a control that can never fire). The
+decisions below settle §R.7.7 and the places where the script at `661bd5c7`, or the release, disagree with this design.
+The script's comments cite them as "D14 derivation M-n".
+
+**The key and what `--after-only` compares (M-1, §R.7.7 item 3).** QL-CA1's key lives in `ql-key-<version>` beside the
+state file, mode 0600, one line, outside the `state-*.env*` names, and kept with the state file's `.prev-<time>` copy. The
+per-item hashes are in the state file. D-R3's "never stored" and the script's three texts that say it now read "kept in a
+file of mode 0600 beside the state file, never printed". `--after-only` compares item by item and reports the comparison
+as a note with its direction; it never fails on it.
+
+**Rule 8 in QL-CA1 (M-2, §R.7.7 item 4).** The changed records are the ids missing from stage A's set and the stage-A
+active records now ended. Their products, old and new, form a set P. Every item of a changed record is left out, and,
+when any changed record is a kit's or the installation's, so are the installation and every offered kit whose in-force
+product is in P. MD13 is its copy.
+
+**Classification (M-3).** The release gives every refusal a fixed `why` code, and the script classifies by it. The text
+is then checked against that code's exact template with the row's shown name: `Installation` for the installation (its
+row subject, not `INSTALL_NAME`), and, for rule 8 on the installation, the clashing kit's plain title or "A hardware
+item". `bad` has its six texts. An unknown code, or a text that matches no template, is `other`, a NO-GO. The classifier
+never reads a name to decide a class.
+
+**Candidates (M-4).** The sheet's "could be linked" hint uses the release's own functions: a resolver with no links over
+the catalogue already read, plan pairs only where both `planKey`s are equal and non-empty, and hardware through a stand-in
+non-Fiber row. A kind is refused only when the form offers a row of it (plans: an offered non-Fiber plan; hardware:
+always, since the installation is always offered).
+
+**The offer file (M-5, §R.7.7 item 1).** Plans and kits are carried in their stored shape, values raw, nulls kept,
+absent fields absent. `$ql_row`'s reshape is not used for them. MD12 is its copy.
+
+**Loading (M-6, §R.7.7 item 2).** The local reading `require_once`s the pin's `lib/UcrmQuoteLinks.php` by path, right
+after the store classes. The local and remote readings are separate processes on separate copies, so what is the same is
+the file's bytes, not one loaded class. With the gate on and no such file, the reading reports `nolinks`, refused as a
+missing resolver is.
+
+**QL-CA3 (M-7, §R.7.7 item 7).** The fixed id `1` for both link actions, in both modes. The anonymous answer is the
+gate's, given before any tab code runs.
+
+**The organization reads (M-8).** Made only when the catalogue read succeeded, by the plugin's client and the token
+client (not the debug path), after the counted requests. They are counted as GETs, each path checked once, and never a
+NO-GO by themselves. MD9 is its copy.
+
+**"Your steps" (M-9, §R.7.7 item 8).** Steps 2, 4, 7 and 8 in ascending order, then the Taxable line, "after the deploy"
+and the agents' line.
+
+**Two active records for one item (M-10).** A note at QL-G1, a FAIL at QL-LK1, and at QL-CA1 compared like any item.
+
+**MD3 (M-11, §R.7.7 item 5), changed from the recommendation.** The recommendation was to drop the time-zone runs. They
+are kept, and the scenario also asserts that no `disagree` note appears. In a sandbox running in UTC, `strtotime()` on
+`linked_at` agrees with `linked_at_ts`, so without the zone runs the weakened copy changes nothing observable and could not
+be caught.
+
+**QL-CA1's own text (M-12).** The counts line and one pointer to the summary. The agents' text appears once, in the
+summary.
+
+**The window (M-13).** The application maximum is read from its file, never from the probe's output. The window's ids go
+to the 0600 sheet. A state file without `QLG1_APP_MAX` is said as "not told".
+
+**`--accept-unpriced` with `--after-only` (M-14, §R.7.7 item 9).** The option's guard accepts it with `--after-only` as
+well as with a deploy. QL-LK1's FAIL names the flag in words and prints the `--after-only` command with it, alone on its
+line: it is read-only, so printing it is safe.
+
+**R19 and QL-LK1 (M-15).** The summary's "check it" reads: once every offered item is linked (step 7), at least 20 minutes
+after the copy. It says that an earlier `--after-only` fails QL-LK1 by design.
+
+**QL-RB3's proof (M-16).** A marker row for each changed file that names the link class or its store at the pin (counts
+filled by the re-pin), plus a sweep of every file the previous release lists, as installed. The pin's
+`lib/UcrmQuoteLines.php` is the sweep's control, because it names both.
+
+**The import-tool hint (M-17).** Given for a kit row whose title's `planKey` equals that of `INSTALL_NAME`, or that of
+the installation's in-force product.
+
+**The rehearsal's link writer (M-18).** A helper that calls the installed `UcrmQuoteLinks::set()` (before the deploy, the
+pin's) with a sandbox configuration, as the store's user, plus a raw planter for corrupt states (two active records, a
+replaced row).
+
+**QL-N7 (M-19).** It stays a note and never counts toward a NO-GO. Every package is judged as `package`:
+`planLine($row, 'package')`, never the default kind, which would judge a plan link under the package's id.
+
+**The verdict's fields (M-20).** `unpriced` is kept and `unlinked` added, so the checks that read the old field keep
+working.
+
+**Copies (R-17, R-18).** §R.7.7's items 1, 4 and 6 are MD12, MD13 and MD14 (§R.9.3). MD4 and MD5 are not copies of the
+deploy script. The rehearsal's dashboard is a stand-in that answers every request with 302, so MD4 is a trigger in that
+stand-in; MD5 is an edit of the sandbox's installed `post_sync.php`. Each scenario names the other checks expected to fail
+beside QL-CA3, and asserts QL-CA3's own line among the failures.
+
+**Recorded at the derivation, from the review rounds (§R.17.6, §R.17.7).**
+
+- `qlunconf` counts the applications that carry `quote_unconfirmed_at` **or** a claim (`quote_make_claim_ts`) and no
+  quotation. A press that died after its POST leaves only the claim until a later press turns it into the key.
+- QL-RB1's row for `includes/api/api_cron_debug.php` marks the call `makeQuotation(`. Under D14 the debug retry reaches
+  the resolver through `KycService::makeQuotation()`, so that file names `UcrmQuoteLines` nowhere, and a mark on the class
+  name would read 0 at the release.
+- Part E appends to three texts: BR1's comment names the added files without a count, the link class among them;
+  `--rollback`'s stage-A note, read before ROLLBACK is typed, and V1's automatic rollback's stop each say that the links
+  stay in the store unread by 5.18.101, that a registration made since the copy is quoted by hand after checking uCRM, and
+  that an application 5.18.102 could not confirm may already have a quotation there (§R.7.4, §R.17.3, §R.17.6). Each
+  appends to an existing line, so no check's count changes.
+- The release delta is 31 added and 38 changed files (69). The texts that said 21, 38 and 59 take the re-pin's counts.
+
 ### R.8 South Sudan, and Uganda with the gate off (decision 8)
 
 **Byte for byte 5.18.101's.** These are emitted, handled or read **only where `QuoteOrganization::setting(...)['on']`**:
@@ -3143,17 +3251,20 @@ caught:
 |---|---|
 | MD1 the script keeps one old remedy, "row's name in the plugin" (§R.7.5) | the negative check |
 | MD2 QL-CA1 keeps the strict comparison over a link made while the deploy runs (§R.7.2) | a link planted between stage B and `qo_after`'s copy: the run must PASS, with the note |
-| MD3 "made since the copy" runs `strtotime()` on `linked_at` (§R.7.3) | a link written in Africa/Kampala and judged in UTC and in Etc/GMT-5, with `COPY_AT` one hour after it and then one hour before. The check must read it as a leftover in the first case and as made since the copy in the second, in both zones; the copy gets the first case wrong under UTC. Stale under D-5: see §R.7.7 item 5 |
-| MD4 the dashboard's sign-in gate broken (`public.php:1064`) | QL-CA3 (1), expected to fail alongside V12 and Q-CA5 |
-| MD5 `requireAdmin` removed from one of the three handlers QL-CA3 reads (the two link actions and `kyc_make_quote`) | QL-CA3 (2), expected to fail alongside R1 |
+| MD3 "made since the copy" runs `strtotime()` on `linked_at` (§R.7.3) | a link written in Africa/Kampala and judged in UTC and in Etc/GMT-5, with `COPY_AT` one hour after it and then one hour before. The check must read it as a leftover in the first case and as made since the copy in the second, in both zones; the copy gets the first case wrong under UTC. Under D-5 the scenario also asserts that no `disagree` note appears (§R.7.7 item 5, §R.7.8 M-11) |
+| MD4 the dashboard's sign-in gate broken (`public.php:1064`); a trigger in the rehearsal's stand-in dashboard, not a script copy (§R.7.8) | QL-CA3 (1), expected to fail alongside V12, BA4, CA4 and Q-CA5, with QL-CA3's own line among the failures |
+| MD5 `requireAdmin` removed from one of the three handlers QL-CA3 reads (the two link actions and `kyc_make_quote`); an edit of the sandbox's installed file, not a script copy (§R.7.8) | QL-CA3 (2), expected to fail alongside R1 and Q-CA1, with QL-CA3's own line among the failures |
 | MD6 the offer carries the link records without `row_stamp` (was ML47) | the leftover-link scenario, run once with the leftover's row unchanged and once with it replaced after the link: QL-G1's verdict must follow the stamp both times; the copy gets one of them wrong |
 | MD7 stage A reads the store through the code root it copies (`ICODE_A`), not the pin's class (§R.7.1) | the leftover-link scenario: QL-G1 must judge the leftover, and QL-CA1 must not report it "linked since stage A"; the copy misses it at QL-G1 and reports it so |
 | MD8 the window's Make-the-quotation count chosen by `submitted_at` instead of by `QLG1_APP_MAX` (§R.7.3) | an application saved in Africa/Kampala less than three hours before the copy: never counted; the copy, reading the string in UTC, counts it. Its fixture's timing: §R.7.7 item 10 |
 | MD9 the raw organization GETs made between `$n0` and `$asked` (§R.7.1) | every scenario that reads the catalogue: QL-G1 must pass its path check; the copy is refused by it |
 | MD10 the Make-the-quotation count (§R.7.3) includes app-origin registrations, ones stored without `quote_sale_entry`, or ones carrying `quote_found_in_ucrm` | a window scenario with one of each beside a web one: the count is 1, and the others are listed apart |
 | MD11 QL-N3's D11 count keeps the rule by the installation answer (§R.7.1, E-1) | a stage-A book with a pending Shifting Connection and a pending Fiber sale, both saved before the deploy: QL-N3 counts both, by P1 and P2; the copy leaves the Shifting Connection out |
+| MD12 the offer keeps `$ql_row`'s reshape for plans and kits (§R.7.7 item 1) | a leftover installation link to an offered kit's product: QL-G1's verdict must be rule 8's; the copy's is not |
+| MD13 QL-CA1 without rule 8's closure (§R.7.7 item 4) | a leftover installation link, and a kit linked during the run to the same product: QL-CA1 must not fail; the copy fails it |
+| MD14 QL-LK1 judges with no kit rows, `fromRecords($offer['links'], [])` (§R.7.7 item 6) | the installation linked to an offered kit's product: QL-LK1 must report it broken by rule 8; the copy reports it resolves |
 
-Copies proposed for §R.7.7's items 1 and 6 are decided with those items.
+§R.7.7's items 1, 4 and 6 are MD12, MD13 and MD14 (§R.7.8).
 
 ### R.10 What stays exactly as built (decision 10)
 
