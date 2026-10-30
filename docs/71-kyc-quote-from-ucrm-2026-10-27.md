@@ -1832,12 +1832,12 @@ linked. It needs no `crm_auth_token`, and no list outside the card has to name t
   (amended by §R.17, D14-UI-4).
 
 After an `error` answer or a Throwable from `postQuote` (step 4), while `quote_unconfirmed_at` is recorded and
-`quote_created` is empty, the card draws *"⚠ uCRM did not confirm the last quotation"* and *"It may have been made."*,
+`quote_created` is empty, the card draws *"⚠ Making the last quotation did not finish"* and *"It may have been made in uCRM."*,
 in place of the refusal text, for admins and agents alike. Where the button is drawn (an admin, and the five
 conditions) it goes on *"Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second
 one."*, and the button stays. Elsewhere — an agent, or an application the button does not apply to, which `retry_quote`
 can reach — it goes on *"Do not make one by hand in uCRM before an admin has looked there for it."* Only with the gate
-on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2, and §R.17.3).
+on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2, §R.17.3 and §R.17.4, CK5-B2).
 
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
@@ -1934,7 +1934,9 @@ In order:
    refusal of the company check is recorded as `postQuote` records it and answers `refused`; a failed POST records
    `quote_error` and answers `error`. The method then records `quote_unconfirmed_at`, since a POST whose answer was
    lost (a timeout, a 5xx) reaches `error` after uCRM made the quotation (§R.17.2). A Throwable from `postQuote` records
-   it too, in its own try, and then goes on to the caller, since it may come after the POST (§R.17.3);
+   it too, in its own try, and then goes on to the caller, since it may come after the POST (§R.17.3). Both writes are
+   one helper, `recordUnconfirmed()`: a write that fails is logged with ids only and never answers in place of the
+   answer or the Throwable it follows (§R.17.4);
 5. **once `postQuote` answers `created`**, one write on the application:
    - `quote_link_ids`, the set the lines came from (§R.4.4);
    - `quote_error` null, cleared as `retry_quote` clears it (`api_cron_debug.php:1115`; F-10);
@@ -2699,18 +2701,25 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     draws its line and not the refusal text (C17, D14-UI-4);
   - **added by §R.17.1 and §R.17.2:** uCRM makes the quotation and its answer is lost (a 504): at the button and at
     `retry_quote` the `error` answer says "did not confirm … it may have been made", never "did not make"; the card
-    says uCRM "did not confirm the last quotation", never "No quotation was made", and still draws the button (the
+    says "Making the last quotation did not finish" (§R.17.4's heading), never "No quotation was made", and still draws the button (the
     control: before the press it said "No quotation was made"); a second press is answered `found`, and the card then
     draws the quotation found (C22 (c)). uCRM refuses the POST: `quote_unconfirmed_at` is recorded, an unreadable list
     keeps it, and a press whose guard finds none removes the key, then makes the quotation or records its own refusal,
     which the card shows (C22 (d));
   - **added by §R.17.3:** a Throwable inside `postQuote` after its POST records the key, and the card says "did not
-    confirm" (C22 (b)); a company-check refusal records none (C19); an agent's card says "did not confirm" with a
+    finish" (C22 (b)); a company-check refusal records none (C19); an agent's card says "did not finish" with a
     sentence that names no button, and an admin's names Make the quotation; a key beside `quote_created` draws no box;
     a press on one application removes only its own key; `retry_quote`'s `error` on an application the button does
     not apply to draws the box with no button and a sentence naming none; and with the key written while `retry_quote`
     waited at its company check (the proxy's `hold_client`), its guard finding none still removes it, as when the key
     was there at its read (C22 (d)).
+  - **added by §R.17.4:** an `\Error` after the POST records the key as an `\Exception` does, and the catch's own key
+    write failing is logged with ids only while `postQuote`'s Throwable goes on (C22 (b)); the `error` answer's own
+    key write failing leaves the answer `error`, logged, and a second press finds the quotation; the `found` answer
+    leaves the key alone (C22 (c)); a key held from an earlier press, then a lost answer or a Throwable after the
+    POST, is recorded afresh; a failed removal of the key stops the press with no POST and nothing changed (C22 (d)).
+    Every card expectation needs the heading and its first sentence, and the card drawn to its bottom row; C19's
+    `retry_quote` half is labelled as `retry_quote`'s own refusal, which comes first.
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -2796,7 +2805,7 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
   - G8's byte-for-byte comparisons of the gate-off trees extend to the Plans, Hardware and Product Mapping pages,
     rendered with a link store present, and to the Orders page, rendered with applications carrying
     `quote_sale_entry` `web` and P1, on which no Make the quotation is drawn, and with one carrying
-    `quote_unconfirmed_at` (§R.17.2; the control: on Uganda that card says "did not confirm").
+    `quote_unconfirmed_at` (§R.17.2; the control: on Uganda that card says "did not finish", §R.17.4).
 - **H:**
   - a linked row is drawn with uCRM's name in the text, `data-name` and `data-title`; an unlinked row with the plugin's
     name and the reason;
@@ -3062,8 +3071,9 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML19j–ML19k L19b's Send Quotation stops after its gate; `retry_quote` answers before its gate-off path runs (§R.17.1) | L (L19b) |
 | ML84a–ML84b the `error` answer's old texts, at the button and in the method (§R.17.1) | C (C22 (c)) |
 | ML85a–ML85e the card after an `error` answer: the box not drawn, `quote_unconfirmed_at` not recorded, never removed, removed before the guard reads uCRM, set to null (§R.17.2) | C (C22 (c), (d)) |
-| MG26 the "did not confirm" box drawn with the gate off (§R.17.2) | G (G8) |
+| MG26 the "did not finish" box drawn with the gate off, its sentence calling nothing (§R.17.2; re-anchored by §R.17.4, CK5-T6) | G (G8) |
 | ML85f–ML85l the box beside `quote_created`, for admins only, every application's key removed, the key on a refusal, a Throwable from `postQuote` recording none, the sentence naming a button not drawn, the removal by the caller's record (§R.17.3; ML85b–ML85d re-anchored) | C (C19, C22 (b), (d)) |
+| ML86a–ML86k the `error` answer's key write unguarded, the old heading, the sentence dropped, the page dying beside `quote_created`, the key's removal swallowed, `recordUnconfirmed()` without its try, the key removed on `found`, the catch taking `\Exception`, a failed write not logged, an earlier stamp kept by the caller's record at either write (§R.17.4; ML85b, ML85i, ML85j re-anchored) | C (C22 (b), (c), (d)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
 | ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
@@ -3695,3 +3705,41 @@ A check of round 3's commit (`1c4b8306`) confirmed five more, all minor; none co
 The router's header now says which lock the `second_lock` fault reaches: the claim's removal where the guard answers
 first, else the key's removal. The three round-3 copies whose anchors round 4 moved (ML85b–ML85d) were re-anchored and
 are caught as before.
+
+#### R.17.4 The check of round 4 (round 5)
+
+A check of rounds 3 and 4 (`1c4b8306`, `53f9e42b`), by a behaviour lens and then a tests lens, confirmed nine more,
+all minor; none could duplicate a quotation. Each was shown by a run. Fixed in `ec11b208`, each with a test that
+fails without it and a weakened copy:
+- **CK5-B1.** The `error` answer's own write of `quote_unconfirmed_at` sat in no try. A store failure there turned
+  the answer into the Throwable's, recorded no key and logged nothing, so the card fell back to the stored refusal
+  while uCRM may hold the quotation. Both writes of the key are now one helper, `recordUnconfirmed()`: a failed
+  write is logged with ids only, and the answer stays what it was. C22 (c); copies ML86a, ML86f, ML86i.
+- **CK5-B2.** After a Throwable that followed `postQuote`'s read-back (its `quote_ref` write failing, say), the card
+  said "uCRM did not confirm the last quotation" beside the read-back's "The quotation uCRM made totals …". uCRM
+  had confirmed it; what did not finish was the record here. The heading is now *"⚠ Making the last quotation did
+  not finish"* and the sentence *"It may have been made in uCRM."* — true after a lost answer, an answer with no
+  id, a Throwable before the POST, and one after the read-back. The flashes are unchanged (§R.4.8). C22, G8; copy
+  ML86b.
+- **CK5-B3.** Nothing pinned that a failed removal of the key stops the press. Swallowed, the press went on and
+  recorded a fresh refusal under the box, which hides it. C22 (d), with `second_lock` reaching the key's removal;
+  copy ML86e. Nor that the `found` answer records `quote_found_in_ucrm` and nothing else, leaving the key (the
+  found line outranks it on the card). C22 (c); copy ML86g.
+- **CK5-T1.** No test pressed an application already holding the key whose answer went unconfirmed again. A "keep
+  the first stamp" edit that reads the caller's `$app` lost the key, since the guard had just removed it from the
+  row. C22 (d), for a lost answer and for a Throwable after the POST; copies ML86j, ML86k.
+- **CK5-T2.** A card that died drew no box either, so "no box, no button" passed on a fatal page. Every card
+  expectation now also needs the card drawn to its bottom row. Copy ML86d.
+- **CK5-T3.** "It may have been made" was pinned nowhere. The card's expectation needs the heading and the
+  sentence. Copy ML86c.
+- **CK5-T4.** Every planted fault was a `RuntimeException`, so the catch's `\Throwable` was not pinned. The router's
+  `after_post_error` throws an `\Error`. C22 (b); copy ML86h.
+- **CK5-T5.** The log line for a failed key write was pinned nowhere. The router's `after_post` takes several keys,
+  and C22 (b) fails the key write too and reads the log. Copies ML86f, ML86i.
+- **CK5-T6.** Two checks did not show what their labels said. C19's `retry_quote` half held whatever the method
+  did, since `retry_quote`'s own company check refuses first; it is now labelled as that refusal. MG26 was caught by
+  a fatal error, not by the box: its gate-off page called `KycService`, which is loaded only with the gate on. It now
+  makes the sentence call nothing too, and G8 sees the box itself.
+
+ML85b, ML85i and ML85j were re-anchored (the helper's two calls; C19's new label) and are caught as before. Section C
+has 320 assertions (303 before); the whole test, 1255 passed, 0 failed; weakened copies 317 (306 before).
