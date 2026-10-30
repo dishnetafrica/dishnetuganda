@@ -1846,13 +1846,14 @@ box above or the refusal text, for admins and agents alike: the press removes th
 card holds may be out of date. The found line still outranks it, and a made quotation draws no box. Every answer and
 every Throwable removes its claim, so a claim still there once it is older than `QUOTE_CLAIM_SECONDS` is a request
 that died — after its POST, perhaps — or a removal that failed (logged): the card then draws the "did not finish"
-box above, never the refusal text, unless a refusal was recorded at or after the claim (`claimLeftUnsettled()`):
+box above, never the refusal text, unless a refusal was recorded at or after the claim (`claimLeftUnsettled()`,
+which reads the refusal's `quote_refused_ts`, an epoch, never `quote_refused_at`'s local time; amended by §R.17.8):
 that is a refusal whose removal failed, and the refusal is drawn. A removal that failed after a refusal draws the
 in-flight box over it until the claim expires; it says not to make one by hand, and a press meanwhile is answered
 `claimed`. The next press that takes an expired claim no refusal followed over records the key first, so a press
 that cannot settle it ('unreadable', a Throwable) never loses the marker; only a guard that finds no quotation
-removes the key. Only with the gate on (amended by §R.17.5, CK6-F1; §R.17.6, CK7-F1 and CK7-F3; and §R.17.7, CK8-F1
-and CK8-F2).
+removes the key. Only with the gate on (amended by §R.17.5, CK6-F1; §R.17.6, CK7-F1 and CK7-F3; §R.17.7, CK8-F1
+and CK8-F2; and §R.17.8, CK9-B1).
 
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
@@ -2865,7 +2866,15 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     that cannot settle it does not turn the claim into the key; the control, the refusal recorded before the claim.
     `retry_quote` that died after its POST on an application the button does not apply to: past the claim's age both
     cards say "did not finish" with the sentence that names no button. Each card's second sentence is matched whole
-    (C22 (f)).
+    (C22 (f); *amended by §R.17.8: until then the match was a substring, so a sentence added after it passed*).
+  - **added by §R.17.8:** a refusal recorded before the claim — 1 s before, two days before, or 30 minutes before
+    with its local time written an hour ahead of the reader's zone — leaves "did not finish", and a press that
+    cannot read keeps the key (C22 (g)). P1 and R2 refusals recorded after the claim hold as P2's does, and each
+    refusal's text is matched whole on both cards (C22 (f)). The press's own two refusals, its lines and the
+    company check, record `quote_refused_ts`; with the claim's removal failing (the router's `lock_n` 3), the
+    refusal holds once the claim expires (C22 (g)). A claim 7200 s old, and a press whose every `updateOne` of the
+    key fails, still turn into the key; `retry_quote` that cannot read, after one that died on an application with
+    no refusal at all, does too (C22 (f)). Gate off, an expired claim draws f2055baf's page (G8).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -3224,6 +3233,8 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML87a–ML87g no box for a press in flight, the box for any claim however old, its sentence and the admin's losing "Do not make one by hand in uCRM:", a card stopping before its bottom row, the failed key write's exception thrown in place of `postQuote`'s, `recordUnconfirmed()` taking `\Exception` (§R.17.5) | C (C22 (b)–(e)) |
 | MG27 the "press in flight" box drawn with the gate off (§R.17.5) | G (G8) |
 | ML89a–ML89e an expired claim never turned into the key, a refusal after the claim ignored, the stale-claim half for P1 only, the admin's sentence for any stale claim, an agent given the admin's sentence (§R.17.7; ML85a, ML85f, ML86d and ML88a re-anchored) | C (C22 (f)) |
+| ML90a–ML90m the claim compared with `quote_refused_at` in the reader's zone, neither refusal writer recording `quote_refused_ts`, a refusal up to 40 minutes or more than a day before the claim counted as settling it, only a P2 refusal settling it, the key written by `recordUnconfirmed()` after the claim, no conversion for a claim older than twice `QUOTE_CLAIM_SECONDS` or where no refusal is recorded, the refusal's text replaced where a claim is recorded, a sentence added after either card's (§R.17.8; ML89b re-anchored) | C (C22 (f), (g)) |
+| MG28 the "did not finish" box drawn with the gate off for an expired claim (§R.17.8) | G (G8) |
 | ML88a–ML88e a claim past `QUOTE_CLAIM_SECONDS` not read as "did not finish", the in-flight box yielding to the key, for 700 s instead of `QUOTE_CLAIM_SECONDS`, the found line yielding to a live claim, the in-flight box beside a made quotation (§R.17.6; ML85a, ML85f, ML85g, ML86d, ML87c and MG26 re-anchored) | C (C22 (e), (f)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
@@ -3974,3 +3985,29 @@ ones; each was shown by a run. Fixed in `3242ad05`, each with a test that fails 
 
 ML85a, ML85f, ML86d and ML88a were re-anchored on the changed condition and are caught as before. Section C has
 355 assertions and G 201; the whole test, 1294 passed, 0 failed; weakened copies 335 (330 before).
+
+#### R.17.8 The check of round 8 (round 9)
+
+A check of round 8's commit (`3242ad05`), behaviour and tests, was cut off by a container restart and run again from
+its leftovers, each verdict re-run. It confirmed one behaviour finding and nine test gaps, each shown by a run; two of
+its weakened copies (an existing key overwritten, the key stamped now) were shown harmless, because the key's value is
+never read. Fixed in `37853c8e`, each with a test that fails without it and a weakened copy:
+- **CK9-B1.** `claimLeftUnsettled()` compared the refusal's `quote_refused_at`, a local time, with the claim's epoch,
+  reading the string in the reader's zone. A process in another zone (a changed `timezone` setting, or one that cannot
+  read `kyc_config.json` and falls back to the profile's default) shifts it: a refusal 30 minutes before the claim of a
+  press that died read as after it, the card drew the refusal's "make the quotation in uCRM", and the next press that
+  could not read lost the marker, while uCRM held the quotation. The two refusal writers a press reaches
+  (`recordNoQuote`, `postQuote`'s company check) now also record `quote_refused_ts`, the same moment as an epoch, and
+  the comparison reads only it. A refusal with no epoch (recorded before 5.18.102, or by a writer no press reaches)
+  counts as before the claim, so the card errs to "did not finish". C22 (g); copies ML90a–ML90c. `postQuote`'s line
+  sits in a 5.18.99 hunk, so it is declared in `test_quote_company`'s `QC_I4_102_AMENDED` with its reason, and I4
+  still holds every other 5.18.99 line verbatim (291 passed, 0 failed; its copies 83 passed, 0 failed).
+- **CK9-T1–T8.** The tests did not pin: a refusal shortly or days before the claim (the suite's sat 2699 s before it);
+  a P1 or R2 refusal after the claim (only P2's); the refusal's text, which could be replaced wherever a claim was
+  recorded; either card's second sentence whole (a substring match, so a sentence telling the reader to make it by hand
+  could be added); a claim long past `QUOTE_CLAIM_SECONDS`; the key written under the claim's lock rather than by a
+  later write that may fail; a claim on an application with no refusal at all; and, gate off, an expired claim. Each
+  is a case now (C22 (f), (g); G8). Copies ML90d–ML90m, MG28.
+
+ML89b was re-anchored on the new comparison and is caught as before. Section C has 388 assertions and G
+205; the whole test, 1331 passed, 0 failed; weakened copies 349 (335 before).
