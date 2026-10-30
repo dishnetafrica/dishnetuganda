@@ -1839,12 +1839,16 @@ one."*, and the button stays. Elsewhere — an agent, or an application the butt
 can reach — it goes on *"Do not make one by hand in uCRM before an admin has looked there for it."* Only with the gate
 on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2, §R.17.3 and §R.17.4, CK5-B2).
 
-While a press is in flight — a claim younger than `QUOTE_CLAIM_SECONDS`, makeQuotation's own rule, and no
-`quote_created` — the card draws *"⏳ Make the quotation was pressed and has not finished"* and *"Do not make one by
-hand in uCRM: wait a few minutes, then open the Orders screen again."* in place of the box above or the refusal text,
-for admins and agents alike: the press removes the key before its POST, and what the card holds may be out of date.
-The found line still outranks it. A claim left by a request that died shows it until the claim expires. Only with the
-gate on (amended by §R.17.5, CK6-F1).
+While a quotation is being made — a claim younger than `QUOTE_CLAIM_SECONDS`, makeQuotation's own rule, taken by
+the button or by `retry_quote`, and no `quote_created` — the card draws *"⏳ Making a quotation for this application
+has not finished"* and *"Do not make one by hand in uCRM: wait, then open the Orders screen again."* in place of the
+box above or the refusal text, for admins and agents alike: the press removes the key before its POST, and what the
+card holds may be out of date. The found line still outranks it, and a made quotation draws no box. Every answer and
+every Throwable removes its claim, so a claim still there once it is older than `QUOTE_CLAIM_SECONDS` is a request
+that died — after its POST, perhaps — or a removal that failed (logged): the card then draws the "did not finish"
+box above, never the refusal text. A removal that failed after a refusal also draws the in-flight box over that
+fresh refusal until the claim expires; it says not to make one by hand, and a press meanwhile is answered `claimed`.
+Only with the gate on (amended by §R.17.5, CK6-F1, and §R.17.6, CK7-F1 and CK7-F3).
 
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
@@ -2735,6 +2739,12 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     answer's key write failing by an `\Error` as by an `\Exception` (C22 (c)). "The card drawn" is counted on the
     card's own bottom-row element, never the stylesheet's rule for it; C19's `retry_quote` half compares the whole
     card.
+  - **added by §R.17.6:** a press that dies after its POST (a fatal error at `postQuote`'s `quote_id` write, the
+    router's `fatal_after_post`): its claim left and no key, the cards say making a quotation has not finished; with
+    the claim past `QUOTE_CLAIM_SECONDS`, "did not finish", never "No quotation was made"; then a press finds the
+    quotation, still one POST (C22 (f)). A claim 901 s old draws "did not finish"; one 870 s old draws the in-flight
+    box while a press is answered `claimed`; the in-flight box outranks the key's box, yields to the found line, and is
+    never drawn beside a made quotation (C22 (e)).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -3092,6 +3102,7 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML86a–ML86k the `error` answer's key write unguarded, the old heading, the sentence dropped, the page dying beside `quote_created`, the key's removal swallowed, `recordUnconfirmed()` without its try, the key removed on `found`, the catch taking `\Exception`, a failed write not logged, an earlier stamp kept by the caller's record at either write (§R.17.4; ML85b, ML85i, ML85j re-anchored) | C (C22 (b), (c), (d)) |
 | ML87a–ML87g no box for a press in flight, the box for any claim however old, its sentence and the admin's losing "Do not make one by hand in uCRM:", a card stopping before its bottom row, the failed key write's exception thrown in place of `postQuote`'s, `recordUnconfirmed()` taking `\Exception` (§R.17.5) | C (C22 (b)–(e)) |
 | MG27 the "press in flight" box drawn with the gate off (§R.17.5) | G (G8) |
+| ML88a–ML88e a claim past `QUOTE_CLAIM_SECONDS` not read as "did not finish", the in-flight box yielding to the key, for 700 s instead of `QUOTE_CLAIM_SECONDS`, the found line yielding to a live claim, the in-flight box beside a made quotation (§R.17.6; ML85a, ML85f, ML85g, ML86d, ML87c and MG26 re-anchored) | C (C22 (e), (f)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
 | ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
@@ -3790,3 +3801,28 @@ test that fails without it and a weakened copy:
   "recorded afresh (a new time), so never lost". C19's `retry_quote` half now compares the whole card.
 
 Section C has 334 assertions and G 201; the whole test, 1273 passed, 0 failed; weakened copies 325 (317 before).
+
+#### R.17.6 The check of round 6 (round 7)
+
+A check of round 6's commit (`949f7fa3`), behaviour and tests in one pass, confirmed one major finding, older than
+round 6, and six minor ones; each was shown by a run. Fixed in `de2b5b74` with tests and weakened copies, except
+CK7-F2, recorded:
+- **CK7-F1 (major).** A press that dies after its POST (a fatal error, a killed worker) runs neither the catch nor
+  the finally: its claim stays, and the key its guard removed is not written again. Once the claim expired the card
+  drew the stored refusal again, whose P1 text says to make the quotation in uCRM, while uCRM held it. Every answer
+  and every Throwable removes its claim, so a claim still there past `QUOTE_CLAIM_SECONDS` now draws the "did not
+  finish" box (§R.4.8). C22 (f), with the router's `fatal_after_post`, and C22 (e)'s 901 s case; copy ML88a. The
+  deploy script's rollback count (`qlunconf`) counts such an application too.
+- **CK7-F2.** A claim whose removal failed (logged) draws the in-flight box with no press running, for up to
+  `QUOTE_CLAIM_SECONDS`, over a fresh refusal. Recorded, not changed: the box says not to make one by hand, a press
+  meanwhile is answered `claimed`, and past that age the "did not finish" box sends an admin to Make the quotation,
+  which settles it (§R.4.8).
+- **CK7-F3.** The heading said "Make the quotation was pressed" also while `retry_quote` held the claim, and "wait a
+  few minutes" understated a wait of up to fifteen. It now reads "⏳ Making a quotation for this application has not
+  finished" and "wait, then open the Orders screen again".
+- **CK7-T4 to CK7-T7.** Four edges of the in-flight box were not pinned: its precedence over the key's box, the age
+  limit between 600 s and 901 s (now 870 s, beside the method's own `claimed`), the found line outranking it, and no
+  box beside a made quotation. C22 (e); copies ML88b–ML88e.
+
+ML85a, ML85f, ML85g, ML86d, ML87c and MG26 were re-anchored on the changed lines and are caught as before. Section C
+has 344 assertions and G 201; the whole test, 1283 passed, 0 failed; weakened copies 330 (325 before).
