@@ -1847,7 +1847,8 @@ card holds may be out of date. The found line still outranks it, and a made quot
 every Throwable removes its claim, so a claim still there once it is older than `QUOTE_CLAIM_SECONDS` is a request
 that died — after its POST, perhaps — or a removal that failed (logged): the card then draws the "did not finish"
 box above, never the refusal text, unless a refusal was recorded at or after the claim (`claimLeftUnsettled()`,
-which reads the refusal's `quote_refused_ts`, an epoch, never `quote_refused_at`'s local time; amended by §R.17.8):
+which reads the refusal's `quote_refused_ts`, an epoch, never `quote_refused_at`'s local time, and a claim is stamped
+after any refusal already recorded; amended by §R.17.8 and §R.17.9):
 that is a refusal whose removal failed, and the refusal is drawn. A removal that failed after a refusal draws the
 in-flight box over it until the claim expires; it says not to make one by hand, and a press meanwhile is answered
 `claimed`. The next press that takes an expired claim no refusal followed over records the key first, so a press
@@ -2875,6 +2876,10 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     refusal holds once the claim expires (C22 (g)). A claim 7200 s old, and a press whose every `updateOne` of the
     key fails, still turn into the key; `retry_quote` that cannot read, after one that died on an application with
     no refusal at all, does too (C22 (f)). Gate off, an expired claim draws f2055baf's page (G8).
+  - **added by §R.17.9:** a refusal recorded in the claim's own second, or 5 s ahead of the clock: the claim is
+    stamped after it, and with both aged the cards say "did not finish"; a press's P2 refusal records its epoch, never
+    before its claim, and with both aged the refusal holds; a refusal 400 days before the claim; each box read to its
+    own close (C22 (g)).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -3235,6 +3240,7 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML89a–ML89e an expired claim never turned into the key, a refusal after the claim ignored, the stale-claim half for P1 only, the admin's sentence for any stale claim, an agent given the admin's sentence (§R.17.7; ML85a, ML85f, ML86d and ML88a re-anchored) | C (C22 (f)) |
 | ML90a–ML90m the claim compared with `quote_refused_at` in the reader's zone, neither refusal writer recording `quote_refused_ts`, a refusal up to 40 minutes or more than a day before the claim counted as settling it, only a P2 refusal settling it, the key written by `recordUnconfirmed()` after the claim, no conversion for a claim older than twice `QUOTE_CLAIM_SECONDS` or where no refusal is recorded, the refusal's text replaced where a claim is recorded, a sentence added after either card's (§R.17.8; ML89b re-anchored) | C (C22 (f), (g)) |
 | MG28 the "did not finish" box drawn with the gate off for an expired claim (§R.17.8) | G (G8) |
+| ML91a–ML91g the claim stamped `time()` whatever refusal is recorded at or after it, a P2 refusal with a stale epoch, the claim a second ahead of the clock, a line added inside the "did not finish" box, the refusal box or the in-flight box, a refusal more than seven days before the claim settling it (§R.17.9) | C (C22 (g), (f)) |
 | ML88a–ML88e a claim past `QUOTE_CLAIM_SECONDS` not read as "did not finish", the in-flight box yielding to the key, for 700 s instead of `QUOTE_CLAIM_SECONDS`, the found line yielding to a live claim, the in-flight box beside a made quotation (§R.17.6; ML85a, ML85f, ML85g, ML86d, ML87c and MG26 re-anchored) | C (C22 (e), (f)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
@@ -4011,3 +4017,23 @@ never read. Fixed in `37853c8e`, each with a test that fails without it and a we
 
 ML89b was re-anchored on the new comparison and is caught as before. Section C has 388 assertions and G
 205; the whole test, 1331 passed, 0 failed; weakened copies 349 (335 before).
+
+#### R.17.9 The check of round 9 (round 10)
+
+A check of round 9's commit (`37853c8e`), behaviour and tests, found nothing major. It confirmed that no press reaches a
+refusal writer without the epoch, that nothing clears a refusal and so no stale epoch can outlive one, and that nothing
+else reads `quote_refused_at` for ordering. It confirmed one minor behaviour finding, not new in round 9, and four test
+gaps, each shown by a run. Fixed in `b1b083ef`, each with a test that fails without it and a weakened copy:
+- **CK10-B1.** A refusal recorded in the same second as a later claim — another request's — or after it, by a clock that
+  stepped back, settled that claim, because one second cannot tell a claim's own refusal from another's. A press that
+  then posted and died left the card on the refusal's "make the quotation in uCRM". `takeQuoteClaim` now stamps the claim
+  one second after any refusal already recorded at or after the present one, and returns that stamp (the claim's removal
+  compares it exactly). C22 (g); copy ML91a.
+- **CK10-T1–T4.** A press's P2 refusal's epoch was not pinned (P1 and R1 were); the lock-fault case aged the claim but
+  not its refusal, so a claim stamped after its own refusal passed; the sentence and refusal-text matchers read only to
+  the first `</div>`, so a line added inside a box passed, as it did for the in-flight box's own reader; and the oldest
+  refusal tested was two days old. Each is a case now (C22 (g); the readers anchored on each box's close). Copies
+  ML91b–ML91g.
+
+Section C has 397 assertions and G 205; the whole test, 1340 passed, 0 failed; weakened copies 356
+(349 before).
