@@ -975,10 +975,12 @@ Five things decide against it anyway:
   writes in one transaction. A link and the end of every active record of the item are therefore one write, and two
   admins cannot leave two active records.
 - **The order of a save. The uCRM read is never inside the lock.**
-  1. **Outside any transaction, first:** the quoting-organization setting, which must be valid (5.18.99 R6; amended
-     by §R.17, G2). Otherwise the save answers *"The company the app quotes under is not set correctly, so nothing
-     was linked. Tell an admin."*, with no uCRM read and no lock. Then §R.3.1 rule 1; rule 2, which reads the row and keeps its id and `row_stamp`;
-     rule 3, the fresh read through `quoteClient`; rules 4–8. Any failure refuses with its reason and writes nothing.
+  1. **Outside any transaction:** §R.3.1 rule 1 (the admin on the fresh record, then the own-page check). Then the
+     quoting-organization setting, which must be valid (5.18.99 R6; amended by §R.17, G2, and §R.17.1, FX-money-2).
+     Otherwise the save answers *"The company the app quotes under is not set correctly, so nothing was linked. Tell
+     an admin."*, with no uCRM read and no lock. A non-admin is still answered 403, and a cross-site post the security
+     flash, never this text. Then rule 2, which reads the row and keeps its id and `row_stamp`; rule 3, the fresh read
+     through `quoteClient`; rules 4–8. Any failure refuses with its reason and writes nothing.
   2. **Then `UcrmQuoteLinks::set()` calls `withLock('ucrm_quote_links.json', …)`.** The callback does no network I/O and
      calls no uCRM client. It makes only store checks:
      - the row still exists in its own table with the same id and `row_stamp`, and is not Fiber. Otherwise it refuses
@@ -1377,14 +1379,17 @@ function, so save and use cannot apply different rules.
      form's own test (`kyc_form.php:33-34`). The form's kit loop (`:32-36`) keeps skipping a row that is not active,
      and now chooses between the kit's own cell and the Fiber cell by `offeredKit`, comparing no `type` itself. So the
      judge and the form cannot differ: a row stored with `is_active` 1 is offered, and one typed `FIBER` is not.
-   - A kit's link takes part in rule 8 only when it is that offered row's single active record, with the row's current
-     stamp, under the quoting organization whose id the caller hands the method (F-4). A leftover link on an inactive
-     or Fiber kit row, or one with another stamp, does not block; QL-LK1 notes it (§R.7.3).
-   - **At use, the kit half applies to every kit row, offered or not** (amended by §R.17, D14-R8-INACTIVE-KIT). A kit
-     line whose own in-force link names the installation's product is refused with rule 8's at-use reason, so a row
-     deactivated with its link left in force never prices beside the installation: not in a stored cart at a retry,
-     not through Make the quotation, not in `confirmLines`. It never blocks the installation: `installLine` still
-     counts offered kit rows only, and the save is unchanged.
+   - A kit's link blocks the installation (rule 8's installation half) only when it is that offered row's single
+     active record, with the row's current stamp, under the quoting organization whose id the caller hands the method
+     (F-4). A leftover link on an inactive or Fiber kit row, or one with another stamp, does not block the installation;
+     QL-LK1 notes it (§R.7.3).
+   - **The kit half applies to every kit row, offered or not, at save and at use** (amended by §R.17,
+     D14-R8-INACTIVE-KIT, and §R.17.1, FX-money-1). At save — `candidate()`, and `set()`'s check inside the lock — a
+     kit row is refused the installation's product; an inactive row's refusal names no deactivation, and its picker
+     leaves that product disabled. At use, a kit line whose own in-force link names the installation's product is
+     refused with rule 8's at-use reason, so a row deactivated with its link left in force never prices beside the
+     installation: not in a stored cart at a retry, not through Make the quotation, not in `confirmLines`. It never
+     blocks the installation: `installLine` and the installation's save still count offered kit rows only.
    - Why: `resolve()` appends the installation line after the kit lines (`:368-372`), and `total()` sums every line
      (`:402-410`). Nothing refuses two lines with one `productId`. Such a link would add a kit-priced line, labelled
      with the kit's name, to every "DishNet installs" sale, and Cash would collect it.
@@ -1530,7 +1535,7 @@ remedy is.
 | plan: prices differ | "<row>'s price in Products (X) differs from its service plan (Y)" | **unchanged** (`:246-247`). **The only reason that carries figures, as today** |
 | plan: product and service plan spelled apart | "<row>'s uCRM product and service plan are not spelled alike, so the quotation's WhatsApp summary could not show it as monthly — an admin fixes the names in uCRM" | — (new) |
 | kit or installation spelled like a service plan, counted or not | "<row> is spelled like a service plan in uCRM, so it cannot be quoted as hardware" | unchanged (`:277`) |
-| the installation and an offered kit linked to one product (rule 8); at use, for a kit line, any kit row (§R.17) | "<row> and the installation are linked to the same uCRM product — an admin links one of them again" | — |
+| the installation and an offered kit linked to one product (rule 8); for a kit line, at save and at use, any kit row (§R.17, §R.17.1) | "<row> and the installation are linked to the same uCRM product — an admin links one of them again" | — |
 | `badProduct` | "<row> has no price in uCRM" / "'s price in uCRM is 0" / "… more than 2 decimals" / "is set as taxable …" / "has no product id …" / "'s invoice label in uCRM differs from its name" | unchanged texts (`:440-451`), now about the linked product |
 | Fiber | "Fiber is not priced from uCRM on this installation" | unchanged (`:332`) |
 | uCRM unreadable; a cart item not in the plugin; no install answer | unchanged (`:169`, `:349`, `:61`) | — |
@@ -1826,6 +1831,11 @@ linked. It needs no `crm_auth_token`, and no list outside the card has to name t
   line in place of the refusal text, never above *"No quotation was made: … an admin makes it from the Orders card"*
   (amended by §R.17, D14-UI-4).
 
+After an `error` answer (step 4), while `quote_unconfirmed_at` is recorded and `quote_created` is empty, the card draws
+*"⚠ uCRM did not confirm the last quotation"* and *"It may have been made. Do not make one by hand in uCRM: Make the
+quotation looks there first and never makes a second one."* in place of the refusal text, and the button stays. Only
+with the gate on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2).
+
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
 (`public.php:98-100`). The button disables itself on submit.
@@ -1867,7 +1877,8 @@ prints the flash raw (`public.php:2508`). By the method's `kind`:
   #<id> — its card says why."*;
 - `claimed` (the claim, below): *"A quotation is being made for application #<id> — wait, then open the Orders screen
   again."*;
-- `error`: *"uCRM did not make the quotation for application #<id> — try again later."*
+- `error`: *"uCRM did not confirm the quotation for application #<id>. It may have been made: try Make the quotation
+  again later — it never makes a second one."* (amended by §R.17.1, FX-flows-2: a lost answer reaches it too)
 
 And the handler's own:
 - step 3, the security check: *"The security check failed, so nothing was changed. Open the Orders screen again and
@@ -1904,7 +1915,8 @@ In order:
 2. **R-M4's guard** (§R.4.4): `billing/quotes?clientId=<crmId>` read with `$quoteCrm`, rows kept by `clientId`. A
    quotation found — any, for a customer the application created; one dated on or after `submitted_at`, for an
    existing customer — records `quote_found_in_ucrm`, and nothing else, and answers `found` (F-10). An unreadable list
-   answers `unreadable` and writes nothing;
+   answers `unreadable` and writes nothing. None found removes `quote_unconfirmed_at` (step 4), since the POST it
+   records made none (§R.17.2);
 3. **the lines**: `retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($store,
    $setting)), $store, $cfg)`. The entry comes from the record (§R.4.2): `web` for every application the button is
    drawn for. The lines are resolved by the current links, and the Cash rule holds: a Cash application with cash
@@ -1917,7 +1929,8 @@ In order:
    `wa_quote_pending`, as every KYC quotation is made. The staff's notes are `Retry for App #<id> · Sales: …` for
    `retry_quote` (`api_cron_debug.php:1106`), and `Made from the Orders card for App #<id> · Sales: …` for the button. A
    refusal of the company check is recorded as `postQuote` records it and answers `refused`; a failed POST records
-   `quote_error` and answers `error`;
+   `quote_error` and answers `error`. The method then records `quote_unconfirmed_at`, since a POST whose answer was
+   lost (a timeout, a 5xx) reaches `error` after uCRM made the quotation (§R.17.2);
 5. **once `postQuote` answers `created`**, one write on the application:
    - `quote_link_ids`, the set the lines came from (§R.4.4);
    - `quote_error` null, cleared as `retry_quote` clears it (`api_cron_debug.php:1115`; F-10);
@@ -1939,7 +1952,8 @@ In order:
 - `claimed`, `found`, `unreadable` and `refused` are 409, and `error` is 500. Each has `quote_id` and `total` null, and
   `lines` the count resolved, else 0. Its `text` is fixed for `claimed` (*"another quotation is being made for this
   application"*), `found` (§R.4.4's text), `unreadable` (*"uCRM's quotations for this client could not be read — no
-  quotation was made"*) and `error` (*"uCRM did not make the quotation"*). For `refused` it is the refusal's text, as
+  quotation was made"*) and `error` (*"uCRM did not confirm the quotation — it may have been made; a retry never makes a
+  second one"*, §R.17.1). For `refused` it is the refusal's text, as
   recorded on the application.
 - A Throwable is not an answer. The claim is removed (below), and the Throwable goes on to the caller.
 
@@ -2311,7 +2325,7 @@ kit's product.
       *"when it was made cannot be told"* for what it cannot judge. Such a record is counted neither as made since the
       copy nor as a leftover;
   - links on Fiber or inactive rows, and a leftover link from an inactive or Fiber kit row to the installation's
-    product, which rule 8 does not block;
+    product, which does not block the installation; a stored sale holding that row is unpriced at use (§R.17, §R.17.1);
   - the products backing two or more offered kit rows (Q16);
   - how many active links name a product that shares its name key with another counted product (§R.2.3);
   - per record ended since the copy (`ended_at_ts >= COPY_AT`; never `ended_at`), the applications quoted under it,
@@ -2673,7 +2687,14 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     unpriced with rule 8's reason, never two lines with one `productId` (C28, D14-R8-INACTIVE-KIT); a Throwable after
     the POST — the step-5 write failing, or one inside `postQuote` after its POST — never answers "No quotation was
     made", and a second press is answered `found` with still one POST (C22, D14-MQ-THROW-AFTER-POST); the found card
-    draws its line and not the refusal text (C17, D14-UI-4).
+    draws its line and not the refusal text (C17, D14-UI-4);
+  - **added by §R.17.1 and §R.17.2:** uCRM makes the quotation and its answer is lost (a 504): at the button and at
+    `retry_quote` the `error` answer says "did not confirm … it may have been made", never "did not make"; the card
+    says uCRM "did not confirm the last quotation", never "No quotation was made", and still draws the button (the
+    control: before the press it said "No quotation was made"); a second press is answered `found`, and the card then
+    draws the quotation found (C22 (c)). uCRM refuses the POST: `quote_unconfirmed_at` is recorded, an unreadable list
+    keeps it, and a press whose guard finds none removes the key, then makes the quotation or records its own refusal,
+    which the card shows (C22 (d)).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -2758,7 +2779,8 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     both;
   - G8's byte-for-byte comparisons of the gate-off trees extend to the Plans, Hardware and Product Mapping pages,
     rendered with a link store present, and to the Orders page, rendered with applications carrying
-    `quote_sale_entry` `web` and P1, on which no Make the quotation is drawn.
+    `quote_sale_entry` `web` and P1, on which no Make the quotation is drawn, and with one carrying
+    `quote_unconfirmed_at` (§R.17.2; the control: on Uganda that card says "did not confirm").
 - **H:**
   - a linked row is drawn with uCRM's name in the text, `data-name` and `data-title`; an unlinked row with the plugin's
     name and the reason;
@@ -2776,6 +2798,10 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
   `include` or `include_once` (E-5). It also proves that `lib/UcrmQuoteLines.php` holds
   `require_once __DIR__ . '/UcrmQuoteLinks.php'` (F-6), and that `kyc_form.php`'s kit loop calls
   `UcrmQuoteLinks::offeredKit` and compares no `type` with `fiber` itself (F-5).
+  **I6b** (§R.17, G3): `SAFETY.md`'s 5.18.102 entry names `ucrm_quote_links`, Make the quotation, `--after-only` and
+  section L, and neither text it replaced. Its control is an entry written out in the test, holding the two replaced
+  texts as 5.18.102's first cut spelled them, so the check's `gone` half is shown able to fire (§R.17.1, FX-tests-2).
+  That the four `need` texts are absent from the first cut was measured once, not kept (§R.17.2, CK-tests-2).
 
 **New section L (the links):**
 - **The store:** the record shape; one active record per item; history kept; written under `withLock`; a relink to the
@@ -2819,6 +2845,9 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     `is_active` 1 and `type` `general`, and of one with no `type`. It does not block for `type` `FIBER` or `Fiber`, nor
     for `is_active` 0 or `'0'`. `UcrmQuoteLinks::offeredKit` gives each row the same answer as the form's kit loop
     draws (a kit cell, or the Fiber cell; H).
+  - **Rule 8's kit half at save, any kit row** (L8, §R.17.1, FX-money-1): an inactive kit row's save to the
+    installation's product is refused, with a text naming no deactivation, and its picker leaves that product
+    disabled; so is the crosswise case inside the lock. Control: the same inactive row is linked to another product.
   - **L-rule8-crosswise:** while the installation's save reads uCRM, another connection commits a kit link to the same
     product. The save refuses inside the lock with rule 8's text and writes nothing: the re-check built
     `fromRecords()` over the lock's records and its `findOne` rows. Control: with no crosswise write, the installation
@@ -2880,10 +2909,12 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
   `sqlite_master` has no `ucrm_quote_links`. Each post's outcome and flash is asserted first, so a post that never
   reached its handler cannot pass (§R.17, T6). **L19b:** the KYC submission (new and existing), `syncOne`,
   `retry_quote`, Send Quotation and a lead quote's lines leave no `ucrm_quote_links` either, each with its Uganda
-  control (§R.17, T1).
+  control (§R.17, T1). Each path must be shown to run to its end, `retry_quote` and Send Quotation by their answer,
+  and L19's page and form draws by `end === 'drawn'` (§R.17.1, FX-tests-1).
 - **The setting invalid** (L-R6, §R.17, G2): a save with `ucrm_quote_organization_id` `abc` or `1x` refuses naming
   the setting, for a plan, two kits and the installation, with no uCRM read and the store unchanged. Control: the
-  setting 1 links after a uCRM read.
+  setting 1 links after a uCRM read. **L-R6b** (§R.17.1, FX-money-2): with the setting invalid, a non-admin is answered
+  403 and a cross-site post the security flash, never the setting's text; nothing is written and uCRM is not asked.
 - **The Hardware picker** pre-selects nothing but the kit's current link, as the Plans picker does (L14, §R.17, T2).
 
 #### R.9.2 The other suites
@@ -2962,7 +2993,8 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML35 a relink, an unlink or a delete hook ends only one active record, or a save no-ops while two are active | L (L-two-active, state (c), and the unlink and delete cases over two active records) |
 | ML36 the save accepts an installation link to an offered kit's product, or the reverse | L |
 | ML37 the resolver prices such an installation. Its second half, QL-LK1 reporting it "resolves", is the deploy script's: §R.7.7 item 6 | A |
-| ML37b the resolver prices an inactive kit row linked to the installation's product beside the installation (§R.17) | A (A32), C (C28) |
+| ML37b the resolver prices an inactive kit row linked to the installation's product beside the installation (§R.17; re-anchored with §R.17.1's line) | A (A32), C (C28) |
+| FXM1a–FXM1b rule 8's kit half at save applied to offered kit rows only: before the lock (`candidate()`), inside it (`set()`) (§R.17.1) | L (L8) |
 | ML38 the entry point ignored, or a post without the marker taken as web (an app sale priced through a plan link) | A, C |
 | ML39 a retry does not record `quote_link_ids` | L (`retry_quote`, Make the quotation), C (the cron retry; §R.17, T3) |
 | ML40 the count reads the active record instead of the ended one | L |
@@ -3010,10 +3042,15 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML82 the claim's removal unsets a claim it did not take, so a press answered `claimed` frees the first request's claim (F-9) | C (the claim's removal: a press answered `claimed`) |
 | ML83a–ML83c a Throwable after the POST answered as "no quotation": the step-5 write let through, and the button's and `retry_quote`'s old texts (§R.17) | C (C22) |
 | ML-R6 the link save reads uCRM with the quoting-organization setting invalid (§R.17, G2) | L (L-R6) |
+| ML-R6b the setting checked before the admin and own-page checks (§R.17.1) | L (L-R6b) |
+| ML19j–ML19k L19b's Send Quotation stops after its gate; `retry_quote` answers before its gate-off path runs (§R.17.1) | L (L19b) |
+| ML84a–ML84b the `error` answer's old texts, at the button and in the method (§R.17.1) | C (C22 (c)) |
+| ML85a–ML85e the card after an `error` answer: the box not drawn, `quote_unconfirmed_at` not recorded, never removed, removed before the guard reads uCRM, set to null (§R.17.2) | C (C22 (c), (d)) |
+| MG26 the "did not confirm" box drawn with the gate off (§R.17.2) | G (G8) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
 | ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
-| MC9b–MC9c C9's unmarked half (§R.17, T7); MI11 SAFETY.md's entry not describing D14 (§R.17, G3) | C (C9); I (I6b) |
+| MC9b–MC9c C9's unmarked half (§R.17, T7); MI11 SAFETY.md's entry not describing D14 (§R.17, G3); MI11b its test record put back to nine sections (§R.17.1) | C (C9); I (I6b) |
 
 No copy removes `CustomerSession::crossSite()` alone: with `fromOwnPage` present it would survive, and a weakened copy
 that cannot be caught proves nothing.
@@ -3536,10 +3573,11 @@ fails without the fix and a weakened copy that the test catches (`38991cbb..` on
   quotation was made — try again". Step 5's write is now in its own try, and the two Throwable texts and their log
   lines no longer say that none exists (§R.4.8). Test C22; copies ML83a–ML83c.
 - **G2** (minor). With the gate on and the quoting-organization setting invalid, every link save refused with a false
-  "changed while it was being linked … try again". It now refuses first, naming the setting (§R.1.4). Test L-R6; copy
-  ML-R6.
-- **G3** (minor). The release's `SAFETY.md` entry still described matching by name. It is rewritten for D14. Test I6b,
-  with 5.18.102's first cut as its control; copy MI11.
+  "changed while it was being linked … try again". It now refuses after the admin and own-page checks, before any uCRM
+  read, naming the setting (§R.1.4, corrected by §R.17.1). Test L-R6; copy ML-R6.
+- **G3** (minor). The release's `SAFETY.md` entry still described matching by name. It is rewritten for D14. Test I6b;
+  copy MI11. (This line first said I6b had 5.18.102's first cut as its control. It had none: §R.17.1, FX-tests-2, and
+  §R.17.2, CK-tests-2.)
 - **D14-UI-1** (minor). Send Quotation told a lead whose plan two rows share that no plan is spelled like it. It now
   names the cause (§R.4.5). Test F7; copies ML-UI1a and ML-UI1b.
 - **D14-UI-2** (minor). Send Quotation's "not priced" alert ended "fix the product in uCRM" after a link reason that
@@ -3581,3 +3619,37 @@ fails without the fix and a weakened copy that the test catches (`38991cbb..` on
 
 **Also found while fixing, and recorded:** T6's proposed copy names ML19b and ML19c were already T1's, so T6's are
 ML19h and ML19i. The two Throwable log lines were reworded with their texts, and ML76's anchor with them.
+
+#### R.17.1 The check of the fixes (round 2)
+
+An independent check of the fourteen fixes (`38991cbb..9ff9d33a`) confirmed five more findings, all minor. Each is
+fixed in its own commit (`9ff9d33a..c68b508e`), with a test that fails without the fix and a weakened copy the test
+catches:
+- **FX-money-1** (with FX-flows-1). The save still applied rule 8's kit half to offered rows only. An inactive kit row
+  could be linked to the installation's product and was then refused at use, and the screen's remedy went round in a
+  loop. Both save checks now apply it to every kit row, and an inactive row's refusal names no deactivation (§R.3.1
+  rule 8, §R.4.1). Test L8; copies FXM1a and FXM1b, and ML37b re-anchored.
+- **FX-money-2**. §R.1.4 put the setting check first. The code rightly runs it after the admin and own-page checks:
+  in §R.1.4's order a non-admin and a cross-site post would have been shown the setting's text. §R.1.4 is corrected,
+  and the handler's ordered list names the step (2a). Test L-R6b; copy ML-R6b.
+- **FX-flows-2**. The `error` answer said uCRM "did not make" the quotation, though a lost answer (a timeout, a 504)
+  reaches it after uCRM made one. Both texts now say "did not confirm … it may have been made" (§R.4.8). Test C22
+  (c); copies ML84a and ML84b.
+- **FX-tests-1**. L19b's `retry_quote` and Send Quotation entries did not prove they ran to their end. They do, and
+  L19's draws assert `end === 'drawn'`. Copies ML19j and ML19k.
+- **FX-tests-2**. §R.17 claimed an I6b control that did not exist. I6b now has one, written out in the test (§R.9.1 I),
+  without a Git read: the first cut, `9e665655`, is not in the release's history. Copy MI11b.
+
+#### R.17.2 The check of round 2 (round 3)
+
+A check of those commits confirmed two more, both minor:
+- **CK-flows-2**. Under the new "may have been made" flash, the Orders card still drew "⚠ No quotation was made" with
+  the stored refusal, whose P1 text says to make the quotation in uCRM by hand. Make the quotation's `error` answer now
+  records `quote_unconfirmed_at`. With the gate on, the card draws "⚠ uCRM did not confirm the last quotation" in the
+  refusal's place, and the button stays. A later press whose guard finds no quotation removes the key; an unreadable
+  list keeps it. With the gate off the card is f2055baf's byte for byte (§R.4.8). Tests C22 (c) and (d), and G8;
+  copies ML85a–ML85e and MG26.
+- **CK-tests-2**. I6b's control covers its `gone` half only. The four `need` texts are shown absent from two
+  written-out lines, not from the first cut's entry, so a `need` text the first cut already held would pass. Measured
+  once instead, on 30 Oct: none of the four occurs in `9e665655`'s 5.18.102 entry, and each `gone` text occurs once.
+  The test is unchanged, since the release cannot read the first cut.
