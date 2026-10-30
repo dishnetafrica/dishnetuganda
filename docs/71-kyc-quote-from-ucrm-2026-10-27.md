@@ -1831,10 +1831,13 @@ linked. It needs no `crm_auth_token`, and no list outside the card has to name t
   line in place of the refusal text, never above *"No quotation was made: … an admin makes it from the Orders card"*
   (amended by §R.17, D14-UI-4).
 
-After an `error` answer (step 4), while `quote_unconfirmed_at` is recorded and `quote_created` is empty, the card draws
-*"⚠ uCRM did not confirm the last quotation"* and *"It may have been made. Do not make one by hand in uCRM: Make the
-quotation looks there first and never makes a second one."* in place of the refusal text, and the button stays. Only
-with the gate on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2).
+After an `error` answer or a Throwable from `postQuote` (step 4), while `quote_unconfirmed_at` is recorded and
+`quote_created` is empty, the card draws *"⚠ uCRM did not confirm the last quotation"* and *"It may have been made."*,
+in place of the refusal text, for admins and agents alike. Where the button is drawn (an admin, and the five
+conditions) it goes on *"Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second
+one."*, and the button stays. Elsewhere — an agent, or an application the button does not apply to, which `retry_quote`
+can reach — it goes on *"Do not make one by hand in uCRM before an admin has looked there for it."* Only with the gate
+on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2, and §R.17.3).
 
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
@@ -1916,7 +1919,7 @@ In order:
    quotation found — any, for a customer the application created; one dated on or after `submitted_at`, for an
    existing customer — records `quote_found_in_ucrm`, and nothing else, and answers `found` (F-10). An unreadable list
    answers `unreadable` and writes nothing. None found removes `quote_unconfirmed_at` (step 4), since the POST it
-   records made none (§R.17.2);
+   records made none: by the row as stored, under the lock, whatever the caller read (§R.17.2, §R.17.3);
 3. **the lines**: `retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($store,
    $setting)), $store, $cfg)`. The entry comes from the record (§R.4.2): `web` for every application the button is
    drawn for. The lines are resolved by the current links, and the Cash rule holds: a Cash application with cash
@@ -1930,7 +1933,8 @@ In order:
    `retry_quote` (`api_cron_debug.php:1106`), and `Made from the Orders card for App #<id> · Sales: …` for the button. A
    refusal of the company check is recorded as `postQuote` records it and answers `refused`; a failed POST records
    `quote_error` and answers `error`. The method then records `quote_unconfirmed_at`, since a POST whose answer was
-   lost (a timeout, a 5xx) reaches `error` after uCRM made the quotation (§R.17.2);
+   lost (a timeout, a 5xx) reaches `error` after uCRM made the quotation (§R.17.2). A Throwable from `postQuote` records
+   it too, in its own try, and then goes on to the caller, since it may come after the POST (§R.17.3);
 5. **once `postQuote` answers `created`**, one write on the application:
    - `quote_link_ids`, the set the lines came from (§R.4.4);
    - `quote_error` null, cleared as `retry_quote` clears it (`api_cron_debug.php:1115`; F-10);
@@ -2371,6 +2375,11 @@ with no quotation is quoted by an admin in uCRM by hand, after checking that the
   5.18.102's Make the quotation and its shared implementation (§R.4.8). 5.18.101 has neither and draws no such button,
   so after a rollback an admin quotes the web ones in uCRM by hand, as the rollback note says.
 - R7 reads the store's growth as "ok … a live plugin writes", and the `_migrations` ledger is unchanged.
+- **Added by §R.17.3:** the rollback stage counts the applications carrying `quote_unconfirmed_at` with no
+  `quote_created` (log, a note), and the rollback note gains a third sentence: *"An application on which 5.18.102 could
+  not confirm a quotation may already have one in uCRM: check there before quoting it by hand or with retry_quote,
+  which in 5.18.101 does not look first."* Every record that can carry the key is a web registration made since the
+  copy (`retryLines` refuses any other entry before a POST), and 5.18.101 never reads the key.
 
 #### R.7.5 Operator-facing texts — rewritten by asserted edit (new)
 
@@ -2694,7 +2703,14 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     control: before the press it said "No quotation was made"); a second press is answered `found`, and the card then
     draws the quotation found (C22 (c)). uCRM refuses the POST: `quote_unconfirmed_at` is recorded, an unreadable list
     keeps it, and a press whose guard finds none removes the key, then makes the quotation or records its own refusal,
-    which the card shows (C22 (d)).
+    which the card shows (C22 (d));
+  - **added by §R.17.3:** a Throwable inside `postQuote` after its POST records the key, and the card says "did not
+    confirm" (C22 (b)); a company-check refusal records none (C19); an agent's card says "did not confirm" with a
+    sentence that names no button, and an admin's names Make the quotation; a key beside `quote_created` draws no box;
+    a press on one application removes only its own key; `retry_quote`'s `error` on an application the button does
+    not apply to draws the box with no button and a sentence naming none; and with the key written while `retry_quote`
+    waited at its company check (the proxy's `hold_client`), its guard finding none still removes it, as when the key
+    was there at its read (C22 (d)).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -3047,6 +3063,7 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML84a–ML84b the `error` answer's old texts, at the button and in the method (§R.17.1) | C (C22 (c)) |
 | ML85a–ML85e the card after an `error` answer: the box not drawn, `quote_unconfirmed_at` not recorded, never removed, removed before the guard reads uCRM, set to null (§R.17.2) | C (C22 (c), (d)) |
 | MG26 the "did not confirm" box drawn with the gate off (§R.17.2) | G (G8) |
+| ML85f–ML85l the box beside `quote_created`, for admins only, every application's key removed, the key on a refusal, a Throwable from `postQuote` recording none, the sentence naming a button not drawn, the removal by the caller's record (§R.17.3; ML85b–ML85d re-anchored) | C (C19, C22 (b), (d)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
 | ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
@@ -3653,3 +3670,28 @@ A check of those commits confirmed two more, both minor:
   written-out lines, not from the first cut's entry, so a `need` text the first cut already held would pass. Measured
   once instead, on 30 Oct: none of the four occurs in `9e665655`'s 5.18.102 entry, and each `gone` text occurs once.
   The test is unchanged, since the release cannot read the first cut.
+
+#### R.17.3 The check of round 3 (round 4)
+
+A check of round 3's commit (`1c4b8306`) confirmed five more, all minor; none could duplicate a quotation. Fixed in
+`53f9e42b`, each with a test that fails without it and a weakened copy:
+- **CK4-F1.** After a Throwable from `postQuote` that followed its POST, the card still said "No quotation was made"
+  under a flash saying uCRM may already have it. The Throwable now records `quote_unconfirmed_at` first. A Throwable
+  before the POST records it too, which errs safe: the card says "may have been made", and the next press's guard
+  settles it. C22 (b); copy ML85j.
+- **CK4-F2.** The box named Make the quotation where the button is not drawn: for an agent, and on an application
+  `retry_quote` reached that the five conditions exclude. The sentence now follows the button's own condition (§R.4.8).
+  C22 (d); copy ML85k.
+- **CK4-F3.** The key was removed only when the caller's `$app` held it. `retry_quote` reads `$app` before its own
+  company-check GET, so a key written meanwhile outlived a guard that had found no quotation, and the card said "may
+  have been made" over a quotation shown not to exist, with the refusal hidden. Removal now reads the row under the
+  lock, always. C22 (d), with the proxy's new `hold_client`; copy ML85l.
+- **CK4-F4.** Four weakenings survived every test: the box beside `quote_created`, the box for admins only, every
+  application's key removed, and the key recorded on a company-check refusal. Each now fails a test (C22 (d), C19);
+  copies ML85f–ML85i.
+- **CK4-F5.** A rollback leaves the key for 5.18.101, whose `retry_quote` POSTs without looking first. §R.7.4 adds a
+  count and a sentence to the rollback note.
+
+The router's header now says which lock the `second_lock` fault reaches: the claim's removal where the guard answers
+first, else the key's removal. The three round-3 copies whose anchors round 4 moved (ML85b–ML85d) were re-anchored and
+are caught as before.
