@@ -1839,6 +1839,13 @@ one."*, and the button stays. Elsewhere — an agent, or an application the butt
 can reach — it goes on *"Do not make one by hand in uCRM before an admin has looked there for it."* Only with the gate
 on: with it off the card is 5.18.101's byte for byte (amended by §R.17.2, CK-flows-2, §R.17.3 and §R.17.4, CK5-B2).
 
+While a press is in flight — a claim younger than `QUOTE_CLAIM_SECONDS`, makeQuotation's own rule, and no
+`quote_created` — the card draws *"⏳ Make the quotation was pressed and has not finished"* and *"Do not make one by
+hand in uCRM: wait a few minutes, then open the Orders screen again."* in place of the box above or the refusal text,
+for admins and agents alike: the press removes the key before its POST, and what the card holds may be out of date.
+The found line still outranks it. A claim left by a request that died shows it until the claim expires. Only with the
+gate on (amended by §R.17.5, CK6-F1).
+
 It is a POST form that prints `csrfField()` inside it and carries `action` = `kyc_make_quote` and `app_id`, and nothing
 else. Its submit button has no `name`, so the browser posts exactly three fields, the token `_csrf` among them
 (`public.php:98-100`). The button disables itself on submit.
@@ -2720,6 +2727,14 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     POST, is recorded afresh; a failed removal of the key stops the press with no POST and nothing changed (C22 (d)).
     Every card expectation needs the heading and its first sentence, and the card drawn to its bottom row; C19's
     `retry_quote` half is labelled as `retry_quote`'s own refusal, which comes first.
+  - **added by §R.17.5:** a press in flight (its claim live, its POST held), with or without a key from an earlier
+    press: the admin's and the agent's cards say "Make the quotation was pressed and has not finished", never "No
+    quotation was made" nor "did not finish"; then the press makes the quotation; a claim 600 s old draws the box and
+    one 901 s old the stored refusal (C22 (e)). The admin's sentence is matched whole. When `postQuote`'s Throwable is
+    an `\Error` and the key write's a `RuntimeException`, the caller's line names the `\Error` (C22 (b)); the `error`
+    answer's key write failing by an `\Error` as by an `\Exception` (C22 (c)). "The card drawn" is counted on the
+    card's own bottom-row element, never the stylesheet's rule for it; C19's `retry_quote` half compares the whole
+    card.
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -2805,7 +2820,8 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
   - G8's byte-for-byte comparisons of the gate-off trees extend to the Plans, Hardware and Product Mapping pages,
     rendered with a link store present, and to the Orders page, rendered with applications carrying
     `quote_sale_entry` `web` and P1, on which no Make the quotation is drawn, and with one carrying
-    `quote_unconfirmed_at` (§R.17.2; the control: on Uganda that card says "did not finish", §R.17.4).
+    `quote_unconfirmed_at` (§R.17.2; the control: on Uganda that card says "did not finish", §R.17.4), and with one
+    whose press is in flight, a live claim (§R.17.5; the control: on Uganda that card says the press has not finished).
 - **H:**
   - a linked row is drawn with uCRM's name in the text, `data-name` and `data-title`; an unlinked row with the plugin's
     name and the reason;
@@ -3074,6 +3090,8 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | MG26 the "did not finish" box drawn with the gate off, its sentence calling nothing (§R.17.2; re-anchored by §R.17.4, CK5-T6) | G (G8) |
 | ML85f–ML85l the box beside `quote_created`, for admins only, every application's key removed, the key on a refusal, a Throwable from `postQuote` recording none, the sentence naming a button not drawn, the removal by the caller's record (§R.17.3; ML85b–ML85d re-anchored) | C (C19, C22 (b), (d)) |
 | ML86a–ML86k the `error` answer's key write unguarded, the old heading, the sentence dropped, the page dying beside `quote_created`, the key's removal swallowed, `recordUnconfirmed()` without its try, the key removed on `found`, the catch taking `\Exception`, a failed write not logged, an earlier stamp kept by the caller's record at either write (§R.17.4; ML85b, ML85i, ML85j re-anchored) | C (C22 (b), (c), (d)) |
+| ML87a–ML87g no box for a press in flight, the box for any claim however old, its sentence and the admin's losing "Do not make one by hand in uCRM:", a card stopping before its bottom row, the failed key write's exception thrown in place of `postQuote`'s, `recordUnconfirmed()` taking `\Exception` (§R.17.5) | C (C22 (b)–(e)) |
+| MG27 the "press in flight" box drawn with the gate off (§R.17.5) | G (G8) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
 | ML-UI4 the found card still prints the refusal text (§R.17) | C (C17) |
@@ -3743,3 +3761,32 @@ fails without it and a weakened copy:
 
 ML85b, ML85i and ML85j were re-anchored (the helper's two calls; C19's new label) and are caught as before. Section C
 has 320 assertions (303 before); the whole test, 1255 passed, 0 failed; weakened copies 317 (306 before).
+
+#### R.17.5 The check of round 5 (round 6)
+
+A check of round 5's commit (`ec11b208`), by a behaviour lens and then a tests lens, confirmed two major findings and
+five minor ones. Each was shown by a run, and none came from round 5's own change. Fixed in `949f7fa3`, each with a
+test that fails without it and a weakened copy:
+- **CK6-F1 (major).** While a press was in flight, the card went back to the stored refusal: a press removes the key
+  before its POST, and the card never read the claim. Where the stored text was P1's own (not `P1_UNLINKED`'s), it
+  told staff to make the quotation in uCRM while the plugin's POST was under way. The window existed since the button
+  was built, for an application with no key as well. A live claim (younger than `QUOTE_CLAIM_SECONDS`, no
+  `quote_created`) now draws its own box, "⏳ Make the quotation was pressed and has not finished", ahead of the
+  "did not finish" box and the refusal, with the gate on (§R.4.8). C22 (e), G8; copies ML87a–ML87c, MG27.
+- **CK6-FT1 (major, a test gap).** The admin's sentence "Do not make one by hand in uCRM: Make the quotation looks
+  there first …" was matched by its second half only, so a copy that dropped or reversed "Do not make one by hand"
+  passed every test. It is matched whole. Copy ML87d.
+- **CK6-F2.** CK5-T2's "card drawn to its bottom row" was met by the stylesheet's rule for that class, on every page.
+  It is now the card's own bottom-row element, counted once. §R.17.4's CK5-T2 and §R.9.1 C were untrue until this.
+  Copy ML87e (a card that stops before its bottom row, with no fatal error).
+- **CK6-F3.** `recordUnconfirmed()` sat under `dropUnconfirmed()`'s docblock, which then described the opposite of
+  what it does. Each has its own now. Not pinned: a comment.
+- **CK6-FT2.** Nothing checked that it is `postQuote`'s Throwable that goes on when the key write fails too: every
+  planted fault was a `RuntimeException`. C22 (b) now plants an `\Error` and a `RuntimeException`, and the caller's
+  line must name the `\Error`. This also checks the router's `after_post_error` itself. Copy ML87f.
+- **CK6-FT3.** "The answer stays what it was" (CK5-B1) was checked for an `\Exception` only. C22 (c) runs the key
+  write failing by an `\Error` too. Copy ML87g.
+- **CK6-FT4.** Two CK5-T1 labels said "removed by the guard", which they do not check (six other lines do); they say
+  "recorded afresh (a new time), so never lost". C19's `retry_quote` half now compares the whole card.
+
+Section C has 334 assertions and G 201; the whole test, 1273 passed, 0 failed; weakened copies 325 (317 before).
