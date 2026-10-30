@@ -3523,7 +3523,7 @@ other decision has at least one: ML53, ML56 and ML64–ML82 (§R.9.3).
 ### R.17 What the build's review changed
 
 The build on `quote-102-d14` (`220c4480` and its tests, to `38991cbb`) was reviewed through five lenses: money, the
-gate and South Sudan, the screens, security, and the tests. Each finding was verified adversarially before it was
+gate and South Sudan, the flows (what each screen says and does), security, and the tests. Each finding was verified adversarially before it was
 fixed. **Fourteen were confirmed and five refuted.** Each confirmed one is fixed in its own commit, with a test that
 fails without the fix and a weakened copy that the test catches (`38991cbb..` on `quote-102-d14`). One line each.
 
