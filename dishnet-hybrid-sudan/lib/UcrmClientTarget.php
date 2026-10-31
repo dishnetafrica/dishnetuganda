@@ -196,6 +196,54 @@ final class UcrmClientTarget
         return $this->organizationRows;
     }
 
+    /**
+     * 5.18.102 (Uganda, docs/71 §I, D3): the client custom attribute "Sales Person" the operator adds in uCRM, found by
+     * its KEY — exactly one client field whose key is exactly 'salesPerson' and which is not a tax field. Never id 1
+     * (the EFRIS TIN on Uganda), never South Sudan's numbers, never a guess by name. Reuses this instance's one
+     * GET custom-attributes. null when the gate is off, the fields cannot be read, or there is none or more than one.
+     */
+    public function salesPersonFieldId(): ?int
+    {
+        if (empty($this->quoteOrg['on'])) return null;
+        $fields = $this->clientFields();
+        if ($fields === null) return null;
+        $found = [];
+        foreach ($fields as $id => $f) {
+            if ((string)($f['key'] ?? '') !== 'salesPerson') continue;
+            if (EfrisClientField::isTaxField($f)) continue;
+            $found[] = (int)$id;
+        }
+        return (count($found) === 1 && $found[0] > 0 && $found[0] !== 1) ? $found[0] : null;
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §I): "Prepared by" — one PATCH clients/{id} carrying the salesPerson attribute, after a
+     * client this plugin created, whether or not a quote follows. Best effort: the attribute absent, ambiguous or
+     * unreadable sends nothing; a refused PATCH changes nothing else. One line to PHP's log either way, with ids only.
+     * The create itself never carries it: an unknown attribute id fails the whole create with a 404 (docs/30).
+     *
+     * @return string 'sent' | 'absent' | 'failed' | 'off'
+     */
+    public function patchSalesPerson(int $clientId, string $salesPerson): string
+    {
+        if (empty($this->quoteOrg['on'])) return 'off';
+        $value = trim($salesPerson);
+        $field = $this->salesPersonFieldId();
+        if ($field === null || $value === '' || $clientId <= 0) {
+            error_log("[UcrmClientTarget] client #{$clientId}: Prepared by not set — "
+                . ($field === null ? 'no single salesPerson client attribute in uCRM' : 'no sales person recorded'));
+            return 'absent';
+        }
+        $r = $this->crm->patch("clients/{$clientId}", [
+            'attributes' => [['customAttributeId' => $field, 'value' => mb_substr($value, 0, 120)]],
+        ]);
+        if ($r === null || isset($r['raw'])) {
+            error_log("[UcrmClientTarget] client #{$clientId}: Prepared by not set — the PATCH of attribute #{$field} was refused");
+            return 'failed';
+        }
+        return 'sent';
+    }
+
     /** @return array<int,array>|null */
     private function clientFields(): ?array
     {

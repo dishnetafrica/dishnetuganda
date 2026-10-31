@@ -6,6 +6,7 @@ require_once __DIR__ . '/PaymentUuids.php';
 require_once __DIR__ . '/UcrmClientTarget.php';
 require_once __DIR__ . '/KycService.php';
 require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization
+require_once __DIR__ . '/UcrmQuoteLines.php';      // 5.18.102: Uganda's lines and cash from uCRM Products
 
 /**
  * KycCrmSync — put a KYC customer who is saved in the plugin but not in uCRM
@@ -240,7 +241,20 @@ final class KycCrmSync
                 'where'          => 'kyc-retry',
             ];
         }
-        $refused = $this->afterCreate($app, $crmId, $known);
+        // 5.18.102 (Uganda, docs/71 §I, §F.2): the company check, then "Prepared by" — before any payment or quote, and
+        // whether or not a quote follows. afterCreate records a refused check and then quotes nothing.
+        $ugCheck = null;
+        if ($known !== []) {
+            $setting = QuoteOrganization::setting($this->config, $this->gateDataDir());
+            $ugCheck = (new QuoteOrganization(UcrmQuoteLines::quoteClient($this->crm, $this->config), $setting))
+                ->checkClient((int)$crmId, 'kyc-retry', $known);
+            if ($ugCheck['ok']) {
+                $sp = trim((string)($app['sales_person'] ?? ''));
+                $this->target()->patchSalesPerson((int)$crmId, $sp !== '' ? $sp : (string)($app['retailer_name'] ?? ''));
+                $known['organizationId'] = $setting['id'];   // it passed: postQuote's own check then asks nothing
+            }
+        }
+        $refused = $this->afterCreate($app, $crmId, $known, $ugCheck);
 
         $out = $this->result(true, 'synced', $crmId,
             "Application #{$id} is now in the CRM as client #{$crmId}"
@@ -256,8 +270,9 @@ final class KycCrmSync
      * What KycService would have done after a successful create.
      *
      * 5.18.99: returns the text when the Uganda quote check refused the quotation, '' otherwise.
+     * 5.18.102 (Uganda, docs/71 §F.4): $ugCheck is run()'s company check; where it is given, ugQuote() makes the quote.
      */
-    private function afterCreate(array $app, string $crmId, array $known = []): string
+    private function afterCreate(array $app, string $crmId, array $known = [], ?array $ugCheck = null): string
     {
         $refused = '';
         $id = (int)$app['id'];
@@ -295,7 +310,9 @@ final class KycCrmSync
         // the application), the same switch and limit, and the same client —
         // the admin token when one is set, else the plugin's own key.
         $autoQuote = ($this->config['kyc_auto_quote_enabled'] ?? true) !== false;
-        if ($autoQuote && empty($app['quote_created'])) {
+        if ($ugCheck !== null) {
+            $refused = $this->ugQuote($app, $crmId, $known, $ugCheck, $autoQuote);   // 5.18.102 (Uganda)
+        } elseif ($autoQuote && empty($app['quote_created'])) {
             $items = $this->quoteItemsFor($app);
             if ($items !== [] && !KycService::quoteOverAutoMax($items, $this->config)) {
                 $ref    = trim((string)($app['quote_ref'] ?? ''));
@@ -320,6 +337,58 @@ final class KycCrmSync
             }
         }
         return $refused;
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §F.4, D11): the retry's quote, made only from lines uCRM prices — the application's
+     * marked lines, re-confirmed, or lines resolved now — and never re-priced for cash already collected: a Cash
+     * application is quoted only when its lines total exactly amount_charged. A refusal is recorded (R1–R7 from the
+     * company check, P1/P2 from the lines, P3 over the limit) and its text returned; it reaches staff on the Orders
+     * card, because the cron run that makes it has no agent to tell.
+     */
+    private function ugQuote(array $app, string $crmId, array $known, array $check, bool $autoQuote): string
+    {
+        $id = (int)$app['id'];
+        if (!$check['ok']) {
+            $text = QuoteOrganization::kycText($check, (int)$crmId);
+            $this->store->updateOne('kyc_applications.json', 'id', $id, [
+                'quote_refused'      => $check['code'],
+                'quote_refused_text' => $text,
+                'quote_refused_at'   => date('Y-m-d H:i:s'),
+            ]);
+            return $text;
+        }
+        if (!$autoQuote || !empty($app['quote_created'])) return '';
+        $setting = QuoteOrganization::setting($this->config, $this->gateDataDir());
+        $quoteCrm = UcrmQuoteLines::quoteClient($this->crm, $this->config);
+        // 5.18.102 (D14, docs/71 §R.4, §R.4.2): the current links, read from the store behind the gate; retryLines applies the
+        // entry rule first, so an application saved before the deploy stays unpriced whatever is linked
+        $r = KycService::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
+            $this->store, $this->config);
+        if (!$r['ok']) {
+            $text = KycService::newCustomerNoQuote((int)$crmId, $r['text']);
+            KycService::recordNoQuote($this->store, $id, $r['code'], $text);
+            return $text;
+        }
+        if (KycService::quoteOverAutoMax($r['lines'], $this->config)) {
+            $text = KycService::newCustomerNoQuote((int)$crmId, KycService::overMaxText($this->config));
+            KycService::recordNoQuote($this->store, $id, 'P3', $text);
+            return $text;
+        }
+        $connectivity = trim((string)($app['connectivity_type'] ?? 'New Connection'));
+        $sp = trim((string)($app['sales_person'] ?? ''));
+        $posted = KycService::postQuote($this->crm, $this->store, $id, (int)$crmId, $r['lines'],
+            KycService::customerNotes($this->config),
+            KycService::kycAdminNotes($id, 'registration, reached uCRM later', $sp !== '' ? $sp : (string)($app['retailer_name'] ?? ''),
+                $connectivity, (string)($app['priority'] ?? 'Medium'),
+                UcrmQuoteLines::needsInstallAnswer((string)($app['customer_type'] ?? ''), $connectivity) ? ($app['install_by'] ?? '') : '',
+                $app['quote_ref'] ?? ''),
+            (string)($app['mobile'] ?? ''), $known !== [] ? $known : null);
+        // 5.18.102 (D14, docs/71 §R.4.4): a quotation made from links records which ones, so a relink can find it
+        if (!empty($posted['created'])) {
+            $this->store->updateOne('kyc_applications.json', 'id', $id, ['quote_link_ids' => UcrmQuoteLines::linkIds($r['link_ids'] ?? [])]);
+        }
+        return !empty($posted['refused']) ? (string)$posted['refused'] : '';
     }
 
     /**

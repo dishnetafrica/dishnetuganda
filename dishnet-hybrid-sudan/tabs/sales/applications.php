@@ -17,6 +17,35 @@ $pendC   = count(array_filter($myApps, $crmWait));
 $syncC   = count(array_filter($myApps, fn($a) => ($a['status']??'')==='synced'));
 $failC   = count(array_filter($myApps, $crmFail));
 $totalC  = count($myApps);
+// 5.18.102 (Uganda, docs/71 §E.2, §F.6): who installs, and a created quotation that does not total what was sent, are
+// shown on the card only where the quoting-organization gate is on. Elsewhere nothing on this page changes.
+require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+$ugOrders102 = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on'];
+// 5.18.102 (Uganda, D14, docs/71 §R.4.4, §R.4.8): Make the quotation's five conditions are KycService's one
+// implementation, which the handler checks again; and the Orders filter &quote_link=<record id> lists only the
+// applications quoted under that uCRM link record (a quote_id, and quote_link_ids naming it). The filter is admins only:
+// anyone else is answered 403. Both only where the gate is on — elsewhere the parameter is not read, and nothing changes.
+$ugQuoteLink102 = null;
+if ($ugOrders102) {
+    require_once dirname(__DIR__, 2) . '/lib/KycService.php';   // loads lib/UcrmQuoteLines.php, which loads UcrmQuoteLinks.php
+    if (isset($_GET['quote_link'])) {
+        if (empty($isAdmin)) {
+            http_response_code(403);
+            echo '<div class="kyc-alert danger">&#10060; Access denied — admin only.</div>';
+            return;
+        }
+        $_qlRaw = $_GET['quote_link'];
+        $ugQuoteLink102 = (is_string($_qlRaw) && $_qlRaw !== '' && strlen($_qlRaw) <= 9 && ctype_digit($_qlRaw)) ? (int)$_qlRaw : 0;
+        $myApps = array_values(array_filter((array)$myApps, function ($a) use ($ugQuoteLink102) {
+            return is_array($a) && $ugQuoteLink102 > 0 && UcrmQuoteLinks::quotedUnder($a, [$ugQuoteLink102]);
+        }));
+        $activeC = count(array_filter($myApps, $inCrm));
+        $pendC   = count(array_filter($myApps, $crmWait));
+        $syncC   = count(array_filter($myApps, fn($a) => ($a['status']??'')==='synced'));
+        $failC   = count(array_filter($myApps, $crmFail));
+        $totalC  = count($myApps);
+    }
+}
 ?>
 
 <style>
@@ -45,6 +74,16 @@ $totalC  = count($myApps);
 </div>
 
 <!-- Orders (KYC Registrations) -->
+<?php if ($ugQuoteLink102 !== null): /* 5.18.102 (Uganda, D14, docs/71 §R.4.4): the Orders filter — the applications quoted under one uCRM link record */ ?>
+<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;margin-bottom:10px;">
+    Applications quoted under uCRM link #<?= (int)$ugQuoteLink102 ?> · <a href="?page=dashboard&amp;tab=applications" style="color:#1d4ed8;">Show every order</a>
+</div>
+<?php endif; ?>
+<?php if ($ugQuoteLink102 !== null && empty($myApps)): /* 5.18.102: none was quoted under it */ ?>
+<div class="app-empty">
+    <div style="font-size:14px;font-weight:800;color:#1e293b;">No application was quoted under uCRM link #<?= (int)$ugQuoteLink102 ?>.</div>
+</div>
+<?php else: /* 5.18.102: the list, as it was */ ?>
 <?php if (empty($myApps)): ?>
 <div class="app-empty">
     <div style="font-size:56px;margin-bottom:8px;">📋</div>
@@ -92,6 +131,9 @@ $totalC  = count($myApps);
         <?php if (!empty($a['crm_client_id'])): ?>
         <span><i class="bi bi-cloud-check"></i> CRM: <?= h($a['crm_client_id']) ?></span>
         <?php endif; ?>
+<?php if ($ugOrders102 && in_array($a['install_by'] ?? null, ['dishnet', 'customer'], true)): /* 5.18.102 (Uganda, docs/71 §E.2): the form's "Who installs?" answer */ ?>
+        <span><i class="bi bi-tools"></i> <?= $a['install_by'] === 'dishnet' ? 'Install: DishNet' : 'Customer installs — kit only' ?></span>
+<?php endif; ?>
     </div>
     <?php
     // Document upload status badges
@@ -336,10 +378,50 @@ $totalC  = count($myApps);
         <?php endif; ?>
     </div>
     <?php endif; ?>
+<?php if ($ugOrders102 && !empty($a['quote_found_in_ucrm']) && empty($a['quote_created'])): /* 5.18.102 (Uganda, D14, docs/71 §R.4.4, F-8, F-10): R-M4's guard found a quotation in uCRM, so none was made a second time; uCRM's number drawn through h() */
+    $_qf102 = is_array($a['quote_found_in_ucrm']) && is_scalar($a['quote_found_in_ucrm']['number'] ?? null) ? (string)$a['quote_found_in_ucrm']['number'] : ''; ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#14532d;background:#f0fdf4;border:1px solid #bbf7d0;">
+        <div style="font-weight:800;margin-bottom:3px;">A quotation was made in uCRM after registration (#<?= h($_qf102) ?>) — no second one was made</div>
+    </div>
+<?php else: /* 5.18.102: elsewhere, and without such a finding, as it was */ ?>
+<?php if ($ugOrders102 && empty($a['quote_created']) && is_numeric($a['quote_make_claim_ts'] ?? null) && time() - (int)$a['quote_make_claim_ts'] < KycService::QUOTE_CLAIM_SECONDS): /* 5.18.102 D14 review round 6 (CK6-F1): a claim younger than QUOTE_CLAIM_SECONDS (makeQuotation's own rule) is a press of Make the quotation, or retry_quote, not yet finished, so what the card holds may be out of date — never "make it by hand". Round 7 (CK7-F3): a heading true whoever holds the claim */ ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+        <div style="font-weight:800;margin-bottom:3px;">⏳ Making a quotation for this application has not finished</div>
+        <div>Do not make one by hand in uCRM: wait, then open the Orders screen again.</div>
+    </div>
+<?php else: /* 5.18.102: with no press in flight, as it was */ ?>
+<?php if ($ugOrders102 && (!empty($a['quote_unconfirmed_at']) || KycService::claimLeftUnsettled($a)) && empty($a['quote_created'])): /* 5.18.102 D14 review round 3 (CK-flows-2): Make the quotation's last POST got no id back (a timeout, a 5xx) — uCRM may have made it, so the card never says none was made; a press finds it (R-M4). Round 5 (CK5-B2): a heading true whatever stopped it — a lost answer, a refusal, a write after the read-back. Round 7 (CK7-F1): a claim past QUOTE_CLAIM_SECONDS too — every answer and every Throwable removes its claim, so one still there is a request that died (after its POST, perhaps) or a removal that failed (logged). Round 8 (CK8-F2): unless a refusal followed it — KycService::claimLeftUnsettled() */ ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+        <div style="font-weight:800;margin-bottom:3px;">⚠ Making the last quotation did not finish</div>
+        <div>It may have been made in uCRM. <?= /* 5.18.102 D14 review round 4 (CK4-F2): the button's own condition */ !empty($isAdmin) && KycService::canMakeQuotation($a) ? 'Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second one.' : 'Do not make one by hand in uCRM before an admin has looked there for it.' ?></div>
+    </div>
+<?php else: /* 5.18.102: without such an answer, as it was */ ?>
 <?php if (!empty($a['quote_refused_text']) && empty($a['quote_created'])): /* 5.18.99 (Uganda): the quote check refused this customer's quotation, and none has been made since */ ?>
     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
         <div style="font-weight:800;margin-bottom:3px;">⚠ No quotation was made</div>
         <div><?= h((string)$a['quote_refused_text']) ?></div>
+    </div>
+<?php endif; ?>
+<?php endif; ?>
+<?php endif; /* 5.18.102 D14 review round 6: the press in flight */ ?>
+<?php if ($ugOrders102 && !empty($isAdmin) && KycService::canMakeQuotation($a)): /* 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — admins only, the five conditions; it posts action, _csrf and app_id, nothing else, and disables itself on submit */ ?>
+    <form method="POST" style="margin-top:6px;" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;}return true;">
+        <?= csrfField() ?>
+        <input type="hidden" name="action" value="kyc_make_quote">
+        <input type="hidden" name="app_id" value="<?= (int)$a['id'] ?>">
+        <button type="submit" style="background:#1565C0;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Make the quotation</button>
+    </form>
+<?php endif; ?>
+<?php endif; ?>
+<?php if ($ugOrders102 && is_array($a['quote_mismatch'] ?? null)): /* 5.18.102 (Uganda, docs/71 §F.6): the quotation uCRM made does not total what the plugin sent */
+    $qmSent = $a['quote_mismatch']['sent_total'] ?? null; $qmMade = $a['quote_mismatch']['created_total'] ?? null; ?>
+    <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+        <div style="font-weight:800;margin-bottom:3px;">⚠ Check the quotation in uCRM</div>
+        <div><?= h(!is_numeric($qmMade)
+            ? 'The quotation could not be read back from uCRM — check it there.'
+            : (is_numeric($qmSent) && abs((float)$qmMade - (float)$qmSent) > 0.0001
+                ? 'The quotation uCRM made totals ' . dn_cur($config) . number_format((float)$qmMade, 2) . ', not the ' . dn_cur($config) . number_format((float)$qmSent, 2) . ' sent — check it in uCRM.'
+                : 'The quotation uCRM made has other lines than the ones sent, for the same total — check it in uCRM.')) ?></div>
     </div>
 <?php endif; ?>
     <div class="app-card-bottom">
@@ -374,6 +456,7 @@ $totalC  = count($myApps);
     <?php endif; ?>
 </div>
 <?php endforeach; ?>
+<?php endif; ?>
 <?php endif; ?>
 
 <div style="height:80px;"></div>

@@ -211,6 +211,34 @@ class NotificationService
     // KYC / ONBOARDING  →  SUPPORT
     // ══════════════════════════════════════════════════════════════════════
 
+    /**
+     * 5.18.102 (Uganda, docs/71 §E.2): the KYC form's "Who installs?" answer as the application stores it — 'dishnet'
+     * or 'customer' — for the staff messages below; '' when it was not asked, holds anything else, or the quoting-
+     * organization gate is off (South Sudan, and Uganda with ucrm_quote_organization_id 0/off). Read through
+     * QuoteOrganization::setting() with the data directory, as the D-10 recipient rule reads its own gate. Never throws.
+     */
+    private function installBy(array $application): string
+    {
+        $by = $application['install_by'] ?? null;
+        if ($by !== 'dishnet' && $by !== 'customer') return '';
+        try {
+            require_once __DIR__ . '/QuoteOrganization.php';
+            $dir = method_exists($this->store, 'getDataDir') ? (string)$this->store->getDataDir() : null;
+            if (empty(\QuoteOrganization::setting((array)$this->cfgForContacts, $dir)['on'])) return '';
+        } catch (\Throwable $e) {
+            return '';
+        }
+        return $by;
+    }
+
+    /** 5.18.102: the message line for installBy()'s answer, worded as the Orders card words it; '' for none. */
+    private static function installLine(string $by): string
+    {
+        if ($by === 'dishnet')  return "🔧 Install: DishNet\n";
+        if ($by === 'customer') return "🔧 Customer installs — kit only\n";
+        return '';
+    }
+
     public function kycSubmitted(array $retailer, array $application): void
     {
         $customerName = trim(($application['firstname'] ?? '') . ' ' . ($application['lastname'] ?? ''));
@@ -247,7 +275,9 @@ class NotificationService
         $msg = "📋 *New Registration*\n\n"
              . "👤 {$customerName}\n"
              . "📍 {$area}\n"
-             . "📶 {$type} | {$this->money($amount)}\n\n"
+             . "📶 {$type} | {$this->money($amount)}\n"
+             . self::installLine($this->installBy($application))   // 5.18.102 (Uganda, docs/71 §E.2): '' elsewhere
+             . "\n"
              . "{$source}\n"
              . "🔖 App #{$appId}\n\n"
              . "👷 Agent: {$retailer['name']}\n"
@@ -317,13 +347,16 @@ class NotificationService
 
         $quoteLine = $quoteRef !== '' ? "📄 Quote: {$quoteRef}\n" : '';
         $jobLine   = $crmJobId  > 0   ? "🗓 CRM Job #{$crmJobId}\n" : '';
+        $installLine = self::installLine($this->installBy($application));   // 5.18.102 (Uganda, docs/71 §E.2): '' elsewhere
 
         // ── Message for Bidal + Admin (full operational context) ──────────
         $bidalMsg = "🔄 *Additional Service — Existing Customer*\n\n"
                   . "👤 {$fullName}\n"
                   . "🔗 CRM #{$crmClientId} (existing client)\n"
                   . "📍 *NEW SITE:* {$newAddress}\n"
-                  . "📶 {$serviceType} | {$this->money($amount)}\n\n"
+                  . "📶 {$serviceType} | {$this->money($amount)}\n"
+                  . $installLine   // 5.18.102 (Uganda, docs/71 §E.2): '' elsewhere
+                  . "\n"
                   . "{$sourceLine}\n"
                   . $quoteLine
                   . $jobLine
@@ -374,7 +407,9 @@ class NotificationService
                   . "👤 {$fullName}\n"
                   . "🔗 CRM #{$crmClientId} (existing)\n"
                   . "📍 New site: {$newAddress}\n"
-                  . "📶 {$serviceType} | {$this->money($amount)}\n\n"
+                  . "📶 {$serviceType} | {$this->money($amount)}\n"
+                  . $installLine   // 5.18.102 (Uganda, docs/71 §E.2): '' elsewhere
+                  . "\n"
                   . $quoteLine
                   . $jobLine
                   . "🔖 App #{$appId}\n\n"
@@ -427,13 +462,19 @@ class NotificationService
         $hasPaid    = !empty($application['payment_id']) || !empty($application['payment_created']);
         $nextStep   = $hasPaid ? 'Schedule installation' : ($hasQuote ? 'Awaiting payment' : 'Create quote');
         
+        // 5.18.102 (Uganda, docs/71 §E.2): a kit-only sale has nothing to install; the answer is shown under the service.
+        $installBy  = $this->installBy($application);
+        if ($hasPaid && $installBy === 'customer') $nextStep = 'Hand over kit (no installation)';
+        
         $serviceLabel = $application['customer_type'] ?? 'Service';
         $areaLine = $area ? " | {$area}" : '';
         
         $agentMsg = "✅ *CRM Account Created*\n\n"
                   . "👤 {$fullName}\n"
                   . "🔗 CRM #{$crmClientId} | {$username}\n"
-                  . "📶 {$serviceLabel}{$areaLine}\n\n"
+                  . "📶 {$serviceLabel}{$areaLine}\n"
+                  . self::installLine($installBy)   // 5.18.102 (Uganda, docs/71 §E.2): '' elsewhere
+                  . "\n"
                   . "📋 App #{$appId} in Plugin\n"
                   . "➡️ Next: {$nextStep}";
         

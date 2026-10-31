@@ -2,6 +2,11 @@
 // PHP 7.4 compatible
 $retailer = $auth->requireLogin();
 $isAdmin  = ($retailer['role'] ?? '') === 'admin';
+// 5.18.102 (Uganda, D14, docs/71 §R.2.6, Q7): where the quoting-organization gate is on, this page stops claiming that
+// ucrm_product_id reaches quotes — the header, the notice, the badges and the column say so, and Auto-Map (which the
+// server refuses with 409 there) is not drawn. Each change is a block emitted only there; elsewhere the page is as it was.
+require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+$_pm102 = !empty(QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']);
 ?>
 <style>
 .pm-wrap { max-width:1100px; margin:0 auto; padding:16px; }
@@ -49,14 +54,20 @@ $isAdmin  = ($retailer['role'] ?? '') === 'admin';
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div>
       <h2 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">🔗 UCRM Product Mapping</h2>
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): quotations use only the links made on the Plans and Hardware screens */ ?>
+      <p style="margin:4px 0 0;font-size:13px;color:#64748b;">On Uganda, quotations use only the uCRM links made on the Plans and Hardware screens. The UCRM Product IDs on this page are not read for quotes.</p>
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
       <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Link plugin plans to UCRM products so quotes reference real billing items.</p>
+<?php endif; ?>
     </div>
     <div class="pm-actions" style="margin:0;">
       <button class="pm-btn pm-btn-outline" onclick="loadMapping()">🔄 Refresh</button>
       <?php if ($isAdmin): ?>
       <button class="pm-btn pm-btn-primary" onclick="pushProducts(1)">👁 Dry Run Push</button>
       <button class="pm-btn pm-btn-success" onclick="pushProducts(0)">⬆️ Push to UCRM</button>
+<?php if (!$_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): Auto-Map is not drawn where the gate is on — the server answers it 409 there */ ?>
       <button class="pm-btn pm-btn-warning" onclick="autoMap(0)">🤖 Auto-Map</button>
+<?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -126,20 +137,32 @@ function loadMapping() {
       var mapped  = cat.mapped_to_ucrm || 0;
       totalActive += active;
       totalMapped += mapped;
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): no green "ok" class — a stored product id is not a link */ ?>
+      var cls = mapped > 0 ? '' : 'warn';
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
       var cls = (mapped >= active && active > 0) ? 'ok' : (mapped > 0 ? '' : 'warn');
+<?php endif; ?>
       summaryHtml += '<div class="pm-stat ' + cls + '"><div class="pm-stat-val">' + mapped + ' / ' + active + '</div><div class="pm-stat-lbl">' + c.label + '</div></div>';
     });
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): no green "ok" class */ ?>
+    summaryHtml += '<div class="pm-stat ' + (totalMapped >= totalActive && totalActive > 0 ? '' : 'warn') + '"><div class="pm-stat-val">' + ucrmTotal + '</div><div class="pm-stat-lbl">UCRM Products Total</div></div>';
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
     summaryHtml += '<div class="pm-stat ' + (totalMapped >= totalActive && totalActive > 0 ? 'ok' : 'warn') + '"><div class="pm-stat-val">' + ucrmTotal + '</div><div class="pm-stat-lbl">UCRM Products Total</div></div>';
+<?php endif; ?>
 
     var summaryEl = document.getElementById('pm-summary');
     summaryEl.innerHTML = summaryHtml;
     summaryEl.style.display = 'grid';
 
     var allMapped = totalMapped >= totalActive && totalActive > 0;
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): one neutral line in the server's words, whatever the counts */ ?>
+    showNotice('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 'info');
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
     showNotice(allMapped
       ? '✅ All active plans are mapped to UCRM products. Quotes will reference real products.'
       : '⚠️ ' + (totalActive - totalMapped) + ' plan(s) not yet mapped. Run <strong>Push to UCRM</strong> or <strong>Auto-Map</strong> to link them.',
       allMapped ? 'success' : 'warn');
+<?php endif; ?>
 
     // Render tables
     var html = '';
@@ -164,9 +187,13 @@ function loadMapping() {
 
 function buildTable(title, items) {
   var allMapped = items.every(function(i) { return i.ucrm_product_id; });
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): no "All Mapped" / "Needs Mapping" badge */ ?>
+  var badge = '';
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
   var badge = allMapped
     ? '<span class="pm-badge mapped">✅ All Mapped</span>'
     : '<span class="pm-badge unmapped">⚠️ Needs Mapping</span>';
+<?php endif; ?>
   var rows = items.map(function(item) {
     var mapped = item.ucrm_product_id
       ? '<span class="pm-id">#' + item.ucrm_product_id + '</span>'
@@ -180,7 +207,11 @@ function buildTable(title, items) {
     return '<tr><td>' + (item.id || '—') + '</td><td>' + (item.name || item.title || '—') + '</td><td>' + price + '</td><td>' + mapped + '</td><td>' + active + '</td></tr>';
   }).join('');
   return '<div class="pm-card"><div class="pm-card-hd"><h3>' + title + '</h3>' + badge + '</div>'
+<?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): the column says what the stored id is, and is not */ ?>
+    + '<table class="pm-table"><thead><tr><th>Local ID</th><th>Name</th><th>Price</th><th>Stored product id (not used for quotes)</th><th>Active</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+<?php else: /* 5.18.102: elsewhere, as it was */ ?>
     + '<table class="pm-table"><thead><tr><th>Local ID</th><th>Name</th><th>Price</th><th>UCRM Product ID</th><th>Active</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+<?php endif; ?>
 }
 
 function buildUcrmTable(products) {
@@ -200,6 +231,9 @@ function pushProducts(dryRun) {
   showNotice((dryRun ? '👁 Dry-running' : '⬆️ Pushing') + ' products to UCRM…');
   document.getElementById('pm-log').textContent = '';
   apiGet('push_products_to_ucrm&dry_run=' + dryRun + '&force=0').then(function(res) {
+<?php /* 5.18.102 (Uganda, docs/71 §K.3, D12): the push is refused (409) where the quoting-organization gate is on — say so, never "Done". Emitted only there */ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php'; if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']): ?>
+    if (res.status === 'error') { showNotice('', 'warn'); document.getElementById('pm-notice').textContent = res.message || 'Not done.'; return; }
+<?php endif; ?>
     var d = res.data || res;
     var s = d.summary || {};
     log('--- ' + (dryRun ? 'DRY RUN' : 'LIVE PUSH') + ' RESULT ---');

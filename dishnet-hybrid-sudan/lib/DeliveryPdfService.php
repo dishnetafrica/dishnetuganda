@@ -56,6 +56,17 @@ class DeliveryPdfService
      */
     public function generateAndSend(array $app, array $retailer, string $crmClientId = ''): array
     {
+        // 5.18.102 (Uganda, docs/71 §K.2, D9): not sent where the quoting-organization gate is on. The document carries
+        // South Sudan's terms, promises a setup call even for a kit-only sale, and prices its items from the browser's
+        // cart, labelled USD. Returned before anything is generated, written or sent. Its three callers (post_kyc.php,
+        // webhook.php's credit-sale payment, FiberInstallService) read 'ok', and 'error' for their log line, so to each
+        // of them this is "not sent". A Uganda delivery note, from the stored lines, is a later release.
+        require_once __DIR__ . '/QuoteOrganization.php';
+        if (QuoteOrganization::setting($this->config, $this->dataDir)['on']) {
+            return ['ok' => false, 'skipped' => 'uganda', 'sent' => false, 'pdf_path' => '', 'filename' => '',
+                    'error' => 'skipped: no Delivery Acknowledgment PDF on Uganda (docs/71 §K.2)'];
+        }
+
         // ── 1. Determine service type ──────────────────────────────────────
         $serviceType = strtolower(trim($app['customer_type'] ?? $app['connectivity_type'] ?? ''));
         $isFiber   = str_contains($serviceType, 'fiber') || str_contains($serviceType, 'ftth');

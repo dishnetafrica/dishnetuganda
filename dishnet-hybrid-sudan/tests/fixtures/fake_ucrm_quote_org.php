@@ -26,6 +26,11 @@ declare(strict_types=1);
  * billing_noid (201 with {}), clients_refuse (POST clients answers 404, as the live uCRM did for a payload it could not
  * place), ignores_org (every POSTed client is filed under organization 2),
  * create_answer_no_org (the POST clients answer carries no organizationId), pdf_serve (uCRM serves a quote PDF).
+ *
+ * 5.18.102 (docs/71 §L.2): the default state carries a TEST catalogue the journey seeds against — the plan "TEST Plan"
+ * mirrored from a service plan of the same name at 100 a month, the kit "TEST Kit" at 1500 and "Professional
+ * Installation" at 200 — served from 'products' and 'service_plans' (each replaceable through /__test/set).
+ * products_down answers 503 on GET products. A POSTed quote keeps each item's productId as sent.
  */
 $port      = (string)($_SERVER['SERVER_PORT'] ?? '0');
 $stateFile = sys_get_temp_dir() . '/fake_ucrm_qo_' . $port . '.json';
@@ -45,7 +50,15 @@ function qo_default(): array
             ['id' => 1, 'name' => 'EFRIS TIN', 'key' => 'efrisTin', 'attributeType' => 'client'],
             ['id' => 5, 'name' => 'starlinkDetails', 'key' => 'starlinkdetails', 'attributeType' => 'service'],
         ],
-        'clients' => [], 'quotes' => [], 'payments' => [], 'products' => [], 'jobs' => [],
+        'clients' => [], 'quotes' => [], 'payments' => [], 'jobs' => [],
+        'products' => [
+            ['id' => 12, 'name' => 'TEST Plan',                 'price' => 100,  'unit' => 'Month', 'taxable' => false],
+            ['id' => 55, 'name' => 'TEST Kit',                  'price' => 1500, 'unit' => 'Pc',    'taxable' => false],
+            ['id' => 70, 'name' => 'Professional Installation', 'price' => 200,  'unit' => 'Job',   'taxable' => false],
+        ],
+        'service_plans' => [
+            ['id' => 1, 'name' => 'TEST Plan', 'periods' => [['period' => 1, 'price' => 100, 'enabled' => true]]],
+        ],
         'client_seq' => 900, 'quote_seq' => 76, 'billing_seq' => 3499, 'job_seq' => 5000,
         'log' => [], 'pdf_html' => [],
     ];
@@ -179,7 +192,8 @@ $lines = function (array $items): array {
         $line = (float)($it['quantity'] ?? 1) * (float)($it['price'] ?? 0);
         $total += $line;
         $out[] = ['label' => (string)($it['label'] ?? 'Item'), 'quantity' => (float)($it['quantity'] ?? 1),
-                  'price' => (float)($it['price'] ?? 0), 'total' => $line, 'unit' => (string)($it['unit'] ?? '')];
+                  'price' => (float)($it['price'] ?? 0), 'total' => $line, 'unit' => (string)($it['unit'] ?? '')]
+               + (isset($it['productId']) ? ['productId' => (int)$it['productId'], 'type' => 'product'] : []);
     }
     return [$out, $total];
 };
@@ -223,9 +237,12 @@ if (preg_match('#^/(?:billing/)?quotes/(\d+)$#', $p, $m)) {
 }
 
 // ── the rest the paths under test touch ────────────────────────────────────────
-if ($p === '/products' && $method === 'GET') qo_out(array_values((array)$state['products']));
+if ($p === '/products' && $method === 'GET') {
+    if (qo_on('products_down')) qo_out(['code' => 503, 'message' => 'Service Unavailable'], 503);
+    qo_out(array_values((array)$state['products']));
+}
 if ($p === '/products' || preg_match('#^/products/\d+$#', $p)) qo_out(['id' => 1] + $body, $method === 'POST' ? 201 : 200);
-if ($p === '/service-plans' && $method === 'GET') qo_out([]);
+if ($p === '/service-plans' && $method === 'GET') qo_out(array_values((array)($state['service_plans'] ?? [])));
 if ($p === '/payments' && $method === 'GET') qo_out(array_values((array)$state['payments']));
 if ($p === '/payments' && $method === 'POST') {
     $state['client_seq']++;

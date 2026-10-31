@@ -17,6 +17,17 @@
  *   the cron          the real cron_quote_wa.php, laid out as on the server
  * and reads every WhatsApp back from the dry-run log, in the order sent.
  * Unset, the switch changes nothing: that is pinned too — it is South Sudan.
+ *
+ * 5.18.102 (rewritten on purpose, never weakened; docs/71 §L.2): this book is Uganda (UGX), where a quotation is made only
+ * from lines uCRM's Products price. The fake serves its TEST catalogue ('catalogue'), the form says who installs
+ * (install_by), and the retry's application is saved as 5.18.102 saves one (its resolved lines marked). The messages,
+ * their order and their claims — what this test pins — are unchanged; the quotation now carries uCRM's lines.
+ *
+ * 5.18.102 D14 (rewritten on purpose, never weakened; docs/71 §R.9.2): a line is priced only through the link an admin
+ * made. Every book holds three links (the plan row → product 12 and service plan 6, the kit row → product 55, the
+ * installation → product 70, each with its row's created_at stamp), the form posts the web KYC form's marker
+ * (ucrm_quote_form), and H's application is stored web (quote_sale_entry) with the link its marked line came from
+ * (quote_link_ids). B0 shows the form's quote 77 is made only because the links are there.
  */
 declare(strict_types=1);
 
@@ -137,16 +148,35 @@ if ($webPort === 0) { bad('the plugin started under php -S'); echo "\n{$pass} pa
 
 $AGENT = ['id' => 7, 'name' => 'Test Agent', 'phone' => '+256700000999', 'role' => 'sales', 'is_admin' => false];
 
-/** A clean install: fake uCRM reset, empty store, the plan and kit the form sells, the settings. */
-function world(bool $likeCrm): SqliteStore {
+/** 5.18.102 D14 (docs/71 §R.1.1): one link record in ucrm_quote_links.json's stored shape, active, under organization 1. */
+function link_rec(int $id, string $item, int $rowId, string $stamp, int $productId, ?int $servicePlanId = null): array {
+    return ['id' => $id, 'item' => $item, 'row_id' => $rowId, 'row_stamp' => $stamp, 'product_id' => $productId,
+            'service_plan_id' => $servicePlanId, 'organization_id' => 1, 'row_name' => 'TEST row ' . $rowId,
+            'product_name' => 'TEST product ' . $productId, 'service_plan_name' => $servicePlanId === null ? null : 'TEST service plan ' . $servicePlanId,
+            'linked_by_id' => 1, 'linked_by_name' => 'Test Admin', 'linked_at' => '2026-10-01 10:00:00', 'ended_at' => null,
+            'ended_by_id' => null, 'ended_why' => null, 'linked_at_ts' => 1790848800 + $id, 'ended_at_ts' => null];
+}
+const PLAN_STAMP = '2026-10-01 09:00:00';   // 5.18.102 D14: the rows' created_at, which their links repeat as row_stamp
+const KIT_STAMP  = '2026-10-01 09:05:00';
+
+/**
+ * A clean install: fake uCRM reset, empty store, the plan and kit the form sells, the settings. 5.18.102 D14: and the
+ * three links an admin would make ($links false: no link store at all, the table never created).
+ */
+function world(bool $likeCrm, bool $links = true): SqliteStore {
     global $ctl, $dataDir, $BASE, $useDataDir, $tmp;
     static $n = 0;
     $ctl('/__test/reset?scenario=uganda');
+    $ctl('/__test/set', ['catalogue' => true]);   // 5.18.102: uCRM's Products price the lines
     $useDataDir($tmp . '/data' . (++$n));
     $s = SqliteStore::create($dataDir);
     $s->save('subscription_plans.json', [['id' => 1, 'name' => 'Residential Standard (TEST)', 'customer_price' => 100,
-        'ucrm_product_id' => 12]]);
-    $s->save('kyc_devices.json', [['id' => 3, 'title' => 'Standard Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55]]);
+        'ucrm_product_id' => 12, 'created_at' => PLAN_STAMP]]);
+    $s->save('kyc_devices.json', [['id' => 3, 'title' => 'Standard Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55,
+        'created_at' => KIT_STAMP]]);
+    // 5.18.102 D14 (docs/71 §R.9.2): record 1 the plan → product 12 and service plan 6; 2 the kit → 55; 3 the installation → 70
+    if ($links) $s->save('ucrm_quote_links.json', [link_rec(1, 'plan', 1, PLAN_STAMP, 12, 6), link_rec(2, 'kit', 3, KIT_STAMP, 55),
+                                                   link_rec(3, 'install', 0, '', 70)]);
     $s->save('kyc_config.json', [
         'crm_base_url' => $BASE, 'crm_auth_token' => 'FAKE-TEST-KEY',
         'dry_run_mode' => true, 'data_dir' => $dataDir,
@@ -164,7 +194,8 @@ function form(string $phone, string $last): array {
     $post = ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
              'firstname' => 'Test', 'lastname' => $last, 'mobile' => $phone, 'email' => '',
              'address_1' => 'Test address', 'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1',
-             'sales_type' => 'Credit', 'priority' => 'Low'];
+             'sales_type' => 'Credit', 'priority' => 'Low', 'install_by' => 'dishnet',   // 5.18.102: the form asks who installs
+             'ucrm_quote_form' => '5.18.102'];   // 5.18.102 D14 (docs/71 §R.4.2, §R.9.2): the web KYC form's marker
     $f = $tmp . '/form_run.php';
     file_put_contents($f, '<?php
 error_reporting(E_ALL & ~E_DEPRECATED);
@@ -277,6 +308,23 @@ is_(($a['wa_quote_sent_by'] ?? '') === 'cron_quote_wa' && ledger($s) === [['quot
     '…recorded as the cron\'s send, through the shared ledger', json_encode(ledger($s)));
 $c = cron();
 is_(count(wa($P)) === 3, 'a second cron run sends nothing more', $c);
+// 5.18.102 D14 (docs/71 §R.4.1, §R.9.2): the quotation above is the links' doing. Control: the same form on a book with
+// them quotes (Q-77); on a book with no link store the customer is still put into uCRM, but no quotation is made — P1,
+// with P1_UNLINKED's text, the plan row named — and nothing is queued for the cron.
+$s = world(false);
+$r = form('+256 700 000 610', 'Linked');
+$a = the_app($s);
+is_(($a['crm_client_id'] ?? '') === '901' && (int)($a['quote_id'] ?? 0) === 77 && ($a['quote_link_ids'] ?? null) === [1, 2, 3]
+    && ($a['quote_sale_entry'] ?? null) === 'web',
+    'D14 control: with the three links the form quotes (Q-77), and the application records the links it was quoted under',
+    json_encode(array_intersect_key($a, array_flip(['crm_client_id', 'quote_id', 'quote_link_ids', 'quote_sale_entry']))));
+$s = world(false, false);
+$r = form('+256 700 000 611', 'Unlinked');
+$a = the_app($s);
+is_(($a['crm_client_id'] ?? '') === '901' && empty($a['quote_id']) && empty($a['wa_quote_pending']) && ($a['quote_refused'] ?? '') === 'P1'
+    && ($a['quote_refused_text'] ?? '') === 'The customer is in uCRM as #901. No quotation was made: Residential Standard (TEST) is not linked to a uCRM product yet — an admin links it on the Plans screen. Do not make it by hand — once the item is linked, an admin makes it from the Orders card. Do not register this customer again.',
+    'D14: with no link store the customer is created but not quoted — P1 with P1_UNLINKED\'s text, although the plan row is spelled exactly like product 12',
+    json_encode(array_intersect_key($a, array_flip(['crm_client_id', 'quote_id', 'wa_quote_pending', 'quote_refused', 'quote_refused_text']))));
 
 // ── C. on: the messages a customer created in uCRM gets ─────────────────────
 echo "\nC. On — \"Welcome to DishNet!\", then the Quotation & Order Summary and its PDF\n";
@@ -304,8 +352,9 @@ is_(events($w) === ['event_client_add', 'ops_quote_created', 'ops_quote_pdf'],
 is_(strpos($w[1]['message'] ?? '', "📄 *Quotation & Order Summary*\n\nDear Test Onboarded,") === 0
     && strpos($w[1]['message'] ?? '', '*Order:* Q-77') !== false,
     '…the summary uCRM quotes get, for this customer and this quote', $w[1]['message'] ?? '');
-is_(strpos($w[2]['message'] ?? '', '[DOC] DishNet-Quote-Q-77.pdf: Quote #Q-77 — UGX 1,600') === 0,
-    '…and the quotation PDF, for the full amount', $w[2]['message'] ?? '');
+// 5.18.102: the full amount is uCRM's — plan 100, kit 1500 and, DishNet installing, Professional Installation 200.
+is_(strpos($w[2]['message'] ?? '', '[DOC] DishNet-Quote-Q-77.pdf: Quote #Q-77 — UGX 1,800') === 0,
+    '…and the quotation PDF, for the full amount (uCRM\'s three lines)', $w[2]['message'] ?? '');
 is_(empty($a['wa_quote_pending']) && !empty($a['wa_quote_sent']) && ($a['wa_quote_sent_by'] ?? '') === 'webhook',
     'the application records the quotation as sent, by the webhook', json_encode(array_intersect_key($a,
         array_flip(['wa_quote_pending', 'wa_quote_sent', 'wa_quote_sent_by']))));
@@ -387,7 +436,11 @@ $s->save('kyc_applications.json', [['id' => 40, 'firstname' => 'Test', 'lastname
     'package_choice' => '1', 'offer_name' => 'Residential Standard (TEST)', 'offer_price' => 100,
     'sales_type' => 'Credit', 'is_lead' => true, 'username' => 'STAR0000040', 'status' => 'new',
     'crm_client_id' => null, 'crm_sync_status' => 'pending', 'created_at' => date('Y-m-d H:i:s'),
-    'quote_items' => [['label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month']]]]);
+    // 5.18.102: as 5.18.102 saves an application — its lines resolved from uCRM and marked, and who installs
+    'install_by' => 'dishnet', 'quote_lines_source' => 'ucrm-5.18.102', 'quote_items_total' => 100.0,
+    'quote_items' => [['productId' => 12, 'label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month']],
+    // 5.18.102 D14 (docs/71 §R.4.2 E-1, §R.4.4, §R.9.2): saved by the web form, with the link its marked line came from
+    'quote_sale_entry' => 'web', 'quote_link_ids' => [1]]]);
 require_once $root . '/lib/WalletService.php';
 require_once $root . '/lib/CrmQueue.php';
 require_once $root . '/lib/EfrisClientField.php';

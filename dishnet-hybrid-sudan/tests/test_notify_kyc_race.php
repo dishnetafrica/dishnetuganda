@@ -18,6 +18,17 @@
  *   5. South Sudan, the race: both, as in 5.18.53 (docs/46 §E)
  *   6. Weakened copies, each caught (skipped with --no-mutants)
  *
+ * 5.18.102 (rewritten on purpose, never weakened; docs/71 §L.2): on Uganda a quotation is made only from lines uCRM's
+ * Products price, so the fake serves its TEST catalogue ('catalogue'), the form says who installs (install_by), and the
+ * retry's application is saved as 5.18.102 saves one (its resolved lines marked). The race — what this test pins — is
+ * unchanged.
+ *
+ * 5.18.102 D14 (rewritten on purpose, never weakened; docs/71 §R.9.2): a line is priced only through the link an admin
+ * made, so each Uganda book holds three links (the plan row → product 12 and service plan 6, the kit row → product 55,
+ * the installation → product 70, each with its row's created_at stamp); the form posts the web KYC form's marker
+ * (ucrm_quote_form), and the retry's application is stored web (quote_sale_entry) with the link its marked line came
+ * from (quote_link_ids). Section 4 also checks that the retry quoted it.
+ *
  * Every person, number and document is fictitious; nothing leaves the machine.
  */
 declare(strict_types=1);
@@ -113,6 +124,7 @@ $world = function (string $tree, array $web, string $tenant, bool $likeCrm, bool
     static $n = 0;
     [$port, $ptr] = $web;
     $ctl('/__test/reset?scenario=uganda');
+    $ctl('/__test/set', ['catalogue' => true]);   // 5.18.102: uCRM's Products price the lines
     if ($race) $ctl('/__test/set', ['webhook_on_create' => "http://127.0.0.1:{$port}/webhook.php", 'webhook_on_create_key' => 'testsecret']);
     $dir = "{$tmp}/data" . (++$n);
     @mkdir($dir, 0777, true);
@@ -122,8 +134,23 @@ $world = function (string $tree, array $web, string $tenant, bool $likeCrm, bool
     require_once $root . '/lib/StoreInterface.php';
     require_once $root . '/lib/SqliteStore.php';
     $s = SqliteStore::create($dir);
-    $s->save('subscription_plans.json', [['id' => 1, 'name' => 'Residential Standard (TEST)', 'customer_price' => 100, 'ucrm_product_id' => 12]]);
-    $s->save('kyc_devices.json', [['id' => 3, 'title' => 'Standard Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55]]);
+    $s->save('subscription_plans.json', [['id' => 1, 'name' => 'Residential Standard (TEST)', 'customer_price' => 100, 'ucrm_product_id' => 12,
+        'created_at' => '2026-10-01 09:00:00']]);   // 5.18.102 D14: the stamps the links repeat
+    $s->save('kyc_devices.json', [['id' => 3, 'title' => 'Standard Kit (TEST)', 'price' => '1500', 'ucrm_product_id' => 55,
+        'created_at' => '2026-10-01 09:05:00']]);
+    if ($tenant === 'uganda') {
+        // 5.18.102 D14 (docs/71 §R.1.1, §R.9.2): the links an admin made — record 1 the plan row → product 12 and its service
+        // plan 6, 2 the kit row → 55, 3 the installation → 70 — under the quoting organization 1
+        $link = function (int $id, string $item, int $rowId, string $stamp, int $pid, ?int $sp = null): array {
+            return ['id' => $id, 'item' => $item, 'row_id' => $rowId, 'row_stamp' => $stamp, 'product_id' => $pid,
+                    'service_plan_id' => $sp, 'organization_id' => 1, 'row_name' => 'TEST row ' . $rowId, 'product_name' => 'TEST product ' . $pid,
+                    'service_plan_name' => $sp === null ? null : 'TEST service plan ' . $sp, 'linked_by_id' => 1, 'linked_by_name' => 'Test Admin',
+                    'linked_at' => '2026-10-01 10:00:00', 'ended_at' => null, 'ended_by_id' => null, 'ended_why' => null,
+                    'linked_at_ts' => 1790848800 + $id, 'ended_at_ts' => null];
+        };
+        $s->save('ucrm_quote_links.json', [$link(1, 'plan', 1, '2026-10-01 09:00:00', 12, 6), $link(2, 'kit', 3, '2026-10-01 09:05:00', 55),
+                                            $link(3, 'install', 0, '', 70)]);
+    }
     $s->save('kyc_config.json', [
         'tenant_profile' => $tenant, 'currency_code' => $tenant === 'uganda' ? 'UGX' : 'USD',
         'crm_base_url' => $BASE, 'crm_auth_token' => 'FAKE-TEST-KEY',
@@ -139,7 +166,8 @@ $form = function (string $tree, string $dir, string $phone, string $last) use ($
     $post = ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
              'firstname' => 'Test', 'lastname' => $last, 'mobile' => $phone, 'email' => '',
              'address_1' => 'Test address', 'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1',
-             'sales_type' => 'Credit', 'priority' => 'Low'];
+             'sales_type' => 'Credit', 'priority' => 'Low', 'install_by' => 'dishnet',   // 5.18.102: the form asks who installs
+             'ucrm_quote_form' => '5.18.102'];   // 5.18.102 D14 (docs/71 §R.4.2, §R.9.2): the web KYC form's marker
     $f = "{$tmp}/form_run.php";
     file_put_contents($f, '<?php
 error_reporting(E_ALL & ~E_DEPRECATED);
@@ -229,11 +257,16 @@ $retryRace = function (string $tree, array $web) use ($world, $retry, $events, $
         'package_choice' => '1', 'offer_name' => 'Residential Standard (TEST)', 'offer_price' => 100,
         'sales_type' => 'Credit', 'is_lead' => true, 'username' => 'STAR0000040', 'status' => 'new',
         'crm_client_id' => null, 'crm_sync_status' => 'pending', 'created_at' => date('Y-m-d H:i:s'),
-        'quote_items' => [['label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month']]]]);
+        // 5.18.102: as 5.18.102 saves an application — its lines resolved from uCRM and marked, and who installs
+        'install_by' => 'dishnet', 'quote_lines_source' => 'ucrm-5.18.102', 'quote_items_total' => 100.0,
+        'quote_items' => [['productId' => 12, 'label' => 'Residential Standard (TEST)', 'quantity' => 1, 'price' => 100.0, 'unit' => 'month']],
+        // 5.18.102 D14 (docs/71 §R.4.2 E-1, §R.4.4, §R.9.2): saved by the web form, with the link its marked line came from
+        'quote_sale_entry' => 'web', 'quote_link_ids' => [1]]]);
     $out = $retry($tree, $dir);
     $app = array_values(array_filter($s->load('kyc_applications.json') ?? [], function ($a) { return (int)($a['id'] ?? 0) === 40; }))[0] ?? [];
     return ['created' => (string)($app['crm_client_id'] ?? ''), 'out' => substr($out, -300), 'events' => $events($dir, $P),
-            'race' => $raced(), 'marked' => strpos($whlog($dir), MARKED) !== false];
+            'race' => $raced(), 'marked' => strpos($whlog($dir), MARKED) !== false,
+            'quoted' => !empty($app['quote_created']) && ($app['quote_link_ids'] ?? null) === [1]];   // 5.18.102 D14
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -263,6 +296,7 @@ is_($c['race'] === [200] && $c['events'] === ['event_client_add'], 'the welcome 
 echo "\n4. Uganda — the retry job, the race forced: no welcome\n";
 $d = $retryRace($root, $web);
 is_($d['created'] !== '' && $d['race'] === [200], 'the retry creates the customer, and client.add overtakes it', json_encode($d));
+is_($d['quoted'], '5.18.102 D14: … and quotes it through the link its marked line came from (quote_link_ids [1])', json_encode($d));
 is_($d['events'] === [], 'no welcome: the form\'s message went when the form ran', json_encode($d['events']));
 is_($d['marked'], 'decided by the retry job\'s mark');
 

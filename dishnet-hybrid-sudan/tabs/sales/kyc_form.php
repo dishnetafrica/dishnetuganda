@@ -1,3 +1,70 @@
+<?php
+// 5.18.102 (Uganda, docs/71 §G): the form draws uCRM's prices — UcrmQuoteLines, the resolver the quotation and the cash
+// amount are made from, read for a page (short timeouts; a successful read reused for 60 s; a failure never kept).
+// Behind the quoting-organization gate (D7), read through QuoteOrganization::setting(): where it is off (South Sudan;
+// Uganda with ucrm_quote_organization_id 0/off) $_q102 stays null, nothing is read and nothing new is emitted below.
+// $_q102 = ['ok', 'reason', 'plans' => [id => ['p' => price|null, 'r' => reason]], 'kits' => [id => …], 'install'].
+// 5.18.102 (D14, docs/71 §R.4.7, §R.5): each cell also carries 'l', the name its row is drawn with — uCRM's product name
+// when the row's link resolves, else the plugin row's own (the installation: its display word) — and, only when it
+// resolves, 'k', the link record id it resolved through (the row's data-link; the selection's are posted as
+// ucrm_links_seen). The links are read live from the store (UcrmQuoteLinks::fromStore), behind the same gate.
+require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+$_q102 = null;
+$_q102Set = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+if (!empty($_q102Set['on'])) {
+    require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
+    $_q102Unread = "uCRM's products could not be read";
+    $_q102Fiber  = 'Fiber is not priced from uCRM on this installation';   // its fee and product 244 are South Sudan's
+    $_q102 = ['ok' => false, 'reason' => $_q102Unread, 'plans' => [], 'kits' => [],
+              'install' => ['p' => null, 'r' => $_q102Unread, 'l' => UcrmQuoteLines::INSTALL_NAME]];
+    // 5.18.102 (D14): $name is what the row is drawn with when its link does not resolve — the plugin row's own name
+    $_q102Cell = function (array $r, string $name): array {
+        $ok = !empty($r['ok']) && is_array($r['line'] ?? null);
+        $cell = ['p' => $ok ? round((float)$r['line']['price'], 2) : null, 'r' => $ok ? '' : (string)($r['reason'] ?? ''),
+                 'l' => $ok ? (string)($r['line']['label'] ?? '') : $name];
+        if ($ok && is_int($r['link'] ?? null) && $r['link'] > 0) $cell['k'] = $r['link'];   // only a link that resolves
+        return $cell;
+    };
+    $_q102Named = function (array $row, string $key): string {
+        return is_scalar($row[$key] ?? null) ? (string)$row[$key] : '';
+    };
+    try {
+        // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read live — never by a name
+        $_q102Res = UcrmQuoteLines::forPage(UcrmQuoteLines::quoteClient(isset($crm) ? $crm : null, is_array($config) ? $config : []),
+            $_q102Set, (string)$dataDir, UcrmQuoteLinks::fromStore($store, $_q102Set));
+        $_q102Cat = $_q102Res->catalogue();
+        if (!empty($_q102Cat['ok'])) {
+            $_q102['ok'] = true;
+            $_q102['reason'] = '';
+            foreach ((array)$store->load('subscription_plans.json') as $_q102Sp) {
+                if (!is_array($_q102Sp) || empty($_q102Sp['is_active'])) continue;
+                $_q102['plans'][(string)($_q102Sp['id'] ?? '')] = strtolower((string)($_q102Sp['type'] ?? 'starlink')) === 'fiber'
+                    ? ['p' => null, 'r' => $_q102Fiber] : $_q102Cell($_q102Res->planLine($_q102Sp), $_q102Named($_q102Sp, 'name'));
+            }
+            foreach ((array)($devices ?? []) as $_q102D) {
+                if (!is_array($_q102D) || empty($_q102D['is_active'])) continue;
+                // 5.18.102 (D14, F-5): the kit's own cell or the Fiber cell, chosen by UcrmQuoteLinks::offeredKit — rule 8's
+                // "offered", one implementation; this loop compares no type itself
+                $_q102['kits'][(string)($_q102D['id'] ?? '')] = UcrmQuoteLinks::offeredKit($_q102D)
+                    ? $_q102Cell($_q102Res->kitLine($_q102D, 1), $_q102Named($_q102D, 'title')) : ['p' => null, 'r' => $_q102Fiber];
+            }
+            // 5.18.102 (D14, §R.2.4): the installation's linked product, by its link; unlinked, its display word only
+            $_q102['install'] = $_q102Cell($_q102Res->installLine(), UcrmQuoteLines::INSTALL_NAME);
+        }
+    } catch (\Throwable $e) {
+        error_log('[kyc_form] 5.18.102: the uCRM catalogue could not be drawn (' . get_class($e) . ')');
+        $_q102['ok'] = false;
+        $_q102['reason'] = $_q102Unread;
+        $_q102['plans'] = $_q102['kits'] = [];
+        $_q102['install'] = ['p' => null, 'r' => $_q102Unread, 'l' => UcrmQuoteLines::INSTALL_NAME];
+    }
+    // One row's cell for the PHP-drawn lists: what the resolver said, or the unreadable reason
+    $_q102Of = function (string $map, $id) use (&$_q102): array {
+        if (empty($_q102['ok'])) return ['p' => null, 'r' => (string)$_q102['reason']];
+        return $_q102[$map][(string)$id] ?? ['p' => null, 'r' => 'not in the page\'s price list'];
+    };
+}
+?>
 
 <!-- STEP WIZARD CSS -->
 <style>
@@ -380,6 +447,11 @@ function wizNext() {
         if (!f.value || !f.value.trim()) { f.style.borderColor='#dc3545'; valid=false; }
         else { f.style.borderColor=''; }
     });
+<?php if ($_q102 !== null): ?>
+    // 5.18.102 (Uganda, docs/71 §E.1): "Who installs?" is checked here explicitly — a radio always has a value, so the
+    // check above would pass it, and a required radio in a hidden panel would block Submit with no visible message
+    if (panel.querySelector('#q102Install') && !q102InstallCheck()) valid = false;
+<?php endif; ?>
     if (!valid) return;
     wizGo(wizCurrent + 1);
 }
@@ -519,11 +591,16 @@ function wizBuildReview() {
   var sc = svcColors[svcType] || { bg: '#f1f5f9', text: '#374151', icon: '📋' };
 
   // ── Cart totals ───────────────────────────────────────────────────────
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §G): step 5 reads the same lines and total as step 3 — q102Quote(), uCRM's prices only
+  var q = q102Quote();
+<?php else: ?>
   var hwTotal = 0;
   cart.forEach(function(i){ hwTotal += parseFloat(i.price || 0) * parseInt(i.qty || 1); });
   var planPrice = plan ? parseFloat(plan.price || 0) : 0;
   var installFee = (svcType === 'Fiber' && typeof _kycFiberInstallFee !== 'undefined') ? _kycFiberInstallFee : 0;
   var todayTotal = hwTotal + planPrice + installFee;
+<?php endif; ?>
 
   // ── Section builder ───────────────────────────────────────────────────
   function section(icon, title, rows) {
@@ -577,6 +654,25 @@ function wizBuildReview() {
   if (svcKey !== 'sim' && svcKey !== 'lte') {
     var hwRows = '';
     if (cart.length > 0) {
+<?php if ($_q102 !== null): ?>
+      // 5.18.102 (Uganda, docs/71 §G): each line as q102Quote() priced it, or "not priced in uCRM" with its reason
+      cart.forEach(function(item, ix) {
+        var ql = q.kits[ix] || { price: null, cents: 0, qty: 1, reason: '' };
+        hwRows += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">' +
+          '<span style="flex:1;font-size:13px;font-weight:700;color:#1e293b;">' + escHtml(item.title || 'Hardware') + '</span>' +
+          '<span style="font-size:12px;color:#6b7280;background:#f1f5f9;padding:2px 8px;border-radius:6px;">×' + ql.qty + '</span>' +
+          (ql.price === null
+            ? '<span style="font-size:12px;font-weight:800;color:#b45309;min-width:60px;text-align:right;" title="' + escAttr(ql.reason) + '">not priced in uCRM</span>'
+            : '<span style="font-size:13px;font-weight:800;color:#D41C1C;min-width:60px;text-align:right;">' + money(ql.cents * ql.qty / 100) + '</span>') +
+        '</div>';
+        if (ql.price === null) {
+          hwRows += '<div style="font-size:11px;color:#b45309;padding:2px 0 6px;">' + escHtml(ql.reason) + '</div>';
+        }
+      });
+      if (cart.length > 1) {
+        hwRows += '<div style="display:flex;justify-content:flex-end;padding:6px 0;font-size:12px;font-weight:700;color:#374151;">Hardware subtotal: ' + (q.hwCents === null ? 'not priced in uCRM' : money(q.hwCents / 100)) + '</div>';
+      }
+<?php else: ?>
       cart.forEach(function(item) {
         var lineTotal = parseFloat(item.price || 0) * parseInt(item.qty || 1);
         hwRows += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">' +
@@ -588,6 +684,7 @@ function wizBuildReview() {
       if (cart.length > 1) {
         hwRows += '<div style="display:flex;justify-content:flex-end;padding:6px 0;font-size:12px;font-weight:700;color:#374151;">Hardware subtotal: ' + money(hwTotal) + '</div>';
       }
+<?php endif; ?>
       if (kitName || kitNumber) {
         hwRows += '<div style="font-size:11px;color:#6b7280;padding:4px 0;">Kit: ' + [kitName, kitNumber].filter(Boolean).join(' · ') + '</div>';
       }
@@ -605,12 +702,23 @@ function wizBuildReview() {
   }
 
   // Plan / subscription
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §G): the plan's 1-month price in uCRM, as q102Quote() priced it
+  if (plan && plan.name) {
+    html += section('📶', 'Monthly Plan', [
+      ['Plan',       escHtml(plan.name)],
+      ['Monthly Fee', (q.plan && q.plan.price !== null) ? money(q.plan.cents / 100) + '/mo'
+        : '<span style="color:#b45309;">not priced in uCRM — ' + escHtml(q.plan ? q.plan.reason : '') + '</span>'],
+    ]);
+  } else if (svcKey !== 'lte') {
+<?php else: ?>
   if (plan && plan.name) {
     html += section('📶', 'Monthly Plan', [
       ['Plan',       plan.name],
       ['Monthly Fee', money(plan.price) + '/mo'],
     ]);
   } else if (svcKey !== 'lte') {
+<?php endif; ?>
     html += section('📶', 'Monthly Plan', [
       ['Plan', '<span style="color:#f59e0b;font-style:italic;">No plan selected</span>'],
     ]);
@@ -632,6 +740,38 @@ function wizBuildReview() {
   ]);
 
   // Order total summary box
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §G): the lines and total of q102Quote() — the same as step 3 and ucrm_total_seen; no
+  // total at all when any line is not priced in uCRM (all or nothing, as the quotation is)
+  if (q.lines.length) {
+    var qRow = function (label, amount) {
+      return '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">' +
+        '<span style="opacity:.85;">' + label + '</span>' + amount + '</div>';
+    };
+    var qAmt = function (cents) { return '<span style="font-weight:700;">' + money(cents / 100) + '</span>'; };
+    var qNo  = '<span style="font-weight:700;color:#fca5a5;">not priced in uCRM</span>';
+    html += '<div style="background:linear-gradient(135deg,#1A1A1A,#2A2A2A);border-radius:14px;padding:14px 16px;color:#fff;margin-bottom:10px;">' +
+      '<div style="font-size:11px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">💰 Order Summary · uCRM prices</div>';
+    if (q.kits.length) html += qRow('Hardware', q.hwCents === null ? qNo : qAmt(q.hwCents));
+    if (q.plan) html += qRow('First Month (' + escHtml(q.plan.label) + ')', q.plan.price === null ? qNo : qAmt(q.plan.cents));
+    if (q.install) html += qRow('🔧 ' + escHtml(q.install.label), q.install.price === null ? qNo : qAmt(q.install.cents));
+    if (q.installBy === 'customer') html += qRow('🔧 Customer installs (kit only)', '<span style="opacity:.7;">no installation line</span>');
+    if (q.status === 'priced') {
+      html += '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;border-top:1px solid rgba(255,255,255,.25);padding-top:8px;margin-top:4px;">' +
+        '<span>Today Total</span><span>' + money(q.total) + '</span></div>';
+      if (q.plan && q.plan.price !== null) {
+        html += '<div style="font-size:11px;opacity:.65;margin-top:6px;">↻ Then ' + money(q.plan.cents / 100) + '/month recurring</div>';
+      }
+    } else if (q.status === 'unpriced') {
+      html += '<div style="border-top:1px solid rgba(255,255,255,.25);padding-top:8px;margin-top:4px;font-size:12px;font-weight:700;color:#fecaca;">' +
+        '⚠ No total from uCRM: ' + escHtml(q102Why(q.reason)) + '. A Credit registration goes in with no quotation; Cash is not possible.</div>';
+      if (payType === 'Cash') {
+        html += '<div style="font-size:12px;font-weight:800;color:#fca5a5;margin-top:6px;">Payment Type is Cash — choose Credit in step 4 to submit.</div>';
+      }
+    }
+    html += '</div>';
+  }
+<?php else: ?>
   if (todayTotal > 0 || planPrice > 0) {
     html += '<div style="background:linear-gradient(135deg,#1A1A1A,#2A2A2A);border-radius:14px;padding:14px 16px;color:#fff;margin-bottom:10px;">' +
       '<div style="font-size:11px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">💰 Order Summary</div>';
@@ -659,6 +799,7 @@ function wizBuildReview() {
     }
     html += '</div>';
   }
+<?php endif; ?>
 
   el.innerHTML = html;
 }
@@ -703,6 +844,19 @@ function wizBuildReview() {
 <input type="hidden" name="hw_cart_json"        id="hwCartOut"     value="[]">
 <input type="hidden" name="connectivity_type"   id="connTypeOut"   value="New Connection">
 <input type="hidden" name="customer_type"       id="custTypeOut"   value="StarLink">
+<?php if ($_q102 !== null): /* 5.18.102 (Uganda, docs/71 §G): the total the form showed, posted for the server's check */ ?>
+<input type="hidden" name="ucrm_total_seen"     id="q102TotalSeen" value="">
+<?php /* 5.18.102 (D14, docs/71 §R.4.7, §R.4.2): the link records that total was made of, and this form's own fixed marker — the sale is 'web' only with it */ ?>
+<input type="hidden" name="ucrm_links_seen"     id="q102LinksSeen" value="">
+<input type="hidden" name="ucrm_quote_form" value="5.18.102">
+<?php if (empty($_q102['ok'])): ?>
+<div id="q102Banner" class="kyc-alert warning" style="display:flex;">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div><strong>uCRM's prices could not be read — Cash sales are not possible until it can; Credit registrations still go in.</strong>
+    <br><span style="font-size:12px;">Reload the form in a minute to try again.</span></div>
+</div>
+<?php endif; ?>
+<?php endif; ?>
 
 <!-- Wallet warning -->
 <div id="cashWarning" class="kyc-alert warning" style="display:none;">
@@ -712,7 +866,166 @@ function wizBuildReview() {
     </div>
 </div>
 <script>var _kycWalletBalance = <?= json_encode(round((float)($myWallet['balance'] ?? 0), 2)) ?>;
-var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?? 100)) ?>;</script>
+<?php if ($_q102 === null): /* 5.18.102 (Uganda, docs/71 §D.4): fiber_install_fee is South Sudan's — not even emitted where the gate is on */ ?>var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?? 100)) ?>;<?php endif; ?></script>
+<?php if ($_q102 !== null): ?>
+<script>
+// ── 5.18.102 (Uganda, docs/71 §E.1, §G): uCRM's prices and the ONE total ──────────────────────────────────────────
+// _q102 is what the page's resolver read (lib/UcrmQuoteLines.php, forPage): per plan and hardware id, uCRM's price
+// ('p', null when the row does not resolve) and the reason ('r'); the installation product; whether uCRM could be read.
+// q102Quote() is the only place the form's total is computed — step 3's summary, step 5's review, the Cash wallet
+// check and ucrm_total_seen all read it. It never reads the plugin's prices, the browser's, or fiber_install_fee.
+// 5.18.102 (D14, docs/71 §R.4.7): a cell whose link resolves also carries 'k', its link record id; q102Quote() collects
+// the ids of the very selection it totals, and q102Refresh() posts them as ucrm_links_seen beside ucrm_total_seen.
+var _q102 = <?= json_encode($_q102, JSON_FORCE_OBJECT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?: 'null' ?>;
+var _q102Cur = <?= json_encode(dn_cur($config)) ?>;
+var _Q102_FIBER = <?= json_encode($_q102Fiber) ?>;
+var _Q102_UNANSWERED = <?= json_encode(defined('UcrmQuoteLines::NO_INSTALL_ANSWER') ? (string)constant('UcrmQuoteLines::NO_INSTALL_ANSWER') : 'who installs was not answered', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var _q102InstallKey = null;
+
+function q102Money(cents) { return (cents / 100).toFixed(2); }
+// The reason as the agent reads it (the unanswered question names where to answer it)
+function q102Why(reason) { return reason === _Q102_UNANSWERED ? 'choose who installs in step 3' : String(reason || ''); }
+function q102Types() {
+  var t = document.querySelector('input[name="customer_type"]:checked');
+  var c = document.querySelector('input[name="connectivity_type"]:checked');
+  return { type: t ? String(t.value).trim() : '', conn: c ? String(c.value).trim() : '' };
+}
+// UcrmQuoteLines::needsInstallAnswer: Starlink, other than Shifting Connection and Ownership Change
+function q102NeedsInstall() {
+  var s = q102Types();
+  return s.type.toLowerCase() === 'starlink' && ['Shifting Connection', 'Ownership Change'].indexOf(s.conn) < 0;
+}
+function q102InstallBy() {
+  var r = document.querySelector('input[name="install_by"]:checked');
+  return (r && !r.disabled && (r.value === 'dishnet' || r.value === 'customer')) ? r.value : '';
+}
+// 5.18.102 (D14, docs/71 §R.4.7): a priced cell's link record id ('k', a positive whole number), or null
+function q102LinkOf(cell) {
+  var k = cell ? cell.k : null;
+  return (typeof k === 'number' && isFinite(k) && k > 0 && Math.floor(k) === k) ? k : null;
+}
+// 5.18.102 (D14): the link record ids of these lines, once each, sorted — the set the server compares (resolve()'s)
+function q102LinkSet(lines) {
+  var seen = {}, ids = [];
+  lines.forEach(function (l) {
+    if (l.link !== null && !seen[l.link]) { seen[l.link] = true; ids.push(l.link); }
+  });
+  ids.sort(function (a, b) { return a - b; });
+  return ids;
+}
+
+// The form's lines and total, all or nothing like the quotation: status 'no_plan' | 'unpriced' (with the first
+// reason, in the resolver's order: Fiber, uCRM unreadable, plan, cart, installation) | 'priced' (total in UGX, 2 dp).
+function q102Quote() {
+  var d = (_q102 && typeof _q102 === 'object') ? _q102 : { ok: false, reason: "uCRM's products could not be read", plans: {}, kits: {}, install: null };
+  var s = q102Types();
+  var fiber = s.type.toLowerCase() === 'fiber';
+  // 5.18.102 (D14, §R.4.7): links — the link record ids of the selection, set only when the total is priced
+  var out = { status: 'priced', reason: '', lines: [], plan: null, kits: [], install: null, installBy: '', hwCents: 0, total: null, links: [] };
+  if (fiber) out.reason = _Q102_FIBER;
+  else if (!d.ok) out.reason = String(d.reason || "uCRM's products could not be read");
+  function line(kind, label, cell, qty) {
+    var l = { kind: kind, label: String(label || ''), qty: Math.max(1, parseInt(qty, 10) || 1), price: null, cents: 0, reason: '', link: null };
+    if (fiber) l.reason = _Q102_FIBER;
+    else if (!d.ok) l.reason = String(d.reason || '');
+    else if (!cell || cell.p === null || cell.p === undefined || !(Number(cell.p) > 0)) l.reason = String((cell && cell.r) || (l.label + ' is not priced in uCRM'));
+    else { l.price = Number(cell.p); l.cents = Math.round(l.price * 100); l.link = q102LinkOf(cell); }
+    if (l.price === null && out.reason === '') out.reason = l.reason;
+    out.lines.push(l);
+    return l;
+  }
+  var cartList = (typeof hwCart !== 'undefined' && hwCart) ? hwCart : [];
+  var p = (typeof selPlan !== 'undefined') ? selPlan : null;
+  if (p) out.plan = line('plan', p.name, (d.plans || {})[String(p.id)], 1);
+  cartList.forEach(function (i) { out.kits.push(line('kit', i.title, (d.kits || {})[String(i.id)], i.qty)); });
+  out.kits.forEach(function (k) { out.hwCents = (out.hwCents === null || k.price === null) ? null : out.hwCents + k.cents * k.qty; });
+  if (q102NeedsInstall()) {
+    out.installBy = q102InstallBy();
+    if (out.installBy === 'dishnet') {
+      var ins = d.install || null;
+      out.install = line('install', (ins && ins.l) || 'Professional Installation', ins, 1);
+    } else if (out.installBy !== 'customer' && out.reason === '') {
+      out.reason = _Q102_UNANSWERED;
+    }
+  }
+  if (!p) { out.status = 'no_plan'; return out; }
+  if (out.reason !== '') { out.status = 'unpriced'; return out; }
+  var cents = 0;
+  out.lines.forEach(function (l) { cents += l.cents * l.qty; });
+  out.total = cents / 100;
+  // 5.18.102 (D14, docs/71 §R.4.7): the link records of the same lines this total is made of — the selected plan, each
+  // cart item, and the installation when DishNet installs
+  out.links = q102LinkSet(out.lines);
+  return out;
+}
+
+// q102Quote(), then what it decides on the page: ucrm_total_seen (a plain decimal, '' when there is no total) and the
+// Cash option of step 4 (disabled, with the reason, while the total is not priced)
+function q102Refresh() {
+  var q = q102Quote();
+  var seen = document.getElementById('q102TotalSeen');
+  if (seen) seen.value = q.status === 'priced' ? q.total.toFixed(2) : '';
+  // 5.18.102 (D14, docs/71 §R.4.7): the selection's link records, sorted and comma-joined — '' when there is no total
+  var linksSeen = document.getElementById('q102LinksSeen');
+  if (linksSeen) linksSeen.value = q.status === 'priced' ? q.links.join(',') : '';
+  var no = q.status === 'unpriced';
+  var cash = document.querySelector('#wSalesType option[value="Cash"]');
+  if (cash) cash.disabled = no;
+  var note = document.getElementById('q102CashNote');
+  if (note) {
+    note.style.display = no ? 'block' : 'none';
+    // 5.18.102 (D14, docs/71 §R.4.1): the reason carries its own remedy ("an admin links it…"), so the tail is short
+    note.textContent = no ? 'Cash is not possible — the total is not priced in uCRM: ' + q102Why(q.reason) + '. Register as Credit, or ask an admin.' : '';
+  }
+  return q;
+}
+
+// "Who installs?" shown only for Starlink + New Connection; while hidden its inputs are disabled (so nothing posts)
+// and never required; the answer is cleared whenever the service or the connection type changes.
+function q102InstallSync() {
+  var wrap = document.getElementById('q102Install');
+  if (!wrap) return;
+  var s = q102Types(), key = s.type + '|' + s.conn;
+  var need = q102NeedsInstall();
+  var clear = (key !== _q102InstallKey) || !need;
+  _q102InstallKey = key;
+  wrap.style.display = need ? 'block' : 'none';
+  wrap.querySelectorAll('input[name="install_by"]').forEach(function (i) {
+    i.disabled = !need;
+    i.required = false;
+    if (clear) i.checked = false;
+  });
+  if (clear) {
+    wrap.querySelectorAll('.wiz-radio-card').forEach(function (c) { c.classList.remove('selected'); });
+    var box = document.getElementById('q102InstallBox'), err = document.getElementById('q102InstallErr');
+    if (box) box.style.borderColor = '';
+    if (err) err.style.display = 'none';
+  }
+  renderSummary();
+}
+function q102InstallPick(el) {
+  wizRadio(el);
+  q102InstallCheck();
+  renderSummary();
+}
+// wizNext (step 3) and kycFormSubmit: false, with a red border and "Choose who installs", while the shown question
+// has no answer
+function q102InstallCheck() {
+  var box = document.getElementById('q102InstallBox'), err = document.getElementById('q102InstallErr');
+  var ok = !q102NeedsInstall() || q102InstallBy() !== '';
+  if (box) box.style.borderColor = ok ? '' : '#dc3545';
+  if (err) err.style.display = ok ? 'none' : 'block';
+  return ok;
+}
+document.addEventListener('DOMContentLoaded', function () {
+  // the connection-type cards only call wizRadio(); a change there must also show, hide or clear the question
+  document.querySelectorAll('input[type="radio"][name="connectivity_type"]').forEach(function (i) {
+    var card = i.closest('label');
+    if (card) card.addEventListener('click', function () { q102InstallSync(); });
+  });
+});
+</script>
+<?php endif; ?>
 
 <div class="wiz-container">
 
@@ -962,6 +1275,34 @@ var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?
   </div>
 </div>
 
+<?php if ($_q102 !== null): /* 5.18.102 (Uganda, docs/71 §E.1): "Who installs?" — Starlink + New Connection only; never preselected, never required */ ?>
+<!-- ══ WHO INSTALLS — Starlink New Connection (5.18.102) ══════════════ -->
+<div id="q102Install" style="display:none;padding:14px 14px 0;">
+  <div id="q102InstallBox" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;padding:12px 14px;">
+    <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <i class="bi bi-tools" style="color:#D41C1C;"></i> Who installs? <span style="color:#dc3545;">*</span>
+    </div>
+    <div class="wiz-radio-group">
+      <label class="wiz-radio-card" onclick="q102InstallPick(this)"<?php if ($_q102['install']['p'] === null): ?> title="<?= h((string)$_q102['install']['r']) ?>"<?php endif; ?><?php if (isset($_q102['install']['k'])): /* 5.18.102 (D14, §R.4.7): the installation's link record */ ?> data-link="<?= (int)$_q102['install']['k'] ?>"<?php endif; ?>>
+        <input type="radio" name="install_by" value="dishnet" disabled>
+        <div class="wrc-title">DishNet installs</div>
+<?php if ($_q102['install']['p'] === null): ?>
+        <div class="wrc-sub" style="color:#b45309;">Installation not priced in uCRM — no quotation, Cash not possible</div>
+        <div class="q102-reason" style="font-size:10px;color:#b45309;margin-top:2px;white-space:normal;"><?= h((string)$_q102['install']['r']) ?></div>
+<?php else: ?>
+        <div class="wrc-sub"><?= h((string)$_q102['install']['l']) ?> · <?= dn_cur($config) ?><?= number_format((float)$_q102['install']['p'], 2) ?></div>
+<?php endif; ?>
+      </label>
+      <label class="wiz-radio-card" onclick="q102InstallPick(this)">
+        <input type="radio" name="install_by" value="customer" disabled>
+        <div class="wrc-title">Customer installs (kit only)</div>
+        <div class="wrc-sub">No installation line</div>
+      </label>
+    </div>
+    <div id="q102InstallErr" style="display:none;color:#dc3545;font-size:12px;font-weight:700;margin-top:8px;">Choose who installs</div>
+  </div>
+</div>
+<?php endif; ?>
 <!-- ══ STICKY ORDER SUMMARY ══════════════════════════════════════════ -->
 <div id="osBar" style="background:linear-gradient(135deg,#1A1A1A,#2A2A2A);border-radius:14px 14px 0 0;padding:14px 16px 12px;color:#fff;position:sticky;top:0;z-index:10;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -989,16 +1330,37 @@ var _kycFiberInstallFee = <?= json_encode((float)($config['fiber_install_fee'] ?
   foreach ($activeDevices as $d):
     $dtype = strtolower($d['type'] ?? 'general');
     $dnum  = (float)preg_replace('/[^0-9.]/','',$d['price']??'0');
+    // 5.18.102 (Uganda, docs/71 §G): the row's price is uCRM's (never the plugin's); one that does not resolve is
+    // drawn "not priced in uCRM" with its reason, and carries 0 so it adds nothing
+    $q102Cell = $_q102 !== null ? $_q102Of('kits', $d['id'] ?? '') : null;
+    if ($q102Cell !== null) $dnum = $q102Cell['p'] !== null ? (float)$q102Cell['p'] : 0.0;
+    // 5.18.102 (D14, docs/71 §R.5, §R.4.7): a row whose link resolves is drawn with uCRM's product name — its text and
+    // data-title, and so the cart, the summary and hw_cart_json — and its link record as data-link; any other row with the
+    // plugin's own title and the reason. Where the gate is off: the plugin's title and no data-link, as before.
+    $q102Resolves = $q102Cell !== null && $q102Cell['p'] !== null;
+    $q102Title    = ($q102Resolves && isset($q102Cell['l'])) ? $q102Cell['l'] : $d['title'];
+    $q102LinkAttr = ($q102Resolves && isset($q102Cell['k'])) ? ' data-link="' . (int)$q102Cell['k'] . '"' : '';
+    // 5.18.102 D14 review (D14-UI-5): the row's own title, for applyDefaults' keyword — never uCRM's name (gate on only)
+    $q102RowAttr  = $_q102 !== null ? ' data-row-title="' . h((string)$d['title']) . '"' : '';
   ?>
-  <div class="hw-row" data-id="<?= $d['id'] ?>" data-title="<?= h($d['title']) ?>"
+  <div class="hw-row" data-id="<?= $d['id'] ?>"<?= $q102LinkAttr ?><?= $q102RowAttr ?> data-title="<?= h($q102Title) ?>"
        data-price="<?= $dnum ?>" data-type="<?= h($dtype) ?>" data-sku="<?= h($d['sku']??'') ?>"
        style="display:none;align-items:center;gap:10px;padding:11px 14px;background:#fff;border-radius:12px;border:1.5px solid #e2e8f0;cursor:pointer;transition:border-color .12s,background .12s;"
        onclick="hwAdd(this)">
     <div style="flex:1;min-width:0;">
-      <div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= h($d['title']) ?></div>
+      <div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= h($q102Title) ?></div>
       <div style="font-size:11px;color:#94a3b8;margin-top:1px;text-transform:capitalize;"><?= h($dtype) ?><?= !empty($d['sku'])?' · '.$d['sku']:'' ?></div>
+<?php if ($q102Cell !== null && $q102Cell['p'] === null): ?>
+      <div class="q102-reason" style="font-size:10px;color:#b45309;margin-top:2px;white-space:normal;"><?= h((string)$q102Cell['r']) ?></div>
+<?php endif; ?>
     </div>
+<?php if ($q102Cell !== null && $q102Cell['p'] === null): ?>
+    <div class="q102-unpriced" style="font-weight:800;color:#b45309;font-size:12px;white-space:nowrap;margin-right:2px;" title="<?= h((string)$q102Cell['r']) ?>">not priced in uCRM</div>
+<?php elseif ($q102Cell !== null): /* uCRM's price as it is: its decimals shown when it has any */ ?>
+    <div style="font-weight:800;color:#D41C1C;font-size:14px;white-space:nowrap;margin-right:2px;"><?= dn_cur($config) ?><?= number_format($dnum, abs($dnum - round($dnum)) < 0.005 ? 0 : 2) ?></div>
+<?php else: ?>
     <div style="font-weight:800;color:#D41C1C;font-size:14px;white-space:nowrap;margin-right:2px;"><?= dn_cur($config) ?><?= number_format($dnum,0) ?></div>
+<?php endif; ?>
     <div style="width:32px;height:32px;background:#D41C1C;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;font-weight:300;pointer-events:none;">+</div>
   </div>
   <?php endforeach; ?>
@@ -1254,26 +1616,45 @@ function smartKitScan() {
     $spFirst = !isset($spFirstOf[$spType]);
     if ($spFirst) $spFirstOf[$spType] = true;
     $spPrice = (float)($sp['customer_price'] ?? 0);
+    // 5.18.102 (Uganda, docs/71 §G): uCRM's 1-month price (the page's resolver), never customer_price; a plan that does
+    // not resolve is drawn "not priced in uCRM" with its reason, and carries 0 so it adds nothing
+    $q102Cell = $_q102 !== null ? $_q102Of('plans', $sp['id'] ?? '') : null;
+    if ($q102Cell !== null) $spPrice = $q102Cell['p'] !== null ? (float)$q102Cell['p'] : 0.0;
+    // 5.18.102 (D14, docs/71 §R.5, §R.4.7): a plan whose link resolves is drawn with uCRM's product name — its text and
+    // data-name, and so the summary, step 5 and selected_plan_name — and its link record as data-link; any other plan
+    // with the plugin's own name and the reason. Where the gate is off: the plugin's name and no data-link, as before.
+    $q102Resolves = $q102Cell !== null && $q102Cell['p'] !== null;
+    $q102Name     = ($q102Resolves && isset($q102Cell['l'])) ? $q102Cell['l'] : $sp['name'];
+    $q102LinkAttr = ($q102Resolves && isset($q102Cell['k'])) ? ' data-link="' . (int)$q102Cell['k'] . '"' : '';
+    // 5.18.102 D14 review (D14-UI-5): the row's own name, for applyDefaults' keyword — never uCRM's name (gate on only)
+    $q102RowAttr  = $_q102 !== null ? ' data-row-name="' . h((string)$sp['name']) . '"' : '';
   ?>
   <div class="pkg-opt pkg-<?= h($spType) ?>"
-       data-id="<?= $sp['id'] ?>" data-name="<?= h($sp['name']) ?>"
+       data-id="<?= $sp['id'] ?>"<?= $q102LinkAttr ?><?= $q102RowAttr ?> data-name="<?= h($q102Name) ?>"
        data-price="<?= $spPrice ?>" data-type="<?= h($spType) ?>"
        style="display:none;align-items:center;gap:10px;padding:12px 14px;background:#fff;border-radius:12px;border:1.5px solid #e2e8f0;cursor:pointer;transition:border-color .12s,background .12s;"
        onclick="pkgPick(this)">
     <input type="radio" name="package_choice" value="<?= $sp['id'] ?>" style="width:18px;height:18px;accent-color:#D41C1C;flex-shrink:0;">
     <div style="width:4px;height:36px;border-radius:2px;background:<?= h($sp['color']??'#D41C1C') ?>;flex-shrink:0;"></div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13px;font-weight:700;color:#1e293b;"><?= h($sp['name']) ?></div>
+      <div style="font-size:13px;font-weight:700;color:#1e293b;"><?= h($q102Name) ?></div>
       <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">
         <?php if(!empty($sp['speed'])): ?><span style="background:#fff0f0;color:#D41C1C;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;"><?= h($sp['speed']) ?></span><?php endif; ?>
         <?php if(!empty($sp['validity'])): ?><span style="background:#FFF3E0;color:#E65100;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;"><?= h($sp['validity']) ?></span><?php endif; ?>
         <?php if(!empty($sp['supplier'])): ?><span style="background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600;"><?= h($sp['supplier']) ?></span><?php endif; ?>
       </div>
     </div>
+<?php if ($q102Cell !== null && $q102Cell['p'] === null): ?>
+    <div class="q102-unpriced" style="text-align:right;flex-shrink:1;max-width:45%;" title="<?= h((string)$q102Cell['r']) ?>">
+      <div style="font-size:12px;font-weight:800;color:#b45309;white-space:nowrap;">not priced in uCRM</div>
+      <div class="q102-reason" style="font-size:9px;color:#b45309;font-weight:600;"><?= h((string)$q102Cell['r']) ?></div>
+    </div>
+<?php else: ?>
     <div style="text-align:right;flex-shrink:0;">
       <div style="font-size:16px;font-weight:900;color:#0D47A1;"><?= dn_cur($config) ?><?= number_format($spPrice,2) ?></div>
       <div style="font-size:9px;color:#94a3b8;font-weight:600;">/month</div>
     </div>
+<?php endif; ?>
   </div>
   <?php endforeach; ?>
   </div>
@@ -1397,7 +1778,7 @@ function applyDefaults(typeKey) {
     for (var di = 0; di < defs.length; di++) {
       if (defs[di].autoAdd) continue;
       for (var ri = 0; ri < rows.length; ri++) {
-        var t = (rows[ri].dataset.title || '').toLowerCase();
+        var t = (rows[ri].dataset.<?= $_q102 !== null ? 'rowTitle' : 'title' /* 5.18.102 D14 review (D14-UI-5): the row's own title */ ?> || '').toLowerCase();
         if (defs[di].match(t)) {
           hwCart.push({ id: rows[ri].dataset.id, title: rows[ri].dataset.title, price: pNum(rows[ri].dataset.price), qty: 1 });
           primaryAdded = true;
@@ -1414,7 +1795,7 @@ function applyDefaults(typeKey) {
     for (var di2 = 0; di2 < defs.length; di2++) {
       if (!defs[di2].autoAdd) continue;
       for (var ri2 = 0; ri2 < rows.length; ri2++) {
-        var t2 = (rows[ri2].dataset.title || '').toLowerCase();
+        var t2 = (rows[ri2].dataset.<?= $_q102 !== null ? 'rowTitle' : 'title' /* 5.18.102 D14 review (D14-UI-5) */ ?> || '').toLowerCase();
         if (defs[di2].match(t2)) {
           var alreadyIn = hwCart.some(function(c){ return c.id === rows[ri2].dataset.id; });
           if (!alreadyIn) {
@@ -1435,7 +1816,7 @@ function applyDefaults(typeKey) {
   var picked = null;
   if (keyword) {
     for (var pi = 0; pi < pkgs.length; pi++) {
-      if ((pkgs[pi].dataset.name||'').toLowerCase().indexOf(keyword) >= 0) {
+      if ((pkgs[pi].dataset.<?= $_q102 !== null ? 'rowName' : 'name' /* 5.18.102 D14 review (D14-UI-5): the row's own name */ ?>||'').toLowerCase().indexOf(keyword) >= 0) {
         picked = pkgs[pi]; break;
       }
     }
@@ -1527,6 +1908,31 @@ function renderCart() {
   if (kit) kit.style.display = (isSL || isFB) ? 'block' : 'none';
 
   var html = '';
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §G): each line at uCRM's price as q102Quote() priced it, or "not priced in uCRM" with
+  // its reason (under Fiber, every line: Fiber is not priced from uCRM here)
+  var q = q102Quote();
+  hwCart.forEach(function(item, idx) {
+    var ql = q.kits[idx] || { price: null, cents: 0, qty: item.qty, reason: '' };
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid #DBEAFE;">'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escHtml(item.title) + '</div>'
+        + (ql.price === null
+            ? '<div class="q102-unpriced" style="font-size:11px;color:#b45309;margin-top:1px;" title="' + escAttr(ql.reason) + '">not priced in uCRM — ' + escHtml(ql.reason) + '</div>'
+            : '<div style="font-size:11px;color:#6b7280;margin-top:1px;">' + _q102Cur + q102Money(ql.cents) + ' each</div>')
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">'
+        + '<button type="button" onclick="hwQty(' + idx + ',-1)" class="hw-qty-btn" style="border:1.5px solid #cbd5e1;background:#f8fafc;border-radius:7px;font-size:20px;cursor:pointer;line-height:1;font-weight:600;color:#374151;">−</button>'
+        + '<span style="min-width:24px;text-align:center;font-weight:800;font-size:14px;">' + item.qty + '</span>'
+        + '<button type="button" onclick="hwQty(' + idx + ',1)" class="hw-qty-btn" style="border:1.5px solid #D41C1C;background:#fff5f5;color:#D41C1C;border-radius:7px;font-size:20px;cursor:pointer;line-height:1;font-weight:700;">+</button>'
+      + '</div>'
+      + (ql.price === null
+          ? '<div style="font-weight:800;color:#b45309;font-size:14px;min-width:54px;text-align:right;">—</div>'
+          : '<div style="font-weight:800;color:#0D47A1;font-size:14px;min-width:54px;text-align:right;">' + _q102Cur + q102Money(ql.cents * ql.qty) + '</div>')
+      + '<button type="button" onclick="hwRemove(' + idx + ')" style="width:24px;height:24px;background:#FEE2E2;color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>'
+    + '</div>';
+  });
+<?php else: ?>
   hwCart.forEach(function(item, idx) {
     var lt = item.price * item.qty;
     html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid #DBEAFE;">'
@@ -1543,6 +1949,7 @@ function renderCart() {
       + '<button type="button" onclick="hwRemove(' + idx + ')" style="width:24px;height:24px;background:#FEE2E2;color:#dc2626;border:none;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>'
     + '</div>';
   });
+<?php endif; ?>
   rows.innerHTML = html;
 
   // Show fixed installation fee for Fiber
@@ -1564,6 +1971,57 @@ function renderCart() {
 
 // ── Summary bar render ────────────────────────────────────────────
 function renderSummary() {
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §G): the one total — q102Quote(), through q102Refresh(), which also sets
+  // ucrm_total_seen and the Cash option. uCRM's prices only; no total while any line is not priced in uCRM.
+  var q = q102Refresh();
+  var linesEl = document.getElementById('osLines');
+  var totEl   = document.getElementById('osTotalBadge');
+  var recEl   = document.getElementById('osRecurring');
+  if (!linesEl || !totEl) return;
+
+  var html = '';
+  if (!hwCart.length && !selPlan) {
+    html = '<div style="font-size:12px;opacity:.55;font-style:italic;">← select hardware &amp; plan below</div>';
+  } else {
+    q.lines.forEach(function (l) {
+      var icon = l.kind === 'plan' ? '📶 ' : (l.kind === 'install' ? '🔧 ' : '📦 ');
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;' + (l.kind === 'kit' ? '' : 'margin-top:2px;') + '">'
+        + '<span style="opacity:.88;">' + icon + escHtml(l.label) + (l.kind === 'kit' && l.qty > 1 ? ' ×' + l.qty : '') + '</span>'
+        + (l.price === null
+            ? '<span style="font-weight:800;color:#fca5a5;" title="' + escAttr(l.reason) + '">not priced in uCRM</span>'
+            : '<span style="font-weight:800;">' + _q102Cur + q102Money(l.cents * l.qty) + (l.kind === 'plan' ? '/mo' : '') + '</span>')
+      + '</div>';
+    });
+    if (q.installBy === 'customer') {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:2px;">'
+        + '<span style="opacity:.7;">🔧 Customer installs (kit only)</span><span style="opacity:.7;">—</span></div>';
+    }
+    if (q.status === 'priced' && q.lines.length > 1) {
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;border-top:1px solid rgba(255,255,255,.22);margin-top:7px;padding-top:7px;">'
+        + '<span>Today Total</span><span>' + _q102Cur + q.total.toFixed(2) + '</span></div>';
+    } else if (q.status === 'unpriced') {
+      html += '<div style="font-size:11px;font-weight:700;color:#fecaca;border-top:1px solid rgba(255,255,255,.22);margin-top:7px;padding-top:7px;">'
+        + (q.reason === _Q102_UNANSWERED ? 'Choose who installs above to see the total.'
+            : '⚠ No total from uCRM: ' + escHtml(q.reason) + ' — no quotation, Cash not possible.')
+      + '</div>';
+    }
+  }
+
+  linesEl.innerHTML = html;
+  totEl.textContent = q.status === 'priced' ? _q102Cur + q.total.toFixed(2) : (q.status === 'unpriced' ? 'not priced' : '—');
+
+  var planCents = (q.plan && q.plan.price !== null) ? q.plan.cents : null;
+  if (planCents !== null) {
+    recEl.style.display = 'block';
+    recEl.textContent   = '↻ Then ' + _q102Cur + q102Money(planCents) + '/month recurring';
+  } else {
+    recEl.style.display = 'none';
+  }
+
+  document.getElementById('selPlanPrice').value = planCents !== null ? q102Money(planCents) : 0;
+  document.getElementById('selPlanName').value  = selPlan ? selPlan.name : '';
+<?php else: ?>
   var hwT = hwCart.reduce(function(s,i){ return s + i.price*i.qty; }, 0);
   var plT = selPlan ? selPlan.price : 0;
   var instFee = (curType === 'fiber' && typeof _kycFiberInstallFee !== 'undefined') ? _kycFiberInstallFee : 0;
@@ -1614,6 +2072,7 @@ function renderSummary() {
 
   document.getElementById('selPlanPrice').value = plT;
   document.getElementById('selPlanName').value  = selPlan ? selPlan.name : '';
+<?php endif; ?>
 }
 
 // ── Area combobox logic ──────────────────────────────────────────────
@@ -1785,6 +2244,10 @@ function wizTypeChange() {
 
   // Show/hide Starlink kit scan block
   kitScanVisibility();
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §E.1): "Who installs?" shown, hidden or cleared with the service type
+  q102InstallSync();
+<?php endif; ?>
 }
 
 // ── Sync outer hidden fields (always submitted regardless of panel visibility) ──
@@ -1834,6 +2297,27 @@ function kycFormSubmit() {
   // ── Client-side wallet balance check for Cash sales ─────────────
   var stEl = document.getElementById('wSalesType');
   var isCash = stEl && stEl.value === 'Cash';
+<?php if ($_q102 !== null): ?>
+  // 5.18.102 (Uganda, docs/71 §E.1, §G): the installation answer checked again; Cash refused while the total is not
+  // priced in uCRM; the wallet checked against the one total (q102Quote) — the same total ucrm_total_seen now posts
+  var q = q102Refresh();
+  if (!q102InstallCheck()) {
+    alert('Choose who installs — step 3 (Plan): "DishNet installs" or "Customer installs (kit only)".');
+    return false;
+  }
+  if (isCash && q.status === 'unpriced') {
+    // 5.18.102 (D14, docs/71 §R.4.1): the reason carries its own remedy ("an admin links it…"), so the tail is short
+    alert('Cash is not possible: this sale is not priced in uCRM (' + q102Why(q.reason) + ').\n\nNothing was submitted. Register as Credit (step 4), or ask an admin.');
+    return false;
+  }
+  if (isCash && typeof _kycWalletBalance !== 'undefined' && q.status === 'priced') {
+    var orderTotal = q.total;
+    if (orderTotal > 0 && _kycWalletBalance < orderTotal) {
+      alert('Insufficient wallet balance.\n\nRequired: ' + _q102Cur + orderTotal.toFixed(2) + '\nAvailable: ' + _q102Cur + _kycWalletBalance.toFixed(2) + '\n\nPlease recharge your wallet or switch to Credit sale.');
+      return false;
+    }
+  }
+<?php else: ?>
   if (isCash && typeof _kycWalletBalance !== 'undefined') {
     var hwTotal = 0;
     if (typeof hwCart !== 'undefined') {
@@ -1847,6 +2331,7 @@ function kycFormSubmit() {
       return false;
     }
   }
+<?php endif; ?>
 
   return confirm('Submit this KYC application?\nPlan: ' + (selPlan ? selPlan.name : '') + '\nAmount will be debited from your wallet if Cash payment.');
 }
@@ -2036,6 +2521,9 @@ function wizSimUpdate() {
                 <option value="Cash" <?= ($pf['sales_type']??'Credit')==='Cash'?'selected':'' ?>>Cash (Wallet Debit) &#8594; Regular Customer</option>
                 <option value="Credit" <?= ($pf['sales_type']??'Credit')==='Credit'?'selected':'' ?>>Credit &#8594; CRM Lead</option>
             </select>
+<?php if ($_q102 !== null): /* 5.18.102 (Uganda, docs/71 §G): why Cash is disabled, written by q102Refresh() */ ?>
+            <div id="q102CashNote" style="display:none;font-size:11px;font-weight:700;color:#b91c1c;margin-top:6px;line-height:1.4;"></div>
+<?php endif; ?>
         </div>
         <div class="wiz-field">
             <label>Priority</label>

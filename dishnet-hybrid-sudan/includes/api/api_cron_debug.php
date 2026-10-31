@@ -1061,6 +1061,43 @@
             if (!$_qoCheck['ok']) $er2($_qoCheck['message'], 409);
         }
 
+        // 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): the gated path is the shared implementation, KycService::makeQuotation,
+        // which Make the quotation on the Orders card calls too: R-M4's guard (never a second quotation), the lines by the
+        // current links (retryLines: never re-priced for cash already collected), postQuote, the read-back and the record
+        // of the links used. Nothing after it posts, writes or sends; the gate-off path below is 5.18.101's.
+        if ($_qoRetry['on']) {
+            // The account re-read fresh by id (docs/71 §R.2.1, §R.16): the API guard's record may be the session's copy.
+            $_mqId = (int)($me2['id'] ?? 0);
+            try {
+                $_mqFresh = $_mqId > 0 ? $store->findOne('retailers.json', 'id', $_mqId) : null;
+            } catch (\Throwable $e) {
+                $_mqFresh = null;
+            }
+            if (!is_array($_mqFresh) || $_mqId <= 0 || (int)($_mqFresh['id'] ?? 0) !== $_mqId
+                || empty($_mqFresh['is_active']) || empty($_mqFresh['is_admin'])) {
+                $er2('Admin only.', 403);
+            }
+            // The company check above passed, so the client is filed under the quoting organization (checkClient passes
+            // only then): postQuote's own check asks nothing more.
+            $_mqKnown = ['organizationId' => $_qoRetry['id'], 'where' => 'debug-retry'];
+            try {
+                $_mq = svc('kyc')->makeQuotation($app, $_mqKnown, 'retry_quote', $_mqFresh);
+            } catch (\Throwable $e) {
+                error_log('[api_cron_debug] retry_quote: application #' . $appId . ': making the quotation did not finish, it may have been made (' . get_class($e) . ')');
+                // 5.18.102 D14 review (D14-MQ-THROW-AFTER-POST): the Throwable may come after the POST made the quotation
+                $er2('The quotation may not have been made — open the application before you retry; a retry never makes a second one.', 500);
+            }
+            // Answered by kind, never by code alone: four kinds share 409 (F-7).
+            if ($_mq['kind'] === 'made') {
+                $ok2(['quote_id' => $_mq['quote_id'], 'items' => $_mq['lines'], 'total' => $_mq['total']],
+                    "Quote #{$_mq['quote_id']} created! PDF will be sent via WhatsApp in ~5 min.");
+            }
+            if ($_mq['kind'] === 'claimed') $er2('another quotation is being made for this application', 409);
+            if (in_array($_mq['kind'], ['found', 'unreadable', 'refused'], true)) $er2((string)$_mq['text'], 409);
+            $er2((string)$_mq['text'], 500);   // 'error'
+            // 5.18.102 (D14): every kind has answered, so the gated path ends here; below is 5.18.101's gate-off path.
+        }
+
         // Build items from app data
         $qItems = [];
         $pkgId = (int)($app['package_choice'] ?? 0);

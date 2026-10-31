@@ -398,6 +398,13 @@
     // GET ?page=api&action=auto_map_products
     // Auto-matches UCRM products to local packages/devices by name similarity
     if ($act === 'auto_map_products' && $met === 'GET') {
+        // 5.18.102 (Uganda, D14, docs/71 §R.2.6, Q7): refused, dry run or not, where the quoting-organization gate is on —
+        // as the push is — before anything is read: it writes fuzzy ids into ucrm_product_id with no confirmation, which
+        // quotes never read under D14 but 5.18.101 would send after a rollback. Answered after the admin-only gate above.
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+        }
         $products    = $store->load('ucrm_products.json') ?? [];
         $packages    = $store->load('subscription_plans.json') ?? [];
         $packages2   = $store->load('kyc_packages.json') ?? [];
@@ -542,6 +549,13 @@
     // POST ?page=api&action=set_product_mapping
     // Manually set ucrm_product_id for a package/device
     if ($act === 'set_product_mapping' && $met === 'POST') {
+        // 5.18.102 (Uganda, D14, docs/71 §R.2.6, Q7): refused where the quoting-organization gate is on, before the body is
+        // read — on Uganda a plan or kit reaches uCRM only through the link an admin makes on the Plans and Hardware
+        // screens, and a ucrm_product_id written here would become productId after a rollback (§R.1.2).
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+        }
         $body = json_decode(file_get_contents('php://input'), true) ?: [];
         $source = $body['source'] ?? '';  // subscription_plans, kyc_packages, kyc_devices
         $localId = (int)($body['local_id'] ?? 0);
@@ -595,6 +609,12 @@
     // GET ?page=api&action=push_products_to_ucrm&dry_run=1
     // Creates UCRM products from plugin packages/devices, saves returned IDs
     if ($act === 'push_products_to_ucrm' && $met === 'GET') {
+        // 5.18.102 (Uganda, docs/71 §K.3, D12): refused, dry run or not, before any uCRM read — the push would overwrite
+        // the Products the quotes and the cash now come from. Answered after the admin-only gate above. Elsewhere unchanged.
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+            $er2('uCRM\'s product was not changed: on Uganda, prices are set in uCRM Products.', 409);
+        }
         require_once dirname(__DIR__, 2) . '/lib/CrmApiClient.php';
         $crm = CrmApiClient::fromUcrm(dirname(__DIR__), $config);
         
@@ -797,6 +817,11 @@
     // POST ?page=api&action=sync_hardware_to_ucrm  { hw_id: N }
     if ($act === 'sync_hardware_to_ucrm' && $met === 'POST') {
         if (!$isAdmin) $er2('Admin only.', 403);
+        // 5.18.102 (Uganda, docs/71 §K.3, D12): as push_products_to_ucrm — nothing read, nothing written.
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+            $er2('uCRM\'s product was not changed: on Uganda, prices are set in uCRM Products.', 409);
+        }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $hwId = (int)($body['hw_id'] ?? 0);
         if (!$hwId) $er2('hw_id required.', 422);
@@ -846,6 +871,11 @@
     // POST ?page=api&action=sync_plan_to_ucrm  { plan_id: N }
     if ($act === 'sync_plan_to_ucrm' && $met === 'POST') {
         if (!$isAdmin) $er2('Admin only.', 403);
+        // 5.18.102 (Uganda, docs/71 §K.3, D12): as push_products_to_ucrm — nothing read, nothing written.
+        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+        if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+            $er2('uCRM\'s product was not changed: on Uganda, prices are set in uCRM Products.', 409);
+        }
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
         $planId = (int)($body['plan_id'] ?? 0);
         if (!$planId) $er2('plan_id required.', 422);

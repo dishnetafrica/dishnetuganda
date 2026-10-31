@@ -30,6 +30,22 @@ declare(strict_types=1);
  *
  * refuse_send (5.18.54, via /__test/set) makes /billing/quotes/{id}/send answer 422.
  *
+ * Products (5.18.102, docs/71 §L.2): GET /products serves 'products' from the state, else [] — unless 'catalogue' is
+ * set, when it serves the TEST catalogue the KYC tests seed against: the plan "Residential Standard (TEST)" mirrored
+ * from a service plan of the same name at 100 a month, the kit "Standard Kit (TEST)" at 1500 and "Professional
+ * Installation" at 200; the service plan is then added to the list above. Opt-in, so the default service-plan list
+ * the summary tests read is the 27 Sep one, unchanged. 5.18.102 D14 (docs/71 §R.9.1): the catalogue also holds two
+ * products no seed links — "Home Plan (TEST)" (13), spelled exactly like the plan row tests/quote_from_ucrm/_lib.php
+ * seeds, and "Standard Kit (TEST)" (54), a twin of 55 priced otherwise — so a priced case proves the link decided,
+ * never the spelling; nothing in the catalogue is spelled like a service plan but the plan's own product (rules 6–7). 'products_down' answers 503. 'sales_person_field' adds a
+ * client field keyed salesPerson with that id (5.18.102 "Prepared by"); 'patch_refuse' makes PATCH /clients/{id}
+ * answer 422. A POSTed quote keeps each item's productId and unit, as sent. More toggles: 'products_after_first' replaces
+ * the products after the first GET (a price changing between two reads); 'extra_fields' appends client fields;
+ * 'force_org' files every created client under that organization (with scenario two_orgs: a misfiled customer);
+ * 'quote_mode' changes what a quote POST makes — substitute (each line's price +10, as if uCRM used another price),
+ * tax (18% added to the total), reject_product (422 when an item carries productId), ignore_product (productId dropped,
+ * type custom), no_items (the answer carries no items; GET billing/quotes/{id} has them).
+ *
  * webhook_on_create (5.18.54, via /__test/set): a created client's client.add is POSTed to that URL before the
  * create is answered — uCRM's event overtaking the form (docs/46 row 19). Needs PHP_CLI_SERVER_WORKERS > 1.
  *
@@ -99,6 +115,10 @@ if ($sc === 'sudan_taxfield') $ssFields[0] = ['id' => 1, 'name' => 'EFRIS TIN', 
 $isSudan = in_array($sc, ['sudan', 'sudan_partial', 'sudan_taxfield'], true);
 $orgs    = $isSudan ? [2, 7] : ($sc === 'two_orgs' ? [1, 3] : [1]);
 $fields  = $isSudan ? $ssFields : $ugFields;
+foreach ((array)($state['extra_fields'] ?? []) as $xf) $fields[] = $xf;
+if (!empty($state['sales_person_field'])) {
+    $fields[] = ['id' => (int)$state['sales_person_field'], 'name' => 'Sales Person', 'key' => 'salesPerson', 'attributeType' => 'client'];
+}
 
 // ── every request is logged; only paths under the API are served ──────────
 $auth = $_SERVER['HTTP_X_AUTH_APP_KEY'] ?? ($_SERVER['HTTP_X_AUTH_TOKEN'] ?? '');
@@ -129,13 +149,32 @@ if ($p === '/service-plans' && $method === 'GET') {
     if (!empty($state['plans_down'])) kyc_out(['code' => 503, 'message' => 'Service Unavailable'], 503);
     $plan = fn(int $id, string $name, int $price): array =>
         ['id' => $id, 'name' => $name, 'periods' => [['period' => 1, 'price' => $price, 'enabled' => true]]];
-    kyc_out($state['service_plans'] ?? [
+    $plans = $state['service_plans'] ?? [
         $plan(1, 'Starlink Residential Lite ( up to 100 Mbps)', 249000),
         $plan(2, 'Residential (up to 400 Mbps)', 329000),
         $plan(3, 'Starlink Business 50 GB', 175000),
         $plan(4, 'Starlink Business 500 GB', 285000),
         $plan(5, 'Starlink Business 1TB', 469000),
-    ]);
+    ];
+    if (!empty($state['catalogue']) && !isset($state['service_plans'])) $plans[] = $plan(6, 'Residential Standard (TEST)', 100);
+    kyc_out($plans);
+}
+if ($p === '/products' && $method === 'GET') {
+    if (!empty($state['products_down'])) kyc_out(['code' => 503, 'message' => 'Service Unavailable'], 503);
+    if (isset($state['products_after_first'])) {
+        $first = $state['products'] ?? [];
+        $state['products'] = $state['products_after_first'];
+        unset($state['products_after_first']);
+        kyc_save($state, $stateFile);
+        kyc_out($first);
+    }
+    kyc_out($state['products'] ?? (!empty($state['catalogue']) ? [
+        ['id' => 12, 'name' => 'Residential Standard (TEST)', 'price' => 100,  'unit' => 'Month', 'taxable' => false],
+        ['id' => 13, 'name' => 'Home Plan (TEST)',            'price' => 95,   'unit' => 'Month', 'taxable' => false],   // 5.18.102 D14: spelled like the plan row, never linked
+        ['id' => 54, 'name' => 'Standard Kit (TEST)',         'price' => 1400, 'unit' => 'Pc',    'taxable' => false],   // 5.18.102 D14: 55's unlinked twin
+        ['id' => 55, 'name' => 'Standard Kit (TEST)',         'price' => 1500, 'unit' => 'Pc',    'taxable' => false],
+        ['id' => 70, 'name' => 'Professional Installation',   'price' => 200,  'unit' => 'Job',   'taxable' => false],
+    ] : []));
 }
 
 if ($p === '/clients' && $method === 'POST') {
@@ -153,6 +192,7 @@ if ($p === '/clients' && $method === 'POST') {
     }
     $state['seq']++;
     $client = ['id' => $state['seq']] + $body;
+    if (!empty($state['force_org'])) $client['organizationId'] = (int)$state['force_org'];
     $state['clients'][] = $client;
     $state['taken'][]   = (string)($body['username'] ?? '');
     kyc_save($state, $stateFile);
@@ -190,11 +230,26 @@ if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'GET') {
     foreach ((array)$state['clients'] as $c) if ((int)$c['id'] === (int)$m[1]) kyc_out($c);
     kyc_out(['code' => 404, 'message' => 'Not Found'], 404);
 }
-if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'PATCH') kyc_out(['id' => (int)$m[1]] + $body);
+if (preg_match('#^/clients/(\d+)$#', $p, $m) && $method === 'PATCH') {
+    if (!empty($state['patch_refuse'])) kyc_out(['code' => 422, 'message' => 'Validation failed.'], 422);
+    kyc_out(['id' => (int)$m[1]] + $body);
+}
 if (preg_match('#^/clients/(\d+)/add-tag/(\d+)$#', $p) && $method === 'PATCH') kyc_out(['ok' => true]);
 if ($p === '/documents' && $method === 'POST') kyc_out(['id' => 1], 201);
 if (preg_match('#^/clients/(\d+)/quotes$#', $p, $m) && $method === 'POST') {
     if (!empty($state['refuse_quotes'])) kyc_out(['code' => 403, 'message' => 'Forbidden'], 403);
+    $mode  = (string)($state['quote_mode'] ?? '');
+    if ($mode === 'reject_product') {
+        foreach ((array)($body['items'] ?? []) as $it) {
+            if (isset($it['productId'])) kyc_out(['code' => 422, 'message' => 'Validation failed.', 'errors' => ['items' => ['TEST']]], 422);
+        }
+    }
+    if ($mode === 'ignore_product') {
+        $body['items'] = array_map(function ($it) { unset($it['productId']); return $it; }, (array)($body['items'] ?? []));
+    }
+    if ($mode === 'substitute') {
+        $body['items'] = array_map(function ($it) { $it['price'] = (float)($it['price'] ?? 0) + 10; return $it; }, (array)($body['items'] ?? []));
+    }
     $id    = ++$state['quote_seq'];
     $items = [];
     $total = 0.0;
@@ -202,13 +257,17 @@ if (preg_match('#^/clients/(\d+)/quotes$#', $p, $m) && $method === 'POST') {
         $line  = (float)($it['quantity'] ?? 1) * (float)($it['price'] ?? 0);
         $total += $line;
         $items[] = ['label' => (string)($it['label'] ?? ''), 'quantity' => (float)($it['quantity'] ?? 1),
-                    'price' => (float)($it['price'] ?? 0), 'total' => $line];
+                    'price' => (float)($it['price'] ?? 0), 'total' => $line]
+                 + (isset($it['productId']) ? ['productId' => (int)$it['productId'], 'type' => 'product'] : [])
+                 + (isset($it['unit']) ? ['unit' => (string)$it['unit']] : []);
     }
+    if ($mode === 'ignore_product') $items = array_map(function ($it) { $it['type'] = 'custom'; return $it; }, $items);
+    if ($mode === 'tax') $total = round($total * 1.18, 2);
     $quote = ['id' => $id, 'number' => 'Q-' . $id, 'clientId' => (int)$m[1], 'status' => 0,
               'items' => $items, 'total' => $total, 'createdDate' => date('c')];
     $state['quotes'][(string)$id] = $quote;
     kyc_save($state, $stateFile);
-    kyc_out($quote, 201);
+    kyc_out($mode === 'no_items' ? ['id' => $id, 'number' => 'Q-' . $id] : $quote, 201);
 }
 if (preg_match('#^/billing/quotes/(\d+)(/send)?$#', $p, $m)) {
     // 5.18.54 (docs/46 row 18, tests/test_notify_kyc_quote_send.php): uCRM refusing to send a quote. The message names an

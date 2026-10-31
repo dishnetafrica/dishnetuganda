@@ -692,7 +692,11 @@ function splynxTestConn() {
         </div>
         <div>
             <label class="form-label">Quote notes prefix</label>
-            <input type="text" name="kyc_quote_notes_prefix" class="form-control" value="<?= h($config['kyc_quote_notes_prefix']??'') ?>" placeholder="e.g. Valid 7 days. Call +211...">
+<?php /* 5.18.102 (Uganda, docs/71 §F.1): the prefix is printed on the customer's quotation; say so, and give a Uganda example. Emitted only where the quoting-organization gate is on */ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php'; $qnUg = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']; ?>
+            <input type="text" name="kyc_quote_notes_prefix" class="form-control" value="<?= h($config['kyc_quote_notes_prefix']??'') ?>" placeholder="<?= $qnUg ? 'e.g. Thank you for choosing DishNet' : 'e.g. Valid 7 days. Call +211...' ?>">
+<?php if ($qnUg): ?>
+            <div class="st-hint">Printed on the customer's quotation, in its notes. Leave it empty, or put only text meant for the customer.</div>
+<?php endif; ?>
         </div>
     </div>
     <div class="st-row cols2">

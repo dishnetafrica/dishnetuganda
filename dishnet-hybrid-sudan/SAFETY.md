@@ -542,6 +542,219 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.102 (2026-10-27; D14, 28 Oct) — Uganda's plugin quotations take their lines and prices from the uCRM Product an admin linked to each plan, kit and the installation; a Cash sale collects the quotation's total; "Prepared by" filled; South Sudan unchanged; no migration
+
+### Why
+The operator, 27 Oct, of quotation 000314: *"currently plugin creating this quotation which is not good for us its
+passes wrong information"* — and asked whether the plugin takes its prices from uCRM. It did not: every KYC line was
+priced by the plugin (`customer_price`, the browser's kit price), the NOTES box carried internal text ("PENDING |
+Auto-generated … Sales: … Priority: …"), "Prepared by" named nobody of ours, no installation line was ever added on a
+Starlink sale, and the cash collected was computed apart from the quote. The operator's decisions (docs/71 §B, D1–D6):
+keep the auto-quote and fix it; the installation is a separate line only when DishNet installs; a "Sales Person" client
+attribute (key `salesPerson`) for "Prepared by"; no auto-quote when anything is unpriced, and the agent told; the cash
+equals the quotation's total; cut on 5.18.101.
+
+D14 — the operator, 28 Oct, *"use name of ucrm sync it with plugin"*; asked what they meant, they chose: *"Pick the
+product per item — On the Plans and Hardware screens (Uganda), an admin picks the uCRM Product for each plan and kit
+from a list. The plugin then shows that product's name and price and matches by that link, never by spelling. Nothing
+is guessed."*, into 5.18.102, re-cut, retested and rehearsed before it is deployed (docs/71 §R.0). The first build
+matched each item to a uCRM product by spelling; D14 replaces that with the link an admin makes.
+
+### What (all behind `QuoteOrganization::setting(...)['on']`: the Uganda tenant, unless `ucrm_quote_organization_id` is 0/off)
+- **`lib/UcrmQuoteLines.php` (new), the one resolver.** It reads uCRM's Products and Service Plans (`limit=500`, the
+  quote's own client) and prices each item from the uCRM Product an admin linked to it, by id: a plan from its linked
+  Product and its linked Service Plan's 1-month price (linked on the Plans screen), a kit from its linked Product
+  (Hardware screen), the installation, when DishNet installs, from the Product linked on the Hardware screen's
+  installation card. No name is matched, and `ucrm_product_id` is never read. An item without a valid link is
+  unpriced: not linked, linked to a row since replaced, linked under another quoting organization, two active links
+  (which count as no link), or a linked product or service plan uCRM no longer lists, archived, priced at 0, taxable,
+  with more than 2 decimals or a differing invoice label. A kit and the installation linked to one product are both
+  refused (rule 8). Fiber on Uganda is always unpriced. A failed read is never cached.
+- **The link store: the table `ucrm_quote_links` in plugin.sqlite3, through `lib/UcrmQuoteLinks.php` (new).** One
+  record per act of linking — the row by id and stamp, uCRM's ids, the quoting organization, the names at link time,
+  the admin — and a relink or an unlink ends the record and keeps it (history). It is created lazily and read only
+  behind the gate: 5.18.101 never reads it, and a rollback leaves it as it is (docs/71 §R.1, §R.7.4). The link and
+  unlink writes (`ucrm_link_save`, `ucrm_link_clear`) are admin-only, judged on the account record re-read fresh by id,
+  with the screen's own-page check; a relink or an unlink says how many applications were quoted under the previous
+  link, and the Orders screen lists them (`&quote_link=N`).
+- **The entry rule.** Only this release's web KYC form (`ucrm_quote_form` = 5.18.102) is priced. App and mobile-API
+  sales, a form opened before the deploy, and every application saved before it are not, and are quoted in uCRM by
+  hand (docs/71 §R.4.2).
+- **Make the quotation** on the Orders card: admin only, for a web registration left with no quotation; the same
+  implementation as `retry_quote` (`KycService::makeQuotation`); it never makes a second quotation — one uCRM already
+  has for the client is found and recorded instead — and it records the `quote_link_ids` it used (docs/71 §R.4.8,
+  §R.4.4).
+- **Auto-Map and `set_product_mapping`** answer 409 on Uganda with the gate on: plans and kits are linked on the Plans
+  and Hardware screens (docs/71 §R.2.6).
+- **The KYC quote** (new and existing customers, the cron/admin retry, `retry_quote`, Make the quotation): made only
+  from those lines, with productId; notes = the Settings prefix only; who sold, connection, priority and installation
+  in adminNotes. An unpriced Credit sale is registered with no quote (P1; for a web sale with an item not linked yet,
+  `P1_UNLINKED`: "Do not make it by hand — once the item is linked, an admin makes it from the Orders card") and the
+  agent told; a Cash sale is refused before any write when it cannot be priced, when it does not post the total the
+  form showed (`ucrm_total_seen`), or when a link changed while the form was open; over the auto-quote limit, P3. A
+  retry never re-prices a Cash sale: it is quoted only when its lines total the cash collected (P2 otherwise).
+- **The cash** — wallet check, debit, uCRM payment, `amount_charged`, collection — equals the quotation's total.
+- **"Prepared by":** the client attribute keyed `salesPerson` (exactly one, never id 1) is PATCHed after the create and
+  the company check, before any payment or quote, whether or not a quote follows. Best effort; ids only in the log.
+- **The created quote is read back** and a mismatch (other prices, a tax uCRM added) recorded for the Orders card.
+- **The form** shows each linked row by its uCRM name and price, asks "Who installs?", keeps one total for every place
+  it shows one, and disables Cash when the total cannot be priced. **Send Quotation and leads:** plans priced through
+  their links, the exact lead pre-fill, no 0-priced line sent, no lead notes in the customer's WhatsApp. **The fallback
+  PDF:** Uganda's header and five terms. **No Delivery Acknowledgment PDF on Uganda.** **The product push** (Sync All,
+  the per-row sync, the save-time sync) is refused on Uganda — prices are set in uCRM Products. The Orders card shows
+  the installation answer and a mismatch.
+- **No migration.** `manifest.json` moves to 5.18.102 and the tests that pin the version move with it.
+
+### Operator action (docs/71 §R.6, which amends §M: steps 1, 2 and 4 keep §M's numbers; step 3 replaces its spelling rule)
+1. Before the deploy, record 5.18.101's deployment in docs/07 (the 5.18.102 deploy script takes its baseline from it).
+2. Add the uCRM client custom attribute "Sales Person", key exactly `salesPerson`.
+3. Prepare uCRM and decide the picks: for each plan sold, one Product and one Service Plan spelled alike, with equal
+   1-month prices, and no other service plan, active or not, spelled like that plan; no service plan carrying a price
+   of its own other than its 1-month price, and fewer than 200 service plans in all; for each kit, a Product not
+   spelled like any service plan; one installation Product, which no kit is linked to; each priced above 0, Taxable
+   off, invoice label empty or the same as the name. Run the deploy script's `--check` (it changes nothing; its sheet
+   lists, per plugin item, the uCRM items with the same spelling — a hint only), and decide each pick on paper, by
+   uCRM id. No link is written before the deploy.
+4. Leave Settings → "Quote notes prefix" empty, or put in it only text meant for customers.
+5. Tell the agents before the copy: until an admin says it is done, Uganda sales are registered as Credit, or wait; no
+   quotation is made by hand for a web KYC registration whose screen says "Do not make it by hand". Tell every admin:
+   no link, unlink, or plan or kit save from the moment the deploy starts until it prints its last line.
+6. Deploy, at a quiet hour.
+7. Once the deploy has printed its last line, link as an admin: on Plans each active, non-Fiber plan; on Hardware each
+   active, non-Fiber kit, and the installation card. The deploy prints the counts still to link. A kit row the import
+   tool made for the installation product is deactivated rather than linked.
+8. Run `--after-only`: it judges every link. Pass it only when every offered item resolves, or carry
+   `--accept-unpriced` for items left unlinked on purpose. Then an admin presses **Make the quotation** on the Orders
+   card of each web registration that shows it, after checking the customer in uCRM, and only where it has no
+   quotation.
+9. Tell the agents that Cash is back, and that the window's web registrations are quoted by an admin, never by hand.
+   Every other registration left with no quotation is quoted in uCRM by hand, as its screen or its Orders card says.
+10. The next real KYC quotation is the second proof.
+
+### SAFETY
+- Uganda only: every line, price, total, refusal, attribute, link and text 5.18.102 adds is read through
+  `QuoteOrganization::setting(...)['on']`. With it off (`ucrm_quote_organization_id` 0 or off), and on South Sudan,
+  every request, record, message, PDF and page is 5.18.101's, and the link store is never opened.
+- One resolver, one join: a Uganda quote line is priced by `UcrmQuoteLines` from uCRM's Products and Service Plans,
+  read with the quote's own client, and the link an admin made is the only join between a plugin item and a uCRM
+  product. Never from the browser's title or price, `customer_price`, `ucrm_product_id`, a name, or a cached failure.
+- Never send a line at price 0, and never match by name: an unlinked item, a link the row's stamp or organization no
+  longer fits, two active links, a taxable line or an unreadable catalogue refuses a Cash sale before any write and
+  leaves a Credit sale with no quote, the agent told why.
+- The cash collected — wallet check, debit, uCRM payment, `amount_charged`, collection — is the quotation's total. A
+  retry never re-prices a Cash sale.
+- Never a second quotation: Make the quotation and `retry_quote` look for one uCRM already has for the client first,
+  and a failure after the POST is never answered "No quotation was made". An answer without a quotation id (a timeout
+  or a 5xx, which can follow a quotation uCRM made) says uCRM "did not confirm" it and that it may have been made.
+- "Prepared by" is the client attribute found by its key `salesPerson`, exactly one, never id 1 and never South Sudan's
+  ids; it is PATCHed after the create and the company check. A log line carries ids only.
+- Internal text (who sold, connection, priority, installation) goes to `adminNotes`, never to the customer's `notes`.
+- No product push on Uganda: prices are set in uCRM Products.
+- Every quote-create path goes through the resolver and the company check before it ships; `test_quote_from_ucrm`
+  section I holds the inventory of those paths.
+- Tests: `tests/test_quote_from_ucrm.php`: 1353 passed, 0 failed, in ten sections A–I and L, without the
+  weakened copies. By section: A 146, B 60, C 410, D 15, E 8, F 58, G 205, H 126 (its 71
+  browser checks among them), I 30, L 295.
+  - A: the resolver.
+  - B: the KYC submission, its cash and its order of writes.
+  - C: the retries, and Make the quotation.
+  - D: "Prepared by".
+  - E: the read-back.
+  - F: Send Quotation and leads.
+  - G: the PDFs, the push, Settings and the Orders card.
+  - H: the KYC form, driven in headless Chromium.
+  - I: the release's boundary, measured from Git against `f2055baf`. It covers the declared files, the kept files and
+    migrations, a 5.18.102 marker on every runtime hunk, `php -l` and the PHP 7.4 rules on added PHP, the quote-create
+    sites, the resolver's construction sites, and this entry.
+  - L: the links — the store, the two actions, the judge, the picker, the link column, what was quoted under a link,
+    and the gate off never opening the store.
+
+  The weakened copies: 368, each one fault planted in a copy of the plugin, in `tests/quote_from_ucrm/mutants.php`
+  and `mutants_<Letter>.php`. The review's first round ran all 285 it had on that round's final tree, and each was
+  caught by the section that guards it (285 passed, 0 failed). Its second round (below) adds eight and re-anchors
+  ML37b (its A and C halves); those, and the copies whose assertions it changed (ML19, ML19b–ML19i, ML57, ML70,
+  ML83a–ML83c, MI11), were run on the second round's final tree, and each was caught. Rounds three to eleven
+  (below) add ML85a–ML85l, ML86a–ML86k, ML87a–ML87g, ML88a–ML88e, ML89a–ML89e, ML90a–ML90m, ML91a–ML91g, ML92a–ML92l
+  and MG26–MG28; those 75 were run on the final tree, and each was caught by the section that guards it
+  (75 passed, 0 failed).
+- `tests/test_quote_company.php` (5.18.99's) rewritten on purpose (docs/71 §P.3, §R.9.2): 291 passed, 0 failed
+  (its weakened copies, `tests/test_quote_company_mutants.php`: 83 passed, 0 failed). Its S journey is still
+  byte for byte `ce7ac388`'s for South Sudan and for Uganda with the setting off.
+- Rewritten on purpose (docs/71 §R.9.2), each passing, 0 failed: `test_kyc_crm_messages` (60),
+  `test_notify_kyc_quote_send` (26), `test_notify_kyc_race` (15), `test_quote_summary` M against `f2055baf` (57) and
+  `test_bank_boundaries` (157); `test_kyc_crm_create` (147 passed) and `test_notify_quote_once` (20) run unchanged. The
+  distributor and cashbook version pins and the two planted-date tests (docs/71 §P.3), each 0 failed:
+  `test_distributor_apply` 61, `_link_ucrm` 33, `_notify` 66, `_registry` 59, `_territory` 47,
+  `test_cashbook_physical_list` 496, `test_field_cash_in_currency` 48 and `test_staff_manual_entry_currency` 36.
+- A review of D14 (five lenses: money, the gate, the flows, security, the tests; each finding verified) confirmed
+  fourteen findings and refuted five. Each is fixed, with a test that fails without the fix and a weakened copy that
+  the test catches:
+  - a kit row deactivated with its link left in force was quoted beside the installation (rule 8 at use);
+  - a failure after Make the quotation's POST was answered "No quotation was made";
+  - a link save with the quoting-organization setting invalid said "changed — try again";
+  - this entry still described the spelling rule;
+  - Send Quotation's lead hint, its "not priced" alert, the form's installation reason (a title only), the Orders
+    card's found-quotation line, and the form's default plan and kit by uCRM's names;
+  - five test gaps: the gate off on the KYC paths, the Hardware picker, the cron retry's link ids, L19's posts, and
+    C9 without the marker.
+- A second round of that review confirmed six more findings, two of them one defect seen through two lenses, so five
+  fixes. Each is fixed, or for the link save's order of checks pinned, with a test that fails without it and a
+  weakened copy that the test catches:
+  - the save let an inactive kit row be linked to the installation's product, which use then refused: rule 8's kit
+    half now applies at save as at use, and an inactive row's refusal does not tell the admin to deactivate it;
+  - an answer from uCRM with no quotation id, which a lost answer after a quotation it made also gives, was answered
+    "uCRM did not make the quotation"; it now says uCRM did not confirm it and that it may have been made;
+  - three test gaps: the link save's setting check coming after the admin and own-page checks, L19b's paths running
+    to their end, and a control on this entry's own check.
+- Rounds three to eleven checked each round's fixes, by behaviour and by tests, each finding shown by a run. None
+  could duplicate a quotation. Fixed, each with a test that fails without it and a weakened copy that it catches:
+  - after an answer that may follow a quotation uCRM made (a lost answer, an answer with no id, a Throwable inside
+    `postQuote`), the Orders card still said "No quotation was made" with the stored refusal's "make it by hand". The
+    application now records `quote_unconfirmed_at`, and with the gate on the card says "Making the last quotation
+    did not finish" and "It may have been made in uCRM.", with a sentence that names Make the quotation only where
+    its button is drawn. A press whose guard finds no quotation removes the key, by the row as stored; an
+    unreadable list keeps it; a failed removal stops the press. A failed write of the key is logged, ids only,
+    and never answers in place of the answer it follows. With the gate off the card is 5.18.101's byte for byte;
+  - while a press is in flight (its claim younger than 15 minutes, no quotation recorded) the card says "Making a
+    quotation for this application has not finished" and tells the reader not to make one by hand in uCRM but to
+    wait and open the Orders screen again;
+  - a press that died after its POST (a fatal error, a killed process) leaves only its claim. Once the claim has
+    expired, and no refusal was recorded after it, the card says the last quotation did not finish; the press that
+    takes over such a claim records `quote_unconfirmed_at` first, so the mark outlives the claim. A refusal
+    recorded after a claim is shown as the refusal;
+  - which came first, a claim or a refusal, is read from `quote_refused_ts`, an epoch the two refusal writers a press
+    reaches now record beside `quote_refused_at`, never from that local time, which a change of zone shifts; a
+    refusal with no epoch counts as before the claim, so the card errs to "did not finish"; and a claim is stamped
+    after any refusal already recorded, so another request's refusal in the claim's own second, or one a clock step
+    put ahead, never reads as the claim's own; that stamp moves only for a refusal less than 15 minutes ahead, an
+    epoch past a claim's lifetime never settles it, and a press's own refusals are never stamped before its claim;
+  - test gaps: a card that died passing as "no box", each card's sentences unpinned (then pinned only as substrings,
+    then only to the first `</div>`, then not from the box's opening), an `\Error` after the POST, the key held from an earlier press, a refusal
+    shortly, days or a year before the claim, a P1, P2 or R2 refusal after it, a claim and its refusal aged apart, the refusal's own text, a claim long expired, the key written under the
+    claim's lock, a claim with no refusal at all, an expired claim with the gate off, and two checks (C19's
+    `retry_quote` half, MG26) that did not show what their labels said.
+- Limitation: no PHP 7.4 runs here. Section I and `test_quote_company` I6 check the 7.4 rules on the added PHP's
+  tokens, and the server's PHP lints every changed file after the copy.
+
+### Known limitations (recorded, accepted — docs/71 §N, §P, §R.6)
+- Right after the copy nothing is linked: until an admin has linked every item the form offers, every Uganda Cash sale
+  is refused and every web Credit sale is registered with no quotation (docs/71 §R.6).
+- What uCRM 4.5.33 does with a quote line's `productId` is not measured; every KYC quote is read back after it is made.
+- A Uganda credit KYC customer's payments each log "Delivery PDF generation failed … skipped" and read their payments
+  once more (`webhook.php` kept byte for byte); with `kyc_messages_like_crm` off a Uganda Cash customer would get the
+  "Request Confirmed!" welcome (docs/07 records it on since 25 Sep).
+- The retailer app and the mobile API cannot answer "Who installs?" or send the total they showed: a Cash sale from them
+  is refused, and a Credit Starlink New Connection gets no quotation (the Orders card says so; the app does not).
+- Send Quotation's panel manual form is stopped by the page on a 0-priced line; its handler (`post_leads.php`, unchanged)
+  drops such a line before the service could refuse it.
+- The fallback PDF's tax rows assume a quote carries tax as an invoice does.
+- Marking products taxable in uCRM stops automatic quotes until a VAT release.
+- Two exposures the review found are older than this release, and 5.18.102 does not widen them (docs/71 §R.17):
+  `postQuote` logs uCRM's whole quote answer, the staff's notes among it, for every KYC quotation, as 5.18.101 does;
+  and the state-changing GET admin actions of `api_cron_debug.php`, `retry_quote` among them, accept the session
+  cookie from another site. Make the quotation narrows the second for quotations (one quotation per client, a claim,
+  the account re-read fresh). Both are left for a later release.
+
 ## 5.18.101 (2026-10-26) — the WhatsApp quotation summary signs off as DishNet Uganda (Uganda); South Sudan unchanged; no migration
 
 ### Why

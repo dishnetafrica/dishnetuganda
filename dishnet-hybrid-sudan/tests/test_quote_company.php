@@ -31,6 +31,24 @@ declare(strict_types=1);
  * and manifest.json differs from ca05ada5's by its version line only, as tests/test_cashbook_physical_list.php M was
  * re-pointed for 5.18.98 by 5.18.99. I1–I3 and I6–I8 still read this tree.
  *
+ * 5.18.102 (rewritten on purpose, never weakened; docs/71 §L.2): on Uganda a KYC quotation is made only from lines uCRM's
+ * Products price (UcrmQuoteLines). The fake serves its TEST catalogue by default (TEST Plan 100 a month, TEST Kit 1500,
+ * Professional Installation 200); every Uganda KYC post here says who installs (install_by) and a Cash post sends the
+ * total the form showed (ucrm_total_seen); the retry's pending applications are saved as 5.18.102 saves one (lines
+ * marked). What this test pins — the company check before every quote — is unchanged. C2 (iv) and C1 (iv) add the order
+ * with a salesPerson attribute; C9 adds that the catalogue is read with the quote's own credential; B4 adds that a
+ * salesPerson field at id 1 (South Sudan's numbering, the EFRIS TIN on Uganda) is never PATCHed.
+ *
+ * 5.18.102 D14 (rewritten on purpose, never weakened; docs/71 §R.9.2): an item is priced only through the link an admin
+ * made (ucrm_quote_links.json), never by its spelling. Every book is seeded with three links (fixtures/
+ * quote_company_journey.php qcj_links(): the plan → product 12 and service plan 1, the kit → 55, the installation → 70),
+ * so the Uganda books of B and C price through them; South Sudan's and the gate-off books carry them as leftover links,
+ * which §S proves are never read (the journeys are ce7ac388's byte for byte, the link store included). Every KYC form
+ * post here carries the web form's marker (ucrm_quote_form) and a Cash post the links it drew (ucrm_links_seen); every
+ * application a Uganda journey retries and expects quoted is stored web (quote_sale_entry), with quote_link_ids where
+ * its lines are marked. I1 counts postQuote's fifth caller, KycService::makeQuotation (§R.4.8); I7 excepts
+ * lib/UcrmQuoteLinks.php by name, which loads no sibling file (§R.1.5), and holds it to that instead.
+ *
  * Every section starts with its positive control. The weakened copies are tests/test_quote_company_mutants.php.
  *
  *   cd tests && DN_VAULT_FILE=$(mktemp -d)/v.json php test_quote_company.php [--root=DIR] [--base=DIR] [--sections=REGEX] [--no-mutants]
@@ -58,6 +76,42 @@ const QC_BASE_COMMIT = 'ce7ac388';
 // 5.18.100: the 5.18.99 release commit. Section I measures 5.18.99's delta on it, against QC_BASE_COMMIT, and holds
 // this tree to it, so that a later release does not read as 5.18.99.
 const QC_DELTA_REL = 'ca05ada5';
+/**
+ * 5.18.102 (docs/71 §L.4): the files 5.18.99 changed that 5.18.102 changes again — I4 holds each to 5.18.99's hunks.
+ * QC_I4_102_AMENDED: the 5.18.99 lines 5.18.102 changes on purpose, each [file, 5.18.99's text, this release's text,
+ * why]. I4 applies each to its hunk before looking for the hunk verbatim, and each must be used exactly once.
+ */
+const QC_I4_102_AMENDED = [
+    ['lib/KycCrmSync.php',
+     "        \$refused = \$this->afterCreate(\$app, \$crmId, \$known);",
+     "        // 5.18.102 (Uganda, docs/71 §I, §F.2): the company check, then \"Prepared by\" — before any payment or quote, and\n"
+     . "        // whether or not a quote follows. afterCreate records a refused check and then quotes nothing.\n"
+     . "        \$ugCheck = null;\n"
+     . "        if (\$known !== []) {\n"
+     . "            \$setting = QuoteOrganization::setting(\$this->config, \$this->gateDataDir());\n"
+     . "            \$ugCheck = (new QuoteOrganization(UcrmQuoteLines::quoteClient(\$this->crm, \$this->config), \$setting))\n"
+     . "                ->checkClient((int)\$crmId, 'kyc-retry', \$known);\n"
+     . "            if (\$ugCheck['ok']) {\n"
+     . "                \$sp = trim((string)(\$app['sales_person'] ?? ''));\n"
+     . "                \$this->target()->patchSalesPerson((int)\$crmId, \$sp !== '' ? \$sp : (string)(\$app['retailer_name'] ?? ''));\n"
+     . "                \$known['organizationId'] = \$setting['id'];   // it passed: postQuote's own check then asks nothing\n"
+     . "            }\n"
+     . "        }\n"
+     . "        \$refused = \$this->afterCreate(\$app, \$crmId, \$known, \$ugCheck);",
+     'the retry runs the company check itself and PATCHes "Prepared by", before any payment or quote (§I, §F.2)'],
+    ['lib/KycCrmSync.php',
+     "     */\n    private function afterCreate(array \$app, string \$crmId, array \$known = []): string",
+     "     * 5.18.102 (Uganda, docs/71 §F.4): \$ugCheck is run()'s company check; where it is given, ugQuote() makes the quote.\n"
+     . "     */\n    private function afterCreate(array \$app, string \$crmId, array \$known = [], ?array \$ugCheck = null): string",
+     'afterCreate takes that check, and ugQuote() makes the quote from it (§F.4)'],
+    ['lib/KycService.php',
+     "                    'quote_refused_at'   => date('Y-m-d H:i:s'),",
+     "                    'quote_refused_at'   => date('Y-m-d H:i:s'),\n"
+     . "                    'quote_refused_ts'   => time(),   // 5.18.102 D14 review round 9 (CK9-B1): see recordNoQuote",
+     'the company check\'s refusal also records its moment as an epoch, which claimLeftUnsettled compares with a claim (§R.17.8, CK9-B1)'],
+];
+const QC_I4_102 = ['includes/api/api_cron_debug.php', 'includes/api/api_products_admin.php', 'lib/KycCrmSync.php', 'lib/KycService.php',
+    'lib/PluginQuotePdf.php', 'lib/QuotationService.php', 'lib/UcrmClientTarget.php', 'tabs/sales/applications.php', 'tabs/sales/kyc_form.php'];
 // The zone each book runs in: a test file pins it, the fixture never does (tests/test_timezone.php). '' is the
 // vault-only Uganda book, which names no tenant in its configuration.
 const QC_TZ = ['uganda' => 'Africa/Kampala', 'south-sudan' => 'Africa/Juba', '' => 'Africa/Kampala'];
@@ -120,15 +174,18 @@ $TB = null;
 if ($BASE !== null && $baseVer === '5.18.98') { $TB = $TMP . '/tb'; qcj_copy_tree($BASE, $TB); }
 
 // ── Books ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-/** A fresh book on tree $tree ($T unless given): its own data directory, vault and configuration. */
-function qc_book(string $tenant, array $cfg = [], array $vault = [], ?string $tree = null): array
+/**
+ * A fresh book on tree $tree ($T unless given): its own data directory, vault and configuration. $more: further qcj_book()
+ * options — 5.18.102 D14: 'links' replaces the three seeded links ([] an empty store).
+ */
+function qc_book(string $tenant, array $cfg = [], array $vault = [], ?string $tree = null, array $more = []): array
 {
     global $T, $TMP, $FAKE, $EVO;
     static $n = 0;
     $n++;
     $dir = $TMP . '/books/b' . $n;
     return qcj_book(['tree' => $tree ?? $T, 'dir' => $dir, 'fake' => $FAKE, 'evo' => $EVO, 'tenant' => $tenant,
-                     'timezone' => QC_TZ[$tenant] ?? QC_TZ[''], 'cfg' => $cfg, 'vault' => $vault]);
+                     'timezone' => QC_TZ[$tenant] ?? QC_TZ[''], 'cfg' => $cfg, 'vault' => $vault] + $more);
 }
 /** The fake uCRM in a known state: its organizations, its clients, and any toggles. */
 function qc_fake(array $orgs, array $clients = [], array $set = []): void
@@ -218,7 +275,13 @@ function qc_kyc_post(string $last, string $phone, string $type = 'Credit', strin
 {
     return ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection', 'firstname' => 'TEST',
             'lastname' => $last, 'mobile' => $phone, 'email' => '', 'address_1' => 'TEST address', 'package_choice' => '1',
-            'device_id' => '3', 'kitQty' => '1', 'sales_type' => $type, 'priority' => 'Low'] + ($existing !== '' ? ['customer_id' => $existing] : []);
+            'device_id' => '3', 'kitQty' => '1', 'sales_type' => $type, 'priority' => 'Low'] + ($existing !== '' ? ['customer_id' => $existing] : [])
+         // 5.18.102: the form asks who installs, and a Cash sale sends the total it showed (TEST Plan + TEST Kit + installation)
+         + ['install_by' => 'dishnet'] + ($type === 'Cash' ? ['ucrm_total_seen' => '1800'] : [])
+         // 5.18.102 D14 (docs/71 §R.4.2, §R.4.7, §R.9.2 F-3): the web KYC form's marker on every post, and on a Cash post the
+         // link records it drew (qcj_links(): the plan 1, the kit 2, the installation 3). The gate-off books never read
+         // either; an existing-customer post here is the hand-made web case of §R.4.2.
+         + ['ucrm_quote_form' => '5.18.102'] + ($type === 'Cash' ? ['ucrm_links_seen' => '1,2,3'] : []);
 }
 const QC_ITEMS = [['label' => 'TEST Kit', 'quantity' => 1, 'price' => 1500, 'unit' => 'piece']];
 
@@ -382,6 +445,7 @@ const QC_NORMALISED = [
     ['page:*',           'csrf',                  'the session CSRF token, read from the page by name="_csrf"'],
     ['page:*',           'address',               'the served address: its port is chosen per run'],
     ['page:*',           'version',               'manifest.json\'s version, which the release moves'],
+    ['page:*',           'path',                  'the run\'s own copy of the plugin, which Settings prints as the cron path (tabs/admin/settings.php:457; §S renders Settings since 5.18.102)'],
 ];
 
 echo "test_quote_company.php — 5.18.99, judging " . ($ROOT === $LIB ? 'this checkout' : $ROOT) . "\n";
@@ -619,6 +683,7 @@ $pending = function (array $ctx, int $id, string $phone): void {
             "mobile" => $ARGS["ph"], "customer_type" => "StarLink", "connectivity_type" => "New Connection", "sales_type" => "Credit",
             "status" => "new", "crm_client_id" => null, "crm_sync_status" => "pending", "crm_sync_attempts" => 0,
             "submitted_at" => date("Y-m-d H:i:s"), "username" => "TESTPEND" . $ARGS["id"],
+            "quote_sale_entry" => "web",   // 5.18.102 D14 (docs/71 §R.4.2 E-1, §R.9.2): saved by this release\'s web form
             "quote_items" => [["label" => "TEST Plan", "quantity" => 1, "price" => 100.0, "unit" => "month"]], "quote_ref" => "QREF-" . $ARGS["id"],
             "crm_sync_payload" => json_encode(["clientType" => 1, "isLead" => true, "firstName" => "TEST", "lastName" => "Pending",
                 "organizationId" => 2, "username" => "TESTPEND" . $ARGS["id"], "contacts" => [["name" => "TEST", "email" => "", "phone" => $ARGS["ph"]]]])]);
@@ -671,6 +736,9 @@ $ug = qc_book('uganda');
 $n0 = count(qc_log());
 qcj_post($ug, 'post_kyc.php', qc_kyc_post('Bnolegacy', '+256700000159'), (int)$ug['agent']);
 t('B4 Uganda gate on: organization 1, so legacyLayout() is false — no POST documents, no add-tag', $legacyCalls($n0), []);
+// 5.18.102: those fields name salesPerson at id 1 — South Sudan's numbering, the EFRIS TIN on Uganda — so "Prepared by" is not set
+t('B4 … and field 1 keyed salesPerson is never PATCHed: no PATCH clients/* (5.18.102, docs/71 §I)',
+    array_values(array_filter(qc_reqs($n0), function ($r) { return strpos($r, 'PATCH /clients/') === 0; })), []);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -794,6 +862,49 @@ $iC = array_search('POST /clients', $rq, true);
 is_($iC !== false && array_slice($rq, $iC + 1, 2) === ['GET /clients/901', 'POST /clients/901/quotes'],
     'C2 (iii) the create answer carries no organizationId: the check reads the client (GET clients/901), then the quote is made', qc_j($rq));
 
+// C2 (iv) — 5.18.102: with a salesPerson client attribute, "Prepared by" is PATCHed between the create and the quote
+$spField = [['id' => 1, 'name' => 'EFRIS TIN', 'key' => 'efrisTin', 'attributeType' => 'client'],
+            ['id' => 7, 'name' => 'Sales Person', 'key' => 'salesPerson', 'attributeType' => 'client'],
+            ['id' => 5, 'name' => 'starlinkDetails', 'key' => 'starlinkdetails', 'attributeType' => 'service']];
+qc_fake($O12, [], ['custom_attributes' => $spField]);
+$ug = qc_book('uganda');
+$n0 = count(qc_log());
+$r = qcj_post($ug, 'post_kyc.php', qc_kyc_post('Cspatt', '+256700000168'), (int)$ug['agent']);
+$rq = qc_reqs($n0);
+$iC = array_search('POST /clients', $rq, true);
+t('C2 (iv) a salesPerson attribute (#7): POST clients, then PATCH clients/901 ("Prepared by"), then POST clients/901/quotes',
+    $iC === false ? null : array_slice($rq, $iC, 3), ['POST /clients', 'PATCH /clients/901', 'POST /clients/901/quotes']);
+qc_fake($O12, [qcj_client(15, 1, 'Existing')], ['custom_attributes' => $spField]);
+$ug = qc_book('uganda');
+$n0 = count(qc_log());
+$r = $kycEx($ug, '15');
+t('C1 (iv) an existing customer with that attribute present: the additional-service quote, and never a PATCH clients/*',
+    [$cnt(qc_reqs($n0), 'POST /clients/15/quotes'), count(array_filter(qc_reqs($n0), function ($x) { return strpos($x, 'PATCH /clients/') === 0; }))], [1, 0]);
+
+// C2 (v) — 5.18.102 D14 (docs/71 §R.4.1, §R.9.2): what prices a sale is its link, never its spelling. C2 (i) above is the
+// control (the seeded links: quoted, the lines the linked products). The same sale on a book whose link store is empty
+// creates the client and makes no quotation: P1, with P1_UNLINKED's text naming the plan row — although "TEST Plan" is
+// spelled exactly like product 12 and like its service plan.
+qc_fake($O12);
+$ug = qc_book('uganda');
+$n0 = count(qc_log());
+qcj_post($ug, 'post_kyc.php', qc_kyc_post('Clinked', '+256700000169'), (int)$ug['agent']);
+$items = null;
+foreach (array_slice(qc_log(), $n0) as $e) if ($e['method'] === 'POST' && $e['path'] === '/clients/901/quotes') $items = $e['body']['items'] ?? null;
+t('C2 (v) control: the seeded links — the quotation\'s lines are the linked products 12, 55 and 70 at uCRM\'s prices',
+    array_map(function ($i) { return [(int)($i['productId'] ?? 0), (float)($i['price'] ?? 0)]; }, (array)$items), [[12, 100.0], [55, 1500.0], [70, 200.0]]);
+qc_fake($O12);
+$ug = qc_book('uganda', [], [], null, ['links' => []]);
+$n0 = count(qc_log());
+$r = qcj_post($ug, 'post_kyc.php', qc_kyc_post('Cunlinked', '+256700000149'), (int)$ug['agent']);
+$app = qc_apps($ug)[0] ?? [];
+$U1 = 'The customer is in uCRM as #901. No quotation was made: TEST Plan is not linked to a uCRM product yet — an admin links it on the Plans screen. '
+    . 'Do not make it by hand — once the item is linked, an admin makes it from the Orders card. Do not register this customer again.';
+t('C2 (v) an empty link store: the client is created, no POST clients/901/quotes, and P1 is recorded with P1_UNLINKED\'s text; the agent sees amber',
+    [$cnt(qc_reqs($n0), 'POST /clients'), $cnt(qc_reqs($n0), 'POST /clients/901/quotes'), $app['quote_refused'] ?? null, $app['quote_refused_text'] ?? null,
+     $app['quote_sale_entry'] ?? null, $r['flash'][0]['type'] ?? null],
+    [1, 0, 'P1', $U1, 'web', 'warning']);
+
 // C3 — the retry (KycCrmSync → postQuote)
 $pendingApp = function (array $ctx, int $id, string $phone) {
     qcj_php($ctx, '
@@ -803,7 +914,12 @@ $pendingApp = function (array $ctx, int $id, string $phone) {
             "customer_type" => "StarLink", "connectivity_type" => "New Connection", "sales_type" => "Credit", "status" => "new",
             "crm_client_id" => null, "crm_sync_status" => "pending", "crm_sync_attempts" => 0, "submitted_at" => date("Y-m-d H:i:s"),
             "username" => "TESTC3" . $ARGS["id"], "quote_ref" => "QREF-" . $ARGS["id"],
-            "quote_items" => [["label" => "TEST Plan", "quantity" => 1, "price" => 100.0, "unit" => "month"]]]);
+            // 5.18.102: as 5.18.102 saves an application — its lines resolved from uCRM and marked, and who installs
+            "install_by" => "customer", "quote_lines_source" => "ucrm-5.18.102", "quote_items_total" => 100.0,
+            "quote_items" => [["productId" => 12, "label" => "TEST Plan", "quantity" => 1, "price" => 100.0, "unit" => "month"]],
+            // 5.18.102 D14 (docs/71 §R.4.2 E-1, §R.4.4, §R.9.2): a web application, and the link record its marked line
+            // came from (qcj_links()\'s 1, the plan), as linesRecord() stores them; without them the retry is unpriced
+            "quote_sale_entry" => "web", "quote_link_ids" => [1]]);
         qcj_out(true);', ['id' => $id, 'ph' => $phone]);
 };
 qc_fake($O12);
@@ -911,7 +1027,8 @@ $c6 = function (int $org) {
         require_once "$TREE/lib/StoreInterface.php"; require_once "$TREE/lib/JsonStore.php"; require_once "$TREE/lib/SqliteStore.php";
         $s = SqliteStore::create($DATA);
         $s->append("kyc_applications.json", ["id" => 804, "firstname" => "TEST", "lastname" => "Retry", "mobile" => "+256700000118",
-            "crm_client_id" => "18", "crm_sync_status" => "synced", "status" => "synced", "package_choice" => 1, "quote_created" => false]);
+            "crm_client_id" => "18", "crm_sync_status" => "synced", "status" => "synced", "package_choice" => 1, "quote_created" => false,
+            "quote_sale_entry" => "web"]);   // 5.18.102 D14 (docs/71 §R.4.2 E-1, §R.9.2): web, unmarked — resolved by the links
         qcj_out(true);');
     return $ug;
 };
@@ -995,12 +1112,14 @@ $c9 = function (array $cfg, array $whoExtra) use ($kycEx, $O12) {
         foreach (array_slice(qc_log(), $n0) as $e) if ($e['method'] === $m && $e['path'] === $p) return $e['auth'] . ':' . $e['key'];
         return 'none';
     };
-    return [$by('GET', '/clients/15'), $by('POST', '/clients/15/quotes')];
+    // 5.18.102: and the catalogue (GET products, GET service-plans) is read with the same client as the quote (docs/71 §D.1)
+    return [$by('GET', '/clients/15'), $by('POST', '/clients/15/quotes'), $by('GET', '/products'), $by('GET', '/service-plans')];
 };
-t('C9 crm_auth_token set: the check\'s GET carries the token, like the POST', $c9(['crm_auth_token' => QCJ_TOKEN], []), ['token:' . QCJ_TOKEN, 'token:' . QCJ_TOKEN]);
-t('C9 no token: both carry the plugin\'s own key', $c9([], []), ['app-key:' . QCJ_APP_KEY, 'app-key:' . QCJ_APP_KEY]);
-t('C9 an agent with a personal uCRM key (post_kyc.php): both carry that agent\'s key', $c9([], ['ucrm_app_key' => 'QC-AGENT-KEY-TEST']),
-    ['app-key:QC-AGENT-KEY-TEST', 'app-key:QC-AGENT-KEY-TEST']);
+t('C9 crm_auth_token set: the check\'s GET carries the token, like the POST (and the catalogue\'s GETs)', $c9(['crm_auth_token' => QCJ_TOKEN], []),
+    array_fill(0, 4, 'token:' . QCJ_TOKEN));
+t('C9 no token: all carry the plugin\'s own key', $c9([], []), array_fill(0, 4, 'app-key:' . QCJ_APP_KEY));
+t('C9 an agent with a personal uCRM key (post_kyc.php): all carry that agent\'s key', $c9([], ['ucrm_app_key' => 'QC-AGENT-KEY-TEST']),
+    array_fill(0, 4, 'app-key:QC-AGENT-KEY-TEST'));
 
 // C10 — organization names are cleaned before staff see them
 $o = qcj_orgs([1, 2]); $o[1]['name'] = 'TEST <b>Co</b> & "X"';
@@ -1412,7 +1531,15 @@ foreach (['uganda', 'south-sudan'] as $tenant) {
     $prod = function () { return count(array_filter(qc_reqs(0), function ($r) { return strpos($r, '/products') !== false; })); };
     $p0 = $prod();
     $ad = qcj_api($base, $b['tok_admin'], 'GET', 'push_products_to_ucrm', null, '&dry_run=1');
-    is_($ad[0] !== 403 && $ad[0] !== 401 && $prod() > $p0, "G {$tenant} control: an admin gets past the gate (the fake logs GET products)", qc_j([$ad[0], substr($ad[1], 0, 200)]));
+    if ($tenant === 'uganda') {
+        // 5.18.102 (rewritten on purpose, docs/71 §K.3, D12): on Uganda the push itself is refused — prices are set in uCRM
+        // Products — so an admin past the admin gate gets 409 and its reason, where a non-admin below still gets 403, and
+        // uCRM's products are not read at all.
+        t("G {$tenant} control: an admin gets past the gate — to 5.18.102's 409 (the push refused on Uganda), never the 403, and uCRM is not asked",
+            [$ad[0], $ad[2], $prod() - $p0], [409, ['status' => 'error', 'message' => "uCRM's product was not changed: on Uganda, prices are set in uCRM Products."], 0]);
+    } else {
+        is_($ad[0] !== 403 && $ad[0] !== 401 && $prod() > $p0, "G {$tenant} control: an admin gets past the gate (the fake logs GET products)", qc_j([$ad[0], substr($ad[1], 0, 200)]));
+    }
     foreach (['0', '1'] as $dry) {
         $p0 = $prod();
         $r = qcj_api($base, $b['tok_agent'], 'GET', 'push_products_to_ucrm', null, '&dry_run=' . $dry);
@@ -1615,7 +1742,19 @@ t('I1 every quote create in the tree is one of Q1–Q5, and each sits after a ch
              ['lib/KycService.php', 'postQuote', true], ['lib/QuotationService.php', 'createCrmQuote', true]]);
 $posted = 0;
 foreach ($tree as $rel => $path) if (substr($rel, -4) === '.php') $posted += preg_match_all('#KycService::postQuote\(|self::postQuote\(#', $code((string)file_get_contents($path)));
-is_($posted === 2, 'I1 … postQuote() has its two callers, KycService::handleNew (Q2) and KycCrmSync::afterCreate (Q3)', (string)$posted);
+// 5.18.102 (rewritten on purpose, docs/71 §L.2): two more callers, where the Uganda gate is on — KycService::ugQuoteNew
+// and KycCrmSync::ugQuote, each posting only lines the resolver priced (tests/test_quote_from_ucrm.php I5 places each one
+// after the resolver's verdict). Each still runs after the company check: ugQuoteNew's caller and ugQuote take it as given.
+// 5.18.102 D14 (rewritten on purpose, docs/71 §R.4.8): a fifth — KycService::makeQuotation, the one implementation that
+// retry_quote's gated block and the Orders card's Make the quotation both call. Its company check is postQuote's own:
+// retry_quote hands on what its own checkClient found, and the button passes null, so postQuote checks (F-1).
+$mqFns = [];
+foreach ($functions($code((string)file_get_contents($T . '/lib/KycService.php'))) as [$fn, $a, $b]) $mqFns[$fn] = [$a, $b];
+$mqLines = explode("\n", $code((string)file_get_contents($T . '/lib/KycService.php')));
+$mqBody = isset($mqFns['makeQuotation']) ? implode("\n", array_slice($mqLines, $mqFns['makeQuotation'][0] - 1, $mqFns['makeQuotation'][1] - $mqFns['makeQuotation'][0] + 1)) : '';
+is_($posted === 5 && substr_count($mqBody, 'self::postQuote(') === 1,
+    'I1 … postQuote() has its five callers: KycService::handleNew (Q2) and KycCrmSync::afterCreate (Q3) where the gate is off, 5.18.102\'s KycService::ugQuoteNew and KycCrmSync::ugQuote, and D14\'s KycService::makeQuotation (once, docs/71 §R.4.8)',
+    qc_j([$posted, substr_count($mqBody, 'self::postQuote(')]));
 
 // I2 — the profiles
 $ugp = json_decode((string)file_get_contents($T . '/profiles/uganda.json'), true);
@@ -1752,28 +1891,62 @@ foreach (QC_I4_UNMARKED as $rel => $list) foreach ($list as $k => $txt) if (!iss
 t('I4 … and every declared hunk is still there (none left over)', $stale, []);
 // 5.18.100: this tree against 5.18.99 — it keeps every file 5.18.99 changed or added exactly as ca05ada5 left it (the
 // manifest is I5's), and removes none of ca05ada5's files.
-$held = [];
+// 5.18.102 (narrowed on purpose, docs/71 §L.2): 5.18.102 changes nine of these files (QC_I4_102). Each of the nine must
+// still carry every one of 5.18.99's hunks (ca05ada5 against ce7ac388), its added lines verbatim and together; every
+// other file stays ca05ada5's byte for byte, as before.
+$hunks99 = function (string $rel) use ($baseFiles, $relTree): array {
+    $d = []; exec('diff -U0 ' . escapeshellarg($baseFiles[$rel] ?? '/dev/null') . ' ' . escapeshellarg($relTree[$rel] ?? '/dev/null'), $d);
+    $out = []; $cur = null;
+    foreach ($d as $l) {
+        if (strpos($l, '@@') === 0) { if ($cur !== null && $cur !== []) $out[] = implode("\n", $cur); $cur = []; continue; }
+        if ($cur === null || strpos($l, '+++') === 0 || strpos($l, '---') === 0) continue;
+        if ($l !== '' && $l[0] === '+') $cur[] = substr($l, 1);
+    }
+    if ($cur !== null && $cur !== []) $out[] = implode("\n", $cur);
+    return $out;
+};
+$held = []; $lost = []; $found = 0; $ctlMissing = []; $amendUsed = [];
 foreach ($DECLARED as $rel) {
     if ($rel === 'manifest.json') continue;
-    if ($RBASE === null || !is_file($T . '/' . $rel) || !is_file($RBASE . '/' . $rel) || hash_file('sha256', $T . '/' . $rel) !== hash_file('sha256', $RBASE . '/' . $rel)) $held[] = $rel;
+    $same = $RBASE !== null && is_file($T . '/' . $rel) && is_file($RBASE . '/' . $rel) && hash_file('sha256', $T . '/' . $rel) === hash_file('sha256', $RBASE . '/' . $rel);
+    if (!in_array($rel, QC_I4_102, true)) { if (!$same) $held[] = $rel; continue; }
+    if ($same) { $held[] = $rel . ' (declared as changed by 5.18.102, but it is not)'; continue; }
+    $tf = (string)@file_get_contents($T . '/' . $rel);
+    $bf = isset($baseFiles[$rel]) ? (string)file_get_contents($baseFiles[$rel]) : '';
+    $missingInBase = 0;
+    foreach ($hunks99($rel) as $i => $blk) {
+        if (strpos($bf, $blk) === false) $missingInBase++;
+        foreach (QC_I4_102_AMENDED as $k => [$af, $aOld, $aNew]) {
+            if ($af === $rel && strpos($blk, $aOld) !== false) { $blk = str_replace($aOld, $aNew, $blk); $amendUsed[$k] = ($amendUsed[$k] ?? 0) + 1; }
+        }
+        if (strpos($tf, $blk) === false) $lost[] = $rel . ' hunk ' . ($i + 1) . ': ' . mb_substr(str_replace("\n", ' / ', $blk), 0, 120); else $found++;
+    }
+    if ($missingInBase === 0) $ctlMissing[] = $rel;
 }
-t('I4 this tree holds every file 5.18.99 changed or added, besides documents and the manifest, as ' . QC_DELTA_REL . ' left it, byte for byte (' . (count($DECLARED) - 1) . ' files)',
+t('I4 this tree holds every file 5.18.99 changed or added, besides documents, the manifest and the ' . count(QC_I4_102) . ' that 5.18.102 changes, as ' . QC_DELTA_REL . ' left it, byte for byte',
     [$held, $RBASE !== null], [[], true]);
+t('I4 … and each of the ' . count(QC_I4_102) . ' still carries every one of 5.18.99\'s hunks verbatim (' . $found . ' hunks)', [$lost, $found > 20], [[], true]);
+t('I4 … where 5.18.102 changes a 5.18.99 line on purpose, it is one of the ' . count(QC_I4_102_AMENDED) . ' declared amendments, each used exactly once',
+    array_map(function ($k) use ($amendUsed) { return $amendUsed[$k] ?? 0; }, array_keys(QC_I4_102_AMENDED)), array_fill(0, count(QC_I4_102_AMENDED), 1));
+t('I4 control: the same check finds 5.18.99\'s hunks missing from ' . QC_BASE_COMMIT . '\'s copy of each of the ' . count(QC_I4_102) . ' (so it can fail)', $ctlMissing, []);
 t('I4 … and removes none of ' . QC_DELTA_REL . '\'s files outside the walk\'s exclusions', $RBASE !== null ? array_values(array_diff(array_keys($relTree), array_keys($tree))) : null, []);
 $gate = '<?php /* 5.18.99 (Uganda): the reason no quotation was made — emitted only where the quoting-organization gate is on */ require_once dirname(__DIR__, 2) . \'/lib/QuoteOrganization.php\'; if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)[\'on\']): ?>+(d.data._quote_error?\' \'+d.data._quote_error:\'\')<?php endif; ?>';
+// 5.18.102 (narrowed on purpose): measured on ca05ada5 — the form changes again in 5.18.102 — and this tree still carries
+// the fragment, once.
 foreach (['tabs/sales/kyc_form.php', 'tabs/lte/lte_dashboard.php'] as $rel) {
-    $new = (string)file_get_contents($T . '/' . $rel);
-    $back = str_replace($gate, '', $new, $gn);
-    t("I4 {$rel}: its one hunk is the _quote_error fragment, inside a condition on the gate; without it the file is ce7ac388's", [$gn, $BASE !== null && $back === (string)file_get_contents($BASE . '/' . $rel)], [1, true]);
+    $rf = $RBASE !== null ? (string)@file_get_contents($RBASE . '/' . $rel) : '';
+    $back = str_replace($gate, '', $rf, $gn);
+    t("I4 {$rel}: in " . QC_DELTA_REL . " its one hunk is the _quote_error fragment, inside a condition on the gate — without it the file is ce7ac388's; this tree still carries it, once",
+        [$gn, $BASE !== null && $back === (string)file_get_contents($BASE . '/' . $rel), substr_count((string)file_get_contents($T . '/' . $rel), $gate)], [1, true, 1]);
 }
 $appsHunk = "<?php if (!empty(\$a['quote_refused_text']) && empty(\$a['quote_created'])): /* 5.18.99 (Uganda): the quote check refused this customer's quotation, and none has been made since */ ?>\n"
     . "    <div style=\"margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;\">\n"
     . "        <div style=\"font-weight:800;margin-bottom:3px;\">⚠ No quotation was made</div>\n"
     . "        <div><?= h((string)\$a['quote_refused_text']) ?></div>\n"
     . "    </div>\n<?php endif; ?>\n";
-$back = str_replace($appsHunk, '', (string)file_get_contents($T . '/tabs/sales/applications.php'), $an);
-t('I4 tabs/sales/applications.php: its one hunk is the refusal block, inside a condition on quote_refused_text (and no quote made since); without it the file is ce7ac388\'s',
-    [$an, $BASE !== null && $back === (string)file_get_contents($BASE . '/tabs/sales/applications.php')], [1, true]);
+$back = str_replace($appsHunk, '', $RBASE !== null ? (string)@file_get_contents($RBASE . '/tabs/sales/applications.php') : '', $an);
+t('I4 tabs/sales/applications.php: in ' . QC_DELTA_REL . ' its one hunk is the refusal block, inside a condition on quote_refused_text (and no quote made since) — without it the file is ce7ac388\'s; this tree still carries it, once (5.18.102 narrowed)',
+    [$an, $BASE !== null && $back === (string)file_get_contents($BASE . '/tabs/sales/applications.php'), substr_count((string)file_get_contents($T . '/tabs/sales/applications.php'), $appsHunk)], [1, true, 1]);
 // I4, the rest of the delta: what the walk above leaves out (tests/, docs/ … and every *.md) is declared too, each with
 // why, so that the release's file list and its pin agree with the delta. Measured with Git on this checkout against
 // ce7ac388: the tracked files that differ, and any new file not yet committed.
@@ -1804,8 +1977,8 @@ is_($RBASE !== null && $mig($T) === $mig($RBASE), 'I5 this tree\'s migrations/ i
 $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
 t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
     [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
-$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.101",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';
-t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.101 (a later release moves this pin on; was 5.18.100)',
+$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.102",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';
+t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.102 (a later release moves this pin on; was 5.18.101)',
     [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
 
 // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's
@@ -1814,6 +1987,14 @@ t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version lin
 // signature spread over several lines, or a named argument on a line that also holds a ternary, is not seen).
 $bad = [];
 $lintFail = [];
+$phpOnly = function (string $src): string {
+    $o = '';
+    foreach (token_get_all($src) as $tk) {
+        if (is_array($tk) && in_array($tk[0], [T_COMMENT, T_DOC_COMMENT, T_INLINE_HTML], true)) { $o .= str_repeat("\n", substr_count($tk[1], "\n")); continue; }
+        $o .= is_array($tk) ? $tk[1] : $tk;
+    }
+    return $o;
+};
 $lintBins = ['php ' . PHP_VERSION => PHP_BINARY];
 foreach (['php7.4', 'php8.1'] as $bin) {
     $where = trim((string)shell_exec('command -v ' . escapeshellarg($bin) . ' 2>/dev/null'));
@@ -1831,10 +2012,12 @@ foreach ($lintFiles as $rel) {
         if ($rc !== 0) $lintFail[] = $rel . ' (' . $binName . ')';
     }
     if (strpos($rel, 'tests/') === 0) continue;
-    // The added CODE lines: both sides with their comments taken out (line count kept), then compared.
+    // The added CODE lines: both sides with their comments taken out (line count kept), then compared. 5.18.102: and a
+    // page's inline HTML and JavaScript too ($phpOnly) — the rules are PHP's, and a JavaScript object literal in
+    // kyc_form.php is not a named argument.
     $cb = $TMP . '/i6_base.php'; $cn = $TMP . '/i6_new.php';
-    file_put_contents($cb, $BASE !== null && is_file($BASE . '/' . $rel) ? $code((string)file_get_contents($BASE . '/' . $rel)) : '');
-    file_put_contents($cn, $code((string)file_get_contents($path)));
+    file_put_contents($cb, $BASE !== null && is_file($BASE . '/' . $rel) ? $phpOnly((string)file_get_contents($BASE . '/' . $rel)) : '');
+    file_put_contents($cn, $phpOnly((string)file_get_contents($path)));
     $d = []; exec('diff ' . escapeshellarg($cb) . ' ' . escapeshellarg($cn), $d);
     $added = implode("\n", array_map(function ($l) { return substr($l, 2); }, array_filter($d, function ($l) { return strpos($l, '> ') === 0; })));
     foreach (QC_I6_RULES as $what => $re) {
@@ -1861,7 +2044,25 @@ foreach ($tree as $rel => $path) {
     $loads[$rel] = preg_match("#require_once[^;]*QuoteOrganization\.php#", $c) === 1;
 }
 is_(count($loads) >= 11, 'I7 control: ' . count($loads) . ' files name QuoteOrganization (lib, the two API includes, the two LTE screens, tools/set_config.php)', qc_j(array_keys($loads)));
-t('I7 every one of them holds its own require_once of QuoteOrganization.php', array_keys(array_filter($loads, function ($v) { return !$v; })), []);
+// 5.18.102 D14 (rewritten on purpose, docs/71 §R.1.5, E-5): lib/UcrmQuoteLinks.php names the class and loads no sibling
+// file at all — its callers load lib/QuoteOrganization.php themselves, and every one loads the judge through
+// lib/UcrmQuoteLines.php, which loads QuoteOrganization.php first (F-6). It is the one file excepted, by name, and in
+// its place: it holds no require or include of any kind, and every other file that loads it is UcrmQuoteLines.php, which
+// loads QuoteOrganization.php before it.
+$qlk = 'lib/UcrmQuoteLinks.php';
+t('I7 every one of them holds its own require_once of QuoteOrganization.php (lib/UcrmQuoteLinks.php excepted by name, docs/71 §R.1.5)',
+    array_keys(array_filter($loads, function ($v, $rel) use ($qlk) { return !$v && $rel !== $qlk; }, ARRAY_FILTER_USE_BOTH)), []);
+$qlkSrc = isset($tree[$qlk]) ? $code((string)file_get_contents($tree[$qlk])) : '';
+$qlkLoaders = [];
+foreach ($tree as $rel => $path) {
+    if (substr($rel, -4) !== '.php' || $rel === $qlk) continue;
+    if (preg_match('#(?:require|include)(?:_once)?[^;]*UcrmQuoteLinks\.php#', $code((string)file_get_contents($path)))) $qlkLoaders[] = $rel;
+}
+$qlLines = isset($tree['lib/UcrmQuoteLines.php']) ? $code((string)file_get_contents($tree['lib/UcrmQuoteLines.php'])) : '';
+$pQO = strpos($qlLines, "require_once __DIR__ . '/QuoteOrganization.php';"); $pQL = strpos($qlLines, "require_once __DIR__ . '/UcrmQuoteLinks.php';");
+t('I7 … and lib/UcrmQuoteLinks.php names QuoteOrganization, holds no require or include at all, and is loaded only by lib/UcrmQuoteLines.php, after its own QuoteOrganization.php',
+    [isset($loads[$qlk]), preg_match('#\b(?:require|include)(?:_once)?\b#', $qlkSrc), $qlkLoaders, $pQO !== false && $pQL !== false && $pQO < $pQL],
+    [true, 0, ['lib/UcrmQuoteLines.php'], true]);
 
 // I8 — every client create is on the allow-list
 $creates = [];
@@ -1929,9 +2130,11 @@ $normalise = function (array $doc, string $tree, array &$seen): array {
         if (preg_match('/name="_csrf" value="([^"]+)"/', (string)$html, $m)) { $html = str_replace($m[1], '<N:csrf>', $html); $seen['page:*.csrf'] = true; }
         if ($base !== '' && strpos($html, preg_replace('#/public\.php$#', '', $base)) !== false) { $html = str_replace(preg_replace('#/public\.php$#', '', $base), '<plugin>', $html); $seen['page:*.address'] = true; }
         if ($ver !== '' && strpos($html, 'v' . $ver) !== false) { $html = str_replace('v' . $ver, 'v<N:version>', $html); $seen['page:*.version'] = true; }
+        $tp = (string)($doc['tree_path'] ?? '');
+        if ($tp !== '' && strpos($html, $tp) !== false) { $html = str_replace($tp, '<tree>', $html); $seen['page:*.path'] = true; }
         $doc['pages'][$k] = $html;
     }
-    unset($doc['served_base']);
+    unset($doc['served_base'], $doc['tree_path']);
     return $doc;
 };
 /** The control on a baseline run: it did something worth comparing. */
@@ -1943,6 +2146,15 @@ $ranAll = function (array $d): array {
             'POST billing/quotes' => $has('#^POST /billing/quotes$#'), 'an Evolution text' => count((array)($d['texts'] ?? [])) > 0,
             'PDF HTML' => strlen((string)(((array)($d['pdf_html'] ?? []))[0] ?? '')) > 1000, 'a warning flash' => in_array('warning', $types, true),
             'a success flash' => in_array('success', $types, true), 'a rendered J14 page' => strlen((string)($d['pages']['applications'] ?? '')) > 10000];
+};
+/**
+ * 5.18.102 D14 (docs/71 §R.8, §R.9.2): the link store a run's book ends with, its records without the row id the reader
+ * adds — the three qcj_links() records when nothing opened it for writing.
+ */
+$linksOf = function (array $d): ?array {
+    $rows = $d['tables']['ucrm_quote_links'] ?? null;
+    if (!is_array($rows)) return null;
+    return array_map(function ($r) { unset($r['__id']); return $r; }, $rows);
 };
 if ($BASE === null || $TB === null) {
     is_(false, 'S the ce7ac388 tree is at hand — without it §S is a failure, never a skip', $whyBase);
@@ -1962,6 +2174,10 @@ if ($BASE === null || $TB === null) {
         $ctl = array_merge($ranAll($b1), array_combine(array_map(function ($k) { return $k . ' (2nd)'; }, array_keys($ranAll($b2))), array_values($ranAll($b2))));
         t("S {$sc} control: each baseline run made a client, a KYC quote and a Send Quotation quote in uCRM, a WhatsApp, a PDF, a warning and a success flash, and the pages",
             array_keys(array_filter($ctl, function ($v) { return !$v; })), []);
+        // 5.18.102 D14 (docs/71 §R.8, §R.9.2): the book carries leftover links — three active records — on both trees, and
+        // each run ends with them exactly as seeded; the comparison below then proves they changed nothing.
+        t("S {$sc} control: the book holds a link store — the three seeded records, active — and each run, on ce7ac388's tree and on this one, ends with it as seeded",
+            [$linksOf($b1), $linksOf($b2), $linksOf($nw)], [qcj_links(), qcj_links(), qcj_links()]);
         $s1 = []; $s2 = []; $s3 = [];
         $n1 = $normalise($b1, $BASE, $s1); $n2 = $normalise($b2, $BASE, $s2); $nn = $normalise($nw, $ROOT, $s3);
         foreach (array_intersect_key($s1, $s2) as $k => $v) $seenBoth[$k] = true;
@@ -1985,6 +2201,17 @@ if ($BASE === null || $TB === null) {
         && strpos($nOn['pages']['kyc_form'] ?? '', $frag) !== false && strpos($bOn['pages']['kyc_form'] ?? '', $frag) === false,
         'S control: gate on (Uganda, clients in 2), the journey differs from ce7ac388 where it should — POST clients names 1, the check reads the client, the screens carry the fragment',
         qc_j([array_slice($diffs($bn, $nn), 0, 6), $orgOf($bOn), $orgOf($nOn), $guard]));
+    // 5.18.102 D14 (docs/71 §R.9.2): the ug2 control is seeded with the same link store, and on this tree, gate on, the
+    // links are read: the KYC form draws the plan row (record 1) and the installation (record 3) through them, with
+    // data-link (§R.4.7). ce7ac388's form, and every gate-off one (compared above), carries no data-link at all.
+    $linkAttrs = function (array $d): array {
+        preg_match_all('/data-link="(\d+)"/', (string)($d['pages']['kyc_form'] ?? ''), $m);
+        $ids = array_map('intval', $m[1]); sort($ids);
+        return array_values(array_unique($ids));
+    };
+    t('S control: ug2 is seeded with the link store (both trees), and on this tree its KYC form draws the plan and the installation through records 1 and 3 (ce7ac388\'s draws no data-link)',
+        [$linksOf($bOn), $linksOf($nOn), $linkAttrs($nOn), $linkAttrs($bOn), strlen((string)($bOn['pages']['kyc_form'] ?? '')) > 10000],
+        [qcj_links(), qcj_links(), [1, 3], [], true]);
     // The control on the normaliser: a copy that writes a changed value into a field not on the list fails the comparison.
     if ($WITH_MUTANTS && $firstSs !== null) {
         [$wk, $hits] = sj_weakened_copy($ROOT, 'lib/QuotationService.php', "                \$l['status']     = 'quoted';\n",

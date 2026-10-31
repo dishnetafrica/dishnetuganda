@@ -451,10 +451,15 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_plan'){
     // ── Auto-sync to UCRM products ──────────────────────────────────────────
     // Create product in UCRM if new, update name/price if already mapped.
     $ucrmMsg = '';
+    // 5.18.102 (Uganda, docs/71 §K.3, D12): uCRM's Products are the price list the quotes and the cash come from, so a
+    // saved plan writes only the plugin's row: no PATCH, no POST, no ucrm_product_id written back. Elsewhere unchanged.
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    $ugNoPush = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], $dataDir ?? null)['on'];
+    if ($ugNoPush) $ucrmMsg = ' uCRM\'s product was not changed: on Uganda, prices are set in uCRM Products.';
     try {
         require_once dirname(__DIR__, 2) . '/lib/CrmApiClient.php';
         $crmSync = CrmApiClient::fromUcrm(dirname(__DIR__), $config ?? []);
-        if ($crmSync->isConfigured()) {
+        if (!$ugNoPush && $crmSync->isConfigured()) {   // 5.18.102: never where the gate is on (above)
             $productPayload = [
                 'name'         => $plan['name'],
                 'invoiceLabel' => $plan['name'],
@@ -490,7 +495,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_plan'){
     // ── End UCRM sync ───────────────────────────────────────────────────────
 
     $store->save('subscription_plans.json', $plans);
-    flash(($planId && !isset($plan['created_at']) ? 'Plan updated.' : 'Plan created.') . $ucrmMsg, 'success');
+    flash(($planId && !isset($plan['created_at']) ? 'Plan updated.' : 'Plan created.') . $ucrmMsg, $ugNoPush ? 'warning' : 'success');   // 5.18.102: amber when uCRM was left as it is
     redirect('?page=dashboard&tab=subscription_plans');
 }
 // ── A photo or spec sheet for one piece of equipment ────────────────────────
@@ -557,6 +562,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_hardware'
     ];
     // Manual UCRM Product ID override — if user typed one, use it
     $manualUcrmId = (int)($_POST['hw_ucrm_product_id'] ?? 0);
+    // 5.18.102 (Uganda, D14, docs/71 §R.2.2, Q8): where the quoting-organization gate is on the field is not drawn and
+    // hw_ucrm_product_id is ignored: quoting never reads ucrm_product_id, and a value typed here would become productId
+    // on Uganda with the gate off, or after a rollback (§R.1.2). A stored value is kept untouched. Elsewhere unchanged.
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], $dataDir ?? null)['on']) $manualUcrmId = 0;
 
     $existingHwUcrmId = 0;
     $savedHwId = $hwId;
@@ -583,10 +593,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_hardware'
 
     // ── Auto-sync to UCRM products ──────────────────────────────────────────
     $hwUcrmMsg = '';
+    // 5.18.102 (Uganda, docs/71 §K.3, D12): as save_plan — the plugin's row only; uCRM's product is left as it is.
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    $ugNoPush = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], $dataDir ?? null)['on'];
+    if ($ugNoPush) $hwUcrmMsg = ' uCRM\'s product was not changed: on Uganda, prices are set in uCRM Products.';
     try {
         require_once dirname(__DIR__, 2) . '/lib/CrmApiClient.php';
         $crmHw = CrmApiClient::fromUcrm(dirname(__DIR__), $config ?? []);
-        if ($crmHw->isConfigured()) {
+        if (!$ugNoPush && $crmHw->isConfigured()) {   // 5.18.102: never where the gate is on (above)
             $hwPayload = [
                 'name'         => $item['title'],
                 'invoiceLabel' => $item['title'],
@@ -619,7 +633,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='save_hardware'
     // ── End UCRM sync ───────────────────────────────────────────────────────
 
     $store->save('kyc_devices.json', $hw);
-    flash(($hwId > 0 ? 'Hardware updated.' : 'Hardware added.') . $hwUcrmMsg, 'success');
+    flash(($hwId > 0 ? 'Hardware updated.' : 'Hardware added.') . $hwUcrmMsg, $ugNoPush ? 'warning' : 'success');   // 5.18.102: amber when uCRM was left as it is
     redirect('?page=dashboard&tab=hardware');
 }
 if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_hardware'){
@@ -627,6 +641,19 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_hardwar
     $delId = (int)($_POST['hw_id'] ?? 0);
     $hw = array_values(array_filter($store->load('kyc_devices.json'), fn($h2) => (int)($h2['id']??0)!==$delId));
     $store->save('kyc_devices.json', $hw);
+    // 5.18.102 (Uganda, D14, docs/71 §R.1.3): the deleted row's uCRM links end with it — every active record of the row,
+    // ended_why "row deleted", in this request — only where the quoting-organization gate is on (the link store is never
+    // opened elsewhere, §R.1.5). A failure is logged with ids only; a reused id is still caught by its stamp.
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+        try {
+            $_dlEnded = UcrmQuoteLinks::end($store, 'kit', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
+            if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_hardware: kit #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 delete_hardware: kit #' . $delId . ': its uCRM links could not be ended (' . get_class($e) . ')');
+        }
+    }
     flash('Hardware deleted.','success');
     redirect('?page=dashboard&tab=hardware');
 }
@@ -645,8 +672,394 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_plan'){
     $delId = (int)($_POST['plan_id'] ?? 0);
     $plans = array_values(array_filter($store->load('subscription_plans.json'), fn($p) => (int)($p['id']??0)!==$delId));
     $store->save('subscription_plans.json', $plans);
+    // 5.18.102 (Uganda, D14, docs/71 §R.1.3): as delete_hardware — the deleted plan's uCRM links end with it, every active
+    // record, ended_why "row deleted", only where the quoting-organization gate is on.
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+        try {
+            $_dlEnded = UcrmQuoteLinks::end($store, 'plan', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
+            if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_plan: plan #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 delete_plan: plan #' . $delId . ': its uCRM links could not be ended (' . get_class($e) . ')');
+        }
+    }
     flash('Plan deleted.','success');
     redirect('?page=dashboard&tab=subscription_plans');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// 5.18.102 (Uganda, D14, docs/71 §R.2, §R.1.4, §R.3.1): link a plan, a kit or the installation to its uCRM Product, and
+// unlink it. Each block is handled only where the quoting-organization gate is on; with it off the block is skipped
+// whole and the action falls through as an unknown one does in 5.18.101. In this order, each step before the next and
+// each refusal writing nothing:
+//   1. $auth->requireAdmin() (the sign-in redirect, or 403), then the account re-read fresh by id — refused with 403
+//      unless it is the same account, active and an admin (BankGate::allows's expression, written here: requireAdmin
+//      reads the session's cached record, which can be stale, §R.2.1);
+//   2. the own-page check, made here and never left to the global CSRF gate (which is skipped for any POST carrying
+//      cb_action or a tab-action field, and whose token is the same for everyone all day): csrfCheck()'s result used,
+//      AND not CustomerSession::crossSite() AND BankGate::fromOwnPage('POST') — post_bank.php's check, both classes
+//      loaded unchanged. A refusal: one fixed flash and a fixed screen address;
+//   2a. (save) the quoting-organization setting must be valid (QuoteOrganization::setting()['id'] an int). Otherwise one
+//      fixed flash naming the setting, with no uCRM read and no lock (5.18.102 D14 review, G2; round 2, FX-money-2). It
+//      comes after 1 and 2, so a non-admin is still answered 403 and a cross-site post the security flash, never its text;
+//   3. (save) rule 2: the row in its own table, not Fiber — its id and stamp kept for the check inside the lock;
+//   4. (save) rules 3–8: a fresh read through UcrmQuoteLines::quoteClient (the client the quotes are made with, its
+//      normal timeouts, never the page cache), outside any transaction, judged by the resolver's own functions
+//      (candidate()), so save and use cannot apply different rules;
+//   5. UcrmQuoteLinks::set() / ::end(): inside withLock, store checks only, then the write. Whatever withLock throws (it
+//      has rolled back) is answered "nothing was linked / unlinked — try again".
+// Every flash is fixed text plus ids, or names passed through QuoteOrganization::plain (the layout prints it raw). The
+// log carries ids and counts only, to PHP's error_log.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_link_save') {
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        $_lkItem = is_string($_POST['item'] ?? null) ? (string)$_POST['item'] : '';
+        $_lkBack = $_lkItem === 'plan' ? '?page=dashboard&tab=subscription_plans' : '?page=dashboard&tab=hardware';
+
+        // 1. an admin, judged on the account record re-read fresh by id — never the session copy
+        $_lkMe = $auth->requireAdmin();
+        $_lkMeId = (int)($_lkMe['id'] ?? 0);
+        try {
+            $_lkFresh = $_lkMeId > 0 ? $store->findOne('retailers.json', 'id', $_lkMeId) : null;
+        } catch (\Throwable $e) {
+            $_lkFresh = null;
+        }
+        if (!is_array($_lkFresh) || $_lkMeId <= 0 || (int)($_lkFresh['id'] ?? 0) !== $_lkMeId
+            || empty($_lkFresh['is_active']) || empty($_lkFresh['is_admin'])) {
+            http_response_code(403);
+            die('<p style="color:red;padding:20px;">Access denied — admin only.</p>');
+        }
+
+        // 2. the own-page check, made here (post_bank.php's)
+        require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
+        require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+        if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
+            flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
+            redirect($_lkBack);
+        }
+
+        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+        $_lkSet = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+        // 5.18.102 D14 review (G2), 5.18.99 R6: the quoting organization must be set correctly — no uCRM read, no lock,
+        // one fixed answer naming the setting (never "changed … try again", which no retry could cure)
+        if (!is_int($_lkSet['id'] ?? null)) {
+            error_log('[post_sync] 5.18.102 ucrm_link_save: refused, the quoting-organization setting is invalid, by #' . $_lkMeId);
+            flash('The company the app quotes under is not set correctly, so nothing was linked. Tell an admin.', 'danger');
+            redirect($_lkBack);
+        }
+        $_lkNum = function ($v): int {
+            return (is_string($v) && $v !== '' && strlen($v) <= 9 && ctype_digit($v)) ? (int)$v : 0;
+        };
+        $_lkPlain = function ($name, string $fallback): string {
+            $p = QuoteOrganization::plain(is_scalar($name) ? (string)$name : '');
+            return $p !== '' ? $p : $fallback;
+        };
+        // A reason, as a flash: the resolver's own words (names already plain), said once that nothing was linked
+        $_lkSay = function (string $reason): string {
+            $r = rtrim(trim($reason), '.');
+            if (strpos($r, 'nothing was linked') === false) return 'Nothing was linked: ' . $r . '.';
+            return (strpos($r, 'uCRM') === 0 ? $r : ucfirst($r)) . '.';
+        };
+        $_lkRowId = $_lkItem === 'install' ? 0 : $_lkNum($_POST['row_id'] ?? null);
+        $_lkPid   = $_lkNum($_POST['product_id'] ?? null);
+        $_lkSpid  = $_lkItem === 'plan' ? $_lkNum($_POST['service_plan_id'] ?? null) : 0;
+        if (!in_array($_lkItem, UcrmQuoteLinks::ITEMS, true) || ($_lkItem !== 'install' && $_lkRowId <= 0)
+            || $_lkPid <= 0 || ($_lkItem === 'plan' && $_lkSpid <= 0)) {
+            flash($_lkItem === 'plan' ? 'Nothing was linked. Pick a uCRM product and a uCRM service plan, then save.'
+                                      : 'Nothing was linked. Pick a uCRM product, then save.', 'danger');
+            redirect($_lkBack);
+        }
+
+        // 3. rule 2: the row in its own table, not Fiber; its id and stamp are kept for the check inside the lock
+        $_lkRow = null;
+        if ($_lkItem !== 'install') {
+            try {
+                $_lkRow = $store->findOne($_lkItem === 'plan' ? 'subscription_plans.json' : 'kyc_devices.json', 'id', $_lkRowId);
+            } catch (\Throwable $e) {
+                $_lkRow = null;
+            }
+            if (!is_array($_lkRow) || (int)($_lkRow['id'] ?? 0) !== $_lkRowId) {
+                flash('Nothing was linked. ' . ($_lkItem === 'plan' ? 'Plan #' : 'Hardware row #') . (int)$_lkRowId
+                    . ' is not on this screen any more.', 'danger');
+                redirect($_lkBack);
+            }
+            if (UcrmQuoteLinks::isFiber($_lkItem, $_lkRow)) {
+                flash($_lkSay(UcrmQuoteLines::FIBER_REASON), 'danger');
+                redirect($_lkBack);
+            }
+        }
+        $_lkRowName = $_lkItem === 'install' ? 'Installation' : (string)($_lkRow[$_lkItem === 'plan' ? 'name' : 'title'] ?? '');
+        $_lkShown   = $_lkItem === 'install' ? 'Installation'
+                    : $_lkPlain($_lkRowName, ($_lkItem === 'plan' ? 'Plan #' : 'Hardware row #') . (int)$_lkRowId);
+
+        // 4. rules 3–8: a fresh read through the quoting client, outside any transaction — the resolver's own rules
+        try {
+            $_lkCrm   = (isset($crm) && is_object($crm)) ? $crm : svc('crm');
+            $_lkLines = new UcrmQuoteLines(UcrmQuoteLines::quoteClient($_lkCrm, is_array($config ?? null) ? $config : []),
+                $_lkSet, UcrmQuoteLinks::fromStore($store, $_lkSet));
+            $_lkCand = $_lkLines->candidate($_lkItem, $_lkRow, $_lkPid, $_lkItem === 'plan' ? $_lkSpid : null);
+            $_lkCat  = $_lkLines->catalogue();
+        } catch (\Throwable $e) {
+            $_lkCand = ['ok' => false, 'reason' => "uCRM's products could not be read — nothing was linked"];
+            $_lkCat  = ['plans' => []];
+        }
+        if (empty($_lkCand['ok']) || !is_array($_lkCand['line'] ?? null)) {
+            error_log('[post_sync] 5.18.102 ucrm_link_save: ' . $_lkItem . ' #' . $_lkRowId . ' to product #' . $_lkPid
+                . ($_lkItem === 'plan' ? ' and service plan #' . $_lkSpid : '') . ' refused before the lock, by #' . $_lkMeId);
+            flash($_lkSay((string)($_lkCand['reason'] ?? '')), 'danger');
+            redirect($_lkBack);
+        }
+        $_lkProdName = (string)($_lkCand['line']['label'] ?? '');
+        $_lkSpName   = '';
+        if ($_lkItem === 'plan') {
+            foreach ((array)($_lkCat['plans'] ?? []) as $_lkSp) {
+                if (is_array($_lkSp) && (int)($_lkSp['id'] ?? 0) === $_lkSpid) { $_lkSpName = (string)($_lkSp['name'] ?? ''); break; }
+            }
+        }
+
+        // 5. the write, inside the lock: store checks only (the row and its stamp again, rule 8 again), then one record
+        try {
+            $_lkRes = UcrmQuoteLinks::set($store, [
+                'item'              => $_lkItem,
+                'row_id'            => $_lkRowId,
+                'row_stamp'         => $_lkRow !== null ? UcrmQuoteLinks::rowStamp($_lkRow) : '',
+                'product_id'        => $_lkPid,
+                'service_plan_id'   => $_lkItem === 'plan' ? $_lkSpid : null,
+                'row_name'          => $_lkRowName,
+                'product_name'      => $_lkProdName,
+                'service_plan_name' => $_lkSpName,
+            ], $_lkFresh, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 ucrm_link_save: ' . $_lkItem . ' #' . $_lkRowId . ': nothing was linked, the lock failed ('
+                . get_class($e) . ')');
+            flash('Nothing was linked — try again.', 'danger');
+            redirect($_lkBack);
+        }
+        $_lkKind  = (string)($_lkRes['kind'] ?? '');
+        $_lkEnded = array_values(array_filter((array)($_lkRes['ended'] ?? []), 'is_int'));
+        $_lkWhat  = 'uCRM product #' . (int)$_lkPid . ' (' . $_lkPlain($_lkProdName, 'no name') . ')'
+                  . ($_lkItem === 'plan' ? ' and service plan #' . (int)$_lkSpid . ' (' . $_lkPlain($_lkSpName, 'no name') . ')' : '');
+        $_lkCount = '';
+        $_lkLog   = '';
+        if ($_lkEnded !== []) {
+            // §R.2.3: what was quoted under the records this save ended — KYC applications only, by sales type
+            try {
+                $_lkN = UcrmQuoteLinks::countQuoted($store, $_lkSet, $_lkEnded);
+                $_lkCount = ' ' . ((int)$_lkN['cash'] + (int)$_lkN['credit']) . ' application(s) were quoted under the previous link ('
+                          . (int)$_lkN['cash'] . ' Cash, ' . (int)$_lkN['credit'] . ' Credit). Review them in uCRM.';
+                foreach ($_lkEnded as $_lkE) {
+                    $_lkCount .= ' <a href="?page=dashboard&amp;tab=applications&amp;quote_link=' . (int)$_lkE
+                               . '">Orders quoted under link #' . (int)$_lkE . '</a>';
+                }
+                $_lkLog = ', quoted under them ' . (int)$_lkN['cash'] . ' Cash and ' . (int)$_lkN['credit'] . ' Credit';
+            } catch (\Throwable $e) {
+                $_lkCount = ' The applications quoted under the previous link could not be counted.';
+            }
+        }
+        if ($_lkKind === 'linked') {
+            flash($_lkShown . ' is linked to ' . $_lkWhat . '.' . $_lkCount, 'success');
+        } elseif ($_lkKind === 'already') {
+            flash($_lkShown . ' is already linked to ' . $_lkWhat . ' — nothing was changed.', 'info');
+        } else {
+            flash($_lkSay((string)($_lkRes['text'] ?? '')), 'danger');   // changed, or rule 8 inside the lock
+        }
+        error_log('[post_sync] 5.18.102 ucrm_link_save: ' . $_lkItem . ' #' . $_lkRowId . ' to product #' . $_lkPid
+            . ($_lkItem === 'plan' ? ' and service plan #' . $_lkSpid : '') . ' by #' . $_lkMeId . ' gave ' . $_lkKind
+            . (is_array($_lkRes['record'] ?? null) ? ' (record #' . (int)($_lkRes['record']['id'] ?? 0) . ')' : '')
+            . ', ' . count($_lkEnded) . ' record(s) ended' . $_lkLog);
+        redirect($_lkBack);
+    }
+}
+
+// 5.18.102 (Uganda, D14, docs/71 §R.2.3, §R.1.4): unlink — every active record of the item ends ("unlinked"), after the
+// screen's confirmation. Steps 1 and 2 above, then UcrmQuoteLinks::end() inside the lock; no uCRM read.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_link_clear') {
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        $_ulItem = is_string($_POST['item'] ?? null) ? (string)$_POST['item'] : '';
+        $_ulBack = $_ulItem === 'plan' ? '?page=dashboard&tab=subscription_plans' : '?page=dashboard&tab=hardware';
+
+        // 1. an admin, judged on the account record re-read fresh by id — never the session copy
+        $_ulMe = $auth->requireAdmin();
+        $_ulMeId = (int)($_ulMe['id'] ?? 0);
+        try {
+            $_ulFresh = $_ulMeId > 0 ? $store->findOne('retailers.json', 'id', $_ulMeId) : null;
+        } catch (\Throwable $e) {
+            $_ulFresh = null;
+        }
+        if (!is_array($_ulFresh) || $_ulMeId <= 0 || (int)($_ulFresh['id'] ?? 0) !== $_ulMeId
+            || empty($_ulFresh['is_active']) || empty($_ulFresh['is_admin'])) {
+            http_response_code(403);
+            die('<p style="color:red;padding:20px;">Access denied — admin only.</p>');
+        }
+
+        // 2. the own-page check, made here (post_bank.php's)
+        require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
+        require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+        if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
+            flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
+            redirect($_ulBack);
+        }
+
+        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+        $_ulSet = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+        $_ulRaw = $_POST['row_id'] ?? null;
+        $_ulRowId = $_ulItem === 'install' ? 0
+                  : ((is_string($_ulRaw) && $_ulRaw !== '' && strlen($_ulRaw) <= 9 && ctype_digit($_ulRaw)) ? (int)$_ulRaw : 0);
+        if (!in_array($_ulItem, UcrmQuoteLinks::ITEMS, true) || ($_ulItem !== 'install' && $_ulRowId <= 0)) {
+            flash('Nothing was unlinked. The request did not name a plan, a hardware row or the installation.', 'danger');
+            redirect($_ulBack);
+        }
+        $_ulShown = 'Installation';
+        if ($_ulItem !== 'install') {
+            try {
+                $_ulRow = $store->findOne($_ulItem === 'plan' ? 'subscription_plans.json' : 'kyc_devices.json', 'id', $_ulRowId);
+            } catch (\Throwable $e) {
+                $_ulRow = null;
+            }
+            $_ulName  = QuoteOrganization::plain(is_array($_ulRow) ? (string)($_ulRow[$_ulItem === 'plan' ? 'name' : 'title'] ?? '') : '');
+            $_ulShown = $_ulName !== '' ? $_ulName : ($_ulItem === 'plan' ? 'Plan #' : 'Hardware row #') . (int)$_ulRowId;
+        }
+
+        try {
+            $_ulEnded = UcrmQuoteLinks::end($store, $_ulItem, $_ulRowId, UcrmQuoteLinks::WHY_UNLINKED, $_ulFresh);
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 ucrm_link_clear: ' . $_ulItem . ' #' . $_ulRowId . ': nothing was unlinked, the lock failed ('
+                . get_class($e) . ')');
+            flash('Nothing was unlinked — try again.', 'danger');
+            redirect($_ulBack);
+        }
+        $_ulEnded = array_values(array_filter((array)$_ulEnded, 'is_int'));
+        if ($_ulEnded === []) {
+            flash($_ulShown . ' had no uCRM link — nothing was changed.', 'info');
+        } else {
+            $_ulCount = '';
+            $_ulLog   = '';
+            try {
+                $_ulN = UcrmQuoteLinks::countQuoted($store, $_ulSet, $_ulEnded);
+                $_ulCount = ' ' . ((int)$_ulN['cash'] + (int)$_ulN['credit']) . ' application(s) were quoted under the previous link ('
+                          . (int)$_ulN['cash'] . ' Cash, ' . (int)$_ulN['credit'] . ' Credit). Review them in uCRM.';
+                foreach ($_ulEnded as $_ulE) {
+                    $_ulCount .= ' <a href="?page=dashboard&amp;tab=applications&amp;quote_link=' . (int)$_ulE
+                               . '">Orders quoted under link #' . (int)$_ulE . '</a>';
+                }
+                $_ulLog = ', quoted under them ' . (int)$_ulN['cash'] . ' Cash and ' . (int)$_ulN['credit'] . ' Credit';
+            } catch (\Throwable $e) {
+                $_ulCount = ' The applications quoted under the previous link could not be counted.';
+            }
+            flash($_ulShown . ' is no longer linked to uCRM. Cash sales of it are refused until it is linked again.' . $_ulCount, 'warning');
+            error_log('[post_sync] 5.18.102 ucrm_link_clear: ' . $_ulItem . ' #' . $_ulRowId . ' by #' . $_ulMeId . ' ended '
+                . count($_ulEnded) . ' record(s)' . $_ulLog);
+        }
+        redirect($_ulBack);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — the Orders card's button for a web registration left
+// unpriced (P1). Handled only where the quoting-organization gate is on; with it off the block is skipped whole and the
+// action falls through as an unknown one does in 5.18.101. In this order, each refusal at steps 3–5 writing nothing and
+// sending no request to uCRM:
+//   1. a POST with this action, the gate on;
+//   2. $auth->requireAdmin(), then the account re-read fresh by id: 403 unless the same account, active and an admin;
+//   3. the own-page check, made here (post_bank.php's): csrfCheck()'s result used, not CustomerSession::crossSite(),
+//      BankGate::fromOwnPage('POST');
+//   4. nothing from the request but the application's number: any key but action, _csrf and app_id, or an app_id that
+//      is not digits only, is refused — the entry, the client, the amount and the lines all come from the store;
+//   5. the application re-read by findOne, and the button's five conditions checked again there
+//      (KycService::canMakeQuotation, the one implementation the card draws by);
+//   6. svc('kyc')->makeQuotation($app, null, 'orders_card', $fresh) — the shared implementation retry_quote calls too;
+//      no organization known, so postQuote() makes the company check itself;
+//   7. a flash chosen by the answer's kind, never by its code (four kinds share 409), then a fixed address.
+// Every id in a flash is cast with (int): the layout prints the flash raw, and postQuote() returns uCRM's id raw.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kyc_make_quote') {
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        $_mqBack = '?page=dashboard&tab=applications';
+
+        // 2. an admin, judged on the account record re-read fresh by id — never the session copy
+        $_mqMe = $auth->requireAdmin();
+        $_mqMeId = (int)($_mqMe['id'] ?? 0);
+        try {
+            $_mqFresh = $_mqMeId > 0 ? $store->findOne('retailers.json', 'id', $_mqMeId) : null;
+        } catch (\Throwable $e) {
+            $_mqFresh = null;
+        }
+        if (!is_array($_mqFresh) || $_mqMeId <= 0 || (int)($_mqFresh['id'] ?? 0) !== $_mqMeId
+            || empty($_mqFresh['is_active']) || empty($_mqFresh['is_admin'])) {
+            http_response_code(403);
+            die('<p style="color:red;padding:20px;">Access denied — admin only.</p>');
+        }
+
+        // 3. the own-page check, made here (post_bank.php's)
+        require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
+        require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+        if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
+            flash('The security check failed, so nothing was changed. Open the Orders screen again and retry.', 'danger');
+            redirect($_mqBack);
+        }
+
+        // 4. nothing from the request but the application's number
+        $_mqOther = array_diff(array_map('strval', array_keys($_POST)), ['action', '_csrf', 'app_id']);
+        $_mqRaw   = $_POST['app_id'] ?? null;
+        if ($_mqOther !== [] || !is_string($_mqRaw) || $_mqRaw === '' || !ctype_digit($_mqRaw)) {
+            flash('The request carried more than the application\'s number, so nothing was changed. Open the Orders screen again and retry.', 'danger');
+            redirect($_mqBack);
+        }
+        $_mqId = (int)$_mqRaw;
+
+        // 5. the application as the store holds it, and the button's five conditions again
+        require_once dirname(__DIR__, 2) . '/lib/KycService.php';
+        try {
+            $_mqApp = $store->findOne('kyc_applications.json', 'id', $_mqId);
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 kyc_make_quote: application #' . (int)$_mqId . ' could not be read (' . get_class($e) . ')');
+            flash('No quotation was made for application #' . (int)$_mqId . ' — try again.', 'danger');
+            redirect($_mqBack);
+        }
+        if (!is_array($_mqApp) || (int)($_mqApp['id'] ?? 0) !== $_mqId || !KycService::canMakeQuotation($_mqApp)) {
+            flash('Make the quotation does not apply to application #' . (int)$_mqId . ' now. Nothing was changed.', 'warning');
+            redirect($_mqBack);
+        }
+
+        // 6. the shared implementation (KycService::makeQuotation): the claim, R-M4's guard, the lines, postQuote()
+        try {
+            $_mq = svc('kyc')->makeQuotation($_mqApp, null, 'orders_card', $_mqFresh);
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.102 kyc_make_quote: application #' . (int)$_mqId . ' by #' . $_mqMeId
+                . ': making the quotation did not finish, it may have been made (' . get_class($e) . ')');
+            // 5.18.102 D14 review (D14-MQ-THROW-AFTER-POST): a Throwable may come after the POST made the quotation, so
+            // the answer never says none exists
+            flash('Making the quotation for application #' . (int)$_mqId . ' did not finish. Open the Orders screen again before you retry: uCRM may already have it, and Make the quotation never makes a second one.', 'danger');
+            redirect($_mqBack);
+        }
+
+        // 7. a flash chosen by the kind
+        $_mqKind = is_array($_mq) ? (string)($_mq['kind'] ?? '') : '';
+        if ($_mqKind === 'made') {
+            flash('Quotation #' . (int)($_mq['quote_id'] ?? 0) . ' was made in uCRM for application #' . (int)$_mqId
+                . '. Its WhatsApp follows once uCRM\'s PDF is ready.', 'success');
+        } elseif ($_mqKind === 'found') {
+            flash('uCRM already has a quotation for this client made after application #' . (int)$_mqId
+                . ' was saved — no second one was made.', 'warning');
+        } elseif ($_mqKind === 'unreadable') {
+            flash('uCRM\'s quotations for this client could not be read, so no quotation was made for application #' . (int)$_mqId
+                . ' — try again.', 'warning');
+        } elseif ($_mqKind === 'refused') {
+            flash('No quotation was made for application #' . (int)$_mqId . ' — its card says why.', 'warning');
+        } elseif ($_mqKind === 'claimed') {
+            flash('A quotation is being made for application #' . (int)$_mqId . ' — wait, then open the Orders screen again.', 'info');
+        } else {
+            // error — 5.18.102 D14 review round 2 (FX-flows-2): uCRM's answer held no id, which a lost answer (a timeout, a
+            // 5xx) after a quotation it made also gives, so the flash says "did not confirm", never "did not make"
+            flash('uCRM did not confirm the quotation for application #' . (int)$_mqId . '. It may have been made: try Make the quotation again later — it never makes a second one.', 'danger');
+        }
+        error_log('[post_sync] 5.18.102 kyc_make_quote: application #' . (int)$_mqId . ' by #' . $_mqMeId . ' gave ' . $_mqKind);
+        redirect($_mqBack);
+    }
 }
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='sim_inbound') {
     $me = $auth->currentRetailer();

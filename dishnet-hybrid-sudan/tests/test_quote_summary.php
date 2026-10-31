@@ -420,11 +420,14 @@ is_(strpos($src, 'PublicPriceFeed::planKey(') !== false, 'Uganda finds the plan 
 is_(substr_count($src, "\"💰 Hardware: \"") === 1 && substr_count($src, "\"💰 Monthly: \"") === 1,
     'the old two lines remain, once — South Sudan\'s');
 
-// ── M. 5.18.101's release boundary ─────────────────────────────────────────
-// Measured against the 5.18.100 release commit from Git, as tests/test_sales_numbers.php R measured 5.18.100's against
-// 5.18.99's. It reads this checkout; a later release re-points it.
-echo "\nM. 5.18.101's release boundary: this tree against 8ff469f5 (the 5.18.100 release commit), from Git\n";
+// ── M. 5.18.101's release boundary, on its own commit ──────────────────────
+// 5.18.102 (re-pointed on purpose, never weakened, as tests/test_sales_numbers.php R was by 5.18.101): 5.18.101's delta is
+// measured between its release commit, f2055baf (QS_M_REL), and 5.18.100's, 8ff469f5 (QS_M_BASE), both from Git — never
+// the working tree, which a later release moves on. This tree is then held to f2055baf where 5.18.101's code lives:
+// webhook.php byte for byte (5.18.102 must not change it: docs/71 §L.4; section G reads it).
+echo "\nM. 5.18.101's release boundary: f2055baf (the 5.18.101 release commit) against 8ff469f5 (5.18.100's), from Git\n";
 const QS_M_BASE = '8ff469f5';
+const QS_M_REL  = 'f2055baf';
 const QS_M_CODE = ['manifest.json', 'webhook.php'];
 const QS_M_DOCS = ['SAFETY.md', 'tests/test_bank_boundaries.php', 'tests/test_cashbook_physical_list.php',
     'tests/test_distributor_apply.php', 'tests/test_distributor_link_ucrm.php', 'tests/test_distributor_notify.php',
@@ -434,47 +437,49 @@ $gitM = function (string $args) use ($root): ?array {
     $o = []; exec('git -C ' . escapeshellarg($root) . ' ' . $args . ' 2>/dev/null', $o, $rc);
     return $rc === 0 ? $o : null;
 };
-$showM = function (string $rel) use ($root): ?string {
-    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg(QS_M_BASE . ':dishnet-hybrid-sudan/' . $rel)
+$showM = function (string $commit, string $rel) use ($root): ?string {
+    $o = (string)shell_exec('git -C ' . escapeshellarg($root) . ' show ' . escapeshellarg($commit . ':dishnet-hybrid-sudan/' . $rel)
                            . ' 2>/dev/null; printf "\\n__RC=%s" "$?"');
     if (!preg_match('/\n__RC=(\d+)$/', $o, $m) || $m[1] !== '0') return null;
     return substr($o, 0, -strlen($m[0]));
 };
-$gdM = $gitM('diff --name-only --relative ' . escapeshellarg(QS_M_BASE) . ' -- .');
-$guM = $gitM('ls-files --others --exclude-standard -- .');
-$wbM = $showM('webhook.php');
-$mbM = $showM('manifest.json');
-if ($gdM === null || $guM === null || $wbM === null || $mbM === null) {
-    is_(false, 'M Git supplies ' . QS_M_BASE . ' — without it the boundary cannot be measured: a failure, never a skip');
+$gdM = $gitM('diff --name-only --relative ' . escapeshellarg(QS_M_BASE) . ' ' . escapeshellarg(QS_M_REL) . ' -- .');
+$wbM = $showM(QS_M_BASE, 'webhook.php');
+$mbM = $showM(QS_M_BASE, 'manifest.json');
+$wrM = $showM(QS_M_REL, 'webhook.php');
+$mrM = $showM(QS_M_REL, 'manifest.json');
+if ($gdM === null || $wbM === null || $mbM === null || $wrM === null || $mrM === null) {
+    is_(false, 'M Git supplies ' . QS_M_BASE . ' and ' . QS_M_REL . ' — without them the boundary cannot be measured: a failure, never a skip');
 } else {
-    $allM = array_values(array_unique(array_filter(array_merge($gdM, $guM), 'strlen')));
+    $allM = array_values(array_unique(array_filter($gdM, 'strlen')));
     sort($allM);
     $isDocM = function (string $rel): bool { return substr($rel, -3) === '.md' || in_array(explode('/', $rel)[0], ['tests', 'docs'], true); };
     $codeM = array_values(array_filter($allM, function ($r) use ($isDocM) { return !$isDocM($r); }));
     $docsM = array_values(array_filter($allM, $isDocM));
     $wantM = QS_M_DOCS; sort($wantM);
-    is_($codeM === QS_M_CODE, 'M outside tests and documents it changes exactly manifest.json and webhook.php: no migration, no other runtime file',
+    is_($codeM === QS_M_CODE, 'M outside tests and documents ' . QS_M_REL . ' changes exactly manifest.json and webhook.php: no migration, no other runtime file',
         json_encode($codeM));
     is_($docsM === $wantM, 'M … and exactly the ' . count(QS_M_DOCS) . ' declared tests and documents',
         json_encode(['not declared' => array_values(array_diff($docsM, $wantM)), 'not changed' => array_values(array_diff($wantM, $docsM))]));
     $mwM = str_replace('    "version": "5.18.100",', '    "version": "5.18.101",', $mbM, $mnM);
-    is_($mnM === 1 && $mwM === (string)@file_get_contents($root . '/manifest.json'),
-        'M manifest.json is ' . QS_M_BASE . '\'s with one line changed, its version, 5.18.100 → 5.18.101');
-    // webhook.php: put 5.18.100's line back in place of this release's block, and the file must be 8ff469f5's, byte for byte.
-    $newM = (string)@file_get_contents($root . '/webhook.php');
+    is_($mnM === 1 && $mwM === $mrM,
+        'M ' . QS_M_REL . '\'s manifest.json is ' . QS_M_BASE . '\'s with one line changed, its version, 5.18.100 → 5.18.101');
+    // webhook.php: put 5.18.100's line back in place of 5.18.101's block, and the file must be 8ff469f5's, byte for byte.
     $oldLineM = '            $msg .= "\n\n🚀 *DishNet Internet Services*";' . "\n";
     $endMarkM = ": '🚀 *DishNet Internet Services*');\n";
-    $startM = strpos($newM, '            // 5.18.101: Uganda signs off');
-    $endM = $startM === false ? false : strpos($newM, $endMarkM, $startM);
-    $spanM = ($startM === false || $endM === false) ? '' : substr($newM, $startM, $endM + strlen($endMarkM) - $startM);
-    $backM = $spanM === '' ? null : substr($newM, 0, $startM) . $oldLineM . substr($newM, $startM + strlen($spanM));
+    $startM = strpos($wrM, '            // 5.18.101: Uganda signs off');
+    $endM = $startM === false ? false : strpos($wrM, $endMarkM, $startM);
+    $spanM = ($startM === false || $endM === false) ? '' : substr($wrM, $startM, $endM + strlen($endMarkM) - $startM);
+    $backM = $spanM === '' ? null : substr($wrM, 0, $startM) . $oldLineM . substr($wrM, $startM + strlen($spanM));
     is_($backM !== null && substr_count($spanM, "\n") === 3 && substr_count($wbM, $oldLineM) === 1 && $backM === $wbM,
-        'M webhook.php is ' . QS_M_BASE . '\'s with one change: the sign-off line and its two lines of comment (3 lines for 1)');
+        'M ' . QS_M_REL . '\'s webhook.php is ' . QS_M_BASE . '\'s with one change: the sign-off line and its two lines of comment (3 lines for 1)');
+    is_((string)@file_get_contents($root . '/webhook.php') === $wrM,
+        'M this tree\'s webhook.php is ' . QS_M_REL . '\'s, byte for byte (a later release must not change it unless it re-points this)');
     $lintM = [];
     $binsM = ['php ' . PHP_VERSION => PHP_BINARY];
     $w74M = trim((string)shell_exec('command -v php7.4 2>/dev/null'));
     if ($w74M !== '') $binsM['php7.4'] = $w74M;
-    else echo "  note M limitation: php7.4 is not installed here; webhook.php's new line is plain string concatenation and a ternary, "
+    else echo "  note M limitation: php7.4 is not installed here; webhook.php's 5.18.101 line is plain string concatenation and a ternary, "
             . "valid PHP 5 — linted under PHP " . PHP_VERSION . " only, a stated limitation, not a pass\n";
     foreach ($binsM as $bn => $bin) {
         $o = []; exec(escapeshellarg($bin) . ' -l ' . escapeshellarg($root . '/webhook.php') . ' 2>&1', $o, $rc);

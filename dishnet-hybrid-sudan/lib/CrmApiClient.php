@@ -32,6 +32,9 @@ class CrmApiClient
     private string $appKey;
     private string $authHeader; // 'X-Auth-App-Key' (auto) or 'x-auth-token' (manual)
     private array  $lastError = [];
+    /** 5.18.102: seconds; null = this class's own defaults (request(): 30 in all, cURL's connect default) */
+    private ?int   $connectTimeout = null;
+    private ?int   $totalTimeout   = null;
 
     public function __construct(string $baseUrl, string $appKey, string $authHeader = 'X-Auth-App-Key')
     {
@@ -82,6 +85,20 @@ class CrmApiClient
     // ── CRUD helpers ──────────────────────────────────────────────────────────
 
     public function get(string $path): ?array             { return $this->request('GET',   $path); }
+
+    /**
+     * 5.18.102 (docs/71 §D.1): a copy of this client whose request() gives up sooner — for the reads made to draw a
+     * page, so a slow uCRM shows the page's banner within seconds instead of after two 30-second waits. Every other
+     * caller keeps the defaults: nothing changes for a client this method did not make.
+     */
+    public function withTimeouts(int $connectSeconds, int $totalSeconds): self
+    {
+        $c = clone $this;
+        $c->connectTimeout = max(1, $connectSeconds);
+        $c->totalTimeout   = max(1, $totalSeconds);
+        $c->lastError      = [];
+        return $c;
+    }
     public function getBaseUrl(): string { return $this->baseUrl; }
     public function getAppKey(): string { return $this->appKey; }
     public function getAuthHeader(): string { return $this->authHeader; }
@@ -443,7 +460,7 @@ class CrmApiClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING       => '',
             CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => $this->totalTimeout ?? 30,   // 5.18.102: withTimeouts()'s limit, else 30 s as before
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST  => $method,
@@ -457,6 +474,7 @@ class CrmApiClient
         ];
         $ca = self::caPath();
         if ($ca !== null) $opts[CURLOPT_CAINFO] = $ca;
+        if ($this->connectTimeout !== null) $opts[CURLOPT_CONNECTTIMEOUT] = $this->connectTimeout;   // 5.18.102
         curl_setopt_array($ch, $opts);
         if ($payload) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
 

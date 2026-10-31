@@ -2,9 +2,17 @@
 declare(strict_types=1);
 /**
  * test_quote_company_mutants.php — 5.18.99 (SPEC-quote-company, revision 2, §5.1 "Weakened copies"): every weakened copy
- * of the table — W1–W60, W36b and W61 — made in a copy of the plugin, must fail the section the table names; the
- * unchanged copy must pass every section first. Development and release suites only, never on the server: it copies
- * the plugin and runs child processes.
+ * of the table — W1–W60, W36b, W61, (5.18.102) W11b and (5.18.102 D14) ML18a, ML18b and ML62 — made in a copy of the plugin, must fail
+ * the section the table names; the unchanged copy must pass every section first. Development and release suites only,
+ * never on the server: it copies the plugin and runs child processes.
+ *
+ * 5.18.102 D14 (docs/71 §R.9.2, §R.9.3): every anchor of W1–W61 was re-taken against the D14 code and still occurs
+ * exactly once — retry_quote's gated block now calls KycService::makeQuotation, and W19 keeps its anchor on the company
+ * check's own line, which D14 left as it was. Three copies are added: ML18 ("a picker, column or action emitted or
+ * handled with the gate off"), whose table names test_quote_company G beside G8 — the Plans and the Hardware screens
+ * drawing the uCRM link column and picker on South Sudan, which G's byte-for-byte comparison with ce7ac388 must catch
+ * (the books carry a link store, so the copies have links to draw); and ML62 (lib/UcrmQuoteLinks.php loading a sibling
+ * file), the control on I7's one exception.
  *
  * Each copy is made with sj_weakened_copy() (tests/fixtures/staff_jobs_sandbox.php) and every further edit the same way:
  * the anchor occurs exactly once, it is replaced exactly once, the copy holds the new text, the anchor survives only
@@ -254,12 +262,23 @@ $MUTANTS = [
     ['W10: the Q1 check removed',
         [[$KS, $Q1, '']],
         [['C', '/^C1 /']]],
-    ['W11: the Q2/Q3 check in postQuote removed',
-        [[$KS, "        if (\$quoteOrg['on']) {\n            \$where = is_array(\$known)", "        if (false) {\n            \$where = is_array(\$known)"]],
+    // 5.18.102 (re-pointed on purpose, never weakened): on Uganda the Q2/Q3 check now runs, and its refusal is recorded,
+    // before postQuote — in KycService::ugQuoteNew (Q2, a new customer) and KycCrmSync::ugQuote (Q3, the retry) — and
+    // postQuote is then called with the organization known, so its own check never refuses: the three 5.18.99 copies
+    // that weakened only postQuote's check (W11, W12, W57) could no longer fail and were equivalent. Each now weakens
+    // the check where it refuses. The retry stays guarded twice on purpose (ugQuote, then postQuote's check behind it),
+    // so W11 removes both there; W11b proves the new customer's check alone.
+    ['W11: the Q2/Q3 check removed — ugQuoteNew\'s (Q2), KycCrmSync::ugQuote\'s (Q3), and postQuote\'s behind them',
+        [[$KS, "        if (\$quoteOrg['on']) {\n            \$where = is_array(\$known)", "        if (false) {\n            \$where = is_array(\$known)"],
+         [$KS, "        if (!\$check['ok']) {\n            \$out['refused'] = QuoteOrganization::kycText(\$check, \$clientId);", "        if (false) {\n            \$out['refused'] = QuoteOrganization::kycText(\$check, \$clientId);"],
+         [$KC, "        if (!\$check['ok']) {\n            \$text = QuoteOrganization::kycText(\$check, (int)\$crmId);", "        if (false) {\n            \$text = QuoteOrganization::kycText(\$check, (int)\$crmId);"]],
         [['C', '/^C2 /'], ['C', '/^C3 /']]],
-    ['W12: postQuote writes quote_error on a refusal',
-        [[$KS, "                    'quote_refused_at'   => date('Y-m-d H:i:s'),\n",
-               "                    'quote_refused_at'   => date('Y-m-d H:i:s'),\n                    'quote_error'        => \$text,\n"]],
+    ['W11b: the Q2 check in ugQuoteNew removed alone (postQuote, told the organization, then asks nothing)',
+        [[$KS, "        if (!\$check['ok']) {\n            \$out['refused'] = QuoteOrganization::kycText(\$check, \$clientId);", "        if (false) {\n            \$out['refused'] = QuoteOrganization::kycText(\$check, \$clientId);"]],
+        [['C', '/^C2 /']]],
+    ['W12: a Q2 refusal writes quote_error (ugQuoteNew; postQuote\'s own refusal no longer runs on Uganda)',
+        [[$KS, "                'quote_refused_text' => \$out['refused'],\n                'quote_refused_at'   => date('Y-m-d H:i:s'),\n",
+               "                'quote_refused_text' => \$out['refused'],\n                'quote_refused_at'   => date('Y-m-d H:i:s'),\n                'quote_error'        => \$out['refused'],\n"]],
         [['C', '/^C2 \(ii\)/']]],
     ['W13: the guard passes when organizationId is missing',
         [[$QO, "        if (\$n <= 0) {", "        if (\$n <= 0) return \$this->pass();\n        if (false) {"]],
@@ -288,7 +307,8 @@ $MUTANTS = [
          [$QS, $LEADF, $LEADF_OFF]],
         [['C', '/^C4 /'], 'H']],
     ['W19: retry_quote (api_cron_debug.php) unguarded',
-        [[$CD, "        if (\$_qoRetry['on']) {", '        if (false) {']],
+        // 5.18.102: re-anchored on the company check's own line — retry_quote now has a second gated block (the lines)
+        [[$CD, "        if (\$_qoRetry['on']) {\n            \$_qoCheck = ", "        if (false) {\n            \$_qoCheck = "]],
         [['C', '/^C6 /']]],
     ['W20: the LTE fallback proforma sent on a refusal',
         [[$CM, "                    } elseif (!empty(\$crmResult['refused'])) {", '                    } elseif (false) {']],
@@ -421,8 +441,12 @@ $MUTANTS = [
     ['W56: the guard reads the organization list when the client is already in the configured organization (OPS-6)',
         [[$QO, "        if (\$n === \$m) return \$this->pass();", "        if (\$n === \$m) { \$this->organizations(); return \$this->pass(); }"]],
         [['C', '/^C14 /']]],
-    ['W57: postQuote records no quote_refused* fields (OPS-1)',
-        [[$KS, $REFUSED3, "                    'quote_refused_none' => true,\n"]],
+    ['W57: a refusal records no quote_refused* fields (OPS-1) — 5.18.102: where Q2 and Q3 now record it, and postQuote',
+        [[$KS, $REFUSED3, "                    'quote_refused_none' => true,\n"],
+         [$KS, "                'quote_refused'      => \$check['code'],\n                'quote_refused_text' => \$out['refused'],\n                'quote_refused_at'   => date('Y-m-d H:i:s'),\n",
+               "                'quote_refused_none' => true,\n"],
+         [$KC, "                'quote_refused'      => \$check['code'],\n                'quote_refused_text' => \$text,\n                'quote_refused_at'   => date('Y-m-d H:i:s'),\n            ]);\n            return \$text;\n        }\n        if (!\$autoQuote",
+               "                'quote_refused_none' => true,\n            ]);\n            return \$text;\n        }\n        if (!\$autoQuote"]],
         [['C', '/^C2 /'], ['C', '/^C3 /']]],
     ['W58: the LTE screens\' fragment emitted on South Sudan (kyc_form) and missing on Uganda (lte_dashboard) (OPS-9)',
         [[$KF, $LTE_GATE, 'if (true): ?>'], [$LD, $LTE_GATE, 'if (false): ?>']],
@@ -438,6 +462,23 @@ $MUTANTS = [
     ['W61: the fallback PDF names the configured organization, not the client\'s own (SPEC §2.5)',
         [[$QO, "        \$want = (int)(\$client['organizationId'] ?? 0);", '        $want = 0;']],
         ['F']],
+    // 5.18.102 D14 (docs/71 §R.8, §R.9.3 ML18 — its test_quote_company G half; tests/quote_from_ucrm/mutants_G.php holds its G8
+    // half): the screens' link column and picker drawn where the gate is off. G renders both screens on South Sudan and
+    // holds them to ce7ac388's bytes.
+    ['ML18a: the Plans screen\'s uCRM link column and picker drawn with the gate off (South Sudan)',
+        [['tabs/sales/subscription_plans.php', "        if (!empty(\$_lk102Set['on'])) {\n            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';",
+               "        if (true) {\n            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';"]],
+        [['G', '/^G the subscription_plans screen is ce7ac388/']]],
+    ['ML18b: the Hardware screen\'s uCRM link column, picker and installation card drawn with the gate off (South Sudan)',
+        [['tabs/sales/hardware.php', "        if (!empty(\$_lk102Set['on'])) {\n            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';",
+               "        if (true) {\n            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';"]],
+        [['G', '/^G the hardware screen is ce7ac388/']]],
+    // 5.18.102 D14 (docs/71 §R.1.5 E-5, §R.9.3 ML62 — the control on I7's exception): lib/UcrmQuoteLinks.php loading a
+    // sibling file. tests/quote_from_ucrm/ judges ML62 at its own I and L; here I7, which excepts the file by name only
+    // because it loads nothing, must fail.
+    ['ML62: lib/UcrmQuoteLinks.php require()s a sibling file (QuoteOrganization.php)',
+        [['lib/UcrmQuoteLinks.php', "final class UcrmQuoteLinks\n{\n", "require_once __DIR__ . '/QuoteOrganization.php';\n\nfinal class UcrmQuoteLinks\n{\n"]],
+        [['I', '/^I7 … and lib\/UcrmQuoteLinks\.php names QuoteOrganization, holds no require/']]],
 ];
 $TABLE = count($MUTANTS);
 if (isset($opt['mutants'])) {                                               // a part of the table only: the control still runs
@@ -449,7 +490,8 @@ if (isset($opt['mutants'])) {                                               // a
 
 // ═══════════════════════════════════════════════════════════════════════════
 echo "1. The control: the test passes on this checkout and on an unchanged copy, every section\n";
-is_($TABLE === 62, 'the table holds W1–W60, W36b and W61, sixty-two weakened copies', (string)$TABLE);
+// 5.18.102 D14 (rewritten on purpose, docs/71 §R.9.3): three copies added, ML18a, ML18b and ML62
+is_($TABLE === 66, 'the table holds W1–W60, W36b, W61, (5.18.102) W11b and (D14) ML18a, ML18b and ML62, sixty-six weakened copies', (string)$TABLE);
 $labels = array_map(function ($m) { return explode(':', $m[0])[0]; }, $MUTANTS);
 is_(count(array_unique($labels)) === count($labels), 'no weakened copy is listed twice');
 $baseTree = null; $whyBase = '';

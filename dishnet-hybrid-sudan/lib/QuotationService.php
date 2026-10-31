@@ -161,6 +161,11 @@ class QuotationService
         if (empty($items)) {
             return ['ok' => false, 'error' => 'No pricing items could be determined for this lead. Please add items manually.'];
         }
+        // 5.18.102 (Uganda, docs/71 §J): no line is ever sent at price 0 — the first one is named, and nothing is written
+        // or sent.
+        if ($this->quoteOrg()['on'] && ($unpriced = $this->unpricedLine($items)) !== '') {
+            return ['ok' => false, 'error' => $unpriced];
+        }
 
         $total    = $this->itemsTotal($items);
         // 5.18.99 (Uganda, "always company 1"): no quote — in uCRM or plugin-only, box ticked or not — for a lead whose
@@ -190,6 +195,11 @@ class QuotationService
                 return ['ok' => false, 'error' => $result['error']];
             }
         }
+
+        // 5.18.102 (Uganda, docs/71 §J): a lead's notes are internal — AI summaries, "Auto-created from WA Lead Recovery
+        // …", staff notes — and never reach the customer's WhatsApp. The lead quotation screen has no note for the
+        // customer, so none is sent. (Only this local copy is cleared; the lead's saved notes are not touched.)
+        if ($this->quoteOrg()['on']) $lead['notes'] = '';
 
         // Send WA to customer
         $waSent = false;
@@ -341,6 +351,11 @@ class QuotationService
         $createCrm     = ($data['create_crm_quote'] ?? ($crmClientId > 0));
 
         if (empty($items)) return ['ok' => false, 'error' => 'At least one line item required.'];
+        // 5.18.102 (Uganda, docs/71 §J): no line is ever sent at price 0 — the first one is named, and nothing is written
+        // or sent. Lines staff type are otherwise sent as typed (no productId).
+        if ($this->quoteOrg()['on'] && ($unpriced = $this->unpricedLine($items)) !== '') {
+            return ['ok' => false, 'error' => $unpriced];
+        }
 
         // 5.18.99 (Uganda, "always company 1"): no quote — in uCRM or plugin-only, box ticked or not — for a customer
         // filed under another company. Nothing is written and nothing is sent.
@@ -715,6 +730,13 @@ class QuotationService
             'adminNotes'          => "Plugin ref: {$quoteRef}",
             'invoiceItems'        => $items,
         ];
+        // 5.18.102 (Uganda, docs/71 §F.1 row 4): notes print on the customer's quotation, so they carry only the notes
+        // prefix and the sender's own "Note / Footer message"; the plugin's reference and the agent are staff-only, in
+        // adminNotes. Every caller — Send Quotation, a lead, LTE — the same. Empty notes hide the template's NOTES box.
+        if ($this->quoteOrg()['on']) {
+            $payload['notes']      = trim(($notesPrefix !== '' ? $notesPrefix . "\n" : '') . trim($note));
+            $payload['adminNotes'] = "Plugin ref: {$quoteRef} · Agent: " . ($retailer['name'] ?? 'Agent');
+        }
 
         $madeId = null;   // 5.18.99: kept outside the try, so a failure after uCRM made the quote says so
         try {
@@ -830,6 +852,136 @@ class QuotationService
         } catch (\Throwable $e) {
             return ['name' => '', 'phone' => '', 'email' => ''];
         }
+    }
+
+    // ── 5.18.102 (Uganda, docs/71 §J): Send Quotation and lead quotes priced from uCRM ─────────────────────────────
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §J): Send Quotation's plan picker, priced from uCRM's plan mirrors through the resolver —
+     * never customer_price. A plan uCRM does not price comes back with price null and why: the page lists it without a
+     * price and never picks it into a line. by_key is the lead pre-fill's exact match (quotePlanKeys(), as
+     * buildLeadItems() uses it) and lead_keys each lead's key of its interest plan, so the page matches no name itself.
+     * For drawing the page: short timeouts, a successful read reused for 60 s.
+     *
+     * @param array $leads the leads the page offers
+     * @return array{ok:bool,reason:string,plans:array,by_key:array,lead_keys:array,shared_keys:list<string>}
+     */
+    public function quotePlanPicker(array $leads = []): array
+    {
+        $lines = $this->quoteLines(true);
+        $cat   = $lines->catalogue();
+        $keyed = $this->quotePlanKeys($lines);
+        $plans = [];
+        foreach ($this->quotePlanRows() as $row) {
+            $name = is_scalar($row['name'] ?? null) ? trim((string)$row['name']) : '';
+            if ($name === '') continue;
+            // 5.18.102 (D14, docs/71 §R.4.5): per row — two rows spelled alike may be linked to different products
+            $hit = $lines->planLine($row);
+            $plans[] = ['id' => (int)($row['id'] ?? 0)] + self::pickerPlan($hit, $name);
+        }
+        $byKey = [];
+        foreach ($keyed as $key => $hit) $byKey[(string)$key] = self::pickerPlan($hit, (string)$hit['name']);
+        // 5.18.102 D14 review (D14-UI-1, docs/71 §R.4.5): a key two or more plan rows hold pre-fills nothing; the page
+        // names that cause rather than "no plan is spelled like it"
+        $held = [];
+        foreach ($this->quotePlanRows() as $row) {
+            $k = PublicPriceFeed::planKey(is_scalar($row['name'] ?? null) ? (string)$row['name'] : '');
+            if ($k !== '') $held[$k] = ($held[$k] ?? 0) + 1;
+        }
+        $shared = [];
+        foreach ($held as $k => $n) if ($n > 1) $shared[] = (string)$k;
+        $leadKeys = [];
+        foreach ($leads as $l) {
+            if (!is_array($l)) continue;
+            $leadKeys[(string)(int)($l['id'] ?? 0)] = PublicPriceFeed::planKey(
+                is_scalar($l['interest_plan'] ?? null) ? (string)$l['interest_plan'] : '');
+        }
+        return ['ok' => !empty($cat['ok']), 'reason' => (string)($cat['reason'] ?? ''), 'plans' => $plans,
+                'by_key' => $byKey, 'lead_keys' => $leadKeys, 'shared_keys' => $shared];
+    }
+
+    /** 5.18.102: one plan as the picker shows it — uCRM's name and price when priced, else the plugin's name, no price and why. */
+    private static function pickerPlan(array $hit, string $name): array
+    {
+        $ok = !empty($hit['ok']) && is_array($hit['line'] ?? null);
+        return [
+            'name'   => $ok ? (string)$hit['line']['label'] : trim($name),
+            'price'  => $ok ? (float)$hit['line']['price'] : null,
+            'unit'   => 'month',
+            'reason' => $ok ? '' : (string)($hit['reason'] ?? ''),
+        ];
+    }
+
+    /** 5.18.102: the resolver's file and PublicPriceFeed::planKey, loaded only where the gate is on. */
+    private static function needQuoteLines(): void
+    {
+        if (!class_exists('UcrmQuoteLines')) require_once __DIR__ . '/UcrmQuoteLines.php';
+        if (!class_exists('PublicPriceFeed')) require_once __DIR__ . '/PublicPriceFeed.php';
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §D.1, §J): the resolver, reading with the client this class makes its quotes with
+     * ($this->crm: the plugin's own key, or crm_base_url with crm_auth_token, as fromUcrm() chose). $forPage: short
+     * timeouts and a successful read reused for 60 s, to draw Send Quotation; otherwise a fresh read with the client's
+     * normal timeout, for a quotation being sent.
+     */
+    private function quoteLines(bool $forPage): UcrmQuoteLines
+    {
+        self::needQuoteLines();
+        // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read live from the store, behind the
+        // gate (every caller here is). Send Quotation records no link ids: it never touches kyc_applications (§R.4.4).
+        $links = UcrmQuoteLinks::fromStore($this->store, $this->quoteOrg());
+        return $forPage ? UcrmQuoteLines::forPage($this->crm, $this->quoteOrg(), $this->dataDir, $links)
+                        : new UcrmQuoteLines($this->crm, $this->quoteOrg(), $links);
+    }
+
+    /** 5.18.102: subscription_plans.json's rows — the plans Send Quotation and a lead quote may name. */
+    private function quotePlanRows(): array
+    {
+        return array_values(array_filter((array)($this->store->load('subscription_plans.json') ?? []), 'is_array'));
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §D.3, §J, §R.4.5): the lead pre-fill's spelling step — from a lead's interest plan (free
+     * text, no id to follow) to a plugin plan row by PublicPriceFeed::planKey — then that row's own link to uCRM. Each key
+     * held by exactly one subscription_plans row, with the resolver's answer for that row: the one exact match the lead
+     * pre-fill and buildLeadItems() share. A key two rows share answers nothing (D14: they may be linked to different
+     * products), and the lead asks for its items by hand. An empty key matches nothing. $only answers that one key
+     * alone, so a lead naming no plan row reads nothing from uCRM.
+     *
+     * @return array<string,array{ok:bool,reason:string,line:?array,name:string}>
+     */
+    private function quotePlanKeys(UcrmQuoteLines $lines, ?string $only = null): array
+    {
+        $held = [];
+        foreach ($this->quotePlanRows() as $row) {
+            $name = is_scalar($row['name'] ?? null) ? (string)$row['name'] : '';
+            $key  = PublicPriceFeed::planKey($name);
+            if ($key === '' || ($only !== null && $key !== $only)) continue;
+            $held[$key][] = [$row, $name];
+        }
+        $out = [];
+        foreach ($held as $key => $rows) {
+            if (count($rows) !== 1) continue;   // two rows spelled alike: no pre-fill (§R.4.5)
+            $out[(string)$key] = $lines->planLine($rows[0][0]) + ['name' => $rows[0][1]];
+        }
+        return $out;
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §J): '' when every line has a price above 0, else the refusal naming the first that has
+     * not. A line at 0 reads as "free" on the customer's quotation, and the quote.add summary drops it.
+     */
+    private function unpricedLine(array $items): string
+    {
+        foreach ($items as $item) {
+            $price = is_array($item) ? ($item['price'] ?? null) : null;
+            if (is_string($price)) $price = trim($price);
+            if ((is_int($price) || is_float($price) || (is_string($price) && is_numeric($price))) && (float)$price > 0) continue;
+            $label = QuoteOrganization::plain(is_array($item) && is_scalar($item['label'] ?? null) ? (string)$item['label'] : '');
+            return ($label !== '' ? $label : 'A line') . ' has no price — enter one or remove it';
+        }
+        return '';
     }
 
     /**
@@ -956,6 +1108,18 @@ class QuotationService
      */
     public function buildLeadItems(array $lead): array
     {
+        // 5.18.102 (Uganda, docs/71 §J): the one plan line uCRM prices whose key is exactly the interest plan's
+        // (PublicPriceFeed::planKey), read fresh with the client the quote is made with — or none. Never a name contained
+        // in another, never a placeholder at 0, never the Fiber fee (South Sudan's). With none, sendLeadQuote asks for
+        // the items to be added by hand.
+        if ($this->quoteOrg()['on']) {
+            self::needQuoteLines();
+            $interest = is_scalar($lead['interest_plan'] ?? null) ? (string)$lead['interest_plan'] : '';
+            $key = PublicPriceFeed::planKey($interest);
+            if ($key === '') return [];
+            $hit = $this->quotePlanKeys($this->quoteLines(false), $key)[$key] ?? null;
+            return ($hit !== null && !empty($hit['ok']) && is_array($hit['line'] ?? null)) ? [$hit['line']] : [];
+        }
         $items = [];
         $serviceType  = strtolower($lead['service_type'] ?? 'starlink');
         $interestPlan = trim($lead['interest_plan'] ?? '');

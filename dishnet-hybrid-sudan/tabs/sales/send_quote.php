@@ -37,6 +37,22 @@ $openLeads = array_values(array_filter($leads, fn($l) =>
     !empty($l['phone'])
 ));
 
+// 5.18.102 (Uganda, docs/71 §J): the picker's prices are uCRM's — the plan mirrors, through the resolver — never
+// customer_price; a plan uCRM does not price is listed without a price and cannot be picked into a line. The lead
+// pre-fill matches a lead's interest plan by its exact key (PublicPriceFeed::planKey) against the map built here, or
+// adds no line. Where the gate is off (South Sudan, or ucrm_quote_organization_id 0/off) none of it runs.
+require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';   // 5.18.102: the file that names the class loads it
+$ugQuote = !empty(QuoteOrganization::setting($cfg, $dataDir)['on']);
+if ($ugQuote) {
+    $ugPick      = $quotSvc->quotePlanPicker($openLeads);
+    $ugJsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE;
+    $plansJson   = json_encode($ugPick['plans'], $ugJsonFlags) ?: '[]';
+    $ugLeadPlans = json_encode((object)$ugPick['by_key'], $ugJsonFlags) ?: '{}';
+    $ugLeadKeys  = json_encode((object)$ugPick['lead_keys'], $ugJsonFlags) ?: '{}';
+    // 5.18.102 D14 review (D14-UI-1): the keys two or more plan rows hold, so the hint names that cause
+    $ugLeadShared = json_encode(array_values($ugPick['shared_keys']), $ugJsonFlags) ?: '[]';
+}
+
 // Flash message from POST redirect
 $flash = '';
 $flashType = 'success';
@@ -90,6 +106,11 @@ $subTab = $_GET['qmode'] ?? 'lead';
     <?= htmlspecialchars($flash) ?>
   </div>
   <?php endif; ?>
+<?php if ($ugQuote && empty($ugPick['ok'])): /* 5.18.102 (Uganda, docs/71 §J): uCRM's products could not be read for the picker */ ?>
+  <div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;">
+    ⚠️ <?= htmlspecialchars((string)($ugPick['reason'] ?: "uCRM's products could not be read")) ?>, so the plan list shows no prices and a lead's plan is not filled in. Type each item and its price yourself, or reload in a minute.
+  </div>
+<?php endif; ?>
 
   <!-- Sub-tab pills -->
   <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
@@ -139,6 +160,9 @@ $subTab = $_GET['qmode'] ?? 'lead';
 
       <div class="sq-section-title">Quote Items</div>
       <div id="leadItemsList"></div>
+<?php if ($ugQuote): /* 5.18.102 (Uganda, docs/71 §J): why the pre-fill added no line */ ?>
+      <div id="leadPlanHint" style="display:none;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:0.82rem;"></div>
+<?php endif; ?>
 
       <button type="button" class="sq-btn sq-btn-ghost sq-btn-sm" onclick="addItem('lead')" style="margin-bottom:12px;">+ Add item</button>
 
@@ -278,10 +302,95 @@ LEAD_DATA[<?= (int)$l['id'] ?>] = {
   crm_client_id: <?= (int)($l['crm_client_id'] ?? 0) ?>
 };
 <?php endforeach; ?>
+<?php if ($ugQuote): /* 5.18.102 (Uganda, docs/71 §J): emitted only where the quoting-organization gate is on */ ?>
+// 5.18.102 (Uganda, docs/71 §J): the lead pre-fill's exact match, built by the server — the key of each plan
+// (PublicPriceFeed::planKey) → the plan uCRM prices, or price null with why; and each lead → the key of its interest
+// plan. Nothing here matches a name: a lead gets the plan of exactly its key, or no line.
+const SQ_LEAD_PLANS = <?= $ugLeadPlans ?>;
+const SQ_LEAD_KEYS  = <?= $ugLeadKeys ?>;
+const SQ_LEAD_SHARED = <?= $ugLeadShared ?>;
+const SQ_CUR = <?= json_encode(dn_cur($config)) ?>;
+function sqHas(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+function sqPriced(p) { return !!p && typeof p.price === 'number' && p.price > 0; }
+// uCRM's names reach a row's HTML (addItem builds it as a string), so they are escaped first.
+function sqEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function sqPlanOption(p) {
+  return sqPriced(p) ? p.name + ' — ' + SQ_CUR + p.price + '/' + p.unit : p.name + ' — not priced in uCRM';
+}
+// The picker: every plan listed, a plan uCRM does not price without a price; picking it puts nothing in the row.
+function sqUgPlanSuggest(inp, ctx, id) {
+  if (!PLANS.length) return;
+  if (document.getElementById('planSuggest_' + ctx + '_' + id)) return;
+  const wrap = document.createElement('datalist');
+  wrap.id = 'planSuggest_' + ctx + '_' + id;
+  PLANS.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = sqPlanOption(p);
+    wrap.appendChild(opt);
+  });
+  inp.setAttribute('list', wrap.id);
+  inp.after(wrap);
+  inp.addEventListener('change', function() {
+    const match = PLANS.find(p => this.value === sqPlanOption(p));
+    if (!match) return;
+    if (!sqPriced(match)) {
+      this.value = '';
+      recalc(ctx);
+      // 5.18.102 D14 review (D14-UI-2, §R.4.1): a link reason carries its own remedy ("an admin links it…")
+      alert('Not priced in uCRM: ' + (match.reason || match.name) + '. It cannot be added from the list — ask an admin, or type the item and its price yourself.');
+      return;
+    }
+    const row = document.getElementById(ctx + '_item_' + id);
+    row.querySelector('.price').value = match.price;
+    row.querySelector('.unit').value  = match.unit;
+    this.value = match.name;
+    recalc(ctx);
+  });
+}
+// The lead pre-fill: the plan of exactly the lead's key, priced from uCRM — else no line, and the hint says why.
+function sqUgLeadPrefill(id) {
+  const hint = document.getElementById('leadPlanHint');
+  const d    = LEAD_DATA[id] || {};
+  const key  = sqHas(SQ_LEAD_KEYS, String(id)) ? SQ_LEAD_KEYS[String(id)] : '';
+  const p    = key !== '' && sqHas(SQ_LEAD_PLANS, key) ? SQ_LEAD_PLANS[key] : null;
+  if (sqPriced(p)) {
+    if (hint) hint.style.display = 'none';
+    addItem('lead', p.name, p.price, 1, p.unit);
+    return;
+  }
+  recalc('lead');
+  if (!hint) return;
+  // 5.18.102 D14 review (D14-UI-1): a key two plan rows hold pre-fills nothing (§R.4.5), and the hint says so
+  hint.textContent = p ? 'Not priced in uCRM: ' + (p.reason || p.name) + '. No line was added — add the items yourself.'
+    : (key !== '' && SQ_LEAD_SHARED.indexOf(key) !== -1
+        ? 'More than one plan on the Plans screen is spelled like this lead\'s interest (' + d.plan + '), so no line was added — add the items yourself.'
+    : d.plan ? 'No plan in the list is spelled like this lead\'s interest (' + d.plan + '), so no line was added — add the items yourself.'
+              : 'This lead names no plan, so no line was added — add the items yourself.');
+  hint.style.display = '';
+}
+// No line is sent without a price: the server refuses one too (QuotationService), this says so before the page posts.
+(function() {
+  [['frmLeadQuote', 'lead'], ['frmManual', 'manual']].forEach(([fid, ctx]) => {
+    const f = document.getElementById(fid);
+    if (!f) return;
+    f.addEventListener('submit', e => {
+      recalc(ctx);
+      const bad = getItems(ctx).find(i => !(i.price > 0));
+      if (bad) { e.preventDefault(); alert((bad.label || 'A line') + ' has no price — enter one or remove it'); }
+    });
+  });
+})();
+<?php endif; ?>
 
 const itemCounters = {lead:0, cash:0, manual:0};
 
 function addItem(ctx, label='', price=0, qty=1, unit='month') {
+<?php if ($ugQuote): ?>
+  label = sqEsc(label); unit = sqEsc(unit);   // 5.18.102 (Uganda, docs/71 §J): uCRM's names reach the row's HTML escaped
+<?php endif; ?>
   const container = document.getElementById(ctx + 'ItemsList');
   const id = ++itemCounters[ctx];
   const div = document.createElement('div');
@@ -303,6 +412,9 @@ function addItem(ctx, label='', price=0, qty=1, unit='month') {
 }
 
 function showPlanSuggest(inp, ctx, id) {
+<?php if ($ugQuote): ?>
+  return sqUgPlanSuggest(inp, ctx, id);   // 5.18.102 (Uganda, docs/71 §J): uCRM's prices; an unpriced plan cannot be picked
+<?php endif; ?>
   if (!PLANS.length) return;
   const existing = document.getElementById('planSuggest_' + ctx + '_' + id);
   if (existing) return;
@@ -379,6 +491,9 @@ function onLeadPick(sel) {
   const container = document.getElementById('leadItemsList');
   container.innerHTML = '';
   itemCounters.lead = 0;
+<?php if ($ugQuote): ?>
+  return sqUgLeadPrefill(id);   // 5.18.102 (Uganda, docs/71 §J): the exact key's uCRM-priced plan, or no line
+<?php endif; ?>
   const match = PLANS.find(p => d.plan && (p.name.toLowerCase().includes(d.plan.toLowerCase()) || d.plan.toLowerCase().includes(p.name.toLowerCase())));
   if (match) {
     addItem('lead', match.name, match.price, 1, match.unit);

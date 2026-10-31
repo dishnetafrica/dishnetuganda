@@ -152,6 +152,15 @@ class PluginQuotePdf
 
         // ── Terms ──
         $termsHtml = $this->buildTerms($isStarlink, $isFiber);
+        // 5.18.102 (Uganda, docs/71 §K.1): the five terms that replace the withdrawn ones, and the quote's own tax rows
+        // as uCRM states them (the shape InvoiceTotals reads: taxes[] = {name, totalValue}, else totalTaxAmount). Item 1
+        // says which: QuoteTaxLine::TEXT when the quote carries no tax, else that VAT is itemised in the totals.
+        $ugTaxLines = [];
+        if ($ug) {
+            if (!class_exists('InvoiceTotals')) require_once __DIR__ . '/InvoiceTotals.php';
+            $ugTaxLines = InvoiceTotals::taxLines($quote);
+            $termsHtml  = $this->buildUgandaTerms($isStarlink, $isFiber, $ugTaxLines !== []);
+        }
 
         // ── Quote date ──
         $createdDate = '';
@@ -181,6 +190,25 @@ class PluginQuotePdf
                 . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">-' . dn_cur($this->config) . number_format($discount, 2) . '</td></tr>';
         }
 
+        // 5.18.102 (Uganda, docs/71 §K.1): a quote that carries tax gets one row per tax, named and valued as uCRM states
+        // it, between the subtotal and the total. Its discount is what the subtotal and the taxes exceed the total by
+        // (the rule above compares the subtotal alone, which a tax would hide or understate), so the rows add up.
+        if ($ugTaxLines !== []) {
+            $ugTaxTotal = 0.0;
+            foreach ($ugTaxLines as $ugTax) $ugTaxTotal += (float)$ugTax['amount'];
+            $totalsHtml = '<tr><td style="padding:6px 14px;font-size:11px;color:#6B6B6B;border-bottom:1px solid #eee;">Subtotal</td>'
+                . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">' . dn_cur($this->config) . number_format($subtotal, 2) . '</td></tr>';
+            $ugDiscount = round($subtotal + $ugTaxTotal - $total, 2);
+            if ($ugDiscount > 0.01) {
+                $totalsHtml .= '<tr><td style="padding:6px 14px;font-size:11px;color:#059669;border-bottom:1px solid #eee;">Discount</td>'
+                    . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;color:#059669;border-bottom:1px solid #eee;">-' . dn_cur($this->config) . number_format($ugDiscount, 2) . '</td></tr>';
+            }
+            foreach ($ugTaxLines as $ugTax) {
+                $totalsHtml .= '<tr><td style="padding:6px 14px;font-size:11px;color:#6B6B6B;border-bottom:1px solid #eee;">' . htmlspecialchars((string)$ugTax['name']) . '</td>'
+                    . '<td style="padding:6px 14px;font-size:11px;font-weight:700;text-align:right;border-bottom:1px solid #eee;">' . dn_cur($this->config) . number_format((float)$ugTax['amount'], 2) . '</td></tr>';
+            }
+        }
+
         $totalsHtml .= '<tr><td style="padding:9px 14px;font-size:15px;font-weight:800;color:#fff;background:#141414;">Total Due</td>'
             . '<td style="padding:9px 14px;font-size:15px;font-weight:800;text-align:right;color:#fff;background:#141414;">' . dn_cur($this->config) . number_format($total, 2) . '</td></tr>';
 
@@ -189,6 +217,12 @@ class PluginQuotePdf
 
         // ── Build full HTML ──
         $html = $this->getTemplate();
+        // 5.18.102 (Uganda, docs/71 §K.1): the header reads as uCRM's page 1 does. Replaced on the bare template, before
+        // anything else is inserted, so no customer's text can be touched by it.
+        if ($ug) {
+            $html = str_replace('Internet Service Provider &middot; {{HEADER_LOCALITY}}',
+                'IT Solutions Provider &middot; Starlink Installation &middot; {{HEADER_LOCALITY}}', $html);
+        }
         // 5.18.99: the five placeholders below are replaced FIRST (str_replace runs in array order). Their values where
         // the gate is off are exactly the template's old text, so after this first pass the HTML is the old template
         // byte for byte and every later replacement runs on the same text; and nothing inserted later (a customer's
@@ -417,6 +451,53 @@ class PluginQuotePdf
                 ['12. Governing Law:', 'Republic of South Sudan law and jurisdiction.'],
             ];
         }
+
+        $third = (int)ceil(count($terms) / 3);
+        $cols = [[], [], []];
+        foreach ($terms as $i => $t) {
+            $colIdx = (int)floor($i / $third);
+            if ($colIdx > 2) $colIdx = 2;
+            $cols[$colIdx][] = $t;
+        }
+
+        $html = '<div style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9B9B9B;font-weight:700;margin-top:6px;margin-bottom:5px;">' . $title . '</div>';
+        $html .= '<table style="width:100%;border-collapse:collapse;"><tr>';
+        foreach ($cols as $ci => $col) {
+            $pad = $ci === 0 ? '0 5px 0 0' : ($ci === 1 ? '0 5px' : '0 0 0 5px');
+            $html .= '<td style="vertical-align:top;padding:' . $pad . ';width:33%;font-size:9px;color:#444;line-height:1.45;">';
+            foreach ($col as $t) {
+                $html .= '<div style="padding:2px 0;"><b style="color:#D41C1C;">*</b> <b style="color:#141414;">' . $t[0] . '</b> ' . $t[1] . '</div>';
+            }
+            $html .= '</td>';
+        }
+        $html .= '</tr></table>';
+
+        return $html;
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §K.1): the fallback quotation's terms on Uganda, exactly the design's five. The neutral
+     * non-USD terms above still say "penalties or reconnection fees follow your service agreement", "best-effort",
+     * "commitment periods … follow your service agreement", "report faults within 24 hours" and "not liable … exceeding
+     * 3 months of fees", all withdrawn on 12 Oct (docs/67 §I, §K). Item 4 keeps the cap of page-2 clause 15 by naming
+     * where it is set out: without it, item 2 would remove the cap. Title and three-column layout as buildTerms().
+     */
+    private function buildUgandaTerms(bool $isStarlink, bool $isFiber, bool $hasTax): string
+    {
+        if (!class_exists('QuoteTaxLine')) require_once __DIR__ . '/QuoteTaxLine.php';
+        $code  = htmlspecialchars(dn_code($this->config));
+        $title = $isStarlink ? 'STARLINK SERVICE — TERMS &amp; CONDITIONS'
+               : ($isFiber   ? 'FIBER SERVICE — TERMS &amp; CONDITIONS'
+                             : 'TERMS &amp; CONDITIONS');
+        $terms = [
+            ['1. Currency &amp; Pricing:', "All prices in {$code}. "
+                . ($hasTax ? 'VAT is itemised in the totals.' : htmlspecialchars(QuoteTaxLine::TEXT))
+                . " Prices may change with 30 days' notice."],
+            ['2. Agreement:', "This quotation is governed by DishNet's published Terms of Service, Terms of Sale, Warranty Policy and Returns, Refunds and Cancellations (dishnetuganda.com/policies.html); where anything here is less favourable to the customer, those terms apply."],
+            ['3. Installation:', 'Installation as quoted; non-standard mounting is quoted before work starts.'],
+            ['4. Liability:', "Responsibility and its limits as section 14 of the Terms of Service and, for a Starlink installation, section 25 of the Installation Terms accepted for it set out. That limit never applies to damage to the customer's property caused by DishNet's negligence. Events outside DishNet's control as section 15."],
+            ['5. Governing Law:', 'Governed by the laws of the Republic of Uganda.'],
+        ];
 
         $third = (int)ceil(count($terms) / 3);
         $cols = [[], [], []];

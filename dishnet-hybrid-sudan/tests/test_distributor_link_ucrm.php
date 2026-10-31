@@ -143,7 +143,7 @@ is_(strpos($tab, "name=\"action\" value=\"dist_link_ucrm\"") !== false, 'the tab
 
 echo "\nK. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.101', 'manifest version is 5.18.71');   // 5.18.101 (was 5.18.100)
+is_(($mani['information']['version'] ?? '') === '5.18.102', 'manifest version is 5.18.71');   // 5.18.102 (was 5.18.101)
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

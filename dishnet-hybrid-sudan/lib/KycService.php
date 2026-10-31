@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/UcrmClientTarget.php';
 require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization and the quote check
+require_once __DIR__ . '/UcrmQuoteLines.php';      // 5.18.102: Uganda's lines and cash from uCRM Products
 
 /**
  * KycService
@@ -136,6 +137,15 @@ class KycService
         return method_exists($this->store, 'getDataDir') ? (string)$this->store->getDataDir() : $this->dataDir;
     }
 
+    /**
+     * 5.18.102 (Uganda, docs/71 §G): uCRM's prices moved under a Cash sale, and its refusal asks for the form to be
+     * reloaded — so the page cache, which may hold the old prices for up to a minute, goes: the reload reads uCRM.
+     */
+    private function dropPageCache(): void
+    {
+        foreach (array_unique([$this->dataDir, $this->gateDataDir()]) as $d) UcrmQuoteLines::dropPageCache((string)$d);
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // PUBLIC — called by web form & mobile API
     // ══════════════════════════════════════════════════════════════════════
@@ -200,8 +210,41 @@ class KycService
             return ['success' => false, 'message' => 'Please select a valid service plan.'];
         }
 
+        // 5.18.99: built before anything is saved, so the quote check reads uCRM with the client the quote is made with.
+        // Building it sends nothing.
+        $_quoteCfg   = $cfg;
+        $_quoteToken = trim($_quoteCfg['crm_auth_token'] ?? '');
+        $_quoteUrl   = trim($_quoteCfg['crm_base_url'] ?? '');
+        $quoteCrm = ($_quoteToken !== '')
+            ? new CrmApiClient(
+                $_quoteUrl !== '' ? $_quoteUrl : rtrim($this->crm->getBaseUrl(), '/'),
+                $_quoteToken,
+                'x-auth-token'
+              )
+            : $this->crm;
+
+        // 5.18.99 (Uganda, "always company 1"): no quote for a customer filed under another company. Before the first
+        // write: no application, no quote, no job, no wallet debit, nothing sent.
+        if ($quoteOrg['on']) {
+            $quoteCheck = (new QuoteOrganization($quoteCrm, $quoteOrg))->checkClient((int)$customerId, 'kyc-existing');
+            if (!$quoteCheck['ok']) return ['success' => false, 'message' => $quoteCheck['message']];
+        }
+
+        // 5.18.102 (Uganda, docs/71 §F.2, §H): uCRM prices the additional service — after the company check, so a misfiled
+        // customer is told to move, and before the wallet check and any write. A Cash sale it cannot price is refused here.
+        $ug = null;
+        if ($quoteOrg['on']) {
+            // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
+            $ug = (new UcrmQuoteLines($quoteCrm, $quoteOrg, UcrmQuoteLinks::fromStore($this->store, $quoteOrg)))->resolve(
+                self::saleFromPost($post, trim($post['connectivity_type'] ?? 'Additional Service')), $this->store);
+            $ugRefusal = self::cashRefusal($ug, $post);
+            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
+            if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
+        }
+
         // ── Resolve amount ────────────────────────────────────────────────
-        [$checkAmount, , ] = $this->resolveAmount($post);
+        // 5.18.102 (Uganda): the resolved total; 0 for a Credit sale uCRM cannot price (no quote, no debit)
+        [$checkAmount, , ] = $ug !== null ? [self::ugAmount($ug), null, null] : $this->resolveAmount($post);
         $isCash = (($post['sales_type'] ?? '') === 'Cash');
 
         // ── Wallet check for Cash sales ───────────────────────────────────
@@ -279,8 +322,8 @@ class KycService
             }
         }
 
-        // Fiber installation fee
-        if (($post['customer_type'] ?? '') === 'Fiber') {
+        // Fiber installation fee (5.18.102: never on Uganda — South Sudan's fee and product 244)
+        if ($ug === null && ($post['customer_type'] ?? '') === 'Fiber') {
             $installFee     = (float)($cfg['fiber_install_fee'] ?? 100);
             $installProduct = (int)($cfg['fiber_install_product_id'] ?? 244);
             if ($installFee > 0) {
@@ -294,29 +337,11 @@ class KycService
                 $quoteItems[] = $item;
             }
         }
-
-        // 5.18.99: built before anything is saved, so the quote check reads uCRM with the client the quote is made with.
-        // Building it sends nothing.
-        $_quoteCfg   = $cfg;
-        $_quoteToken = trim($_quoteCfg['crm_auth_token'] ?? '');
-        $_quoteUrl   = trim($_quoteCfg['crm_base_url'] ?? '');
-        $quoteCrm = ($_quoteToken !== '')
-            ? new CrmApiClient(
-                $_quoteUrl !== '' ? $_quoteUrl : rtrim($this->crm->getBaseUrl(), '/'),
-                $_quoteToken,
-                'x-auth-token'
-              )
-            : $this->crm;
-
-        // 5.18.99 (Uganda, "always company 1"): no quote for a customer filed under another company. Before the first
-        // write: no application, no quote, no job, no wallet debit, nothing sent.
-        if ($quoteOrg['on']) {
-            $quoteCheck = (new QuoteOrganization($quoteCrm, $quoteOrg))->checkClient((int)$customerId, 'kyc-existing');
-            if (!$quoteCheck['ok']) return ['success' => false, 'message' => $quoteCheck['message']];
-        }
+        // 5.18.102 (Uganda): uCRM's lines replace the plugin-priced ones above — none when the sale is unpriced
+        if ($ug !== null) $quoteItems = $ug['status'] === 'priced' ? $ug['lines'] : [];
 
         // ── Save application locally first (generates quote_ref) ──────────
-        $appId = $this->saveApplication([
+        $appId = $this->saveApplication(array_merge([
             'connectivity_type'     => $connectivity,
             'customer_type'         => $post['customer_type'] ?? '',
             'date'                  => $post['date'] ?? date('Y-m-d'),
@@ -349,7 +374,7 @@ class KycService
             'new_service_address'   => $newAddress,
             'quote_id'              => null,
             'quote_created'         => false,
-        ]);
+        ], $ug !== null ? self::linesRecord($ug, $post, $connectivity) : []));   // 5.18.102 (Uganda): docs/71 §F.3
 
         // ── Post quote to CRM ─────────────────────────────────────────────
         $quoteId      = null;
@@ -376,7 +401,29 @@ class KycService
             'items'      => $quoteItems,
         ];
 
-        $quoteResponse = $quoteCrm->post("clients/{$customerId}/quotes", $quotePayload);
+        // 5.18.102 (Uganda, docs/71 §F.1 row 3): the customer sees the prefix and the installation site; the rest is
+        // staff's. No quote at all when uCRM cannot price the sale (P1).
+        $ugNoQuote = '';
+        if ($ug !== null) {
+            $quotePayload = [
+                'notes'      => self::customerNotes($cfg, $newAddress !== '' ? 'Installation site: ' . $newAddress : ''),
+                'adminNotes' => "ADDITIONAL SERVICE — EXISTING CUSTOMER\n"
+                              . "Service type: " . ($post['customer_type'] ?? '') . "\n"
+                              . "Connection: {$connectivity}\n"
+                              . "Priority: " . ($post['priority'] ?? 'Medium') . "\n"
+                              . "Sales: {$salesPerson}\n"
+                              . (self::installLabel($post['install_by'] ?? '') !== '' ? 'Install: ' . self::installLabel($post['install_by'] ?? '') . "\n" : '')
+                              . "KYC application #{$appId}"
+                              . (self::composedRef($qRef) !== '' ? "\nPlugin ref: " . self::composedRef($qRef) : ''),
+                'items'      => $quoteItems,
+            ];
+            if ($ug['status'] !== 'priced') {
+                $ugNoQuote = self::p1Text($ug);   // 5.18.102 (D14, §R.4.1): P1_UNLINKED's text for a web sale not linked
+                self::recordNoQuote($this->store, (int)$appId, 'P1', $ugNoQuote);
+            }
+        }
+
+        $quoteResponse = $ugNoQuote === '' ? $quoteCrm->post("clients/{$customerId}/quotes", $quotePayload) : null;
 
         if (!empty($quoteResponse['id'])) {
             $quoteId      = $quoteResponse['id'];
@@ -388,6 +435,7 @@ class KycService
                 $ucrmQuoteNumber = $fetched['number'] ?? null;
             }
             if ($ucrmQuoteNumber) $qRef = $ucrmQuoteNumber;
+            if ($ug !== null) self::readBack($quoteCrm, $this->store, (int)$appId, $quoteId, $quoteItems, $quoteResponse, $fetched ?? null);   // 5.18.102
 
             self::sendQuoteViaCrm($quoteCrm, $cfg, $this->dataDir, $quoteId, "additional service, client #{$customerId}");   // D-8
 
@@ -401,7 +449,7 @@ class KycService
                 'wa_quote_phone'       => preg_replace('/[^0-9+]/', '', $post['mobile'] ?? ''),
                 'wa_quote_deferred_at' => date('Y-m-d H:i:s'),
             ]);
-        } else {
+        } elseif ($ugNoQuote === '') {
             error_log('[KycService] Additional service quote failed for CRM #' . $customerId . ': ' . json_encode($quoteCrm->getLastError()));
             $this->store->updateOne('kyc_applications.json', 'id', $appId, [
                 'quote_error' => json_encode($quoteCrm->getLastError()),
@@ -418,7 +466,8 @@ class KycService
             $post,
             $newAddress,
             $qRef,
-            $appId
+            $appId,
+            $ug   // 5.18.102 (Uganda): the job's plan price is uCRM's, and a kit-only sale says so
         );
         if ($crmJobId > 0) {
             $this->store->updateOne('kyc_applications.json', 'id', $appId, [
@@ -451,11 +500,12 @@ class KycService
             ? "Quote #{$qRef} created for additional service at: {$newAddress}. Admin will review and activate."
             : "Application saved. Please notify admin to create the service manually.";
 
+        if ($ugNoQuote !== '') $successMsg = 'Application saved. ' . $ugNoQuote;   // 5.18.102 (Uganda): no quote, and why
         if ($walletDebited) {
             $successMsg .= " Wallet debited " . dn_cur() . number_format($checkAmount, 2) . ".";
         }
 
-        return [
+        return self::ugWithInstall($ug, $post, $connectivity, [   // 5.18.102 (Uganda): who installs, for the staff messages
             'success' => true,
             'message' => $successMsg,
             'data'    => [
@@ -478,8 +528,8 @@ class KycService
                 'customer_type'         => $post['customer_type'] ?? '',
                 'connectivity_type'     => $connectivity,
                 'sales_type'            => $post['sales_type']    ?? 'Credit',
-            ],
-        ];
+            ] + ($ugNoQuote !== '' ? ['quote_refused' => $ugNoQuote] : []),   // 5.18.102: only when no quote was made
+        ]);
     }
 
 
@@ -495,6 +545,23 @@ class KycService
 
         $salesPerson  = $this->resolveSalesPerson($post, $retailer);
         $connectivity = trim($post['connectivity_type'] ?? 'New Connection');
+
+        // ── 5.18.102 (Uganda, docs/71 §F.2, §H): uCRM prices the sale ONCE, before anything is written ──────
+        // Ahead of the duplicate-phone block, which can write a duplicate_confirmations row, so a refusal here writes
+        // nothing at all. That one result is the cash, the stored lines and the quote. A Cash sale uCRM cannot price,
+        // or whose form showed another total, goes no further.
+        $ugOrg = QuoteOrganization::setting(is_array($cfg) ? $cfg : [], $this->gateDataDir());
+        $ug = null;
+        if ($ugOrg['on']) {
+            // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
+            $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
+                    UcrmQuoteLinks::fromStore($this->store, $ugOrg)))
+                ->resolve(self::saleFromPost($post, $connectivity), $this->store);
+            if ($ug['status'] === 'no_plan') return ['success' => false, 'message' => 'Please select a valid package/plan.'];
+            $ugRefusal = self::cashRefusal($ug, $post);
+            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
+            if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
+        }
 
         // ── Duplicate phone check ─────────────────────────────────────────
         // Uses local files only (< 50ms). Live CRM only if index is stale > 10 min.
@@ -657,7 +724,10 @@ class KycService
         }
 
         // ── Step 1: Resolve amount & wallet check ────────────────────────
-        [$checkAmount, $offer, $device] = $this->resolveAmount($post);
+        // 5.18.102 (Uganda): the resolved total; 0 for a Credit sale uCRM cannot price, which goes in as a lead, unquoted
+        [$checkAmount, $offer, $device] = $ug !== null
+            ? [self::ugAmount($ug), $ug['offer'], $ug['device'] ?: []]
+            : $this->resolveAmount($post);
         if ($checkAmount === null) {
             return ['success' => false, 'message' => 'Please select a valid package/plan.'];
         }
@@ -668,7 +738,8 @@ class KycService
         }
 
         // Ensure quote will have actual pricing — $0 quotes are not useful
-        if ($checkAmount <= 0 && (($post['sales_type'] ?? '') !== 'Cash')) {
+        // (5.18.102: not on Uganda — there an unpriced Credit sale is registered with no quote, docs/71 §H)
+        if ($ug === null && $checkAmount <= 0 && (($post['sales_type'] ?? '') !== 'Cash')) {
             return ['success' => false, 'message' => 'Selected plan has no pricing. Please select a valid plan with pricing or contact admin to update plan prices.'];
         }
 
@@ -955,8 +1026,10 @@ class KycService
         // One builder for the form and the uCRM retry (KycCrmSync), so a
         // customer whose create had to be retried is quoted the same lines.
         $hwCart = !empty($post['hw_cart_json']) ? json_decode($post['hw_cart_json'], true) : [];
-        $quoteItems = self::quoteItems($offer ?: null, is_array($hwCart) ? $hwCart : [], $device ?: null,
-            (int)($post['kitQty'] ?? 1), (string)($post['customer_type'] ?? ''), $cfg);
+        $quoteItems = $ug !== null
+            ? ($ug['status'] === 'priced' ? $ug['lines'] : [])   // 5.18.102 (Uganda): uCRM's lines, none when unpriced
+            : self::quoteItems($offer ?: null, is_array($hwCart) ? $hwCart : [], $device ?: null,
+                (int)($post['kitQty'] ?? 1), (string)($post['customer_type'] ?? ''), $cfg);
         $quoteCreated = false;
         $quoteRefused = '';   // 5.18.99: the text when the Uganda quote check refused the quotation
         $quoteId      = null;
@@ -967,8 +1040,10 @@ class KycService
         $qNotesPrefix = '';
         // Max-amount guard: if cart total exceeds threshold, skip auto-quote
         // (agent will generate the quotation manually for non-standard hardware bundles)
+        $ugOverMax = false;   // 5.18.102: on Uganda the suppression is recorded (P3), not only logged
         if ($autoQuoteEnabled && self::quoteOverAutoMax($quoteItems, $cfg)) {
             $autoQuoteEnabled = false; // suppress — too complex for auto-quote
+            $ugOverMax = true;
             error_log("KycService: auto-quote suppressed for CRM #{$crmClientId} — the quote is over kyc_auto_quote_max_amount");
         }
         if ($autoQuoteEnabled && !empty($quoteItems)) {
@@ -1054,7 +1129,8 @@ class KycService
         }
 
         // ── Step 8: Save application locally ─────────────────────────────
-        $appId = $this->saveApplication([
+        // 5.18.102 (Uganda, docs/71 §F.3): with the resolved lines merged in (linesRecord), where the gate is on.
+        $appId = $this->saveApplication(array_merge([
             'connectivity_type' => $connectivity,
             'customer_type'     => $post['customer_type'] ?? '',
             'date'              => $post['date'] ?? date('Y-m-d'),
@@ -1110,10 +1186,18 @@ class KycService
             'photo_uploaded'    => $photoUploaded,
             'id_uploaded'       => $idUploaded,
             'kit_image_uploaded'=> $kitImageUploaded,
-        ]);
+        ], $ug !== null ? self::linesRecord($ug, $post, $connectivity) : []));   // 5.18.102 (Uganda): docs/71 §F.3
 
         // ── Step 8b: Now that appId + atomic quote_seq are assigned, POST quote to UCRM ──
-        if ($autoQuoteEnabled && !empty($quoteItems) && $crmClientId) {
+        if ($ug !== null && $crmClientId) {
+            // 5.18.102 (Uganda, docs/71 §F.2 steps 3–5): the company check, "Prepared by", then uCRM's lines or why not
+            $ugQ = $this->ugQuoteNew($ug, $ugOrg, $target, is_array($crmResponse) ? $crmResponse : null, (int)$appId,
+                (int)$crmClientId, is_array($cfg) ? $cfg : [], $post, $salesPerson, $connectivity, $ugOverMax);
+            $quoteCreated = $ugQ['created'];
+            $quoteId      = $ugQ['id'];
+            if ($ugQ['ref'] !== '') $qRef = $ugQ['ref'];
+            $quoteRefused = $ugQ['refused'];
+        } elseif ($autoQuoteEnabled && !empty($quoteItems) && $crmClientId) {
             error_log("[KycService] Auto-quote ENABLED for CRM #{$crmClientId} — " . count($quoteItems) . " items, total: $" . array_sum(array_map(fn($i) => (float)($i['price'] ?? 0) * (int)($i['quantity'] ?? 1), $quoteItems)));
             $savedApp = $this->store->findOne('kyc_applications.json', 'id', $appId);
             $qRef     = $savedApp['quote_ref'] ?? '';
@@ -1237,7 +1321,7 @@ class KycService
         if ($hadId    && !$idUploaded)   $successMsg .= " ⚠ ID proof upload failed — please add manually in UCRM Files tab.";
         if ($hadKit   && !$kitImageUploaded) $successMsg .= " ⚠ Kit label photo upload failed — saved locally, will retry.";
 
-        return [
+        return self::ugWithInstall($ug, $post, $connectivity, [   // 5.18.102 (Uganda): who installs, for the staff messages
             'success' => true,
             'message' => $successMsg,
             'data'    => [
@@ -1256,7 +1340,7 @@ class KycService
                 'id_uploaded'        => $idUploaded,
                 'kit_image_uploaded' => $kitImageUploaded,
             ] + ($quoteRefused !== '' ? ['quote_refused' => $quoteRefused] : []),   // 5.18.99: only when refused
-        ];
+        ]);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1571,6 +1655,709 @@ class KycService
         return $prefix . str_pad((string)$seq, 6, '0', STR_PAD_LEFT);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // 5.18.102 (Uganda, docs/71): the lines and the cash from uCRM Products
+    // ══════════════════════════════════════════════════════════════════════
+
+    /** The sale as UcrmQuoteLines::resolve() reads it, from a form or API post. */
+    public static function saleFromPost(array $post, string $connectivity): array
+    {
+        $cart = !empty($post['hw_cart_json']) ? json_decode((string)$post['hw_cart_json'], true) : [];
+        return [
+            'package_choice'    => $post['package_choice'] ?? 0,
+            'device_id'         => $post['device_id'] ?? 0,
+            'hw_cart'           => is_array($cart) ? $cart : [],
+            'kitQty'            => $post['kitQty'] ?? 1,
+            'customer_type'     => (string)($post['customer_type'] ?? ''),
+            'connectivity_type' => $connectivity,
+            'install_by'        => is_string($post['install_by'] ?? null) ? trim($post['install_by']) : '',
+            // 5.18.102 (D14, docs/71 §R.4.2): 'web' only when the post carries this release's KYC form marker, exactly
+            'entry'             => ($post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app',
+        ];
+    }
+
+    /**
+     * The same, from a stored application (the retries, docs/71 §F.4). The cart and kit quantity linesRecord() kept with
+     * an unpriced sale come first: an existing customer's application stores neither elsewhere, and a retry must resolve
+     * the sale that was made.
+     */
+    public static function saleFromApp(array $app): array
+    {
+        $cart = array_key_exists('quote_sale_cart', $app) ? $app['quote_sale_cart'] : ($app['hw_cart_json'] ?? null);
+        if (is_string($cart)) $cart = json_decode($cart, true);
+        return [
+            'package_choice'    => $app['package_choice'] ?? 0,
+            'device_id'         => $app['device_id'] ?? 0,
+            'hw_cart'           => is_array($cart) ? $cart : [],
+            'kitQty'            => $app['quote_sale_kit_qty'] ?? ($app['kitQty'] ?? 1),
+            'customer_type'     => (string)($app['customer_type'] ?? ''),
+            'connectivity_type' => trim((string)($app['connectivity_type'] ?? 'New Connection')),
+            'install_by'        => is_string($app['install_by'] ?? null) ? $app['install_by'] : '',
+            // 5.18.102 (D14, §R.4.2, E-1): 'web' only when stored exactly so; none (every application saved before the
+            // deploy), 'app', '' or anything else is 'app'
+            'entry'             => ($app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',
+        ];
+    }
+
+    /** The amount a resolved sale collects: its total, or 0 for a sale uCRM cannot price (a Credit lead, never Cash). */
+    private static function ugAmount(array $res): float
+    {
+        return $res['status'] === 'priced' ? (float)$res['total'] : 0.0;
+    }
+
+    /**
+     * A Cash sale that may not go ahead (docs/71 §G, §H, D10): the text, or ''. Asked before anything is written. The
+     * total the form showed must come with the sale, as a plain decimal, and equal uCRM's at 2 dp.
+     */
+    private static function cashRefusal(array $res, array $post): string
+    {
+        if (($post['sales_type'] ?? '') !== 'Cash' || $res['status'] === 'no_plan') return '';
+        if ($res['status'] !== 'priced') {
+            return $res['reason'] === UcrmQuoteLines::NO_INSTALL_ANSWER
+                ? UcrmQuoteLines::text('CASH_NO_INSTALL')
+                : UcrmQuoteLines::text('CASH_UNPRICED', ['{REASON}' => (string)$res['reason']]);
+        }
+        if ((float)$res['total'] <= 0) return UcrmQuoteLines::text('CASH_ZERO');
+        $seen = $post['ucrm_total_seen'] ?? null;
+        if (!is_scalar($seen) || !preg_match('/^[0-9]+(\.[0-9]+)?$/', trim((string)$seen))) return UcrmQuoteLines::text('CASH_NO_TOTAL');
+        if (!UcrmQuoteLines::postedTotalMatches($seen, (float)$res['total'])) return UcrmQuoteLines::text('CASH_CHANGED');
+        // 5.18.102 (D14, docs/71 §R.4.7): the link records the form drew must be the ones this sale resolved through — a
+        // relink at the same price would otherwise show the agent one product and charge the customer for another.
+        if (!UcrmQuoteLines::seenLinksMatch($post['ucrm_links_seen'] ?? null, (array)($res['link_ids'] ?? []))) {
+            return UcrmQuoteLines::text('CASH_RELINKED');
+        }
+        return '';
+    }
+
+    /**
+     * What every Uganda application stores (docs/71 §F.3): the resolved lines with this release's mark, or none; the
+     * resolved prices in offer_price and device_price, never the plugin's or the browser's; the installation answer
+     * when the sale asked for one.
+     */
+    public static function linesRecord(array $res, array $post, string $connectivity): array
+    {
+        $rec = [];
+        $by = self::installAnswer($post, $connectivity);
+        if ($by !== '') $rec['install_by'] = $by;
+        // 5.18.102 (D14, docs/71 §R.4.2, §R.4.4): the entry point, from resolve() — read once, never from the post again
+        $rec['quote_sale_entry'] = ($res['entry'] ?? null) === 'web' ? 'web' : 'app';
+        if ($res['status'] === 'priced') {
+            return $rec + [
+                'quote_link_ids'      => UcrmQuoteLines::linkIds($res['link_ids'] ?? []),   // 5.18.102 (§R.4.4)
+                'quote_items'         => $res['lines'],
+                'quote_lines_source'  => UcrmQuoteLines::SOURCE,
+                'quote_items_total'   => $res['total'],
+                'quote_lines_read_at' => date('Y-m-d H:i:s'),
+                'offer_price'         => $res['plan_price'],
+                'device_price'        => $res['device_price'],
+            ];
+        }
+        // Unpriced: no lines to keep, so the sale itself is kept for the retry, which resolves it again (saleFromApp).
+        $sale = self::saleFromPost($post, $connectivity);
+        return $rec + ['quote_items' => null, 'offer_price' => null, 'device_price' => null,
+                       'quote_sale_cart' => $sale['hw_cart'], 'quote_sale_kit_qty' => $sale['kitQty']];
+    }
+
+    /** The sale's "Who installs?" answer, 'dishnet' or 'customer', where the sale asks it (docs/71 §E.1); '' otherwise. */
+    private static function installAnswer(array $post, string $connectivity): string
+    {
+        $by = is_string($post['install_by'] ?? null) ? trim($post['install_by']) : '';
+        return UcrmQuoteLines::needsInstallAnswer((string)($post['customer_type'] ?? ''), $connectivity)
+            && ($by === 'dishnet' || $by === 'customer') ? $by : '';
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §E.2): a handler's answer with the installation answer added to its data — the data
+     * post_kyc.php and the mobile API hand to the staff messages (kycSubmitted, kycCrmCreated, kycAdditionalService).
+     * Where the gate is off ($ug null) the answer is returned unchanged.
+     */
+    private static function ugWithInstall(?array $ug, array $post, string $connectivity, array $answer): array
+    {
+        if ($ug === null) return $answer;
+        $by = self::installAnswer($post, $connectivity);
+        if ($by !== '' && isset($answer['data']) && is_array($answer['data'])) $answer['data']['install_by'] = $by;
+        return $answer;
+    }
+
+    /** The customer-visible notes of a Uganda quote (docs/71 §F.1): the prefix, then $extra. '' leaves NOTES empty. */
+    public static function customerNotes(array $cfg, string $extra = ''): string
+    {
+        $prefix = trim((string)($cfg['kyc_quote_notes_prefix'] ?? ''));
+        $extra  = trim($extra);
+        return $prefix . ($prefix !== '' && $extra !== '' ? "\n" : '') . $extra;
+    }
+
+    /** A reference fit to compose into text: '' for the placeholder PENDING, which must never reach uCRM. */
+    public static function composedRef($ref): string
+    {
+        $r = trim((string)$ref);
+        return strtoupper($r) === 'PENDING' ? '' : $r;
+    }
+
+    /** "DishNet" / "Customer installs — kit only" / '' (not asked). */
+    public static function installLabel($by): string
+    {
+        return $by === 'dishnet' ? 'DishNet' : ($by === 'customer' ? 'Customer installs — kit only' : '');
+    }
+
+    /** The staff-only adminNotes of a Uganda KYC quote (docs/71 §F.1). */
+    public static function kycAdminNotes(int $appId, string $how, string $sales, string $connectivity, string $priority,
+                                         $installBy, $ref): string
+    {
+        $parts = ["KYC application #{$appId}", $how, 'Sales: ' . $sales, 'Connection: ' . $connectivity,
+                  'Priority: ' . ($priority !== '' ? $priority : 'Medium')];
+        $inst = self::installLabel($installBy);
+        if ($inst !== '') $parts[] = 'Install: ' . $inst;
+        $r = self::composedRef($ref);
+        if ($r !== '') $parts[] = 'Plugin ref: ' . $r;
+        return implode(' · ', $parts);
+    }
+
+    /** The text for a new KYC customer created in uCRM with no quotation (P1, P3): where they are, and not to register again. */
+    public static function newCustomerNoQuote(int $clientId, string $text): string
+    {
+        return 'The customer is in uCRM as #' . $clientId . '. ' . $text . ' Do not register this customer again.';
+    }
+
+    /**
+     * Record that no quotation was made, and why (docs/71 §F.5): P1 unpriced, P2 a retry whose lines do not total the
+     * cash collected, P3 over the auto-quote limit. The fields are 5.18.99's, written only where its gate is on.
+     * 5.18.102 D14 review round 9 (CK9-B1): and quote_refused_ts, the same moment as an epoch, which claimLeftUnsettled
+     * compares with a claim's — never quote_refused_at, a local time that a change of zone would shift. Round 11 (CK11-B2):
+     * $notBefore is a press's claim, which a refusal already recorded may have put a second ahead of the clock (round 10),
+     * so that press's own refusal is never stamped before its claim.
+     */
+    public static function recordNoQuote($store, int $appId, string $code, string $text, int $notBefore = 0): void
+    {
+        $store->updateOne('kyc_applications.json', 'id', $appId, [
+            'quote_refused'      => $code,
+            'quote_refused_text' => $text,
+            'quote_refused_at'   => date('Y-m-d H:i:s'),
+            'quote_refused_ts'   => max(time(), $notBefore),   // 5.18.102 D14 review round 9 (CK9-B1); round 11 (CK11-B2)
+        ]);
+        error_log("[KycService] application #{$appId}: no quotation made ({$code})");
+    }
+
+    /** "UGX 249,000" — the book's symbol; decimals only when there are some. */
+    private static function ugMoney(float $v, array $cfg): string
+    {
+        return dn_money($v, $cfg, abs($v - round($v)) < 0.0001 ? 0 : 2);
+    }
+
+    /**
+     * The lines a retry may quote for an application (docs/71 §F.4, D11), or why none:
+     *   - 5.18.102 (D14, §R.4.2, E-1): the entry rule first — an application not stored with quote_sale_entry 'web'
+     *     (every one saved before the deploy, every app-origin one) is unpriced with the entry reason, whatever it stores
+     *     and whatever is linked;
+     *   - marked lines (quote_lines_source) are re-confirmed by their links (UcrmQuoteLines::confirmLines, §R.4.4): each
+     *     quote_link_ids record still in force, its item still resolving, at the price stored;
+     *   - no marked lines: resolved now by the current links — never inferred from a stored productId;
+     *   - a Cash application is never re-priced: quoted only when the lines total exactly the cash collected (2 dp).
+     * A Credit refusal whose reason is "not linked" on a web application takes P1_UNLINKED's text (§R.4.1).
+     *
+     * @return array{ok:bool,lines:array,code:string,text:string,link_ids:array}  link_ids: the records the lines came
+     *         from — the resolution's set for unmarked lines, the stored set for marked ones (§R.4.4)
+     */
+    public static function retryLines(array $app, UcrmQuoteLines $uql, $store, array $cfg): array
+    {
+        $lines    = null;
+        $reason   = '';
+        $linkIds  = [];
+        $unlinked = false;
+        $sale     = self::saleFromApp($app);
+        if ($sale['entry'] !== 'web') {
+            $reason = UcrmQuoteLines::ENTRY_REASON;   // 5.18.102 (D14, E-1): before the marked lines are confirmed
+        } else {
+            $marked = ($app['quote_lines_source'] ?? '') === UcrmQuoteLines::SOURCE
+                && is_array($app['quote_items'] ?? null) && $app['quote_items'] !== [];
+            if ($marked) {
+                $reason = $uql->confirmLines($app['quote_items'], $app['quote_link_ids'] ?? null, $store);
+                if ($reason === '') {
+                    $lines   = array_values($app['quote_items']);
+                    $linkIds = UcrmQuoteLines::linkIds($app['quote_link_ids'] ?? []);
+                }
+            } else {
+                $res = $uql->resolve($sale, $store);
+                if ($res['status'] === 'priced') {
+                    $lines   = $res['lines'];
+                    $linkIds = UcrmQuoteLines::linkIds($res['link_ids'] ?? []);
+                } else {
+                    $reason   = $res['status'] === 'no_plan' ? "the customer's plan is no longer in the plugin" : (string)$res['reason'];
+                    $unlinked = !empty($res['unlinked']);
+                }
+            }
+        }
+        $cash = round((float)($app['amount_charged'] ?? 0), 2);
+        if (($app['sales_type'] ?? '') === 'Cash' && $cash > 0) {
+            if ($lines === null || abs(UcrmQuoteLines::total($lines) - $cash) > 0.0001) {
+                return ['ok' => false, 'lines' => [], 'code' => 'P2',
+                        'text' => UcrmQuoteLines::text('P2', ['{AMOUNT}' => self::ugMoney($cash, $cfg)]), 'link_ids' => []];
+            }
+            return ['ok' => true, 'lines' => $lines, 'code' => '', 'text' => '', 'link_ids' => $linkIds];
+        }
+        if ($lines === null) {
+            return ['ok' => false, 'lines' => [], 'code' => 'P1', 'link_ids' => [],
+                    'text' => self::p1Text(['reason' => $reason, 'unlinked' => $unlinked, 'entry' => $sale['entry']])];
+        }
+        return ['ok' => true, 'lines' => $lines, 'code' => '', 'text' => '', 'link_ids' => $linkIds];
+    }
+
+    /**
+     * 5.18.102 (D14, docs/71 §R.4.1, E-2): P1's text — or P1_UNLINKED's ("Do not make it by hand — once the item is
+     * linked, an admin makes it from the Orders card") for a web sale whose reason is "not linked", an item or the
+     * installation. resolve() marks those reasons; the choice never matches the text. The record stays P1.
+     */
+    public static function p1Text(array $res): string
+    {
+        $code = (!empty($res['unlinked']) && ($res['entry'] ?? null) === 'web') ? 'P1_UNLINKED' : 'P1';
+        return UcrmQuoteLines::text($code, ['{REASON}' => (string)($res['reason'] ?? '')]);
+    }
+
+    /** P3's text for the configured limit. */
+    public static function overMaxText(array $cfg): string
+    {
+        return UcrmQuoteLines::text('P3', ['{MAX}' => self::ugMoney((float)($cfg['kyc_auto_quote_max_amount'] ?? 0), $cfg)]);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — one implementation, two entry points
+    // ══════════════════════════════════════════════════════════════════════
+
+    /** 5.18.102 (F-9): the claim's age limit, above the method's worst case (about eight 30 s requests, ~240 s). */
+    public const QUOTE_CLAIM_SECONDS = 900;
+    /** 5.18.102 (F-1, F-13): the two entry points; any other $via throws before the claim. */
+    public const MAKE_QUOTE_VIA = ['orders_card', 'retry_quote'];
+    /** 5.18.102 (F-7): the fixed texts of makeQuotation()'s answers (no figure, no name). */
+    public const MAKE_QUOTE_TEXTS = [
+        'claimed'    => 'another quotation is being made for this application',
+        'found'      => 'uCRM already has a quotation for this client made after this application was saved — no second one is made',
+        'unreadable' => 'uCRM\'s quotations for this client could not be read — no quotation was made',
+        // 5.18.102 D14 review round 2 (FX-flows-2): no id in uCRM's answer — a timeout or a 5xx may follow a quotation
+        // uCRM made, so the text never says none was made
+        'error'      => 'uCRM did not confirm the quotation — it may have been made; a retry never makes a second one',
+    ];
+
+    /**
+     * 5.18.102 (D14, docs/71 §R.4.8, F-10): does Make the quotation apply to this application — the button's five
+     * conditions, one implementation for the Orders card and the handler's re-check: quote_sale_entry exactly 'web', a
+     * uCRM client, quote_refused P1, no quote_created, and no quote_found_in_ucrm.
+     */
+    public static function canMakeQuotation(array $app): bool
+    {
+        return ($app['quote_sale_entry'] ?? null) === 'web'
+            && !empty($app['crm_client_id'])
+            && ($app['quote_refused'] ?? null) === 'P1'
+            && empty($app['quote_created'])
+            && empty($app['quote_found_in_ucrm']);
+    }
+
+    /**
+     * 5.18.102 D14 review round 8 (CK8-F1, CK8-F2): a claim still recorded (quote_make_claim_ts) with no refusal recorded at
+     * or after it. Every answer and every Throwable removes its claim, so such a claim is a request that died — after its
+     * POST, perhaps — or a removal that failed after an answer that recorded nothing. One a refusal followed is a refusal
+     * whose removal failed: the refusal holds. Round 9 (CK9-B1): "followed" is read from quote_refused_ts, the epoch the
+     * two refusal writers a press reaches record beside quote_refused_at (recordNoQuote, postQuote's company check) —
+     * never from quote_refused_at, a local time that a change of zone (or a process that falls back to another zone)
+     * would shift. A refusal with no epoch — recorded before 5.18.102, or by a writer no press reaches (registration's
+     * company check, the cron for a customer not yet in uCRM) — counts as before the claim: the card errs to "did not
+     * finish", never to a refusal that would send someone to make by hand a quotation that may exist.
+     */
+    public static function claimLeftUnsettled(array $app): bool
+    {
+        $ts = $app['quote_make_claim_ts'] ?? null;
+        if (!is_numeric($ts)) return false;
+        // round 11 (CK11-B1): a press's own refusal falls within its claim's lifetime; an epoch past it is no refusal of this
+        // claim's (a corrupt value, a clock that ran ahead), so the claim is unsettled
+        if (is_numeric($app['quote_refused_ts'] ?? null) && (int)$app['quote_refused_ts'] >= (int)$ts + self::QUOTE_CLAIM_SECONDS) return true;
+        $at = $app['quote_refused_ts'] ?? null;
+        return !is_numeric($at) || (int)$at < (int)$ts;
+    }
+
+    /**
+     * 5.18.102 (D14, docs/71 §R.4.8, E-2, F-1…F-13): quote one KYC application from its record, by the current links —
+     * the shared implementation retry_quote's gated block and the Orders card's Make the quotation both call. Only
+     * their gated paths call it; South Sudan and Uganda with the gate off never reach it.
+     *
+     *   1. the claim (quote_make_claim_ts, F-9): taken inside withLock, refused ('claimed') while quote_created is set or
+     *      a claim younger than QUOTE_CLAIM_SECONDS is recorded; removed in a finally, only while it is still this
+     *      request's;
+     *   2. R-M4's guard (§R.4.4): billing/quotes?clientId=<crmId> read with the quoting client, rows kept by clientId. A
+     *      quotation found — any, for a customer this application created; one dated on or after submitted_at, for an
+     *      existing customer — records quote_found_in_ucrm and nothing else ('found'); an unreadable list writes nothing
+     *      ('unreadable'); none found removes quote_unconfirmed_at, as the earlier POST it records made none;
+     *   3. the lines: retryLines() — the entry from the record, the current links, the Cash rule on the stored
+     *      amount_charged. A refusal is recorded (P1, P1_UNLINKED's text, or P2) ('refused');
+     *   4. postQuote(): its company check (asking nothing when $known names the organization), the POST, the read-back,
+     *      quote_ref, uCRM's send, quote_created and wa_quote_pending, as every KYC quotation is made. A company-check
+     *      refusal is 'refused'; a failed POST records quote_error and quote_unconfirmed_at (the Orders card then says
+     *      making the last quotation did not finish and that it may have been made, never that none was made) and is
+     *      'error'. A Throwable from postQuote() records quote_unconfirmed_at too, then goes on (it may follow the POST).
+     *      Either write that fails is logged (ids only), never answered in place of the answer it follows;
+     *   5. once created, one write: quote_link_ids, quote_error null, quote_made_by_id and quote_made_via.
+     *
+     * No auto-quote limit applies (P3): either entry point is an admin's act. A Throwable is not an answer: the claim
+     * is removed and the Throwable goes on to the caller. The log carries ids only.
+     *
+     * @param array      $app    the application as its caller read it
+     * @param array|null $known  the organization the caller has already checked, in postQuote()'s shape, or null
+     * @param string     $via    'orders_card' or 'retry_quote' (the staff's notes, and quote_made_via)
+     * @param array      $actor  the admin's account record, re-read fresh by id (§R.2.1)
+     * @return array{code:int,kind:string,quote_id:?int,lines:int,total:?float,text:string}
+     */
+    public function makeQuotation(array $app, ?array $known, string $via, array $actor): array
+    {
+        if (!in_array($via, self::MAKE_QUOTE_VIA, true)) throw new \InvalidArgumentException('makeQuotation: unknown entry point');
+        $appId = (int)($app['id'] ?? 0);
+        $crmId = (int)($app['crm_client_id'] ?? 0);
+        if ($appId <= 0 || $crmId <= 0) throw new \InvalidArgumentException('makeQuotation: no application or no uCRM client');
+        $cfg = $this->store->load('kyc_config.json') ?: [];
+        if (!is_array($cfg)) $cfg = [];
+        $setting = QuoteOrganization::setting($cfg, $this->gateDataDir());
+        if (empty($setting['on'])) throw new \LogicException('makeQuotation: the quoting-organization gate is off');
+        $quoteCrm = UcrmQuoteLines::quoteClient($this->crm, $cfg);
+
+        // 1. the claim
+        $claim = self::takeQuoteClaim($this->store, $appId);
+        if ($claim === null) {
+            error_log("[KycService] Make the quotation, application #{$appId} ({$via}): claimed");
+            return self::madeAnswer(409, 'claimed', null, 0, null, self::MAKE_QUOTE_TEXTS['claimed']);
+        }
+        try {
+            // 2. R-M4's guard: never a second quotation
+            $found = self::quotationInUcrm($quoteCrm, $app, $crmId);
+            if ($found === null) {
+                error_log("[KycService] Make the quotation, application #{$appId} ({$via}): uCRM's quotations unreadable");
+                return self::madeAnswer(409, 'unreadable', null, 0, null, self::MAKE_QUOTE_TEXTS['unreadable']);
+            }
+            if ($found !== []) {
+                $num = is_scalar($found['number'] ?? null) && trim((string)$found['number']) !== ''
+                    ? trim((string)$found['number']) : (string)(int)($found['id'] ?? 0);
+                $this->store->updateOne('kyc_applications.json', 'id', $appId, [
+                    'quote_found_in_ucrm' => ['number' => $num, 'at' => date('Y-m-d H:i:s')],
+                ]);
+                error_log("[KycService] Make the quotation, application #{$appId} ({$via}): a quotation is in uCRM already");
+                return self::madeAnswer(409, 'found', null, 0, null, self::MAKE_QUOTE_TEXTS['found']);
+            }
+            // 5.18.102 D14 review round 3 (CK-flows-2): uCRM has no quotation for this application, so an earlier POST whose
+            // answer did not confirm one made none — the card's "did not finish" box gives way to this press's answer.
+            // Round 4 (CK4-F3): always, under the lock, by the row as stored — never by the caller's $app, read before the
+            // claim, which another request may have outdated
+            self::dropUnconfirmed($this->store, $appId);
+
+            // 3. the lines, by the current links
+            $r = self::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
+                $this->store, $cfg);
+            if (!$r['ok']) {
+                self::recordNoQuote($this->store, $appId, $r['code'], $r['text'], $claim);   // round 11 (CK11-B2): never before the claim
+                return self::madeAnswer(409, 'refused', null, 0, null, $r['text']);
+            }
+
+            // 4. postQuote(), as every KYC quotation is made
+            $sp = trim((string)($app['sales_person'] ?? ''));
+            $staffNotes = ($via === 'retry_quote' ? 'Retry for App #' : 'Made from the Orders card for App #') . $appId
+                        . ' · Sales: ' . ($sp !== '' ? $sp : (string)($app['retailer_name'] ?? ''));
+            try {
+                $posted = self::postQuote($this->crm, $this->store, $appId, $crmId, $r['lines'], self::customerNotes($cfg),
+                    $staffNotes, (string)($app['mobile'] ?? ''), $known);
+            } catch (\Throwable $e) {
+                // 5.18.102 D14 review round 4 (CK4-F1): a Throwable inside postQuote may follow its POST, so the card says
+                // "did not finish" as after an 'error' answer. Recorded in its own try; the Throwable goes on either way
+                self::recordUnconfirmed($this->store, $appId, $via);
+                throw $e;
+            }
+            $n = count($r['lines']);
+            if (empty($posted['created'])) {
+                if (!empty($posted['refused'])) {
+                    self::refusalNotBeforeClaim($this->store, $appId, $claim, $via);   // round 11 (CK11-B2)
+                    error_log("[KycService] Make the quotation, application #{$appId} ({$via}): refused by the company check");
+                    return self::madeAnswer(409, 'refused', null, $n, null, (string)$posted['refused']);
+                }
+                // 5.18.102 D14 review round 2 (FX-flows-2): "not confirmed", never "none made" (the answer may have been lost)
+                // 5.18.102 D14 review round 3 (CK-flows-2): recorded, so the Orders card says "did not finish", never "none made".
+                // Round 5 (CK5-B1): in its own try, as the catch's — the answer stays 'error' whatever the write does
+                self::recordUnconfirmed($this->store, $appId, $via);
+                error_log("[KycService] Make the quotation, application #{$appId} ({$via}): uCRM did not confirm a quotation (no id in its answer)");
+                return self::madeAnswer(500, 'error', null, $n, null, self::MAKE_QUOTE_TEXTS['error']);
+            }
+
+            // 5. one write, once created. 5.18.102 D14 review (D14-MQ-THROW-AFTER-POST): postQuote() has already stored
+            // quote_id, quote_created and wa_quote_pending, so 'made' is true whatever this write does — a failure here is
+            // logged (ids only, so an admin can restore quote_link_ids) and never answered as "no quotation".
+            $quoteId = (int)$posted['id'];
+            try {
+                $this->store->updateOne('kyc_applications.json', 'id', $appId, [
+                    'quote_link_ids'   => UcrmQuoteLines::linkIds($r['link_ids'] ?? []),
+                    'quote_error'      => null,
+                    'quote_made_by_id' => (int)($actor['id'] ?? 0),
+                    'quote_made_via'   => $via,
+                ]);
+            } catch (\Throwable $e) {
+                error_log("[KycService] Make the quotation, application #{$appId} ({$via}): quotation #{$quoteId} made; its record (link ids "
+                    . implode(',', UcrmQuoteLines::linkIds($r['link_ids'] ?? [])) . ') could not be written (' . get_class($e) . ')');
+            }
+            error_log("[KycService] Make the quotation, application #{$appId} ({$via}): quotation #{$quoteId} made, {$n} line(s)");
+            return self::madeAnswer(200, 'made', $quoteId, $n, UcrmQuoteLines::total($r['lines']), '');
+        } finally {
+            self::dropQuoteClaim($this->store, $appId, $claim);
+        }
+    }
+
+    /** 5.18.102 (F-7): makeQuotation()'s one answer shape. */
+    private static function madeAnswer(int $code, string $kind, ?int $quoteId, int $lines, ?float $total, string $text): array
+    {
+        return ['code' => $code, 'kind' => $kind, 'quote_id' => $quoteId, 'lines' => $lines,
+                'total' => $total === null ? null : round($total, 2), 'text' => $text];
+    }
+
+    /**
+     * 5.18.102 (F-9): take the claim inside withLock — no network I/O in the callback. null when another request holds
+     * a claim younger than QUOTE_CLAIM_SECONDS, or a quotation was made after the caller read the application (nothing
+     * written); else the stamp written, which only this request may remove: time(), or (5.18.102 D14 review round 10,
+     * CK10-B1) one second after a refusal recorded at or after it, so that refusal never reads as this claim's own.
+     */
+    private static function takeQuoteClaim($store, int $appId): ?int
+    {
+        $now = time();
+        $taken = $store->withLock('kyc_applications.json', function (array $apps) use ($appId, $now) {
+            foreach ($apps as $i => $a) {
+                if (!is_array($a) || (int)($a['id'] ?? 0) !== $appId) continue;
+                if (!empty($a['quote_created'])) return ['records' => $apps, 'result' => false];
+                $ts = $a['quote_make_claim_ts'] ?? null;
+                if (is_numeric($ts) && $now - (int)$ts < self::QUOTE_CLAIM_SECONDS) return ['records' => $apps, 'result' => false];
+                // 5.18.102 D14 review round 8 (CK8-F1): an expired claim no refusal followed is a request that died, after its
+                // POST perhaps. It becomes the key the Orders card's "did not finish" box reads, which only a guard that finds no
+                // quotation removes — so a press that cannot settle it ('unreadable', a Throwable) never loses it
+                if (self::claimLeftUnsettled($a) && !array_key_exists('quote_unconfirmed_at', $a)) {
+                    $apps[$i]['quote_unconfirmed_at'] = date('Y-m-d H:i:s', (int)$ts);
+                }
+                // Round 10 (CK10-B1): stamped after any refusal already recorded — one recorded in this same second by
+                // another request, or later by a clock that stepped back, would otherwise settle this claim (claimLeftUnsettled)
+                $stamp = $now;
+                $rts = $a['quote_refused_ts'] ?? null;
+                // round 11 (CK11-B1): an epoch QUOTE_CLAIM_SECONDS or more ahead (corrupt, or a clock that ran ahead) never
+                // holds a claim back; claimLeftUnsettled never lets such an epoch settle a claim either
+                if (is_numeric($rts) && (int)$rts >= $now + self::QUOTE_CLAIM_SECONDS) $rts = null;
+                if (is_numeric($rts) && (int)$rts >= $stamp) $stamp = (int)$rts + 1;
+                $apps[$i]['quote_make_claim_ts'] = $stamp;
+                return ['records' => $apps, 'result' => $stamp];
+            }
+            return ['records' => $apps, 'result' => null];
+        });
+        if ($taken === null) throw new \RuntimeException('makeQuotation: application #' . $appId . ' is not in the store');
+        return is_int($taken) ? $taken : null;
+    }
+
+    /**
+     * 5.18.102 (F-9): remove this request's claim by a second withLock that unsets that one key, on that one
+     * application, only while it still holds the value this request wrote (updateOne only merges, so it could not). A
+     * removal that throws is logged with ids only; the claim then expires by its age.
+     */
+    private static function dropQuoteClaim($store, int $appId, int $claim): void
+    {
+        try {
+            $store->withLock('kyc_applications.json', function (array $apps) use ($appId, $claim) {
+                foreach ($apps as $i => $a) {
+                    if (!is_array($a) || (int)($a['id'] ?? 0) !== $appId) continue;
+                    if (array_key_exists('quote_make_claim_ts', $a) && $a['quote_make_claim_ts'] === $claim) {
+                        unset($apps[$i]['quote_make_claim_ts']);
+                    }
+                    break;
+                }
+                return ['records' => $apps, 'result' => null];
+            });
+        } catch (\Throwable $e) {
+            error_log("[KycService] Make the quotation, application #{$appId}: the claim could not be removed; it expires by its age");
+        }
+    }
+
+    /**
+     * 5.18.102 D14 review round 11 (CK11-B2): postQuote's company check stamps its refusal at time(), and this press's claim
+     * may stand a second ahead of the clock (round 10), so the refusal is raised to the claim — never stamped before it.
+     * In its own try: a failed write is logged with ids only (the refusal then reads as before the claim, so the card errs
+     * to "did not finish", and only if the claim's removal fails too) and never answers in place of the refusal.
+     */
+    private static function refusalNotBeforeClaim($store, int $appId, int $claim, string $via): void
+    {
+        if ($claim <= time()) return;
+        try {
+            $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_refused_ts' => $claim]);
+        } catch (\Throwable $e) {
+            error_log("[KycService] Make the quotation, application #{$appId} ({$via}): the refusal's time could not be raised to its claim (" . get_class($e) . ')');
+        }
+    }
+
+    /**
+     * 5.18.102 D14 review rounds 3–5: record quote_unconfirmed_at, for the Orders card's "did not finish" box. A write that
+     * fails is logged with ids only and never answers in place of the answer or the Throwable it follows.
+     */
+    private static function recordUnconfirmed($store, int $appId, string $via): void
+    {
+        try {
+            $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_unconfirmed_at' => date('Y-m-d H:i:s')]);
+        } catch (\Throwable $e) {
+            error_log("[KycService] Make the quotation, application #{$appId} ({$via}): quote_unconfirmed_at could not be recorded (" . get_class($e) . ')');
+        }
+    }
+
+    /**
+     * 5.18.102 D14 review round 3 (CK-flows-2): remove quote_unconfirmed_at by a withLock that unsets that one key on that one
+     * application (updateOne only merges, so it could not). makeQuotation() calls it once R-M4's guard has found no
+     * quotation, before any POST, whether or not the caller's record held the key: the earlier POST that key records
+     * made none. A row without the key is left as it is. A removal that throws goes on to the caller.
+     */
+    private static function dropUnconfirmed($store, int $appId): void
+    {
+        $store->withLock('kyc_applications.json', function (array $apps) use ($appId) {
+            foreach ($apps as $i => $a) {
+                if (!is_array($a) || (int)($a['id'] ?? 0) !== $appId) continue;
+                unset($apps[$i]['quote_unconfirmed_at']);
+                break;
+            }
+            return ['records' => $apps, 'result' => null];
+        });
+    }
+
+    /**
+     * 5.18.102 (R-M4, docs/71 §R.4.4): a quotation uCRM already holds for this client — [] when none, null when the list
+     * cannot be read (fail closed). Only rows whose clientId is $crmId count: the answer may hold other clients'. For an
+     * existing customer (is_additional_service) only a quotation dated on or after submitted_at counts, both read in
+     * the plugin's timezone; a date that cannot be parsed counts as after.
+     */
+    private static function quotationInUcrm($quoteCrm, array $app, int $crmId): ?array
+    {
+        try {
+            $list = $quoteCrm->get('billing/quotes?' . http_build_query(['clientId' => $crmId]));
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (!is_array($list) || array_key_exists('raw', $list)) return null;
+        if ($list !== [] && array_keys($list) !== range(0, count($list) - 1)) return null;
+        $existing = !empty($app['is_additional_service']);
+        $since = $existing ? strtotime((string)($app['submitted_at'] ?? '')) : false;
+        foreach ($list as $q) {
+            if (!is_array($q) || (int)($q['clientId'] ?? 0) !== $crmId) continue;
+            if (!$existing || $since === false) return $q;
+            $made = is_scalar($q['createdDate'] ?? null) ? strtotime((string)$q['createdDate']) : false;
+            if ($made === false || $made >= $since) return $q;
+        }
+        return [];
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §F.6): what uCRM made, against what was sent — each item's label and price, and the
+     * total. From the POST's answer, or one GET when the answer has no items. A mismatch is stored as quote_mismatch
+     * for the Orders card; each item's type and whether it carries a productId are stored as a note. quote.add has
+     * already messaged the customer, so this detects; it cannot prevent.
+     */
+    public static function readBack($quoteCrm, $store, int $appId, $quoteId, array $sent, array $resp, ?array $fetched = null): void
+    {
+        try {
+            $q = (is_array($resp['items'] ?? null) && $resp['items'] !== []) ? $resp : null;
+            if ($q === null && is_array($fetched) && is_array($fetched['items'] ?? null)) $q = $fetched;
+            if ($q === null) $q = $quoteCrm->get("billing/quotes/{$quoteId}");
+            $items = is_array($q) && is_array($q['items'] ?? null) ? array_values($q['items']) : null;
+            $sentTotal = UcrmQuoteLines::total($sent);
+            $now = date('Y-m-d H:i:s');
+            if ($items === null) {
+                $store->updateOne('kyc_applications.json', 'id', $appId, [
+                    'quote_mismatch' => ['sent_total' => $sentTotal, 'created_total' => null, 'at' => $now],
+                ]);
+                error_log("[KycService] application #{$appId}: quote #{$quoteId} could not be read back");
+                return;
+            }
+            $created = 0.0;
+            $shape   = [];
+            $same    = count($items) === count($sent);
+            foreach ($items as $i => $it) {
+                if (!is_array($it)) { $same = false; continue; }
+                $qty = (float)($it['quantity'] ?? 1);
+                $price = round((float)($it['price'] ?? 0), 2);
+                $created += $price * $qty;
+                $shape[] = ['type' => is_scalar($it['type'] ?? null) ? (string)$it['type'] : '',
+                            'has_product_id' => !empty($it['productId']),
+                            'unit' => is_scalar($it['unit'] ?? null) ? (string)$it['unit'] : ''];
+                $s = $sent[$i] ?? null;
+                if (!is_array($s) || (string)($it['label'] ?? '') !== (string)($s['label'] ?? '')
+                    || abs($price - round((float)($s['price'] ?? 0), 2)) > 0.0001) {
+                    $same = false;
+                }
+            }
+            if (isset($q['total']) && is_numeric($q['total'])) $created = (float)$q['total'];
+            $created = round($created, 2);
+            $upd = ['quote_readback' => ['items' => $shape, 'at' => $now]];
+            if (!$same || abs($created - $sentTotal) > 0.0001) {
+                $upd['quote_mismatch'] = ['sent_total' => $sentTotal, 'created_total' => $created, 'at' => $now];
+                error_log("[KycService] application #{$appId}: quote #{$quoteId} differs from the lines sent");
+            }
+            $store->updateOne('kyc_applications.json', 'id', $appId, $upd);
+        } catch (\Throwable $e) {
+            error_log("[KycService] application #{$appId}: quote read-back failed");
+        }
+    }
+
+    /**
+     * 5.18.102 (Uganda, docs/71 §F.2 steps 3–5, §I): after a new KYC client is created — the company check, then
+     * "Prepared by" (whether or not a quote follows), then the quote, made only from uCRM's lines. A refusal is
+     * recorded (R1–R7 from the check, P1 unpriced, P3 over the limit) and never written as quote_error.
+     *
+     * @return array{created:bool,id:mixed,ref:string,refused:string}
+     */
+    private function ugQuoteNew(array $ug, array $org, UcrmClientTarget $target, ?array $created, int $appId,
+                                int $clientId, array $cfg, array $post, string $salesPerson, string $connectivity,
+                                bool $overMax): array
+    {
+        $out = ['created' => false, 'id' => null, 'ref' => '', 'refused' => ''];
+        $quoteCrm = UcrmQuoteLines::quoteClient($this->crm, $cfg);
+        $rows = $target->organizationRows();
+        $check = (new QuoteOrganization($quoteCrm, $org))->checkClient($clientId, 'kyc-new', [
+            'organizationId' => is_int($created['organizationId'] ?? null) ? $created['organizationId'] : null,
+            'organizations'  => $rows,
+        ]);
+        if (!$check['ok']) {
+            $out['refused'] = QuoteOrganization::kycText($check, $clientId);
+            $this->store->updateOne('kyc_applications.json', 'id', $appId, [
+                'quote_refused'      => $check['code'],
+                'quote_refused_text' => $out['refused'],
+                'quote_refused_at'   => date('Y-m-d H:i:s'),
+            ]);
+            return $out;
+        }
+        $target->patchSalesPerson($clientId, $salesPerson);
+
+        if (($cfg['kyc_auto_quote_enabled'] ?? true) === false) return $out;   // the switch, as before
+        if ($ug['status'] !== 'priced') {
+            $out['refused'] = self::newCustomerNoQuote($clientId, self::p1Text($ug));   // 5.18.102 (D14, §R.4.1)
+            self::recordNoQuote($this->store, $appId, 'P1', $out['refused']);
+            return $out;
+        }
+        if ($overMax) {
+            $out['refused'] = self::newCustomerNoQuote($clientId, self::overMaxText($cfg));
+            self::recordNoQuote($this->store, $appId, 'P3', $out['refused']);
+            return $out;
+        }
+        $savedApp = $this->store->findOne('kyc_applications.json', 'id', $appId);
+        $qRef = $savedApp['quote_ref'] ?? '';
+        if ($qRef === '' || $qRef === null) {   // the post gate of Step 8b, unchanged
+            $this->store->updateOne('kyc_applications.json', 'id', $appId, ['quote_debug' => 'quote_ref was empty']);
+            return $out;
+        }
+        $by = is_string($post['install_by'] ?? null) ? trim($post['install_by']) : '';
+        $posted = self::postQuote($this->crm, $this->store, $appId, $clientId, $ug['lines'], self::customerNotes($cfg),
+            self::kycAdminNotes($appId, 'registration', $salesPerson, $connectivity, (string)($post['priority'] ?? 'Medium'),
+                UcrmQuoteLines::needsInstallAnswer((string)($post['customer_type'] ?? ''), $connectivity) ? $by : '', $qRef),
+            (string)($post['mobile'] ?? ''),
+            // the check above passed: the client is filed under the quoting organization, so postQuote asks nothing
+            ['organizationId' => $org['id'], 'organizations' => $rows, 'where' => 'kyc-new']);
+        if ($posted['created']) {
+            $out['created'] = true;
+            $out['id'] = $posted['id'];
+            $out['ref'] = (string)$posted['ref'];
+        } elseif (!empty($posted['refused'])) {
+            $out['refused'] = (string)$posted['refused'];
+        }
+        return $out;
+    }
+
     /**
      * The lines of a KYC quote: the package, then the hardware (the cart, or
      * else the single device), then — for Fiber — the installation fee.
@@ -1702,6 +2489,7 @@ class KycService
                     'quote_refused'      => $check['code'],
                     'quote_refused_text' => $text,
                     'quote_refused_at'   => date('Y-m-d H:i:s'),
+                    'quote_refused_ts'   => time(),   // 5.18.102 D14 review round 9 (CK9-B1): see recordNoQuote
                 ]);
                 return ['created' => false, 'id' => null, 'ref' => '', 'refused' => $text];
             }
@@ -1725,10 +2513,12 @@ class KycService
         $quoteId = $resp['id'];
         // uCRM's own quote number is the reference; fetch it if the POST did not say.
         $number = $resp['number'] ?? null;
+        $fetched = null;   // 5.18.102: kept for readBack() below, so the quote is read once
         if (!$number) {
             $fetched = $quoteCrm->get("billing/quotes/{$quoteId}");
             $number  = $fetched['number'] ?? null;
         }
+        if ($quoteOrg['on']) self::readBack($quoteCrm, $store, $appId, $quoteId, $items, $resp, is_array($fetched) ? $fetched : null);   // 5.18.102
         if ($number) {
             $store->updateOne('kyc_applications.json', 'id', $appId, ['quote_ref' => $number]);
         }
@@ -1983,6 +2773,9 @@ class KycService
      * (logged via error_log). Failure here MUST NOT block KYC submission —
      * the quote is the legal commitment; the job is operational scaffolding.
      *
+     * 5.18.102 (Uganda, docs/71 §E.2): $ug, the resolved sale, prices the plan from uCRM and says when the customer
+     * installs it (kit only); null as before.
+     *
      * @return int  New CRM scheduling job ID, or 0 on failure.
      */
     private function createCrmJobForBidal(
@@ -1990,7 +2783,8 @@ class KycService
         array $post,
         string $newAddress,
         string $quoteRef,
-        int $appId
+        int $appId,
+        ?array $ug = null
     ): int {
         try {
             // ── Resolve Bidal's UCRM user ID ──────────────────────────────
@@ -2039,6 +2833,10 @@ class KycService
 
             // ── Title: bold, scannable, identifies existing customer ──────
             $title = "Additional Service — {$custDisplay} ({$customerId}) — New Site: {$areaShort}";
+            // 5.18.102 (Uganda, docs/71 §E.2): uCRM's monthly price, and a kit-only sale never booked as an installation
+            $kitOnly = $ug !== null && ($post['install_by'] ?? '') === 'customer'
+                && UcrmQuoteLines::needsInstallAnswer($serviceType, $connectivity);
+            if ($kitOnly) $title .= ' — Kit only, no installation';
 
             // ── Description: full operational brief ───────────────────────
             $descLines = [
@@ -2048,7 +2846,12 @@ class KycService
                 "New Site Address    : {$newAddress}",
                 "Service Type        : {$serviceType}",
                 "Connection          : {$connectivity}",
-                "Plan                : {$planName} (\${$planAmt}/mo)",
+                // 5.18.102 (D14, §R.5): uCRM's plan label beside uCRM's price; the plugin's name only with "not priced in uCRM"
+                $ug !== null
+                    ? ($ug['plan_price'] !== null
+                        ? "Plan                : " . (string)($ug['plan_label'] ?? $planName) . ' (' . dn_money((float)$ug['plan_price'], $cfg, 0) . '/mo)'
+                        : "Plan                : {$planName} (not priced in uCRM)")
+                    : "Plan                : {$planName} (\${$planAmt}/mo)",
                 "Priority            : {$priority}",
                 "Customer Phone      : {$custPhone}",
                 "Sales Person        : {$salesPerson}",
@@ -2059,7 +2862,7 @@ class KycService
                 "1. Verify new site address & GPS",
                 "2. Create a NEW service line on existing client #{$customerId}",
                 "3. DO NOT modify existing service(s) — leave current site intact",
-                "4. Schedule install per priority",
+                $kitOnly ? "4. Kit only — no installation: the customer installs it" : "4. Schedule install per priority",
             ];
             $description = implode("\n", $descLines);
 

@@ -22,6 +22,17 @@
  * 5.18.99: on Uganda the additional service's client (901) is seeded in organization 1, the quoting organization, since
  * the quote check now reads it before the quote is made (tests/test_quote_company.php tests the refusal).
  *
+ * 5.18.102 (rewritten on purpose, never weakened; docs/71 §L.2): on Uganda a quotation is made only from lines uCRM's
+ * Products price, so the fake serves its TEST catalogue there ('catalogue') and each Uganda submission says who installs
+ * (install_by), as the form now asks. Everything this test pins — uCRM's send, once, behind the switch — is unchanged;
+ * only the lines quoted are uCRM's. tests/test_quote_from_ucrm.php tests the lines themselves.
+ *
+ * 5.18.102 D14 (rewritten on purpose, never weakened; docs/71 §R.9.2): a line is priced only through the link an admin
+ * made, so each Uganda book holds three links (the plan row → product 12 and service plan 6, the kit row → product 55,
+ * the installation → product 70, each with its row's created_at stamp), and each Uganda submission carries the web KYC
+ * form's marker (ucrm_quote_form) beside install_by — the existing customer's is the hand-made web case of §R.4.2.
+ * South Sudan's books and posts are as before. Section 1 shows the quote is the links' (none without them).
+ *
  * Every person, number and document is fictitious; nothing leaves the machine.
  */
 declare(strict_types=1);
@@ -111,12 +122,14 @@ const AGENT = ['id' => 7, 'name' => 'Test Agent', 'role' => 'sales', 'is_admin' 
  * directory keeps any setting already in it (the set_config case). Returns what the application recorded, the uCRM
  * send calls, and the lines the copy's plugin log and PHP's error log gained.
  */
-$submit = function (string $tree, string $tenant, array $cfg, int $existing = 0, bool $refuse = false, ?string $dir = null)
+$submit = function (string $tree, string $tenant, array $cfg, int $existing = 0, bool $refuse = false, ?string $dir = null,
+                   bool $links = true)
     use ($tmp, $BASE, $fake, $calls): array {
     static $n = 0;
     $n++;
     $fake('/__test/reset?scenario=' . ($tenant === 'uganda' ? 'uganda' : 'sudan'));
     if ($refuse) $fake('/__test/set', ['refuse_send' => true]);
+    if ($tenant === 'uganda') $fake('/__test/set', ['catalogue' => true]);   // 5.18.102: uCRM's Products price the lines
     // 5.18.99 (rewritten on purpose): on Uganda an existing customer's quote is made only for a client uCRM files under the
     // quoting organization (1, profiles/uganda.json), and the check reads the client first. Client 901 is therefore held
     // by the fake, in organization 1, as the Uganda customer it stands for; South Sudan reads nothing new and is unseeded.
@@ -131,7 +144,21 @@ $submit = function (string $tree, string $tenant, array $cfg, int $existing = 0,
     $post  = ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
               'firstname' => 'Test', 'lastname' => 'Quotesend' . $n, 'mobile' => $phone, 'email' => '',
               'address_1' => 'Test address', 'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1',
-              'sales_type' => 'Credit', 'priority' => 'Low'] + ($existing > 0 ? ['customer_id' => (string)$existing] : []);
+              'sales_type' => 'Credit', 'priority' => 'Low'] + ($existing > 0 ? ['customer_id' => (string)$existing] : [])
+           + ($tenant === 'uganda' ? ['install_by' => 'dishnet'] : [])    // 5.18.102: the form asks who installs
+           + ($tenant === 'uganda' ? ['ucrm_quote_form' => '5.18.102'] : []);   // 5.18.102 D14 (§R.4.2): the web form's marker
+    // 5.18.102 D14 (docs/71 §R.1.1, §R.9.2): on Uganda, the links an admin made — record 1 the plan row → product 12 and its
+    // service plan 6, 2 the kit row → 55, 3 the installation → 70 — under the quoting organization 1, with the rows' stamps
+    $link = function (int $id, string $item, int $rowId, string $stamp, int $pid, ?int $sp = null): array {
+        return ['id' => $id, 'item' => $item, 'row_id' => $rowId, 'row_stamp' => $stamp, 'product_id' => $pid,
+                'service_plan_id' => $sp, 'organization_id' => 1, 'row_name' => 'TEST row ' . $rowId, 'product_name' => 'TEST product ' . $pid,
+                'service_plan_name' => $sp === null ? null : 'TEST service plan ' . $sp, 'linked_by_id' => 1, 'linked_by_name' => 'Test Admin',
+                'linked_at' => '2026-10-01 10:00:00', 'ended_at' => null, 'ended_by_id' => null, 'ended_why' => null,
+                'linked_at_ts' => 1790848800 + $id, 'ended_at_ts' => null];
+    };
+    $linkRecs = ($tenant === 'uganda' && $links)
+        ? [$link(1, 'plan', 1, '2026-10-01 09:00:00', 12, 6), $link(2, 'kit', 3, '2026-10-01 09:05:00', 55), $link(3, 'install', 0, '', 70)]
+        : null;
     $seed  = ['tenant_profile' => $tenant, 'currency_code' => $tenant === 'uganda' ? 'UGX' : 'USD',
               'dry_run_mode' => true, 'data_dir' => $dir] + $cfg;
     $logBefore = (string)@file_get_contents($tree . '/data/plugin.log');
@@ -144,8 +171,12 @@ foreach (["StoreInterface", "JsonStore", "SqliteStore", "CrmApiClient", "WalletS
           "UcrmClientTarget", "KycService"] as $l) require_once "$root/lib/$l.php";
 $dir = ' . var_export($dir, true) . ';
 $s   = SqliteStore::create($dir);
-$s->save("subscription_plans.json", [["id" => 1, "name" => "Residential Standard (TEST)", "customer_price" => 100, "ucrm_product_id" => 12]]);
-$s->save("kyc_devices.json", [["id" => 3, "title" => "Standard Kit (TEST)", "price" => "1500", "ucrm_product_id" => 55]]);
+$s->save("subscription_plans.json", [["id" => 1, "name" => "Residential Standard (TEST)", "customer_price" => 100, "ucrm_product_id" => 12,
+    "created_at" => "2026-10-01 09:00:00"]]);   // 5.18.102 D14: the stamps the links repeat
+$s->save("kyc_devices.json", [["id" => 3, "title" => "Standard Kit (TEST)", "price" => "1500", "ucrm_product_id" => 55,
+    "created_at" => "2026-10-01 09:05:00"]]);
+$__links = json_decode(' . var_export(json_encode($linkRecs), true) . ', true);
+if (is_array($__links)) $s->save("ucrm_quote_links.json", $__links);   // 5.18.102 D14 (docs/71 §R.9.2)
 $s->save("kyc_config.json", ($s->load("kyc_config.json") ?? []) + json_decode(' . var_export(json_encode($seed), true) . ', true));
 $crm = new CrmApiClient(' . var_export($BASE, true) . ', "FAKE-TEST-KEY", "X-Auth-App-Key");
 $k   = new KycService($crm, $s, new WalletService($s, $s->getPdo()), new CrmQueue($s), $dir);
@@ -185,6 +216,13 @@ is_($a['log'] === '' && $b['log'] === '', 'nothing in the plugin\'s log when uCR
 // 5.18.99: the control that the seeding above is what the additional service now reads — the quote check asked uCRM for
 // client 901 once, and found it under the quoting organization (else no quote would have been made).
 is_($b['checked'] === 1, '5.18.99: the additional service\'s quote check read client ' . $CLIENT . ' from uCRM once', json_encode($b['checked']));
+// 5.18.102 D14 (docs/71 §R.4.1, §R.9.2): the quotes above are the links' doing — the same two submissions on a book with
+// no link store make no quotation, so uCRM is asked to send nothing (the controls are $a and $b above)
+$a0 = $submit($real, $UG, [], 0, false, null, false);
+$b0 = $submit($real, $UG, [], $CLIENT, false, null, false);
+is_(!empty($a0['ok']) && $a0['posted'] === 0 && empty($a0['quote_created']) && $a0['sends'] === 0
+    && !empty($b0['ok']) && $b0['posted'] === 0 && empty($b0['quote_created']) && $b0['sends'] === 0,
+    '5.18.102 D14: with no link store, neither path makes a quotation, and uCRM is asked to send none', json_encode([$a0, $b0]));
 
 echo "\n2. Uganda — kyc_quote_send_via_crm = 0: uCRM is not asked; the quote and its WhatsApp stand\n";
 $c = $submit($real, $UG, ['kyc_quote_send_via_crm' => '0']);

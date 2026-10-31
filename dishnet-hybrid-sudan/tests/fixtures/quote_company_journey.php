@@ -199,12 +199,48 @@ function qcj_scenario(string $name): array
     return $S[$name] + ['name' => $name];
 }
 
+/** 5.18.102 D14 (docs/71 §R.1.1): the seeded rows' created_at, which their links carry as row_stamp. */
+const QCJ_PLAN_STAMP = '2026-10-01 09:00:00';
+const QCJ_KIT_STAMP  = '2026-10-01 09:05:00';
+
+/**
+ * 5.18.102 D14 (docs/71 §R.1.1, §R.9.2): one link record in ucrm_quote_links.json's stored shape, active, made under the
+ * quoting organization 1 by the book's fictitious admin; $more overrides any key.
+ */
+function qcj_link(int $id, string $item, int $rowId, string $stamp, int $productId, ?int $servicePlanId = null, array $more = []): array
+{
+    return array_merge([
+        'id' => $id, 'item' => $item, 'row_id' => $item === 'install' ? 0 : $rowId, 'row_stamp' => $item === 'install' ? '' : $stamp,
+        'product_id' => $productId, 'service_plan_id' => $item === 'plan' ? $servicePlanId : null, 'organization_id' => 1,
+        'row_name' => $item === 'install' ? 'Installation' : 'TEST row ' . $rowId, 'product_name' => 'TEST product ' . $productId,
+        'service_plan_name' => $item === 'plan' ? 'TEST service plan ' . (int)$servicePlanId : null,
+        'linked_by_id' => 1, 'linked_by_name' => 'TEST Admin', 'linked_at' => '2026-10-01 10:00:00',
+        'ended_at' => null, 'ended_by_id' => null, 'ended_why' => null, 'linked_at_ts' => 1790848800 + $id, 'ended_at_ts' => null,
+    ], $more);
+}
+
+/**
+ * The links every book is seeded with (fake_ucrm_quote_org.php's catalogue): record 1 the plan row 1 → product 12 "TEST
+ * Plan" with service plan 1; 2 the kit row 3 → product 55 "TEST Kit"; 3 the installation → product 70.
+ */
+function qcj_links(): array
+{
+    return [qcj_link(1, 'plan', 1, QCJ_PLAN_STAMP, 12, 1), qcj_link(2, 'kit', 3, QCJ_KIT_STAMP, 55), qcj_link(3, 'install', 0, '', 70)];
+}
+
 /**
  * A book: a data directory with its configuration (store row and file), a vault, the plans and kit the forms quote,
  * the staff, and ucrm.json in the tree pointing the plugin at the fake uCRM with the plugin's own key.
  *
  * $o: tree, dir, fake, evo, tenant ('uganda'|'south-sudan'|''), timezone, cfg (merged last), vault (keys for the vault
  * only). The zone comes from the caller: a test file may pin one, a fixture may not (tests/test_timezone.php).
+ *
+ * 5.18.102 D14 (docs/71 §R.9.2): every book is seeded with a link store, ucrm_quote_links.json (qcj_links(): the plan
+ * row → product 12 and service plan 1, the kit row → product 55, the installation → product 70, under the quoting
+ * organization 1), and the two rows carry created_at stamps the links repeat (QCJ_PLAN_STAMP, QCJ_KIT_STAMP). On a
+ * Uganda book with the gate on the links price its sales; on South Sudan, and on Uganda with the gate off, they are the
+ * leftover links §R.8 says are never opened — and the §S journey is still ce7ac388's byte for byte. $o['links'] replaces
+ * them ([] an empty store; null none at all: the table is never created).
  * @return array ctx: tree, data, vault, errlog, fake, evo, api (the fake's API base), agent, admin (staff ids)
  */
 function qcj_book(array $o): array
@@ -246,15 +282,19 @@ function qcj_book(array $o): array
         file_put_contents($DATA . "/webhook_secret", $ARGS["cfg"]["webhook_secret"]);
         // An admin\'s first page runs the piggyback cron after the page; marked as just run, it does not run here.
         file_put_contents($DATA . "/piggyback_last_run.txt", (string)(time() + 10 * 365 * 86400));
-        $s->save("subscription_plans.json", [["id" => 1, "name" => "TEST Plan", "customer_price" => 100, "ucrm_product_id" => 12, "is_active" => true]]);
-        $s->save("kyc_devices.json", [["id" => 3, "title" => "TEST Kit", "price" => "1500", "ucrm_product_id" => 55]]);
+        $s->save("subscription_plans.json", [["id" => 1, "name" => "TEST Plan", "customer_price" => 100, "ucrm_product_id" => 12, "is_active" => true,
+            "created_at" => $ARGS["plan_stamp"]]]);   // 5.18.102 D14: the stamp the plan link repeats (docs/71 §R.1.1 row_stamp)
+        $s->save("kyc_devices.json", [["id" => 3, "title" => "TEST Kit", "price" => "1500", "ucrm_product_id" => 55, "created_at" => $ARGS["kit_stamp"]]]);
+        if ($ARGS["links"] !== null) $s->save("ucrm_quote_links.json", $ARGS["links"]);   // 5.18.102 D14 (docs/71 §R.9.2): the link store
         $pw = password_hash("qc-password-1", PASSWORD_BCRYPT, ["cost" => 4]);
         $admin = $s->appendWithId("retailers.json", ["name" => "TEST Admin", "email" => "admin@example.test", "phone" => "+256700000191",
             "role" => "admin", "is_admin" => true, "is_active" => true, "api_token" => $ARGS["tok_admin"], "token_issued_at" => time(), "password" => $pw]);
         $agent = $s->appendWithId("retailers.json", ["name" => "TEST Agent", "email" => "agent@example.test", "phone" => "+256700000192",
             "role" => "sales", "is_admin" => false, "is_active" => true, "modules" => [], "api_token" => $ARGS["tok_agent"], "token_issued_at" => time(), "password" => $pw]);
         qcj_out(["admin" => (int)$admin["id"], "agent" => (int)$agent["id"]]);
-    ', ['cfg' => $cfg, 'tok_admin' => 'QC-TOK-ADMIN-TEST-0001', 'tok_agent' => 'QC-TOK-AGENT-TEST-0002']);
+    ', ['cfg' => $cfg, 'tok_admin' => 'QC-TOK-ADMIN-TEST-0001', 'tok_agent' => 'QC-TOK-AGENT-TEST-0002',
+        'plan_stamp' => QCJ_PLAN_STAMP, 'kit_stamp' => QCJ_KIT_STAMP,
+        'links' => array_key_exists('links', $o) ? $o['links'] : qcj_links()]);   // 5.18.102 D14
     if (!isset($seed['out']['agent'])) throw new \RuntimeException('the book could not be seeded: ' . substr((string)$seed['raw'], 0, 600));
     return ['tree' => $tree, 'dir' => $dir, 'data' => $data, 'vault' => $vault, 'errlog' => $dir . '/php_errors.log',
             'fake' => rtrim($o['fake'], '/'), 'evo' => (string)($o['evo'] ?? ''), 'api' => $api, 'env' => $env, 'cfg' => $cfg,
@@ -485,7 +525,10 @@ function qcj_journey(string $treeSrc, string $scenario, string $fake, string $ev
     $kyc = function (string $last, string $phone, string $type, array $extra = []): array {
         return ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
                 'firstname' => 'TEST', 'lastname' => $last, 'mobile' => $phone, 'email' => '', 'address_1' => 'TEST address',
-                'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1', 'sales_type' => $type, 'priority' => 'Low'] + $extra;
+                'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1', 'sales_type' => $type, 'priority' => 'Low',
+                // 5.18.102 D14 (docs/71 §R.4.2, §R.9.2): the web KYC form's marker. Where the gate is off nothing reads it,
+                // so the journey is still ce7ac388's; on Uganda with the gate on it makes these sales web sales.
+                'ucrm_quote_form' => '5.18.102'] + $extra;
     };
     $r = qcj_post($ctx, 'post_kyc.php', $kyc('Credit', '+256700000121', 'Credit'), $agent);  $flash('J1-credit', $r); $out['steps']['J1-credit'] = $r['to'];
     $r = qcj_post($ctx, 'post_kyc.php', $kyc('Cash', '+256700000122', 'Cash'), $agent);      $flash('J1-cash', $r);   $out['steps']['J1-cash'] = $r['to'];
@@ -531,6 +574,9 @@ function qcj_journey(string $treeSrc, string $scenario, string $fake, string $ev
     foreach (['J4' => $lead('1'), 'J4u' => $lead('0'), 'J5' => $man('1'), 'J5u' => $man('0')] as $k => $post) {
         $r = qcj_post($ctx, 'post_leads.php', $post, $agent); $flash($k, $r); $out['steps'][$k] = $r['to'];
     }
+    // J4e (5.18.102, docs/71 §L.2) — the lead quote with no items, so the service builds them (buildLeadItems)
+    $r = qcj_post($ctx, 'post_leads.php', ['action' => 'send_lead_quote', 'lead_id' => '1', 'quote_items_json' => '[]', 'create_crm_quote' => '1'], $agent);
+    $flash('J4e', $r); $out['steps']['J4e'] = $r['to'];
     // J6 — the lead quote with uCRM refusing the create (the silent plugin-only path where the gate is off); J6m — the
     // manual quote, box ticked, the same refusal (sendManualQuote's own failed-create branch, gated separately)
     qcj_fake($fake, '/__test/set', ['billing_refuse' => true]);
@@ -596,6 +642,7 @@ function qcj_journey(string $treeSrc, string $scenario, string $fake, string $ev
     [$srv, $base] = qcj_serve_plugin($ctx);
     $out['served'] = $srv !== null;
     $out['served_base'] = $base;   // a run's own address; the comparison takes it out of the pages
+    $out['tree_path'] = $tree;     // 5.18.102: the run's own copy of the plugin, which Settings prints; taken out the same way
     if ($srv !== null) {
         // J12 — the debug retry_quote, as an admin, for an application with a uCRM client and no quote
         qcj_php($ctx, '
@@ -623,12 +670,18 @@ function qcj_journey(string $treeSrc, string $scenario, string $fake, string $ev
         $r = qcj_api($base, $ctx['tok_admin'], 'POST', 'lte_create_subscriber', $lte('TEST Ltetwo', '+256700000142'));
         $out['steps']['J13-refused'] = [$r[0], $r[2]['status'] ?? null, $r[2]['data']['_quote_error'] ?? null, $r[2]['data']['_quote_ref'] ?? null];
         qcj_fake($fake, '/__test/set', ['billing_refuse' => false]);
-        // J14 — the three changed tabs, rendered for an admin
+        // J13k (5.18.102, docs/71 §L.2) — a Cash kyc_submit through the retailer API (api_retailer.php), as the agent
+        $r = qcj_api($base, $ctx['tok_agent'], 'POST', 'kyc_submit', ['customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
+            'firstname' => 'TEST', 'lastname' => 'Apicash', 'mobile' => '+256700000151', 'email' => '', 'address_1' => 'TEST address',
+            'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1', 'sales_type' => 'Cash', 'priority' => 'Low']);
+        $out['steps']['J13k'] = [$r[0], $r[2]['status'] ?? null, $r[2]['message'] ?? null];
+        // J14 — the three changed tabs, rendered for an admin (5.18.102: and Send Quotation and Settings, docs/71 §L.2)
         $jar = $work . '/jar.txt';
         $out['login'] = qcj_login($base, $jar, 'admin@example.test');
         $out['pages'] = [];
         foreach (['applications' => 'page=dashboard&tab=applications', 'kyc_form' => 'page=dashboard&tab=form',
-                  'lte_dashboard' => 'page=dashboard&tab=lte_dashboard'] as $k => $qs) {
+                  'lte_dashboard' => 'page=dashboard&tab=lte_dashboard', 'send_quote' => 'page=dashboard&tab=send_quote',
+                  'settings' => 'page=dashboard&tab=settings'] as $k => $qs) {
             $out['pages'][$k] = qcj_http('GET', "{$base}?{$qs}", null, [], $jar)[1];
         }
         qcj_stop($srv);
@@ -640,8 +693,10 @@ function qcj_journey(string $treeSrc, string $scenario, string $fake, string $ev
     $out['pdf_html'] = $fs['pdf_html'] ?? [];
     $out['texts'] = array_map(function ($t) { return ['number' => (string)($t['number'] ?? ''), 'text' => (string)($t['text'] ?? '')]; },
         qcj_evo_texts($evo));
+    // 5.18.102 D14 (docs/71 §R.8, §R.9.2): ucrm_quote_links too — the link store the book was seeded with, compared like the
+    // rest: where the gate is off it is never opened, so it ends as it began, on either tree.
     $out['tables'] = qcj_tables($ctx['data'], ['kyc_applications', 'leads', 'quotes_log', 'wa_sent_quotes', 'payment_collections',
-        'passbook', 'lte_subscribers']);
+        'passbook', 'lte_subscribers', 'ucrm_quote_links']);
     // The wallets: each account's balance (WalletService keeps it on the retailers row; the row's token and password
     // hash are the book's own and are not compared).
     $out['tables']['wallets'] = array_map(function ($r) { return ['id' => $r['__id'] ?? null, 'wallet' => $r['wallet'] ?? null]; },
