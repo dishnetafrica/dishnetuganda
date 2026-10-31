@@ -2692,6 +2692,24 @@ beside QL-CA3, and asserts QL-CA3's own line among the failures.
   appends to an existing line, so no check's count changes.
 - The release delta is 31 added and 38 changed files (69). The texts that said 21, 38 and 59 take the re-pin's counts.
 
+**The one check of 31 Oct (SS-1, SL-1; part F).** After round 11, one read-only check of the derived script and its
+rehearsal found two defects in the script, both minor. Each is fixed by an asserted edit, and the script re-pinned onto
+the same release commit:
+- **SS-1.** A deploy that finds 5.18.102 already serving runs an `--after-only`'s checks. `--accept-unpriced` typed with a
+  deploy is QL-G1's (§R.7.7 item 9), but it stayed set and then decided QL-LK1. An operator re-running a printed QL-G1
+  command from the shell's history got a PASSED where an `--after-only` without the flag FAILS. The flag is now cleared at
+  that switch and said in a note, and QL-LK1 judges as in an `--after-only` typed without it, as V3j and BA2 never read a
+  typed `--without-bank-balance`. A fifth part module, F, makes this edit; the option's text says so (part C).
+- **SL-1, a reading of M-10.** QL-LK1's corrupt-store FAIL counts two active records for one item across the whole store,
+  whether or not the form offers the item, as M-10 orders. Its remedy told the admin to link each such item again on the
+  Plans or Hardware screen. No screen shows a pair on a Fiber row, on a row no longer in its table or under an item the
+  release does not know, so for those it now says to send the log file, for a repair by hand (part B). The count is
+  unchanged.
+
+The rehearsal proves both (102-5: 5a''' and 5a'''', 5k to 5k''''). Four fixes in the rehearsal alone came with them:
+three weakened copies' checks now require the copy's own reading; 5f and 5g pin their whole sets of failures (§R.9.3,
+MD4 and MD5); and 10d' sweeps the catalogue hashes by value. The record is docs/07's 5.18.102 entry.
+
 ### R.8 South Sudan, and Uganda with the gate off (decision 8)
 
 **Byte for byte 5.18.101's.** These are emitted, handled or read **only where `QuoteOrganization::setting(...)['on']`**:
@@ -3277,7 +3295,7 @@ caught:
 | MD2 QL-CA1 keeps the strict comparison over a link made while the deploy runs (§R.7.2) | a link planted between stage B and `qo_after`'s copy: the run must PASS, with the note |
 | MD3 "made since the copy" runs `strtotime()` on `linked_at` (§R.7.3) | a link written in Africa/Kampala and judged in UTC and in Etc/GMT-5, with `COPY_AT` one hour after it and then one hour before. The check must read it as a leftover in the first case and as made since the copy in the second, in both zones; the copy gets the first case wrong under UTC. Under D-5 the scenario also asserts that no `disagree` note appears (§R.7.7 item 5, §R.7.8 M-11) |
 | MD4 the dashboard's sign-in gate broken (`public.php:1064`); a trigger in the rehearsal's stand-in dashboard, not a script copy (§R.7.8) | QL-CA3 (1), expected to fail alongside V12, BA4, CA4 and Q-CA5, with QL-CA3's own line among the failures |
-| MD5 `requireAdmin` removed from one of the three handlers QL-CA3 reads (the two link actions and `kyc_make_quote`); an edit of the sandbox's installed file, not a script copy (§R.7.8) | QL-CA3 (2), expected to fail alongside R1 and Q-CA1, with QL-CA3's own line among the failures |
+| MD5 `requireAdmin` removed from one of the three handlers QL-CA3 reads (the two link actions and `kyc_make_quote`); an edit of the sandbox's installed file, not a script copy (§R.7.8) | QL-CA3 (2), expected to fail alongside R1, Q-CA1 and R5 (R5 hashes every file changed since `e076632`, `post_sync.php` among them; measured in the rehearsal, 31 Oct), with QL-CA3's own line among the failures |
 | MD6 the offer carries the link records without `row_stamp` (was ML47) | the leftover-link scenario, run once with the leftover's row unchanged and once with it replaced after the link: QL-G1's verdict must follow the stamp both times; the copy gets one of them wrong |
 | MD7 stage A reads the store through the code root it copies (`ICODE_A`), not the pin's class (§R.7.1) | the leftover-link scenario: QL-G1 must judge the leftover, and QL-CA1 must not report it "linked since stage A"; the copy misses it at QL-G1 and reports it so |
 | MD8 the window's Make-the-quotation count chosen by `submitted_at` instead of by `QLG1_APP_MAX` (§R.7.3) | an application saved in Africa/Kampala less than three hours before the copy: never counted; the copy, reading the string in UTC, counts it. Its fixture's timing: §R.7.7 item 10 |
