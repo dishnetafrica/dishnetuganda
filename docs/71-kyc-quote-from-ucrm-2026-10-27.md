@@ -1848,7 +1848,8 @@ every Throwable removes its claim, so a claim still there once it is older than 
 that died — after its POST, perhaps — or a removal that failed (logged): the card then draws the "did not finish"
 box above, never the refusal text, unless a refusal was recorded at or after the claim (`claimLeftUnsettled()`,
 which reads the refusal's `quote_refused_ts`, an epoch, never `quote_refused_at`'s local time, and a claim is stamped
-after any refusal already recorded; amended by §R.17.8 and §R.17.9):
+after any refusal already recorded and less than `QUOTE_CLAIM_SECONDS` ahead, an epoch past a claim's lifetime never
+settling it; amended by §R.17.8, §R.17.9 and §R.17.10):
 that is a refusal whose removal failed, and the refusal is drawn. A removal that failed after a refusal draws the
 in-flight box over it until the claim expires; it says not to make one by hand, and a press meanwhile is answered
 `claimed`. The next press that takes an expired claim no refusal followed over records the key first, so a press
@@ -2880,6 +2881,11 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
     stamped after it, and with both aged the cards say "did not finish"; a press's P2 refusal records its epoch, never
     before its claim, and with both aged the refusal holds; a refusal 400 days before the claim; each box read to its
     own close (C22 (g)).
+  - **added by §R.17.10:** a second press while a claim stamped ahead of the clock is held: claimed, one quotation
+    (C21 (b)); refusal epochs ten years ahead and `PHP_INT_MAX`: a press posts, its claim stamped now, and "did not
+    finish" once it is 901 s old; a refusal 30 s ahead, then a refusing press: its claim removed, the refusal drawn,
+    the next press not claimed, and with the removal failing its own refusal stamped at or after its claim; the cards
+    right after a press with a claim stamped ahead died; each box matched whole (C22 (g)).
 - **C, Make the quotation** (E-2, §R.4.8). Each refusal leaves the store unchanged and no request in the fake uCRM's
   log, except where stated, and each has its accepted control:
   - **the button's gate:** drawn on Uganda with the gate on, for an admin, for an application that meets the five
@@ -3241,6 +3247,7 @@ There is no migration, and no `$FLAT_TABLES` entry (§R.1.4).
 | ML90a–ML90m the claim compared with `quote_refused_at` in the reader's zone, neither refusal writer recording `quote_refused_ts`, a refusal up to 40 minutes or more than a day before the claim counted as settling it, only a P2 refusal settling it, the key written by `recordUnconfirmed()` after the claim, no conversion for a claim older than twice `QUOTE_CLAIM_SECONDS` or where no refusal is recorded, the refusal's text replaced where a claim is recorded, a sentence added after either card's (§R.17.8; ML89b re-anchored) | C (C22 (f), (g)) |
 | MG28 the "did not finish" box drawn with the gate off for an expired claim (§R.17.8) | G (G8) |
 | ML91a–ML91g the claim stamped `time()` whatever refusal is recorded at or after it, a P2 refusal with a stale epoch, the claim a second ahead of the clock, a line added inside the "did not finish" box, the refusal box or the in-flight box, a refusal more than seven days before the claim settling it (§R.17.9) | C (C22 (g), (f)) |
+| ML92a–ML92l no bound on the stamp or on the settling epoch, a press's refusal (lines or company check) stamped before its claim, a claim ahead not blocking a second press, the card ignoring a claim ahead, a line added inside each box before its heading or sentence, the stamp read from `quote_refused_at`, the removal given `time()` in place of the stamp, the stamp only for a refusal strictly ahead (§R.17.10; ML90b, ML91b re-anchored) | C (C21 (b), C22 (g)) |
 | ML88a–ML88e a claim past `QUOTE_CLAIM_SECONDS` not read as "did not finish", the in-flight box yielding to the key, for 700 s instead of `QUOTE_CLAIM_SECONDS`, the found line yielding to a live claim, the in-flight box beside a made quotation (§R.17.6; ML85a, ML85f, ML85g, ML86d, ML87c and MG26 re-anchored) | C (C22 (e), (f)) |
 | ML-UI1a, ML-UI1b a shared key not marked, or ignored by the page; MF-alert the picker alert's old tail (§R.17) | F (F7, F5) |
 | MH-UI3 the installation's reason only in a title; MH-UI5a–MH-UI5c the defaults matched on uCRM's names (§R.17) | H (H10, block 10, H13) |
@@ -4037,3 +4044,27 @@ gaps, each shown by a run. Fixed in `b1b083ef`, each with a test that fails with
 
 Section C has 397 assertions and G 205; the whole test, 1340 passed, 0 failed; weakened copies 356
 (349 before).
+
+#### R.17.10 The check of round 10 (round 11)
+
+A check of round 10's commit (`b1b083ef`) found nothing major in the code, two minor behaviour findings and six test
+gaps, each shown by a run; one of the surviving weakened copies made two quotations, and three told staff to make one by
+hand. Fixed in `c95ab515`, each with a test that fails without it and a weakened copy:
+- **CK11-B1.** Round 10's stamp had no bound: a refusal epoch far ahead (a clock that ran ahead, or a corrupt value)
+  held every claim back for as long as it was ahead — with `PHP_INT_MAX` for ever, the stamp overflowing so that every
+  press was answered "claimed". The stamp now moves only for a refusal less than `QUOTE_CLAIM_SECONDS` ahead, and an
+  epoch at or past a claim's lifetime never settles that claim (a press's own refusal always falls within it), so the
+  card errs to "did not finish". C22 (g); copies ML92a, ML92b.
+- **CK11-B2.** With the claim stamped ahead, the press's own refusal, stamped `time()`, read as before its claim, so a
+  refusal whose claim's removal failed read "did not finish". `recordNoQuote` takes the press's claim and never stamps
+  before it; for the company check's refusal, which `postQuote` stamps (its signature is 5.18.99's and pinned),
+  `makeQuotation` raises the epoch to the claim in a write of its own, logged and never answered in place of the
+  refusal. C22 (g); copies ML92c, ML92d.
+- **CK11-T1–T7.** Not pinned: a second press while a claim stamped ahead is held (a copy that let it through made two
+  quotations); the card right after such a press died; a line added inside a box before its heading or between heading
+  and sentence (the readers began at the heading); the bump read from `quote_refused_at`; the claim's removal comparing
+  the stamp it was given; the bump in the refusal's own second. Each is a case now (C21 (b); C22 (g); each box matched
+  whole, from its opening to its close). Copies ML92e–ML92l.
+
+ML90b and ML91b were re-anchored on the bounded epoch and are caught as before. Section C has 410 assertions and G
+205; the whole test, 1353 passed, 0 failed; weakened copies 368 (356 before).
