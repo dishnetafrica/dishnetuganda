@@ -140,10 +140,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='send_lead_q
     foreach ($leads as $l) { if ((int)($l['id']??0)===$leadId) { $lead=$l; break; } }
     if (!$lead) { flash('Lead not found.','danger'); redirect('?page=dashboard&tab=leads'); }
 
+    // 5.18.103 (Uganda, root docs/72 §G.9, G-9): a page drawn under the uCRM catalogue says so (ucrm_quote_form). With the
+    // switch still on, each line it picked from the catalogue passes before the price filter below, as picked — {kind, sp,
+    // p, q, label, price} — and QuotationService reads every one from uCRM again before anything is sent; its typed lines
+    // are read exactly as before. With the switch since turned off, nothing is sent. No marker, or the gate off: unchanged.
+    $sqForm = QuotationService::directForm($store, $dataDir, $_POST['ucrm_quote_form'] ?? null);
+    if ($sqForm === 'off') { flash('Quote failed: ' . QuotationService::DIRECT_OFF_TEXT, 'danger'); redirect('?page=dashboard&tab=leads'); }
+
     // Parse items from POST (simple: label|price pairs, or JSON)
     $items = [];
     $rawItems = json_decode($_POST['quote_items_json'] ?? '[]', true) ?? [];
     foreach ($rawItems as $it) {
+        if ($sqForm === 'direct' && ($sqLine = QuotationService::pickedLine($it)) !== null) { $items[] = $sqLine; continue; }   // 5.18.103 (§G.9)
         $price = (float)preg_replace('/[^0-9.]/', '', (string)($it['price'] ?? '0'));
         if ($price > 0 || !empty($it['label'])) {
             $items[] = [
@@ -210,9 +218,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='send_manual
     $retailer = $auth->requireLogin();
     require_once dirname(__DIR__, 2) . '/lib/QuotationService.php';
 
+    // 5.18.103 (Uganda, root docs/72 §G.9, G-9): as the lead quote above — a page drawn under the uCRM catalogue passes each
+    // line it picked before the price filter below (a picked line is never dropped for its posted price), for
+    // QuotationService to read from uCRM again; typed lines exactly as before; the switch since turned off, nothing is sent.
+    $sqForm = QuotationService::directForm($store, $dataDir, $_POST['ucrm_quote_form'] ?? null);
+    if ($sqForm === 'off') { flash('Failed: ' . QuotationService::DIRECT_OFF_TEXT, 'danger'); redirect('?page=dashboard&tab=leads'); }
+
     $rawItems  = json_decode($_POST['mq_items_json'] ?? '[]', true) ?? [];
     $items = [];
     foreach ($rawItems as $it) {
+        if ($sqForm === 'direct' && ($sqLine = QuotationService::pickedLine($it)) !== null) { $items[] = $sqLine; continue; }   // 5.18.103 (§G.9)
         $price = (float)preg_replace('/[^0-9.]/', '', (string)($it['price'] ?? '0'));
         if ($price > 0) {
             $items[] = ['label'=>trim($it['label']??'Item'), 'quantity'=>max(1,(int)($it['quantity']??1)), 'price'=>$price, 'unit'=>trim($it['unit']??'amount')];

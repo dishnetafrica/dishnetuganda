@@ -1097,6 +1097,12 @@
             $er2((string)$_mq['text'], 500);   // 'error'
             // 5.18.102 (D14): every kind has answered, so the gated path ends here; below is 5.18.101's gate-off path.
         }
+        // 5.18.103 (root docs/72 §G.8): a sale from the uCRM catalogue is never quoted by the gate-off path below, which would
+        // price it from its stored cart and no plan line. It cannot exist on South Sudan.
+        if (($app['quote_sale_entry'] ?? null) === 'web-direct') {
+            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
+            $er2(UcrmQuoteLines::text('GATE_OFF_DIRECT'), 409);
+        }
 
         // Build items from app data
         $qItems = [];

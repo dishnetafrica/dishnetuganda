@@ -7,6 +7,9 @@ $isAdmin  = ($retailer['role'] ?? '') === 'admin';
 // server refuses with 409 there) is not drawn. Each change is a block emitted only there; elsewhere the page is as it was.
 require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
 $_pm102 = !empty(QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']);
+// 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, the page says plans and hardware come straight from uCRM
+require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+$_pm103 = $_pm102 && UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
 ?>
 <style>
 .pm-wrap { max-width:1100px; margin:0 auto; padding:16px; }
@@ -55,7 +58,7 @@ $_pm102 = !empty(QuoteOrganization::setting(is_array($config ?? null) ? $config 
     <div>
       <h2 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">🔗 UCRM Product Mapping</h2>
 <?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): quotations use only the links made on the Plans and Hardware screens */ ?>
-      <p style="margin:4px 0 0;font-size:13px;color:#64748b;">On Uganda, quotations use only the uCRM links made on the Plans and Hardware screens. The UCRM Product IDs on this page are not read for quotes.</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#64748b;"><?= $_pm103 /* 5.18.103 (§G.12) */ ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue). The UCRM Product IDs on this page are not read for quotes.' : 'On Uganda, quotations use only the uCRM links made on the Plans and Hardware screens. The UCRM Product IDs on this page are not read for quotes.' ?></p>
 <?php else: /* 5.18.102: elsewhere, as it was */ ?>
       <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Link plugin plans to UCRM products so quotes reference real billing items.</p>
 <?php endif; ?>
@@ -156,7 +159,11 @@ function loadMapping() {
 
     var allMapped = totalMapped >= totalActive && totalActive > 0;
 <?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): one neutral line in the server's words, whatever the counts */ ?>
+<?php if ($_pm103): /* 5.18.103 (root docs/72 §G.12): the uCRM catalogue is on */ ?>
+    showNotice('On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).', 'info');
+<?php else: /* 5.18.103: with it off, 5.18.102's line */ ?>
     showNotice('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 'info');
+<?php endif; ?>
 <?php else: /* 5.18.102: elsewhere, as it was */ ?>
     showNotice(allMapped
       ? '✅ All active plans are mapped to UCRM products. Quotes will reference real products.'

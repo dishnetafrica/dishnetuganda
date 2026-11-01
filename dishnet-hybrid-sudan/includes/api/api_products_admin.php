@@ -403,7 +403,11 @@
         // quotes never read under D14 but 5.18.101 would send after a rollback. Answered after the admin-only gate above.
         require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
         if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
-            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+            // 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, nothing is linked any more
+            require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+            $er2(UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()
+                ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).'
+                : 'On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
         }
         $products    = $store->load('ucrm_products.json') ?? [];
         $packages    = $store->load('subscription_plans.json') ?? [];
@@ -554,7 +558,11 @@
         // screens, and a ucrm_product_id written here would become productId after a rollback (§R.1.2).
         require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
         if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
-            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+            // 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, nothing is linked any more
+            require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+            $er2(UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()
+                ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).'
+                : 'On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
         }
         $body = json_decode(file_get_contents('php://input'), true) ?: [];
         $source = $body['source'] ?? '';  // subscription_plans, kyc_packages, kyc_devices

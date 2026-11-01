@@ -500,14 +500,23 @@ try {
 </a>
 <?php endif; ?>
 <?php /* SIM Cards nav hidden  handled by DishNet 4G */ ?>
-<?php if($can('plans')): ?>
+<?php /* 5.18.103 (Uganda, root docs/72 §G.3): with the gate on, the uCRM catalogue for those who may see Plans or Hardware;
+with its switch on, Plans and Hardware are not drawn (their screens show a card). The gate closed: nothing here changes. */
+require_once dirname(__DIR__) . '/lib/UcrmCatalogue.php';
+$_cat103Nav = UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null); ?>
+<?php if($can('plans') && !$_cat103Nav->direct()): ?>
 <a href="?page=dashboard&tab=subscription_plans" class="kyc-tab <?= $tab==='subscription_plans'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-layers-fill"></i></span> Service Plans
 </a>
 <?php endif; ?>
-<?php if($can('hardware')): ?>
+<?php if($can('hardware') && !$_cat103Nav->direct()): ?>
 <a href="?page=dashboard&tab=hardware" class="kyc-tab <?= $tab==='hardware'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-router-fill"></i></span> Hardware
+</a>
+<?php endif; ?>
+<?php if($_cat103Nav->open() && ($can('plans') || $can('hardware'))): /* 5.18.103 (§G.3) */ ?>
+<a href="?page=dashboard&tab=ucrm_catalogue" class="kyc-tab <?= $tab==='ucrm_catalogue'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-box-seam"></i></span> uCRM catalogue
 </a>
 <?php endif; ?>
 <?php if($isAdmin): ?>

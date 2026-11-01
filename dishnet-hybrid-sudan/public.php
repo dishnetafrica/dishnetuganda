@@ -2692,6 +2692,7 @@ $_tabFiles = [
     'my_account'         => 'tabs/sales/my_account.php',
     'subscription_plans' => 'tabs/sales/subscription_plans.php',
     'hardware'           => 'tabs/sales/hardware.php',
+    'ucrm_catalogue'     => 'tabs/sales/ucrm_catalogue.php',   // 5.18.103 (root docs/72 §G.3): Uganda's uCRM catalogue
 
     //  Support 
     'support_leader_manual' => 'tabs/support/manual_support_leader.php',
@@ -2821,6 +2822,7 @@ $_tabPerms = [
     'sim_cards'          => 'sim_cards',
     'subscription_plans' => 'plans',
     'hardware'           => 'hardware',
+    'ucrm_catalogue'     => ['plans', 'hardware'],   // 5.18.103 (§G.3): who may see Plans or Hardware (admins by default)
     // Support
     'support_leader_manual' => '*support_leader',
     'support_dashboard'  => 'support_dash',
@@ -3001,6 +3003,7 @@ if (isset($_tabFiles[$tab])) {
             'field_expenses'=>'Field Expenses','scheduling'=>'My Jobs','customer_lookup'=>'Customers',
             'my_account'=>'My Cash','leads'=>'Leads','collect_payment'=>'Collect Payment',
             'form'=>'New KYC Registration','hardware'=>'Hardware','subscription_plans'=>'Plans',
+            'ucrm_catalogue'=>'uCRM catalogue',   // 5.18.103 (root docs/72 §G.3)
             'sim_cards'=>'SIM Cards','quote_logs'=>'Quote Logs','all_leads'=>'All Leads',
             'all_collections'=>'All Collections','all_apps'=>'All Orders','wa_leads'=>'WA Leads',
             'support_tickets'=>'Tickets','service_status'=>'Service Status',

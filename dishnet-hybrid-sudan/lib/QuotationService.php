@@ -56,6 +56,10 @@ class QuotationService
     private array $quoteCheckMemo = [];
     /** @var QuoteOrganization|null 5.18.99 */
     private $quoteGuard = null;
+    /** @var UcrmCatalogue|false|null 5.18.103 (root docs/72 §G.3): the uCRM catalogue's settings, once read; false where the gate is closed */
+    private $ucrmCatalogue = null;
+    /** @var array|null 5.18.103 (§G.9, G-15): offered() from this instance's one fresh uCRM read, for a send */
+    private ?array $directOfferedMemo = null;
 
     public function __construct($store, string $dataDir, array $config = [])
     {
@@ -152,6 +156,16 @@ class QuotationService
     {
         $phone = preg_replace('/[^0-9+]/', '', $lead['phone'] ?? $lead['mobile'] ?? '');
         $name  = $lead['customer_name'] ?? 'Valued Customer';
+
+        // 5.18.103 (Uganda, root docs/72 §G.9, G-15): in direct mode every line picked from the uCRM catalogue — from this
+        // page or the mobile API — is re-read from uCRM fresh, before anything is created or sent, and goes at uCRM's label
+        // and price; a line that was not picked names no uCRM product. The line auto-built below is from a fresh read
+        // already. With the switch off, or the gate off, nothing here runs.
+        if ($items !== [] && $this->directMode()) {
+            $direct = $this->directLines($items);
+            if (!$direct['ok']) return ['ok' => false, 'error' => $direct['error']];
+            $items = $direct['items'];
+        }
 
         // Auto-build items from lead interest if none provided
         if (empty($items)) {
@@ -349,6 +363,16 @@ class QuotationService
         $items         = $data['items'] ?? [];
         $note          = trim($data['note'] ?? '');
         $createCrm     = ($data['create_crm_quote'] ?? ($crmClientId > 0));
+
+        // 5.18.103 (Uganda, root docs/72 §G.9, G-15): in direct mode every line picked from the uCRM catalogue — from this
+        // page or the mobile API — is re-read from uCRM fresh, before anything below, and goes at uCRM's label and price;
+        // a line that was not picked names no uCRM product, and the price-0 rule below still holds for it. With the switch
+        // off, or the gate off, nothing here runs.
+        if (is_array($items) && $items !== [] && $this->directMode()) {
+            $direct = $this->directLines($items);
+            if (!$direct['ok']) return ['ok' => false, 'error' => $direct['error']];
+            $items = $direct['items'];
+        }
 
         if (empty($items)) return ['ok' => false, 'error' => 'At least one line item required.'];
         // 5.18.102 (Uganda, docs/71 §J): no line is ever sent at price 0 — the first one is named, and nothing is written
@@ -984,6 +1008,320 @@ class QuotationService
         return '';
     }
 
+    // ── 5.18.103 (Uganda, root docs/72 §G.9, G-14, G-15): Send Quotation and lead quotes from the uCRM catalogue ──────────
+    //
+    // With the uCRM catalogue's switch on ("direct mode", UcrmCatalogue), Send Quotation picks uCRM's own plans, hardware
+    // and installation (UcrmQuoteLines::offered()), and every send re-reads each picked line from uCRM before anything is
+    // created or sent — here, which the web page and the mobile API share, so neither can send a uCRM product at a posted
+    // price. The send itself is unchanged: sendLeadQuote / sendManualQuote, type lead / manual, event quote_lead /
+    // quote_manual, the Ref marker and the quotes_log row (G-14). With the switch off, or the gate off, none of this runs.
+
+    /** 5.18.103 (§G.9, G-9): a page drawn in direct mode, posted after an admin turned the switch off — nothing is sent. */
+    public const DIRECT_OFF_TEXT = 'This quotation page was opened under the uCRM catalogue, which an admin has since turned off — reload the page. Nothing was sent.';
+    /** 5.18.103 (§G.9): a picked line whose price in uCRM is not the price the page showed. */
+    public const DIRECT_PRICE_CHANGED = 'a price changed in uCRM since the page was opened — reload';
+    /** 5.18.103 (§G.9): a picked line that cannot be read — no item id, or a quantity outside 1–99. */
+    public const DIRECT_LINE_UNREADABLE = 'a line picked from the uCRM catalogue could not be read — reload the page';
+    /** 5.18.103 (§G.9): the kinds of line a page picks from the uCRM catalogue; any other line is typed. */
+    public const DIRECT_KINDS = ['plan', 'item', 'install'];
+
+    /**
+     * 5.18.103 (§G.3): the uCRM catalogue's settings — null where the quoting gate is closed (QuoteOrganization::setting()'s
+     * 'on' with an integer id): there its table is never opened and its file never loaded.
+     */
+    private function catalogueSettings(): ?UcrmCatalogue
+    {
+        if ($this->ucrmCatalogue === null) {
+            $this->ucrmCatalogue = false;
+            $qo = $this->quoteOrg();
+            if (!empty($qo['on'])) {
+                if (!class_exists('UcrmCatalogue')) require_once __DIR__ . '/UcrmCatalogue.php';
+                if (UcrmCatalogue::gateOpen($qo)) $this->ucrmCatalogue = UcrmCatalogue::fromStore($this->store, $qo);
+            }
+        }
+        return $this->ucrmCatalogue === false ? null : $this->ucrmCatalogue;
+    }
+
+    /** 5.18.103 (§G.3, G-1): is direct mode on here — the gate open with an integer id, and the uCRM catalogue's switch on? */
+    public function directMode(): bool
+    {
+        $c = $this->catalogueSettings();
+        return $c !== null && $c->direct();
+    }
+
+    /**
+     * 5.18.103 (§G.9, G-9): what a Send Quotation post's marker (ucrm_quote_form) says. '' when it carries none, or the gate
+     * is closed — the post is read as 5.18.102 reads it; 'direct' when the page was drawn in direct mode and the switch is
+     * still on; 'off' when it was, but an admin has since turned the switch off — the handler then sends nothing.
+     */
+    public static function directForm($store, string $dataDir, $posted): string
+    {
+        if (!is_string($posted) || $posted === '') return '';
+        self::needQuoteLines();
+        if ($posted !== UcrmQuoteLines::DIRECT_MARKER) return '';
+        $cat = (new self($store, $dataDir))->catalogueSettings();
+        if ($cat === null) return '';
+        return $cat->direct() ? 'direct' : 'off';
+    }
+
+    /**
+     * 5.18.103 (§G.9): a posted line picked from the uCRM catalogue — {kind, sp, p, q, label, price}: the ids and the
+     * quantity as integers (0 when they cannot be read, which the send refuses), the price as it was drawn (null when it is
+     * not a number) — or null for any other line, which is a typed one. One reading for the web handlers and the send.
+     */
+    public static function pickedLine($it): ?array
+    {
+        if (!is_array($it) || !is_string($it['kind'] ?? null) || !in_array($it['kind'], self::DIRECT_KINDS, true)) return null;
+        $int = function ($v): int {
+            if (is_string($v) && preg_match('/^[0-9]{1,9}$/', trim($v))) $v = (int)trim($v);
+            return (is_int($v) && $v > 0) ? $v : 0;
+        };
+        $price = $it['price'] ?? null;
+        if (is_string($price)) $price = trim($price);
+        $isNum = is_int($price) || is_float($price) || (is_string($price) && is_numeric($price));
+        return [
+            'kind'  => $it['kind'],
+            'sp'    => $it['kind'] === 'plan' ? $int($it['sp'] ?? null) : null,
+            'p'     => $int($it['p'] ?? null),
+            'q'     => $int(array_key_exists('q', $it) ? $it['q'] : ($it['quantity'] ?? null)),
+            'label' => is_scalar($it['label'] ?? null) ? trim((string)$it['label']) : '',
+            'price' => $isNum ? round((float)$price, 2) : null,
+        ];
+    }
+
+    /**
+     * 5.18.103 (Uganda, root docs/72 §G.9): Send Quotation's pickers in direct mode — null when direct mode is off (the page
+     * then draws 5.18.102's). What uCRM offers (offered(), drawn through forDirectPage(): the page timeouts and the 60-second
+     * cache, or the last good list, marked stale), each item as the page posts it once picked — {kind, sp (plans only), p,
+     * q, label, price, unit} — and the standard quotations priced live against it (standardFrom(): usable whole, else
+     * disabled with the reason, G-12). lead_keys is each lead's key of its interest plan (PublicPriceFeed::planKey), so the
+     * page matches no name itself. Nothing drawn here is trusted at the send: directLines() reads uCRM again.
+     *
+     * @return array{ok:bool,reason:string,stale:bool,marker:string,max_qty:int,plans:array,hardware:array,install:array,
+     *               standards:array,lead_keys:array}|null
+     */
+    public function directQuotePicker(array $leads = []): ?array
+    {
+        if (!$this->directMode()) return null;
+        self::needQuoteLines();
+        $cat   = $this->catalogueSettings();
+        $stale = false;
+        try {
+            // $this->crm makes the quote, so it reads the catalogue: no configuration is handed on, and quoteClient() keeps it
+            $page  = UcrmQuoteLines::forDirectPage($this->crm, [], $this->quoteOrg(), $this->dataDir);
+            $stale = !empty($page['stale']);
+            $off   = $page['uql']->offered($cat->installProductId(), $cat->hiddenIds());
+        } catch (\Throwable $e) {
+            $off = self::directUnread();
+        }
+        $plans = [];
+        foreach ((array)$off['plans'] as $row) {
+            $plans[] = self::directPick('plan', $row, 1) + ['name' => (string)($row['name'] ?? ''),
+                'speed' => (string)($row['speed'] ?? ''), 'key' => (string)($row['key'] ?? '')];
+        }
+        $hardware = [];
+        foreach ((array)$off['hardware'] as $row) {
+            $hardware[] = self::directPick('item', $row, 1) + ['group' => ($row['group'] ?? '') === 'accessory' ? 'accessory' : 'kit'];
+        }
+        $in = is_array($off['install'] ?? null) ? $off['install'] : [];
+        $install = (!empty($in['ok']) && is_array($in['line'] ?? null))
+            ? ['ok' => true, 'reason' => ''] + self::directPick('install', $in['line'], 1)
+            : ['ok' => false, 'reason' => (string)($in['reason'] ?? '')];
+        $standards = [];
+        foreach ($cat->standards() as $std) {
+            $r = UcrmQuoteLines::standardFrom($std, $off);
+            $lines = [];
+            if ($r['ok']) {
+                // the same rows standardFrom() priced, in its order: the plan, each hardware item, the installation
+                foreach ((array)$off['plans'] as $row) {
+                    if ((int)$row['sp'] === (int)$std['plan']['sp'] && (int)$row['p'] === (int)$std['plan']['p']) { $lines[] = self::directPick('plan', $row, 1); break; }
+                }
+                foreach ($std['hw'] as $h) {
+                    foreach ((array)$off['hardware'] as $row) {
+                        if ((int)$row['p'] === (int)$h['p']) { $lines[] = self::directPick('item', $row, (int)$h['q']); break; }
+                    }
+                }
+                if (!empty($std['install']) && $install['ok']) $lines[] = array_diff_key($install, ['ok' => 1, 'reason' => 1]);
+            }
+            $whole = $r['ok'] && count($lines) === 1 + count($std['hw']) + (!empty($std['install']) ? 1 : 0);
+            $standards[] = ['id' => (int)$std['id'], 'title' => (string)$std['title'], 'ok' => $whole,
+                'reason' => $whole ? '' : ($r['ok'] ? 'its items could not be read — see the uCRM catalogue screen' : (string)$r['reason']),
+                'total' => $whole ? (float)$r['total'] : null, 'lines' => $whole ? $lines : []];
+        }
+        $leadKeys = [];
+        foreach ($leads as $l) {
+            if (!is_array($l)) continue;
+            $interest = is_scalar($l['interest_plan'] ?? null) ? (string)$l['interest_plan'] : '';
+            $leadKeys[(string)(int)($l['id'] ?? 0)] = PublicPriceFeed::planKey($interest);
+        }
+        return ['ok' => !empty($off['ok']), 'reason' => (string)($off['reason'] ?? ''), 'stale' => $stale,
+                'marker' => UcrmQuoteLines::DIRECT_MARKER, 'max_qty' => UcrmQuoteLines::MAX_QTY,
+                'plans' => $plans, 'hardware' => $hardware, 'install' => $install, 'standards' => $standards,
+                'lead_keys' => $leadKeys];
+    }
+
+    /**
+     * 5.18.103 (§G.9, G-15): the lines a send in direct mode goes with. Every picked line (pickedLine()) is re-resolved from
+     * one fresh uCRM read through the direct rules (offered(), with the installation in force and the products kept off):
+     * a plan by its service plan and product, an item by its product (quantity 1–99), the installation by its product
+     * being the one offered now. One that is not offered refuses the whole send with its reason; one whose price in uCRM
+     * is not the price it was drawn with (2 dp) refuses with DIRECT_PRICE_CHANGED — and either drops the page cache, so the
+     * reload reads uCRM. The line sent is {productId, label, price, quantity, unit} from that read, never the posted label
+     * or price. Every other line is typed: it goes as given, less any productId. Nothing picked, nothing read.
+     *
+     * @return array{ok:bool,error:string,items:array}
+     */
+    private function directLines(array $items): array
+    {
+        self::needQuoteLines();
+        $out = [];
+        $off = null;
+        $installId = null;
+        foreach ($items as $item) {
+            $pk = self::pickedLine($item);
+            if ($pk === null) {
+                if (is_array($item)) unset($item['productId']);   // G-15: a line not picked names no uCRM product
+                $out[] = $item;
+                continue;
+            }
+            if ($pk['p'] <= 0 || $pk['q'] < 1 || $pk['q'] > UcrmQuoteLines::MAX_QTY || ($pk['kind'] === 'plan' && $pk['sp'] <= 0)) {
+                return ['ok' => false, 'error' => self::DIRECT_LINE_UNREADABLE, 'items' => []];
+            }
+            if ($off === null) {
+                $off = $this->directOffered();
+                if (empty($off['ok'])) return ['ok' => false, 'error' => (string)($off['reason'] ?: "uCRM's products could not be read"), 'items' => []];
+                $cat = $this->catalogueSettings();
+                $installId = $cat !== null ? $cat->installProductId() : null;
+            }
+            $hit = self::directFind($off, $pk);
+            if ($hit === null) {
+                UcrmQuoteLines::dropPageCache($this->dataDir);
+                return ['ok' => false, 'error' => self::directWhyNot($off, $pk, $installId), 'items' => []];
+            }
+            if ($pk['price'] === null || abs(round((float)$hit['price'], 2) - $pk['price']) > 0.0001) {
+                UcrmQuoteLines::dropPageCache($this->dataDir);
+                return ['ok' => false, 'error' => self::DIRECT_PRICE_CHANGED, 'items' => []];
+            }
+            $out[] = self::directSendLine($hit, $pk['q']);
+        }
+        return ['ok' => true, 'error' => '', 'items' => $out];
+    }
+
+    /**
+     * 5.18.103 (§G.9): a lead's auto-built line in direct mode — the one offered plan whose key is exactly the interest
+     * plan's (PublicPriceFeed::planKey), from a fresh read, or none (the lead then asks for its items by hand). A lead that
+     * names no plan reads nothing from uCRM.
+     */
+    private function directLeadItems(array $lead): array
+    {
+        $key = PublicPriceFeed::planKey(is_scalar($lead['interest_plan'] ?? null) ? (string)$lead['interest_plan'] : '');
+        if ($key === '') return [];
+        $off = $this->directOffered();
+        if (empty($off['ok'])) return [];
+        $hits = [];
+        foreach ((array)$off['plans'] as $row) {
+            if ((string)($row['key'] ?? '') === $key) $hits[] = $row;
+        }
+        return count($hits) === 1 ? [self::directSendLine($hits[0], 1)] : [];
+    }
+
+    /** 5.18.103 (§G.9): offered() from one fresh uCRM read (forDirectUse(), never a cache), read once per instance. */
+    private function directOffered(): array
+    {
+        if ($this->directOfferedMemo === null) {
+            self::needQuoteLines();
+            $cat = $this->catalogueSettings();
+            try {
+                // $this->crm makes the quote, so it reads the catalogue: no configuration is handed on, and quoteClient() keeps it
+                $this->directOfferedMemo = UcrmQuoteLines::forDirectUse($this->crm, [], $this->quoteOrg())
+                    ->offered($cat !== null ? $cat->installProductId() : null, $cat !== null ? $cat->hiddenIds() : []);
+            } catch (\Throwable $e) {
+                $this->directOfferedMemo = self::directUnread();
+            }
+        }
+        return $this->directOfferedMemo;
+    }
+
+    /** 5.18.103: offered()'s answer when uCRM could not be read. */
+    private static function directUnread(): array
+    {
+        $why = "uCRM's products could not be read";
+        return ['ok' => false, 'reason' => $why, 'plans' => [], 'hardware' => [],
+                'install' => ['ok' => false, 'reason' => $why, 'why' => 'unreadable', 'line' => null], 'not_offered' => []];
+    }
+
+    /** 5.18.103 (§G.9): an offered row as the page posts it once picked. */
+    private static function directPick(string $kind, array $row, int $q): array
+    {
+        return ['kind' => $kind, 'sp' => $kind === 'plan' ? (int)($row['sp'] ?? 0) : null, 'p' => (int)($row['productId'] ?? 0),
+                'q' => $q, 'label' => (string)($row['label'] ?? ''), 'price' => round((float)($row['price'] ?? 0), 2),
+                'unit' => (string)($row['unit'] ?? '')];
+    }
+
+    /** 5.18.103 (§G.9, G-15): the line a send goes with, from an offered row of the fresh read — the shape every quote carries. */
+    private static function directSendLine(array $row, int $q): array
+    {
+        return ['productId' => (int)$row['productId'], 'label' => (string)$row['label'], 'price' => round((float)$row['price'], 2),
+                'quantity' => $q, 'unit' => (string)$row['unit']];
+    }
+
+    /** 5.18.103 (§G.9): the offered row a picked line names — a plan by service plan and product, an item, the installation. */
+    private static function directFind(array $off, array $pk): ?array
+    {
+        if ($pk['kind'] === 'plan') {
+            foreach ((array)$off['plans'] as $row) {
+                if ((int)$row['sp'] === $pk['sp'] && (int)$row['p'] === $pk['p']) return $row;
+            }
+            return null;
+        }
+        if ($pk['kind'] === 'item') {
+            foreach ((array)$off['hardware'] as $row) {
+                if ((int)$row['p'] === $pk['p']) return $row;
+            }
+            return null;
+        }
+        $in = is_array($off['install'] ?? null) ? $off['install'] : [];
+        return (!empty($in['ok']) && is_array($in['line'] ?? null) && (int)$in['line']['productId'] === $pk['p']) ? $in['line'] : null;
+    }
+
+    /**
+     * 5.18.103 (§G.9): why a picked line is not offered now — the rule's own reason where offered() gives one (not_offered),
+     * else what changed since the page was drawn. uCRM's names pass through QuoteOrganization::plain.
+     */
+    private static function directWhyNot(array $off, array $pk, ?int $installId): string
+    {
+        $listed = function (string $kind, int $id) use ($off): string {
+            foreach ((array)($off['not_offered'] ?? []) as $n) {
+                if (is_array($n) && ($n['kind'] ?? '') === $kind && (int)($n['id'] ?? 0) === $id) return (string)($n['reason'] ?? '');
+            }
+            return '';
+        };
+        if ($pk['kind'] === 'plan') {
+            $r = $listed('plan', $pk['sp']);
+            if ($r !== '') return $r;
+            foreach ((array)$off['plans'] as $row) {
+                if ((int)$row['sp'] === $pk['sp']) {
+                    return 'the uCRM product of the service plan ' . QuoteOrganization::plain((string)($row['name'] ?? '')) . ' changed since the page was opened — reload';
+                }
+            }
+            return 'uCRM service plan #' . $pk['sp'] . ' is not offered on the forms — reload';
+        }
+        $in = is_array($off['install'] ?? null) ? $off['install'] : [];
+        if ($pk['kind'] === 'install') {
+            if (empty($in['ok'])) return (string)($in['reason'] ?? '') !== '' ? (string)$in['reason'] : 'the installation product is not set';
+            return 'the installation product was changed on the uCRM catalogue screen since the page was opened — reload';
+        }
+        if ($installId !== null && $pk['p'] === $installId) {
+            $shown = (!empty($in['ok']) && is_array($in['line'] ?? null)) ? QuoteOrganization::plain((string)$in['line']['label']) : 'uCRM product #' . $pk['p'];
+            return $shown . ' is the installation product, so it cannot be quoted as hardware — add it as the installation';
+        }
+        foreach ((array)$off['plans'] as $row) {
+            if ((int)$row['p'] === $pk['p']) return QuoteOrganization::plain((string)$row['label']) . ' is a service plan\'s product in uCRM — add it from the plan list';
+        }
+        $r = $listed('product', $pk['p']);
+        return $r !== '' ? $r : 'uCRM product #' . $pk['p'] . ' is not offered on the forms — reload';
+    }
+
     /**
      * Email the quotation PDF straight from the plugin's mail system.
      *
@@ -1114,6 +1452,8 @@ class QuotationService
         // the items to be added by hand.
         if ($this->quoteOrg()['on']) {
             self::needQuoteLines();
+            // 5.18.103 (root docs/72 §G.9): in direct mode, the one offered uCRM plan keyed exactly like the interest, or none
+            if ($this->directMode()) return $this->directLeadItems($lead);
             $interest = is_scalar($lead['interest_plan'] ?? null) ? (string)$lead['interest_plan'] : '';
             $key = PublicPriceFeed::planKey($interest);
             if ($key === '') return [];

@@ -4,6 +4,7 @@ require_once __DIR__ . '/currency.php';
 require_once __DIR__ . '/UcrmClientTarget.php';
 require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization and the quote check
 require_once __DIR__ . '/UcrmQuoteLines.php';      // 5.18.102: Uganda's lines and cash from uCRM Products
+require_once __DIR__ . '/UcrmCatalogue.php';       // 5.18.103 (root docs/72 §G): the uCRM catalogue's switch and settings
 
 /**
  * KycService
@@ -235,8 +236,10 @@ class KycService
         $ug = null;
         if ($quoteOrg['on']) {
             // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
+            // 5.18.103 (docs/72 §G G-9): with the uCRM catalogue switched on, no post here is 'web' (only the two APIs reach it)
             $ug = (new UcrmQuoteLines($quoteCrm, $quoteOrg, UcrmQuoteLinks::fromStore($this->store, $quoteOrg)))->resolve(
-                self::saleFromPost($post, trim($post['connectivity_type'] ?? 'Additional Service')), $this->store);
+                self::saleFromPost($post, trim($post['connectivity_type'] ?? 'Additional Service'),
+                    UcrmCatalogue::fromStore($this->store, $quoteOrg)->direct()), $this->store);
             $ugRefusal = self::cashRefusal($ug, $post);
             if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
             if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
@@ -553,13 +556,36 @@ class KycService
         $ugOrg = QuoteOrganization::setting(is_array($cfg) ? $cfg : [], $this->gateDataDir());
         $ug = null;
         if ($ugOrg['on']) {
-            // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
-            $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
-                    UcrmQuoteLinks::fromStore($this->store, $ugOrg)))
-                ->resolve(self::saleFromPost($post, $connectivity), $this->store);
+            // 5.18.103 (root docs/72 §G G-9): the uCRM catalogue's switch decides how a post is read. A direct form's post is
+            // priced by uCRM id (resolveDirect) only while the switch is on — with it off it is refused before anything is
+            // written; every other post is 5.18.102's, by the links, read as 'app' while the switch is on.
+            $ugCat    = UcrmCatalogue::fromStore($this->store, $ugOrg);
+            $ugDirect = $ugCat->direct();
+            $ugForm   = ($post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::DIRECT_MARKER;
+            if ($ugForm && !$ugDirect) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_OFF')];
+            $ugSale = self::saleFromPost($post, $connectivity, $ugDirect);
+            if ($ugForm) {
+                if ($ugSale['direct_plan'] === null) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_NO_PLAN')];
+                if ($ugSale['direct_cart'] === null) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_CART')];
+                $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
+                        UcrmQuoteLinks::fromRecords([], [])))
+                    ->resolveDirect($ugSale, $ugCat->installProductId(), $ugCat->hiddenIds());
+                if ($ug['status'] === 'invalid') return ['success' => false, 'message' => (string)$ug['reason']];
+                // G-7: from here on the plugin-id fields are the server's — never a uCRM id, never what the browser sent —
+                // before the duplicate check, buildAttributes and the stored record read them.
+                $post['package_choice'] = '';
+                $post['device_id']      = '';
+                $post['hw_cart_json']   = self::directCartJson($ug);
+                $post['kitQty']         = (string)(($ug['item_ids']['hw'][0]['q'] ?? null) ?: 1);
+            } else {
+                // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
+                $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
+                        UcrmQuoteLinks::fromStore($this->store, $ugOrg)))
+                    ->resolve($ugSale, $this->store);
+            }
             if ($ug['status'] === 'no_plan') return ['success' => false, 'message' => 'Please select a valid package/plan.'];
             $ugRefusal = self::cashRefusal($ug, $post);
-            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
+            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED') || $ugRefusal === UcrmQuoteLines::text('CASH_ITEM_CHANGED')) $this->dropPageCache();
             if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
         }
 
@@ -733,7 +759,8 @@ class KycService
         }
 
         $packageId = (int)($post['package_choice'] ?? 0);
-        if ($packageId <= 0) {
+        // 5.18.103 (docs/72 §G.6): a direct sale carries its plan as a uCRM pair, checked above; package_choice is ''
+        if ($packageId <= 0 && !($ug !== null && ($ug['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY)) {
             return ['success' => false, 'message' => 'Please select a service plan before submitting.'];
         }
 
@@ -1659,11 +1686,25 @@ class KycService
     // 5.18.102 (Uganda, docs/71): the lines and the cash from uCRM Products
     // ══════════════════════════════════════════════════════════════════════
 
-    /** The sale as UcrmQuoteLines::resolve() reads it, from a form or API post. */
-    public static function saleFromPost(array $post, string $connectivity): array
+    /**
+     * The sale as UcrmQuoteLines::resolve() and resolveDirect() read it, from a form or API post. 5.18.103 (docs/72 §G
+     * G-9): $directOn is the uCRM catalogue's switch — true: only the direct form's marker is 'web-direct', and every other
+     * post is 'app'; false: the direct marker is 'app' (handleNew refuses it before this) and 5.18.102's marker is 'web';
+     * null (no caller of this release passes it): as 5.18.102.
+     */
+    public static function saleFromPost(array $post, string $connectivity, ?bool $directOn = null): array
     {
         $cart = !empty($post['hw_cart_json']) ? json_decode((string)$post['hw_cart_json'], true) : [];
+        $marker = $post['ucrm_quote_form'] ?? null;
+        if ($directOn === true) {
+            $entry = $marker === UcrmQuoteLines::DIRECT_MARKER ? UcrmQuoteLines::DIRECT_ENTRY : 'app';
+        } else {
+            $entry = $marker === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app';
+        }
         return [
+            // 5.18.103 (§G.6): the direct form's uCRM ids — null when absent or unreadable (handleNew refuses those)
+            'direct_plan'       => UcrmQuoteLines::parsePlan($post['ucrm_plan'] ?? null),
+            'direct_cart'       => UcrmQuoteLines::parseCart($post['ucrm_cart_json'] ?? null),
             'package_choice'    => $post['package_choice'] ?? 0,
             'device_id'         => $post['device_id'] ?? 0,
             'hw_cart'           => is_array($cart) ? $cart : [],
@@ -1671,8 +1712,9 @@ class KycService
             'customer_type'     => (string)($post['customer_type'] ?? ''),
             'connectivity_type' => $connectivity,
             'install_by'        => is_string($post['install_by'] ?? null) ? trim($post['install_by']) : '',
-            // 5.18.102 (D14, docs/71 §R.4.2): 'web' only when the post carries this release's KYC form marker, exactly
-            'entry'             => ($post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app',
+            // 5.18.102 (D14, docs/71 §R.4.2): 'web' only when the post carries the KYC form's marker, exactly;
+            // 5.18.103: 'web-direct' only from the direct form while the switch is on
+            'entry'             => $entry,
         ];
     }
 
@@ -1685,7 +1727,12 @@ class KycService
     {
         $cart = array_key_exists('quote_sale_cart', $app) ? $app['quote_sale_cart'] : ($app['hw_cart_json'] ?? null);
         if (is_string($cart)) $cart = json_decode($cart, true);
+        // 5.18.103 (docs/72 §G.8, G-10): a direct application's sale is its stored uCRM ids, whatever the switch says now
+        $direct = ($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY;
+        $ids    = $direct ? UcrmQuoteLines::itemIds($app['quote_item_ids'] ?? null) : null;
         return [
+            'direct_plan'       => $ids !== null ? $ids['plan'] : null,
+            'direct_cart'       => $ids !== null ? $ids['hw'] : ($direct ? null : []),
             'package_choice'    => $app['package_choice'] ?? 0,
             'device_id'         => $app['device_id'] ?? 0,
             'hw_cart'           => is_array($cart) ? $cart : [],
@@ -1694,8 +1741,8 @@ class KycService
             'connectivity_type' => trim((string)($app['connectivity_type'] ?? 'New Connection')),
             'install_by'        => is_string($app['install_by'] ?? null) ? $app['install_by'] : '',
             // 5.18.102 (D14, §R.4.2, E-1): 'web' only when stored exactly so; none (every application saved before the
-            // deploy), 'app', '' or anything else is 'app'
-            'entry'             => ($app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',
+            // deploy), 'app', '' or anything else is 'app'. 5.18.103: 'web-direct' when stored exactly so
+            'entry'             => $direct ? UcrmQuoteLines::DIRECT_ENTRY : (($app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app'),
         ];
     }
 
@@ -1721,6 +1768,12 @@ class KycService
         $seen = $post['ucrm_total_seen'] ?? null;
         if (!is_scalar($seen) || !preg_match('/^[0-9]+(\.[0-9]+)?$/', trim((string)$seen))) return UcrmQuoteLines::text('CASH_NO_TOTAL');
         if (!UcrmQuoteLines::postedTotalMatches($seen, (float)$res['total'])) return UcrmQuoteLines::text('CASH_CHANGED');
+        // 5.18.103 (docs/72 §G.6): a direct sale's items must be the ones the form drew — their tokens, as sets — so a
+        // rename or a swap at the same id and price is caught; there is no link record to compare
+        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
+            return UcrmQuoteLines::seenItemsMatch($post['ucrm_items_seen'] ?? null, (array)($res['tokens'] ?? []))
+                ? '' : UcrmQuoteLines::text('CASH_ITEM_CHANGED');
+        }
         // 5.18.102 (D14, docs/71 §R.4.7): the link records the form drew must be the ones this sale resolved through — a
         // relink at the same price would otherwise show the agent one product and charge the customer for another.
         if (!UcrmQuoteLines::seenLinksMatch($post['ucrm_links_seen'] ?? null, (array)($res['link_ids'] ?? []))) {
@@ -1739,6 +1792,23 @@ class KycService
         $rec = [];
         $by = self::installAnswer($post, $connectivity);
         if ($by !== '') $rec['install_by'] = $by;
+        // 5.18.103 (docs/72 §G.7): a direct sale — its uCRM ids always, priced or not; never quote_link_ids, never a cart
+        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
+            $rec['quote_sale_entry'] = UcrmQuoteLines::DIRECT_ENTRY;
+            $rec['quote_item_ids']   = $res['item_ids'];
+            if ($res['status'] === 'priced') {
+                return $rec + [
+                    'quote_items'         => $res['lines'],
+                    'quote_lines_source'  => UcrmQuoteLines::DIRECT_SOURCE,
+                    'quote_items_total'   => $res['total'],
+                    'quote_lines_read_at' => date('Y-m-d H:i:s'),
+                    'offer_price'         => $res['plan_price'],
+                    'device_price'        => $res['device_price'],
+                ];
+            }
+            return $rec + ['quote_items' => null, 'offer_price' => null, 'device_price' => null,
+                           'quote_unpriced_why' => (string)($res['why'] ?? '')];
+        }
         // 5.18.102 (D14, docs/71 §R.4.2, §R.4.4): the entry point, from resolve() — read once, never from the post again
         $rec['quote_sale_entry'] = ($res['entry'] ?? null) === 'web' ? 'web' : 'app';
         if ($res['status'] === 'priced') {
@@ -1845,6 +1915,20 @@ class KycService
     }
 
     /**
+     * 5.18.103 (docs/72 §G.7, G-7): the hw_cart_json a direct application stores, rebuilt by the server — what its readers
+     * read (the installation prefill and the stock deduction: title and qty; the export: title and price), uCRM's names
+     * and prices, id 0 (it matches no plugin row anywhere) and no ucrm_product_id (the gate-off builders would quote it).
+     */
+    public static function directCartJson(array $res): string
+    {
+        $rows = [];
+        foreach ((array)($res['cart_rows'] ?? []) as $r) {
+            $rows[] = ['id' => 0, 'title' => (string)($r['title'] ?? ''), 'price' => $r['price'] ?? null, 'qty' => (int)($r['qty'] ?? 1)];
+        }
+        return json_encode($rows, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
      * The lines a retry may quote for an application (docs/71 §F.4, D11), or why none:
      *   - 5.18.102 (D14, §R.4.2, E-1): the entry rule first — an application not stored with quote_sale_entry 'web'
      *     (every one saved before the deploy, every app-origin one) is unpriced with the entry reason, whatever it stores
@@ -1854,18 +1938,41 @@ class KycService
      *   - no marked lines: resolved now by the current links — never inferred from a stored productId;
      *   - a Cash application is never re-priced: quoted only when the lines total exactly the cash collected (2 dp).
      * A Credit refusal whose reason is "not linked" on a web application takes P1_UNLINKED's text (§R.4.1).
+     * 5.18.103 (root docs/72 §G.8, G-10): a direct application ('web-direct') is retried by its uCRM ids, whatever the
+     * switch says — stored lines re-confirmed (confirmDirect: the rules, not "kept off"), or an unpriced sale resolved
+     * again (resolveDirect, "kept off" applying); its Credit refusal takes P1_DIRECT. $cat is the uCRM catalogue's
+     * settings (null: none — the switch off, no installation, nothing kept off).
      *
      * @return array{ok:bool,lines:array,code:string,text:string,link_ids:array}  link_ids: the records the lines came
-     *         from — the resolution's set for unmarked lines, the stored set for marked ones (§R.4.4)
+     *         from — the resolution's set for unmarked lines, the stored set for marked ones (§R.4.4); [] for a direct one
      */
-    public static function retryLines(array $app, UcrmQuoteLines $uql, $store, array $cfg): array
+    public static function retryLines(array $app, UcrmQuoteLines $uql, $store, array $cfg, ?UcrmCatalogue $cat = null): array
     {
         $lines    = null;
         $reason   = '';
         $linkIds  = [];
         $unlinked = false;
+        $why      = '';
+        $cat      = $cat ?? UcrmCatalogue::fromRecords([], false);
         $sale     = self::saleFromApp($app);
-        if ($sale['entry'] !== 'web') {
+        if ($sale['entry'] === UcrmQuoteLines::DIRECT_ENTRY) {
+            $markedD = ($app['quote_lines_source'] ?? '') === UcrmQuoteLines::DIRECT_SOURCE
+                && is_array($app['quote_items'] ?? null) && $app['quote_items'] !== [];
+            if ($markedD) {
+                $reason = $uql->confirmDirect($app['quote_items'], $app['quote_item_ids'] ?? null);
+                if ($reason === '') $lines = array_values($app['quote_items']);
+            } elseif ($sale['direct_plan'] === null || $sale['direct_cart'] === null) {
+                $reason = 'the uCRM items this application was saved with could not be read';
+            } else {
+                $res = $uql->resolveDirect($sale, $cat->installProductId(), $cat->hiddenIds(), true);
+                if ($res['status'] === 'priced') {
+                    $lines = $res['lines'];
+                } else {
+                    $reason = (string)$res['reason'];
+                    $why    = (string)($res['why'] ?? '');
+                }
+            }
+        } elseif ($sale['entry'] !== 'web') {
             $reason = UcrmQuoteLines::ENTRY_REASON;   // 5.18.102 (D14, E-1): before the marked lines are confirmed
         } else {
             $marked = ($app['quote_lines_source'] ?? '') === UcrmQuoteLines::SOURCE
@@ -1895,9 +2002,10 @@ class KycService
             }
             return ['ok' => true, 'lines' => $lines, 'code' => '', 'text' => '', 'link_ids' => $linkIds];
         }
-        if ($lines === null) {
+        if ($lines === null) {   // 5.18.103 (docs/72 §G.8): the why code and the switch choose the text (P1_DIRECT, WEB_SWITCH_ON)
             return ['ok' => false, 'lines' => [], 'code' => 'P1', 'link_ids' => [],
-                    'text' => self::p1Text(['reason' => $reason, 'unlinked' => $unlinked, 'entry' => $sale['entry']])];
+                    'text' => self::p1Text(['reason' => $reason, 'unlinked' => $unlinked, 'entry' => $sale['entry'], 'why' => $why],
+                        $cat->direct())];
         }
         return ['ok' => true, 'lines' => $lines, 'code' => '', 'text' => '', 'link_ids' => $linkIds];
     }
@@ -1906,9 +2014,17 @@ class KycService
      * 5.18.102 (D14, docs/71 §R.4.1, E-2): P1's text — or P1_UNLINKED's ("Do not make it by hand — once the item is
      * linked, an admin makes it from the Orders card") for a web sale whose reason is "not linked", an item or the
      * installation. resolve() marks those reasons; the choice never matches the text. The record stays P1.
+     * 5.18.103 (root docs/72 §G.8): $directOn, the uCRM catalogue's switch, and a direct sale's why code.
      */
-    public static function p1Text(array $res): string
+    public static function p1Text(array $res, bool $directOn = false): string
     {
+        // 5.18.103 (root docs/72 §G.8): a direct sale takes P1_DIRECT — true after a rollback too — but a sale that does not
+        // say who installs keeps P1; with the switch on, a 5.18.102 web sale left unlinked is quoted in uCRM by hand (G-10)
+        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
+            $code = ($res['why'] ?? '') === 'no_install_answer' ? 'P1' : 'P1_DIRECT';
+            return UcrmQuoteLines::text($code, ['{REASON}' => (string)($res['reason'] ?? '')]);
+        }
+        if ($directOn && !empty($res['unlinked']) && ($res['entry'] ?? null) === 'web') return UcrmQuoteLines::text('WEB_SWITCH_ON');
         $code = (!empty($res['unlinked']) && ($res['entry'] ?? null) === 'web') ? 'P1_UNLINKED' : 'P1';
         return UcrmQuoteLines::text($code, ['{REASON}' => (string)($res['reason'] ?? '')]);
     }
@@ -1941,10 +2057,14 @@ class KycService
      * 5.18.102 (D14, docs/71 §R.4.8, F-10): does Make the quotation apply to this application — the button's five
      * conditions, one implementation for the Orders card and the handler's re-check: quote_sale_entry exactly 'web', a
      * uCRM client, quote_refused P1, no quote_created, and no quote_found_in_ucrm.
+     * 5.18.103 (root docs/72 §G.8, G-10): $directOn, the uCRM catalogue's switch — see the body.
      */
-    public static function canMakeQuotation(array $app): bool
+    public static function canMakeQuotation(array $app, bool $directOn = false): bool
     {
-        return ($app['quote_sale_entry'] ?? null) === 'web'
+        // 5.18.103 (root docs/72 §G.8, G-10): a direct application always; a 5.18.102 web one only with the switch off —
+        // with it on, its plugin items can no longer be linked, so its quotation is made in uCRM by hand
+        $entry = $app['quote_sale_entry'] ?? null;
+        return ($entry === UcrmQuoteLines::DIRECT_ENTRY || ($entry === 'web' && !$directOn))
             && !empty($app['crm_client_id'])
             && ($app['quote_refused'] ?? null) === 'P1'
             && empty($app['quote_created'])
@@ -2046,7 +2166,7 @@ class KycService
 
             // 3. the lines, by the current links
             $r = self::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
-                $this->store, $cfg);
+                $this->store, $cfg, UcrmCatalogue::fromStore($this->store, $setting));   // 5.18.103 (docs/72 §G.8)
             if (!$r['ok']) {
                 self::recordNoQuote($this->store, $appId, $r['code'], $r['text'], $claim);   // round 11 (CK11-B2): never before the claim
                 return self::madeAnswer(409, 'refused', null, 0, null, $r['text']);
@@ -2085,8 +2205,11 @@ class KycService
             // logged (ids only, so an admin can restore quote_link_ids) and never answered as "no quotation".
             $quoteId = (int)$posted['id'];
             try {
-                $this->store->updateOne('kyc_applications.json', 'id', $appId, [
+                // 5.18.103 (docs/72 §G.8): a direct application records no link ids — it was quoted by its uCRM ids
+                $this->store->updateOne('kyc_applications.json', 'id', $appId,
+                    (($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY ? [] : [
                     'quote_link_ids'   => UcrmQuoteLines::linkIds($r['link_ids'] ?? []),
+                    ]) + [
                     'quote_error'      => null,
                     'quote_made_by_id' => (int)($actor['id'] ?? 0),
                     'quote_made_via'   => $via,

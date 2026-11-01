@@ -10,6 +10,10 @@
 // ucrm_links_seen). The links are read live from the store (UcrmQuoteLinks::fromStore), behind the same gate.
 require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
 $_q102 = null;
+// 5.18.103 (Uganda, root docs/72 §G.5): $_q103 stays null — and everything below is 5.18.102's, or South Sudan's where
+// the gate is off — unless the gate is open with an integer id (UcrmCatalogue::gateOpen) AND an admin has turned the uCRM
+// catalogue on (UcrmCatalogue::direct()): "direct mode", the plans and hardware straight from uCRM by uCRM id.
+$_q103 = null;
 $_q102Set = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
 if (!empty($_q102Set['on'])) {
     require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
@@ -28,6 +32,101 @@ if (!empty($_q102Set['on'])) {
     $_q102Named = function (array $row, string $key): string {
         return is_scalar($row[$key] ?? null) ? (string)$row[$key] : '';
     };
+    // 5.18.103 (root docs/72 §G.5, G-1): direct mode. The switch is read behind the gate (the store's ucrm_catalogue;
+    // UcrmCatalogue::fromStore opens nothing unless the gate is open with an integer id). On: the 5.18.102 reading below
+    // is skipped — no plugin plan or kit row is priced or drawn, and no link is read — and $_q102 keeps its shape over
+    // uCRM's own items: the cell map q102Quote() totals, keyed by the direct ids, a plan by "<servicePlanId>:<productId>"
+    // (its ucrm_plan value) and hardware by the uCRM product id. Each cell also carries 't', the item's token
+    // (UcrmQuoteLines::token(), computed in PHP only), which the form posts back for its selection as ucrm_items_seen.
+    // $_q103 holds what the direct markup draws. A switch that cannot be read is off here: 5.18.102's form, whose post the
+    // server reads as 'app' while the switch is on (a Credit sale unpriced, Cash refused).
+    $_q103Cat = null;
+    try {
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+        if (UcrmCatalogue::gateOpen($_q102Set)) {
+            $_q103Cat = UcrmCatalogue::fromStore($store, $_q102Set);
+            if ($_q103Cat->direct()) {
+                $_q103 = ['read' => 'none', 'plans' => [], 'hardware' => [], 'standards' => [], 'not_plans' => 0,
+                          'not_products' => 0, 'admin' => false];
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('[kyc_form] 5.18.103: the uCRM catalogue switch could not be read (' . get_class($e) . ')');
+        $_q103 = null;
+    }
+    if ($_q103 !== null) {
+        // 5.18.103 (§G.5): the screen that lists what is not offered (?tab=ucrm_catalogue) is linked for those who may see
+        // it — Plans or Hardware, admins by default (public.php's $_tabPerms) — and named for everyone else
+        try {
+            $_q103['admin'] = isset($can) && is_callable($can) && ($can('plans') || $can('hardware'));
+        } catch (\Throwable $e) {
+            $_q103['admin'] = false;
+        }
+        $_q103Tok = function ($t): string {
+            return (is_string($t) && preg_match('/^[0-9a-f]{16}$/', $t) === 1) ? $t : '';
+        };
+        try {
+            // 5.18.103 (§G.4, §G.5): what the forms offer — the plan pairs (G-4), the hardware (G-5), the installation
+            // (G-6) — from the page's read (short timeouts, the 60-second cache) or, when that read fails, from the last
+            // good list, marked stale; never priced from at submission, which reads uCRM again
+            $_q103Page = UcrmQuoteLines::forDirectPage(isset($crm) ? $crm : null, is_array($config) ? $config : [], $_q102Set, (string)$dataDir);
+            $_q103Off  = $_q103Page['uql']->offered($_q103Cat->installProductId(), $_q103Cat->hiddenIds());
+            if (!empty($_q103Off['ok'])) {
+                $_q103['read'] = !empty($_q103Page['stale']) ? 'stale' : 'fresh';
+                foreach ((array)$_q103Off['plans'] as $_q103R) {
+                    $_q103V = (int)($_q103R['sp'] ?? 0) . ':' . (int)($_q103R['p'] ?? 0);
+                    $_q103T = $_q103Tok($_q103R['token'] ?? null);
+                    if (UcrmQuoteLines::parsePlan($_q103V) === null || $_q103T === '') continue;
+                    $_q103Pr = round((float)($_q103R['price'] ?? 0), 2);
+                    $_q103['plans'][] = ['v' => $_q103V, 'label' => (string)($_q103R['label'] ?? ''), 'price' => $_q103Pr,
+                                         'speed' => trim((string)($_q103R['speed'] ?? '')), 'token' => $_q103T];
+                    $_q102['plans'][$_q103V] = ['p' => $_q103Pr, 'r' => '', 'l' => (string)($_q103R['label'] ?? ''), 't' => $_q103T];
+                }
+                foreach ((array)$_q103Off['hardware'] as $_q103R) {
+                    $_q103P = (int)($_q103R['p'] ?? 0);
+                    $_q103T = $_q103Tok($_q103R['token'] ?? null);
+                    if ($_q103P <= 0 || $_q103T === '') continue;
+                    $_q103Pr = round((float)($_q103R['price'] ?? 0), 2);
+                    $_q103['hardware'][] = ['p' => $_q103P, 'label' => (string)($_q103R['label'] ?? ''), 'price' => $_q103Pr,
+                                            'group' => (($_q103R['group'] ?? '') === 'accessory') ? 'accessory' : 'kit', 'token' => $_q103T];
+                    $_q102['kits'][(string)$_q103P] = ['p' => $_q103Pr, 'r' => '', 'l' => (string)($_q103R['label'] ?? ''), 't' => $_q103T];
+                }
+                foreach ((array)$_q103Off['not_offered'] as $_q103R) {
+                    if (($_q103R['kind'] ?? '') === 'plan') $_q103['not_plans']++;
+                    else $_q103['not_products']++;
+                }
+                // the installation: offered()'s own judgement of the product in force — its cell, or the reason
+                $_q103In = (array)($_q103Off['install'] ?? []);
+                $_q103T  = $_q103Tok($_q103In['token'] ?? null);
+                $_q102['install'] = (!empty($_q103In['ok']) && is_array($_q103In['line'] ?? null) && $_q103T !== '')
+                    ? ['p' => round((float)($_q103In['line']['price'] ?? 0), 2), 'r' => '', 'l' => (string)($_q103In['line']['label'] ?? ''), 't' => $_q103T]
+                    : ['p' => null, 'r' => (string)($_q103In['reason'] ?? $_q102Unread), 'l' => UcrmQuoteLines::INSTALL_NAME];
+                // the total is uCRM's only on a fresh read: on the last good list every line is unpriced, so there is no
+                // total, no ucrm_total_seen, and Cash is disabled (§G.5) — Credit registrations still go in
+                $_q102['ok']     = $_q103['read'] === 'fresh';
+                $_q102['reason'] = $_q103['read'] === 'fresh' ? '' : 'uCRM could not be read — the list may be out of date';
+            }
+            // 5.18.103 (G-12): each standard quotation an admin defined, priced live against the same list — usable, or
+            // the reason it is not (never a partial bundle); ids and quantities only, never a price from the store
+            foreach ($_q103Cat->standards() as $_q103S) {
+                $_q103F  = UcrmQuoteLines::standardFrom($_q103S, $_q103Off);
+                $_q103Hw = [];
+                foreach ((array)($_q103S['hw'] ?? []) as $_q103H) $_q103Hw[] = ['p' => (int)($_q103H['p'] ?? 0), 'q' => (int)($_q103H['q'] ?? 0)];
+                $_q103['standards'][] = ['id' => (int)($_q103S['id'] ?? 0), 'title' => (string)($_q103S['title'] ?? ''),
+                    'ok' => !empty($_q103F['ok']), 'reason' => (string)($_q103F['reason'] ?? ''),
+                    'total' => !empty($_q103F['ok']) ? round((float)$_q103F['total'], 2) : null,
+                    'install' => !empty($_q103S['install']), 'hw' => $_q103Hw,
+                    'plan' => (int)($_q103S['plan']['sp'] ?? 0) . ':' . (int)($_q103S['plan']['p'] ?? 0)];
+            }
+        } catch (\Throwable $e) {
+            error_log('[kyc_form] 5.18.103: the uCRM catalogue could not be drawn (' . get_class($e) . ')');
+            $_q103 = ['read' => 'none', 'plans' => [], 'hardware' => [], 'standards' => [], 'not_plans' => 0,
+                      'not_products' => 0, 'admin' => !empty($_q103['admin'])];
+            $_q102 = ['ok' => false, 'reason' => $_q102Unread, 'plans' => [], 'kits' => [],
+                      'install' => ['p' => null, 'r' => $_q102Unread, 'l' => UcrmQuoteLines::INSTALL_NAME]];
+        }
+    }
+    if ($_q103 === null) {   // 5.18.103 (§G.5): the 5.18.102 reading, unchanged — only while direct mode is off
     try {
         // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read live — never by a name
         $_q102Res = UcrmQuoteLines::forPage(UcrmQuoteLines::quoteClient(isset($crm) ? $crm : null, is_array($config) ? $config : []),
@@ -58,6 +157,7 @@ if (!empty($_q102Set['on'])) {
         $_q102['plans'] = $_q102['kits'] = [];
         $_q102['install'] = ['p' => null, 'r' => $_q102Unread, 'l' => UcrmQuoteLines::INSTALL_NAME];
     }
+    }   // 5.18.103 (§G.5): end of the 5.18.102 reading
     // One row's cell for the PHP-drawn lists: what the resolver said, or the unreadable reason
     $_q102Of = function (string $map, $id) use (&$_q102): array {
         if (empty($_q102['ok'])) return ['p' => null, 'r' => (string)$_q102['reason']];
@@ -839,11 +939,32 @@ function wizBuildReview() {
 <input type="hidden" name="action" value="kyc_submit">
 
 <!-- ── Persistent hidden fields (OUTSIDE all wiz-panels so they always submit) ── -->
+<?php if ($_q103 === null): /* 5.18.103 (root docs/72 §G.5, G-7): never drawn in direct mode — the server sets package_choice, device_id and hw_cart_json itself */ ?>
 <input type="hidden" name="package_choice"      id="pkgChoiceOut"  value="">
 <input type="hidden" name="device_id"           id="deviceIdOut"   value="">
 <input type="hidden" name="hw_cart_json"        id="hwCartOut"     value="[]">
+<?php endif; /* 5.18.103 (G-7) */ ?>
 <input type="hidden" name="connectivity_type"   id="connTypeOut"   value="New Connection">
 <input type="hidden" name="customer_type"       id="custTypeOut"   value="StarLink">
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, §G.6, G-7, G-9): the direct form's own fields. No package_choice, device_id, hw_cart_json or ucrm_links_seen; the plan posts from its own radio (ucrm_plan) and "Who installs?" from its own (install_by); ucrm_cart_json is [{"p":productId,"q":n}]; ucrm_total_seen and ucrm_items_seen (the drawn tokens of the selection, sorted, comma-joined) are '' while there is no total; the marker is the class's constant */ ?>
+<input type="hidden" name="ucrm_cart_json"      id="q103CartOut"   value="[]">
+<input type="hidden" name="ucrm_total_seen"     id="q102TotalSeen" value="">
+<input type="hidden" name="ucrm_items_seen"     id="q103ItemsSeen" value="">
+<input type="hidden" name="ucrm_quote_form" value="<?= h(UcrmQuoteLines::DIRECT_MARKER) ?>">
+<?php if ($_q103['read'] === 'stale'): /* 5.18.103 (§G.5): the last good list is drawn, marked so; Cash disabled */ ?>
+<div id="q103Banner" class="kyc-alert warning" style="display:flex;">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div><strong>uCRM could not be read — the list may be out of date; Cash is unavailable; Credit registrations still go in.</strong>
+    <br><span style="font-size:12px;">Reload the form in a minute to try again.</span></div>
+</div>
+<?php elseif ($_q103['read'] === 'none'): /* 5.18.103 (§G.5): never read — no list to draw, so nothing to choose */ ?>
+<div id="q103Banner" class="kyc-alert warning" style="display:flex;">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div><strong>uCRM could not be read, and no earlier list of its plans and hardware is kept — there is nothing to choose from, so no registration can be made here until it can.</strong>
+    <br><span style="font-size:12px;">Reload the form in a minute to try again.</span></div>
+</div>
+<?php endif; /* 5.18.103 (§G.5) */ ?>
+<?php else: /* 5.18.103: direct mode off — 5.18.102's own fields, unchanged */ ?>
 <?php if ($_q102 !== null): /* 5.18.102 (Uganda, docs/71 §G): the total the form showed, posted for the server's check */ ?>
 <input type="hidden" name="ucrm_total_seen"     id="q102TotalSeen" value="">
 <?php /* 5.18.102 (D14, docs/71 §R.4.7, §R.4.2): the link records that total was made of, and this form's own fixed marker — the sale is 'web' only with it */ ?>
@@ -857,6 +978,7 @@ function wizBuildReview() {
 </div>
 <?php endif; ?>
 <?php endif; ?>
+<?php endif; /* 5.18.103 (§G.5): end of the direct form's fields / 5.18.102's */ ?>
 
 <!-- Wallet warning -->
 <div id="cashWarning" class="kyc-alert warning" style="display:none;">
@@ -969,6 +1091,13 @@ function q102Refresh() {
   var linksSeen = document.getElementById('q102LinksSeen');
   if (linksSeen) linksSeen.value = q.status === 'priced' ? q.links.join(',') : '';
   var no = q.status === 'unpriced';
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): direct mode only */ ?>
+  // 5.18.103 (§G.5, §G.6): the drawn tokens of the very selection this total is made of, posted as ucrm_items_seen (''
+  // while there is no total); and Cash disabled whenever the list on the page is not uCRM's now (the last good list)
+  var itemsSeen = document.getElementById('q103ItemsSeen');
+  if (itemsSeen) itemsSeen.value = (typeof q103ItemsSeen === 'function') ? q103ItemsSeen(q) : '';
+  if (!_q102 || !_q102.ok) no = true;
+<?php endif; /* 5.18.103 */ ?>
   var cash = document.querySelector('#wSalesType option[value="Cash"]');
   if (cash) cash.disabled = no;
   var note = document.getElementById('q102CashNote');
@@ -1026,6 +1155,104 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php endif; ?>
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): direct mode's own script — emitted only in direct mode */ ?>
+<script>
+// ── 5.18.103 (Uganda, root docs/72 §G.5): the KYC form in direct mode ──────────────────────────────────────────────
+// _q102 (above) holds uCRM's own items here, keyed by the direct ids: a plan by "<servicePlanId>:<productId>" (selPlan.id,
+// the checked ucrm_plan radio), hardware by the uCRM product id (each hwCart id). q102Quote() totals it exactly as in
+// 5.18.102, all or nothing, in integer cents. Each cell carries 't', the item's token, drawn by PHP
+// (UcrmQuoteLines::token) — this script only picks the selection's and joins them, it never computes one.
+var _Q103_MAX_QTY  = <?= (int)UcrmQuoteLines::MAX_QTY ?>;
+var _Q103_MAX_CART = <?= (int)UcrmQuoteLines::MAX_CART ?>;
+<?php
+// 5.18.103 (G-12): the usable standard quotations, by id — ids and quantities only; their prices are the cells above
+$_q103StdJs = [];
+foreach ($_q103['standards'] as $_q103S) {
+    if (!$_q103S['ok'] || $_q103S['id'] <= 0) continue;
+    $_q103StdJs[(string)$_q103S['id']] = ['title' => $_q103S['title'], 'plan' => $_q103S['plan'], 'hw' => $_q103S['hw'],
+                                          'install' => $_q103S['install']];
+}
+?>
+var _q103Std = <?= json_encode((object)$_q103StdJs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{}' ?>;
+
+// ucrm_cart_json: the cart as [{"p":productId,"q":n}] — never a price, never a plugin id (G-7)
+function q103SyncCart() {
+  var el = document.getElementById('q103CartOut');
+  if (!el) return;
+  var out = [];
+  ((typeof hwCart !== 'undefined' && hwCart) ? hwCart : []).forEach(function (i) {
+    var p = parseInt(i.id, 10), q = parseInt(i.qty, 10);
+    if (p > 0 && q >= 1) out.push({ p: p, q: Math.min(_Q103_MAX_QTY, q) });
+  });
+  el.value = JSON.stringify(out);
+}
+
+// ucrm_items_seen: the drawn tokens of the selected items — the plan, each hardware item, and the installation when
+// DishNet installs (q.install, as q102Quote() decided it) — once each, sorted, comma-joined; '' while there is no total,
+// or when any selected item has no drawn token (the server then refuses a Cash sale rather than guess)
+function q103ItemsSeen(q) {
+  if (!q || q.status !== 'priced') return '';
+  var d = (_q102 && typeof _q102 === 'object') ? _q102 : {};
+  var toks = [], bad = false;
+  function add(cell) {
+    var t = (cell && typeof cell.t === 'string' && /^[0-9a-f]{16}$/.test(cell.t)) ? cell.t : null;
+    if (t === null) { bad = true; return; }
+    if (toks.indexOf(t) < 0) toks.push(t);
+  }
+  if (typeof selPlan !== 'undefined' && selPlan) add((d.plans || {})[String(selPlan.id)]);
+  ((typeof hwCart !== 'undefined' && hwCart) ? hwCart : []).forEach(function (i) { add((d.kits || {})[String(i.id)]); });
+  if (q.install) add(d.install);
+  if (bad) return '';
+  toks.sort();
+  return toks.join(',');
+}
+
+// A standard quotation (G-12): selects its plan, sets the cart to its hardware and quantities, and answers "Who installs?"
+// with DishNet when it includes the installation — otherwise the question is left open (unanswered) for the agent. It
+// never submits: the agent still checks and submits. Only usable ones have a live button; this re-checks every row.
+function q103Standard(id) {
+  var s = _q103Std[String(id)];
+  if (!s || curType !== 'starlink') return;
+  var planRow = null;
+  document.querySelectorAll('.pkg-opt').forEach(function (p) { if (p.dataset.id === String(s.plan)) planRow = p; });
+  var cart = [], missing = !planRow;
+  (s.hw || []).forEach(function (h) {
+    var row = null;
+    document.querySelectorAll('.hw-row').forEach(function (r) { if (r.dataset.id === String(h.p)) row = r; });
+    if (!row) { missing = true; return; }
+    cart.push({ id: row.dataset.id, title: row.dataset.title, price: pNum(row.dataset.price),
+                qty: Math.min(_Q103_MAX_QTY, Math.max(1, parseInt(h.q, 10) || 1)) });
+  });
+  if (missing) { alert('This standard quotation cannot be used on this form now — reload the form.'); return; }
+  hwCart = cart;
+  var wrap = document.getElementById('q102Install');
+  var asked = !!wrap && q102NeedsInstall();
+  if (asked) {
+    wrap.querySelectorAll('input[name="install_by"]').forEach(function (i) { i.checked = false; });
+    wrap.querySelectorAll('.wiz-radio-card').forEach(function (c) { c.classList.remove('selected'); });
+    var box = document.getElementById('q102InstallBox'), err = document.getElementById('q102InstallErr');
+    if (box) box.style.borderColor = '';
+    if (err) err.style.display = 'none';
+    if (s.install) {
+      var r = wrap.querySelector('input[name="install_by"][value="dishnet"]');
+      var card = r ? r.closest('label') : null;
+      if (card) wizRadio(card);
+    }
+  }
+  pkgPick(planRow);
+  hwHighlightAll();
+  renderCart();
+  syncOuterFields();
+  renderSummary();
+  var note = document.getElementById('q103StdNote');
+  if (note) {
+    note.style.display = 'block';
+    note.textContent = 'Filled from "' + String(s.title || '') + '" — check the items'
+      + (asked && !s.install ? ', choose who installs' : '') + ', then continue. Nothing is submitted until you submit.';
+  }
+}
+</script>
+<?php endif; /* 5.18.103 (§G.5): end of direct mode's script */ ?>
 
 <div class="wiz-container">
 
@@ -1073,10 +1300,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 <input type="radio" name="customer_type" value="StarLink" checked>
                 <div class="wrc-icon">📡</div><div class="wrc-title">Starlink</div><div class="wrc-sub">Satellite Internet</div>
             </label>
+<?php if ($_q103 === null): /* 5.18.103 (root docs/72 §G.5): the Fiber card is not drawn in direct mode — Uganda has no Fiber plan to offer (QL-G1: 0 Fiber plan rows) */ ?>
             <label class="wiz-radio-card" onclick="wizRadio(this);wizTypeChange()">
                 <input type="radio" name="customer_type" value="Fiber">
                 <div class="wrc-icon">🔌</div><div class="wrc-title">Fiber</div><div class="wrc-sub">FTTH Connection</div>
             </label>
+<?php endif; /* 5.18.103 (§G.5): end of the Fiber card */ ?>
             <label class="wiz-radio-card" onclick="wizRadio(this);wizTypeChange()">
                 <input type="radio" name="customer_type" value="LTE">
                 <div class="wrc-icon">📶</div><div class="wrc-title">DishNet 4G</div><div class="wrc-sub">Magma Network</div>
@@ -1318,6 +1547,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <!-- ══ HARDWARE CATALOGUE ════════════════════════════════════════════ -->
 <div id="wHardwareSection">
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, G-12): above the lists, one button per standard quotation an admin defined, priced live (UcrmQuoteLines::standardFrom); pressing one fills the plan, the hardware and "Who installs?", and never submits; one that cannot be used now is disabled with its reason. Then how many uCRM items this form does not offer, and where they are listed */ ?>
+  <div id="q103Standards" style="margin-bottom:12px;">
+<?php if ($_q103['standards'] !== []): ?>
+    <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <i class="bi bi-lightning-charge" style="color:#D41C1C;"></i> Standard quotations
+      <span style="font-size:10px;font-weight:600;color:#D41C1C;background:#EFF6FF;padding:1px 8px;border-radius:10px;">one tap fills the order</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+<?php foreach ($_q103['standards'] as $q103S): $q103On = $q103S['ok'] && $q103S['total'] !== null; ?>
+      <button type="button" class="q103-std" data-std="<?= (int)$q103S['id'] ?>"<?php if (!$q103On): ?> disabled title="<?= h($q103S['reason']) ?>"<?php endif; ?> onclick="q103Standard(<?= (int)$q103S['id'] ?>)"
+              style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;padding:11px 14px;background:<?= $q103On ? '#fff' : '#f8fafc' ?>;border:1.5px solid <?= $q103On ? '#D41C1C' : '#e2e8f0' ?>;border-radius:12px;cursor:<?= $q103On ? 'pointer' : 'not-allowed' ?>;font-family:inherit;">
+        <span style="font-size:13px;font-weight:800;color:<?= $q103On ? '#1e293b' : '#94a3b8' ?>;"><?= h($q103S['title']) ?></span>
+<?php if ($q103On): $q103Tot = (float)$q103S['total']; ?>
+        <span style="font-size:11px;color:#6b7280;"><?= dn_cur($config) ?><?= number_format($q103Tot, abs($q103Tot - round($q103Tot)) < 0.005 ? 0 : 2) ?><?= $q103S['install'] ? ' · includes installation' : '' ?></span>
+<?php else: ?>
+        <span class="q103-reason" style="font-size:11px;color:#b45309;white-space:normal;">Cannot be used now: <?= h($q103S['reason']) ?></span>
+<?php endif; ?>
+      </button>
+<?php endforeach; ?>
+    </div>
+    <div id="q103StdNote" style="display:none;font-size:12px;font-weight:700;color:#166534;margin-top:6px;"></div>
+<?php endif; ?>
+<?php $q103NotN = (int)$_q103['not_plans'] + (int)$_q103['not_products']; if ($q103NotN > 0): ?>
+    <div class="q103-not-offered" style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.4;">
+      <?= (int)$_q103['not_plans'] ?> uCRM service plan<?= (int)$_q103['not_plans'] === 1 ? '' : 's' ?> and <?= (int)$_q103['not_products'] ?> uCRM product<?= (int)$_q103['not_products'] === 1 ? '' : 's' ?> are not offered on this form.
+<?php if (!empty($_q103['admin'])): ?>
+      The <a href="?page=dashboard&amp;tab=ucrm_catalogue" style="color:#D41C1C;font-weight:700;">uCRM catalogue</a> screen lists them, and why.
+<?php else: ?>
+      An admin sees them, and why, on the uCRM catalogue screen.
+<?php endif; ?>
+    </div>
+<?php endif; ?>
+  </div>
+<?php endif; /* 5.18.103 (§G.5): end of the standard quotations */ ?>
   <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
     <i class="bi bi-hdd-network" style="color:#D41C1C;"></i> Hardware
     <span style="font-size:10px;font-weight:600;color:#D41C1C;background:#EFF6FF;padding:1px 8px;border-radius:10px;">tap + to add</span>
@@ -1325,6 +1588,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
   <!-- Catalogue rows rendered by PHP, typed for JS filtering -->
   <div id="wHardwareList" style="display:flex;flex-direction:column;gap:6px;">
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, G-5): uCRM's own hardware — one row per offered product, data-id the uCRM product id, kits before accessories (the website's split, for display only), uCRM's price; the plugin's kit rows are not drawn. The row's token rides beside it (data-token), as in its cell */ ?>
+<?php $q103Grp = ''; foreach ($_q103['hardware'] as $q103H): $q103Pr = (float)$q103H['price']; ?>
+<?php if ($q103H['group'] !== $q103Grp): $q103Grp = $q103H['group']; ?>
+  <div class="q103-group" style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin:4px 2px 0;"><?= $q103Grp === 'accessory' ? 'Accessories' : 'Kits' ?></div>
+<?php endif; ?>
+  <div class="hw-row" data-id="<?= (int)$q103H['p'] ?>" data-title="<?= h($q103H['label']) ?>"
+       data-price="<?= h(number_format($q103Pr, 2, '.', '')) ?>" data-type="starlink" data-group="<?= h($q103H['group']) ?>" data-token="<?= h($q103H['token']) ?>"
+       style="display:none;align-items:center;gap:10px;padding:11px 14px;background:#fff;border-radius:12px;border:1.5px solid #e2e8f0;cursor:pointer;transition:border-color .12s,background .12s;"
+       onclick="hwAdd(this)">
+    <div style="flex:1;min-width:0;">
+      <div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= h($q103H['label']) ?></div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:1px;"><?= $q103H['group'] === 'accessory' ? 'Accessory' : 'Kit' ?> · uCRM</div>
+    </div>
+    <div style="font-weight:800;color:#D41C1C;font-size:14px;white-space:nowrap;margin-right:2px;"><?= dn_cur($config) ?><?= number_format($q103Pr, abs($q103Pr - round($q103Pr)) < 0.005 ? 0 : 2) ?></div>
+    <div style="width:32px;height:32px;background:#D41C1C;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;font-weight:300;pointer-events:none;">+</div>
+  </div>
+<?php endforeach; ?>
+<?php if ($_q103['hardware'] === [] && $_q103['read'] !== 'none'): ?>
+  <div style="font-size:12px;color:#9ca3af;font-style:italic;padding:6px 2px;">No hardware is offered from uCRM.</div>
+<?php endif; ?>
+<?php else: /* 5.18.103: direct mode off — 5.18.102's kit rows, unchanged */ ?>
   <?php
   $activeDevices = array_values(array_filter($devices, fn($d) => !empty($d['is_active'])));
   foreach ($activeDevices as $d):
@@ -1364,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <div style="width:32px;height:32px;background:#D41C1C;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;font-weight:300;pointer-events:none;">+</div>
   </div>
   <?php endforeach; ?>
+<?php endif; /* 5.18.103 (§G.5): end of the hardware rows */ ?>
   </div>
 
   <!-- Cart -->
@@ -1607,6 +1892,29 @@ function smartKitScan() {
     <span id="wPlanCount" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
   </div>
   <div id="wPackageList" style="display:flex;flex-direction:column;gap:6px;">
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, G-4): uCRM's own plans — one radio per offered plan pair, name ucrm_plan, value "<servicePlanId>:<productId>", drawn with uCRM's product name, speed and 1-month price; the plugin's plan rows (and their package_choice radios) are not drawn, and nothing is preselected */ ?>
+<?php foreach ($_q103['plans'] as $q103P): $q103Pr = (float)$q103P['price']; $q103Sp = (string)$q103P['speed']; if ($q103Sp !== '' && is_numeric($q103Sp)) $q103Sp = rtrim(rtrim(number_format((float)$q103Sp, 2, '.', ''), '0'), '.') . ' Mbps'; ?>
+  <div class="pkg-opt pkg-starlink"
+       data-id="<?= h($q103P['v']) ?>" data-name="<?= h($q103P['label']) ?>"
+       data-price="<?= h(number_format($q103Pr, 2, '.', '')) ?>" data-type="starlink" data-token="<?= h($q103P['token']) ?>"
+       style="display:none;align-items:center;gap:10px;padding:12px 14px;background:#fff;border-radius:12px;border:1.5px solid #e2e8f0;cursor:pointer;transition:border-color .12s,background .12s;"
+       onclick="pkgPick(this)">
+    <input type="radio" name="ucrm_plan" value="<?= h($q103P['v']) ?>" style="width:18px;height:18px;accent-color:#D41C1C;flex-shrink:0;">
+    <div style="width:4px;height:36px;border-radius:2px;background:#D41C1C;flex-shrink:0;"></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:700;color:#1e293b;"><?= h($q103P['label']) ?></div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">
+        <?php if ($q103Sp !== ''): ?><span style="background:#fff0f0;color:#D41C1C;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;"><?= h($q103Sp) ?></span><?php endif; ?>
+        <span style="background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600;">uCRM</span>
+      </div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;">
+      <div style="font-size:16px;font-weight:900;color:#0D47A1;"><?= dn_cur($config) ?><?= number_format($q103Pr, 2) ?></div>
+      <div style="font-size:9px;color:#94a3b8;font-weight:600;">/month</div>
+    </div>
+  </div>
+<?php endforeach; ?>
+<?php else: /* 5.18.103: direct mode off — 5.18.102's plan rows, unchanged */ ?>
   <?php
   $subPlans  = $store->load('subscription_plans.json');
   $spFirstOf = [];
@@ -1657,6 +1965,7 @@ function smartKitScan() {
 <?php endif; ?>
   </div>
   <?php endforeach; ?>
+<?php endif; /* 5.18.103 (§G.5): end of the plan rows */ ?>
   </div>
   <div id="wNoPlanMsg" style="display:none;text-align:center;padding:20px;color:#9ca3af;font-size:13px;">No plans available for this service.</div>
 </div>
@@ -1664,8 +1973,10 @@ function smartKitScan() {
 </div><!-- /padding -->
 
 <!-- Hidden form fields -->
+<?php if ($_q103 === null): /* 5.18.103 (root docs/72 §G.5, G-7): never drawn in direct mode — the direct cart posts as ucrm_cart_json */ ?>
 <input type="hidden" name="hw_cart_json"        id="hwCartJson"   value="[]">
 <input type="hidden" name="device_id"           id="hwDeviceId"   value="">
+<?php endif; /* 5.18.103 (G-7) */ ?>
 <input type="hidden" name="kitQty"              id="hwKitQty"     value="1">
 <input type="hidden" name="kitUnit"             id="hwKitUnit"    value="Piece">
 <input type="hidden" name="kitName"             id="hwKitName"    value="">
@@ -1765,6 +2076,15 @@ function applyDefaults(typeKey) {
   curType = typeKey;
   hwCart  = [];
   selPlan = null;
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): direct mode */ ?>
+  // 5.18.103 (§G.5): no keyword defaults in direct mode — nothing is preselected unless a standard quotation is pressed;
+  // the cart and the plan are only cleared, and the page redrawn
+  hwHighlightAll();
+  renderCart();
+  renderPlanHighlights();
+  renderSummary();
+  return;
+<?php endif; /* 5.18.103 */ ?>
 
   // 1. Determine default hw — primary first, then autoAdd secondaries
   var defs = typeDefaults[typeKey] || [];
@@ -1867,6 +2187,10 @@ function renderPlanHighlights() {
 function hwAdd(row) {
   var id = row.dataset.id;
   var existing = hwCart.find(function(i){ return i.id === id; });
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, §G.6): the server's limits — at most 99 of one item, at most 30 items */ ?>
+  if (existing && existing.qty >= _Q103_MAX_QTY) { alert('At most ' + _Q103_MAX_QTY + ' of one item on a sale.'); return; }
+  if (!existing && hwCart.length >= _Q103_MAX_CART) { alert('At most ' + _Q103_MAX_CART + ' different items on a sale.'); return; }
+<?php endif; /* 5.18.103 */ ?>
   if (existing) { existing.qty++; }
   else { hwCart.push({ id: id, title: row.dataset.title, price: pNum(row.dataset.price), qty: 1 }); }
   hwHighlightAll();
@@ -1875,6 +2199,9 @@ function hwAdd(row) {
 }
 function hwQty(idx, d) {
   hwCart[idx].qty = Math.max(1, hwCart[idx].qty + d);
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): the quantity box stops at the server's limit, 99 */ ?>
+  if (hwCart[idx].qty > _Q103_MAX_QTY) hwCart[idx].qty = _Q103_MAX_QTY;
+<?php endif; /* 5.18.103 */ ?>
   renderCart(); renderSummary();
 }
 function hwRemove(idx) {
@@ -1899,8 +2226,12 @@ function renderCart() {
   if (!hwCart.length) {
     wrap.style.display = 'none';
     if (kit) kit.style.display = 'none';
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, G-7): no hw_cart_json or device_id in direct mode — the direct cart, ucrm_cart_json */ ?>
+    q103SyncCart();
+<?php else: ?>
     document.getElementById('hwCartJson').value = '[]';
     document.getElementById('hwDeviceId').value = '';
+<?php endif; /* 5.18.103 */ ?>
     return;
   }
 
@@ -1963,10 +2294,15 @@ function renderCart() {
     + '</div>';
   }
 
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5, G-7): the direct cart, ucrm_cart_json — never hw_cart_json or device_id */ ?>
+  q103SyncCart();
+  document.getElementById('hwKitQty').value   = hwCart[0].qty;
+<?php else: ?>
   var cartJson = JSON.stringify(hwCart);
   document.getElementById('hwCartJson').value = cartJson;
   document.getElementById('hwDeviceId').value = hwCart[0].id;
   document.getElementById('hwKitQty').value   = hwCart[0].qty;
+<?php endif; /* 5.18.103 */ ?>
 }
 
 // ── Summary bar render ────────────────────────────────────────────
@@ -2285,14 +2621,24 @@ function syncOuterFields() {
   if (selPriceEl && selPlan) selPriceEl.value = selPlan.price;
   var selNameEl = document.getElementById('selPlanName');
   if (selNameEl && selPlan) selNameEl.value = selPlan.name;
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): direct mode */ ?>
+  // 5.18.103 (§G.5): the direct cart as ucrm_cart_json; the plan posts from its own radio (ucrm_plan) — the three
+  // plugin-id fields above are not drawn in direct mode, so the lines that set them find nothing
+  q103SyncCart();
+<?php endif; /* 5.18.103 */ ?>
 }
 
 // ── Form submit with validation ───────────────────────────────────
 function kycFormSubmit() {
   syncOuterFields();
   if (!selPlan) { alert('Please select a service plan before submitting.'); return false; }
+<?php if ($_q103 !== null): /* 5.18.103 (root docs/72 §G.5): a plan is selected — its own radio, ucrm_plan, the one the total was made from; there is no package_choice in direct mode */ ?>
+  var uplan = document.querySelector('input[name="ucrm_plan"]:checked');
+  if (!uplan || !uplan.value || uplan.value !== String(selPlan.id)) { alert('Please select a service plan before submitting.'); return false; }
+<?php else: ?>
   var pcOut = document.getElementById('pkgChoiceOut');
   if (!pcOut || !pcOut.value) { alert('Please select a service plan before submitting.'); return false; }
+<?php endif; /* 5.18.103 */ ?>
 
   // ── Client-side wallet balance check for Cash sales ─────────────
   var stEl = document.getElementById('wSalesType');

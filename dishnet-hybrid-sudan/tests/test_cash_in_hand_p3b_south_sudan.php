@@ -26,6 +26,13 @@ declare(strict_types=1);
  * The tool's banner and its new rule line are the only output that changes on every tenant (SPEC §c.2): they are taken
  * out of the comparison and checked against fixed text. A difference is reported by its position and length only.
  *
+ * One block is taken out of the pages and counted instead (5.18.103, rewritten on purpose, root docs/72 §G.13): the uCRM
+ * catalogue's menu entry, which includes/navigation.php draws on every dashboard page, for those who may see Plans or
+ * Hardware, wherever the quoting organization is in force, whatever the catalogue's switch says (§G.3) — of these books,
+ * the Uganda one. It is the exact text T3_CATALOGUE_NAV, taken out of this tree's pages only: each must carry it once
+ * where this tree has lib/UcrmCatalogue.php and the book is UP, and never otherwise; f4b4c96's never. Two weakened copies
+ * of navigation.php, the entry drawn on every tenant and the entry not drawn, show the count is not idle.
+ *
  * Two things are kept apart rather than normalised away, each as narrowly as it can be:
  *   - the tool's error stream (ConfigVault's notices go there, by error_log()) is compared on its own, byte for byte,
  *     beside the printed lines: 5.18.96 loads the configuration before its banner, to choose the rule line, and that
@@ -112,6 +119,10 @@ const T3_NEW_RULE   = '  rule       every entry not voided, any account (as befo
 const T3_OLD_SENT   = "  the ledger's running balance per currency (rows not voided; accounts and the unassigned split play no part):";
 const T3_ADMIN      = 'RH-Admin One';
 const T3_STDERR     = "\n\0 the error stream \0\n";
+// 5.18.103 (root docs/72 §G.3, §G.13): the uCRM catalogue's menu entry, exactly as includes/navigation.php draws it on a
+// page other than the catalogue's own — the one block of these pages that changes where the quoting organization is in force.
+const T3_CATALOGUE_NAV = "<a href=\"?page=dashboard&tab=ucrm_catalogue\" class=\"kyc-tab \">\n"
+                       . "    <span class=\"nav-icon\"><i class=\"bi bi-box-seam\"></i></span> uCRM catalogue\n</a>\n";
 
 // ── 1. The baseline tree ──────────────────────────────────────────────────────
 if (isset($opt['base'])) {
@@ -487,14 +498,25 @@ foreach ($BOOKS as $tag => $B) {
             return $rc . "\n" . (string)preg_replace('/^RULE .*$/m', '', $o);
         }, false];
 
-        $outside = []; $sameStmt = 0;
+        $outside = []; $sameStmt = 0; $navSeen = [];
         foreach ($out as $lbl => [$get, $page]) {
             [$a, $b, $inMinute] = t3_pair($get, $old, $new, $page);
             if (!$inMinute) { is_(false, "[{$tag}] {$lbl}: read from both trees within one minute"); continue; }
             [$a, $b] = t3_same_statement($a, $b, $old, $new, $sameStmt);
+            if ($page) {   // 5.18.103: the uCRM catalogue's menu entry, out of this tree's page only, and counted (header)
+                $navSeen[$lbl] = [substr_count($a, T3_CATALOGUE_NAV), substr_count($b, T3_CATALOGUE_NAV)];
+                $b = str_replace(T3_CATALOGUE_NAV, '', $b);
+            }
             is_($a === $b, "[{$tag}] {$lbl} (" . strlen($b) . ' bytes)', $a === $b ? '' : t3_where($a, $b));
             $outside[$lbl] = $b;
         }
+
+        // 5.18.103: the uCRM catalogue's menu entry, counted where it was taken out (header)
+        $navWant = ($tag === 'UP' && is_file($root . '/lib/UcrmCatalogue.php')) ? 1 : 0;
+        $navOff  = array_filter($navSeen, function ($p) use ($navWant) { return $p !== [0, $navWant]; });
+        is_(count($navSeen) >= 10 && $navOff === [],
+            "[{$tag}] the uCRM catalogue's menu entry (5.18.103), taken out of the comparison: " . ($navWant ? 'once on each' : 'on none')
+            . ' of this tree\'s ' . count($navSeen) . " pages, on none of f4b4c96's", json_encode($navOff));
 
         // tools/cash_in_hand.php: the banner and the rule line against fixed text, everything else byte for byte
         if ($sameStmt > 0) echo "  note [{$tag}] {$sameStmt} page(s) failed on both trees at the same statement; only its line number was normalised\n";
@@ -567,6 +589,8 @@ if ($withMutants) {
            . ($fails ? '; first: ' . trim(substr($fails[0], 7, 100)) : '') . "\n";
     };
     $CB = 'lib/CashbookService.php'; $PAGE = 'tabs/accounts/cashbook.php'; $CEO = 'tabs/admin/ceo_dashboard.php'; $TOOL = 'tools/cash_in_hand.php';
+    $NAV = 'includes/navigation.php';
+    $NAVIF = "<?php if(\$_cat103Nav->open() && (\$can('plans') || \$can('hardware'))): /* 5.18.103 (§G.3) */ ?>";
     $GATE = "\$this->cashRuleCache = StaffJobsGate::applies(\$cfg, \$this->dataDir) && !dn_ssp_selectable(\$cfg);";
     // [label, the books that must catch it (for the M rows, the SPEC's "caught by"), [file, anchor, replacement]...]
     $MUTANTS = [
@@ -602,6 +626,10 @@ if ($withMutants) {
             "if (array_column(\$summary['in'] ?? [[1]], 'total') === []) throw new \\RuntimeException('RH weakened copy');\n\$maxIn=max(1,max(array_column(\$summary['in']??[[1]],'total')));"]]],
         ['M28: the tool\'s :34 sentence reworded on every tenant', ['SS'], [[$TOOL, "if (\$ruleA) {\n    echo \"\\n  the ledger's cash in hand",
             "if (true) {\n    echo \"\\n  the ledger's cash in hand"]]],
+        // 5.18.103: the menu entry's count is not idle — drawn where the quoting organization is not in force, and not drawn
+        ['5.18.103: the uCRM catalogue\'s menu entry drawn on every tenant', ['SS', 'SN'], [[$NAV, $NAVIF,
+            "<?php if(\$can('plans') || \$can('hardware')): /* 5.18.103 (§G.3) */ ?>"]]],
+        ['5.18.103: the uCRM catalogue\'s menu entry not drawn', ['UP'], [[$NAV, $NAVIF, "<?php if(false): /* 5.18.103 (§G.3) */ ?>"]]],
     ];
 
     // A copy runs sections 1–3 and the two closing checks: this run's passes so far, plus those two.

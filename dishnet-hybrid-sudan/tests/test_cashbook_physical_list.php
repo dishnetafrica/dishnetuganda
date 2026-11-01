@@ -701,9 +701,23 @@ function pl_pair(callable $get, SjSandbox $a, SjSandbox $b, bool $page): array
         $t0 = time();
         $stamps = ['long-date' => date('l, d M Y', $t0), 'date' => date('d M Y', $t0), 'time' => date('g:i A', $t0)];
         $x = $get($a); $y = $get($b);
-        if (date('Y-m-d H:i', time()) === date('Y-m-d H:i', $t0)) return [pl_norm($x, $a, $stamps, $page), pl_norm($y, $b, $stamps, $page), true];
+        if (date('Y-m-d H:i', time()) === date('Y-m-d H:i', $t0)) return [pl_norm($x, $a, $stamps, $page), pl_norm(pl_r103($y, $page), $b, $stamps, $page), true];
     }
-    return [pl_norm($x, $a, $stamps, $page), pl_norm($y, $b, $stamps, $page), false];
+    return [pl_norm($x, $a, $stamps, $page), pl_norm(pl_r103($y, $page), $b, $stamps, $page), false];
+}
+
+/**
+ * 5.18.103 (root docs/72 §G.3, §G.13, rewritten on purpose): on Uganda an admin's menu gains one entry, the uCRM catalogue
+ * (includes/navigation.php, behind the quoting organization's gate). This tree's page is compared with 5.18.97's with that
+ * one entry taken out — exactly once, as drawn; a page that does not hold it exactly once is compared as it is (and so
+ * differs). Every other byte is still held. The entry itself is held by tests/test_catalogue_direct.php.
+ */
+function pl_r103(string $html, bool $page): string
+{
+    if (!$page) return $html;
+    $entry = "<a href=\"?page=dashboard&tab=ucrm_catalogue\" class=\"kyc-tab \">\n"
+           . "    <span class=\"nav-icon\"><i class=\"bi bi-box-seam\"></i></span> uCRM catalogue\n</a>\n";
+    return substr_count($html, $entry) === 1 ? str_replace($entry, '', $html) : $html;
 }
 
 /** One request: [code, body, headers (lower-case names)]. */
@@ -1917,12 +1931,17 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     }
     t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
         [$since, count($held)], [[], 6]);
-    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.102",', $mr, $mtn);
-    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.102",
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.103",', $mr, $mtn);   // 5.18.103 (was 5.18.102)
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.103",
         [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {
-        t("{$rel} is byte-identical to " . PL_BASE, [isset($BASEB[$rel]), $blob($root . '/' . $rel) === ($BASEB[$rel] ?? 'absent')], [true, true]);
+        // 5.18.103 (root docs/72 §G.13, rewritten on purpose): navigation.php read without 5.18.103's declared lines
+        // (tests/fixtures/r103_revert.php; the lines themselves held by tests/test_catalogue_direct.php I)
+        require_once __DIR__ . '/fixtures/r103_revert.php';
+        $r103 = function (string $f) use ($blob, $root, $rel) { if ($rel !== 'includes/navigation.php' || !is_file($f)) return $blob($f);
+            $s = r103_revert($rel, (string)file_get_contents($f)); return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s); };
+        t("{$rel} is byte-identical to " . PL_BASE, [isset($BASEB[$rel]), $r103($root . '/' . $rel) === ($BASEB[$rel] ?? 'absent')], [true, true]);
     }
     $WORDS = ['UPDATE', 'DELETE', 'INSERT', 'CREATE', 'ALTER', 'accounts(', 'ensureAccountsTable'];
     foreach ($added as $rel) {
@@ -1984,13 +2003,22 @@ TXT
         ],
     ];
     $kept = function (string $rel) use ($root, $blob, $bsRevert): ?string {
+        // 5.18.103 (root docs/72 §G.13, rewritten on purpose): tests/test_cash_in_hand_p3b_south_sudan.php takes the uCRM
+        // catalogue's menu entry out of its pages and counts it; held to 5.18.97's bytes with 5.18.103's seven declared
+        // pieces taken out (tests/fixtures/r103_revert.php: each found exactly once, or no match)
+        if ($rel === 'tests/test_cash_in_hand_p3b_south_sudan.php') {
+            if (!is_file($root . '/' . $rel)) return null;
+            require_once __DIR__ . '/fixtures/r103_revert.php';
+            $s = r103_revert($rel, (string)file_get_contents($root . '/' . $rel));
+            return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s);
+        }
         if ($rel !== 'tests/test_bank_screen.php') return $blob($root . '/' . $rel);
         if (!is_file($root . '/' . $rel)) return null;
         $c = (string)file_get_contents($root . '/' . $rel);
         foreach ($bsRevert as [$new, $old]) { if (substr_count($c, $new) !== 1) return null; $c = str_replace($new, $old, $c); }
         return sha1('blob ' . strlen($c) . "\0" . $c);
     };
-    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files; tests/test_bank_screen.php with 5.18.100\'s one declared change taken out)',
+    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files; tests/test_bank_screen.php with 5.18.100\'s one declared change taken out, tests/test_cash_in_hand_p3b_south_sudan.php with 5.18.103\'s)',
         array_values(array_filter($keep, function ($rel) use ($BASEB, $kept) { return !isset($BASEB[$rel]) || $kept($rel) !== $BASEB[$rel]; })), []);
 } catch (\Throwable $e) { pl_threw('section M', $e); }
 

@@ -241,10 +241,12 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS ?? [], [
     ['label' => 'ML19 (L) a gate-off path loads the link store (delete_plan\'s hook ungated: the table created on South Sudan)', 'file' => $PS,
      'old' => "    if (\$delId > 0 && QuoteOrganization::setting(is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)['on']) {\n"
             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
+            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
+            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
      'new' => "    if (\$delId > 0) {\n"
             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
+            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
+            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
      'sections' => 'L', 'pattern' => '/L19 (South Sudan|Uganda with the setting 0): after every/'],   // narrowed (T6): the absence line, never the control's
     // 5.18.102 D14 review (T6): L19's posts must be shown to run — each copy below stops a post before its handler
     ['label' => 'ML19h (L) the global gate refuses every post (no L19 post reaches its handler)', 'file' => 'includes/post_handlers.php',
@@ -254,10 +256,12 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS ?? [], [
         [$PS, "(\$_POST['action']??'')==='delete_hardware'){", "(\$_POST['action']??'')==='delete_hardware_x'){"],
         [$PS, "    if (\$delId > 0 && QuoteOrganization::setting(is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)['on']) {\n"
             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',",
+            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
+            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',",
               "    if (\$delId > 0) {\n"
             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',"]],
+            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
+            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',"]],
      'sections' => 'L', 'pattern' => '/L19 (South Sudan|Uganda with the setting 0): the control/'],
     ['label' => 'ML23 (L) delete_plan on Uganda leaves the link active', 'file' => $PS,
      'old' => "            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan', \$delId, UcrmQuoteLinks::WHY_DELETED, (array)(\$auth->currentRetailer() ?? []));",

@@ -312,6 +312,11 @@ final class KycCrmSync
         $autoQuote = ($this->config['kyc_auto_quote_enabled'] ?? true) !== false;
         if ($ugCheck !== null) {
             $refused = $this->ugQuote($app, $crmId, $known, $ugCheck, $autoQuote);   // 5.18.102 (Uganda)
+        } elseif ($autoQuote && empty($app['quote_created']) && ($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
+            // 5.18.103 (root docs/72 §G.8): a sale from the uCRM catalogue is never quoted by the gate-off builder below, which
+            // would rebuild it from offer_name at offer_price ?? 0 and its cart — a free plan line. Never on South Sudan.
+            $refused = KycService::newCustomerNoQuote((int)$crmId, UcrmQuoteLines::text('GATE_OFF_DIRECT'));
+            KycService::recordNoQuote($this->store, $id, 'P1', $refused);
         } elseif ($autoQuote && empty($app['quote_created'])) {
             $items = $this->quoteItemsFor($app);
             if ($items !== [] && !KycService::quoteOverAutoMax($items, $this->config)) {
@@ -364,7 +369,7 @@ final class KycCrmSync
         // 5.18.102 (D14, docs/71 §R.4, §R.4.2): the current links, read from the store behind the gate; retryLines applies the
         // entry rule first, so an application saved before the deploy stays unpriced whatever is linked
         $r = KycService::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
-            $this->store, $this->config);
+            $this->store, $this->config, UcrmCatalogue::fromStore($this->store, $setting));   // 5.18.103 (docs/72 §G.8)
         if (!$r['ok']) {
             $text = KycService::newCustomerNoQuote((int)$crmId, $r['text']);
             KycService::recordNoQuote($this->store, $id, $r['code'], $text);
@@ -385,7 +390,8 @@ final class KycCrmSync
                 $app['quote_ref'] ?? ''),
             (string)($app['mobile'] ?? ''), $known !== [] ? $known : null);
         // 5.18.102 (D14, docs/71 §R.4.4): a quotation made from links records which ones, so a relink can find it
-        if (!empty($posted['created'])) {
+        // 5.18.103 (docs/72 §G.8): a direct application records none — it was quoted by its uCRM ids
+        if (!empty($posted['created']) && ($app['quote_sale_entry'] ?? null) !== UcrmQuoteLines::DIRECT_ENTRY) {
             $this->store->updateOne('kyc_applications.json', 'id', $id, ['quote_link_ids' => UcrmQuoteLines::linkIds($r['link_ids'] ?? [])]);
         }
         return !empty($posted['refused']) ? (string)$posted['refused'] : '';

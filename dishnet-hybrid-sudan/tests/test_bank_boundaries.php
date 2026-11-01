@@ -129,6 +129,12 @@ function t(string $m, $got, $want): void {
         . "\n       want " . substr((string)json_encode($want, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 400));
 }
 function src(string $rel): string { global $root; return (string)@file_get_contents($root . '/' . $rel); }
+// 5.18.103 (root docs/72 §G.13, rewritten on purpose): includes/navigation.php and public.php gain 5.18.103's declared lines
+// (the uCRM catalogue's menu entry and tab). They stay in A's list: every other byte is still held to the base, read through
+// r103_revert(), which takes out exactly those lines (each found once). The lines themselves are held by
+// tests/test_catalogue_direct.php I.
+require_once __DIR__ . '/fixtures/r103_revert.php';
+function src102(string $rel): string { $s = r103_revert($rel, src($rel)); return $s === null ? "\0 5.18.103's declared lines not found" : $s; }
 /** A file as BK_BASE (or $rev) holds it, from this checkout's Git; null when Git cannot supply it. */
 function base_of(string $rel, string $rev = BK_BASE): ?string
 {
@@ -226,15 +232,15 @@ if (!$gitOk) {
 } else {
     foreach ($UNTOUCHED as $rel) {
         $b = base_of($rel);
-        is_($b !== null && hash('sha256', $b) === hash('sha256', src($rel)), "{$rel} is byte-identical to " . BK_BASE);
+        is_($b !== null && hash('sha256', $b) === hash('sha256', src102($rel)), "{$rel} is byte-identical to " . BK_BASE);   // 5.18.103: src102
     }
     // manifest.json: the release's version and nothing else — ec0accd4's bytes with the one version line moved to the
     // release's (5.18.102: the version pin moves with the release; was 5.18.101, 5.18.100, 5.18.99 and 5.18.98 before it).
     $mb = (string)base_of('manifest.json');
-    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.102",', $mb, $mn);
-    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.102',
+    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.103",', $mb, $mn);   // 5.18.103 (was 5.18.102)
+    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.103',
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
-        [1, true, '5.18.102']);
+        [1, true, '5.18.103']);
     // includes/routes.php: the base with 5.18.98's changed lines put in their place; then every line of it is still there, in
     // order, and the extra lines are 5.18.98's, in blocks that each name it, and only these.
     $rb = (string)base_of('includes/routes.php'); $chg = [];
@@ -249,7 +255,7 @@ if (!$gitOk) {
     $ADDED = [];
     foreach (['includes/navigation.php' => 9, 'tabs/admin/ceo_dashboard.php' => 6] as $rel => $want) {
         $lb = base_of($rel, BK_LINKS_BASE);
-        [$kept, $extra, $blocks] = bk_insertions(explode("\n", (string)$lb), explode("\n", src($rel)));
+        [$kept, $extra, $blocks] = bk_insertions(explode("\n", (string)$lb), explode("\n", src102($rel)));   // 5.18.103: src102
         $ADDED[$rel] = array_map(function (array $bl): string { return implode("\n", $bl); }, $blocks);
         $marked = count(array_filter($blocks, function ($bl) { $t = implode("\n", $bl); return strpos($t, '5.18.97') !== false || strpos($t, 'bank') !== false; }));
         t("{$rel}: against " . BK_LINKS_BASE . " (5.18.96) every line is kept, in order; {$want} line(s) added, the ECO Bank link, in blocks that each name the Bank release",
@@ -532,7 +538,7 @@ if ($withMutants) {
         ['the neutraliser without @', [$RT, "strpos(\"=+-@\\t\\r\", \$s[0])", "strpos(\"=+-\\t\\r\", \$s[0])"]],
         ['a changed line in public.php beside the hunks', ['public.php', "    'distributors' => '*admin',", "    'distributors' => null,"]],
         ['the forbidden hunk missing', ['public.php', "            'bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events',\n", '']],
-        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.102",', '    "version": "5.18.97",']],   // 5.18.102 (was 5.18.101)
+        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.103",', '    "version": "5.18.97",']],   // 5.18.103 (was 5.18.102)
         ['manifest.json changed beside its version', ['manifest.json', '    "url": "https://dishnetafrica.com",', '    "url": "https://example.test",']],
     ];
     $mainPass = $pass;                                                      // the child runs sections A–H, exactly what this run passed

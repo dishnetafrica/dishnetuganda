@@ -542,6 +542,68 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.103 (2026-11-01) — Uganda: plans and hardware straight from uCRM (the uCRM catalogue), behind an admin's switch; standard quotations in one click; nothing linked; South Sudan unchanged; no migration
+
+### Why
+The owner, 1 Nov, after 5.18.102's links proved hard to make by hand: *"i dont want to link plan … where it will show all
+the plans from ucrm. remove or hide plugin plans"*, *"show all the things of hardware … same like website and give standard
+one click predefined quote"*, and *"i will not create quotation from plugin until next build"* (root docs/72 §A, D6, D7).
+The design is root docs/72 §G, reviewed adversarially before it was built (§G.15).
+
+### What (all behind `QuoteOrganization::setting(...)['on']` with an integer id; and the uCRM catalogue's switch)
+- **The switch, OFF until an admin turns it on** on the new uCRM catalogue screen (`tabs/sales/ucrm_catalogue.php`, tab
+  `ucrm_catalogue`, Plans or Hardware permission — admins by default). Turning it on reads uCRM fresh and needs at least
+  one plan offered and the installation product set and passing its rules; turning it off reads nothing. Off = 5.18.102
+  exactly for the forms and the quotations: a deploy changes nothing an agent sees; an admin's menu (Plans or Hardware
+  permission) gains the screen's entry, below.
+- **The store: the table `ucrm_catalogue` in plugin.sqlite3, through `lib/UcrmCatalogue.php` (new)** — the switch, the
+  installation product, the products kept off the forms, and up to ten standard quotations (ids only, never a price).
+  One record per act, with who and when; a change ends the record in force and keeps it. Read only behind the gate, so
+  South Sudan never gets the table. Never a configuration key (web and cron read the configuration from different
+  places).
+- **What is offered (`UcrmQuoteLines::offered()`)**: a plan is a uCRM pair — a service plan passing 5.18.102's rule 6 and
+  exactly one counted product spelled like it (counted before judging) at its 1-month price; hardware is every counted
+  product the website would show that passes 5.18.102's product rules, is not spelled like a plan, is not the
+  installation and is not kept off, grouped kits / accessories as the website groups them. `public_price_exclude` is
+  not read. Every item carries a token (sha256 over id, name, price in cents and unit, computed in PHP only).
+- **The KYC form (switch on)** draws those items by uCRM id — no `package_choice`, `device_id` or `hw_cart_json` input at
+  all — the standard-quotation buttons (fill, never submit), quantities up to 99, no Fiber card (0 Fiber plan rows on
+  Uganda, QL-G1 of 1 Nov), and, when uCRM cannot be read, the last good list marked out of date with Cash disabled:
+  Credit still goes in. Marker `ucrm_quote_form = 5.18.103-direct`.
+- **A direct sale (`resolveDirect()`)** is priced once, before any write; a Cash sale collects exactly the total and is
+  refused on a changed total or a changed item (`CASH_ITEM_CHANGED`, the tokens); a missing plan or an unreadable cart is
+  refused before anything is written; an unpriced Credit sale is registered with its ids and `P1_DIRECT`. Stored with
+  `quote_sale_entry = 'web-direct'` (5.18.102 reads it as `app`), `quote_item_ids`, the direct source mark; the server
+  sets `package_choice` and `device_id` to `''` and rebuilds `hw_cart_json` (`id 0`, uCRM's names and prices, no product
+  id) before the duplicate check, the uCRM create and the record.
+- **The switch on:** a form opened before it, the retailer app and the mobile API are `app` (unpriced, as 5.18.102 reads
+  them); **the switch off:** a direct form's post is refused ("reload the form"). Stored applications keep their branch
+  whatever the switch says; with it on, a 5.18.102 web application gets no Make the quotation and the card says to make
+  its quotation in uCRM by hand.
+- **Retries and Make the quotation:** stored direct lines re-confirmed by the rules (never "kept off"); an unpriced one
+  resolved again ("kept off" applying); the Cash rule (P2) and P3 as before; no link ids recorded. With the quoting
+  organization off, KycCrmSync and `retry_quote` never quote a direct application.
+- **Send Quotation and lead quotes (switch on):** uCRM's plans and hardware picked by id, the standard-quotation buttons;
+  every picked line re-priced inside `QuotationService` (so the mobile API's sends too), a changed price refused, a
+  `productId` on a line not picked removed; the sends' types, events and `quotes_log` rows unchanged.
+- **The link store is frozen** while the switch is on: link saves and clears refused, a deleted plan or kit row ends no
+  link. The Plans and Hardware screens show one card pointing to the uCRM catalogue.
+- **The menu:** wherever the quoting organization is in force, the uCRM catalogue's entry for those who may see Plans or
+  Hardware, whatever the switch says — with the switch off, the one change to the pages.
+  `tests/test_cash_in_hand_p3b_south_sudan.php`, which holds the Cashbook, landing and CEO pages to 5.18.94's bytes,
+  takes exactly that entry out and counts it (rewritten on purpose; two weakened copies of `navigation.php` show the
+  count is not idle).
+- **No migration.** `manifest.json` moves to 5.18.103 and the tests that pin the version move with it.
+
+### Operator action (root docs/72 §G.14)
+1. On the uCRM catalogue screen: set the installation product; keep off the forms any product that is not hardware (a
+   fee, a service); read the plans offered and the reasons for the rest.
+2. Add the standard quotation(s) the agents should press.
+3. Turn the switch on. The screen lists the 5.18.102 web registrations still waiting with no quotation: make theirs in
+   uCRM by hand.
+4. Stock deduction at job completion matches cart titles to stock categories: title the categories as in uCRM (the deploy
+   counts the hardware with no category of the same title).
+
 ## 5.18.102 (2026-10-27; D14, 28 Oct) — Uganda's plugin quotations take their lines and prices from the uCRM Product an admin linked to each plan, kit and the installation; a Cash sale collects the quotation's total; "Prepared by" filled; South Sudan unchanged; no migration
 
 ### Why

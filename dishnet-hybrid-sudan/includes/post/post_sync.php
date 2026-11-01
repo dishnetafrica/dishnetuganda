@@ -647,7 +647,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_hardwar
     require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
     if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
-        try {
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on
+        if (!UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) try {
             $_dlEnded = UcrmQuoteLinks::end($store, 'kit', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
             if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_hardware: kit #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
         } catch (\Throwable $e) {
@@ -677,7 +678,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_plan'){
     require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
     if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
-        try {
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on
+        if (!UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) try {
             $_dlEnded = UcrmQuoteLinks::end($store, 'plan', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
             if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_plan: plan #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
         } catch (\Throwable $e) {
@@ -738,6 +740,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_
         if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
             flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
             redirect($_lkBack);
+        }
+        // 5.18.103 (root docs/72 §G G-11): with the uCRM catalogue on, the link store is frozen — kept for 5.18.102's
+        // applications and a rollback, never written
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+        if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
+            flash('Nothing was linked: on Uganda, plans and hardware now come straight from uCRM (the uCRM catalogue).', 'warning');
+            redirect('?page=dashboard&tab=ucrm_catalogue');
         }
 
         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
@@ -902,6 +911,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_
             flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
             redirect($_ulBack);
         }
+        // 5.18.103 (root docs/72 §G G-11): with the uCRM catalogue on, the link store is frozen — kept for 5.18.102's
+        // applications and a rollback, never written
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+        if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
+            flash('Nothing was unlinked: on Uganda, plans and hardware now come straight from uCRM (the uCRM catalogue).', 'warning');
+            redirect('?page=dashboard&tab=ucrm_catalogue');
+        }
 
         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
         $_ulSet = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
@@ -1020,7 +1036,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kyc_m
             flash('No quotation was made for application #' . (int)$_mqId . ' — try again.', 'danger');
             redirect($_mqBack);
         }
-        if (!is_array($_mqApp) || (int)($_mqApp['id'] ?? 0) !== $_mqId || !KycService::canMakeQuotation($_mqApp)) {
+        // 5.18.103 (root docs/72 §G.8, G-10): with the uCRM catalogue on, a 5.18.102 web application is quoted by hand
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+        $_mqDirect = UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
+        if (!is_array($_mqApp) || (int)($_mqApp['id'] ?? 0) !== $_mqId || !KycService::canMakeQuotation($_mqApp, $_mqDirect)) {
             flash('Make the quotation does not apply to application #' . (int)$_mqId . ' now. Nothing was changed.', 'warning');
             redirect($_mqBack);
         }
@@ -1059,6 +1078,193 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kyc_m
         }
         error_log('[post_sync] 5.18.102 kyc_make_quote: application #' . (int)$_mqId . ' by #' . $_mqMeId . ' gave ' . $_mqKind);
         redirect($_mqBack);
+    }
+}
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// 5.18.103 (Uganda, root docs/72 §G.3): the uCRM catalogue screen's five actions — the switch (ucrm_cat_mode), the
+// installation product (ucrm_cat_install), keeping a product off the forms or offering it again (ucrm_cat_hidden), and a
+// standard quotation saved or stopped (ucrm_cat_standard_save, ucrm_cat_standard_end). Handled only where the
+// quoting-organization gate is on; with it off the block is skipped whole and the action falls through as an unknown one
+// does. The order is the link actions' above, each refusal writing nothing:
+//   1. $auth->requireAdmin(), then the account re-read fresh by id — 403 unless the same account, active and an admin;
+//   2. the own-page check: csrfCheck() AND not CustomerSession::crossSite() AND BankGate::fromOwnPage('POST');
+//   3. the quoting-organization setting valid (an int id) — else one fixed flash, no uCRM read, no lock;
+//   4. where a uCRM item is judged (turning on, the installation, a standard quotation): a fresh read
+//      (UcrmQuoteLines::forDirectUse — never a cache), outside any lock, judged by offered() and standardFrom();
+//      turning the switch off, keeping off and stopping a standard quotation read nothing from uCRM (G-1);
+//   5. UcrmCatalogue's write, inside withLock, store checks only. Whatever it throws (it has rolled back) is answered
+//      "nothing was changed — try again".
+// Every flash is fixed text plus ids, or names through QuoteOrganization::plain; the log carries ids and kinds only.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && in_array(($_POST['action'] ?? ''), ['ucrm_cat_mode', 'ucrm_cat_install', 'ucrm_cat_hidden', 'ucrm_cat_standard_save', 'ucrm_cat_standard_end'], true)) {
+    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+        $_c3Act  = (string)$_POST['action'];
+        $_c3Back = '?page=dashboard&tab=ucrm_catalogue';
+
+        // 1. an admin, judged on the account record re-read fresh by id — never the session copy
+        $_c3Me   = $auth->requireAdmin();
+        $_c3MeId = (int)($_c3Me['id'] ?? 0);
+        try {
+            $_c3Fresh = $_c3MeId > 0 ? $store->findOne('retailers.json', 'id', $_c3MeId) : null;
+        } catch (\Throwable $e) {
+            $_c3Fresh = null;
+        }
+        if (!is_array($_c3Fresh) || $_c3MeId <= 0 || (int)($_c3Fresh['id'] ?? 0) !== $_c3MeId
+            || empty($_c3Fresh['is_active']) || empty($_c3Fresh['is_admin'])) {
+            http_response_code(403);
+            die('<p style="color:red;padding:20px;">Access denied — admin only.</p>');
+        }
+
+        // 2. the own-page check, made here (post_bank.php's)
+        require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
+        require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
+        if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
+            flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
+            redirect($_c3Back);
+        }
+
+        // 3. the quoting organization set correctly — no uCRM read, no lock
+        $_c3Set = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+        if (!is_int($_c3Set['id'] ?? null)) {
+            error_log('[post_sync] 5.18.103 ' . $_c3Act . ': refused, the quoting-organization setting is invalid, by #' . $_c3MeId);
+            flash('The company the app quotes under is not set correctly, so nothing was changed. Tell an admin.', 'danger');
+            redirect($_c3Back);
+        }
+        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
+        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+        $_c3Cfg   = is_array($config ?? null) ? $config : [];
+        $_c3Dir   = isset($dataDir) ? (string)$dataDir : null;
+        $_c3Actor = ['id' => $_c3MeId, 'name' => (string)($_c3Fresh['name'] ?? '')];
+        $_c3Crm0  = (isset($crm) && is_object($crm)) ? $crm : svc('crm');   // the plugin's client; quoteClient picks the token
+        $_c3Num = function ($v): int {
+            return (is_string($v) && $v !== '' && strlen($v) <= 9 && ctype_digit($v)) ? (int)$v : 0;
+        };
+        // 4. a fresh read, judged — only for the acts that name a uCRM item to be offered
+        $_c3Offered = function () use ($store, $_c3Set, $_c3Cfg, $_c3Crm0): array {
+            $cat = UcrmCatalogue::fromStore($store, $_c3Set);
+            return UcrmQuoteLines::forDirectUse($_c3Crm0, $_c3Cfg, $_c3Set)->offered($cat->installProductId(), $cat->hiddenIds());
+        };
+        $_c3Say = function (string $reason, string $what): string {
+            $r = rtrim(trim($reason), '.');
+            return 'Nothing was ' . $what . ': ' . ($r !== '' ? $r : 'try again') . '.';
+        };
+        try {
+            if ($_c3Act === 'ucrm_cat_mode') {
+                $_c3On = ($_POST['on'] ?? '') === '1';
+                if ($_c3On) {
+                    $_c3Off = $_c3Offered();
+                    if (empty($_c3Off['ok'])) {
+                        flash('uCRM could not be read, so the uCRM catalogue was not turned on. Try again.', 'danger');
+                        redirect($_c3Back);
+                    }
+                    if ($_c3Off['plans'] === []) {
+                        flash('No plan is offered from uCRM yet, so the uCRM catalogue was not turned on. The screen lists why each plan is not offered.', 'danger');
+                        redirect($_c3Back);
+                    }
+                    if (empty($_c3Off['install']['ok'])) {
+                        flash($_c3Say((string)$_c3Off['install']['reason'], 'changed') . ' Set the installation product before turning the uCRM catalogue on.', 'danger');
+                        redirect($_c3Back);
+                    }
+                    $_c3R = UcrmCatalogue::setMode($store, true, (int)$_c3Off['install']['p'], $_c3Actor, $_c3Cfg, $_c3Dir);
+                } else {
+                    $_c3R = UcrmCatalogue::setMode($store, false, null, $_c3Actor, $_c3Cfg, $_c3Dir);
+                }
+                $_c3Text = ['on' => 'The uCRM catalogue is on: the KYC form and Send Quotation now offer uCRM\'s plans and hardware.',
+                            'off' => 'The uCRM catalogue is off: the KYC form and Send Quotation are as before.',
+                            'already' => 'Nothing changed: the uCRM catalogue was already ' . ($_c3On ? 'on' : 'off') . '.'][$_c3R['kind']] ?? null;
+                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
+            } elseif ($_c3Act === 'ucrm_cat_install') {
+                $_c3Pid = $_c3Num($_POST['product_id'] ?? null);
+                if ($_c3Pid <= 0) {
+                    flash('Nothing was changed. Pick the uCRM product that is the installation, then save.', 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3Cat0 = UcrmCatalogue::fromStore($store, $_c3Set);
+                $_c3Crm  = $_c3Crm0;
+                $_c3Off  = UcrmQuoteLines::forDirectUse($_c3Crm, $_c3Cfg, $_c3Set)->offered($_c3Pid, $_c3Cat0->hiddenIds());
+                if (empty($_c3Off['ok']) || empty($_c3Off['install']['ok'])) {
+                    flash($_c3Say((string)(empty($_c3Off['ok']) ? $_c3Off['reason'] : $_c3Off['install']['reason']), 'changed'), 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3R = UcrmCatalogue::setInstall($store, $_c3Pid, (string)$_c3Off['install']['line']['label'], $_c3Actor, $_c3Cfg, $_c3Dir);
+                $_c3Text = ['set' => 'The installation product is now ' . QuoteOrganization::plain((string)$_c3Off['install']['line']['label']) . ' (uCRM #' . $_c3Pid . ').',
+                            'already' => 'Nothing changed: that product is already the installation.'][$_c3R['kind']] ?? null;
+                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
+            } elseif ($_c3Act === 'ucrm_cat_hidden') {
+                $_c3Pid  = $_c3Num($_POST['product_id'] ?? null);
+                $_c3Hide = ($_POST['hide'] ?? '') === '1';
+                if ($_c3Pid <= 0) {
+                    flash('Nothing was changed. The request did not name a uCRM product.', 'danger');
+                    redirect($_c3Back);
+                }
+                // The name is for the history only, from the page's own read when it has one — never the browser's
+                $_c3Name = '';
+                try {
+                    $_c3Crm = $_c3Crm0;
+                    $_c3Pg  = UcrmQuoteLines::forDirectPage($_c3Crm, $_c3Cfg, $_c3Set, (string)$_c3Dir);
+                    foreach ((array)($_c3Pg['uql']->catalogue()['products'] ?? []) as $_c3Row) {
+                        if ((int)($_c3Row['id'] ?? 0) === $_c3Pid) { $_c3Name = (string)($_c3Row['name'] ?? ''); break; }
+                    }
+                } catch (\Throwable $e) {
+                    $_c3Name = '';
+                }
+                $_c3R = UcrmCatalogue::setHidden($store, $_c3Pid, $_c3Hide, $_c3Name, $_c3Actor, $_c3Cfg, $_c3Dir);
+                $_c3Text = ['hidden' => 'uCRM product #' . $_c3Pid . ' is kept off the forms.',
+                            'shown' => 'uCRM product #' . $_c3Pid . ' is offered on the forms again (when it passes the rules).',
+                            'already' => 'Nothing changed.'][$_c3R['kind']] ?? null;
+                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
+            } elseif ($_c3Act === 'ucrm_cat_standard_save') {
+                $_c3Plan = UcrmQuoteLines::parsePlan($_POST['plan'] ?? null);
+                $_c3Hw = [];
+                $_c3Ps = is_array($_POST['hw_p'] ?? null) ? array_values($_POST['hw_p']) : [];
+                $_c3Qs = is_array($_POST['hw_q'] ?? null) ? array_values($_POST['hw_q']) : [];
+                $_c3Bad = false;
+                foreach ($_c3Ps as $_c3I => $_c3P) {
+                    if ($_c3P === '' || $_c3P === '0') continue;   // an empty row of the form
+                    $_c3Pn = $_c3Num($_c3P);
+                    $_c3Qn = $_c3Num($_c3Qs[$_c3I] ?? null);
+                    if ($_c3Pn <= 0 || $_c3Qn < 1 || $_c3Qn > UcrmCatalogue::MAX_QTY) { $_c3Bad = true; break; }
+                    $_c3Hw[] = ['p' => $_c3Pn, 'q' => $_c3Qn];
+                }
+                if ($_c3Plan === null || $_c3Bad) {
+                    flash('Nothing was saved. Give the standard quotation a plan, and hardware with quantities from 1 to ' . UcrmCatalogue::MAX_QTY . '.', 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3Std = ['title' => is_string($_POST['title'] ?? null) ? (string)$_POST['title'] : '', 'plan' => $_c3Plan,
+                           'hw' => $_c3Hw, 'install' => ($_POST['install'] ?? '') === '1'];
+                $_c3Shape = UcrmCatalogue::standardShape(['title' => UcrmCatalogue::plainTitle($_c3Std['title'])] + $_c3Std);
+                if ($_c3Shape !== '') {
+                    flash($_c3Say($_c3Shape, 'saved'), 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3Off = $_c3Offered();
+                $_c3Priced = UcrmQuoteLines::standardFrom($_c3Std, $_c3Off);
+                if (empty($_c3Priced['ok'])) {
+                    flash($_c3Say((string)$_c3Priced['reason'], 'saved'), 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3Rep = $_c3Num($_POST['standard_id'] ?? null);
+                $_c3R = UcrmCatalogue::saveStandard($store, $_c3Rep > 0 ? $_c3Rep : null, $_c3Std, $_c3Actor, $_c3Cfg, $_c3Dir);
+                $_c3Text = ['saved' => 'The standard quotation "' . UcrmCatalogue::plainTitle($_c3Std['title']) . '" is saved.'][$_c3R['kind']] ?? null;
+                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'saved'), $_c3Text !== null ? 'success' : 'danger');
+            } else {   // ucrm_cat_standard_end
+                $_c3Id = $_c3Num($_POST['standard_id'] ?? null);
+                if ($_c3Id <= 0) {
+                    flash('Nothing was changed. The request did not name a standard quotation.', 'danger');
+                    redirect($_c3Back);
+                }
+                $_c3R = UcrmCatalogue::endStandard($store, $_c3Id, $_c3Actor, $_c3Cfg, $_c3Dir);
+                $_c3Text = ['ended' => 'That standard quotation is no longer offered.'][$_c3R['kind']] ?? null;
+                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
+            }
+            error_log('[post_sync] 5.18.103 ' . $_c3Act . ' by #' . $_c3MeId . ' gave ' . (string)($_c3R['kind'] ?? '?'));
+        } catch (\Throwable $e) {
+            error_log('[post_sync] 5.18.103 ' . $_c3Act . ' by #' . $_c3MeId . ': did not finish (' . get_class($e) . ')');
+            flash('Nothing was changed — try again.', 'danger');
+        }
+        redirect($_c3Back);
     }
 }
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='sim_inbound') {

@@ -18,6 +18,13 @@ declare(strict_types=1);
  * lib/UcrmQuoteLines.php requires it by its own path (I7); and kyc_form.php's kit loop choosing its cell by
  * UcrmQuoteLinks::offeredKit, with no type test of its own (I8). I5 is rewritten where §R.4.8 moved retry_quote's
  * gated path into the shared implementation.
+ *
+ * 5.18.103 (root docs/72 §G.13, rewritten on purpose, never weakened): the tree now also carries 5.18.103, so the declared
+ * lists gain its files (QFU_I_R103 — its own boundary is tests/test_catalogue_direct.php I, against 1a0ea5f), the manifest
+ * line reads 5.18.103, a hunk may carry either release's marker, handleNew's verdict is read through $ugSale (resolve() or
+ * resolveDirect()), the inventory (I6) gains the direct sites, and lib/UcrmQuoteLines.php has a fifth require_once (the
+ * website's ShopCatalogue, inside the method that groups kits and accessories). Every check keeps its subject and its
+ * strength; the weakened copies of mutants_I.php are each still caught.
  */
 
 const QFU_I_BASE = 'f2055baf';
@@ -30,6 +37,12 @@ const QFU_I_RUNTIME = [
     'lib/UcrmQuoteLines.php', 'lib/UcrmQuoteLinks.php', 'tabs/admin/settings.php', 'tabs/sales/applications.php', 'tabs/sales/hardware.php',
     'tabs/sales/kyc_form.php', 'tabs/sales/product_mapping.php', 'tabs/sales/send_quote.php',
     'tabs/sales/subscription_plans.php',
+];
+/** 5.18.103 (root docs/72 §G.12): the files 5.18.103 adds or changes, declared here so this boundary still holds the rest. */
+const QFU_I_R103 = [
+    'includes/navigation.php', 'includes/post/post_leads.php', 'public.php', 'lib/UcrmCatalogue.php',
+    'tabs/sales/ucrm_catalogue.php', 'tests/test_catalogue_direct.php', 'tests/fixtures/r103_revert.php',
+    'tests/test_cash_in_hand_p3b_south_sudan.php',   // rewritten on purpose: the uCRM catalogue's menu entry taken out and counted
 ];
 /** The manifest (its version line) and the documents in the plugin's own directory. */
 const QFU_I_OTHER = ['SAFETY.md', 'manifest.json'];
@@ -104,10 +117,10 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
         if (hash_file('sha256', $p) !== hash_file('sha256', $base[$rel])) $changed[] = $rel;
     }
     foreach ($base as $rel => $p) if (!isset($tree[$rel])) $removed[] = $rel;
-    $own = fn(string $r) => strpos($r, 'tests/quote_from_ucrm/') === 0;
+    $own = fn(string $r) => strpos($r, 'tests/quote_from_ucrm/') === 0 || strpos($r, 'tests/catalogue_direct/') === 0;   // 5.18.103: and 5.18.103's test directory
     $all = array_values(array_filter(array_merge($changed, $added), fn($r) => !$own($r)));
     sort($all);
-    $want = array_merge(QFU_I_RUNTIME, QFU_I_OTHER, QFU_I_TESTS);
+    $want = array_merge(QFU_I_RUNTIME, QFU_I_OTHER, QFU_I_TESTS, QFU_I_R103);   // 5.18.103: and its declared files
     sort($want);
 
     // I1 — exactly the declared files
@@ -116,16 +129,17 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
         'I1 against ' . QFU_I_BASE . ' the tree changes or adds exactly the ' . count($want) . ' declared files (and this test\'s own directory), and removes none');
     // 5.18.102 D14 (rewritten on purpose, docs/71 §R.11): the link judge is the third new file
     $c->eq(array_values(array_filter($added, fn($r) => !$own($r))),
-        ['lib/UcrmQuoteLines.php', 'lib/UcrmQuoteLinks.php', 'tests/test_quote_from_ucrm.php'],
-        'I1 … of which three are new outside this test\'s directory: the resolver, the link judge (lib/UcrmQuoteLinks.php) and this test');
+        ['lib/UcrmCatalogue.php', 'lib/UcrmQuoteLines.php', 'lib/UcrmQuoteLinks.php', 'tabs/sales/ucrm_catalogue.php',
+         'tests/fixtures/r103_revert.php', 'tests/test_catalogue_direct.php', 'tests/test_quote_from_ucrm.php'],
+        'I1 … of which three are new outside this test\'s directory: the resolver, the link judge (lib/UcrmQuoteLinks.php) and this test — and 5.18.103\'s four (its store, its screen, its test and its fixture)');
     $c->eq(array_values(array_diff(QFU_I_OWN_ADDED, $added)), [],
         'I1 … and this test\'s directory gains the file §R.11 declares there: the new section\'s, L_links.php (the links, §R.9.1 L)');
 
     // I2 — no migration; the manifest by its version line; the kept files
     $mig = function (string $t): array { $o = []; foreach (glob($t . '/migrations/*') ?: [] as $f) $o[basename($f)] = hash_file('sha256', $f); ksort($o); return $o; };
     $c->t($mig($T) === $mig($B) && count($mig($B)) > 50, 'I2 migrations/ is ' . QFU_I_BASE . '\'s, file for file (' . count($mig($B)) . ' files): no migration');
-    $mb = str_replace('    "version": "5.18.101",', '    "version": "5.18.102",', (string)file_get_contents($B . '/manifest.json'), $mn);
-    $c->eq([$mn, $mb === (string)@file_get_contents($T . '/manifest.json')], [1, true], 'I2 manifest.json is ' . QFU_I_BASE . '\'s with one line changed, its version, 5.18.101 → 5.18.102');
+    $mb = str_replace('    "version": "5.18.101",', '    "version": "5.18.103",', (string)file_get_contents($B . '/manifest.json'), $mn);   // 5.18.103 (was 5.18.102)
+    $c->eq([$mn, $mb === (string)@file_get_contents($T . '/manifest.json')], [1, true], 'I2 manifest.json is ' . QFU_I_BASE . '\'s with one line changed, its version, 5.18.101 → 5.18.103');
     $kept = [];
     foreach (QFU_I_KEPT as $rel) if (!is_file($T . '/' . $rel) || !is_file($B . '/' . $rel) || hash_file('sha256', $T . '/' . $rel) !== hash_file('sha256', $B . '/' . $rel)) $kept[] = $rel;
     $c->eq($kept, [], 'I2 the ' . count(QFU_I_KEPT) . ' files §L.4 keeps are ' . QFU_I_BASE . '\'s, byte for byte (webhook.php, QuoteOrganization.php, post_kyc.php, api_retailer.php …)');
@@ -152,10 +166,11 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
             $span = implode("\n", array_slice($nl, $from, $to - $from + ($len === 0 ? 1 : 0)));
             $hunkLines = array_slice($nl, $len === 0 ? $start : $start - 1, $len);
             $closer = $hunkLines !== [] && array_filter($hunkLines, fn($x) => !preg_match('/^\s*(?:<\?php\s+(?:endif|else|endforeach);\s*\?>|[})\];,]+)\s*$/', $x)) === [];
-            if (strpos($span, '5.18.102') === false && !$closer) $unmarked[] = $rel . ' +' . $start . ',' . $len . ': ' . mb_substr(trim($nl[max(0, $start - 1)] ?? ''), 0, 100);
+            // 5.18.103: a hunk may carry either release's marker (5.18.103 changes some of these files again)
+            if (strpos($span, '5.18.102') === false && strpos($span, '5.18.103') === false && !$closer) $unmarked[] = $rel . ' +' . $start . ',' . $len . ': ' . mb_substr(trim($nl[max(0, $start - 1)] ?? ''), 0, 100);
         }
     }
-    $c->eq($unmarked, [], 'I3 every one of the ' . $hunkCount . ' hunks in the ' . count(QFU_I_RUNTIME) . ' runtime files carries its 5.18.102 marker');
+    $c->eq($unmarked, [], 'I3 every one of the ' . $hunkCount . ' hunks in the ' . count(QFU_I_RUNTIME) . ' runtime files carries its 5.18.102 marker (or, where 5.18.103 changed it again, 5.18.103\'s)');
 
     // I4 — php -l on every new or changed PHP file; the PHP 7.4 rules on every added code line of the runtime files
     // The PHP code only: comments and a page's inline HTML/JavaScript taken out (the line count kept), so the PHP 7.4 rules
@@ -302,10 +317,15 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
     $c->eq([$pq['lib/KycCrmSync.php ugQuote'] ?? null, $pq['lib/KycService.php makeQuotation'] ?? null], [true, true],
         'I5 … ugQuote and makeQuotation each post the lines retryLines() gave, after it');
     $hn = (string)file_get_contents($T . '/lib/KycService.php');
-    $iRes = strpos($hn, '->resolve(self::saleFromPost($post, $connectivity), $this->store)');
-    $iUq  = strpos($hn, '$ugQ = $this->ugQuoteNew(');
-    $c->t($iRes !== false && $iUq !== false && $iRes < $iUq && substr_count($hn, '$this->ugQuoteNew(') === 1,
-        'I5 … ugQuoteNew is called once, from handleNew, after the resolver\'s verdict on the same sale');
+    // 5.18.103 (rewritten on purpose): the sale is read once into $ugSale, and the verdict is resolveDirect()'s for a direct
+    // form's post, resolve()'s for any other — both on that same $ugSale, both before ugQuoteNew
+    $iSale = strpos($hn, '$ugSale = self::saleFromPost($post, $connectivity, $ugDirect);');
+    $iRes  = strpos($hn, '->resolve($ugSale, $this->store)');
+    $iDir  = strpos($hn, "->resolveDirect(\$ugSale, \$ugCat->installProductId(), \$ugCat->hiddenIds())");
+    $iUq   = strpos($hn, '$ugQ = $this->ugQuoteNew(');
+    $c->t($iSale !== false && $iRes !== false && $iDir !== false && $iUq !== false && $iSale < $iRes && $iSale < $iDir && $iRes < $iUq && $iDir < $iUq
+        && substr_count($hn, '$this->ugQuoteNew(') === 1,
+        'I5 … ugQuoteNew is called once, from handleNew, after the resolver\'s verdict on the same sale (5.18.103: resolve() or resolveDirect() on $ugSale)');
     $qs = (string)file_get_contents($T . '/lib/QuotationService.php');
     $ok = true;
     foreach (['sendLeadQuote', 'sendManualQuote'] as $f) {
@@ -339,11 +359,13 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
         foreach ($am[1] as $rhs) if (!$judgeOf($rhs, $src, $depth + 1)) return false;
         return true;
     };
-    $sites = []; $noJudge = [];
+    $sites = []; $noJudge = []; $direct103 = [];
     foreach ($tree as $rel => $path) {
         if (substr($rel, -4) !== '.php' || strpos($rel, 'tests/') === 0) continue;
         $src = $code((string)file_get_contents($path));
         if (strpos($src, 'UcrmQuoteLines') === false) continue;
+        // 5.18.103: the direct sites (forDirectPage, forDirectUse) build their own empty judge — direct mode reads no link (G-3)
+        if (preg_match_all('#UcrmQuoteLines::forDirect(Page|Use)\s*\(#', $src, $dm)) foreach ($dm[1] as $w) $direct103[$rel]['forDirect' . $w] = ($direct103[$rel]['forDirect' . $w] ?? 0) + 1;
         if (!preg_match_all('#(new\s+UcrmQuoteLines|UcrmQuoteLines::forPage)\s*\(#', $src, $sm, PREG_OFFSET_CAPTURE)) continue;
         foreach ($sm[0] as $k => [$hit, $off]) {
             $isNew = strpos($sm[1][$k][0], 'new') === 0;
@@ -366,11 +388,18 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
     }
     ksort($sites);
     $c->eq($sites, [
-        'includes/post/post_sync.php' => ['new' => 1], 'lib/KycCrmSync.php' => ['new' => 1], 'lib/KycService.php' => ['new' => 3],
+        'includes/post/post_sync.php' => ['new' => 1], 'lib/KycCrmSync.php' => ['new' => 1], 'lib/KycService.php' => ['new' => 4],   // 5.18.103: the direct submission (fromRecords([], []))
         'lib/QuotationService.php' => ['forPage' => 1, 'new' => 1], 'tabs/sales/hardware.php' => ['new' => 2, 'forPage' => 1],
         'tabs/sales/kyc_form.php' => ['forPage' => 1], 'tabs/sales/subscription_plans.php' => ['new' => 2, 'forPage' => 1],
     ], 'I6 the inventory: fourteen construction sites in seven files — the form, the submission (2) and Make the quotation, the cron retry, Send Quotation (2), the link save, the Plans and Hardware screens (3 each); none left in api_cron_debug.php (§R.4.8)');
     $c->eq($noJudge, [], 'I6 … and every one passes a link judge built by UcrmQuoteLinks::fromStore() or ::fromRecords()');
+    ksort($direct103);
+    foreach ($direct103 as &$_d) ksort($_d);
+    unset($_d);
+    $c->eq($direct103, [
+        'includes/post/post_sync.php' => ['forDirectPage' => 1, 'forDirectUse' => 2], 'lib/QuotationService.php' => ['forDirectPage' => 1, 'forDirectUse' => 1],
+        'tabs/sales/kyc_form.php' => ['forDirectPage' => 1], 'tabs/sales/ucrm_catalogue.php' => ['forDirectPage' => 1],
+    ], 'I6 5.18.103 (root docs/72 §G): the direct sites — the screen\'s three actions, Send Quotation\'s page and send, the form, the screen — each through forDirectPage/forDirectUse, which hold an empty judge');
     $ctl = 'function f() { $a = UcrmQuoteLinks::fromStore($s, $t); $b = $a; $c2 = null; $x = new UcrmQuoteLines($k, $t, $b); }';
     $c->eq([$judgeOf('$b', $ctl), $judgeOf('$c2', $ctl), $judgeOf('null', $ctl), $judgeOf('$zz', $ctl)], [true, false, false, false],
         'I6 control: the judge check follows a variable to fromStore(), and refuses null, a variable assigned null, and one never assigned');
@@ -411,8 +440,8 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
         }
         return $o;
     };
-    $c->eq(count($incl($T . '/lib/UcrmQuoteLines.php')), 4,
-        'I7 the control: the same token count finds lib/UcrmQuoteLines.php\'s four require_once lines');
+    $c->eq(count($incl($T . '/lib/UcrmQuoteLines.php')), 5,
+        'I7 the control: the same token count finds lib/UcrmQuoteLines.php\'s four require_once lines (5.18.103: and a fifth, inside the method that reads the website\'s ShopCatalogue)');
     $c->eq([is_file($T . '/lib/UcrmQuoteLinks.php'), $incl($T . '/lib/UcrmQuoteLinks.php')], [true, []],
         'I7 lib/UcrmQuoteLinks.php holds no require, require_once, include or include_once');
     $c->eq(substr_count($code((string)file_get_contents($T . '/lib/UcrmQuoteLines.php')), "require_once __DIR__ . '/UcrmQuoteLinks.php'"), 1,

@@ -137,8 +137,8 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
     ['label' => 'ML53 (G8) Make the quotation drawn with the gate off', 'edits' => [
         ['tabs/sales/applications.php', "if (\$ugOrders102) {\n    require_once dirname(__DIR__, 2) . '/lib/KycService.php';",
                                         "require_once dirname(__DIR__, 2) . '/lib/KycService.php';\nif (\$ugOrders102) {"],
-        ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):",
-                                        "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):"],
+        ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):",
+                                        "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):"],
      ], 'sections' => 'G', 'pattern' => '/G8 (South Sudan|Uganda with the setting (0|off)): the same web P1|G8 the Orders page/'],
     ['label' => 'MG22 Auto-Map let through on Uganda', 'file' => $API,
      'old' => "quotes never read under D14 but 5.18.101 would send after a rollback. Answered after the admin-only gate above.\n        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';\n        if (QuoteOrganization::setting(",
@@ -161,7 +161,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
     //  off, and G8 sees a fatal error, not the box)
     ['label' => 'MG26 the "did not finish" box drawn with the gate off', 'edits' => [
         ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && (!empty(\$a['quote_unconfirmed_at'])", "<?php if ((!empty(\$a['quote_unconfirmed_at'])"],
-        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make", "!empty(\$isAdmin) ? 'Do not make"]],
+        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make", "!empty(\$isAdmin) ? 'Do not make"]],
      'sections' => 'G', 'pattern' => '/G8 the Orders page with an application whose last Make the quotation went unconfirmed/'],
     // 5.18.102 D14 review round 6 (CK6-F1): the in-flight box with the gate off (its constant inlined: KycService is not loaded)
     ['label' => 'MG27 the "press in flight" box drawn with the gate off', 'edits' => [
@@ -173,6 +173,6 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
     ['label' => 'MG28 the "did not finish" box drawn with the gate off for an expired claim', 'edits' => [
         ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && (!empty(\$a['quote_unconfirmed_at']) || KycService::claimLeftUnsettled(\$a)) && empty(\$a['quote_created'])):",
             "<?php if (((\$ugOrders102 && !empty(\$a['quote_unconfirmed_at'])) || (is_numeric(\$a['quote_make_claim_ts'] ?? null) && time() - (int)\$a['quote_make_claim_ts'] >= 900 && (\$ugOrders102 ? KycService::claimLeftUnsettled(\$a) : true))) && empty(\$a['quote_created'])):"],
-        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make", "!empty(\$isAdmin) && \$ugOrders102 && KycService::canMakeQuotation(\$a) ? 'Do not make"]],
+        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make", "!empty(\$isAdmin) && \$ugOrders102 && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make"]],
      'sections' => 'G', 'pattern' => '/G8 the Orders page with an application whose claim expired/'],
 ]);

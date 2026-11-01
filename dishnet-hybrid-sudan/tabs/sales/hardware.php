@@ -1,4 +1,15 @@
 <?php
+// 5.18.103 (Uganda, root docs/72 §G.3): with the uCRM catalogue switched on, this screen gives way to it — one card, and
+// nothing below runs (no link store opened, no uCRM read). With the switch off, or the gate closed, the screen is 5.18.102's.
+require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
+    echo '<div class="card" style="padding:20px;max-width:720px;"><h3 style="margin-top:0;">Hardware</h3>'
+       . '<p>On Uganda, plans and hardware come straight from uCRM — the uCRM catalogue is on. Prices are changed in uCRM.</p>'
+       . '<p><a class="btn btn-primary" href="?page=dashboard&amp;tab=ucrm_catalogue">See the uCRM catalogue</a></p></div>';
+    return;
+}
+?>
+<?php
 // Currency label for every money figure on this screen. The Sudan/SS
 // builds hardcoded '$'; the amounts themselves are whatever currency the
 // uCRM organisation bills in, so the label now follows config.

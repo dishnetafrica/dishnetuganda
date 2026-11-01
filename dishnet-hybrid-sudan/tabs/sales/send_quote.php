@@ -43,6 +43,21 @@ $openLeads = array_values(array_filter($leads, fn($l) =>
 // adds no line. Where the gate is off (South Sudan, or ucrm_quote_organization_id 0/off) none of it runs.
 require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';   // 5.18.102: the file that names the class loads it
 $ugQuote = !empty(QuoteOrganization::setting($cfg, $dataDir)['on']);
+// 5.18.103 (Uganda, root docs/72 §G.9): with the uCRM catalogue's switch on ("direct mode"), the lines are picked from
+// uCRM's own plans, hardware and installation (QuotationService::directQuotePicker(); null in any other state), and
+// 5.18.102's picker below is not read: the plugin's plans are not offered, so a typed line suggests nothing. The forms post
+// their marker, and the send reads every picked line from uCRM again (QuotationService::directLines()). With the switch
+// off, or the gate off, $sqDirect is null and the page is 5.18.102's.
+$sqDirect = $ugQuote ? $quotSvc->directQuotePicker($openLeads) : null;
+if ($sqDirect !== null) {
+    $sqJsonFlags  = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE;
+    $sqDirectJson = json_encode(['lead_keys' => (object)$sqDirect['lead_keys']] + $sqDirect, $sqJsonFlags)
+        ?: '{"ok":false,"reason":"","stale":false,"max_qty":99,"plans":[],"hardware":[],"install":{"ok":false},"standards":[],"lead_keys":{}}';
+    $plansJson    = '[]';   // 5.18.102's lead pre-fill and datalist read these; in direct mode they offer nothing
+    $ugLeadPlans  = '{}';
+    $ugLeadKeys   = '{}';
+    $ugLeadShared = '[]';
+} else   // 5.18.103: not direct mode — 5.18.102's picker, exactly
 if ($ugQuote) {
     $ugPick      = $quotSvc->quotePlanPicker($openLeads);
     $ugJsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE;
@@ -106,11 +121,72 @@ $subTab = $_GET['qmode'] ?? 'lead';
     <?= htmlspecialchars($flash) ?>
   </div>
   <?php endif; ?>
+<?php if ($sqDirect === null): /* 5.18.103 (root docs/72 §G.9): 5.18.102's banner, drawn only outside direct mode */ ?>
 <?php if ($ugQuote && empty($ugPick['ok'])): /* 5.18.102 (Uganda, docs/71 §J): uCRM's products could not be read for the picker */ ?>
   <div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;">
     ⚠️ <?= htmlspecialchars((string)($ugPick['reason'] ?: "uCRM's products could not be read")) ?>, so the plan list shows no prices and a lead's plan is not filled in. Type each item and its price yourself, or reload in a minute.
   </div>
 <?php endif; ?>
+<?php elseif (!$sqDirect['ok']): /* 5.18.103 (§G.9): direct mode, and uCRM could not be read, with no last good list */ ?>
+  <div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;">
+    ⚠️ <?= htmlspecialchars((string)($sqDirect['reason'] ?: "uCRM's products could not be read"), ENT_QUOTES) ?>, so nothing can be picked from uCRM. Type each item and its price yourself, or reload in a minute.
+  </div>
+<?php elseif ($sqDirect['stale']): /* 5.18.103 (§G.5, §G.9): direct mode, drawn from the last good list */ ?>
+  <div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;">
+    ⚠️ uCRM could not be read just now, so the uCRM lists below are the last ones read and may be out of date. Every line picked from uCRM is checked against uCRM again when you send: if its price changed, nothing is sent and you reload.
+  </div>
+<?php endif; ?>
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9): the uCRM pickers the lead and manual forms draw in direct mode */
+    $sqCur   = html_entity_decode(trim(dn_cur($config ?? null)), ENT_QUOTES, 'UTF-8');   // dn_cur() escapes; $sqH escapes once
+    $sqMoney = function ($v): string { $v = (float)$v; return number_format($v, abs($v - round($v)) < 0.0001 ? 0 : 2); };
+    $sqPickers = function (string $ctx) use ($sqDirect, $sqCur, $sqMoney): void {
+        $sqH = function ($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+        $groups = ['Kits' => [], 'Accessories' => []];
+        foreach ($sqDirect['hardware'] as $x) $groups[$x['group'] === 'accessory' ? 'Accessories' : 'Kits'][] = $x;
+        $inst = $sqDirect['install'];
+?>
+      <div class="sq-direct" style="margin:0 0 12px;padding:10px 12px;border:1px solid #c7d2fe;background:#eef2ff;border-radius:8px;">
+<?php if ($sqDirect['standards'] !== []): ?>
+        <div class="sq-label">Standard quotations — one click fills the lines</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+<?php foreach ($sqDirect['standards'] as $i => $s): ?>
+          <button type="button" class="sq-btn sq-btn-ghost sq-btn-sm" onclick="sqDirectStandard('<?= $sqH($ctx) ?>', <?= (int)$i ?>)"<?= $s['ok'] ? '' : ' disabled' ?>><?= $sqH($s['ok'] ? $s['title'] . ' — ' . $sqCur . ' ' . $sqMoney($s['total']) : $s['title']) ?></button>
+<?php endforeach; ?>
+        </div>
+<?php foreach ($sqDirect['standards'] as $s): if ($s['ok']) continue; ?>
+        <div style="font-size:0.78rem;color:#92400e;margin:-4px 0 8px;"><?= $sqH($s['title']) ?> cannot be used: <?= $sqH($s['reason']) ?></div>
+<?php endforeach; ?>
+<?php endif; ?>
+<?php if ($sqDirect['ok']): ?>
+        <select class="sq-input" style="margin-bottom:8px;" onchange="sqDirectPickPlan('<?= $sqH($ctx) ?>', this)">
+          <option value="">— Add a plan from uCRM —</option>
+<?php foreach ($sqDirect['plans'] as $pl): ?>
+          <option value="<?= (int)$pl['sp'] ?>:<?= (int)$pl['p'] ?>"><?= $sqH($pl['label'] . ' — ' . $sqCur . ' ' . $sqMoney($pl['price']) . ' / ' . $pl['unit'] . ($pl['speed'] === '' ? '' : ' · ' . $pl['speed'] . (is_numeric($pl['speed']) ? ' Mbps' : ''))) ?></option>
+<?php endforeach; ?>
+        </select>
+        <select class="sq-input" onchange="sqDirectPickHw('<?= $sqH($ctx) ?>', this)">
+          <option value="">— Add hardware or the installation from uCRM —</option>
+<?php foreach ($groups as $gName => $rows): if ($rows === []) continue; ?>
+          <optgroup label="<?= $sqH($gName) ?>">
+<?php foreach ($rows as $hw): ?>
+            <option value="item:<?= (int)$hw['p'] ?>"><?= $sqH($hw['label'] . ' — ' . $sqCur . ' ' . $sqMoney($hw['price']) . ' / ' . $hw['unit']) ?></option>
+<?php endforeach; ?>
+          </optgroup>
+<?php endforeach; ?>
+          <optgroup label="Installation">
+<?php if ($inst['ok']): ?>
+            <option value="install:<?= (int)$inst['p'] ?>"><?= $sqH($inst['label'] . ' — ' . $sqCur . ' ' . $sqMoney($inst['price']) . ' / ' . $inst['unit']) ?></option>
+<?php else: ?>
+            <option value="" disabled>Not available: <?= $sqH($inst['reason']) ?></option>
+<?php endif; ?>
+          </optgroup>
+        </select>
+<?php else: ?>
+        <div style="font-size:0.82rem;color:#92400e;">Nothing can be picked from uCRM right now — type the items yourself.</div>
+<?php endif; ?>
+        <div style="font-size:0.75rem;color:#6b7280;margin-top:6px;">A line picked from uCRM goes at uCRM's name and price — only its quantity (1–<?= (int)$sqDirect['max_qty'] ?>) can be changed — and is checked against uCRM again when you send. A line typed by hand is marked "typed — not from uCRM".</div>
+      </div>
+<?php }; endif; ?>
 
   <!-- Sub-tab pills -->
   <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
@@ -128,6 +204,9 @@ $subTab = $_GET['qmode'] ?? 'lead';
       <input type="hidden" name="action" value="send_lead_quote">
       <?= csrfField() ?>
       <input type="hidden" name="quote_items_json" id="leadItemsJson" value="[]">
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9, G-9): this page was drawn under the uCRM catalogue */ ?>
+      <input type="hidden" name="ucrm_quote_form" value="<?= htmlspecialchars((string)$sqDirect['marker'], ENT_QUOTES) ?>">
+<?php endif; ?>
 
       <div style="margin-bottom:14px;">
         <label class="sq-label">Lead *</label>
@@ -163,6 +242,7 @@ $subTab = $_GET['qmode'] ?? 'lead';
 <?php if ($ugQuote): /* 5.18.102 (Uganda, docs/71 §J): why the pre-fill added no line */ ?>
       <div id="leadPlanHint" style="display:none;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:0.82rem;"></div>
 <?php endif; ?>
+<?php if ($sqDirect !== null) $sqPickers('lead');   /* 5.18.103 (root docs/72 §G.9): pick from the uCRM catalogue */ ?>
 
       <button type="button" class="sq-btn sq-btn-ghost sq-btn-sm" onclick="addItem('lead')" style="margin-bottom:12px;">+ Add item</button>
 
@@ -238,6 +318,9 @@ $subTab = $_GET['qmode'] ?? 'lead';
       <input type="hidden" name="action" value="send_manual_quote">
       <?= csrfField() ?>
       <input type="hidden" name="mq_items_json" id="manualItemsJson" value="[]">
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9, G-9): this page was drawn under the uCRM catalogue */ ?>
+      <input type="hidden" name="ucrm_quote_form" value="<?= htmlspecialchars((string)$sqDirect['marker'], ENT_QUOTES) ?>">
+<?php endif; ?>
 
       <div class="sq-row">
         <div>
@@ -270,6 +353,7 @@ $subTab = $_GET['qmode'] ?? 'lead';
 
       <div class="sq-section-title">Quote Items</div>
       <div id="manualItemsList"></div>
+<?php if ($sqDirect !== null) $sqPickers('manual');   /* 5.18.103 (root docs/72 §G.9): pick from the uCRM catalogue */ ?>
       <button type="button" class="sq-btn sq-btn-ghost sq-btn-sm" onclick="addItem('manual')" style="margin-bottom:12px;">+ Add item</button>
 
       <div class="sq-total-bar" id="manualTotalBar" style="display:none;">
@@ -384,6 +468,147 @@ function sqUgLeadPrefill(id) {
   });
 })();
 <?php endif; ?>
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9): direct mode's pickers — emitted only with the uCRM catalogue's switch on */ ?>
+// 5.18.103 (§G.9): what uCRM offers, as the server read it (QuotationService::directQuotePicker()). Nothing here is
+// trusted at the send: every picked line is read from uCRM again there, and a price that changed refuses the send.
+const SQ_DIRECT = <?= $sqDirectJson ?>;
+const SQ_PICKED = {};   // row id → the picked line it shows; its name, unit and price are uCRM's and read-only
+function sqDirectKey(l) { return l.kind + ':' + (l.kind === 'plan' ? l.sp + ':' : '') + l.p; }
+function sqDirectMoney(v) {   // as the server's lists show it: thousands grouped, decimals only when there are any
+  const n = Number(v) || 0;
+  const d = Math.abs(n - Math.round(n)) < 0.0001 ? 0 : 2;
+  return n.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+}
+// A line picked from uCRM: built from text nodes (uCRM's names are never HTML here); only its quantity (1–99) can change.
+// The same item picked again adds to that line's quantity.
+function sqDirectAdd(ctx, line) {
+  const list = document.getElementById(ctx + 'ItemsList');
+  if (!list || !line) return;
+  const max = SQ_DIRECT.max_qty || 99;
+  const want = sqDirectKey(line);
+  const rows = list.querySelectorAll('.sq-item-row.sq-picked');
+  for (let i = 0; i < rows.length; i++) {
+    const had = SQ_PICKED[rows[i].id];
+    if (had && sqDirectKey(had) === want) {
+      const qi = rows[i].querySelector('.qty');
+      qi.value = String(Math.min(max, (parseInt(qi.value, 10) || 1) + (parseInt(line.q, 10) || 1)));
+      recalc(ctx);
+      return;
+    }
+  }
+  const id = ++itemCounters[ctx];
+  const div = document.createElement('div');
+  div.className = 'sq-item-row sq-picked';
+  div.id = ctx + '_item_' + id;
+  const keep = {};
+  keep.kind = line.kind; keep.sp = line.sp; keep.p = line.p; keep.label = line.label; keep.price = line.price; keep.unit = line.unit;
+  SQ_PICKED[div.id] = keep;
+  const name = document.createElement('span');
+  name.style.cssText = 'flex:1;font-size:0.85rem;';
+  name.textContent = line.label;
+  const tag = document.createElement('span');
+  tag.className = 'sq-badge';
+  tag.style.cssText = 'background:#e0e7ff;color:#3730a3;';
+  tag.textContent = 'uCRM';
+  tag.title = 'Picked from the uCRM catalogue: uCRM\'s name and price, checked against uCRM again when you send';
+  const qty = document.createElement('input');
+  qty.type = 'number'; qty.className = 'qty'; qty.min = '1'; qty.max = String(max); qty.step = '1';
+  qty.value = String(Math.max(1, Math.min(max, parseInt(line.q, 10) || 1)));
+  qty.addEventListener('input', function () { recalc(ctx); });
+  const unit = document.createElement('span');
+  unit.style.cssText = 'font-size:0.82rem;color:#6b7280;';
+  unit.textContent = line.unit;
+  const price = document.createElement('span');
+  price.style.cssText = 'font-size:0.85rem;font-weight:600;min-width:90px;text-align:right;';
+  price.textContent = SQ_CUR + sqDirectMoney(line.price);
+  const rm = document.createElement('button');
+  rm.type = 'button'; rm.className = 'sq-remove'; rm.title = 'Remove'; rm.textContent = '✕';
+  rm.addEventListener('click', function () { removeItem(ctx, String(id)); });
+  [name, tag, qty, unit, price, rm].forEach(function (el) { div.appendChild(el); });
+  list.appendChild(div);
+  recalc(ctx);
+}
+// A line typed by hand is marked on the page only — never in the label sent.
+function sqDirectMarkTyped(div) {
+  const m = document.createElement('span');
+  m.className = 'sq-typed-mark';
+  m.style.cssText = 'font-size:0.72rem;color:#92400e;white-space:nowrap;';
+  m.textContent = 'typed — not from uCRM';
+  div.insertBefore(m, div.querySelector('.sq-remove'));
+}
+// The lines a form posts: a picked line with its uCRM ids and the price it was drawn with; a typed line as 5.18.102 reads it.
+function sqDirectItems(ctx) {
+  const max = SQ_DIRECT.max_qty || 99;
+  const items = [];
+  document.querySelectorAll('#' + ctx + 'ItemsList .sq-item-row').forEach(function (row) {
+    const l = SQ_PICKED[row.id];
+    if (l && row.classList.contains('sq-picked')) {
+      const qi = row.querySelector('.qty');
+      const q = Math.max(1, Math.min(max, parseInt(qi.value, 10) || 1));
+      if (qi.value !== '' && String(q) !== qi.value) qi.value = String(q);   // the box shows what is sent (1–99)
+      const it = {};
+      it.kind = l.kind; it.p = l.p; it.q = q; it.label = l.label; it.price = l.price; it.quantity = q; it.unit = l.unit;
+      if (l.kind === 'plan') it.sp = l.sp;
+      items.push(it);
+      return;
+    }
+    const label = (row.querySelector('.label')?.value || '').trim();
+    const qty   = parseInt(row.querySelector('.qty')?.value || '1') || 1;
+    const price = parseFloat(row.querySelector('.price')?.value || '0') || 0;
+    const unit  = (row.querySelector('.unit')?.value || 'amount').trim();
+    if (label || price > 0) items.push({label, quantity: qty, price, unit});
+  });
+  return items;
+}
+function sqDirectPickPlan(ctx, sel) {
+  const m = /^(\d+):(\d+)$/.exec(sel.value);
+  sel.value = '';
+  if (!m) return;
+  const hit = SQ_DIRECT.plans.find(function (x) { return String(x.sp) === m[1] && String(x.p) === m[2]; });
+  if (hit) sqDirectAdd(ctx, hit);
+}
+function sqDirectPickHw(ctx, sel) {
+  const m = /^(item|install):(\d+)$/.exec(sel.value);
+  sel.value = '';
+  if (!m) return;
+  const inst = SQ_DIRECT.install || {};
+  const hit = m[1] === 'install'
+    ? (inst.ok && String(inst.p) === m[2] ? inst : null)
+    : SQ_DIRECT.hardware.find(function (x) { return String(x.p) === m[2]; });
+  if (hit) sqDirectAdd(ctx, hit);
+}
+// A standard quotation (G-12): its lines, priced live from uCRM, replace the lines; it never sends.
+function sqDirectStandard(ctx, i) {
+  const s = SQ_DIRECT.standards[i];
+  const list = document.getElementById(ctx + 'ItemsList');
+  if (!s || !s.ok || !list) return;
+  list.innerHTML = '';
+  itemCounters[ctx] = 0;
+  s.lines.forEach(function (l) { sqDirectAdd(ctx, l); });
+  const hint = document.getElementById('leadPlanHint');
+  if (ctx === 'lead' && hint) hint.style.display = 'none';
+  recalc(ctx);
+}
+// The lead pre-fill: the one offered plan whose key (PublicPriceFeed::planKey, built by the server) is the lead's — else no line.
+function sqDirectLeadPrefill(id) {
+  const hint = document.getElementById('leadPlanHint');
+  const d    = LEAD_DATA[id] || {};
+  const keys = SQ_DIRECT.lead_keys || {};
+  const key  = Object.prototype.hasOwnProperty.call(keys, String(id)) ? keys[String(id)] : '';
+  const hits = key !== '' ? SQ_DIRECT.plans.filter(function (x) { return x.key === key; }) : [];
+  if (hits.length === 1) {
+    if (hint) hint.style.display = 'none';
+    sqDirectAdd('lead', hits[0]);
+    return;
+  }
+  recalc('lead');
+  if (!hint) return;
+  hint.textContent = !SQ_DIRECT.ok ? 'uCRM could not be read, so no plan was added — add the items yourself.'
+    : d.plan ? 'No plan offered from uCRM is spelled like this lead\'s interest (' + d.plan + '), so no line was added — pick one below, or add the items yourself.'
+             : 'This lead names no plan, so no line was added — pick one below, or add the items yourself.';
+  hint.style.display = '';
+}
+<?php endif; ?>
 
 const itemCounters = {lead:0, cash:0, manual:0};
 
@@ -404,6 +629,9 @@ function addItem(ctx, label='', price=0, qty=1, unit='month') {
     <input type="number" class="price" placeholder="Price" value="${price || ''}" min="0" step="0.01" oninput="recalc('${ctx}')">
     <button type="button" class="sq-remove" onclick="removeItem('${ctx}','${id}')" title="Remove">✕</button>
   `;
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9): a typed line is marked on the page only; the cash proforma is unchanged */ ?>
+  if (ctx !== 'cash') sqDirectMarkTyped(div);
+<?php endif; ?>
   // Plan autocomplete on label input
   const labelInput = div.querySelector('.label');
   labelInput.addEventListener('focus', () => showPlanSuggest(labelInput, ctx, id));
@@ -449,6 +677,9 @@ function removeItem(ctx, id) {
 }
 
 function getItems(ctx) {
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9): picked lines carry their uCRM ids; typed lines are read as below */ ?>
+  return sqDirectItems(ctx);
+<?php endif; ?>
   const rows = document.querySelectorAll('#' + ctx + 'ItemsList .sq-item-row');
   const items = [];
   rows.forEach(row => {
@@ -491,6 +722,9 @@ function onLeadPick(sel) {
   const container = document.getElementById('leadItemsList');
   container.innerHTML = '';
   itemCounters.lead = 0;
+<?php if ($sqDirect !== null): /* 5.18.103 (root docs/72 §G.9): the one offered uCRM plan keyed like the lead's interest, or no line */ ?>
+  return sqDirectLeadPrefill(id);
+<?php endif; ?>
 <?php if ($ugQuote): ?>
   return sqUgLeadPrefill(id);   // 5.18.102 (Uganda, docs/71 §J): the exact key's uCRM-priced plan, or no line
 <?php endif; ?>

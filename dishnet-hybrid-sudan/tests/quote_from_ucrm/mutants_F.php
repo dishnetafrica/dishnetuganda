@@ -51,7 +51,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
      'old' => "    \$plansJson   = json_encode(\$ugPick['plans'], \$ugJsonFlags) ?: '[]';\n", 'new' => '',
      'sections' => 'F', 'pattern' => '/F5 the picker/'],
     ['label' => 'MF12 a failed catalogue read kept for the page', 'file' => $UQL,
-     'old' => "        if (!empty(\$cat['ok'])) {\n            @file_put_contents(\$file,", 'new' => "        if (true) {\n            @file_put_contents(\$file,",
+     'old' => "        if (!empty(\$cat['ok'])) {\n            \$json = json_encode(", 'new' => "        if (true) {\n            \$json = json_encode(",
      'sections' => 'F', 'pattern' => '/never kept/'],
     ['label' => 'MF13 the banner\'s reason unescaped', 'file' => $SQ,
      'old' => "<?= htmlspecialchars((string)(\$ugPick['reason'] ?: \"uCRM's products could not be read\")) ?>",

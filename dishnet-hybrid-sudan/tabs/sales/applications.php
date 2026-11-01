@@ -21,6 +21,10 @@ $totalC  = count($myApps);
 // shown on the card only where the quoting-organization gate is on. Elsewhere nothing on this page changes.
 require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
 $ugOrders102 = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on'];
+// 5.18.103 (Uganda, root docs/72 §G.8, G-10): the uCRM catalogue's switch — with it on, a 5.18.102 web application is
+// offered no Make the quotation and its card says to quote it in uCRM by hand. False wherever the gate is off.
+require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
+$ugDirect103 = $ugOrders102 && UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
 // 5.18.102 (Uganda, D14, docs/71 §R.4.4, §R.4.8): Make the quotation's five conditions are KycService's one
 // implementation, which the handler checks again; and the Orders filter &quote_link=<record id> lists only the
 // applications quoted under that uCRM link record (a quote_id, and quote_link_ids naming it). The filter is admins only:
@@ -393,9 +397,12 @@ if ($ugOrders102) {
 <?php if ($ugOrders102 && (!empty($a['quote_unconfirmed_at']) || KycService::claimLeftUnsettled($a)) && empty($a['quote_created'])): /* 5.18.102 D14 review round 3 (CK-flows-2): Make the quotation's last POST got no id back (a timeout, a 5xx) — uCRM may have made it, so the card never says none was made; a press finds it (R-M4). Round 5 (CK5-B2): a heading true whatever stopped it — a lost answer, a refusal, a write after the read-back. Round 7 (CK7-F1): a claim past QUOTE_CLAIM_SECONDS too — every answer and every Throwable removes its claim, so one still there is a request that died (after its POST, perhaps) or a removal that failed (logged). Round 8 (CK8-F2): unless a refusal followed it — KycService::claimLeftUnsettled() */ ?>
     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
         <div style="font-weight:800;margin-bottom:3px;">⚠ Making the last quotation did not finish</div>
-        <div>It may have been made in uCRM. <?= /* 5.18.102 D14 review round 4 (CK4-F2): the button's own condition */ !empty($isAdmin) && KycService::canMakeQuotation($a) ? 'Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second one.' : 'Do not make one by hand in uCRM before an admin has looked there for it.' ?></div>
+        <div>It may have been made in uCRM. <?= /* 5.18.102 D14 review round 4 (CK4-F2): the button's own condition */ !empty($isAdmin) && KycService::canMakeQuotation($a, $ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second one.' : 'Do not make one by hand in uCRM before an admin has looked there for it.' ?></div>
     </div>
 <?php else: /* 5.18.102: without such an answer, as it was */ ?>
+<?php /* 5.18.103 (Uganda, root docs/72 §G.8, G-10): with the uCRM catalogue on, a 5.18.102 web application left with P1 is
+quoted in uCRM by hand — its card says so, whatever text it stored (P1_UNLINKED's "once linked" cannot happen now) */
+if ($ugDirect103 && ($a['quote_sale_entry'] ?? null) === 'web' && ($a['quote_refused'] ?? null) === 'P1' && !empty($a['quote_refused_text'])) $a['quote_refused_text'] = UcrmQuoteLines::text('WEB_SWITCH_ON'); ?>
 <?php if (!empty($a['quote_refused_text']) && empty($a['quote_created'])): /* 5.18.99 (Uganda): the quote check refused this customer's quotation, and none has been made since */ ?>
     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
         <div style="font-weight:800;margin-bottom:3px;">⚠ No quotation was made</div>
@@ -404,7 +411,7 @@ if ($ugOrders102) {
 <?php endif; ?>
 <?php endif; ?>
 <?php endif; /* 5.18.102 D14 review round 6: the press in flight */ ?>
-<?php if ($ugOrders102 && !empty($isAdmin) && KycService::canMakeQuotation($a)): /* 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — admins only, the five conditions; it posts action, _csrf and app_id, nothing else, and disables itself on submit */ ?>
+<?php if ($ugOrders102 && !empty($isAdmin) && KycService::canMakeQuotation($a, $ugDirect103) /* 5.18.103 (§G.8) */): /* 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — admins only, the five conditions; it posts action, _csrf and app_id, nothing else, and disables itself on submit */ ?>
     <form method="POST" style="margin-top:6px;" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;}return true;">
         <?= csrfField() ?>
         <input type="hidden" name="action" value="kyc_make_quote">
