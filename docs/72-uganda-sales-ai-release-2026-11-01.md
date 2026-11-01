@@ -1417,3 +1417,287 @@ Total: about 45–60 working days, one coherent release.
 - **Whisper on Luganda.**
 - **Location data:** the source, licence and size of a Uganda district and town dataset.
 - **Two line ranges were not re-read:** the 3,005–3,100 region of `webhook.php` and the after-sales job-title rule in `InstallScheduledWhatsApp`.
+
+## G. 5.18.103 — the catalogue straight from uCRM: the design to build (1 Nov 2026)
+
+Status: **draft, under review (1 Nov); nothing built, nothing deployed.** It replaces §F.2's §1 and
+folds in §F.3's findings F11, F12, F13 and F18, under D6 and D7. Base: `origin/release/5.18.102` = `1a0ea5f`.
+Citations `L:path:line` are that commit's `dishnet-hybrid-sudan/path:line`, read by two read-only agents on 1 Nov
+(their map is not kept; every line cited here was checked against the tree).
+
+### G.1 What changes, in the owner's words and in the agents'
+
+*"remove all the hardware and internet plans for plugin … use what is in the ucrm make it simple"*, *"show all the
+things of hardware … same like website and give standard one click predefined quote"*.
+
+- **For an agent on the KYC form:** the plans and hardware listed are uCRM's own service plans and products, at
+  uCRM's prices, the hardware grouped as the website groups it (kits, accessories). Above them, one button per
+  **standard quotation** an admin defined ("Standard: Starlink Mini + Residential + installation"): one click fills the
+  plan, the hardware and "DishNet installs"; the agent still checks and submits. A Cash sale collects exactly the
+  total shown, as in 5.18.102.
+- **For staff on Send Quotation:** the plan list and a new hardware list come from uCRM too, each line carrying its
+  uCRM product, and the same standard-quotation buttons fill the lines; Send works as today.
+- **For an admin:** on Uganda, the Plans and Hardware screens give way to one read-only **uCRM catalogue** screen:
+  what the forms offer, what they do not and why (inactive, archived, priced 0, spelled like a plan…), and four
+  settings — the installation product, products to keep off the forms, the standard quotations, and the switch itself.
+  Nothing is linked any more. Prices are changed in uCRM, as today.
+- **Nothing changes until an admin turns it on** on that screen, after reading the list (§G.3). Until then 5.18.103
+  behaves exactly as 5.18.102 (D6's state: no plugin quotation until the build is live).
+
+Out of 5.18.103, recorded: the website's price feed (§F.2 §1.11 — the site already reads uCRM, `L:prices.php:61-62`;
+its own filtering waits); the retailer app and the mobile API (§G.11); the AI's senses, the quote follow-up, the daily
+list, after-sales (D7: the release after); no migration, so F13 does not arise here (§G.12).
+
+### G.2 Decisions
+
+| # | Decision | Reason |
+|---|---|---|
+| G-1 | **Direct mode is a switch, OFF until an admin turns it on** on the uCRM catalogue screen, and turning it on needs a readable catalogue, at least one plan offered and the installation product set (§G.3). Off = 5.18.102 exactly | The admin reads what the forms will offer before agents see it (D4's "each with its own check", applied to this release); a deploy never changes what agents see; and turning it off is the kill switch — back to D6's state, never to a wrong price |
+| G-2 | **The switch and the three settings live in one new store table, `ucrm_catalogue`**, written under `withLock` with provenance; never a config key | Web pages read config from the store row and the crons from the files (`L:public.php:512`, `L:lib/PluginConfig.php:53-79`); a web-written key would be invisible to the cron that retries quotations. `tools/set_config.php` is pinned by `test_quote_company` I3 and is not touched. `QuoteOrganization.php` stays byte for byte (it is in `test_quote_from_ucrm` I's kept list) |
+| G-3 | **The direct rules live in `UcrmQuoteLines`** (new public methods), reusing its private rule functions unchanged: `planRules`, `servicePlanRules`, `badProduct`, `likePlan`, `monthPrice`, `exclusion` | One class prices the form, the cash and every quote (docs/71 §D). Reuse means direct mode cannot judge a uCRM row by different rules |
+| G-4 | **A plan is a uCRM pair**: a service plan offered by rule 6 (6a–6c, the 1-month price) **and exactly one counted product keyed like it**, at the same price. The quote line is that product (`unit` month) | The WhatsApp quote summary (`L:webhook.php:339-358`, kept) shows a line as monthly only when its label keys to a service plan, and `billing/quotes` takes products. "Exactly one" is docs/71 §D.3's rule, restored: with no link to name one id, two products spelled like one plan are ambiguous, and the plan is not offered ("two products in uCRM are spelled like it") |
+| G-5 | **Hardware is every counted product the website would show**: passing `badProduct`, not keyed like any service plan (rule 7), not the installation product, not kept off by an admin, and not in `public_price_exclude` (`L:lib/PublicPriceFeed.php:24-25`); grouped kit / accessory by `ShopCatalogue::accessoryNameKeys`, the website's own split (`L:lib/PublicPriceFeed.php:50-77`), for display only | *"same like website"*. The rules are 5.18.102's, so no item the website lists that uCRM would quote wrongly (taxable, priced 0, more than 2 decimals) reaches a quote |
+| G-6 | **The installation is one setting, a uCRM product id**, picked on the screen from the products that pass `badProduct` and rule 7. It is never offered as hardware, and a cart naming it is refused | No name is matched (docs/71 D14). Rule 8 ("installation ≠ an offered kit") becomes a plain id comparison |
+| G-7 | **A direct sale never writes a uCRM id into `package_choice`, `device_id` or the legacy cart fields.** The server sets `package_choice` and `device_id` to `''` and rebuilds `hw_cart_json` itself; the uCRM ids go to new fields | 5.18.102 reads those fields as plugin row ids (retries, `L:lib/KycCrmSync.php:407`, the Bidal job `L:lib/KycService.php:2829-2832`, `kyc_quote_debug`); a uCRM id there could price a different plugin row after a rollback. The browser is never trusted to blank them (three of them are posted twice, `L:tabs/sales/kyc_form.php:842-844`, `:1637`, `:1667-1668`) |
+| G-8 | **A direct sale is stored with `quote_sale_entry = 'web-direct'`**, which 5.18.102 reads as `app` | After a rollback to 5.18.102 its retry refuses at the entry rule — no quotation, P1 or P2 — and Make the quotation is not offered (`canMakeQuotation` wants `'web'`). No wrong quote can result in either direction |
+| G-9 | **The posted form says which world it came from**: marker `5.18.103-direct`. With the switch on, only that marker is `web-direct`; a form opened before the switch (marker `5.18.102`) is `app`. With the switch off, the direct marker is `app` and `5.18.102` is `web` as today | A form's ids are only meaningful in the world that drew them |
+| G-10 | **Stored applications keep the branch they were saved under, whatever the switch says**: `web-direct` records are retried and quoted by the direct rules; `web` records by their links (frozen) | The ids in a record do not change meaning when the switch moves; the switch governs what the form offers and how a new post is read |
+| G-11 | **The link store is frozen, never deleted**: with the switch on, link saves and clears are refused, and deleting a plan or kit row no longer ends its links | It still prices 5.18.102's applications on retry and keeps a rollback (or the switch turned off) working |
+| G-12 | **A standard quotation stores ids only, never prices**, and is priced live each time it is used; if any item no longer resolves, its button is disabled with the reason, never a partial bundle | Prices change in uCRM; a stored price would be a second price list |
+| G-13 | **No new permission, no migration.** Defining standard quotations and the settings: admins. Using one: whoever may use the KYC form or Send Quotation already | A new RBAC permission needs a migration (`L:lib/RbacService.php:35-41`); the release norm is "no migration" |
+| G-14 | **The standard quotation on Send Quotation goes through the existing send**, its type (`lead` or `manual`), event (`quote_lead`, `quote_manual`), Ref marker and `quotes_log` row unchanged | F12: the next release's quote tracker reads exactly those; a new type would be uncounted on Quote History and never retried (`L:lib/NotificationRetry.php:32`) |
+
+### G.3 The switch, and the uCRM catalogue screen
+
+**The store table** `ucrm_catalogue` (plugin store, created lazily on first write, read only where the quoting
+organization's gate is on — `QuoteOrganization::setting()['on']` **and** an integer id, since `on` can come with
+`id` null, `L:lib/QuoteOrganization.php:80-114`). Records, each with an int `id`, `kind`, provenance (`by_id`,
+`by_name`, `at`, `at_ts`) and `ended_at_ts` (null = in force; a change ends the old record and appends a new one, so the
+history stays):
+
+| kind | holds | at most |
+|---|---|---|
+| `mode` | `on: true/false` | one in force; none = off |
+| `install` | `product_id` | one in force; none = not set |
+| `hidden` | `product_id` | one in force per product |
+| `standard` | `title` (plain, ≤ 60), `plan {sp, p}`, `hw [{p, q}]` (q 1–20, ≤ 10 items), `install: bool` | 10 in force |
+
+A new class, `lib/UcrmCatalogue.php`, owns it: `fromStore($store, $setting)` (opens nothing when the gate is off),
+`direct()`, `installProductId()`, `hiddenIds()`, `standards()`, and the writes `setMode`, `setInstall`, `setHidden`,
+`saveStandard`, `endStandard` — each under `withLock`, each re-reading the gate inside the lock, each refusing a value
+it cannot validate, each returning a fixed result kind. No uCRM request is made inside a lock: the caller reads the
+catalogue first and passes the judged ids in (as `UcrmQuoteLinks::set()` does).
+
+**The screen** `tabs/sales/ucrm_catalogue.php`, tab `ucrm_catalogue`, under the `plans` or `hardware` permission
+(admins by default, `L:public.php:2343-2344`):
+
+1. **The switch:** on or off, who set it and when; "Turn on" (with the three conditions, each shown met or not) or
+   "Turn off".
+2. **Plans offered**: name, speed (`downloadSpeed`, as the website shows it, `L:lib/PublicPriceFeed.php:36`),
+   monthly price. **Not offered**, each with its reason.
+3. **Hardware offered**, kits then accessories, with price and "Keep off the forms" per product (admins). **Kept
+   off**, with "Offer again". **Not offered**, each with its reason.
+4. **The installation product**: the one in force, or "not set", and a picker of the products that may be it.
+5. **Standard quotations**: each with its items and live total (or the reason it cannot be used), "Edit", "Stop
+   using"; "Add a standard quotation" (title, a plan, hardware with quantities, "includes installation").
+
+Every uCRM string passes through `h()`; reasons through `QuoteOrganization::plain`. The page reads the catalogue with
+`quoteClient()` and the page timeouts, through `forPage()`'s 60-second cache; every **save** reads it fresh. Each POST
+handler (in `includes/post/post_sync.php`) copies 5.18.102's guard order exactly (`L:includes/post/post_sync.php:721-741`):
+`requireAdmin`, the fresh re-read of the account (`retailers.json`, active and admin, else 403), then
+`csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST')`, then the gate with an integer id —
+never `$can()` or `$isAdmin`, which do not exist yet when POST handlers run (`L:public.php:978` against `:2202`,
+`:2363`).
+
+**Nav and tabs on Uganda** (`L:includes/navigation.php:503-512`, `L:public.php:2693-2694`, `:2822-2823`): with the
+gate on, a "uCRM catalogue" entry is added for those who may see Plans or Hardware. With the switch **on**, the Plans
+and Hardware entries are not drawn, and `?tab=subscription_plans` / `?tab=hardware` show one card — *"On Uganda,
+plans and hardware come straight from uCRM — see the uCRM catalogue"* — and stop before 5.18.102's body, which opens
+nothing (no link store, no catalogue read). With the switch off, both screens are 5.18.102's, byte for byte. South
+Sudan: no entry, no change. `includes/onboarding.php:173-174` links the two tabs; with the switch on they show the card.
+
+### G.4 What is offered — `UcrmQuoteLines::offered()`
+
+One catalogue read (`catalogue()`, unchanged: `GET products?limit=500`, `GET service-plans?limit=500`, fail closed,
+`L:lib/UcrmQuoteLines.php:206-251`). Returns `{ok, reason, plans, hardware, install, not_offered}`:
+
+- **plans**: each service plan that passes `servicePlanRules` (counted, fewer than 200 rows, key unique, one enabled
+  1-month price, `planPrice` equal to it) **and** has exactly one counted product keyed alike that passes
+  `planRules`; a plan whose name is in `public_price_exclude` is left out. Each: `{sp, p, label (the product's name),
+  price, speed, key}`.
+- **hardware**: each counted product that passes `badProduct`, is not `likePlan`, is not the installation product, is
+  not kept off and not in `public_price_exclude`. Each: `{p, label, price, unit, group}`.
+- **install**: the installation product judged by `badProduct` and rule 7, or `{ok: false, reason}` — "the
+  installation product is not set — an admin sets it on the uCRM catalogue screen", or the rule's reason.
+- **not_offered**: every service plan and product left out, with its reason and a fixed `why` code, for the screen and
+  the deploy check.
+
+New reasons (plain, never a price): `plan_no_product` "no uCRM product is spelled like this service plan";
+`plan_two_products` "two uCRM products are spelled like this service plan"; `kept_off` "an admin keeps it off the
+forms"; `site_excluded` "the website's price list leaves it out (public_price_exclude)"; `install_unset`.
+
+### G.5 The KYC form (direct mode)
+
+`tabs/sales/kyc_form.php` builds its price-cell map from `offered()` instead of the plugin rows when direct mode is
+on (`L:tabs/sales/kyc_form.php:11-64`); with it off, the 5.18.102 block runs unchanged, and South Sudan (`$_q102 ===
+null`) stays byte for byte.
+
+- **Rows.** The plan list draws one radio per offered plan, its value `"<sp>:<p>"`, field name `ucrm_plan` (never
+  `package_choice`); the hardware list draws one row per offered product, `data-id` the product id, `data-type`
+  `starlink` (so the existing type filter shows them for Starlink and hides them for Fiber, SIM and LTE, as 5.18.102
+  shows nothing priced there, `L:tabs/sales/kyc_form.php:1698-1703`, `:1740-1761`), kits before accessories. Items
+  not offered are not drawn; the form says how many and that the uCRM catalogue screen lists them.
+- **Standard quotations.** One button per usable standard quotation above the plan list. Pressing it selects the
+  plan, sets the cart to its hardware and quantities, and answers "Who installs?" with DishNet when it includes the
+  installation (otherwise leaves the question open). It never submits. The keyword defaults (`applyDefaults`,
+  `L:tabs/sales/kyc_form.php:1707-1726`, `:1764-1837`) do nothing in direct mode: nothing is preselected unless a
+  standard quotation is pressed.
+- **The total** stays `q102Quote`'s single all-or-nothing total in integer cents, keyed by the new ids; the
+  installation cell is the installation product's.
+- **Posted fields** in direct mode: `ucrm_plan`; `ucrm_cart_json` = `[{"p":id,"q":n}]`; `install_by`;
+  `ucrm_total_seen`; **`ucrm_items_seen`** — each selected item's token, the first 16 hex of
+  `sha256(productId|label|price|unit)`, sorted and comma-joined; `ucrm_quote_form = 5.18.103-direct`.
+  `package_choice`, `device_id` and `hw_cart_json` are posted empty — and the server ignores whatever comes (G-7).
+
+### G.6 Pricing a direct sale — `resolveDirect()`
+
+`KycService::saleFromPost` adds `direct_plan` (`[sp, p]` from `ucrm_plan`, two positive ints, else null),
+`direct_cart` (from `ucrm_cart_json`: at most 20 entries, each two positive ints, q 1–20, duplicates merged; anything
+malformed → the whole cart is malformed) and `entry` per G-9.
+
+`UcrmQuoteLines::resolveDirect($sale, $offered)` — the same shape `resolve()` answers (`L:lib/UcrmQuoteLines.php:
+509-592`), `link_ids` always `[]`, plus `item_ids {plan:{sp,p}, hw:[{p,q}], install:p|null}`, `labels {offer,
+device}` and `tokens`:
+
+1. entry not `web-direct` → unpriced, `ENTRY_REASON`;
+2. Fiber → `FIBER_REASON`;
+3. the catalogue unreadable → its reason;
+4. no plan, or a malformed cart → `no_plan` / unpriced "the sale's items could not be read";
+5. the plan pair must be **offered** now (G-4) → else its reason;
+6. each hardware id must be **offered** now (G-5) → else its reason;
+7. "Who installs?" as today (`needsInstallAnswer`); DishNet → the installation must be set and pass → else its reason.
+
+`handleNew` calls it at the same place, once, before any write (`L:lib/KycService.php:549-564`). Its `package_choice
+> 0` check (`:735-738`) becomes "a plan pair was posted" in direct mode. `cashRefusal` keeps every step but the last;
+in direct mode the last is **`seenItemsMatch(ucrm_items_seen, tokens)`**, refused with a new text, `CASH_ITEM_CHANGED`:
+*"An item on this sale changed in uCRM since the form was opened — reload the form. Nothing was saved and no money was
+taken."*, which also drops the page cache. (`seenLinksMatch` would refuse every direct Cash sale: it needs a non-empty
+link set, `L:lib/UcrmQuoteLines.php:436-443`.) The token also closes 5.18.102's recorded limit that a rename at the
+same id and price went unnoticed.
+
+`handleExisting` is unchanged: only the two APIs reach it (the web form never sends `customer_id`), and they never
+carry the direct marker.
+
+### G.7 What a direct application stores
+
+`linesRecord` in direct mode:
+
+- `quote_sale_entry = 'web-direct'`, `install_by`;
+- `quote_item_ids` — always, priced or not (the retry re-resolves an unpriced one from it);
+- priced: `quote_items`, `quote_lines_source = 'ucrm-direct-5.18.103'`, `quote_items_total`, `quote_lines_read_at`,
+  `offer_price`, `device_price` — never `quote_link_ids`;
+- unpriced: `quote_items null`, `offer_price null`, `device_price null` — never `quote_sale_cart`;
+- and, set by the server over the posted values: `package_choice ''`, `device_id ''`, `offer_name` (the plan's uCRM
+  label when listed), `device_title` (the first hardware label), `kitQty` (the first hardware quantity), and
+  **`hw_cart_json` rebuilt** as `[{"id":0,"ucrm_product_id":p,"title":<uCRM label>,"price":<uCRM price>,"qty":q}]`.
+
+`id 0` matches no plugin row anywhere; the titles are what the installation prefill, the stock deduction at job
+completion and the WhatsApp fallback read (`L:includes/api/api_install_auth.php:96-108`,
+`L:includes/api/api_scheduling.php:700-741`, `L:cron_quote_wa.php:826-834`) — uCRM's names, as 5.18.102 already
+stores when a link resolves. The client note and the Bidal job take `offer_name` and `device_title`
+(`L:lib/KycService.php:789`, `:2848-2853`); `LifecycleService` takes `offer_name` before `package_choice`
+(`L:lib/LifecycleService.php:258`). The uCRM attributes 41/42 carry `''` and are dropped on Uganda anyway
+(`L:lib/UcrmClientTarget.php:101-109`, measured 25 Sep).
+
+### G.8 Retries and Make the quotation
+
+`saleFromApp` reads `quote_sale_entry` per G-8/G-10 and, for `web-direct`, the sale from `quote_item_ids`.
+`retryLines` gains one branch, chosen by the record, never by the switch (G-10):
+
+- `quote_lines_source = 'ucrm-direct-5.18.103'` with lines → **`confirmDirect($lines, $item_ids)`**: each id judged
+  again by the direct rules (the plan pair, each product, the installation as stored), every stored line equal to its
+  item's line now in product id and price at 2 dp. A changed price is said in words, never with the figure, as
+  `confirmLines` does (`L:lib/UcrmQuoteLines.php:613-666`). Kept off and `public_price_exclude` do **not** apply at
+  retry: they decide what the form offers, not whether a sale already made may be quoted.
+- `web-direct` without lines → `resolveDirect` over the stored ids, with "offered" read the same way (rules only).
+- the Cash rule (P2) and P3 unchanged. An unpriced Credit `web-direct` sale gets **P1_DIRECT**: *"No quotation was
+  made: {REASON}. Once it is put right in uCRM, an admin makes it from the Orders card."*
+
+`canMakeQuotation` accepts `web-direct` as well as `web` (`L:lib/KycService.php:1945-1952`); `makeQuotation`
+(`:2007-2104`), `KycCrmSync::ugQuote` (`L:lib/KycCrmSync.php:349-392`) and `retry_quote` reach the same `retryLines`.
+None of them writes `quote_link_ids` for a direct record.
+
+### G.9 Send Quotation and lead quotes
+
+In direct mode (`tabs/sales/send_quote.php`, `lib/QuotationService.php`), with the switch off byte for byte 5.18.102:
+
+- the plan picker lists `offered()` plans (value `sp:p`); a new **hardware picker** lists `offered()` hardware and the
+  installation; each picked line carries `{kind, sp?, p, q}` and shows uCRM's name and price, not editable;
+- lines typed by hand stay allowed, marked "typed — not from uCRM", under the price-0 rule
+  (`L:lib/QuotationService.php:975-986`);
+- the standard-quotation buttons fill the lines (G-12);
+- the handlers `send_lead_quote` and `send_manual_quote` (`L:includes/post/post_leads.php:132-169`, `:205-239`)
+  accept a picked line's ids and **re-resolve it on the server** from a fresh catalogue read through the direct rules
+  — the posted label and price of a picked line are ignored, and a picked id that is not offered refuses the whole
+  send with its reason, before anything is created or sent;
+- `buildLeadItems` (`L:lib/QuotationService.php:1109-1122`) keys the lead's interest against the offered plans' keys
+  and adds the one that matches uniquely, else nothing — the same hint 5.18.102 takes through a plugin row;
+- the cash proforma and the mobile API's send (`api/index.php`, kept byte for byte by `test_quote_from_ucrm` I2) are
+  unchanged.
+
+### G.10 South Sudan, Uganda with the switch off, and rollback
+
+- **South Sudan:** the gate is off; nothing new is constructed, drawn or read (the table is never opened).
+- **Uganda, switch off:** 5.18.102 exactly, plus the uCRM catalogue screen in the nav for admins.
+- **Turning the switch off** with direct applications stored: they keep being retried by the direct rules (G-10).
+- **Rollback to 5.18.102** (redeploy): the `ucrm_catalogue` table stays, read by nothing. Direct applications read as
+  `app`: no quotation is made (P1, or P2 where cash was collected), Make the quotation is not offered — they are quoted
+  by hand in uCRM. `package_choice ''` and `hw_cart_json` ids 0 leave nothing a plugin row could match. The link store
+  is as 5.18.102 left it, so 5.18.102 works as before. There is no price-0 hazard (that was 5.18.101's, §R.6).
+
+### G.11 The retailer app and the mobile API — unchanged (F11, settled by evidence)
+
+They post plugin ids with no marker, so on Uganda they stay `app`: Credit with no quotation (P1), Cash refused — as in
+5.18.102 (`L:includes/api/api_retailer.php:7-8`, `L:api/index.php:197-219`). F11's question — which client the agents
+use — is answered by 5.18.102's deploy log of 1 Nov: **QL-N7 counted 0 active `kyc_packages` rows** on Uganda, and the
+app offers a plan only from `kyc_packages`, so a registration with a plan comes from the web KYC form; QL-N4 counted 11
+KYC applications in 90 days. Recorded as a known limit: the app still lists the plugin's kits, unpriced.
+
+### G.12 Files, and what stays byte for byte
+
+New: `lib/UcrmCatalogue.php`, `tabs/sales/ucrm_catalogue.php`, `tests/test_catalogue_direct.php` and its directory.
+Changed: `lib/UcrmQuoteLines.php`, `lib/KycService.php`, `lib/KycCrmSync.php`, `lib/QuotationService.php`,
+`tabs/sales/kyc_form.php`, `tabs/sales/send_quote.php`, `tabs/sales/subscription_plans.php`, `tabs/sales/hardware.php`,
+`tabs/sales/applications.php` (P1_DIRECT), `tabs/sales/product_mapping.php` and `includes/api/api_products_admin.php`
+(the texts that say "linked on the Plans and Hardware screens", behind direct mode), `includes/navigation.php`,
+`public.php` (the tab), `includes/post/post_sync.php`, `includes/post/post_leads.php`, `manifest.json` (5.18.103),
+`SAFETY.md`. **No migration** (the table is created lazily, as `ucrm_quote_links` was). Byte for byte: `webhook.php`,
+`cron_quote_wa.php`, `api/index.php`, `QuoteOrganization.php`, `PublicPriceFeed.php`, `prices.php`, `shop.php`,
+`tools/set_config.php`, `UcrmQuoteLinks.php`, every South Sudan path.
+
+### G.13 Tests, checks and the deploy
+
+- **`tests/test_catalogue_direct.php`**, built on `test_quote_from_ucrm`'s runner and fake uCRM: the store and the
+  switch; `offered()` over every rule and reason; the form in direct mode (headless Chromium); submission, cash and
+  every refusal; the stored record (G-7, field by field); retries and Make the quotation across the switch (G-10);
+  Send Quotation and the standard quotation (one `quotes_log` row with `sent_by` and the existing event per send —
+  F12); the screens and their guards; South Sudan and the switch off byte for byte; the rollback reading (5.18.102's
+  `retryLines` and `canMakeQuotation`, run from Git, on a direct record); the release boundary from Git against
+  `1a0ea5f`. Each guard with a weakened copy that it catches.
+- **Rewritten on purpose, never weakened:** `test_quote_from_ucrm` section I re-pointed (its files measured against
+  `f2055baf` at `1a0ea5f`, then this tree held to `1a0ea5f` for them, as 5.18.100 did for `test_quote_company`), and
+  any of its sections whose Uganda expectations meet the new nav entry.
+- **The deploy script** (from 5.18.102's, by asserted edits), its own checks `QC`: stage A reads the catalogue through
+  the pin's `offered()` on a copy, GET only — counts of plans and hardware offered and not offered by reason, the
+  switch and the installation (none expected right after the copy); after the copy the same through the installed
+  code, equal item by item; the new screen without a session; `--after-only` once the admin has turned the switch on:
+  the switch on, the installation set and valid, every standard quotation usable. The rollback counts the direct
+  applications 5.18.102 will leave unquoted (a note, no refusal — §G.10).
+- **The rehearsal** chained on 5.18.102's.
+
+### G.14 Open — the owner's, none blocking the build
+
+- **The standard quotations' contents** are set on the screen by an admin; the build needs none. Which kit, plan and
+  installation the first one holds is the owner's.
+- **Products kept off the forms**: the screen lists all 31 products uCRM offers for hardware; any that is not
+  hardware (a fee, a service) is kept off by an admin there.
