@@ -1,9 +1,9 @@
 # 71 — Uganda: the plugin's quotations take their lines and prices from uCRM (5.18.102 design, 27 Oct 2026)
 
-Status: **being re-cut for D14 (§R, the operator's decision of 28 Oct): designed; built and reviewed on the local branch `quote-102-d14` (§R.17); not yet re-cut as the release.** The release as it stood before D14: **design, reviewed (§O); built and committed as `release/5.18.102` = `9e66565` (local, not pushed; re-cut from `00d2be1`, see §P.5); what the
+Status: **D14 (§R, the operator's decision of 28 Oct) designed, built and reviewed through round 11 (§R.17), and cut as `release/5.18.102` = `1a0ea5f` on 5.18.101, pushed 1 Nov; its suite, rehearsal, deploy script and runbook are in root docs/07 (5.18.102); not deployed. The local branch `quote-102-d14` was lost with the session's container on 1 Nov, before it was pushed; its final tree is the release's.** The release as it stood before D14: **design, reviewed (§O); built and committed as `release/5.18.102` = `9e66565` (local, not pushed; re-cut from `00d2be1`, see §P.5); what the
 build changed from this design is in §P; the deploy script's own decisions are in §Q.** The release is cut on 5.18.101
-(`f2055baf`), which is live according to the operator (D6). Its deployment record is still pending in docs/07, and the
-deploy script cannot be handed over until it is recorded (§M). §R cites this file's lines as they stood before §R and the D14 row were added (`f60f1663`): from line 55 on, add one.
+(`f2055baf`), deployed on 27 Oct (D6) and recorded in docs/07 ("5.18.101 DEPLOYED", 1 Nov), as §M step 1
+requires. §R cites this file's lines as they stood before §R and the D14 row were added (`f60f1663`): from line 55 on, add one.
 
 ## A. Why
 
@@ -834,7 +834,7 @@ settled here by precedent or on the side of caution.
 
 ## R. Items linked to uCRM by an admin, never matched by spelling (D14, the operator's decision of 28 Oct)
 
-Status: design, reviewed (one adversarial review, every finding verified; four checks); not built.
+Status: design, reviewed (one adversarial review, every finding verified; four checks); built, reviewed through round 11 (§R.17) and released as `1a0ea5f` (root docs/07, 5.18.102); not deployed.
 
 The review's findings are folded in by §R.13, and the checks' by §R.14, §R.15 and §R.16: the lead engineer's decisions
 D-1 to D-15, E-1 to E-6 and F-1 to F-14, and every checker item. The deploy-script mechanics the checks left are

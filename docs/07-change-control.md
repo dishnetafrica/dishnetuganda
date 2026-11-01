@@ -15022,3 +15022,293 @@ uCRM line). The cash sheets stayed on the server. Three runs, each its own comma
     installation & support"* when the webhook sends it. Report only what the message shows;
   - the five clients moved to organization #1 in uCRM (Q-N2);
   - Q-N3's `?:http404`, to be looked at, read-only.
+
+## 27 Oct – 1 Nov — 5.18.102: on Uganda the plugin's KYC quotations take their lines and prices from the uCRM Product and Service Plan an admin links to each plan, kit and the installation on the Plans and Hardware screens — matched by link, never by spelling (D14); a Cash sale collects exactly the quotation's total; the installation a separate line only when DishNet installs; "Prepared by" from the client attribute `salesPerson`; internal text in `adminNotes`, not the customer's notes; Make the quotation on the Orders card; no product push and no Delivery Acknowledgment PDF on Uganda; all behind `QuoteOrganization::setting()['on']`; South Sudan, and Uganda with the setting 0/off, as 5.18.101; no migration. `release/5.18.102` = `1a0ea5f`, cut on 5.18.101 (`f2055ba`), pushed on the operator's word on 1 Nov (05:25 UTC); `scripts/deploy-5.18.102.sh` pinned to it; the release suite twice on it (31 Oct–1 Nov, 299 files): pass A 18,307 passed and 4 failed, pass B 18,346 passed and 1 failed — in both, one weakened copy of `test_quote_from_ucrm` that round 11's code no longer lets be planted (known limit 13), and in pass A only 5.18.98's cashbook test inside its 21:00–24:00 UTC window (known limit 12); the rehearsal PASSED, a clean trial (run 5, 31 Oct: 1,949 ok, 0 failed); NOT deployed
+
+**Request.** The owner, 27 Oct, of quotation 000314: *"currently plugin creating this quotation which is not good for us
+its passes wrong information"*, and whether the plugin takes its prices from uCRM. It did not: every KYC line was priced
+by the plugin, the customer's notes carried internal text, "Prepared by" named nobody of ours, no installation line was
+ever added on a Starlink sale, and the cash collected was computed apart from the quote. The operator's decisions of 27
+Oct are D1–D6 in root `docs/71` §B: keep the auto-quote and fix it; the installation a separate line only when DishNet
+installs; a "Sales Person" client attribute for "Prepared by"; no auto-quote when anything is unpriced, and the agent
+told; the cash equals the quotation's total; cut on 5.18.101. On 28 Oct: *"use name of ucrm sync it with plugin"*. Asked
+what they meant, they chose *"Pick the product per item"* — an admin picks the uCRM Product for each plan and kit on the
+Plans and Hardware screens, matched by that link, never by spelling, nothing guessed — into 5.18.102, re-cut, retested
+and rehearsed before it is deployed (D14, `docs/71` §R). On 1 Nov the operator gave the word to push the release branch,
+and chose to keep `1a0ea5f` with known limit 13 recorded rather than re-cut it.
+
+**About this entry.** The entry reviewed on 31 Oct was lost with the session's scratch area when its container was
+replaced on 1 Nov, before it was committed, and so was the local branch `quote-102-d14` that held D14's working commits
+and known limit 13's fix (nothing of either had been pushed; the release commit holds D14's final tree). This entry was
+rebuilt from what was pushed — the release commit and its `SAFETY.md` entry, root `docs/71`, the deploy script and its
+rehearsal — and from the session's record of the suite, the trial and 5.18.101's logs, then checked against them.
+
+### Release notes (Uganda, with the quoting organization in force; root `docs/71` §R, the release's `SAFETY.md`)
+
+- **One resolver, `lib/UcrmQuoteLines.php` (new).** It reads uCRM's Products and Service Plans and prices each item by
+  the uCRM item an admin linked it to, by id: a plan through its Product and its Service Plan's 1-month price, a kit
+  through its Product, the installation through the Product on the Hardware screen's installation card — only when
+  DishNet installs (the form's new question, "Who installs?"). No name is matched. An item without a valid link is
+  unpriced, with its reason: not linked, its row replaced, another quoting organization, two active links, or a linked
+  item uCRM no longer lists, archived, priced at 0, taxable, with more than 2 decimals or a differing invoice label; a
+  kit and the installation linked to one product are both refused. Fiber on Uganda is always unpriced. A failed read is
+  never cached.
+- **The links, `lib/UcrmQuoteLinks.php` (new).** One record per act of linking in the table `ucrm_quote_links` of
+  `plugin.sqlite3`, created when first used behind the gate — no migration; a relink or an unlink ends a record and
+  keeps it. Only admins link, judged on the account re-read by id. The Plans and Hardware screens show uCRM's name and
+  price beside each row, live, never copied into the plugin's rows.
+- **Cash.** A Cash sale collects exactly the quotation's total, and is refused before anything is written when the sale
+  cannot be priced, or the total or an item's link changed since the form read it (`CASH_UNPRICED`, `CASH_RELINKED`). An
+  unpriced Credit sale is registered with no quotation and the agent told (P1); a retry never re-prices a Cash sale
+  (P2).
+- **The entry rule (E-1).** Only this release's web KYC form is priced. A sale from the retailer app or the mobile API,
+  a form opened before the deploy, and every application saved before the deploy are not: they are quoted in uCRM by
+  hand.
+- **Make the quotation**, on the Orders card, admins only: for a web registration left unpriced because an item was not
+  yet linked. It looks in uCRM first, never makes a second quotation, and records the links it used.
+- **The quotation.** "Prepared by" is the client attribute keyed `salesPerson`, PATCHed after the create (a new customer
+  only; never attribute id 1). Internal text goes to `adminNotes`; the customer's notes hold only Settings' prefix. No
+  line is ever sent at price 0. The created quote is read back and a mismatch is shown on the Orders card.
+- **Send Quotation and the lead quotes** take their plan prices from uCRM and refuse a line priced 0. The fallback PDF
+  has Uganda's header and five terms.
+- **No Delivery Acknowledgment PDF on Uganda (D9), and no product push (D12):** Sync All, the per-row sync and the sync
+  when a plan or kit is saved are refused; prices are set in uCRM Products.
+- **Unchanged:** South Sudan, and Uganda with `ucrm_quote_organization_id` 0/off, byte for byte 5.18.101; `webhook.php`
+  (the summary's sign-off), `cron_quote_wa.php`, `QuoteOrganization`, `QuoteTaxLine`, `TenantProfile`,
+  `PublicPriceFeed`, the brain, the leads, the follow-ups, the Inbox, the channel registry, the Cashbook, ECO Bank and
+  every Balance.
+
+**Files** (against `f2055ba`): 69 — 31 added, 38 changed; 14,800 insertions, 184 deletions; no migration. The added ones
+are the two libraries, the new test `tests/test_quote_from_ucrm.php` and its folder `tests/quote_from_ucrm/`; the
+changed ones include `KycService`, `QuotationService`, `KycCrmSync`, `CrmApiClient`, `DeliveryPdfService`,
+`PluginQuotePdf`, the KYC form, Send Quotation, the Plans, Hardware, Product Mapping, Settings and Orders screens,
+`post_sync.php`, the cron debug and products admin APIs, the manifest, `SAFETY.md` and the rewritten tests (`docs/71`
+§R.11).
+
+**Ancestry.** `1a0ea5f` (5.18.102, release) ← `f2055ba` (5.18.101, release; DEPLOYED 27 Oct, copy 06:38:20 UTC — its
+record above) ← `8ff469f` (5.18.100). The release was cut on 5.18.101 five times, the first cut and four re-cuts:
+`00d2be1` (27 Oct, the first build, which matched by spelling; re-cut after `test_timezone` failed, `docs/71` §P.5);
+`9e66565` (28 Oct; its release suite twice: 299 files, 17,130 passed, 0 failed in each pass); `273c354` (round 9 of
+D14's review); `8196a40` (round 10); `1a0ea5f` (round 11, the final tree). Only `1a0ea5f` was pushed.
+
+### Tests
+
+- **`tests/test_quote_from_ucrm.php` (new):** sections A–I and L, 1,353 passed, 0 failed, as `SAFETY.md` records — A the
+  resolver 146, B the KYC submission and its cash 60, C the retries and Make the quotation 410, D "Prepared by" 15, E
+  the read-back 8, F Send Quotation and leads 58, G the PDFs, the push, Settings and the Orders card 205, H the KYC form
+  in headless Chromium 126 (71 browser checks among them), I the release's boundary from Git against `f2055baf` 30, L
+  the links 295.
+- **368 weakened copies**, each one fault planted in a copy of the plugin and caught by the section that guards it — not
+  all on the final tree: the review's first round ran its 285 on that round's tree; the second its new and re-anchored
+  ones on its own; the 75 added in rounds 3–11 (ML85a–ML92l, MG26–MG28) ran on the final tree, 75 passed, 0 failed.
+- **Rewritten on purpose, never weakened** (`docs/71` §L.2, §P.3, §R.9.2): `test_quote_company` 291/0 (its weakened
+  copies 83/0), its S journey byte for byte `ce7ac388`'s (5.18.98) for South Sudan and for Uganda with the setting off;
+  `test_kyc_crm_messages` 60, `test_notify_kyc_quote_send` 26, `test_notify_kyc_race` 15 — each 0 failed.
+- **The release, the full suite twice**, on `1a0ea5f` in a frozen worktree, no other suite or trial running (what ran
+  beside it is below):
+  - **Pass A** 31 Oct 20:46:02 – 1 Nov 01:33:33 UTC: **299 files, 18,307 passed, 4 failed, EXIT=1**, in three files:
+    `test_quote_from_ucrm` **1,720 passed, 1 failed** — sections A–I and L 1,353 passed, 0 failed; 367 of the 368
+    weakened copies caught; the one failure ML79's copy, which can no longer be planted (known limit 13); and
+    `test_cashbook_physical_list` 495/1 with its mutants 4/2, run at 21:15 UTC, inside its time window (known limit 12).
+  - **Pass B** 1 Nov 01:33:33 – 06:24:39 UTC: **299 files, 18,346 passed, 1 failed, EXIT=1**, in one file:
+    `test_quote_from_ucrm` 1,720 passed, 1 failed, the same ML79 line. Against pass A: the cashbook test 496/0 and its
+    mutants 48/0, run at 01:57 and 01:58 UTC, outside the window; `test_sales_pilot` 119/0 against 125/0 — run at 06:12
+    UTC on a Sunday, it left out its follow-up cases (*"no time zone is inside the follow-up sending window now
+    (09:00–18:00, not Sunday)"*), as recorded since 5.18.93. Every other file reads as in pass A.
+  - **Against 9e66565's release suite**, the passes differ in these files only: `test_quote_from_ucrm` 513 → 1,720/1;
+    `test_quote_company` 283 → 291 and its mutants 80 → 83; `test_kyc_crm_messages` 58 → 60;
+    `test_notify_kyc_quote_send` 25 → 26; `test_notify_kyc_race` 14 → 15 (D14's own); and, by the clock, the two
+    cashbook files in pass A and `test_sales_pilot` in pass B. The other 290 files read the same.
+  - **Beside the suite:** during pass A, four single-file runs for known limit 12 (21:17–21:23 UTC), one at a time;
+    during pass B, no PHP — the push of the release branch and the reading of 5.18.101's logs. `test_customer_pwa`
+    (unchanged by this release) left its `php -S` server running after each pass's run of it; both were stopped by hand.
+  - **After the suite, alone:** ML79's copy re-anchored, with section C (1 Nov 06:25:35–06:26:39 UTC): section C 410
+    passed and the copy is caught by C — 411 passed, 0 failed, exit 0 (known limit 13).
+
+### `scripts/deploy-5.18.102.sh` — 10,136 lines, sha256 `0cace7fecaef8204…`
+
+**How it is made.** By asserted edits, in two stages — every anchor found exactly the stated number of times, every new
+text present and every superseded one absent, `bash -n` clean, or nothing is written: from 5.18.101's script, pinned
+first to `9e66565` and reviewed twice; then for D14 (`docs/71` §R.7.8) by part modules A, B, C and E, then F (there is
+no part D), the last from the one check of 31 Oct. A separate re-pin step filled the release commit, the file lists, the
+counts and QL-RB1's and QL-RB3's marks from Git at `1a0ea5f`, and verified every sum against Git. It carries every check
+of 5.18.101's (stage A, the backup, V, R, the cash, bank, quoting, owner and sign-off checks, the quarantine's A14 and
+R19, Z).
+
+**New — 5.18.102's own checks (QL, "quote lines")**, counts only in the log; names, ids and prices only on the 0600 cash
+sheet:
+- **QL-G1, stage A, before anything changes.** The catalogue the KYC form offers — every active plan and kit and the
+  installation — through the pin's resolver and link class, on a copy of the book, from uCRM GET-only. Right after the
+  copy nothing is linked, so *not linked* is the expected reading. NO-GO for an unreadable catalogue, a reason the
+  script cannot classify, the link store unread, and — unless `--accept-unpriced` is typed — a kind of item (plans;
+  hardware and the installation) for which uCRM offers nothing an admin could link. Its sheet lists, per item, *"uCRM
+  items with the same spelling — a hint only"*, each with whether it could be linked or the rule that stops it.
+- **QL-N1–QL-N7, notes:** the `salesPerson` attribute; quotation 000314's item types; the applications saved before the
+  deploy that the retry will not price (E-1); the entry points of 90 days; the newest plan save and kit; the notes
+  prefix and auto-quote settings; the retailer-app packages, never priced.
+- **After the copy:** QL-CA1 the catalogue again through the installed code, each verdict equal to stage A's (compared
+  as a keyed hash, its key in a 0600 file beside the state file, never printed); QL-CA2; QL-CA3 the Plans and Hardware
+  screens and the Orders card without a session.
+- **`--after-only`, after linking: QL-LK1** judges every item the form offers by its link — a FAIL unless every one
+  resolves, or `--accept-unpriced` is typed for items left unlinked on purpose — and counts the window's web
+  registrations an admin quotes with Make the quotation, apart from the app-origin ones quoted by hand.
+- **Rollback: QL-RB1–QL-RB3.** The 31 added files left on disk and reached by nothing; the applications waiting for uCRM
+  with no plan price recorded counted — the rollback refuses while one is pending, or while that count cannot be made,
+  because 5.18.101's cron would quote each at price 0 and uCRM would WhatsApp it to the customer, unless
+  `--rollback-unpriced-pending` is typed; the links left in the store, named by no 5.18.101 file, and the applications
+  5.18.102 could not confirm a quotation for, counted.
+
+**Modes:** a deploy; `--check` (stage A alone, stopped before the backup: nothing is backed up, copied or deployed);
+`--after-only`; `--rollback`; `--redeploy`, `--move-list-only`, `--check-bank`; flags each the operator's explicit
+choice (`--accept-unpriced`, `--without-bank-balance`, `--quote-company-off`, `--quote-create-unproven`,
+`--lead-org-differs`, `--rollback-unpriced-pending`). The script's header is the full reference.
+
+### The rehearsal — `scripts/harness/deploy-5.18.102/rehearse.sh`, 1,806 lines, sha256 `aae25add1e5a8be9…`
+
+Chained on 5.18.101's rehearsal, with `rh102-seed.php`, `rh102-ref.php`, `rh102-links.php` (new), `rh102q.py`: a fake
+uCRM, the release's resolver, the deploy, the links an admin makes, `--after-only`, the rollback and the redeploy, and
+copies of the script with planted faults. Runs, each alone: run 1 void (its TMPDIR); run 2 1,919 ok, 18 failed; run 3
+1,904 ok, 36 failed; run 4 stopped by hand — runs 2–4 each met the inherited A0 false stop of an older script in the
+chained part (known limit 10); **run 5, the clean trial, 31 Oct 14:29:45–20:45:11 UTC: 1,949 ok, 0 failed.** The script
+and the rehearsal committed on the development branch (`78de2bb9`) are byte for byte the files of run 5.
+
+### Runbook
+
+`docs/71` §R.6's ten steps. As root on the server; each command its own paste; send back each run's **log file**, never
+a copy of the terminal and never a cash sheet. No KYC registration and no quote to try the release: the plugin WhatsApps
+every new quote.
+
+0. **The release branch is pushed** (1 Nov 05:25 UTC: `origin` holds `release/5.18.102` at `1a0ea5f`). The `--check` and
+   deploy commands below fetch it, and the `&&` stops them if that fails. Every run of the script also fetches it itself
+   when the checkout lacks it, and refuses if it still finds no `1a0ea5f`.
+1. **5.18.101's deployment record — done** (*"5.18.101 DEPLOYED"* above). Its after-checks PASSED with R19 conclusive,
+   and the quarantine's `--check` begun after its copy (1 Nov 05:41:47 UTC) PASSED: the check A14 needs. After any
+   rollback, or an upload of the plugin through uCRM, run that `--check` again first.
+2. **Add the "Sales Person" client attribute** in uCRM (System → Customisation → Custom attributes → Client) and confirm
+   that its key is exactly `salesPerson`. QL-N1 says whether it is there.
+3. **Prepare uCRM, and decide the picks** (`docs/71` §R.6 step 3): for each plan sold, one Product and one Service Plan
+   spelled alike, with equal 1-month prices, and no other service plan spelled like that plan; no service plan with a
+   price of its own other than its 1-month price, and fewer than 200 service plans; for each kit, a Product not spelled
+   like any service plan; one installation Product, which no kit is linked to; each priced above 0, Taxable off, its
+   invoice label empty or the same as its name. Then the read-only check — it changes nothing; its 0600 sheet lists, per
+   item, the uCRM items spelled like it, a hint only, with whether each could be linked:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.102 && mkdir -p /root/dnb-5.18.102 && bash scripts/deploy-5.18.102.sh --check 2>&1 | ( umask 077; exec tee /root/dnb-5.18.102/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: GO, every item *not linked*. A NO-GO from QL-G1 changes nothing: prepare uCRM and run it again. Decide each
+   pick on paper from the sheet, by uCRM id. No link is written before the deploy.
+4. **Settings → "Quote notes prefix"** empty, or only text meant for customers (QL-N6 says set or unset).
+5. **Tell the agents**, before the deploy: from the deploy until an admin says it is done, Uganda sales are registered
+   as Credit, or wait; no quotation is made by hand for a web KYC registration whose screen says *"Do not make it by
+   hand"* — an admin makes it from the Orders card afterwards; a registration from the retailer app, the mobile API or a
+   form opened before the deploy, and every application saved before it, is quoted in uCRM by hand. **Tell every
+   admin:** no link, unlink, or plan or kit save from the moment the deploy starts until it prints its last line.
+6. **Deploy**, at a quiet hour, not between 14:55 and 15:10 UTC (the evening WhatsApp, 18:00 Kampala). Type `DEPLOY`
+   when asked:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.102 && mkdir -p /root/dnb-5.18.102 && bash scripts/deploy-5.18.102.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.102/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes; *not linked* everywhere, and the counts still to link. Any refusal before
+   `DEPLOY` changed nothing: send the log file and stop.
+7. **Link, as an admin, once the deploy has printed its last line:** on Plans each active plan that is not Fiber, on
+   Hardware each active kit that is not Fiber, and the installation on its card. A kit row the import tool made for the
+   installation product is deactivated rather than linked (and unlinked first if it was linked).
+8. **`--after-only`**, once every offered item is linked and at least 20 minutes after the copy (the summary prints the
+   time) — read-only; a run before every item is linked fails QL-LK1 by design:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.102.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.102/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own, the quarantine's check:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Once `--after-only` passes, an admin presses **Make the quotation** on the Orders card of each web registration of
+   the window that QL-LK1 counts — after checking the customer in uCRM, and only where there is no quotation.
+9. **Tell the agents** that Cash is back for the linked items, and that the window's web registrations are quoted by an
+   admin, never by hand; any other registration left with no quotation is quoted in uCRM by hand, as its screen says.
+10. **The next real KYC quotation is the second proof.** Report only what the quotation shows, never the customer's name
+    or number. Run `--after-only` once more the next day after 15:00 UTC, its own command as in step 8.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, on its own. Do not roll back on your
+own unless staff or customers are affected; send the log file first. It asks you to type `ROLLBACK` before it changes
+anything, puts 5.18.101 (`f2055ba`) back and checks it. It refuses before anything changes while an application waiting
+for uCRM with no plan price recorded is still pending, or while that count cannot be made (QL-RB2): within minutes
+5.18.101's cron would quote each one with its plan line at price 0, and uCRM's quote.add webhook would WhatsApp that
+quotation to the customer. To clear it, let them sync under 5.18.102 first (they retry on the cron), or do not roll
+back. `--rollback-unpriced-pending`, typed after `--rollback`, is the operator's explicit choice: it rolls back all the
+same, and each such application is then quoted at price 0 and WhatsApped. As root, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.102.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.102/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+Then the quarantine's `--check`, its own command, as in step 8. **What the rollback brings back on Uganda:** quotations
+and the Cash amount from the plugin's own plans and kits; the internal text in the quotation's customer notes; no
+"Prepared by" on a new customer; Send Quotation and the lead quotes at the plugin's prices, a line priced 0 accepted;
+the old fallback PDF; saving a plan or kit and Sync All writing uCRM's Products; the Delivery Acknowledgment PDF, with
+South Sudan's terms and phone; a Cash sale from the retailer app or the mobile API accepted. **What stays:** ECO Bank,
+the quoting organization, the channel registry and every number's owner; the quotes already in uCRM and what 5.18.102
+wrote on applications; the 31 added files on disk, reached by nothing; the links in the store, never read by 5.18.101
+and judged again by a later deploy of 5.18.102 (`--redeploy`). **After it:** a KYC registration made since the copy with
+no quotation is quoted by an admin in uCRM by hand, after checking that the customer has none; an application on which
+5.18.102 could not confirm a quotation may already have one in uCRM — check there before quoting it by hand or with
+`retry_quote`, which in 5.18.101 does not look first (QL-RB3 counts them). The rollback prints a by-hand put-back for
+when the script cannot run. It counts nothing: an application still waiting for uCRM with no plan price recorded is then
+quoted by 5.18.101's cron at price 0 and WhatsApped, as above.
+
+### Known limits (recorded, accepted — the release's `SAFETY.md`, `docs/71` §N, §P, §R.6)
+
+1. **The entry rule.** A sale from the retailer app or the mobile API, a form opened before the deploy, and every
+   application saved before the deploy are never quoted from uCRM: they are quoted in uCRM by hand, and get no Make the
+   quotation button.
+2. **The window.** Right after the copy nothing is linked: until an admin has linked every item the form offers, every
+   Uganda Cash sale is refused and every web Credit sale is registered with no quotation (`docs/71` §R.6).
+3. **Not measured in uCRM:** what uCRM 4.5.33 does with a quote line's `productId` (every KYC quote is read back after
+   it is made), and whether it shows `adminNotes` only to staff. Marking products taxable in uCRM stops automatic quotes
+   until a VAT release.
+4. **No Delivery PDF on Uganda, as decided (D9), has two side effects**, `webhook.php` and `post_kyc.php` kept byte for
+   byte: a Uganda credit KYC customer's payments each read the payments once more and log *"Delivery PDF generation
+   failed … skipped"*; and with `kyc_messages_like_crm` off a Uganda Cash customer would get the "Request Confirmed!"
+   welcome (docs/07 records it on since 25 Sep).
+5. **The retailer app and the mobile API** cannot answer "Who installs?" or send the total they showed: a Cash sale from
+   them is refused, and a Credit Starlink New Connection gets no quotation (the Orders card says so; the app does not).
+6. **Send Quotation's panel manual form** is stopped by the page on a 0-priced line; its handler (`post_leads.php`,
+   unchanged) drops such a line before the service could refuse it.
+7. **The fallback PDF's tax rows** assume a quote carries tax as an invoice does; the fallback still carries no Service
+   Agreement and no Flex sentence. "Prepared by" on Send Quotation, lead and existing-customer quotations is the
+   client's `salesPerson` or the template's fallback, never the person sending the quote.
+8. **Two older exposures, not widened** (`docs/71` §R.17): `postQuote` logs uCRM's whole quote answer, the staff's notes
+   among it, as 5.18.101 does; and the state-changing GET admin actions of `api_cron_debug.php`, `retry_quote` among
+   them, accept the session cookie from another site. Make the quotation narrows the second for quotations. Both are
+   left for a later release.
+9. **The deploy proves the catalogue through the release's own code on copies**, GET-only, and the links as the admin
+   makes them; the quotation itself is proved in the suite against a fake uCRM, and live by the next real KYC quotation.
+   No test quote is made.
+10. **The inherited A0 false stop** (runs 2–4 above) is a race in 5.18.94's, 5.18.97's and 5.18.98's scripts, which the
+    chained rehearsal runs again: a list printed into `grep -q`, whose early exit can leave the writer without a reader.
+    5.18.102's script judges no status from such a pipeline. It has never stopped a production run.
+11. **Carried from 5.18.101:** A13's and R18's lock reading (its known limit 6) and Q-N3's `?:http404` (its known limit
+    7), unchanged.
+12. **`test_cashbook_physical_list` fails one control between 21:00 and 24:00 UTC, and its mutants test with it** —
+    5.18.98's test, which this release changes only by the version pin. It plants its "today" and "yesterday" rows with
+    `date()` under `Africa/Kampala`, but reads them back through a separate PHP process that sets no zone, so php.ini's
+    UTC applies; from 21:00 to 24:00 UTC Kampala's date is UTC's plus one, and the daily report's read of "yesterday"
+    holds nothing. The mutants test runs the main test as its control, so it judges no copy and fails closed. Reproduced
+    on 5.18.101's tree at the same hour (495/1 and 4/2); with every PHP process defaulting to `Africa/Kampala`,
+    5.18.101's test and the release's each pass 496/0. The server never runs either test. The fix belongs in the test
+    (its reader to use the tenant's zone), on the development branch, and is not made here.
+13. **One weakened copy of `test_quote_from_ucrm` cannot be planted on the release tree, so the test fails 1** (each
+    pass: 1,720 passed, 1 failed). ML79's refusal copy (*"quote_made_by_id and quote_made_via recorded on a refusal"*,
+    `tests/quote_from_ucrm/mutants_C.php`) anchors on `makeQuotation`'s `recordNoQuote` call, to which round 11
+    (CK11-B2) added the claim (`lib/KycService.php:2051`); round 11 re-ran its own copies (ML92a–ML92l) and the two it
+    re-anchored (ML90b, ML91b), not ML79. The code is the release's and is not in question; what the release tree lacks
+    is that proof. A static check of all 368 copies' anchors against `1a0ea5f` found that one and no other.
+    - **The fix**: in ML79's `'old'` and `'new'`, the call's line becomes exactly the release's
+      `lib/KycService.php:2051`, the claim and round 11's comment added (with the claim alone the anchor is still found
+      0 times) — as written in `mutants_C.php`:
+
+              self::recordNoQuote(\$this->store, \$appId, \$r['code'], \$r['text'], \$claim);   // round 11 (CK11-B2): never before the claim
+
+      Proved alone after the suite: section C 410 passed and the copy is caught by C, 411 passed, 0 failed, exit 0. Its
+      commit was on the lost local branch; the change is made again with the next release.
+    - **The owner's decision, 1 Nov: keep `1a0ea5f`** and record this limit, as 5.18.101 did its known limit 8.
