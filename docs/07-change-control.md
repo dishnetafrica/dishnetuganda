@@ -14967,3 +14967,58 @@ Afterwards:
      - `test_notify_evo_retry` counts its three as skips, about 08:00–18:00.
 
      This release suite did not run on a Sunday.
+
+## 27 Oct — 5.18.101 DEPLOYED (copy 06:38:20 UTC) — PASSED 179 ok / 0 failed / 19 notes; after-checks PASSED 1 Nov
+
+**From the log files**, printed on the server on 1 Nov by a read-only command and pasted from between its markers; the
+same text is kept there as `/root/dnb-5.18.101/record-20261101T054023Z.txt` (0600), each log with its line count and
+the start of its sha256. The scripts print no secret and no figure in a log; the command also withheld anything shaped
+like a credential or a phone number before printing (it withheld one status field, `token=`, on the quoting checks'
+uCRM line). The cash sheets stayed on the server. Three runs, each its own command, as root on the server.
+
+- **The deploy** (`deploy-20261027T063628Z.log`, 430 lines, sha256 `02350baba152ba3c…`; begun 06:36:28 UTC; the backup
+  in `/root/dnb-5.18.101/backup-20261027T063628Z`): every check of stage A held, then GO.
+  - **The release:** A0 the 13 files by their pinned sha256 (13 changed, 0 added, no migration), A7 and A2.
+  - **5.18.95's fixes:** A22a–A22g and A22L.
+  - **The live install:** BR1 (all 1,488 files 5.18.100 tracks under the plugin, byte for byte), Q-G1, A3–A6, A8–A18
+    and A21; A14 on the quarantine's `--check` begun 27 Oct 06:35:59 UTC, after 5.18.100's copy.
+  - **The cash checks:** A22-T1, A23.1–A23.8, G2, G3, BK1–BK3, BR2, BR3, BN5, C1–C5 and A24.
+  - **5.18.99's quoting checks:** Q-G2–Q-G4b and Q-G6. **5.18.100's:** TN-G1–TN-G3. **5.18.101's own:** QS-G1 as text.
+- **`DEPLOY` was typed and the container serves `f2055ba`**, the copy at 06:38:20 UTC. After the copy: V1–V13 over the
+  public address, BA4, CA4, Q-CA4 and Q-CA5; then R1–R26, BA1, BA2, BK3, CA2, CA3, Q-CA1–Q-CA6, TN-CA1–TN-CA3,
+  QS-CA1, Z1 and Z2. **PASSED, 179 ok, 0 failed, 19 notes.** uCRM was asked 21 GETs and nothing else.
+- **What it found and left:**
+  - QS-CA1: the installed `webhook.php` ends the summary with the owner's wording on Uganda and the old line otherwise
+    (`new=1 old=0`).
+  - `owners()` offers 4 active salesperson accounts and 7 active technician accounts, none an administrator's (0 left
+    out). The registry: 3 salesperson numbers, 0 a technician's, 3 departments' — none added or changed (TN-N1, R11).
+    `wa_inbox_roles` is unset.
+- **The notes, each expected by the runbook:**
+  - A17: two pending requests under v1.0.
+  - N1–N4.
+  - Q-G4: no currency given for organization #1.
+  - Q-G5 INCONCLUSIVE: no Lead or Manual quote with a uCRM client in 30 days.
+  - Q-N1–Q-N7. Q-N2 still counts **the 9 clients, 4 under organization #1 and 5 under #2: the five are not yet moved**.
+    Q-N3 reads `?:http404`, as on 24 and 25 Oct.
+  - TN-N1, twice; R3: no `migration.log` line for 087; Q-CA3's note.
+  - R19: not yet conclusive. The retry job last ran at 06:30:05 UTC, before the copy.
+- **The after-checks** (`after-20261101T053452Z.log`, 270 lines, sha256 `e510736066143613…`; begun 1 Nov 05:34:52 UTC):
+  **PASSED, 113 ok, 0 failed, 4 notes**; uCRM was asked 12 GETs and nothing else. Run five days after the copy, this one
+  run is both the check due 20 minutes after it and the next day's after 15:10 UTC.
+  - **R19 conclusive: the quarantine holds.** Master ran the retry job at 05:25:04 UTC, after the copy, and nothing
+    appeared at the stray store's old name; the kept file is unchanged.
+  - V4: no fatal or parse error of the plugin in the 290,980 container-log lines since the copy.
+  - R7: the migration ledger as at the deploy; the database 3,112,960 bytes larger (a live plugin writes). Z1: the
+    vault as the deploy's stage A found it.
+  - The notes: R3; CA3, 8 rows added to the book since the deploy's reading and none changed or removed (webhooks, the
+    evening pull and staff; the ids on the sheet only); Q-CA3's; TN-N1.
+- **The quarantine's `--check`** (`check-20261101T054147Z.log`, 45 lines, sha256 `aa20e9adec4c20a6…`; begun 1 Nov
+  05:41:47 UTC): **PASSED, 9 ok, 0 failed, 2 notes** — K2 (the container serves `f2055ba`, not `69c87a6`: expected) and
+  K7 (`config.json` removed and made again in `<plugin>/data`, names only; judged only for a database). K13: the retry
+  job ran at 05:35:06 UTC and the quarantine holds. **It is the check 5.18.102's A14 requires**: begun after 5.18.101's
+  copy, and PASSED. Its own `.own.log` and `quarantine.env` were not sent; the 5.18.102 script reads both on the server.
+- **Still to come:**
+  - the next real quote made in uCRM for a Uganda customer: its WhatsApp summary ends *"🛰️ DishNet Uganda — Starlink,
+    installation & support"* when the webhook sends it. Report only what the message shows;
+  - the five clients moved to organization #1 in uCRM (Q-N2);
+  - Q-N3's `?:http404`, to be looked at, read-only.
