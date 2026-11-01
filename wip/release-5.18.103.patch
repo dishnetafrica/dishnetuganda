@@ -1,0 +1,2078 @@
+diff --git a/dishnet-hybrid-sudan/includes/api/api_cron_debug.php b/dishnet-hybrid-sudan/includes/api/api_cron_debug.php
+index 4f658d9..0fe5014 100644
+--- a/dishnet-hybrid-sudan/includes/api/api_cron_debug.php
++++ b/dishnet-hybrid-sudan/includes/api/api_cron_debug.php
+@@ -1097,6 +1097,12 @@
+             $er2((string)$_mq['text'], 500);   // 'error'
+             // 5.18.102 (D14): every kind has answered, so the gated path ends here; below is 5.18.101's gate-off path.
+         }
++        // 5.18.103 (root docs/72 §G.8): a sale from the uCRM catalogue is never quoted by the gate-off path below, which would
++        // price it from its stored cart and no plan line. It cannot exist on South Sudan.
++        if (($app['quote_sale_entry'] ?? null) === 'web-direct') {
++            require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
++            $er2(UcrmQuoteLines::text('GATE_OFF_DIRECT'), 409);
++        }
+ 
+         // Build items from app data
+         $qItems = [];
+diff --git a/dishnet-hybrid-sudan/includes/api/api_products_admin.php b/dishnet-hybrid-sudan/includes/api/api_products_admin.php
+index edfc3b8..5e7180a 100644
+--- a/dishnet-hybrid-sudan/includes/api/api_products_admin.php
++++ b/dishnet-hybrid-sudan/includes/api/api_products_admin.php
+@@ -403,7 +403,11 @@
+         // quotes never read under D14 but 5.18.101 would send after a rollback. Answered after the admin-only gate above.
+         require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+         if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+-            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
++            // 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, nothing is linked any more
++            require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++            $er2(UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()
++                ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).'
++                : 'On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+         }
+         $products    = $store->load('ucrm_products.json') ?? [];
+         $packages    = $store->load('subscription_plans.json') ?? [];
+@@ -554,7 +558,11 @@
+         // screens, and a ucrm_product_id written here would become productId after a rollback (§R.1.2).
+         require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+         if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+-            $er2('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
++            // 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, nothing is linked any more
++            require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++            $er2(UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()
++                ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).'
++                : 'On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 409);
+         }
+         $body = json_decode(file_get_contents('php://input'), true) ?: [];
+         $source = $body['source'] ?? '';  // subscription_plans, kyc_packages, kyc_devices
+diff --git a/dishnet-hybrid-sudan/includes/navigation.php b/dishnet-hybrid-sudan/includes/navigation.php
+index ecf6382..d73ae0f 100644
+--- a/dishnet-hybrid-sudan/includes/navigation.php
++++ b/dishnet-hybrid-sudan/includes/navigation.php
+@@ -500,16 +500,25 @@ try {
+ </a>
+ <?php endif; ?>
+ <?php /* SIM Cards nav hidden  handled by DishNet 4G */ ?>
+-<?php if($can('plans')): ?>
++<?php /* 5.18.103 (Uganda, root docs/72 §G.3): with the gate on, the uCRM catalogue for those who may see Plans or Hardware;
++with its switch on, Plans and Hardware are not drawn (their screens show a card). The gate closed: nothing here changes. */
++require_once dirname(__DIR__) . '/lib/UcrmCatalogue.php';
++$_cat103Nav = UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null); ?>
++<?php if($can('plans') && !$_cat103Nav->direct()): ?>
+ <a href="?page=dashboard&tab=subscription_plans" class="kyc-tab <?= $tab==='subscription_plans'?'active':'' ?>">
+     <span class="nav-icon"><i class="bi bi-layers-fill"></i></span> Service Plans
+ </a>
+ <?php endif; ?>
+-<?php if($can('hardware')): ?>
++<?php if($can('hardware') && !$_cat103Nav->direct()): ?>
+ <a href="?page=dashboard&tab=hardware" class="kyc-tab <?= $tab==='hardware'?'active':'' ?>">
+     <span class="nav-icon"><i class="bi bi-router-fill"></i></span> Hardware
+ </a>
+ <?php endif; ?>
++<?php if($_cat103Nav->open() && ($can('plans') || $can('hardware'))): /* 5.18.103 (§G.3) */ ?>
++<a href="?page=dashboard&tab=ucrm_catalogue" class="kyc-tab <?= $tab==='ucrm_catalogue'?'active':'' ?>">
++    <span class="nav-icon"><i class="bi bi-box-seam"></i></span> uCRM catalogue
++</a>
++<?php endif; ?>
+ <?php if($isAdmin): ?>
+ <a href="?page=dashboard&tab=photo_manager" class="kyc-tab <?= $tab==='photo_manager'?'active':'' ?>">
+     <span class="nav-icon"><i class="bi bi-images"></i></span> Photo Manager
+diff --git a/dishnet-hybrid-sudan/includes/post/post_sync.php b/dishnet-hybrid-sudan/includes/post/post_sync.php
+index f4d5d7e..0ef0d01 100644
+--- a/dishnet-hybrid-sudan/includes/post/post_sync.php
++++ b/dishnet-hybrid-sudan/includes/post/post_sync.php
+@@ -647,7 +647,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_hardwar
+     require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+     if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+-        try {
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on
++        if (!UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) try {
+             $_dlEnded = UcrmQuoteLinks::end($store, 'kit', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
+             if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_hardware: kit #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
+         } catch (\Throwable $e) {
+@@ -677,7 +678,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&($_POST['action']??'')==='delete_plan'){
+     require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+     if ($delId > 0 && QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
+         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+-        try {
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on
++        if (!UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) try {
+             $_dlEnded = UcrmQuoteLinks::end($store, 'plan', $delId, UcrmQuoteLinks::WHY_DELETED, (array)($auth->currentRetailer() ?? []));
+             if ($_dlEnded !== []) error_log('[post_sync] 5.18.102 delete_plan: plan #' . $delId . ': ' . count($_dlEnded) . ' uCRM link record(s) ended');
+         } catch (\Throwable $e) {
+@@ -739,6 +741,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_
+             flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
+             redirect($_lkBack);
+         }
++        // 5.18.103 (root docs/72 §G G-11): with the uCRM catalogue on, the link store is frozen — kept for 5.18.102's
++        // applications and a rollback, never written
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++        if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
++            flash('Nothing was linked: on Uganda, plans and hardware now come straight from uCRM (the uCRM catalogue).', 'warning');
++            redirect('?page=dashboard&tab=ucrm_catalogue');
++        }
+ 
+         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+         $_lkSet = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+@@ -902,6 +911,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ucrm_
+             flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
+             redirect($_ulBack);
+         }
++        // 5.18.103 (root docs/72 §G G-11): with the uCRM catalogue on, the link store is frozen — kept for 5.18.102's
++        // applications and a rollback, never written
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++        if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
++            flash('Nothing was unlinked: on Uganda, plans and hardware now come straight from uCRM (the uCRM catalogue).', 'warning');
++            redirect('?page=dashboard&tab=ucrm_catalogue');
++        }
+ 
+         require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)
+         $_ulSet = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+@@ -1020,7 +1036,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kyc_m
+             flash('No quotation was made for application #' . (int)$_mqId . ' — try again.', 'danger');
+             redirect($_mqBack);
+         }
+-        if (!is_array($_mqApp) || (int)($_mqApp['id'] ?? 0) !== $_mqId || !KycService::canMakeQuotation($_mqApp)) {
++        // 5.18.103 (root docs/72 §G.8, G-10): with the uCRM catalogue on, a 5.18.102 web application is quoted by hand
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++        $_mqDirect = UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
++        if (!is_array($_mqApp) || (int)($_mqApp['id'] ?? 0) !== $_mqId || !KycService::canMakeQuotation($_mqApp, $_mqDirect)) {
+             flash('Make the quotation does not apply to application #' . (int)$_mqId . ' now. Nothing was changed.', 'warning');
+             redirect($_mqBack);
+         }
+@@ -1061,6 +1080,193 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kyc_m
+         redirect($_mqBack);
+     }
+ }
++// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
++// 5.18.103 (Uganda, root docs/72 §G.3): the uCRM catalogue screen's five actions — the switch (ucrm_cat_mode), the
++// installation product (ucrm_cat_install), keeping a product off the forms or offering it again (ucrm_cat_hidden), and a
++// standard quotation saved or stopped (ucrm_cat_standard_save, ucrm_cat_standard_end). Handled only where the
++// quoting-organization gate is on; with it off the block is skipped whole and the action falls through as an unknown one
++// does. The order is the link actions' above, each refusal writing nothing:
++//   1. $auth->requireAdmin(), then the account re-read fresh by id — 403 unless the same account, active and an admin;
++//   2. the own-page check: csrfCheck() AND not CustomerSession::crossSite() AND BankGate::fromOwnPage('POST');
++//   3. the quoting-organization setting valid (an int id) — else one fixed flash, no uCRM read, no lock;
++//   4. where a uCRM item is judged (turning on, the installation, a standard quotation): a fresh read
++//      (UcrmQuoteLines::forDirectUse — never a cache), outside any lock, judged by offered() and standardFrom();
++//      turning the switch off, keeping off and stopping a standard quotation read nothing from uCRM (G-1);
++//   5. UcrmCatalogue's write, inside withLock, store checks only. Whatever it throws (it has rolled back) is answered
++//      "nothing was changed — try again".
++// Every flash is fixed text plus ids, or names through QuoteOrganization::plain; the log carries ids and kinds only.
++// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
++if ($_SERVER['REQUEST_METHOD'] === 'POST'
++    && in_array(($_POST['action'] ?? ''), ['ucrm_cat_mode', 'ucrm_cat_install', 'ucrm_cat_hidden', 'ucrm_cat_standard_save', 'ucrm_cat_standard_end'], true)) {
++    require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
++    if (QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']) {
++        $_c3Act  = (string)$_POST['action'];
++        $_c3Back = '?page=dashboard&tab=ucrm_catalogue';
++
++        // 1. an admin, judged on the account record re-read fresh by id — never the session copy
++        $_c3Me   = $auth->requireAdmin();
++        $_c3MeId = (int)($_c3Me['id'] ?? 0);
++        try {
++            $_c3Fresh = $_c3MeId > 0 ? $store->findOne('retailers.json', 'id', $_c3MeId) : null;
++        } catch (\Throwable $e) {
++            $_c3Fresh = null;
++        }
++        if (!is_array($_c3Fresh) || $_c3MeId <= 0 || (int)($_c3Fresh['id'] ?? 0) !== $_c3MeId
++            || empty($_c3Fresh['is_active']) || empty($_c3Fresh['is_admin'])) {
++            http_response_code(403);
++            die('<p style="color:red;padding:20px;">Access denied — admin only.</p>');
++        }
++
++        // 2. the own-page check, made here (post_bank.php's)
++        require_once dirname(__DIR__, 2) . '/lib/BankGate.php';
++        require_once dirname(__DIR__, 2) . '/lib/CustomerSession.php';
++        if (!(csrfCheck() && !CustomerSession::crossSite() && BankGate::fromOwnPage('POST'))) {
++            flash('The security check failed, so nothing was changed. Open the screen again and retry.', 'danger');
++            redirect($_c3Back);
++        }
++
++        // 3. the quoting organization set correctly — no uCRM read, no lock
++        $_c3Set = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
++        if (!is_int($_c3Set['id'] ?? null)) {
++            error_log('[post_sync] 5.18.103 ' . $_c3Act . ': refused, the quoting-organization setting is invalid, by #' . $_c3MeId);
++            flash('The company the app quotes under is not set correctly, so nothing was changed. Tell an admin.', 'danger');
++            redirect($_c3Back);
++        }
++        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
++        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++        $_c3Cfg   = is_array($config ?? null) ? $config : [];
++        $_c3Dir   = isset($dataDir) ? (string)$dataDir : null;
++        $_c3Actor = ['id' => $_c3MeId, 'name' => (string)($_c3Fresh['name'] ?? '')];
++        $_c3Crm0  = (isset($crm) && is_object($crm)) ? $crm : svc('crm');   // the plugin's client; quoteClient picks the token
++        $_c3Num = function ($v): int {
++            return (is_string($v) && $v !== '' && strlen($v) <= 9 && ctype_digit($v)) ? (int)$v : 0;
++        };
++        // 4. a fresh read, judged — only for the acts that name a uCRM item to be offered
++        $_c3Offered = function () use ($store, $_c3Set, $_c3Cfg, $_c3Crm0): array {
++            $cat = UcrmCatalogue::fromStore($store, $_c3Set);
++            return UcrmQuoteLines::forDirectUse($_c3Crm0, $_c3Cfg, $_c3Set)->offered($cat->installProductId(), $cat->hiddenIds());
++        };
++        $_c3Say = function (string $reason, string $what): string {
++            $r = rtrim(trim($reason), '.');
++            return 'Nothing was ' . $what . ': ' . ($r !== '' ? $r : 'try again') . '.';
++        };
++        try {
++            if ($_c3Act === 'ucrm_cat_mode') {
++                $_c3On = ($_POST['on'] ?? '') === '1';
++                if ($_c3On) {
++                    $_c3Off = $_c3Offered();
++                    if (empty($_c3Off['ok'])) {
++                        flash('uCRM could not be read, so the uCRM catalogue was not turned on. Try again.', 'danger');
++                        redirect($_c3Back);
++                    }
++                    if ($_c3Off['plans'] === []) {
++                        flash('No plan is offered from uCRM yet, so the uCRM catalogue was not turned on. The screen lists why each plan is not offered.', 'danger');
++                        redirect($_c3Back);
++                    }
++                    if (empty($_c3Off['install']['ok'])) {
++                        flash($_c3Say((string)$_c3Off['install']['reason'], 'changed') . ' Set the installation product before turning the uCRM catalogue on.', 'danger');
++                        redirect($_c3Back);
++                    }
++                    $_c3R = UcrmCatalogue::setMode($store, true, (int)$_c3Off['install']['p'], $_c3Actor, $_c3Cfg, $_c3Dir);
++                } else {
++                    $_c3R = UcrmCatalogue::setMode($store, false, null, $_c3Actor, $_c3Cfg, $_c3Dir);
++                }
++                $_c3Text = ['on' => 'The uCRM catalogue is on: the KYC form and Send Quotation now offer uCRM\'s plans and hardware.',
++                            'off' => 'The uCRM catalogue is off: the KYC form and Send Quotation are as before.',
++                            'already' => 'Nothing changed: the uCRM catalogue was already ' . ($_c3On ? 'on' : 'off') . '.'][$_c3R['kind']] ?? null;
++                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
++            } elseif ($_c3Act === 'ucrm_cat_install') {
++                $_c3Pid = $_c3Num($_POST['product_id'] ?? null);
++                if ($_c3Pid <= 0) {
++                    flash('Nothing was changed. Pick the uCRM product that is the installation, then save.', 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3Cat0 = UcrmCatalogue::fromStore($store, $_c3Set);
++                $_c3Crm  = $_c3Crm0;
++                $_c3Off  = UcrmQuoteLines::forDirectUse($_c3Crm, $_c3Cfg, $_c3Set)->offered($_c3Pid, $_c3Cat0->hiddenIds());
++                if (empty($_c3Off['ok']) || empty($_c3Off['install']['ok'])) {
++                    flash($_c3Say((string)(empty($_c3Off['ok']) ? $_c3Off['reason'] : $_c3Off['install']['reason']), 'changed'), 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3R = UcrmCatalogue::setInstall($store, $_c3Pid, (string)$_c3Off['install']['line']['label'], $_c3Actor, $_c3Cfg, $_c3Dir);
++                $_c3Text = ['set' => 'The installation product is now ' . QuoteOrganization::plain((string)$_c3Off['install']['line']['label']) . ' (uCRM #' . $_c3Pid . ').',
++                            'already' => 'Nothing changed: that product is already the installation.'][$_c3R['kind']] ?? null;
++                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
++            } elseif ($_c3Act === 'ucrm_cat_hidden') {
++                $_c3Pid  = $_c3Num($_POST['product_id'] ?? null);
++                $_c3Hide = ($_POST['hide'] ?? '') === '1';
++                if ($_c3Pid <= 0) {
++                    flash('Nothing was changed. The request did not name a uCRM product.', 'danger');
++                    redirect($_c3Back);
++                }
++                // The name is for the history only, from the page's own read when it has one — never the browser's
++                $_c3Name = '';
++                try {
++                    $_c3Crm = $_c3Crm0;
++                    $_c3Pg  = UcrmQuoteLines::forDirectPage($_c3Crm, $_c3Cfg, $_c3Set, (string)$_c3Dir);
++                    foreach ((array)($_c3Pg['uql']->catalogue()['products'] ?? []) as $_c3Row) {
++                        if ((int)($_c3Row['id'] ?? 0) === $_c3Pid) { $_c3Name = (string)($_c3Row['name'] ?? ''); break; }
++                    }
++                } catch (\Throwable $e) {
++                    $_c3Name = '';
++                }
++                $_c3R = UcrmCatalogue::setHidden($store, $_c3Pid, $_c3Hide, $_c3Name, $_c3Actor, $_c3Cfg, $_c3Dir);
++                $_c3Text = ['hidden' => 'uCRM product #' . $_c3Pid . ' is kept off the forms.',
++                            'shown' => 'uCRM product #' . $_c3Pid . ' is offered on the forms again (when it passes the rules).',
++                            'already' => 'Nothing changed.'][$_c3R['kind']] ?? null;
++                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
++            } elseif ($_c3Act === 'ucrm_cat_standard_save') {
++                $_c3Plan = UcrmQuoteLines::parsePlan($_POST['plan'] ?? null);
++                $_c3Hw = [];
++                $_c3Ps = is_array($_POST['hw_p'] ?? null) ? array_values($_POST['hw_p']) : [];
++                $_c3Qs = is_array($_POST['hw_q'] ?? null) ? array_values($_POST['hw_q']) : [];
++                $_c3Bad = false;
++                foreach ($_c3Ps as $_c3I => $_c3P) {
++                    if ($_c3P === '' || $_c3P === '0') continue;   // an empty row of the form
++                    $_c3Pn = $_c3Num($_c3P);
++                    $_c3Qn = $_c3Num($_c3Qs[$_c3I] ?? null);
++                    if ($_c3Pn <= 0 || $_c3Qn < 1 || $_c3Qn > UcrmCatalogue::MAX_QTY) { $_c3Bad = true; break; }
++                    $_c3Hw[] = ['p' => $_c3Pn, 'q' => $_c3Qn];
++                }
++                if ($_c3Plan === null || $_c3Bad) {
++                    flash('Nothing was saved. Give the standard quotation a plan, and hardware with quantities from 1 to ' . UcrmCatalogue::MAX_QTY . '.', 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3Std = ['title' => is_string($_POST['title'] ?? null) ? (string)$_POST['title'] : '', 'plan' => $_c3Plan,
++                           'hw' => $_c3Hw, 'install' => ($_POST['install'] ?? '') === '1'];
++                $_c3Shape = UcrmCatalogue::standardShape(['title' => UcrmCatalogue::plainTitle($_c3Std['title'])] + $_c3Std);
++                if ($_c3Shape !== '') {
++                    flash($_c3Say($_c3Shape, 'saved'), 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3Off = $_c3Offered();
++                $_c3Priced = UcrmQuoteLines::standardFrom($_c3Std, $_c3Off);
++                if (empty($_c3Priced['ok'])) {
++                    flash($_c3Say((string)$_c3Priced['reason'], 'saved'), 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3Rep = $_c3Num($_POST['standard_id'] ?? null);
++                $_c3R = UcrmCatalogue::saveStandard($store, $_c3Rep > 0 ? $_c3Rep : null, $_c3Std, $_c3Actor, $_c3Cfg, $_c3Dir);
++                $_c3Text = ['saved' => 'The standard quotation "' . UcrmCatalogue::plainTitle($_c3Std['title']) . '" is saved.'][$_c3R['kind']] ?? null;
++                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'saved'), $_c3Text !== null ? 'success' : 'danger');
++            } else {   // ucrm_cat_standard_end
++                $_c3Id = $_c3Num($_POST['standard_id'] ?? null);
++                if ($_c3Id <= 0) {
++                    flash('Nothing was changed. The request did not name a standard quotation.', 'danger');
++                    redirect($_c3Back);
++                }
++                $_c3R = UcrmCatalogue::endStandard($store, $_c3Id, $_c3Actor, $_c3Cfg, $_c3Dir);
++                $_c3Text = ['ended' => 'That standard quotation is no longer offered.'][$_c3R['kind']] ?? null;
++                flash($_c3Text ?? $_c3Say((string)$_c3R['text'], 'changed'), $_c3Text !== null ? 'success' : 'danger');
++            }
++            error_log('[post_sync] 5.18.103 ' . $_c3Act . ' by #' . $_c3MeId . ' gave ' . (string)($_c3R['kind'] ?? '?'));
++        } catch (\Throwable $e) {
++            error_log('[post_sync] 5.18.103 ' . $_c3Act . ' by #' . $_c3MeId . ': did not finish (' . get_class($e) . ')');
++            flash('Nothing was changed — try again.', 'danger');
++        }
++        redirect($_c3Back);
++    }
++}
+ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='sim_inbound') {
+     $me = $auth->currentRetailer();
+     if ($me && !empty($me['is_admin'])) {
+diff --git a/dishnet-hybrid-sudan/lib/KycCrmSync.php b/dishnet-hybrid-sudan/lib/KycCrmSync.php
+index 4453e59..32d45ae 100644
+--- a/dishnet-hybrid-sudan/lib/KycCrmSync.php
++++ b/dishnet-hybrid-sudan/lib/KycCrmSync.php
+@@ -312,6 +312,11 @@ final class KycCrmSync
+         $autoQuote = ($this->config['kyc_auto_quote_enabled'] ?? true) !== false;
+         if ($ugCheck !== null) {
+             $refused = $this->ugQuote($app, $crmId, $known, $ugCheck, $autoQuote);   // 5.18.102 (Uganda)
++        } elseif ($autoQuote && empty($app['quote_created']) && ($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
++            // 5.18.103 (root docs/72 §G.8): a sale from the uCRM catalogue is never quoted by the gate-off builder below, which
++            // would rebuild it from offer_name at offer_price ?? 0 and its cart — a free plan line. Never on South Sudan.
++            $refused = KycService::newCustomerNoQuote((int)$crmId, UcrmQuoteLines::text('GATE_OFF_DIRECT'));
++            KycService::recordNoQuote($this->store, $id, 'P1', $refused);
+         } elseif ($autoQuote && empty($app['quote_created'])) {
+             $items = $this->quoteItemsFor($app);
+             if ($items !== [] && !KycService::quoteOverAutoMax($items, $this->config)) {
+@@ -364,7 +369,7 @@ final class KycCrmSync
+         // 5.18.102 (D14, docs/71 §R.4, §R.4.2): the current links, read from the store behind the gate; retryLines applies the
+         // entry rule first, so an application saved before the deploy stays unpriced whatever is linked
+         $r = KycService::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
+-            $this->store, $this->config);
++            $this->store, $this->config, UcrmCatalogue::fromStore($this->store, $setting));   // 5.18.103 (docs/72 §G.8)
+         if (!$r['ok']) {
+             $text = KycService::newCustomerNoQuote((int)$crmId, $r['text']);
+             KycService::recordNoQuote($this->store, $id, $r['code'], $text);
+@@ -385,7 +390,8 @@ final class KycCrmSync
+                 $app['quote_ref'] ?? ''),
+             (string)($app['mobile'] ?? ''), $known !== [] ? $known : null);
+         // 5.18.102 (D14, docs/71 §R.4.4): a quotation made from links records which ones, so a relink can find it
+-        if (!empty($posted['created'])) {
++        // 5.18.103 (docs/72 §G.8): a direct application records none — it was quoted by its uCRM ids
++        if (!empty($posted['created']) && ($app['quote_sale_entry'] ?? null) !== UcrmQuoteLines::DIRECT_ENTRY) {
+             $this->store->updateOne('kyc_applications.json', 'id', $id, ['quote_link_ids' => UcrmQuoteLines::linkIds($r['link_ids'] ?? [])]);
+         }
+         return !empty($posted['refused']) ? (string)$posted['refused'] : '';
+diff --git a/dishnet-hybrid-sudan/lib/KycService.php b/dishnet-hybrid-sudan/lib/KycService.php
+index 88c15d5..73b745d 100644
+--- a/dishnet-hybrid-sudan/lib/KycService.php
++++ b/dishnet-hybrid-sudan/lib/KycService.php
+@@ -4,6 +4,7 @@ require_once __DIR__ . '/currency.php';
+ require_once __DIR__ . '/UcrmClientTarget.php';
+ require_once __DIR__ . '/QuoteOrganization.php';   // 5.18.99: the Uganda quoting organization and the quote check
+ require_once __DIR__ . '/UcrmQuoteLines.php';      // 5.18.102: Uganda's lines and cash from uCRM Products
++require_once __DIR__ . '/UcrmCatalogue.php';       // 5.18.103 (root docs/72 §G): the uCRM catalogue's switch and settings
+ 
+ /**
+  * KycService
+@@ -235,8 +236,10 @@ class KycService
+         $ug = null;
+         if ($quoteOrg['on']) {
+             // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
++            // 5.18.103 (docs/72 §G G-9): with the uCRM catalogue switched on, no post here is 'web' (only the two APIs reach it)
+             $ug = (new UcrmQuoteLines($quoteCrm, $quoteOrg, UcrmQuoteLinks::fromStore($this->store, $quoteOrg)))->resolve(
+-                self::saleFromPost($post, trim($post['connectivity_type'] ?? 'Additional Service')), $this->store);
++                self::saleFromPost($post, trim($post['connectivity_type'] ?? 'Additional Service'),
++                    UcrmCatalogue::fromStore($this->store, $quoteOrg)->direct()), $this->store);
+             $ugRefusal = self::cashRefusal($ug, $post);
+             if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
+             if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
+@@ -553,13 +556,36 @@ class KycService
+         $ugOrg = QuoteOrganization::setting(is_array($cfg) ? $cfg : [], $this->gateDataDir());
+         $ug = null;
+         if ($ugOrg['on']) {
+-            // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
+-            $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
+-                    UcrmQuoteLinks::fromStore($this->store, $ugOrg)))
+-                ->resolve(self::saleFromPost($post, $connectivity), $this->store);
++            // 5.18.103 (root docs/72 §G G-9): the uCRM catalogue's switch decides how a post is read. A direct form's post is
++            // priced by uCRM id (resolveDirect) only while the switch is on — with it off it is refused before anything is
++            // written; every other post is 5.18.102's, by the links, read as 'app' while the switch is on.
++            $ugCat    = UcrmCatalogue::fromStore($this->store, $ugOrg);
++            $ugDirect = $ugCat->direct();
++            $ugForm   = ($post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::DIRECT_MARKER;
++            if ($ugForm && !$ugDirect) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_OFF')];
++            $ugSale = self::saleFromPost($post, $connectivity, $ugDirect);
++            if ($ugForm) {
++                if ($ugSale['direct_plan'] === null) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_NO_PLAN')];
++                if ($ugSale['direct_cart'] === null) return ['success' => false, 'message' => UcrmQuoteLines::text('DIRECT_CART')];
++                $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
++                        UcrmQuoteLinks::fromRecords([], [])))
++                    ->resolveDirect($ugSale, $ugCat->installProductId(), $ugCat->hiddenIds());
++                if ($ug['status'] === 'invalid') return ['success' => false, 'message' => (string)$ug['reason']];
++                // G-7: from here on the plugin-id fields are the server's — never a uCRM id, never what the browser sent —
++                // before the duplicate check, buildAttributes and the stored record read them.
++                $post['package_choice'] = '';
++                $post['device_id']      = '';
++                $post['hw_cart_json']   = self::directCartJson($ug);
++                $post['kitQty']         = (string)(($ug['item_ids']['hw'][0]['q'] ?? null) ?: 1);
++            } else {
++                // 5.18.102 (D14, docs/71 §R.4): priced only through the links an admin made, read from the store behind the gate
++                $ug = (new UcrmQuoteLines(UcrmQuoteLines::quoteClient($this->crm, is_array($cfg) ? $cfg : []), $ugOrg,
++                        UcrmQuoteLinks::fromStore($this->store, $ugOrg)))
++                    ->resolve($ugSale, $this->store);
++            }
+             if ($ug['status'] === 'no_plan') return ['success' => false, 'message' => 'Please select a valid package/plan.'];
+             $ugRefusal = self::cashRefusal($ug, $post);
+-            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED')) $this->dropPageCache();
++            if ($ugRefusal === UcrmQuoteLines::text('CASH_CHANGED') || $ugRefusal === UcrmQuoteLines::text('CASH_ITEM_CHANGED')) $this->dropPageCache();
+             if ($ugRefusal !== '') return ['success' => false, 'message' => $ugRefusal];
+         }
+ 
+@@ -733,7 +759,8 @@ class KycService
+         }
+ 
+         $packageId = (int)($post['package_choice'] ?? 0);
+-        if ($packageId <= 0) {
++        // 5.18.103 (docs/72 §G.6): a direct sale carries its plan as a uCRM pair, checked above; package_choice is ''
++        if ($packageId <= 0 && !($ug !== null && ($ug['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY)) {
+             return ['success' => false, 'message' => 'Please select a service plan before submitting.'];
+         }
+ 
+@@ -1659,11 +1686,25 @@ class KycService
+     // 5.18.102 (Uganda, docs/71): the lines and the cash from uCRM Products
+     // ══════════════════════════════════════════════════════════════════════
+ 
+-    /** The sale as UcrmQuoteLines::resolve() reads it, from a form or API post. */
+-    public static function saleFromPost(array $post, string $connectivity): array
++    /**
++     * The sale as UcrmQuoteLines::resolve() and resolveDirect() read it, from a form or API post. 5.18.103 (docs/72 §G
++     * G-9): $directOn is the uCRM catalogue's switch — true: only the direct form's marker is 'web-direct', and every other
++     * post is 'app'; false: the direct marker is 'app' (handleNew refuses it before this) and 5.18.102's marker is 'web';
++     * null (no caller of this release passes it): as 5.18.102.
++     */
++    public static function saleFromPost(array $post, string $connectivity, ?bool $directOn = null): array
+     {
+         $cart = !empty($post['hw_cart_json']) ? json_decode((string)$post['hw_cart_json'], true) : [];
++        $marker = $post['ucrm_quote_form'] ?? null;
++        if ($directOn === true) {
++            $entry = $marker === UcrmQuoteLines::DIRECT_MARKER ? UcrmQuoteLines::DIRECT_ENTRY : 'app';
++        } else {
++            $entry = $marker === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app';
++        }
+         return [
++            // 5.18.103 (§G.6): the direct form's uCRM ids — null when absent or unreadable (handleNew refuses those)
++            'direct_plan'       => UcrmQuoteLines::parsePlan($post['ucrm_plan'] ?? null),
++            'direct_cart'       => UcrmQuoteLines::parseCart($post['ucrm_cart_json'] ?? null),
+             'package_choice'    => $post['package_choice'] ?? 0,
+             'device_id'         => $post['device_id'] ?? 0,
+             'hw_cart'           => is_array($cart) ? $cart : [],
+@@ -1671,8 +1712,9 @@ class KycService
+             'customer_type'     => (string)($post['customer_type'] ?? ''),
+             'connectivity_type' => $connectivity,
+             'install_by'        => is_string($post['install_by'] ?? null) ? trim($post['install_by']) : '',
+-            // 5.18.102 (D14, docs/71 §R.4.2): 'web' only when the post carries this release's KYC form marker, exactly
+-            'entry'             => ($post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app',
++            // 5.18.102 (D14, docs/71 §R.4.2): 'web' only when the post carries the KYC form's marker, exactly;
++            // 5.18.103: 'web-direct' only from the direct form while the switch is on
++            'entry'             => $entry,
+         ];
+     }
+ 
+@@ -1685,7 +1727,12 @@ class KycService
+     {
+         $cart = array_key_exists('quote_sale_cart', $app) ? $app['quote_sale_cart'] : ($app['hw_cart_json'] ?? null);
+         if (is_string($cart)) $cart = json_decode($cart, true);
++        // 5.18.103 (docs/72 §G.8, G-10): a direct application's sale is its stored uCRM ids, whatever the switch says now
++        $direct = ($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY;
++        $ids    = $direct ? UcrmQuoteLines::itemIds($app['quote_item_ids'] ?? null) : null;
+         return [
++            'direct_plan'       => $ids !== null ? $ids['plan'] : null,
++            'direct_cart'       => $ids !== null ? $ids['hw'] : ($direct ? null : []),
+             'package_choice'    => $app['package_choice'] ?? 0,
+             'device_id'         => $app['device_id'] ?? 0,
+             'hw_cart'           => is_array($cart) ? $cart : [],
+@@ -1694,8 +1741,8 @@ class KycService
+             'connectivity_type' => trim((string)($app['connectivity_type'] ?? 'New Connection')),
+             'install_by'        => is_string($app['install_by'] ?? null) ? $app['install_by'] : '',
+             // 5.18.102 (D14, §R.4.2, E-1): 'web' only when stored exactly so; none (every application saved before the
+-            // deploy), 'app', '' or anything else is 'app'
+-            'entry'             => ($app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',
++            // deploy), 'app', '' or anything else is 'app'. 5.18.103: 'web-direct' when stored exactly so
++            'entry'             => $direct ? UcrmQuoteLines::DIRECT_ENTRY : (($app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app'),
+         ];
+     }
+ 
+@@ -1721,6 +1768,12 @@ class KycService
+         $seen = $post['ucrm_total_seen'] ?? null;
+         if (!is_scalar($seen) || !preg_match('/^[0-9]+(\.[0-9]+)?$/', trim((string)$seen))) return UcrmQuoteLines::text('CASH_NO_TOTAL');
+         if (!UcrmQuoteLines::postedTotalMatches($seen, (float)$res['total'])) return UcrmQuoteLines::text('CASH_CHANGED');
++        // 5.18.103 (docs/72 §G.6): a direct sale's items must be the ones the form drew — their tokens, as sets — so a
++        // rename or a swap at the same id and price is caught; there is no link record to compare
++        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
++            return UcrmQuoteLines::seenItemsMatch($post['ucrm_items_seen'] ?? null, (array)($res['tokens'] ?? []))
++                ? '' : UcrmQuoteLines::text('CASH_ITEM_CHANGED');
++        }
+         // 5.18.102 (D14, docs/71 §R.4.7): the link records the form drew must be the ones this sale resolved through — a
+         // relink at the same price would otherwise show the agent one product and charge the customer for another.
+         if (!UcrmQuoteLines::seenLinksMatch($post['ucrm_links_seen'] ?? null, (array)($res['link_ids'] ?? []))) {
+@@ -1739,6 +1792,23 @@ class KycService
+         $rec = [];
+         $by = self::installAnswer($post, $connectivity);
+         if ($by !== '') $rec['install_by'] = $by;
++        // 5.18.103 (docs/72 §G.7): a direct sale — its uCRM ids always, priced or not; never quote_link_ids, never a cart
++        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
++            $rec['quote_sale_entry'] = UcrmQuoteLines::DIRECT_ENTRY;
++            $rec['quote_item_ids']   = $res['item_ids'];
++            if ($res['status'] === 'priced') {
++                return $rec + [
++                    'quote_items'         => $res['lines'],
++                    'quote_lines_source'  => UcrmQuoteLines::DIRECT_SOURCE,
++                    'quote_items_total'   => $res['total'],
++                    'quote_lines_read_at' => date('Y-m-d H:i:s'),
++                    'offer_price'         => $res['plan_price'],
++                    'device_price'        => $res['device_price'],
++                ];
++            }
++            return $rec + ['quote_items' => null, 'offer_price' => null, 'device_price' => null,
++                           'quote_unpriced_why' => (string)($res['why'] ?? '')];
++        }
+         // 5.18.102 (D14, docs/71 §R.4.2, §R.4.4): the entry point, from resolve() — read once, never from the post again
+         $rec['quote_sale_entry'] = ($res['entry'] ?? null) === 'web' ? 'web' : 'app';
+         if ($res['status'] === 'priced') {
+@@ -1844,6 +1914,20 @@ class KycService
+         return dn_money($v, $cfg, abs($v - round($v)) < 0.0001 ? 0 : 2);
+     }
+ 
++    /**
++     * 5.18.103 (docs/72 §G.7, G-7): the hw_cart_json a direct application stores, rebuilt by the server — what its readers
++     * read (the installation prefill and the stock deduction: title and qty; the export: title and price), uCRM's names
++     * and prices, id 0 (it matches no plugin row anywhere) and no ucrm_product_id (the gate-off builders would quote it).
++     */
++    public static function directCartJson(array $res): string
++    {
++        $rows = [];
++        foreach ((array)($res['cart_rows'] ?? []) as $r) {
++            $rows[] = ['id' => 0, 'title' => (string)($r['title'] ?? ''), 'price' => $r['price'] ?? null, 'qty' => (int)($r['qty'] ?? 1)];
++        }
++        return json_encode($rows, JSON_UNESCAPED_UNICODE);
++    }
++
+     /**
+      * The lines a retry may quote for an application (docs/71 §F.4, D11), or why none:
+      *   - 5.18.102 (D14, §R.4.2, E-1): the entry rule first — an application not stored with quote_sale_entry 'web'
+@@ -1854,18 +1938,41 @@ class KycService
+      *   - no marked lines: resolved now by the current links — never inferred from a stored productId;
+      *   - a Cash application is never re-priced: quoted only when the lines total exactly the cash collected (2 dp).
+      * A Credit refusal whose reason is "not linked" on a web application takes P1_UNLINKED's text (§R.4.1).
++     * 5.18.103 (root docs/72 §G.8, G-10): a direct application ('web-direct') is retried by its uCRM ids, whatever the
++     * switch says — stored lines re-confirmed (confirmDirect: the rules, not "kept off"), or an unpriced sale resolved
++     * again (resolveDirect, "kept off" applying); its Credit refusal takes P1_DIRECT. $cat is the uCRM catalogue's
++     * settings (null: none — the switch off, no installation, nothing kept off).
+      *
+      * @return array{ok:bool,lines:array,code:string,text:string,link_ids:array}  link_ids: the records the lines came
+-     *         from — the resolution's set for unmarked lines, the stored set for marked ones (§R.4.4)
++     *         from — the resolution's set for unmarked lines, the stored set for marked ones (§R.4.4); [] for a direct one
+      */
+-    public static function retryLines(array $app, UcrmQuoteLines $uql, $store, array $cfg): array
++    public static function retryLines(array $app, UcrmQuoteLines $uql, $store, array $cfg, ?UcrmCatalogue $cat = null): array
+     {
+         $lines    = null;
+         $reason   = '';
+         $linkIds  = [];
+         $unlinked = false;
++        $why      = '';
++        $cat      = $cat ?? UcrmCatalogue::fromRecords([], false);
+         $sale     = self::saleFromApp($app);
+-        if ($sale['entry'] !== 'web') {
++        if ($sale['entry'] === UcrmQuoteLines::DIRECT_ENTRY) {
++            $markedD = ($app['quote_lines_source'] ?? '') === UcrmQuoteLines::DIRECT_SOURCE
++                && is_array($app['quote_items'] ?? null) && $app['quote_items'] !== [];
++            if ($markedD) {
++                $reason = $uql->confirmDirect($app['quote_items'], $app['quote_item_ids'] ?? null);
++                if ($reason === '') $lines = array_values($app['quote_items']);
++            } elseif ($sale['direct_plan'] === null || $sale['direct_cart'] === null) {
++                $reason = 'the uCRM items this application was saved with could not be read';
++            } else {
++                $res = $uql->resolveDirect($sale, $cat->installProductId(), $cat->hiddenIds(), true);
++                if ($res['status'] === 'priced') {
++                    $lines = $res['lines'];
++                } else {
++                    $reason = (string)$res['reason'];
++                    $why    = (string)($res['why'] ?? '');
++                }
++            }
++        } elseif ($sale['entry'] !== 'web') {
+             $reason = UcrmQuoteLines::ENTRY_REASON;   // 5.18.102 (D14, E-1): before the marked lines are confirmed
+         } else {
+             $marked = ($app['quote_lines_source'] ?? '') === UcrmQuoteLines::SOURCE
+@@ -1897,7 +2004,8 @@ class KycService
+         }
+         if ($lines === null) {
+             return ['ok' => false, 'lines' => [], 'code' => 'P1', 'link_ids' => [],
+-                    'text' => self::p1Text(['reason' => $reason, 'unlinked' => $unlinked, 'entry' => $sale['entry']])];
++                    'text' => self::p1Text(['reason' => $reason, 'unlinked' => $unlinked, 'entry' => $sale['entry'], 'why' => $why],
++                        $cat->direct())];
+         }
+         return ['ok' => true, 'lines' => $lines, 'code' => '', 'text' => '', 'link_ids' => $linkIds];
+     }
+@@ -1907,8 +2015,15 @@ class KycService
+      * linked, an admin makes it from the Orders card") for a web sale whose reason is "not linked", an item or the
+      * installation. resolve() marks those reasons; the choice never matches the text. The record stays P1.
+      */
+-    public static function p1Text(array $res): string
++    public static function p1Text(array $res, bool $directOn = false): string
+     {
++        // 5.18.103 (root docs/72 §G.8): a direct sale takes P1_DIRECT — true after a rollback too — but a sale that does not
++        // say who installs keeps P1; with the switch on, a 5.18.102 web sale left unlinked is quoted in uCRM by hand (G-10)
++        if (($res['entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY) {
++            $code = ($res['why'] ?? '') === 'no_install_answer' ? 'P1' : 'P1_DIRECT';
++            return UcrmQuoteLines::text($code, ['{REASON}' => (string)($res['reason'] ?? '')]);
++        }
++        if ($directOn && !empty($res['unlinked']) && ($res['entry'] ?? null) === 'web') return UcrmQuoteLines::text('WEB_SWITCH_ON');
+         $code = (!empty($res['unlinked']) && ($res['entry'] ?? null) === 'web') ? 'P1_UNLINKED' : 'P1';
+         return UcrmQuoteLines::text($code, ['{REASON}' => (string)($res['reason'] ?? '')]);
+     }
+@@ -1942,9 +2057,12 @@ class KycService
+      * conditions, one implementation for the Orders card and the handler's re-check: quote_sale_entry exactly 'web', a
+      * uCRM client, quote_refused P1, no quote_created, and no quote_found_in_ucrm.
+      */
+-    public static function canMakeQuotation(array $app): bool
++    public static function canMakeQuotation(array $app, bool $directOn = false): bool
+     {
+-        return ($app['quote_sale_entry'] ?? null) === 'web'
++        // 5.18.103 (root docs/72 §G.8, G-10): a direct application always; a 5.18.102 web one only with the switch off —
++        // with it on, its plugin items can no longer be linked, so its quotation is made in uCRM by hand
++        $entry = $app['quote_sale_entry'] ?? null;
++        return ($entry === UcrmQuoteLines::DIRECT_ENTRY || ($entry === 'web' && !$directOn))
+             && !empty($app['crm_client_id'])
+             && ($app['quote_refused'] ?? null) === 'P1'
+             && empty($app['quote_created'])
+@@ -2046,7 +2164,7 @@ class KycService
+ 
+             // 3. the lines, by the current links
+             $r = self::retryLines($app, new UcrmQuoteLines($quoteCrm, $setting, UcrmQuoteLinks::fromStore($this->store, $setting)),
+-                $this->store, $cfg);
++                $this->store, $cfg, UcrmCatalogue::fromStore($this->store, $setting));   // 5.18.103 (docs/72 §G.8)
+             if (!$r['ok']) {
+                 self::recordNoQuote($this->store, $appId, $r['code'], $r['text'], $claim);   // round 11 (CK11-B2): never before the claim
+                 return self::madeAnswer(409, 'refused', null, 0, null, $r['text']);
+@@ -2085,8 +2203,11 @@ class KycService
+             // logged (ids only, so an admin can restore quote_link_ids) and never answered as "no quotation".
+             $quoteId = (int)$posted['id'];
+             try {
+-                $this->store->updateOne('kyc_applications.json', 'id', $appId, [
++                // 5.18.103 (docs/72 §G.8): a direct application records no link ids — it was quoted by its uCRM ids
++                $this->store->updateOne('kyc_applications.json', 'id', $appId,
++                    (($app['quote_sale_entry'] ?? null) === UcrmQuoteLines::DIRECT_ENTRY ? [] : [
+                     'quote_link_ids'   => UcrmQuoteLines::linkIds($r['link_ids'] ?? []),
++                    ]) + [
+                     'quote_error'      => null,
+                     'quote_made_by_id' => (int)($actor['id'] ?? 0),
+                     'quote_made_via'   => $via,
+diff --git a/dishnet-hybrid-sudan/lib/UcrmCatalogue.php b/dishnet-hybrid-sudan/lib/UcrmCatalogue.php
+new file mode 100644
+index 0000000..1bdf4bb
+--- /dev/null
++++ b/dishnet-hybrid-sudan/lib/UcrmCatalogue.php
+@@ -0,0 +1,399 @@
++<?php
++declare(strict_types=1);
++
++/**
++ * UcrmCatalogue — 5.18.103 (Uganda, root docs/72 §G): the uCRM catalogue's switch and its three settings, as an admin
++ * sets them on the uCRM catalogue screen.
++ *
++ * With the switch on ("direct mode"), the KYC form, Send Quotation and the lead quotes offer uCRM's own service plans and
++ * products, by uCRM id, at uCRM's prices (UcrmQuoteLines::offered()), and the plugin's own plan and kit lists are hidden
++ * on Uganda. With it off — the state a deploy leaves — 5.18.103 behaves as 5.18.102 (docs/72 §G G-1).
++ *
++ * Where it lives (G-2): the record collection ucrm_catalogue.json — the table ucrm_catalogue in the plugin's store,
++ * created by its first read or write, no migration; never a configuration key (web pages read the configuration from the
++ * store row, the crons from the files). One record per act:
++ *
++ *   id, kind (mode | install | hidden | standard), and by kind:
++ *     mode      on (bool)
++ *     install   product_id, product_name (display only — never matched, never priced)
++ *     hidden    product_id, product_name (display only)
++ *     standard  title, plan {sp, p}, hw [{p, q}], install (bool)
++ *   by_id, by_name, at, at_ts, ended_at, ended_at_ts, ended_by_id
++ *
++ *   ended_at_ts null is the in-force marker. A change ends the record in force and appends a new one, so the history
++ *   stays. at and ended_at are display strings only: never compared, never ordered.
++ *
++ * Reads: fromStore($store, $setting) takes the gate from its caller — QuoteOrganization::setting(): 'on' with an integer
++ * id — and opens nothing otherwise (SqliteStore::load() creates any table it does not find, so a read where the gate is
++ * off would add a table to South Sudan's store). Every reader fails safe: two records in force where one is allowed read
++ * as none (the switch off, the installation not set).
++ *
++ * Writes go through $store->withLock(self::FILE, …), each re-reading the gate inside the lock and checking the store
++ * only — never a uCRM read inside the lock. The caller judges uCRM items first (a fresh read through UcrmQuoteLines) and
++ * passes the judged ids in, as UcrmQuoteLinks::set() does. Prices are never stored (G-12).
++ *
++ * This file loads lib/QuoteOrganization.php only when it is absent (forConfig(), the writes); its callers load
++ * lib/SqliteStore.php.
++ * PHP 7.4 compatible.
++ */
++final class UcrmCatalogue
++{
++    /** 5.18.103: the collection, and so the table ucrm_catalogue (SqliteStore: the file name less .json). */
++    public const FILE  = 'ucrm_catalogue.json';
++    public const KINDS = ['mode', 'install', 'hidden', 'standard'];
++    /** 5.18.103 (§G.3): at most this many standard quotations in force, and this many hardware items in each. */
++    public const MAX_STANDARDS      = 10;
++    public const MAX_STANDARD_ITEMS = 10;
++    /** 5.18.103 (§G.5, §G.6): the most of one item a sale may carry — the form's cap and the server's. */
++    public const MAX_QTY   = 99;
++    public const TITLE_MAX = 60;
++
++    /** @var array<int,array> every record, the ended ones too, in stored order */
++    private array $records;
++    private bool $open;
++
++    private function __construct(array $records, bool $open)
++    {
++        $this->records = $open ? array_values(array_filter($records, 'is_array')) : [];
++        $this->open    = $open;
++    }
++
++    // ── constructors ───────────────────────────────────────────────────────
++
++    /** Is the gate open: QuoteOrganization::setting()'s 'on', with an integer id (on can come with id null)? */
++    public static function gateOpen(array $setting): bool
++    {
++        return !empty($setting['on']) && is_int($setting['id'] ?? null) && $setting['id'] > 0;
++    }
++
++    /**
++     * The settings over the store's records. $setting is QuoteOrganization::setting() as the caller has read it: with the
++     * gate closed nothing is opened, and the reader holds nothing (the switch off).
++     */
++    public static function fromStore($store, array $setting): self
++    {
++        if (!self::gateOpen($setting)) return new self([], false);
++        $records = $store->load(self::FILE);
++        return new self(is_array($records) ? $records : [], true);
++    }
++
++    /**
++     * 5.18.103: the settings as a page or a handler sees them — the gate read from its configuration
++     * (QuoteOrganization::setting($config, $dataDir), loaded here when absent), then fromStore(). Never throws: anything
++     * unclear is the gate closed.
++     */
++    public static function forConfig($store, array $config, ?string $dataDir): self
++    {
++        try {
++            if (!class_exists('QuoteOrganization')) require_once __DIR__ . '/QuoteOrganization.php';
++            return self::fromStore($store, QuoteOrganization::setting($config, $dataDir));
++        } catch (\Throwable $e) {
++            return new self([], false);
++        }
++    }
++
++    /** The settings over records the caller holds (the deploy's copy, a test). Opens nothing. */
++    public static function fromRecords(array $records, bool $open = true): self
++    {
++        return new self($records, $open);
++    }
++
++    // ── reads ──────────────────────────────────────────────────────────────
++
++    public function open(): bool
++    {
++        return $this->open;
++    }
++
++    /** Every record whole, the ended ones too. */
++    public function records(): array
++    {
++        return $this->records;
++    }
++
++    /** The records of a kind in force, in stored order. */
++    private function inForce(string $kind): array
++    {
++        $out = [];
++        foreach ($this->records as $r) {
++            if (($r['kind'] ?? null) === $kind && ($r['ended_at_ts'] ?? null) === null) $out[] = $r;
++        }
++        return $out;
++    }
++
++    /** The switch's record in force, or null (none, or two — read as off). */
++    public function modeRecord(): ?array
++    {
++        $m = $this->inForce('mode');
++        return count($m) === 1 ? $m[0] : null;
++    }
++
++    /** Is direct mode on (§G.3): exactly one switch record in force, holding on === true. */
++    public function direct(): bool
++    {
++        $m = $this->modeRecord();
++        return $m !== null && ($m['on'] ?? null) === true;
++    }
++
++    /** The installation's record in force, or null (none, two, or not a positive id — read as not set). */
++    public function installRecord(): ?array
++    {
++        $m = $this->inForce('install');
++        if (count($m) !== 1) return null;
++        return self::posInt($m[0]['product_id'] ?? null) ? $m[0] : null;
++    }
++
++    public function installProductId(): ?int
++    {
++        $r = $this->installRecord();
++        return $r === null ? null : (int)$r['product_id'];
++    }
++
++    /** The product ids an admin keeps off the forms, unique, ascending. */
++    public function hiddenIds(): array
++    {
++        $ids = [];
++        foreach ($this->inForce('hidden') as $r) {
++            if (self::posInt($r['product_id'] ?? null)) $ids[(int)$r['product_id']] = true;
++        }
++        $ids = array_keys($ids);
++        sort($ids);
++        return $ids;
++    }
++
++    /** The hidden records in force (for the screen: name, who, when). */
++    public function hiddenRecords(): array
++    {
++        return $this->inForce('hidden');
++    }
++
++    /** The standard quotations in force, each valid in shape, by id ascending (a malformed record is left out). */
++    public function standards(): array
++    {
++        $out = [];
++        foreach ($this->inForce('standard') as $r) {
++            if (self::standardShape($r) === '') $out[(int)$r['id']] = $r;
++        }
++        ksort($out);
++        return array_values($out);
++    }
++
++    public function standard(int $id): ?array
++    {
++        foreach ($this->standards() as $r) if ((int)$r['id'] === $id) return $r;
++        return null;
++    }
++
++    /** A kind's records, the ended ones too, newest first (the screen's history). */
++    public function history(string $kind): array
++    {
++        $out = [];
++        foreach ($this->records as $r) if (($r['kind'] ?? null) === $kind) $out[] = $r;
++        usort($out, function ($a, $b) { return (int)($b['id'] ?? 0) <=> (int)($a['id'] ?? 0); });
++        return $out;
++    }
++
++    // ── validation (one implementation: the writes, the screen and the deploy) ──────────────────
++
++    /**
++     * '' when a standard quotation's fields are well formed (§G.3), else what is wrong. title: plain text, 1–60
++     * characters; plan: {sp, p} positive ints; hw: at most 10 entries, each {p, q} with p a positive int, unique, and q
++     * 1–99; install: a bool.
++     */
++    public static function standardShape(array $s): string
++    {
++        $title = $s['title'] ?? null;
++        if (!is_string($title) || trim($title) === '' || $title !== self::plainTitle($title)) return 'the title is missing or not plain text';
++        $plan = $s['plan'] ?? null;
++        if (!is_array($plan) || !self::posInt($plan['sp'] ?? null) || !self::posInt($plan['p'] ?? null)) return 'the plan is missing';
++        $hw = $s['hw'] ?? null;
++        if (!is_array($hw) || count($hw) > self::MAX_STANDARD_ITEMS || ($hw !== [] && array_keys($hw) !== range(0, count($hw) - 1))) {
++            return 'the hardware list is not valid (at most ' . self::MAX_STANDARD_ITEMS . ' items)';
++        }
++        $seen = [];
++        foreach ($hw as $h) {
++            if (!is_array($h) || !self::posInt($h['p'] ?? null) || !is_int($h['q'] ?? null) || $h['q'] < 1 || $h['q'] > self::MAX_QTY) {
++                return 'a hardware item is not valid (quantity 1–' . self::MAX_QTY . ')';
++            }
++            if (isset($seen[$h['p']])) return 'a hardware item is listed twice';
++            $seen[$h['p']] = true;
++        }
++        if (!is_bool($s['install'] ?? null)) return 'whether it includes the installation is not said';
++        return '';
++    }
++
++    /** A title as the screen stores it: control characters and < > & " removed, spaces collapsed, at most 60 characters. */
++    public static function plainTitle(string $t): string
++    {
++        $t = preg_replace('/[\x00-\x1F\x7F<>&"]/u', '', $t) ?? '';
++        $t = trim(preg_replace('/\s+/u', ' ', $t) ?? '');
++        return mb_substr($t, 0, self::TITLE_MAX);
++    }
++
++    private static function posInt($v): bool
++    {
++        return is_int($v) && $v > 0 && $v <= 999999999;
++    }
++
++    // ── writes (each under the lock; store checks only) ────────────────────
++
++    /**
++     * Turn the switch on or off. On is asked by the caller only after its fresh read met the three conditions (§G.3, G-1);
++     * $judgedInstall is the installation product that read judged: inside the lock it must still be the one in force, or
++     * nothing changes ('changed'). Off needs nothing judged and is never refused but by the gate.
++     *
++     * @return array{kind:string,text:string,record:?array}  kind: on | off | already | changed | gate
++     */
++    public static function setMode($store, bool $on, ?int $judgedInstall, array $actor, array $config, ?string $dataDir): array
++    {
++        return self::write($store, $config, $dataDir, function (array $records, self $now) use ($on, $judgedInstall, $actor) {
++            if ($on && ($judgedInstall === null || $now->installProductId() !== $judgedInstall)) {
++                return ['kind' => 'changed', 'text' => 'the installation product changed while the switch was being turned on — nothing was changed; try again'];
++            }
++            if ($now->direct() === $on && $now->modeRecord() !== null) return ['kind' => 'already', 'shown' => $now->modeRecord()];
++            return ['kind' => $on ? 'on' : 'off', 'new' => ['kind' => 'mode', 'on' => $on]];
++        }, $actor);
++    }
++
++    /**
++     * Set the installation product. The caller has judged $productId on a fresh read (badProduct and rule 7, §G.4).
++     * Refused ('clash') when a standard quotation in force lists it as hardware.
++     *
++     * @return array{kind:string,text:string,record:?array}  kind: set | already | clash | gate
++     */
++    public static function setInstall($store, int $productId, string $productName, array $actor, array $config, ?string $dataDir): array
++    {
++        if (!self::posInt($productId)) throw new \InvalidArgumentException('UcrmCatalogue::setInstall: no product id');
++        return self::write($store, $config, $dataDir, function (array $records, self $now) use ($productId, $productName) {
++            foreach ($now->standards() as $s) {
++                foreach ($s['hw'] as $h) {
++                    if ((int)$h['p'] === $productId) {
++                        return ['kind' => 'clash', 'text' => 'the standard quotation "' . (string)$s['title'] . '" lists this product as hardware — change it first; nothing was changed'];
++                    }
++                }
++            }
++            if ($now->installProductId() === $productId) return ['kind' => 'already', 'shown' => $now->installRecord()];
++            return ['kind' => 'set', 'new' => ['kind' => 'install', 'product_id' => $productId, 'product_name' => self::plainTitle($productName)]];
++        }, $actor);
++    }
++
++    /**
++     * Keep a product off the forms ($hidden true) or offer it again (false).
++     *
++     * @return array{kind:string,text:string,record:?array}  kind: hidden | shown | already | gate
++     */
++    public static function setHidden($store, int $productId, bool $hidden, string $productName, array $actor, array $config, ?string $dataDir): array
++    {
++        if (!self::posInt($productId)) throw new \InvalidArgumentException('UcrmCatalogue::setHidden: no product id');
++        return self::write($store, $config, $dataDir, function (array $records, self $now) use ($productId, $hidden, $productName) {
++            $is = in_array($productId, $now->hiddenIds(), true);
++            if ($is === $hidden) return ['kind' => 'already'];
++            if ($hidden) return ['kind' => 'hidden', 'new' => ['kind' => 'hidden', 'product_id' => $productId, 'product_name' => self::plainTitle($productName)]];
++            return ['kind' => 'shown', 'end' => ['hidden', $productId]];   // the end of the product's hidden records, no new record
++        }, $actor);
++    }
++
++    /**
++     * Save a standard quotation: a new one ($replaceId null) or a new version of one in force. The caller has judged every
++     * item on a fresh read (each offered, §G.4). Refused when the shape is wrong ('invalid'), when it would be the
++     * eleventh ('full'), when the one it replaces is no longer in force ('changed'), or when its hardware names the
++     * installation product in force ('clash').
++     *
++     * @return array{kind:string,text:string,record:?array}  kind: saved | invalid | full | changed | clash | gate
++     */
++    public static function saveStandard($store, ?int $replaceId, array $std, array $actor, array $config, ?string $dataDir): array
++    {
++        $std = ['kind' => 'standard', 'title' => is_string($std['title'] ?? null) ? self::plainTitle($std['title']) : null,
++                'plan' => $std['plan'] ?? null, 'hw' => $std['hw'] ?? null, 'install' => $std['install'] ?? null];
++        $bad = self::standardShape($std);
++        if ($bad !== '') return ['kind' => 'invalid', 'text' => $bad . ' — nothing was saved', 'record' => null];
++        return self::write($store, $config, $dataDir, function (array $records, self $now) use ($replaceId, $std) {
++            $install = $now->installProductId();
++            foreach ($std['hw'] as $h) {
++                if ($install !== null && (int)$h['p'] === $install) {
++                    return ['kind' => 'clash', 'text' => 'the installation product cannot be listed as hardware — tick "includes installation" instead; nothing was saved'];
++                }
++            }
++            if ($replaceId !== null) {
++                if ($now->standard($replaceId) === null) return ['kind' => 'changed', 'text' => 'that standard quotation was changed or stopped meanwhile — nothing was saved; reload'];
++                return ['kind' => 'saved', 'new' => $std, 'end' => ['standard-id', $replaceId]];
++            }
++            if (count($now->standards()) >= self::MAX_STANDARDS) {
++                return ['kind' => 'full', 'text' => 'there are already ' . self::MAX_STANDARDS . ' standard quotations — stop using one first; nothing was saved'];
++            }
++            return ['kind' => 'saved', 'new' => $std];
++        }, $actor);
++    }
++
++    /**
++     * Stop using a standard quotation.
++     *
++     * @return array{kind:string,text:string,record:?array}  kind: ended | changed | gate
++     */
++    public static function endStandard($store, int $id, array $actor, array $config, ?string $dataDir): array
++    {
++        return self::write($store, $config, $dataDir, function (array $records, self $now) use ($id) {
++            if ($now->standard($id) === null) return ['kind' => 'changed', 'text' => 'that standard quotation was already stopped or changed — nothing was changed; reload'];
++            return ['kind' => 'ended', 'end' => ['standard-id', $id]];
++        }, $actor);
++    }
++
++    /**
++     * One write under the lock. $decide($records, $now) answers ['kind' => …, 'text'? => …, 'new'? => record to append,
++     * 'end'? => ['standard-id', id] (end that record) or ['hidden', productId] (end that product's hidden records),
++     * 'shown'? => the record in force an 'already' answer reports]. With a new record of a single-in-force kind (mode,
++     * install) every record of the kind in force is ended first. An answer with neither 'new' nor 'end' returns the
++     * records unchanged. Whatever withLock throws (it has already rolled back) goes to the caller.
++     */
++    private static function write($store, array $config, ?string $dataDir, callable $decide, array $actor): array
++    {
++        if (!class_exists('QuoteOrganization')) require_once __DIR__ . '/QuoteOrganization.php';
++        $actorId   = (int)($actor['id'] ?? 0);
++        $actorName = (string)($actor['name'] ?? '');
++        return $store->withLock(self::FILE, function (array $records) use ($config, $dataDir, $decide, $actorId, $actorName) {
++            $records = array_values(array_filter($records, 'is_array'));
++            $same = function (string $kind, string $text, ?array $rec = null) use ($records): array {
++                return ['records' => $records, 'result' => ['kind' => $kind, 'text' => $text, 'record' => $rec]];
++            };
++            // The gate, read here (G-2): a switch turned on where the quoting organization has since gone off stays off.
++            if (!self::gateOpen(QuoteOrganization::setting($config, $dataDir))) {
++                return $same('gate', 'the quoting organization is not in force here — nothing was changed');
++            }
++            $ans  = $decide($records, new self($records, true));
++            $kind = (string)$ans['kind'];
++            $text = (string)($ans['text'] ?? '');
++            $new  = isset($ans['new']) && is_array($ans['new']) ? $ans['new'] : null;
++            $end  = isset($ans['end']) && is_array($ans['end']) ? $ans['end'] : null;
++            if ($new === null && $end === null) return $same($kind, $text, isset($ans['shown']) && is_array($ans['shown']) ? $ans['shown'] : null);
++
++            $now = date('Y-m-d H:i:s');
++            $ts  = time();
++            $maxId = 0;
++            foreach ($records as $r) {
++                $rid = is_numeric($r['id'] ?? null) ? (int)$r['id'] : 0;
++                if ($rid > $maxId) $maxId = $rid;
++            }
++            $single = is_array($new) && in_array($new['kind'] ?? '', ['mode', 'install'], true) ? (string)$new['kind'] : null;
++            foreach ($records as $i => $r) {
++                if (($r['ended_at_ts'] ?? null) !== null) continue;
++                $hit = false;
++                if ($single !== null && ($r['kind'] ?? null) === $single) $hit = true;
++                if (is_array($end) && $end[0] === 'standard-id' && ($r['kind'] ?? null) === 'standard' && (int)($r['id'] ?? 0) === (int)$end[1]) $hit = true;
++                if (is_array($end) && $end[0] === 'hidden' && ($r['kind'] ?? null) === 'hidden' && (int)($r['product_id'] ?? 0) === (int)$end[1]) $hit = true;
++                if (!$hit) continue;
++                $records[$i]['ended_at']    = $now;
++                $records[$i]['ended_at_ts'] = $ts;
++                $records[$i]['ended_by_id'] = $actorId;
++            }
++            $record = null;
++            if (is_array($new)) {
++                $record = ['id' => $maxId + 1] + $new + [
++                    'by_id' => $actorId, 'by_name' => $actorName, 'at' => $now, 'at_ts' => $ts,
++                    'ended_at' => null, 'ended_at_ts' => null, 'ended_by_id' => null,
++                ];
++                $records[] = $record;
++            }
++            return ['records' => $records, 'result' => ['kind' => $kind, 'text' => $text, 'record' => $record]];
++        });
++    }
++}
+diff --git a/dishnet-hybrid-sudan/lib/UcrmQuoteLines.php b/dishnet-hybrid-sudan/lib/UcrmQuoteLines.php
+index bd0649e..596eaa7 100644
+--- a/dishnet-hybrid-sudan/lib/UcrmQuoteLines.php
++++ b/dishnet-hybrid-sudan/lib/UcrmQuoteLines.php
+@@ -68,7 +68,9 @@ final class UcrmQuoteLines
+     public const PAGE_TOTAL   = 5;
+     public const CACHE_FILE   = 'ucrm_quote_catalogue_cache.json';
+     /** 5.18.102 (D14, §R.3.2): the page cache's shape version; a cache without it is a miss. */
+-    public const CACHE_SHAPE  = 'd14-1';
++    public const CACHE_SHAPE  = 'd103-1';   // 5.18.103 (docs/72 §G.3): excluded_names added; 5.18.102's 'd14-1' is a miss both ways
++    /** 5.18.103 (§G.5): the last read that succeeded, any age — drawn out of date, never priced from. */
++    public const LAST_GOOD_FILE = 'ucrm_quote_catalogue_last_good.json';
+ 
+     private const NO_INSTALL_CONNECTIONS = ['Shifting Connection', 'Ownership Change'];
+     /** The reason when a sale that must say who installs does not (docs/71 §E.1); KycService words its own refusal. */
+@@ -77,6 +79,15 @@ final class UcrmQuoteLines
+     public const ENTRY_REASON = 'this sale did not come from the KYC form of this release (the retailer app, the mobile API, a form opened before the update, or an application saved before it), so it is not priced from uCRM';
+     /** 5.18.102: the web KYC form's own marker (§R.4.2): ucrm_quote_form exactly this string. */
+     public const FORM_MARKER  = '5.18.102';
++    /** 5.18.103 (docs/72 §G G-9): the direct form's marker; with the switch on, only it is the entry 'web-direct'. */
++    public const DIRECT_MARKER = '5.18.103-direct';
++    /** 5.18.103 (G-8): what a direct sale stores as quote_sale_entry — read by 5.18.102 as 'app'. */
++    public const DIRECT_ENTRY  = 'web-direct';
++    /** 5.18.103 (§G.7): marks lines direct mode resolved. Never inferred from productId. */
++    public const DIRECT_SOURCE = 'ucrm-direct-5.18.103';
++    /** 5.18.103 (§G.5, §G.6): the most of one item, and the most items, a direct sale carries. */
++    public const MAX_QTY  = 99;
++    public const MAX_CART = 30;
+     public const FIBER_REASON = 'Fiber is not priced from uCRM on this installation';
+     /** 5.18.102: the installation's own name in reasons (it has no plugin row). */
+     private const INSTALL_ROW = 'Installation';
+@@ -100,6 +111,14 @@ final class UcrmQuoteLines
+         'CASH_RELINKED' => 'An admin changed which uCRM product an item on this sale is linked to since the form was opened — reload the form. Nothing was saved and no money was taken.',
+         'CASH_ZERO'     => 'This sale totals nothing in uCRM, so it cannot be a Cash sale. Nothing was saved and no money was taken.',
+         'CASH_NO_INSTALL' => 'This sale does not say who installs (DishNet, or the customer), so it cannot be priced from uCRM. Nothing was saved and no money was taken. Choose who installs on the web KYC form, or register as Credit.',
++        // 5.18.103 (docs/72 §G.6, §G.8): direct mode's own texts
++        'P1_DIRECT'       => 'No quotation was made: {REASON}. Make the quotation in uCRM by hand, or — once the reason is put right — an admin makes it from the Orders card.',
++        'CASH_ITEM_CHANGED' => 'An item on this sale changed in uCRM since the form was opened — reload the form. Nothing was saved and no money was taken.',
++        'DIRECT_OFF'      => 'This form was opened under the uCRM catalogue, which an admin has since turned off — reload the form. Nothing was saved and no money was taken.',
++        'DIRECT_NO_PLAN'  => 'Please select a service plan.',
++        'DIRECT_CART'     => 'The sale\'s hardware could not be read — reload the form. Nothing was saved and no money was taken.',
++        'GATE_OFF_DIRECT' => 'No quotation was made: a sale from the uCRM catalogue is not quoted while the quoting organization is off — make the quotation in uCRM.',
++        'WEB_SWITCH_ON'   => 'This registration was made before the uCRM catalogue was turned on, and its items are the plugin\'s, which are no longer linked — make its quotation in uCRM by hand.',
+     ];
+ 
+     public static function text(string $code, array $vars = []): string
+@@ -114,6 +133,8 @@ final class UcrmQuoteLines
+     private ?array $cat = null;
+     /** @var int number of catalogue reads this instance made (tests assert one per submission) */
+     private int $reads = 0;
++    /** 5.18.103 (§G G-3): while true, a row uCRM no longer lists is reasoned in direct mode's words (no link to make). */
++    private bool $directWords = false;
+ 
+     /**
+      * @param mixed $crm             the client the quote is made with (quoteClient())
+@@ -160,10 +181,7 @@ final class UcrmQuoteLines
+         $raw  = @file_get_contents($file);
+         if (is_string($raw)) {
+             $c = json_decode($raw, true);
+-            if (is_array($c) && !empty($c['ok']) && (time() - (int)($c['at'] ?? 0)) < self::PAGE_TTL
+-                && ($c['shape'] ?? null) === self::CACHE_SHAPE
+-                && is_array($c['products'] ?? null) && is_array($c['plans'] ?? null) && is_array($c['excluded'] ?? null)
+-                && is_array($c['plan_keys'] ?? null) && is_array($c['plan_key_of'] ?? null) && is_int($c['plan_rows'] ?? null)) {
++            if (self::cacheShaped($c) && (time() - (int)($c['at'] ?? 0)) < self::PAGE_TTL) {   // 5.18.103: the shape, one test
+                 return new self($crm, $setting, $links, $c);
+             }
+         }
+@@ -171,7 +189,9 @@ final class UcrmQuoteLines
+         $self  = new self($short, $setting, $links);
+         $cat   = $self->catalogue();
+         if (!empty($cat['ok'])) {
+-            @file_put_contents($file, json_encode($cat + ['at' => time(), 'shape' => self::CACHE_SHAPE]), LOCK_EX);
++            $json = json_encode($cat + ['at' => time(), 'shape' => self::CACHE_SHAPE]);
++            @file_put_contents($file, $json, LOCK_EX);
++            @file_put_contents(rtrim($dataDir, '/') . '/' . self::LAST_GOOD_FILE, $json, LOCK_EX);   // 5.18.103 (§G.5)
+         }
+         return $self;
+     }
+@@ -208,7 +228,8 @@ final class UcrmQuoteLines
+         if ($this->cat !== null) return $this->cat;
+         $this->reads++;
+         $fail = ['ok' => false, 'reason' => "uCRM's products could not be read", 'products' => [], 'plans' => [],
+-                 'excluded' => ['products' => [], 'plans' => []], 'plan_key_of' => [], 'plan_keys' => [], 'plan_rows' => 0];
++                 'excluded' => ['products' => [], 'plans' => []], 'excluded_names' => ['products' => [], 'plans' => []],
++                 'plan_key_of' => [], 'plan_keys' => [], 'plan_rows' => 0];
+         // The second list is not asked for once the first has failed: a uCRM that does not answer costs one wait, not two.
+         try {
+             $products = $this->crm->get('products?limit=' . self::LIMIT);
+@@ -222,10 +243,14 @@ final class UcrmQuoteLines
+         // 5.18.102 (§R.3.2): what was filtered out, by id and why — "archived", "not active" and "another organization's"
+         // are reasons of their own, and an id in neither list is "no longer listed" (a read never holds 500 rows).
+         $excluded = ['products' => [], 'plans' => []];
++        $exNames  = ['products' => [], 'plans' => []];   // 5.18.103 (docs/72 §G.3): the screen names them, never matched
+         foreach (['products' => $products, 'plans' => $plans] as $kind => $rows) {
+             foreach ($rows as $row) {
+                 $why = $this->exclusion($row);
+-                if ($why !== '' && is_numeric($row['id'] ?? null)) $excluded[$kind][(int)$row['id']] = $why;
++                if ($why !== '' && is_numeric($row['id'] ?? null)) {
++                    $excluded[$kind][(int)$row['id']] = $why;
++                    $exNames[$kind][(int)$row['id']]  = is_scalar($row['name'] ?? null) ? (string)$row['name'] : '';
++                }
+             }
+         }
+         // 5.18.102 (§R.3.1 rules 6–7): the quotation summary's own map (webhook.php's whQuotePlans, mirrored exactly):
+@@ -244,6 +269,7 @@ final class UcrmQuoteLines
+             'products'    => array_values(array_filter($products, [$this, 'counts'])),
+             'plans'       => array_values(array_filter($plans, [$this, 'counts'])),
+             'excluded'    => $excluded,
++            'excluded_names' => $exNames,
+             'plan_key_of' => $planKeyOf,
+             'plan_keys'   => $planKeys,
+             'plan_rows'   => count($plans),
+@@ -701,6 +727,496 @@ final class UcrmQuoteLines
+         return $seen !== [] && $seen === self::linkIds($linkIds);
+     }
+ 
++    // ── 5.18.103 (Uganda, root docs/72 §G): the catalogue straight from uCRM ("direct mode") ────────────────
++
++    /**
++     * 5.18.103 (§G.4): a line's token — the first 16 hex of sha256 over its productId, label, price in integer cents and
++     * unit. Computed here only: drawn into the page beside the item, posted back (ucrm_items_seen), compared as a set.
++     */
++    public static function token(array $line): string
++    {
++        $cents = (string)(int)round(((float)($line['price'] ?? 0)) * 100);
++        return substr(hash('sha256', (int)($line['productId'] ?? 0) . '|' . (string)($line['label'] ?? '') . '|' . $cents
++            . '|' . (string)($line['unit'] ?? '')), 0, 16);
++    }
++
++    /** 5.18.103 (§G.6): do the posted tokens (comma-joined, 16 hex each) equal $tokens, as sets? Missing, malformed → false. */
++    public static function seenItemsMatch($posted, array $tokens): bool
++    {
++        if (!is_string($posted)) return false;
++        $s = trim($posted);
++        if ($s === '' || !preg_match('/^[0-9a-f]{16}(,[0-9a-f]{16})*$/', $s)) return false;
++        $seen = array_values(array_unique(explode(',', $s)));
++        $want = array_values(array_unique(array_map('strval', $tokens)));
++        sort($seen);
++        sort($want);
++        return $want !== [] && $seen === $want;
++    }
++
++    /** 5.18.103 (§G.6): the plan pair a direct form posts (ucrm_plan, "<servicePlanId>:<productId>"), or null. */
++    public static function parsePlan($v): ?array
++    {
++        if (!is_string($v) || !preg_match('/^([1-9][0-9]{0,8}):([1-9][0-9]{0,8})$/', trim($v), $m)) return null;
++        return ['sp' => (int)$m[1], 'p' => (int)$m[2]];
++    }
++
++    /**
++     * 5.18.103 (§G.6): the cart a direct form posts (ucrm_cart_json, [{"p":id,"q":n}]): at most MAX_CART entries, each two
++     * positive integers, q 1–MAX_QTY; a product posted twice is merged, its quantities added (still at most MAX_QTY). []
++     * for no hardware; null for anything that cannot be read or breaks a limit — the whole cart, never part of it.
++     */
++    public static function parseCart($v): ?array
++    {
++        if ($v === null || $v === '') return [];
++        if (is_string($v)) {
++            $v = json_decode($v, true);
++            if (!is_array($v)) return null;
++        }
++        if (!is_array($v)) return null;
++        if ($v === []) return [];
++        if (array_keys($v) !== range(0, count($v) - 1) || count($v) > self::MAX_CART) return null;
++        $qty = [];
++        foreach ($v as $e) {
++            if (!is_array($e)) return null;
++            $p = $e['p'] ?? null;
++            $q = $e['q'] ?? null;
++            if (is_string($p) && ctype_digit($p)) $p = (int)$p;
++            if (is_string($q) && ctype_digit($q)) $q = (int)$q;
++            if (!is_int($p) || $p <= 0 || $p > 999999999 || !is_int($q) || $q < 1 || $q > self::MAX_QTY) return null;
++            $qty[$p] = ($qty[$p] ?? 0) + $q;
++            if ($qty[$p] > self::MAX_QTY) return null;
++        }
++        $out = [];
++        foreach ($qty as $p => $q) $out[] = ['p' => (int)$p, 'q' => (int)$q];
++        return $out;
++    }
++
++    /**
++     * 5.18.103 (§G.7, §G.8): the uCRM ids a direct application stores (quote_item_ids), checked — {plan:{sp,p}, hw:[{p,q}],
++     * install: id|null} — or null when they cannot be read.
++     */
++    public static function itemIds($v): ?array
++    {
++        if (!is_array($v)) return null;
++        $plan = $v['plan'] ?? null;
++        if (!is_array($plan) || !is_int($plan['sp'] ?? null) || !is_int($plan['p'] ?? null) || $plan['sp'] <= 0 || $plan['p'] <= 0) return null;
++        $hw = self::parseCart($v['hw'] ?? []);
++        if ($hw === null || ($hw !== [] && $hw != ($v['hw'] ?? null))) return null;
++        $inst = $v['install'] ?? null;
++        if ($inst !== null && (!is_int($inst) || $inst <= 0)) return null;
++        return ['plan' => ['sp' => $plan['sp'], 'p' => $plan['p']], 'hw' => $hw, 'install' => $inst];
++    }
++
++    /**
++     * 5.18.103 (§G.5): the last catalogue read that succeeded, whatever its age, kept beside the page cache — drawn, marked
++     * out of date and with Cash disabled, only when the page's own read fails. Never priced from: the submission reads
++     * uCRM again. null when there is none.
++     */
++    public static function lastGood($crm, array $setting, string $dataDir, UcrmQuoteLinks $links): ?self
++    {
++        $raw = @file_get_contents(rtrim($dataDir, '/') . '/' . self::LAST_GOOD_FILE);
++        if (!is_string($raw)) return null;
++        $c = json_decode($raw, true);
++        return self::cacheShaped($c) ? new self($crm, $setting, $links, $c) : null;
++    }
++
++    /**
++     * 5.18.103 (§G.5): the resolver a direct-mode page draws from — forPage()'s (the page timeouts, the 60-second cache),
++     * or, when that read fails, the last good copy, marked stale (drawn out of date, Cash disabled, never priced from).
++     * Direct mode reads no link: the judge it holds is empty. $pluginCrm is the plugin's own client (quoteClient() picks
++     * the admin token when one is set).
++     *
++     * @return array{uql:self,stale:bool}
++     */
++    public static function forDirectPage($pluginCrm, array $cfg, array $setting, string $dataDir): array
++    {
++        $links  = UcrmQuoteLinks::fromRecords([], []);
++        $client = self::quoteClient($pluginCrm, $cfg);
++        $uql    = self::forPage($client, $setting, $dataDir, $links);
++        if (!empty($uql->catalogue()['ok'])) return ['uql' => $uql, 'stale' => false];
++        $lg = self::lastGood($client, $setting, $dataDir, $links);
++        return $lg !== null ? ['uql' => $lg, 'stale' => true] : ['uql' => $uql, 'stale' => false];
++    }
++
++    /**
++     * 5.18.103 (§G.6, §G.9): a resolver that reads uCRM fresh, for a submission, a send or a save — never a cache.
++     */
++    public static function forDirectUse($pluginCrm, array $cfg, array $setting): self
++    {
++        return new self(self::quoteClient($pluginCrm, $cfg), $setting, UcrmQuoteLinks::fromRecords([], []));
++    }
++
++    /**
++     * 5.18.103 (§G.4): what the forms offer, from one catalogue read — the plan pairs (G-4), the hardware (G-5), the
++     * installation (G-6) — and every service plan and product left out, with its reason and a fixed why code, for the
++     * uCRM catalogue screen and the deploy's count.
++     *
++     * @param int|null $installId the installation product in force (UcrmCatalogue::installProductId()), or null
++     * @param int[]    $keptOff   the products an admin keeps off the forms (UcrmCatalogue::hiddenIds())
++     * @return array{ok:bool,reason:string,plans:array,hardware:array,install:array,not_offered:array}
++     */
++    public function offered(?int $installId, array $keptOff): array
++    {
++        $cat = $this->catalogue();
++        if (!$cat['ok']) {
++            return ['ok' => false, 'reason' => $cat['reason'], 'plans' => [], 'hardware' => [],
++                    'install' => ['ok' => false, 'reason' => $cat['reason'], 'why' => 'unreadable', 'line' => null], 'not_offered' => []];
++        }
++        $prev = $this->directWords;
++        $this->directWords = true;
++        try {
++            $off = [];
++            foreach ($keptOff as $k) if (is_int($k) && $k > 0) $off[$k] = true;
++            $notOffered = [];
++            $plans = [];
++            $planProducts = [];
++            foreach ($cat['plans'] as $sp) {
++                $spid = (int)($sp['id'] ?? 0);
++                if ($spid <= 0) continue;
++                $pair = $this->directPair($spid, null);
++                if (!$pair['ok']) {
++                    $notOffered[] = ['kind' => 'plan', 'id' => $spid, 'name' => (string)($sp['name'] ?? ''), 'reason' => $pair['reason'], 'why' => $pair['why']];
++                    continue;
++                }
++                $pid = (int)$pair['line']['productId'];
++                $planProducts[$pid] = true;
++                $plans[] = $pair['line'] + ['sp' => $spid, 'p' => $pid, 'name' => (string)($sp['name'] ?? ''),
++                    'speed' => (string)($sp['downloadSpeed'] ?? $sp['download_speed'] ?? ''), 'key' => $pair['key'],
++                    'token' => self::token($pair['line'])];
++            }
++            $hardware = [];
++            $accessory = self::accessoryKeys();
++            foreach ($cat['products'] as $prod) {
++                $pid = (int)($prod['id'] ?? 0);
++                if ($pid <= 0 || isset($planProducts[$pid]) || ($installId !== null && $pid === $installId)) continue;
++                $name = (string)($prod['name'] ?? '');
++                $it = $this->directItem($pid, 1);
++                if (!$it['ok']) {
++                    $notOffered[] = ['kind' => 'product', 'id' => $pid, 'name' => $name, 'reason' => $it['reason'], 'why' => $it['why']];
++                    continue;
++                }
++                if (isset($off[$pid])) {
++                    $notOffered[] = ['kind' => 'product', 'id' => $pid, 'name' => $name,
++                        'reason' => QuoteOrganization::plain($name) . ' is kept off the forms by an admin', 'why' => 'kept_off'];
++                    continue;
++                }
++                $group = (class_exists('ShopCatalogue') && isset($accessory[ShopCatalogue::nameKey($name)])) ? 'accessory' : 'kit';
++                $hardware[] = $it['line'] + ['p' => $pid, 'group' => $group, 'token' => self::token($it['line'])];
++            }
++            foreach (['plans' => 'plan', 'products' => 'product'] as $kind => $one) {
++                foreach ((array)($cat['excluded'][$kind] ?? []) as $id => $why) {
++                    $name = (string)($cat['excluded_names'][$kind][$id] ?? '');
++                    $notOffered[] = ['kind' => $one, 'id' => (int)$id, 'name' => $name,
++                        'reason' => $this->unlisted($kind, (int)$id, $this->directShown($kind, (int)$id), $one === 'plan' ? 'service plan' : 'product'),
++                        'why' => (string)$why];
++                }
++            }
++            $byPrice = function (array $a, array $b): int {
++                return [$a['price'], $a['label']] <=> [$b['price'], $b['label']];
++            };
++            usort($plans, $byPrice);
++            usort($hardware, function (array $a, array $b) use ($byPrice): int {
++                return [$a['group'] === 'kit' ? 0 : 1] <=> [$b['group'] === 'kit' ? 0 : 1] ?: $byPrice($a, $b);
++            });
++            $inst = $this->directInstall($installId);
++            return ['ok' => true, 'reason' => '', 'plans' => $plans, 'hardware' => $hardware,
++                    'install' => $inst + ['p' => $inst['ok'] ? (int)$inst['line']['productId'] : null,
++                                          'token' => $inst['ok'] ? self::token($inst['line']) : null],
++                    'not_offered' => $notOffered];
++        } finally {
++            $this->directWords = $prev;
++        }
++    }
++
++    /**
++     * 5.18.103 (§G.6): price one direct sale — the shape resolve() answers, link_ids always [], plus item_ids (what the
++     * application stores, priced or not), tokens (every line's) and why (the reason's fixed code). Every item must be
++     * offered now (G-4, G-5: not kept off, not the installation), the installation set and passing when DishNet installs.
++     *
++     * @param array $sale saleFromPost()/saleFromApp(): direct_plan {sp,p}|null, direct_cart [{p,q}]|null, customer_type,
++     *                    connectivity_type, install_by, entry ('web-direct' only from the direct form, the switch on)
++     * @param bool  $applyKeptOff false only where a sale already made is re-read and kept-off must not apply (never at
++     *                    submission, never at the retry of an unpriced sale — docs/72 §G.8)
++     */
++    public function resolveDirect(array $sale, ?int $installId, array $keptOff, bool $applyKeptOff = true): array
++    {
++        $plan  = is_array($sale['direct_plan'] ?? null) ? $sale['direct_plan'] : null;
++        $cart  = array_key_exists('direct_cart', $sale) ? $sale['direct_cart'] : [];
++        $entry = ($sale['entry'] ?? null) === self::DIRECT_ENTRY ? self::DIRECT_ENTRY : 'app';
++        $out = ['status' => 'no_plan', 'reason' => '', 'why' => '', 'lines' => [], 'total' => null, 'offer' => null,
++                'device' => null, 'plan_price' => null, 'device_price' => null, 'plan_label' => null, 'entry' => $entry,
++                'link_ids' => [], 'unlinked' => false, 'item_ids' => null, 'tokens' => [], 'cart_rows' => []];
++        if ($plan === null || !is_int($plan['sp'] ?? null) || !is_int($plan['p'] ?? null)) return $out;
++        if ($cart === null || !is_array($cart)) {
++            $out['status'] = 'invalid';
++            $out['reason'] = self::text('DIRECT_CART');
++            $out['why']    = 'cart';
++            return $out;
++        }
++        $out['item_ids'] = ['plan' => ['sp' => $plan['sp'], 'p' => $plan['p']], 'hw' => array_values($cart), 'install' => null];
++        $out['status']   = 'unpriced';
++        // the cart the application keeps (KycService::directCartJson, G-7): names and prices once uCRM is read, else none
++        foreach ($cart as $c) $out['cart_rows'][] = ['title' => '', 'price' => null, 'qty' => (int)$c['q']];
++        $type = (string)($sale['customer_type'] ?? '');
++        if ($entry !== self::DIRECT_ENTRY) return self::directNo($out, self::ENTRY_REASON, 'entry');
++        if (strcasecmp(trim($type), 'Fiber') === 0) return self::directNo($out, self::FIBER_REASON, 'fiber');
++        $cat = $this->catalogue();
++        if (!$cat['ok']) return self::directNo($out, $cat['reason'], 'unreadable');
++
++        // The names the application keeps (offer_name, device_title, hw_cart_json, G-7), read whether or not it prices.
++        $out['offer'] = ['name' => $this->directName('products', $plan['p'])];
++        foreach ($cart as $i => $c) {
++            $row = $this->listed('products', (int)$c['p']);
++            $out['cart_rows'][$i] = ['title' => $this->directName('products', (int)$c['p']),
++                'price' => $row !== null && is_numeric($row['price'] ?? null) ? round((float)$row['price'], 2) : null, 'qty' => (int)$c['q']];
++        }
++        if ($cart !== []) {
++            $first = $this->listed('products', (int)$cart[0]['p']);
++            $out['device'] = ['title' => $this->directName('products', (int)$cart[0]['p']),
++                              'price' => $first !== null && is_numeric($first['price'] ?? null) ? round((float)$first['price'], 2) : null];
++        }
++
++        $off = $this->offered($installId, $applyKeptOff ? $keptOff : []);
++        $prev = $this->directWords;
++        $this->directWords = true;
++        try {
++            $lines = [];
++            $pl = null;
++            foreach ($off['plans'] as $row) {
++                if ($row['sp'] === $plan['sp'] && $row['p'] === $plan['p']) { $pl = $row; break; }
++            }
++            if ($pl === null) {
++                $pair = $this->directPair($plan['sp'], $plan['p']);
++                return self::directNo($out, $pair['ok'] ? $this->directShown('plans', $plan['sp']) . ' is not offered on the forms' : $pair['reason'],
++                    $pair['ok'] ? 'not_offered' : $pair['why']);
++            }
++            $lines[] = self::lineOf($pl);
++            $out['plan_price'] = $pl['price'];
++            $out['plan_label'] = $pl['label'];
++            foreach ($cart as $c) {
++                $p = (int)$c['p'];
++                $hw = null;
++                foreach ($off['hardware'] as $row) if ($row['p'] === $p) { $hw = $row; break; }
++                if ($hw === null) {
++                    $shown = $this->directShown('products', $p);
++                    if ($installId !== null && $p === $installId) return self::directNo($out, "{$shown} is the installation product, so it cannot be sold as hardware", 'install_product');
++                    $it = $this->directItem($p, 1);
++                    if (!$it['ok']) return self::directNo($out, $it['reason'], $it['why']);
++                    if ($applyKeptOff && in_array($p, $keptOff, true)) return self::directNo($out, "{$shown} is kept off the forms by an admin", 'kept_off');
++                    return self::directNo($out, "{$shown} is not offered on the forms", 'not_offered');
++                }
++                $line = self::lineOf($hw);
++                $line['quantity'] = (int)$c['q'];
++                $lines[] = $line;
++                if ($out['device_price'] === null) $out['device_price'] = $hw['price'];
++            }
++            if (self::needsInstallAnswer($type, (string)($sale['connectivity_type'] ?? ''))) {
++                $by = (string)($sale['install_by'] ?? '');
++                if ($by !== 'dishnet' && $by !== 'customer') return self::directNo($out, self::NO_INSTALL_ANSWER, 'no_install_answer');
++                if ($by === 'dishnet') {
++                    if (empty($off['install']['ok'])) return self::directNo($out, (string)$off['install']['reason'], (string)$off['install']['why']);
++                    $lines[] = $off['install']['line'];
++                    $out['item_ids']['install'] = (int)$off['install']['line']['productId'];
++                }
++            }
++        } finally {
++            $this->directWords = $prev;
++        }
++        $out['status'] = 'priced';
++        $out['lines']  = $lines;
++        $out['total']  = self::total($lines);
++        $out['tokens'] = array_values(array_map([self::class, 'token'], $lines));
++        return $out;
++    }
++
++    /**
++     * 5.18.103 (§G.8): for a retry of a direct application's stored lines — '' when they may be quoted as stored, else the
++     * reason. Each stored id is judged again by the rules (the plan pair as G-4, each product as G-5 but without
++     * "kept off" and without the installation in force, the installation product as stored), and every stored line must
++     * be its item's line now in product id and price (2 dp). A price that changed is said in words, never with the figure.
++     */
++    public function confirmDirect(array $lines, $itemIds): string
++    {
++        $ids = self::itemIds($itemIds);
++        if ($ids === null) return 'the uCRM items this application was saved with could not be read';
++        $cat = $this->catalogue();
++        if (!$cat['ok']) return $cat['reason'];
++        $labels = [];
++        foreach ($lines as $l) {
++            $lbl = is_array($l) && is_scalar($l['label'] ?? null) ? (string)$l['label'] : '';
++            $labels[is_array($l) ? (int)($l['productId'] ?? 0) : 0] = QuoteOrganization::plain($lbl !== '' ? $lbl : 'An item');
++        }
++        $repriced = function (string $label): string {
++            return "{$label}'s price in uCRM changed after this application was saved";
++        };
++        $prev = $this->directWords;
++        $this->directWords = true;
++        try {
++            $current = [];
++            $pair = $this->directPair($ids['plan']['sp'], $ids['plan']['p']);
++            if (!$pair['ok']) return $pair['why'] === 'price_differs' ? $repriced($labels[$ids['plan']['p']] ?? 'The plan') : $pair['reason'];
++            $current[(int)$pair['line']['productId']] = $pair['line'];
++            foreach ($ids['hw'] as $h) {
++                $it = $this->directItem((int)$h['p'], (int)$h['q']);
++                if (!$it['ok']) return $it['reason'];
++                $current[(int)$h['p']] = $it['line'];
++            }
++            if ($ids['install'] !== null) {
++                $in = $this->directInstall($ids['install']);
++                if (!$in['ok']) return $in['reason'];
++                $current[(int)$ids['install']] = $in['line'];
++            }
++        } finally {
++            $this->directWords = $prev;
++        }
++        $changed = 'the items of this application changed after it was saved';
++        if (count($lines) !== count($current)) return $changed;
++        $seen = [];
++        foreach ($lines as $l) {
++            $pid = is_array($l) ? (int)($l['productId'] ?? 0) : 0;
++            if ($pid <= 0 || !isset($current[$pid]) || isset($seen[$pid])) return $changed;
++            $seen[$pid] = true;
++            if (abs(round((float)$current[$pid]['price'], 2) - round((float)($l['price'] ?? 0), 2)) > 0.0001) return $repriced($labels[$pid] ?? 'An item');
++        }
++        return '';
++    }
++
++    /**
++     * 5.18.103 (§G G-12): a standard quotation (UcrmCatalogue's record) priced live against offered(): usable only when
++     * its plan, every hardware item and — when it includes it — the installation are offered now; never a partial bundle.
++     * One implementation for the KYC form, Send Quotation, the uCRM catalogue screen and the deploy's check.
++     *
++     * @return array{ok:bool,reason:string,lines:array,total:?float,tokens:array}
++     */
++    public static function standardFrom(array $std, array $off): array
++    {
++        $no = function (string $r): array {
++            return ['ok' => false, 'reason' => $r, 'lines' => [], 'total' => null, 'tokens' => []];
++        };
++        if (empty($off['ok'])) return $no((string)($off['reason'] ?? "uCRM's products could not be read"));
++        $sp = (int)($std['plan']['sp'] ?? 0);
++        $pp = (int)($std['plan']['p'] ?? 0);
++        $lines = [];
++        $plan = null;
++        foreach ((array)($off['plans'] ?? []) as $row) {
++            if ((int)$row['sp'] === $sp && (int)$row['p'] === $pp) { $plan = $row; break; }
++        }
++        if ($plan === null) return $no('its plan is not offered now — see the uCRM catalogue screen');
++        $lines[] = self::lineOf($plan);
++        foreach ((array)($std['hw'] ?? []) as $h) {
++            $hit = null;
++            foreach ((array)($off['hardware'] ?? []) as $row) {
++                if ((int)$row['p'] === (int)($h['p'] ?? 0)) { $hit = $row; break; }
++            }
++            if ($hit === null) return $no('a hardware item in it (uCRM product #' . (int)($h['p'] ?? 0) . ') is not offered now — see the uCRM catalogue screen');
++            $line = self::lineOf($hit);
++            $line['quantity'] = max(1, (int)($h['q'] ?? 1));
++            $lines[] = $line;
++        }
++        if (!empty($std['install'])) {
++            if (empty($off['install']['ok'])) return $no((string)($off['install']['reason'] ?? 'the installation product is not usable'));
++            $lines[] = $off['install']['line'];
++        }
++        return ['ok' => true, 'reason' => '', 'lines' => $lines, 'total' => self::total($lines),
++                'tokens' => array_values(array_map([self::class, 'token'], $lines))];
++    }
++
++    /** 5.18.103: a plan pair by its service plan, and — when $p is given — that product (G-4). */
++    private function directPair(int $spid, ?int $p): array
++    {
++        $cat   = $this->catalogue();
++        $shown = $this->directShown('plans', $spid);
++        $sp = $this->servicePlanRules($spid, $shown, true);
++        if ($sp['reason'] !== '') return self::no($sp['reason'], $sp['why']) + ['key' => ''];
++        $key = $sp['key'];
++        if ($key === '') return self::no("{$shown} has no name a uCRM product could be spelled like", 'plan_no_product') + ['key' => ''];
++        $cands = [];   // G-4: the counted products keyed like it, counted before any judging
++        foreach ($cat['products'] as $prod) {
++            if (is_array($prod) && PublicPriceFeed::planKey((string)($prod['name'] ?? '')) === $key) $cands[] = $prod;
++        }
++        if ($cands === []) return self::no("no uCRM product is spelled like the service plan {$shown}, so it cannot be a quotation line", 'plan_no_product') + ['key' => $key];
++        if (count($cands) > 1) return self::no("two uCRM products are spelled like the service plan {$shown} — an admin removes or renames one in uCRM", 'plan_two_products') + ['key' => $key];
++        $pid = (int)($cands[0]['id'] ?? 0);
++        if ($p !== null && $pid !== $p) return self::no("the uCRM product of {$shown} changed since the form was opened", 'plan_product_changed') + ['key' => $key];
++        return $this->planRules($shown, $pid, $spid, null, true) + ['key' => $key];
++    }
++
++    /** 5.18.103: a product as hardware (G-5) — counted, badProduct, not spelled like a plan; kept-off and the installation are the callers'. */
++    private function directItem(int $pid, int $qty): array
++    {
++        $shown   = $this->directShown('products', $pid);
++        $product = $this->listed('products', $pid);
++        if ($product === null) return self::no($this->unlisted('products', $pid, $shown, 'product', true), 'unlisted');
++        $bad = $this->badProduct($product, $shown);
++        if ($bad !== '') return self::no($bad, 'bad');
++        if ($this->likePlan($product)) return self::no("{$shown} is spelled like a service plan in uCRM, so it cannot be quoted as hardware", 'like_plan');
++        return self::yes(self::line($product, max(1, $qty), 'piece'), null);
++    }
++
++    /** 5.18.103: the installation product (G-6) — set, counted, badProduct, not spelled like a plan. */
++    private function directInstall(?int $pid): array
++    {
++        if ($pid === null || $pid <= 0) return self::no('the installation product is not set — an admin sets it on the uCRM catalogue screen', 'install_unset');
++        $shown   = $this->directShown('products', $pid);
++        $product = $this->listed('products', $pid);
++        if ($product === null) return self::no('the installation product: ' . $this->unlisted('products', $pid, $shown, 'product', true), 'unlisted');
++        $bad = $this->badProduct($product, $shown);
++        if ($bad !== '') return self::no('the installation product: ' . $bad, 'bad');
++        if ($this->likePlan($product)) return self::no("the installation product {$shown} is spelled like a service plan in uCRM", 'like_plan');
++        return self::yes(self::line($product, 1, 'job'), null);
++    }
++
++    /** 5.18.103: a uCRM row's name fit for a reason — counted or filtered out — else "uCRM product #id". */
++    private function directShown(string $kind, int $id): string
++    {
++        $n = $this->directName($kind, $id);
++        return $n !== '' ? $n : 'uCRM ' . ($kind === 'plans' ? 'service plan' : 'product') . ' #' . $id;
++    }
++
++    /** 5.18.103: a uCRM row's name, through QuoteOrganization::plain — counted or filtered out — or ''. */
++    private function directName(string $kind, int $id): string
++    {
++        $row = $this->listed($kind, $id);
++        $n = $row !== null ? (string)($row['name'] ?? '') : (string)($this->catalogue()['excluded_names'][$kind][$id] ?? '');
++        return QuoteOrganization::plain($n);
++    }
++
++    /** 5.18.103: an offered row back to the line shape every quote carries. */
++    private static function lineOf(array $row): array
++    {
++        return ['productId' => (int)$row['productId'], 'label' => (string)$row['label'], 'price' => (float)$row['price'],
++                'quantity' => (int)($row['quantity'] ?? 1), 'unit' => (string)$row['unit']];
++    }
++
++    /** 5.18.103: a direct sale left unpriced, with its reason and why code. */
++    private static function directNo(array $out, string $reason, string $why): array
++    {
++        $out['status'] = 'unpriced';
++        $out['reason'] = $reason;
++        $out['why']    = $why;
++        return $out;
++    }
++
++    /** 5.18.103: the website's accessory names (ShopCatalogue), for the kit / accessory grouping only — never a price. */
++    private static function accessoryKeys(): array
++    {
++        try {
++            if (!class_exists('ShopCatalogue')) require_once __DIR__ . '/ShopCatalogue.php';
++            return ShopCatalogue::accessoryNameKeys(dirname(__DIR__));
++        } catch (\Throwable $e) {
++            return [];
++        }
++    }
++
++    /** 5.18.103 (§G.3): a page cache or last-good copy of this release's shape (age aside). */
++    private static function cacheShaped($c): bool
++    {
++        return is_array($c) && !empty($c['ok']) && ($c['shape'] ?? null) === self::CACHE_SHAPE
++            && is_array($c['products'] ?? null) && is_array($c['plans'] ?? null) && is_array($c['excluded'] ?? null)
++            && is_array($c['excluded_names'] ?? null)
++            && is_array($c['plan_keys'] ?? null) && is_array($c['plan_key_of'] ?? null) && is_int($c['plan_rows'] ?? null);
++    }
++
+     // ── helpers ────────────────────────────────────────────────────────────
+ 
+     /** 5.18.102 (F-4): the quoting organization's id this resolver hands the judge, on every call. */
+@@ -729,6 +1245,9 @@ final class UcrmQuoteLines
+         $why   = (string)($this->catalogue()['excluded'][$kind][$id] ?? '');
+         $words = ['archived' => 'archived', 'inactive' => 'not active', 'organization' => 'another organization\'s'];
+         $state = $words[$why] ?? '';
++        if ($this->directWords) {   // 5.18.103 (§G G-3): nothing to link in direct mode — the remedy is in uCRM
++            return $state === '' ? "{$shown} is no longer listed in uCRM" : "{$shown} is {$state} in uCRM";
++        }
+         if (!$atUse) {
+             return $state === '' ? "uCRM does not list {$what} #{$id} — nothing was linked"
+                                  : "uCRM {$what} #{$id} is {$state} in uCRM — nothing was linked";
+diff --git a/dishnet-hybrid-sudan/manifest.json b/dishnet-hybrid-sudan/manifest.json
+index 20e1759..87648c3 100644
+--- a/dishnet-hybrid-sudan/manifest.json
++++ b/dishnet-hybrid-sudan/manifest.json
+@@ -5,7 +5,7 @@
+     "displayName": "DishNet Hybrid — Sudan Edition",
+     "description": "The full DishNet Hybrid platform for a fresh Sudan deployment, with the AI WhatsApp brain built in. Carries the complete mature feature set — CRM, customer portal and PWA, sales and KYC, support and field operations, accounting and cashbook, HRM and payroll, retailers, stock, LTE, Starlink, reporting and the existing APIs, webhooks and automation — and adds Sales, Support and Accounts on WhatsApp through Evolution API, answered by one AI brain grounded in live UISP/uCRM data. Ships with no data: no customers, no employees, no accounting records, and no default passwords. The first administrator is created through a setup step on first run.",
+     "url": "https://dishnetafrica.com",
+-    "version": "5.18.102",
++    "version": "5.18.103",
+     "ucrmVersionCompliability": {
+       "min": "2.14.0",
+       "max": null
+diff --git a/dishnet-hybrid-sudan/public.php b/dishnet-hybrid-sudan/public.php
+index d9d8e78..c869ad4 100644
+--- a/dishnet-hybrid-sudan/public.php
++++ b/dishnet-hybrid-sudan/public.php
+@@ -2692,6 +2692,7 @@ $_tabFiles = [
+     'my_account'         => 'tabs/sales/my_account.php',
+     'subscription_plans' => 'tabs/sales/subscription_plans.php',
+     'hardware'           => 'tabs/sales/hardware.php',
++    'ucrm_catalogue'     => 'tabs/sales/ucrm_catalogue.php',   // 5.18.103 (root docs/72 §G.3): Uganda's uCRM catalogue
+ 
+     //  Support 
+     'support_leader_manual' => 'tabs/support/manual_support_leader.php',
+@@ -2821,6 +2822,7 @@ $_tabPerms = [
+     'sim_cards'          => 'sim_cards',
+     'subscription_plans' => 'plans',
+     'hardware'           => 'hardware',
++    'ucrm_catalogue'     => ['plans', 'hardware'],   // 5.18.103 (§G.3): who may see Plans or Hardware (admins by default)
+     // Support
+     'support_leader_manual' => '*support_leader',
+     'support_dashboard'  => 'support_dash',
+@@ -3001,6 +3003,7 @@ if (isset($_tabFiles[$tab])) {
+             'field_expenses'=>'Field Expenses','scheduling'=>'My Jobs','customer_lookup'=>'Customers',
+             'my_account'=>'My Cash','leads'=>'Leads','collect_payment'=>'Collect Payment',
+             'form'=>'New KYC Registration','hardware'=>'Hardware','subscription_plans'=>'Plans',
++            'ucrm_catalogue'=>'uCRM catalogue',   // 5.18.103 (root docs/72 §G.3)
+             'sim_cards'=>'SIM Cards','quote_logs'=>'Quote Logs','all_leads'=>'All Leads',
+             'all_collections'=>'All Collections','all_apps'=>'All Orders','wa_leads'=>'WA Leads',
+             'support_tickets'=>'Tickets','service_status'=>'Service Status',
+diff --git a/dishnet-hybrid-sudan/tabs/sales/applications.php b/dishnet-hybrid-sudan/tabs/sales/applications.php
+index 1635786..a605c2d 100644
+--- a/dishnet-hybrid-sudan/tabs/sales/applications.php
++++ b/dishnet-hybrid-sudan/tabs/sales/applications.php
+@@ -21,6 +21,10 @@ $totalC  = count($myApps);
+ // shown on the card only where the quoting-organization gate is on. Elsewhere nothing on this page changes.
+ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+ $ugOrders102 = QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on'];
++// 5.18.103 (Uganda, root docs/72 §G.8, G-10): the uCRM catalogue's switch — with it on, a 5.18.102 web application is
++// offered no Make the quotation and its card says to quote it in uCRM by hand. False wherever the gate is off.
++require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++$ugDirect103 = $ugOrders102 && UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
+ // 5.18.102 (Uganda, D14, docs/71 §R.4.4, §R.4.8): Make the quotation's five conditions are KycService's one
+ // implementation, which the handler checks again; and the Orders filter &quote_link=<record id> lists only the
+ // applications quoted under that uCRM link record (a quote_id, and quote_link_ids naming it). The filter is admins only:
+@@ -393,18 +397,19 @@ if ($ugOrders102) {
+ <?php if ($ugOrders102 && (!empty($a['quote_unconfirmed_at']) || KycService::claimLeftUnsettled($a)) && empty($a['quote_created'])): /* 5.18.102 D14 review round 3 (CK-flows-2): Make the quotation's last POST got no id back (a timeout, a 5xx) — uCRM may have made it, so the card never says none was made; a press finds it (R-M4). Round 5 (CK5-B2): a heading true whatever stopped it — a lost answer, a refusal, a write after the read-back. Round 7 (CK7-F1): a claim past QUOTE_CLAIM_SECONDS too — every answer and every Throwable removes its claim, so one still there is a request that died (after its POST, perhaps) or a removal that failed (logged). Round 8 (CK8-F2): unless a refusal followed it — KycService::claimLeftUnsettled() */ ?>
+     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+         <div style="font-weight:800;margin-bottom:3px;">⚠ Making the last quotation did not finish</div>
+-        <div>It may have been made in uCRM. <?= /* 5.18.102 D14 review round 4 (CK4-F2): the button's own condition */ !empty($isAdmin) && KycService::canMakeQuotation($a) ? 'Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second one.' : 'Do not make one by hand in uCRM before an admin has looked there for it.' ?></div>
++        <div>It may have been made in uCRM. <?= /* 5.18.102 D14 review round 4 (CK4-F2): the button's own condition */ !empty($isAdmin) && KycService::canMakeQuotation($a, $ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make one by hand in uCRM: Make the quotation looks there first and never makes a second one.' : 'Do not make one by hand in uCRM before an admin has looked there for it.' ?></div>
+     </div>
+ <?php else: /* 5.18.102: without such an answer, as it was */ ?>
+ <?php if (!empty($a['quote_refused_text']) && empty($a['quote_created'])): /* 5.18.99 (Uganda): the quote check refused this customer's quotation, and none has been made since */ ?>
+     <div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11px;color:#7c2d12;background:#FFF7ED;border:1px solid #FED7AA;">
+         <div style="font-weight:800;margin-bottom:3px;">⚠ No quotation was made</div>
+-        <div><?= h((string)$a['quote_refused_text']) ?></div>
++        <div><?= h($ugDirect103 && ($a['quote_sale_entry'] ?? null) === 'web' && ($a['quote_refused'] ?? null) === 'P1'
++            ? UcrmQuoteLines::text('WEB_SWITCH_ON') : (string)$a['quote_refused_text']) /* 5.18.103 (root docs/72 §G.8, G-10) */ ?></div>
+     </div>
+ <?php endif; ?>
+ <?php endif; ?>
+ <?php endif; /* 5.18.102 D14 review round 6: the press in flight */ ?>
+-<?php if ($ugOrders102 && !empty($isAdmin) && KycService::canMakeQuotation($a)): /* 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — admins only, the five conditions; it posts action, _csrf and app_id, nothing else, and disables itself on submit */ ?>
++<?php if ($ugOrders102 && !empty($isAdmin) && KycService::canMakeQuotation($a, $ugDirect103) /* 5.18.103 (§G.8) */): /* 5.18.102 (Uganda, D14, docs/71 §R.4.8, E-2): Make the quotation — admins only, the five conditions; it posts action, _csrf and app_id, nothing else, and disables itself on submit */ ?>
+     <form method="POST" style="margin-top:6px;" onsubmit="var b=this.querySelector('button[type=submit]');if(b){b.disabled=true;}return true;">
+         <?= csrfField() ?>
+         <input type="hidden" name="action" value="kyc_make_quote">
+diff --git a/dishnet-hybrid-sudan/tabs/sales/hardware.php b/dishnet-hybrid-sudan/tabs/sales/hardware.php
+index 63e934d..ab6c73d 100644
+--- a/dishnet-hybrid-sudan/tabs/sales/hardware.php
++++ b/dishnet-hybrid-sudan/tabs/sales/hardware.php
+@@ -1,4 +1,15 @@
+ <?php
++// 5.18.103 (Uganda, root docs/72 §G.3): with the uCRM catalogue switched on, this screen gives way to it — one card, and
++// nothing below runs (no link store opened, no uCRM read). With the switch off, or the gate closed, the screen is 5.18.102's.
++require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
++    echo '<div class="card" style="padding:20px;max-width:720px;"><h3 style="margin-top:0;">Hardware</h3>'
++       . '<p>On Uganda, plans and hardware come straight from uCRM — the uCRM catalogue is on. Prices are changed in uCRM.</p>'
++       . '<p><a class="btn btn-primary" href="?page=dashboard&amp;tab=ucrm_catalogue">See the uCRM catalogue</a></p></div>';
++    return;
++}
++?>
++<?php
+ // Currency label for every money figure on this screen. The Sudan/SS
+ // builds hardcoded '$'; the amounts themselves are whatever currency the
+ // uCRM organisation bills in, so the label now follows config.
+diff --git a/dishnet-hybrid-sudan/tabs/sales/product_mapping.php b/dishnet-hybrid-sudan/tabs/sales/product_mapping.php
+index 9cc8c6a..f488032 100644
+--- a/dishnet-hybrid-sudan/tabs/sales/product_mapping.php
++++ b/dishnet-hybrid-sudan/tabs/sales/product_mapping.php
+@@ -7,6 +7,9 @@ $isAdmin  = ($retailer['role'] ?? '') === 'admin';
+ // server refuses with 409 there) is not drawn. Each change is a block emitted only there; elsewhere the page is as it was.
+ require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
+ $_pm102 = !empty(QuoteOrganization::setting(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)['on']);
++// 5.18.103 (root docs/72 §G.12): with the uCRM catalogue on, the page says plans and hardware come straight from uCRM
++require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++$_pm103 = $_pm102 && UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct();
+ ?>
+ <style>
+ .pm-wrap { max-width:1100px; margin:0 auto; padding:16px; }
+@@ -55,7 +58,7 @@ $_pm102 = !empty(QuoteOrganization::setting(is_array($config ?? null) ? $config
+     <div>
+       <h2 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">🔗 UCRM Product Mapping</h2>
+ <?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): quotations use only the links made on the Plans and Hardware screens */ ?>
+-      <p style="margin:4px 0 0;font-size:13px;color:#64748b;">On Uganda, quotations use only the uCRM links made on the Plans and Hardware screens. The UCRM Product IDs on this page are not read for quotes.</p>
++      <p style="margin:4px 0 0;font-size:13px;color:#64748b;"><?= $_pm103 /* 5.18.103 (§G.12) */ ? 'On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue). The UCRM Product IDs on this page are not read for quotes.' : 'On Uganda, quotations use only the uCRM links made on the Plans and Hardware screens. The UCRM Product IDs on this page are not read for quotes.' ?></p>
+ <?php else: /* 5.18.102: elsewhere, as it was */ ?>
+       <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Link plugin plans to UCRM products so quotes reference real billing items.</p>
+ <?php endif; ?>
+@@ -156,7 +159,11 @@ function loadMapping() {
+ 
+     var allMapped = totalMapped >= totalActive && totalActive > 0;
+ <?php if ($_pm102): /* 5.18.102 (Uganda, D14, docs/71 §R.2.6): one neutral line in the server's words, whatever the counts */ ?>
++<?php if ($_pm103): /* 5.18.103 (root docs/72 §G.12): the uCRM catalogue is on */ ?>
++    showNotice('On Uganda, plans and hardware come straight from uCRM (the uCRM catalogue).', 'info');
++<?php else: /* 5.18.103: with it off, 5.18.102's line */ ?>
+     showNotice('On Uganda, plans and kits are linked to uCRM on the Plans and Hardware screens.', 'info');
++<?php endif; ?>
+ <?php else: /* 5.18.102: elsewhere, as it was */ ?>
+     showNotice(allMapped
+       ? '✅ All active plans are mapped to UCRM products. Quotes will reference real products.'
+diff --git a/dishnet-hybrid-sudan/tabs/sales/subscription_plans.php b/dishnet-hybrid-sudan/tabs/sales/subscription_plans.php
+index 7efbb8a..5896f57 100644
+--- a/dishnet-hybrid-sudan/tabs/sales/subscription_plans.php
++++ b/dishnet-hybrid-sudan/tabs/sales/subscription_plans.php
+@@ -1,4 +1,15 @@
+ <?php
++// 5.18.103 (Uganda, root docs/72 §G.3): with the uCRM catalogue switched on, this screen gives way to it — one card, and
++// nothing below runs (no link store opened, no uCRM read). With the switch off, or the gate closed, the screen is 5.18.102's.
++require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++if (UcrmCatalogue::forConfig($store, is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null)->direct()) {
++    echo '<div class="card" style="padding:20px;max-width:720px;"><h3 style="margin-top:0;">Service Plans</h3>'
++       . '<p>On Uganda, plans and hardware come straight from uCRM — the uCRM catalogue is on. Prices are changed in uCRM.</p>'
++       . '<p><a class="btn btn-primary" href="?page=dashboard&amp;tab=ucrm_catalogue">See the uCRM catalogue</a></p></div>';
++    return;
++}
++?>
++<?php
+ // Currency label for every money figure on this screen. The Sudan/SS
+ // builds hardcoded '$'; the amounts themselves are whatever currency the
+ // uCRM organisation bills in, so the label now follows config.
+diff --git a/dishnet-hybrid-sudan/tabs/sales/ucrm_catalogue.php b/dishnet-hybrid-sudan/tabs/sales/ucrm_catalogue.php
+new file mode 100644
+index 0000000..75f9ed1
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tabs/sales/ucrm_catalogue.php
+@@ -0,0 +1,215 @@
++<?php
++// Tab: ucrm_catalogue — 5.18.103 (Uganda, root docs/72 §G.3): the uCRM catalogue screen.
++//
++// What the KYC form and Send Quotation offer from uCRM when the switch is on — the plan pairs, the hardware, the
++// installation — what they do not and why, and the four settings: the switch, the installation product, the products
++// kept off the forms and the standard quotations. Drawn only where the quoting-organization gate is on with an integer id
++// (UcrmCatalogue::gateOpen); elsewhere one line says the screen does not apply, and nothing is read. The lists come from
++// one read through UcrmQuoteLines::forDirectPage (the page timeouts, the 60-second cache, the last good copy when uCRM
++// cannot be read); every save reads uCRM again (includes/post/post_sync.php, the ucrm_cat_* actions). Every uCRM string
++// goes through h(); controls are drawn for admins only, and every action is re-checked on the server.
++require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';
++require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';
++require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';
++$_c3Cfg = is_array($config ?? null) ? $config : [];
++$_c3Set = QuoteOrganization::setting($_c3Cfg, isset($dataDir) ? (string)$dataDir : null);
++$_c3Cur = htmlspecialchars(trim((string)(($_c3Cfg['currency_symbol'] ?? '') ?: 'UGX'))) . ' ';
++$_c3Admin = !empty($isAdmin);
++$_c3Money = function ($v) use ($_c3Cur): string {
++    $f = (float)$v;
++    return $_c3Cur . number_format($f, abs($f - round($f)) < 0.0001 ? 0 : 2);
++};
++if (!UcrmCatalogue::gateOpen($_c3Set)) {
++    echo '<div class="card" style="padding:20px;max-width:760px;"><h3 style="margin-top:0;">uCRM catalogue</h3>'
++       . '<p>The uCRM catalogue applies only where quotations are made under the quoting organization (Uganda), and that is not in force here.</p></div>';
++    return;
++}
++$_c3Cat = UcrmCatalogue::fromStore($store, $_c3Set);
++$_c3Pg  = ['uql' => null, 'stale' => false];
++$_c3Off = ['ok' => false, 'reason' => "uCRM's products could not be read", 'plans' => [], 'hardware' => [],
++           'install' => ['ok' => false, 'reason' => "uCRM's products could not be read"], 'not_offered' => []];
++$_c3All = [];   // every counted product, for the pickers: id => [name, price]
++try {
++    $_c3Pg  = UcrmQuoteLines::forDirectPage(isset($crm) ? $crm : null, $_c3Cfg, $_c3Set, (string)$dataDir);
++    $_c3Off = $_c3Pg['uql']->offered($_c3Cat->installProductId(), $_c3Cat->hiddenIds());
++    foreach ((array)($_c3Pg['uql']->catalogue()['products'] ?? []) as $_c3Row) {
++        if (is_array($_c3Row) && (int)($_c3Row['id'] ?? 0) > 0) $_c3All[(int)$_c3Row['id']] = [(string)($_c3Row['name'] ?? ''), $_c3Row['price'] ?? null];
++    }
++} catch (\Throwable $e) {
++    error_log('[ucrm_catalogue] 5.18.103: the uCRM catalogue could not be drawn (' . get_class($e) . ')');
++}
++$_c3Direct  = $_c3Cat->direct();
++$_c3Mode    = $_c3Cat->modeRecord();
++$_c3Inst    = $_c3Cat->installRecord();
++$_c3Hidden  = $_c3Cat->hiddenRecords();
++$_c3Stds    = $_c3Cat->standards();
++$_c3Kits    = array_values(array_filter($_c3Off['hardware'], function ($h) { return $h['group'] === 'kit'; }));
++$_c3Acc     = array_values(array_filter($_c3Off['hardware'], function ($h) { return $h['group'] !== 'kit'; }));
++$_c3NotPlan = array_values(array_filter($_c3Off['not_offered'], function ($n) { return $n['kind'] === 'plan'; }));
++$_c3NotProd = array_values(array_filter($_c3Off['not_offered'], function ($n) { return $n['kind'] === 'product' && $n['why'] !== 'kept_off'; }));
++$_c3CanOn   = !empty($_c3Off['ok']) && empty($_c3Pg['stale']) && $_c3Off['plans'] !== [] && !empty($_c3Off['install']['ok']);
++// The 5.18.102 web applications still waiting with P1 — quoted in uCRM by hand once the switch is on (G-10)
++$_c3Waiting = [];
++foreach ((array)$store->load('kyc_applications.json') as $_c3A) {
++    if (is_array($_c3A) && ($_c3A['quote_sale_entry'] ?? null) === 'web' && ($_c3A['quote_refused'] ?? null) === 'P1'
++        && empty($_c3A['quote_created']) && empty($_c3A['quote_found_in_ucrm'])) {
++        $_c3Waiting[] = (int)($_c3A['id'] ?? 0);
++    }
++}
++$_c3Who = function (?array $r): string {
++    if ($r === null) return '';
++    return ' — ' . h((string)($r['by_name'] ?? '')) . ', ' . h((string)($r['at'] ?? ''));
++};
++$_c3Form = function (string $action, array $fields, string $label, string $style, string $confirm = '') {
++    $out = '<form method="POST" style="display:inline;margin:0;"' . ($confirm !== '' ? ' onsubmit="return confirm(this.dataset.q);" data-q="' . h($confirm) . '"' : '') . '>'
++         . csrfField() . '<input type="hidden" name="action" value="' . h($action) . '">';
++    foreach ($fields as $k => $v) $out .= '<input type="hidden" name="' . h($k) . '" value="' . h((string)$v) . '">';
++    return $out . '<button type="submit" style="' . h($style) . '">' . h($label) . '</button></form>';
++};
++$_c3Btn  = 'background:#1565C0;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;';
++$_c3Btn2 = 'background:#fff;color:#334155;border:1px solid #cbd5e1;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;';
++$_c3Card = 'background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:14px;';
++?>
++<div style="max-width:1100px;margin:0 auto;padding:12px;">
++  <h2 style="margin:0 0 4px;font-size:20px;">uCRM catalogue</h2>
++  <p style="margin:0 0 14px;color:#64748b;font-size:13px;">The plans and hardware the KYC form and Send Quotation offer, straight from uCRM, at uCRM's prices. Prices are changed in uCRM; nothing here is linked.</p>
++
++<?php if (empty($_c3Off['ok'])): ?>
++  <div style="<?= $_c3Card ?>border-color:#fecaca;background:#fef2f2;color:#7f1d1d;">uCRM could not be read: <?= h((string)$_c3Off['reason']) ?>. Reload the screen to try again.</div>
++<?php elseif (!empty($_c3Pg['stale'])): ?>
++  <div style="<?= $_c3Card ?>border-color:#fed7aa;background:#fff7ed;color:#7c2d12;">uCRM could not be read just now — this is the last list read, and it may be out of date. The switch cannot be turned on until uCRM answers.</div>
++<?php endif; ?>
++
++  <div style="<?= $_c3Card ?>">
++    <h3 style="margin:0 0 8px;font-size:16px;">The switch: <?= $_c3Direct ? '<span style="color:#166534;">ON</span>' : '<span style="color:#9a3412;">OFF</span>' ?></h3>
++    <p style="margin:0 0 8px;font-size:13px;"><?= $_c3Direct
++        ? 'The KYC form and Send Quotation offer the plans and hardware below. The Plans and Hardware screens are replaced by this one.'
++        : 'Agents still see the plugin\'s own plans and hardware, as before. Turn it on once the lists below are right.' ?><?= $_c3Who($_c3Mode) ?></p>
++<?php if (!$_c3Direct): ?>
++    <ul style="margin:0 0 8px;padding-left:18px;font-size:13px;">
++      <li><?= !empty($_c3Off['ok']) && empty($_c3Pg['stale']) ? '✅' : '❌' ?> uCRM can be read now</li>
++      <li><?= $_c3Off['plans'] !== [] ? '✅' : '❌' ?> at least one plan is offered (<?= count($_c3Off['plans']) ?>)</li>
++      <li><?= !empty($_c3Off['install']['ok']) ? '✅' : '❌' ?> the installation product is set and usable<?= !empty($_c3Off['install']['ok']) ? '' : ': ' . h((string)($_c3Off['install']['reason'] ?? '')) ?></li>
++    </ul>
++<?php if ($_c3Admin && $_c3CanOn): ?>
++    <?= $_c3Form('ucrm_cat_mode', ['on' => '1'], 'Turn on', $_c3Btn, 'Turn the uCRM catalogue on? Agents will see uCRM\'s plans and hardware at once.') ?>
++<?php elseif ($_c3Admin): ?>
++    <button type="button" disabled style="<?= h($_c3Btn) ?>opacity:.5;cursor:not-allowed;">Turn on</button>
++<?php endif; ?>
++<?php if ($_c3Waiting !== []): ?>
++    <p style="margin:10px 0 0;font-size:12px;color:#7c2d12;"><?= count($_c3Waiting) ?> registration(s) made before the switch are waiting with no quotation (application #<?= h(implode(', #', $_c3Waiting)) ?>). Once the switch is on, make their quotations in uCRM by hand.</p>
++<?php endif; ?>
++<?php elseif ($_c3Admin): ?>
++    <?= $_c3Form('ucrm_cat_mode', ['on' => '0'], 'Turn off', $_c3Btn2, 'Turn the uCRM catalogue off? Agents will see the plugin\'s own plans and hardware again, with no quotation from them.') ?>
++<?php endif; ?>
++  </div>
++
++  <div style="<?= $_c3Card ?>">
++    <h3 style="margin:0 0 8px;font-size:16px;">Plans offered (<?= count($_c3Off['plans']) ?>)</h3>
++<?php if ($_c3Off['plans'] === []): ?>
++    <p style="font-size:13px;color:#64748b;">None.</p>
++<?php else: ?>
++    <table style="width:100%;font-size:13px;border-collapse:collapse;"><tr style="text-align:left;color:#64748b;"><th>Plan (uCRM product)</th><th>Speed</th><th>Monthly</th><th>uCRM ids</th></tr>
++<?php foreach ($_c3Off['plans'] as $_c3P): ?>
++      <tr style="border-top:1px solid #f1f5f9;"><td><?= h($_c3P['label']) ?></td><td><?= h($_c3P['speed']) ?></td><td><?= h($_c3Money($_c3P['price'])) ?></td><td style="color:#94a3b8;">plan #<?= (int)$_c3P['sp'] ?> · product #<?= (int)$_c3P['p'] ?></td></tr>
++<?php endforeach; ?>
++    </table>
++<?php endif; ?>
++<?php if ($_c3NotPlan !== []): ?>
++    <details style="margin-top:8px;"><summary style="font-size:13px;cursor:pointer;">Service plans not offered (<?= count($_c3NotPlan) ?>) — why</summary>
++      <ul style="font-size:12px;"><?php foreach ($_c3NotPlan as $_c3N): ?><li><?= h($_c3N['name'] !== '' ? $_c3N['name'] : ('#' . $_c3N['id'])) ?> (#<?= (int)$_c3N['id'] ?>): <?= h($_c3N['reason']) ?></li><?php endforeach; ?></ul>
++    </details>
++<?php endif; ?>
++  </div>
++
++  <div style="<?= $_c3Card ?>">
++    <h3 style="margin:0 0 8px;font-size:16px;">Hardware offered (<?= count($_c3Off['hardware']) ?>)</h3>
++<?php foreach (['Kits' => $_c3Kits, 'Accessories' => $_c3Acc] as $_c3G => $_c3List): if ($_c3List === []) continue; ?>
++    <h4 style="margin:8px 0 4px;font-size:13px;color:#475569;"><?= h($_c3G) ?></h4>
++    <table style="width:100%;font-size:13px;border-collapse:collapse;">
++<?php foreach ($_c3List as $_c3H): ?>
++      <tr style="border-top:1px solid #f1f5f9;"><td><?= h($_c3H['label']) ?></td><td><?= h($_c3Money($_c3H['price'])) ?></td><td style="color:#94a3b8;">#<?= (int)$_c3H['p'] ?></td>
++        <td style="text-align:right;"><?= $_c3Admin ? $_c3Form('ucrm_cat_hidden', ['product_id' => (int)$_c3H['p'], 'hide' => '1'], 'Keep off the forms', $_c3Btn2) : '' ?></td></tr>
++<?php endforeach; ?>
++    </table>
++<?php endforeach; ?>
++<?php if ($_c3Hidden !== []): ?>
++    <h4 style="margin:12px 0 4px;font-size:13px;color:#475569;">Kept off the forms (<?= count($_c3Hidden) ?>)</h4>
++    <table style="width:100%;font-size:13px;border-collapse:collapse;">
++<?php foreach ($_c3Hidden as $_c3K): ?>
++      <tr style="border-top:1px solid #f1f5f9;"><td><?= h((string)($_c3K['product_name'] ?? '') !== '' ? (string)$_c3K['product_name'] : ('uCRM product #' . (int)$_c3K['product_id'])) ?></td><td style="color:#94a3b8;">#<?= (int)$_c3K['product_id'] ?><?= $_c3Who($_c3K) ?></td>
++        <td style="text-align:right;"><?= $_c3Admin ? $_c3Form('ucrm_cat_hidden', ['product_id' => (int)$_c3K['product_id'], 'hide' => '0'], 'Offer again', $_c3Btn2) : '' ?></td></tr>
++<?php endforeach; ?>
++    </table>
++<?php endif; ?>
++<?php if ($_c3NotProd !== []): ?>
++    <details style="margin-top:8px;"><summary style="font-size:13px;cursor:pointer;">uCRM products not offered (<?= count($_c3NotProd) ?>) — why</summary>
++      <ul style="font-size:12px;"><?php foreach ($_c3NotProd as $_c3N): ?><li><?= h($_c3N['name'] !== '' ? $_c3N['name'] : ('#' . $_c3N['id'])) ?> (#<?= (int)$_c3N['id'] ?>): <?= h($_c3N['reason']) ?></li><?php endforeach; ?></ul>
++    </details>
++<?php endif; ?>
++  </div>
++
++  <div style="<?= $_c3Card ?>">
++    <h3 style="margin:0 0 8px;font-size:16px;">The installation product</h3>
++    <p style="font-size:13px;margin:0 0 8px;"><?php if ($_c3Inst === null): ?>Not set — "DishNet installs" cannot be priced until it is.<?php else: ?>
++      <?= h((string)($_c3Inst['product_name'] ?? '')) ?> (uCRM #<?= (int)$_c3Inst['product_id'] ?>)<?= $_c3Who($_c3Inst) ?> —
++      <?= !empty($_c3Off['install']['ok']) ? h($_c3Money($_c3Off['install']['line']['price'])) . ', added once when DishNet installs' : '<span style="color:#b91c1c;">not usable now: ' . h((string)($_c3Off['install']['reason'] ?? '')) . '</span>' ?><?php endif; ?></p>
++<?php if ($_c3Admin && $_c3All !== []): ?>
++    <form method="POST" style="margin:0;"><?= csrfField() ?><input type="hidden" name="action" value="ucrm_cat_install">
++      <select name="product_id" style="max-width:420px;">
++        <option value="">— pick the uCRM product —</option>
++<?php foreach ($_c3All as $_c3Id => $_c3V): ?>
++        <option value="<?= (int)$_c3Id ?>"<?= $_c3Inst !== null && (int)$_c3Inst['product_id'] === (int)$_c3Id ? ' selected' : '' ?>><?= h($_c3V[0]) ?> (#<?= (int)$_c3Id ?>)</option>
++<?php endforeach; ?>
++      </select>
++      <button type="submit" style="<?= h($_c3Btn) ?>">Save</button>
++    </form>
++    <p style="font-size:11px;color:#94a3b8;margin:4px 0 0;">Checked against uCRM when saved: a price above 0, not taxable, not spelled like a service plan.</p>
++<?php endif; ?>
++  </div>
++
++  <div style="<?= $_c3Card ?>">
++    <h3 style="margin:0 0 8px;font-size:16px;">Standard quotations (<?= count($_c3Stds) ?> of <?= UcrmCatalogue::MAX_STANDARDS ?>)</h3>
++    <p style="font-size:13px;margin:0 0 8px;color:#64748b;">One click on the KYC form or Send Quotation fills the plan, the hardware and the installation. Priced from uCRM each time it is used.</p>
++<?php foreach ($_c3Stds as $_c3S): $_c3Pr = UcrmQuoteLines::standardFrom($_c3S, $_c3Off); ?>
++    <div style="border-top:1px solid #f1f5f9;padding:8px 0;font-size:13px;">
++      <strong><?= h((string)$_c3S['title']) ?></strong>
++      — <?= !empty($_c3Pr['ok']) ? h($_c3Money($_c3Pr['total'])) : '<span style="color:#b91c1c;">cannot be used now: ' . h((string)$_c3Pr['reason']) . '</span>' ?>
++      <span style="color:#94a3b8;"><?= $_c3Who($_c3S) ?></span>
++<?php if (!empty($_c3Pr['ok'])): ?>
++      <ul style="margin:4px 0 0;font-size:12px;"><?php foreach ($_c3Pr['lines'] as $_c3L): ?><li><?= (int)$_c3L['quantity'] ?> × <?= h((string)$_c3L['label']) ?> — <?= h($_c3Money($_c3L['price'])) ?></li><?php endforeach; ?></ul>
++<?php endif; ?>
++<?php if ($_c3Admin): ?>
++      <div style="margin-top:4px;"><a href="?page=dashboard&amp;tab=ucrm_catalogue&amp;edit_std=<?= (int)$_c3S['id'] ?>#std-form" style="font-size:12px;">Edit</a>
++        <?= $_c3Form('ucrm_cat_standard_end', ['standard_id' => (int)$_c3S['id']], 'Stop using', $_c3Btn2, 'Stop using this standard quotation?') ?></div>
++<?php endif; ?>
++    </div>
++<?php endforeach; ?>
++<?php if ($_c3Admin && !empty($_c3Off['ok'])):
++    $_c3Edit = null;
++    $_c3EditId = (int)($_GET['edit_std'] ?? 0);
++    if ($_c3EditId > 0) $_c3Edit = $_c3Cat->standard($_c3EditId);
++    if ($_c3Edit !== null || count($_c3Stds) < UcrmCatalogue::MAX_STANDARDS): ?>
++    <form method="POST" id="std-form" style="margin-top:12px;border-top:1px dashed #cbd5e1;padding-top:10px;"><?= csrfField() ?>
++      <input type="hidden" name="action" value="ucrm_cat_standard_save">
++<?php if ($_c3Edit !== null): ?><input type="hidden" name="standard_id" value="<?= (int)$_c3Edit['id'] ?>"><?php endif; ?>
++      <h4 style="margin:0 0 6px;font-size:13px;"><?= $_c3Edit !== null ? 'Edit "' . h((string)$_c3Edit['title']) . '"' : 'Add a standard quotation' ?></h4>
++      <div style="margin-bottom:6px;"><label style="font-size:12px;">Title <input type="text" name="title" maxlength="<?= UcrmCatalogue::TITLE_MAX ?>" required value="<?= h((string)($_c3Edit['title'] ?? '')) ?>" style="width:320px;"></label></div>
++      <div style="margin-bottom:6px;"><label style="font-size:12px;">Plan <select name="plan" required><option value="">— pick —</option>
++<?php foreach ($_c3Off['plans'] as $_c3P): $_c3V = (int)$_c3P['sp'] . ':' . (int)$_c3P['p']; ?>
++        <option value="<?= h($_c3V) ?>"<?= $_c3Edit !== null && ((int)$_c3Edit['plan']['sp'] . ':' . (int)$_c3Edit['plan']['p']) === $_c3V ? ' selected' : '' ?>><?= h($_c3P['label']) ?> — <?= h($_c3Money($_c3P['price'])) ?></option>
++<?php endforeach; ?>
++      </select></label></div>
++<?php $_c3Rows = min(UcrmCatalogue::MAX_STANDARD_ITEMS, max(3, count((array)($_c3Edit['hw'] ?? [])) + 2)); for ($_c3I = 0; $_c3I < $_c3Rows; $_c3I++): $_c3Cur0 = $_c3Edit['hw'][$_c3I] ?? null; ?>
++      <div style="margin-bottom:4px;font-size:12px;">Hardware <select name="hw_p[]"><option value="">— none —</option>
++<?php foreach ($_c3Off['hardware'] as $_c3H): ?>
++        <option value="<?= (int)$_c3H['p'] ?>"<?= $_c3Cur0 !== null && (int)$_c3Cur0['p'] === (int)$_c3H['p'] ? ' selected' : '' ?>><?= h($_c3H['label']) ?> — <?= h($_c3Money($_c3H['price'])) ?></option>
++<?php endforeach; ?>
++      </select> × <input type="number" name="hw_q[]" min="1" max="<?= UcrmCatalogue::MAX_QTY ?>" value="<?= (int)($_c3Cur0['q'] ?? 1) ?>" style="width:60px;"></div>
++<?php endfor; ?>
++      <div style="margin:6px 0;font-size:12px;"><label><input type="checkbox" name="install" value="1"<?= !empty($_c3Edit['install']) ? ' checked' : '' ?>> includes installation (DishNet installs)</label></div>
++      <button type="submit" style="<?= h($_c3Btn) ?>"><?= $_c3Edit !== null ? 'Save the changes' : 'Add' ?></button>
++    </form>
++<?php endif; endif; ?>
++  </div>
++</div>
