@@ -4,3 +4,8 @@
 (root `docs/72` §G), not yet a release. Apply with `git apply` on a checkout of `origin/release/5.18.102` (`1a0ea5f`).
 It is replaced at each milestone and the folder is removed when the release branch is pushed on the operator's word.
 Nothing here is deployed or deployable.
+
+`derive-5.18.103/` derives `scripts/deploy-5.18.103.sh` from `scripts/deploy-5.18.102.sh` by asserted text edits
+(each part asserts its anchor, its count, its replacements and its result): `python3 -I derive103.py REPO RELEASE_REPO
+PIN_FULL OUT`, with RELEASE_REPO a checkout of release/5.18.103 at PIN_FULL. NOT for use yet: the pin is a work-in-progress
+commit, the script is unrehearsed and under review; it goes to `scripts/` only with the final release commit.

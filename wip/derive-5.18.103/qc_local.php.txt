@@ -1,0 +1,72 @@
+        // 5.18.103 (root docs/72 §G.13; QC-G1, QC-N1–QC-N5, QC-N7, QC-ON4) — on the same copy, through the same store. The
+        // uCRM catalogue's records through the RELEASE's lib/UcrmCatalogue.php, required by that file's own path (cat=): at
+        // stage A the pin's from Git (5.18.102's root never holds it, even where a rolled-back run left the file on disk),
+        // after the copy the installed root's own copy. With the quoting organization in force (qorg, the gate: direct mode
+        // lives under it, D7) UcrmCatalogue::fromStore($store, …) — which asks sqlite_master first, so no read creates the
+        // table — and its records(), every record, ended ones too, whole, to the offer file's "catalogue", which the remote
+        // reading judges through the same release's offered(): never a price (none is stored, G-12). The rest on the same
+        // copy: the applications by quote_sale_entry (F11's measure, §G.11), 5.18.102's web applications refused P1 with no
+        // quotation (G-10), the web-direct records against G-7 (QC-ON4), the active plugin plans by type (QC-N7), the
+        // active stock categories' titles and public_price_exclude's names (to the offer file, lowercased and trimmed:
+        // QC-N5 and QC-N6 compare them in the remote reading). stdout: counts; ids and names to this reading's sheet lines.
+        $qcS = []; $qcO = ["qccat" => "-", "qcsw" => "-", "qcinst" => "-", "qcstd" => "-", "qchid" => "-"];
+        $offer["catalogue"] = null; $offer["stock"] = null; $offer["ppx"] = null;
+        if (array_key_exists("cat", $A)) {
+            $qcCatF = (string)$A["cat"];
+            $qcS[] = ""; $qcS[] = "== QC the uCRM catalogue's settings and the applications on the copy — " . (string)($A["label"] ?? "") . " (names and ids: never paste) ==";
+            try {
+                if ($m <= 0) $qcO["qccat"] = "off";
+                elseif ($qcCatF === "" || !is_file($qcCatF)) $qcO["qccat"] = "?nocat";
+                else {
+                    if (!class_exists("UcrmCatalogue", false)) require_once $qcCatF;
+                    $qcHad = $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ucrm_catalogue'")->fetchColumn() !== false;
+                    $qcCat = UcrmCatalogue::fromStore($store, ["on" => true, "id" => $m, "source" => "setting", "error" => ""]);
+                    $qcHas = $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ucrm_catalogue'")->fetchColumn() !== false;
+                    if ($qcHas !== $qcHad) $qcO["qccat"] = "?created";   // the reader made the table: not the release's reader
+                    else {
+                        $qcR = $qcCat->records(); $offer["catalogue"] = $qcR;
+                        $qcIn = []; foreach ($qcR as $r) if (($r["ended_at_ts"] ?? null) === null) $qcIn[(string)($r["kind"] ?? "?")] = ($qcIn[(string)($r["kind"] ?? "?")] ?? 0) + 1;
+                        $qcO["qccat"] = $qcHad ? "records:" . count($qcR) . ",inforce:" . array_sum($qcIn) : "absent";
+                        $qcMode = $qcIn["mode"] ?? 0; $qcInst = $qcIn["install"] ?? 0;
+                        $qcO["qcsw"] = $qcMode === 0 ? "none" : ($qcMode > 1 ? "two" : ($qcCat->direct() ? "on" : "off"));
+                        $qcO["qcinst"] = $qcInst === 0 ? "unset" : ($qcInst > 1 ? "two" : "set");
+                        $qcO["qcstd"] = (string)count($qcCat->standards()); $qcO["qchid"] = (string)count($qcCat->hiddenIds());
+                        $qcMr = $qcCat->modeRecord(); $qcIr = $qcCat->installRecord();
+                        $qcS[] = "  the table ucrm_catalogue: " . ($qcHad ? count($qcR) . " record(s), " . array_sum($qcIn) . " in force" : "absent — never written on this book");
+                        $qcS[] = "  the switch: " . ($qcMr === null ? ($qcMode > 1 ? "two records in force — read as OFF" : "never set — OFF") : (($qcMr["on"] ?? false) === true ? "ON" : "off") . ", record #" . (string)($qcMr["id"] ?? "?") . " by account #" . (string)($qcMr["by_id"] ?? "?") . " " . (string)($qcMr["by_name"] ?? "") . " at " . (string)($qcMr["at"] ?? "?"));
+                        $qcS[] = "  the installation product: " . ($qcIr === null ? ($qcInst > 1 ? "two records in force — read as not set" : "not set") : "uCRM product #" . (string)($qcIr["product_id"] ?? "?") . " " . (string)($qcIr["product_name"] ?? ""));
+                        foreach ($qcCat->hiddenRecords() as $r) $qcS[] = "  kept off the forms: uCRM product #" . (string)($r["product_id"] ?? "?") . " " . (string)($r["product_name"] ?? "");
+                        foreach ($qcCat->standards() as $r) $qcS[] = "  standard quotation #" . (string)($r["id"] ?? "?") . " \"" . (string)($r["title"] ?? "") . "\": service plan #" . (string)($r["plan"]["sp"] ?? "?") . " with product #" . (string)($r["plan"]["p"] ?? "?") . ", hardware " . (is_array($r["hw"] ?? null) && $r["hw"] ? implode(", ", array_map(function ($h) { return "#" . (string)($h["p"] ?? "?") . "×" . (string)($h["q"] ?? "?"); }, $r["hw"])) : "none") . ", installation " . (!empty($r["install"]) ? "yes" : "no");
+                    }
+                }
+            } catch (Throwable $e) { $qcO = array_fill_keys(array_keys($qcO), "?" . get_class($e)); $offer["catalogue"] = null; }
+            // the applications (Uganda: this server's book) by entry, 5.18.102's waiting web P1s, the web-direct records by G-7
+            $qcE = ["web" => 0, "app" => 0, "direct" => 0, "none" => 0, "other" => 0]; $qcP1 = []; $qcD = 0; $qcBad = [];
+            foreach ($apps as $r) {
+                $e = $r["quote_sale_entry"] ?? null;
+                $qcE[$e === null ? "none" : ($e === "web" ? "web" : ($e === "app" ? "app" : ($e === "web-direct" ? "direct" : "other")))]++;
+                if ($e === "web" && ($r["quote_refused"] ?? null) === "P1" && empty($r["quote_created"])) $qcP1[] = (int)($r["id"] ?? 0);
+                if ($e !== "web-direct") continue;
+                $qcD++; $cart = $r["hw_cart_json"] ?? null; if (is_string($cart)) $cart = json_decode($cart, true);
+                $cartOk = $cart === null || (is_array($cart) && array_reduce($cart, function ($ok, $c) { return $ok && is_array($c) && ($c["id"] ?? null) === 0; }, true));
+                if (($r["package_choice"] ?? null) !== "" || ($r["device_id"] ?? null) !== "" || !$cartOk) $qcBad[] = (int)($r["id"] ?? 0);
+            }
+            $qcO["qcentry"] = "web:" . $qcE["web"] . ",app:" . $qcE["app"] . ",direct:" . $qcE["direct"] . ",none:" . $qcE["none"] . ",other:" . $qcE["other"];
+            $qcO["qcwebp1"] = (string)count($qcP1); $qcO["qcg7"] = "direct:" . $qcD . ",bad:" . count($qcBad);
+            $qcS[] = "  QC-N4 5.18.102's web applications refused P1 with no quotation: " . ($qcP1 ? "#" . implode(", #", $qcP1) : "none");
+            if ($qcBad) $qcS[] = "  QC-ON4 web-direct applications that break G-7 (package_choice, device_id or a cart id that is not 0): #" . implode(", #", $qcBad);
+            // the active plugin plans by type (QC-N7): direct mode draws none of them
+            $qcT = []; foreach ($ql_plans as $r) { if (empty($r["is_active"])) continue; $t = strtolower(trim((string)($r["type"] ?? "starlink"))); $t = preg_match('/^[a-z0-9_-]{1,20}$/', $t) ? $t : "other"; $qcT[$t] = ($qcT[$t] ?? 0) + 1; }
+            ksort($qcT); $qcTs = []; foreach ($qcT as $k => $v) $qcTs[] = $k . ":" . $v; $qcO["qcplantype"] = $qcTs ? implode(",", $qcTs) : "none";
+            // the active stock categories' titles (QC-N5) and public_price_exclude's names (QC-N6): to the offer file only
+            try {
+                if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stock_categories'")->fetchColumn() === false) { $offer["stock"] = []; $qcO["qcstock"] = "absent"; }
+                else { $offer["stock"] = []; foreach ($pdo->query("SELECT title FROM stock_categories WHERE is_active = 1")->fetchAll(PDO::FETCH_COLUMN) as $t) $offer["stock"][] = strtolower(trim((string)$t)); $qcO["qcstock"] = "rows:" . count($offer["stock"]); }
+            } catch (Throwable $e) { $offer["stock"] = null; $qcO["qcstock"] = "?" . get_class($e); }
+            try {
+                if (!class_exists("PluginConfig", false)) foreach (["ConfigVault", "PluginConfig"] as $l) if (is_file($root . "/lib/$l.php")) require_once $root . "/lib/$l.php";
+                $qcCfg = class_exists("PluginConfig", false) ? PluginConfig::read($root, $data) : [];
+                $offer["ppx"] = array_values(array_map(function ($x) { return strtolower(trim((string)$x)); }, array_filter((array)($qcCfg["public_price_exclude"] ?? []), "is_scalar")));
+                $qcO["qcppx"] = "names:" . count($offer["ppx"]);
+            } catch (Throwable $e) { $offer["ppx"] = null; $qcO["qcppx"] = "?" . get_class($e); }
+        }

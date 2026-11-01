@@ -1,0 +1,107 @@
+        if (isset($what["qc"])) {
+            // 5.18.103 (root docs/72 §G.13; QC-G1 before the copy, QC-CA1 after it, QC-N2, QC-N5, QC-N6, QC-ON2, QC-ON3) — what
+            // the forms offer in direct mode, through THIS code root's UcrmQuoteLines::offered() — the pin's before the copy,
+            // the INSTALLED code after it — constructed directly on the catalogue's own GET-only clients above (never
+            // forDirectPage(), which writes its page cache and last good copy into the data folder it is given, nor
+            // forDirectUse(), whose quoteClient() returns a client nothing wraps), over an empty judge (direct mode reads no
+            // link), with the copy's catalogue settings (UcrmCatalogue::fromRecords over the offer file's "catalogue": the
+            // installation product and the products kept off, exactly as the screen and the submission pass them). Once per
+            // client: the plugin's own, and the token client when crm_auth_token is set; each asks exactly GET
+            // products?limit=500, then GET service-plans?limit=500 (only the first when it fails — the release asks no
+            // second list then), checked as qcpath. Each answer is classified by its why code against the release's own set
+            // (a code outside it, or an empty reason: "other", which QC-G1 refuses). stdout, per client: qcc (the service plans
+            // and products uCRM counted, the plans and hardware offered, those not offered, unread, other), qcwhy (not offered,
+            // by why), qcread, qcinst (the installation: unset, ok, or its why), qcstd (standard quotations defined, usable by
+            // the release's standardFrom()), qcstock (offered hardware with no active stock category of its title), qcppx
+            // (offered items public_price_exclude names). The sheet: each item by name with its uCRM ids, price and unit, or its
+            // reason verbatim. The hash file (qch=): one line per item through each client — the keyed hash of (client, kind,
+            // ids) and of its verdict (offered with its token, or its why and reason) — under the QL key (salt=), in this
+            // reading's 0600 folder alone, never printed; QC-CA1 compares the lines. With no quoting organization: qcc=off.
+            try {
+                $qcOffer = json_decode((string)@file_get_contents((string)($A["offer"] ?? "")), true);
+                if ($m <= 0) $out[] = "qcc=off";
+                elseif (!is_file($root . "/lib/UcrmQuoteLines.php") || !is_file($root . "/lib/UcrmCatalogue.php")) $out[] = "qcc=nolib";
+                elseif (!is_array($qcOffer) || !is_array($qcOffer["catalogue"] ?? null) || !is_array($qcOffer["stock"] ?? null) || !is_array($qcOffer["ppx"] ?? null)) $out[] = "qcc=nooffer";
+                else {
+                    require_once $root . "/lib/UcrmQuoteLines.php"; require_once $root . "/lib/UcrmCatalogue.php";
+                    $qcCat = UcrmCatalogue::fromRecords($qcOffer["catalogue"], true);
+                    $qcInstId = $qcCat->installProductId(); $qcOff = $qcCat->hiddenIds(); $qcStds = $qcCat->standards();
+                    $qcSalt = (string)($A["salt"] ?? ""); $qcKeyOk = strlen($qcSalt) >= 32;
+                    $qcHx = function (string $s) use ($qcSalt): string { return substr(hash_hmac("sha256", $s, $qcSalt), 0, 32); };
+                    // the release's why codes for what offered() leaves out (directPair, directItem, kept off, the catalogue's
+                    // own exclusions) and for the installation (directInstall) — written out, as QL-G1's are
+                    $qcKnown = ["plan" => ["plan_rows", "unlisted", "plan_twin", "no_month", "plan_price", "plan_no_product", "plan_two_products",
+                                           "bad", "price_differs", "spelled_apart", "archived", "inactive", "organization"],
+                                "product" => ["unlisted", "bad", "like_plan", "kept_off", "archived", "inactive", "organization"],
+                                "install" => ["install_unset", "unlisted", "bad", "like_plan"]];
+                    $qcStock = array_flip($qcOffer["stock"]); $qcPpx = array_flip($qcOffer["ppx"]);
+                    $qcc = []; $qcw = []; $qcrd = []; $qci = []; $qcs = []; $qck = []; $qcx = []; $qcBad = []; $qcIH = [];
+                    $S[] = ""; $S[] = "== QC what the forms offer from uCRM in direct mode — " . (string)($A["label"] ?? "") . " (names, uCRM ids, prices, units and reasons: never paste) ==";
+                    $S[] = "  the copy's settings: installation product " . ($qcInstId === null ? "not set" : "#" . $qcInstId) . "; kept off " . ($qcOff ? "#" . implode(", #", $qcOff) : "none") . "; standard quotations " . count($qcStds);
+                    foreach (["plug" => $qlPlug, "tok" => $qlTok] as $nm => $c) {
+                        if ($c === null) { foreach (["qcc", "qcw", "qcrd", "qci", "qcs", "qck", "qcx"] as $v) ${$v}[] = $nm . ":unset"; continue; }
+                        $n0 = count($GLOBALS["dnbP"]);
+                        $u = new UcrmQuoteLines($c, $setting, UcrmQuoteLinks::fromRecords([], []));
+                        $off = $u->offered($qcInstId, $qcOff);
+                        $asked = array_slice($GLOBALS["dnbP"], $n0);
+                        $read = !empty($off["ok"]);
+                        $pathOk = $asked === ["products?limit=500", "service-plans?limit=500"] || (!$read && $asked === ["products?limit=500"]);
+                        if (!$pathOk) $qcBad[] = $nm;
+                        $rd = $read ? "read" : $http($c);
+                        if ($rd === "noanswer" && count($asked) > 0) $rd = "unusable";
+                        $qcrd[] = $nm . ":" . $rd;
+                        $cat = $u->catalogue();
+                        $who = $nm === "plug" ? "the plugin's own client" : "the token client (crm_auth_token)";
+                        if (!$read) {
+                            $qcc[] = $nm . ":sp:0,pr:0,plans:0,hw:0,not:0,unread:1,other:0"; $qcw[] = $nm . ":none"; $qci[] = $nm . ":unread";
+                            $qcs[] = $nm . ":" . count($qcStds) . "/0"; $qck[] = $nm . ":0"; $qcx[] = $nm . ":0";
+                            $S[] = "  " . $who . ": uCRM's products and service plans could not be read (" . $rd . "): nothing is judged";
+                            continue;
+                        }
+                        $why = []; $other = 0;
+                        $S[] = "  " . $who . ": read — " . count((array)$cat["products"]) . " product(s) and " . count((array)$cat["plans"]) . " service plan(s) counted; offered " . count($off["plans"]) . " plan(s) and " . count($off["hardware"]) . " hardware item(s)";
+                        foreach ($off["plans"] as $r) {
+                            $S[] = "    plan: " . (string)$r["label"] . " — uCRM service plan #" . (int)$r["sp"] . " with product #" . (int)$r["p"] . ", " . (string)$r["price"] . " per " . (string)$r["unit"];
+                            if ($qcKeyOk) $qcIH[$qcHx($nm . "|plan|" . (int)$r["sp"] . "|" . (int)$r["p"])] = $qcHx($nm . "|plan|" . (int)$r["sp"] . "|" . (int)$r["p"] . "|o|" . (string)$r["token"]);
+                        }
+                        $nStock = 0; $nPpx = 0;
+                        foreach ($off["plans"] as $r) if (isset($qcPpx[strtolower(trim((string)$r["label"]))])) { $nPpx++; $S[] = "    public_price_exclude names the offered plan " . (string)$r["label"]; }
+                        foreach ($off["hardware"] as $r) {
+                            $lab = strtolower(trim((string)$r["label"]));
+                            $S[] = "    hardware: " . (string)$r["label"] . " — uCRM product #" . (int)$r["p"] . ", " . (string)$r["price"] . " per " . (string)$r["unit"]
+                                 . (isset($qcStock[$lab]) ? "" : " — no active stock category of this title: a completed job deducts nothing for it (docs/72 §G.7)");
+                            if (!isset($qcStock[$lab])) $nStock++;
+                            if (isset($qcPpx[$lab])) { $nPpx++; $S[] = "    public_price_exclude names the offered hardware " . (string)$r["label"]; }
+                            if ($qcKeyOk) $qcIH[$qcHx($nm . "|hw|" . (int)$r["p"])] = $qcHx($nm . "|hw|" . (int)$r["p"] . "|o|" . (string)$r["token"]);
+                        }
+                        foreach ($off["not_offered"] as $r) {
+                            $k = (string)($r["kind"] ?? "?"); $w = (string)($r["why"] ?? ""); $rs = (string)($r["reason"] ?? "");
+                            if (!in_array($w, $qcKnown[$k] ?? [], true) || trim($rs) === "") { $other++; $w = "other"; }
+                            $why[$w] = ($why[$w] ?? 0) + 1;
+                            $S[] = "    not offered: " . ($k === "plan" ? "service plan" : "product") . " #" . (int)($r["id"] ?? 0) . " " . (string)($r["name"] ?? "") . " — " . $rs . " [" . (string)($r["why"] ?? "") . "]";
+                            if ($qcKeyOk) $qcIH[$qcHx($nm . "|no|" . $k . "|" . (int)($r["id"] ?? 0))] = $qcHx($nm . "|no|" . $k . "|" . (int)($r["id"] ?? 0) . "|x|" . (string)($r["why"] ?? "") . "|" . $rs);
+                        }
+                        $in = (array)$off["install"]; $iw = !empty($in["ok"]) ? "ok" : (string)($in["why"] ?? "");
+                        if ($iw !== "ok" && !in_array($iw, $qcKnown["install"], true)) { $other++; $iw = "other"; }
+                        $qci[] = $nm . ":" . ($iw === "install_unset" ? "unset" : $iw);
+                        $S[] = "    the installation: " . (!empty($in["ok"]) ? (string)$in["line"]["label"] . " — uCRM product #" . (int)$in["line"]["productId"] . ", " . (string)$in["line"]["price"] . " per " . (string)$in["line"]["unit"] : (string)($in["reason"] ?? ""));
+                        if ($qcKeyOk) $qcIH[$qcHx($nm . "|install")] = $qcHx($nm . "|install|" . (!empty($in["ok"]) ? "o|" . (string)$off["install"]["token"] : "x|" . (string)($in["why"] ?? "") . "|" . (string)($in["reason"] ?? "")));
+                        $usable = 0;
+                        foreach ($qcStds as $sd) {
+                            $sf = UcrmQuoteLines::standardFrom($sd, $off);
+                            if (!empty($sf["ok"])) $usable++;
+                            $S[] = "    standard quotation #" . (string)($sd["id"] ?? "?") . " \"" . (string)($sd["title"] ?? "") . "\": " . (!empty($sf["ok"]) ? "usable — " . count($sf["lines"]) . " line(s), total " . (string)$sf["total"] : "not usable — " . (string)$sf["reason"]);
+                        }
+                        ksort($why); $ws = []; foreach ($why as $k => $v) $ws[] = $k . "." . $v;
+                        $qcc[] = $nm . ":sp:" . count((array)$cat["plans"]) . ",pr:" . count((array)$cat["products"]) . ",plans:" . count($off["plans"]) . ",hw:" . count($off["hardware"]) . ",not:" . count($off["not_offered"]) . ",unread:0,other:" . $other;
+                        $qcw[] = $nm . ":" . ($ws ? implode("+", $ws) : "none");
+                        $qcs[] = $nm . ":" . count($qcStds) . "/" . $usable; $qck[] = $nm . ":" . $nStock; $qcx[] = $nm . ":" . $nPpx;
+                    }
+                    $qcLs = []; foreach ($qcIH as $hi => $hv) $qcLs[] = "i " . $hi . " " . $hv; sort($qcLs);
+                    if (!$put((string)($A["qch"] ?? ""), $qcKeyOk ? "items " . count($qcLs) . "\n" . ($qcLs ? implode("\n", $qcLs) . "\n" : "") : "?nokey\n")) { echo "?qch"; exit(3); }
+                    $qcIH = []; $qcLs = [];
+                    $out[] = "qcc=" . implode(";", $qcc) . " qcwhy=" . implode(";", $qcw) . " qcread=" . implode(";", $qcrd) . " qcpath=" . ($qcBad ? "bad:" . implode(",", $qcBad) : "ok")
+                           . " qcinst=" . implode(";", $qci) . " qcstd=" . implode(";", $qcs) . " qcstock=" . implode(";", $qck) . " qcppx=" . implode(";", $qcx);
+                }
+            } catch (Throwable $e) { $out[] = "qcc=?" . get_class($e); }
+        }
