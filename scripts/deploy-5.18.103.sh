@@ -28,7 +28,7 @@
 #            api/index.php, QuoteOrganization, PublicPriceFeed, prices.php, shop.php, tools/set_config.php and
 #            UcrmQuoteLinks byte for byte 5.18.102's, and so are the brain, the leads, the follow-ups, the Inbox, the
 #            channel registry and its owners, the Cashbook, ECO Bank and every Balance. Files, against 1a0ea5f:
-#            32 changed, 26 added — 58 (the catalogue's class and screen, and its test tests/test_catalogue_direct.php
+#            33 changed, 26 added — 59 (the catalogue's class and screen, and its test tests/test_catalogue_direct.php
 #            with its directory tests/catalogue_direct/, are the added ones).
 #
 #   THE FIGURES GO TO A CASH SHEET, NEVER TO THE TERMINAL OR THE LOG. Each run writes its own sheet,
@@ -176,8 +176,8 @@
 #            reader that could not tell the two apart would pass anything. Whether this server sees the new line is
 #            Q-G2's question — the tenant is Uganda through the installed code on a copy — the gate's own rule
 #            (TenantProfile::current()->id()). By the sha256 pinned here, Q-CA1 reads every file 5.18.103 changes or adds
-#            (its 58, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it changes
-#            (32), as 5.18.102 has them; all three read the 97 files of 5.18.102 it must not touch — webhook.php,
+#            (its 59, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it changes
+#            (33), as 5.18.102 has them; all three read the 97 files of 5.18.102 it must not touch — webhook.php,
 #            cron_quote_wa.php, lib/QuoteOrganization.php, lib/QuoteTaxLine.php, lib/TenantProfile.php,
 #            lib/PublicPriceFeed.php and lib/UcrmQuoteLinks.php among them. The 26 files it adds have no 5.18.102
 #            form: BR1 counts any left on disk, and QC-RB1 shows that nothing in 5.18.102 reaches them.
@@ -300,7 +300,7 @@
 #            the --after-only's reading once the switch is on (QC-ON1–QC-ON4); the next real KYC quotation is the second.
 #
 #   THE COMMIT IT INSTALLS IS A RELEASE COMMIT, NOT THE BRANCH TIP. The pin below, on release/5.18.103, is cut on 1a0ea5f
-#            (5.18.102, live): 58 files — 32 changed, 26 added — each file's sha256 pinned here. Stage A refuses a pin whose
+#            (5.18.102, live): 59 files — 33 changed, 26 added — each file's sha256 pinned here. Stage A refuses a pin whose
 #            parent is not 5.18.102, whose short hash names another commit, whose delta is not exactly these files by these
 #            hashes, that carries a migration, and a checkout holding a file git does not track under the plugin folder
 #            outside data/. Its master.php and main.php are checked byte for byte (A0).
@@ -507,8 +507,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="c09c03c"   # 5.18.103 (release) — on Uganda, with the uCRM catalogue switched on by an admin (the new uCRM catalogue screen, lib/UcrmCatalogue.php), the KYC form, Send Quotation and the lead quotes offer uCRM's own service plans and products by uCRM id, at uCRM's prices (UcrmQuoteLines::offered()), and the plugin's own plan and kit lists are hidden; a standard quotation in one click; switched off, as the deploy leaves it, 5.18.102 exactly (root docs/72 §G); all behind QuoteOrganization::setting()['on']; no migration
-EXPECTED_PLUGIN_COMMIT_FULL="c09c03c6137987cff8463b5c6541be3feecb904f"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="221c9dc"   # 5.18.103 (release) — on Uganda, with the uCRM catalogue switched on by an admin (the new uCRM catalogue screen, lib/UcrmCatalogue.php), the KYC form, Send Quotation and the lead quotes offer uCRM's own service plans and products by uCRM id, at uCRM's prices (UcrmQuoteLines::offered()), and the plugin's own plan and kit lists are hidden; a standard quotation in one click; switched off, as the deploy leaves it, 5.18.102 exactly (root docs/72 §G); all behind QuoteOrganization::setting()['on']; no migration
+EXPECTED_PLUGIN_COMMIT_FULL="221c9dcf04f8281888d77761ae019f59cc1d9c0a"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.103"
 BASELINE_COMMIT="1a0ea5f"          # 5.18.102 (release, the KYC quotations' lines from uCRM by link; the live plugin since 1 Nov 07:37 UTC, root docs/07) — what the server runs first, and the rollback; G3 and V3j require ECO Bank's switch ON and a statement kept on it, as 5.18.102's did
 BASELINE_COMMIT_FULL="1a0ea5f103f237db0c7c103c9efd8d38408fbac9"
@@ -720,6 +720,7 @@ ab18c049c0e97f3321b793d36dca52c2f772de4b3ccd3d26d72a0471cbe4716d  tabs/sales/kyc
 9e116d0d9c4db9dea6ee411ef0c7d360d5dc3edfde7f154ad26a6581decc444f  tests/quote_from_ucrm/mutants_G.php
 5c538876263942cfe0a9ec4531588e549c9025f2a58dd462f88df81d507b5bae  tests/quote_from_ucrm/mutants_L.php
 9abe3fdba9969ef25cb1afe5273e3d9300207d64d4cb2f05714aad8c0052fd4c  tests/test_bank_boundaries.php
+34481fb3a8c00675afb2ce3c0701aff544b9f39de24bb1f05de67bd9a0da09a0  tests/test_cash_in_hand_p3b_south_sudan.php
 79a8869cdeb39de8024f6fe4da8c4d990cace10ae89162dd0386e355a3ed09b1  tests/test_cashbook_physical_list.php
 6bb0b0f686e7528316cb0f9ba5bf0f08f51d1639e2e87da5a9998d0c645f13a5  tests/test_distributor_apply.php
 55e9fba4e8289d0b288f1ac2282981575c18bba93e2b8cc9ed7895fbce25bb7f  tests/test_distributor_link_ucrm.php
@@ -729,11 +730,11 @@ b3b143571d07ed618834264a2787397c75fa27328fb2f7e085ab15e75ea2e7a8  tests/test_dis
 9ed79741ae3db7ef08f8f37fc77c88ec3df6f4d3229c663000b75c21ac347702  tests/test_quote_company.php
 SUMS
 )"
-PREV_CHANGED_N=32
-# 5.18.103 — the release's own files, each with the sha256 release/5.18.103 (c09c03c) gives it: the delta,
+PREV_CHANGED_N=33
+# 5.18.103 — the release's own files, each with the sha256 release/5.18.103 (221c9dc) gives it: the delta,
 # exactly, its 26 added files among them — A0 reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-e99b321b2276479f9b8f0eb31379657e3abd2702c20a94d1107376b1f1954794  SAFETY.md
+4f15136860078074ba642393612b17e5359c3a8519374ba050c18287c73141c8  SAFETY.md
 9791847f5701e0d03cce0a4d0ec60f45ae52ccb99158f3e7f7f1aca88999285c  includes/api/api_cron_debug.php
 ffd7688b2bf21f3ac8d2703308b5eb67f98a9ab5278825b1d175a94bc1c6ce51  includes/api/api_products_admin.php
 aadf9fb8ef34b0b7f1f1af1c558e485dcb7f7d1f0dad5062126046fe2da90385  includes/navigation.php
@@ -751,14 +752,15 @@ a31ae0e4f8f64ded90373b5a41719cf331f97729884fd71f09f979615e7e58bb  public.php
 df215bb9656f4d903d8e1833e46370938fbe3d79e8efdaa4f732013c5668d730  tabs/sales/product_mapping.php
 8569c8df03ddbd9ea20b7c072eb8f69314fc0eddd099516f94dd8cd558fb50a1  tabs/sales/send_quote.php
 3f8c5d01f86e2d633a2636cb24e07b1a8e0f8d7c6cfc44716c07a1645d2158f1  tabs/sales/subscription_plans.php
-21d36299063d295eb45a03ea1fd6070177e7e7c1cd17adfbbabe00034b61063e  tests/quote_from_ucrm/I_boundary.php
+61edad98556365269637ebf493d2d8d83f236a751e71ee0d592afac9e7594865  tests/quote_from_ucrm/I_boundary.php
 206338833e66846ed740b1369fa065edbeb375b03db384e141ee87702c465ba0  tests/quote_from_ucrm/mutants.php
 69c4a7b991e59eec4672091b7b7699f12598c2f0f1a723afdeac9060a2cbde24  tests/quote_from_ucrm/mutants_C.php
 e3d1e66bd4f9b7e746fcf199445767c0e7137266a70d8b5e1f87d8ae1826abfc  tests/quote_from_ucrm/mutants_F.php
 9c1baf65c16553e5c2a2273d29a0b430585b5558e2053e377c9e5a60279b226e  tests/quote_from_ucrm/mutants_G.php
 777e2cd85c1f74514afda3f2b69ab925982518ba1fe08935a4adedb31b36d3ff  tests/quote_from_ucrm/mutants_L.php
 afb6176ce48250c4f3be839030606f9417138b976051efda1209f364e3f2f21d  tests/test_bank_boundaries.php
-5208546e1b444eaabd5767a143b79698ccae3e4ca930300eaf2d43230d0511c7  tests/test_cashbook_physical_list.php
+9409bfe1c3ba66d8b030ce49b4db3df3e901795da893abbfc5da6014e03dca02  tests/test_cash_in_hand_p3b_south_sudan.php
+eed351f83db9f7a939cba349165b1ea8d7f7d636bc073d05ede1d5b89508b70c  tests/test_cashbook_physical_list.php
 d1f1a0d076602d016f55863cc77b0c581f9d95c6ac4a1e7c715a8d58e7b5a4a4  tests/test_distributor_apply.php
 f0949155c066e264a812159d0cdb360d1160d444d694209dfbe5f8e2071b00aa  tests/test_distributor_link_ucrm.php
 c43ac3615cc87d13caa72f4167e180d77131b38b9738f5cc9db4774f42bf58c3  tests/test_distributor_notify.php
@@ -774,7 +776,7 @@ cdbcf4c164e45bf719e7929fcafabd1e2312fb88b5e60a2e56cb5bf7e63d75bb  tests/catalogu
 fa050e33798640560f524ce2b587200207a322378c13657ef779f2213836ad3b  tests/catalogue_direct/E_send_quote.php
 46fa396f1bfe00fed162a518a95ce420c738c254424c8f6a6371aa3ec59f53c9  tests/catalogue_direct/F_screen.php
 4a63e25b63901227c09caf64a995a2a4f89676c2fb18b11257cd147fe446c98f  tests/catalogue_direct/G_kyc_form.php
-adcdc3f93ccbdcaf44028de7ba801fc132f09ffdece4eb3fa8c2ba82ef2c2d85  tests/catalogue_direct/I_boundary.php
+b957bcff3b172777ea06bfd69cc8ad557af0124c7f1bdb5efc452beb69273676  tests/catalogue_direct/I_boundary.php
 8cd719c085394ce7611ea97a7bdd2e28b422d83c0c4ef802131dd2959c1b078b  tests/catalogue_direct/R_rollback.php
 05d1aac1679eeef3b88007d57775a7d390e65acec3d74f333f375aa52f2f2da0  tests/catalogue_direct/_lib.php
 4b3080cb31bf3fa0310f077ecbf7b9f551c4a7f573008c984bf5190717cd704a  tests/catalogue_direct/e_lib.php
@@ -789,11 +791,11 @@ f0de65dc1e64e1a0acfe581c9bcb174583c14676aae1690000b149800cd4ec89  tests/catalogu
 650d5458b92ac80b8be7321a2467879c7b6993b32fec82132a0baeeaac3a183f  tests/catalogue_direct/mutants_F.php
 eca0c4647066021481a6298767e8a44de0e20177545852ccbad4d0dff96abe21  tests/catalogue_direct/mutants_G.php
 e78eede936309ebe86c04d723b2c088b7aaf83cadb85b43f6e7704ca0b8befab  tests/catalogue_direct/mutants_I.php
-ca21499460ea78ba394c5e79c98cf5e606016d4afb0ee4d849ee1b61da378e37  tests/fixtures/r103_revert.php
+e81686c129027c9b3427c8b8e0f2015e4e2ccbcd561dcb98dffa710b8f519eea  tests/fixtures/r103_revert.php
 236ade6a5008c63c53cce31b813cc247db389dfa7abd3b0866c55ebb630a7d03  tests/test_catalogue_direct.php
 SUMS
 )"
-PIN_SHA_N=58
+PIN_SHA_N=59
 DOMAIN_B="dishnet-mikrotik-control-plane docs"    # Domain B and the plugin's documents, under the plugin directory: never touched (A7, R14)
 # The event processor run once on a throwaway database with five events (A6, R13, RB): type=status/attempts, and +unknown
 # when it was logged as an unknown type. South Sudan's loop — 5.18.87's, kept by 5.18.88 — and Uganda's since 5.18.88, which
@@ -833,11 +835,11 @@ P90_SIGNATURE="uganda+on: gaps=sales,support seller=internal_numbers_incomplete;
 # registry off it reads "policy=off/off refusal=-/- sql=-/- evo=off,-/off,- gaps=-/- channels=0:0/0:0 internal=<n>:0/<n>:0
 # statements=0 registry-reads=0 writes=0", then "|" and an HMAC under this run's key — inert; on, it reads the registry and
 # refuses what it finds unsafe. writes= is 0 in every reading.
-# The release's own files, and nothing else: 26 added, 32 changed — 58, each by its sha256
+# The release's own files, and nothing else: 26 added, 33 changed — 59, each by its sha256
 # (PIN_SHA256S). Anything outside this list in the pin is another build. A0 word-splits both lists: no path in them
 # holds a space or a glob character.
 EXPECTED_ADDED="lib/UcrmCatalogue.php tabs/sales/ucrm_catalogue.php tests/catalogue_direct/A_store.php tests/catalogue_direct/B_offered.php tests/catalogue_direct/C_submission.php tests/catalogue_direct/D_retries.php tests/catalogue_direct/E_send_quote.php tests/catalogue_direct/F_screen.php tests/catalogue_direct/G_kyc_form.php tests/catalogue_direct/I_boundary.php tests/catalogue_direct/R_rollback.php tests/catalogue_direct/_lib.php tests/catalogue_direct/e_lib.php tests/catalogue_direct/e_send_quote_browser.js tests/catalogue_direct/g_kyc_form_browser.js tests/catalogue_direct/g_lib.php tests/catalogue_direct/mutants_A.php tests/catalogue_direct/mutants_B.php tests/catalogue_direct/mutants_C.php tests/catalogue_direct/mutants_D.php tests/catalogue_direct/mutants_E.php tests/catalogue_direct/mutants_F.php tests/catalogue_direct/mutants_G.php tests/catalogue_direct/mutants_I.php tests/fixtures/r103_revert.php tests/test_catalogue_direct.php"
-EXPECTED_CHANGED="SAFETY.md includes/api/api_cron_debug.php includes/api/api_products_admin.php includes/navigation.php includes/post/post_leads.php includes/post/post_sync.php lib/KycCrmSync.php lib/KycService.php lib/QuotationService.php lib/UcrmQuoteLines.php manifest.json public.php tabs/sales/applications.php tabs/sales/hardware.php tabs/sales/kyc_form.php tabs/sales/product_mapping.php tabs/sales/send_quote.php tabs/sales/subscription_plans.php tests/quote_from_ucrm/I_boundary.php tests/quote_from_ucrm/mutants.php tests/quote_from_ucrm/mutants_C.php tests/quote_from_ucrm/mutants_F.php tests/quote_from_ucrm/mutants_G.php tests/quote_from_ucrm/mutants_L.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_quote_company.php"
+EXPECTED_CHANGED="SAFETY.md includes/api/api_cron_debug.php includes/api/api_products_admin.php includes/navigation.php includes/post/post_leads.php includes/post/post_sync.php lib/KycCrmSync.php lib/KycService.php lib/QuotationService.php lib/UcrmQuoteLines.php manifest.json public.php tabs/sales/applications.php tabs/sales/hardware.php tabs/sales/kyc_form.php tabs/sales/product_mapping.php tabs/sales/send_quote.php tabs/sales/subscription_plans.php tests/quote_from_ucrm/I_boundary.php tests/quote_from_ucrm/mutants.php tests/quote_from_ucrm/mutants_C.php tests/quote_from_ucrm/mutants_F.php tests/quote_from_ucrm/mutants_G.php tests/quote_from_ucrm/mutants_L.php tests/test_bank_boundaries.php tests/test_cash_in_hand_p3b_south_sudan.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_quote_company.php"
 # 5.18.96 — the two of its tests the server runs under its own PHP, kept by 5.18.97 through 5.18.103 (which change
 # neither). The page tests (T2, T3) serve the plugin over HTTP and run only in the suites; the weakened copies (the
 # mutant driver) only there too; ECO Bank's tests, 5.18.98's (tests/test_cashbook_physical_list.php and its weakened
@@ -6298,7 +6300,7 @@ done
 M87_SHA="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$MIG87" 2>/dev/null | sha256sum | cut -c1-64)"
 [ "$M87_SHA" = "$MIG87_SHA256" ] || stop "the pin's $MIG87 is not the reviewed one production applied on 7 Oct (sha256 ${M87_SHA:0:16}…, reviewed ${MIG87_SHA256:0:16}…) — this script is for another build"
 # 5.18.98: every file of the delta by the sha256 pinned in this script (PIN_SHA256S) — the list is the delta exactly, its
-# fifty-eight files and no other, the 26 it adds among them — and 5.18.102's files this release must leave as they are
+# fifty-nine files and no other, the 26 it adds among them — and 5.18.102's files this release must leave as they are
 # (PREV_KEPT_SHA256S) by theirs, in both release commits: what Q-G1 reads installed before anything changes, Q-CA1 after
 # the copy and RB after a rollback. 5.18.99: and every file it changes by the sha256 5.18.102's release commit gives it
 # (PREV_CHANGED_SHA256S; an added file has no such form, and is refused there) —
@@ -8421,7 +8423,7 @@ done
 IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
 [ "$IV" = "$EXPECTED_VERSION" ] && ok "R1 the installed manifest says $IV" || bad "R1 the installed manifest says ${IV:-?}"
 # Q-CA1 — 5.18.99 (SPEC-quote-company §6), carried: the installed files are this release's by the sha256 THIS SCRIPT pins
-# for each of its 58 (R1 compared them with Git), the 26 it adds among them; the 5.18.102 files this release must not
+# for each of its 59 (R1 compared them with Git), the 26 it adds among them; the 5.18.102 files this release must not
 # touch — ECO Bank's module, its link on the CEO page, the Cashbook's service, its page, its tab, its export and its routes,
 # api/index.php, cron_quote_wa.php, the quoting files 5.18.103 keeps (QuoteOrganization, QuoteTaxLine, TenantProfile,
 # PublicPriceFeed, UcrmQuoteLinks), lib/SalesNumbersAdmin.php and its page and the rest — are still 5.18.102's by theirs (webhook.php
@@ -9541,7 +9543,7 @@ else
 fi
 note "RB run the quarantine's --check next, its own command (printed at the end, with its own log): it is the authority on the kept file, and it measures what this script does not — whether a process holds it"
 # 5.18.103's files are 5.18.102's again, each byte for byte — by Git's sha256 and by the one THIS SCRIPT pins for each
-# (PREV_CHANGED_SHA256S, Q-G1's set read again: 32) — and the 26 files it added stay on disk
+# (PREV_CHANGED_SHA256S, Q-G1's set read again: 33) — and the 26 files it added stay on disk
 # (deploy-hybrid.sh never deletes, nor can the by-hand put-back). Git's loop below passes over them, since 5.18.102 has
 # none of them; QC-RB1 (below) proves nothing in 5.18.102 reaches them. The files 5.18.103 adds, as they are on disk now —
 # counted here, before any line says how many: N_ADDED is Git's count of them, never the disk's; RB below, QC-RB1, RB's
@@ -9637,6 +9639,8 @@ tabs/sales/subscription_plans.php|ucrm_catalogue|1
 tests/quote_from_ucrm/I_boundary.php|UcrmCatalogue|2
 tests/quote_from_ucrm/I_boundary.php|ucrm_catalogue|3
 tests/quote_from_ucrm/mutants_L.php|UcrmCatalogue|8
+tests/test_cash_in_hand_p3b_south_sudan.php|UcrmCatalogue|2
+tests/test_cash_in_hand_p3b_south_sudan.php|ucrm_catalogue|1
 tests/test_cashbook_physical_list.php|ucrm_catalogue|1
 MARKS
 )"
@@ -9651,7 +9655,7 @@ while IFS='|' read -r qr1_rel qr1_mark qr1_pin; do
   qr1_in="$(qc_rb1_n "$qr1_mark" <"$DEST/$qr1_rel")"
   [ "$qr1_in" = "0" ] || QCRB1_BAD="$QCRB1_BAD $qr1_rel:names-$qr1_mark×${qr1_in:-?}"
 done <<< "$QC_RB1_MARKS"
-[ "$QCRB1_N" = "24" ] || QCRB1_BAD="$QCRB1_BAD count:$QCRB1_N/24"
+[ "$QCRB1_N" = "26" ] || QCRB1_BAD="$QCRB1_BAD count:$QCRB1_N/26"
 qr1_ctl="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/lib/UcrmCatalogue.php" 2>/dev/null | qc_rb1_n UcrmCatalogue):$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/lib/UcrmCatalogue.php" 2>/dev/null | qc_rb1_n ucrm_catalogue)"
 case "$qr1_ctl" in
   [1-9]*:[1-9]*)

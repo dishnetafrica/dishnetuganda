@@ -1,8 +1,8 @@
 diff --git a/dishnet-hybrid-sudan/SAFETY.md b/dishnet-hybrid-sudan/SAFETY.md
-index 8009d84..9515ea0 100644
+index 8009d84..3e44b4b 100644
 --- a/dishnet-hybrid-sudan/SAFETY.md
 +++ b/dishnet-hybrid-sudan/SAFETY.md
-@@ -542,6 +542,62 @@ the same field names.
+@@ -542,6 +542,68 @@ the same field names.
  
  # 🔖 VERSION LOG (append after every session)
  
@@ -18,7 +18,8 @@ index 8009d84..9515ea0 100644
 +- **The switch, OFF until an admin turns it on** on the new uCRM catalogue screen (`tabs/sales/ucrm_catalogue.php`, tab
 +  `ucrm_catalogue`, Plans or Hardware permission — admins by default). Turning it on reads uCRM fresh and needs at least
 +  one plan offered and the installation product set and passing its rules; turning it off reads nothing. Off = 5.18.102
-+  exactly: a deploy changes nothing an agent sees.
++  exactly for the forms and the quotations: a deploy changes nothing an agent sees; an admin's menu (Plans or Hardware
++  permission) gains the screen's entry, below.
 +- **The store: the table `ucrm_catalogue` in plugin.sqlite3, through `lib/UcrmCatalogue.php` (new)** — the switch, the
 +  installation product, the products kept off the forms, and up to ten standard quotations (ids only, never a price).
 +  One record per act, with who and when; a change ends the record in force and keeps it. Read only behind the gate, so
@@ -51,6 +52,11 @@ index 8009d84..9515ea0 100644
 +  `productId` on a line not picked removed; the sends' types, events and `quotes_log` rows unchanged.
 +- **The link store is frozen** while the switch is on: link saves and clears refused, a deleted plan or kit row ends no
 +  link. The Plans and Hardware screens show one card pointing to the uCRM catalogue.
++- **The menu:** wherever the quoting organization is in force, the uCRM catalogue's entry for those who may see Plans or
++  Hardware, whatever the switch says — with the switch off, the one change to the pages.
++  `tests/test_cash_in_hand_p3b_south_sudan.php`, which holds the Cashbook, landing and CEO pages to 5.18.94's bytes,
++  takes exactly that entry out and counts it (rewritten on purpose; two weakened copies of `navigation.php` show the
++  count is not idle).
 +- **No migration.** `manifest.json` moves to 5.18.103 and the tests that pin the version move with it.
 +
 +### Operator action (root docs/72 §G.14)
@@ -5087,10 +5093,10 @@ index 0000000..401105e
 +}];
 diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/I_boundary.php b/dishnet-hybrid-sudan/tests/catalogue_direct/I_boundary.php
 new file mode 100644
-index 0000000..b224049
+index 0000000..481943b
 --- /dev/null
 +++ b/dishnet-hybrid-sudan/tests/catalogue_direct/I_boundary.php
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,171 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -5121,9 +5127,15 @@ index 0000000..b224049
 +const CD_I_TESTS = [
 +    'tests/test_catalogue_direct.php',
 +    'tests/test_bank_boundaries.php', 'tests/test_cashbook_physical_list.php', 'tests/test_distributor_apply.php',
++    // the Cashbook pages held to 5.18.94's bytes: the uCRM catalogue's menu entry taken out and counted
++    'tests/test_cash_in_hand_p3b_south_sudan.php',
 +    'tests/test_distributor_link_ucrm.php', 'tests/test_distributor_notify.php', 'tests/test_distributor_registry.php',
 +    'tests/test_distributor_territory.php', 'tests/test_quote_company.php',
 +    'tests/quote_from_ucrm/I_boundary.php', 'tests/fixtures/r103_revert.php',
++    // 5.18.102's weakened copies re-anchored where 5.18.103 moved their code (the same fault each), and ML79's refusal copy,
++    // which 5.18.102's round 11 had already left unplantable
++    'tests/quote_from_ucrm/mutants.php', 'tests/quote_from_ucrm/mutants_C.php', 'tests/quote_from_ucrm/mutants_F.php',
++    'tests/quote_from_ucrm/mutants_G.php', 'tests/quote_from_ucrm/mutants_L.php',
 +];
 +/** §G.12 "Byte for byte". */
 +const CD_I_KEPT = [
@@ -6720,10 +6732,10 @@ index 0000000..c242980
 +]);
 diff --git a/dishnet-hybrid-sudan/tests/fixtures/r103_revert.php b/dishnet-hybrid-sudan/tests/fixtures/r103_revert.php
 new file mode 100644
-index 0000000..a78b2f8
+index 0000000..5ee382e
 --- /dev/null
 +++ b/dishnet-hybrid-sudan/tests/fixtures/r103_revert.php
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,121 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -6731,7 +6743,9 @@ index 0000000..a78b2f8
 + * lines to, includes/navigation.php and public.php, recovered from this release's by taking out exactly 5.18.103's
 + * declared lines (each found exactly once, or null). For the tests that hold those files to an earlier release's bytes —
 + * tests/test_bank_boundaries.php A and tests/test_cashbook_physical_list.php M — which keep holding every other byte of
-+ * them; the 5.18.103 lines themselves are held by tests/test_catalogue_direct.php I (declared, marked, measured against
++ * them; and, the same way, of tests/test_cash_in_hand_p3b_south_sudan.php, which 5.18.103 rewrites on purpose (it takes
++ * the uCRM catalogue's menu entry out of its pages and counts it), for test_cashbook_physical_list.php M's keep-list.
++ * The 5.18.103 lines themselves are held by tests/test_catalogue_direct.php I (declared, marked, measured against
 + * 1a0ea5f from Git). Generated from Git and checked there: 1a0ea5f's bytes come back exactly.
 + */
 +const R103_REVERT = [
@@ -6770,6 +6784,67 @@ index 0000000..a78b2f8
 +', ''], ['    \'ucrm_catalogue\'     => [\'plans\', \'hardware\'],   // 5.18.103 (§G.3): who may see Plans or Hardware (admins by default)
 +', ''], ['            \'ucrm_catalogue\'=>\'uCRM catalogue\',   // 5.18.103 (root docs/72 §G.3)
 +', '']],
++    // 5.18.103 (§G.13): the test that holds the Cashbook, landing and CEO pages to 5.18.94's bytes — its seven pieces
++    'tests/test_cash_in_hand_p3b_south_sudan.php' => [
++        [' * out of the comparison and checked against fixed text. A difference is reported by its position and length only.
++ *
++ * One block is taken out of the pages and counted instead (5.18.103, rewritten on purpose, root docs/72 §G.13): the uCRM
++ * catalogue\'s menu entry, which includes/navigation.php draws on every dashboard page, for those who may see Plans or
++ * Hardware, wherever the quoting organization is in force, whatever the catalogue\'s switch says (§G.3) — of these books,
++ * the Uganda one. It is the exact text T3_CATALOGUE_NAV, taken out of this tree\'s pages only: each must carry it once
++ * where this tree has lib/UcrmCatalogue.php and the book is UP, and never otherwise; f4b4c96\'s never. Two weakened copies
++ * of navigation.php, the entry drawn on every tenant and the entry not drawn, show the count is not idle.
++',
++         ' * out of the comparison and checked against fixed text. A difference is reported by its position and length only.
++'],
++        ['const T3_STDERR     = "\\n\\0 the error stream \\0\\n";
++// 5.18.103 (root docs/72 §G.3, §G.13): the uCRM catalogue\'s menu entry, exactly as includes/navigation.php draws it on a
++// page other than the catalogue\'s own — the one block of these pages that changes where the quoting organization is in force.
++const T3_CATALOGUE_NAV = "<a href=\\"?page=dashboard&tab=ucrm_catalogue\\" class=\\"kyc-tab \\">\\n"
++                       . "    <span class=\\"nav-icon\\"><i class=\\"bi bi-box-seam\\"></i></span> uCRM catalogue\\n</a>\\n";
++',
++         'const T3_STDERR     = "\\n\\0 the error stream \\0\\n";
++'],
++        ['
++        $outside = []; $sameStmt = 0; $navSeen = [];
++',
++         '
++        $outside = []; $sameStmt = 0;
++'],
++        ['            [$a, $b] = t3_same_statement($a, $b, $old, $new, $sameStmt);
++            if ($page) {   // 5.18.103: the uCRM catalogue\'s menu entry, out of this tree\'s page only, and counted (header)
++                $navSeen[$lbl] = [substr_count($a, T3_CATALOGUE_NAV), substr_count($b, T3_CATALOGUE_NAV)];
++                $b = str_replace(T3_CATALOGUE_NAV, \'\', $b);
++            }
++',
++         '            [$a, $b] = t3_same_statement($a, $b, $old, $new, $sameStmt);
++'],
++        ['        }
++
++        // 5.18.103: the uCRM catalogue\'s menu entry, counted where it was taken out (header)
++        $navWant = ($tag === \'UP\' && is_file($root . \'/lib/UcrmCatalogue.php\')) ? 1 : 0;
++        $navOff  = array_filter($navSeen, function ($p) use ($navWant) { return $p !== [0, $navWant]; });
++        is_(count($navSeen) >= 10 && $navOff === [],
++            "[{$tag}] the uCRM catalogue\'s menu entry (5.18.103), taken out of the comparison: " . ($navWant ? \'once on each\' : \'on none\')
++            . \' of this tree\\\'s \' . count($navSeen) . " pages, on none of f4b4c96\'s", json_encode($navOff));
++',
++         '        }
++'],
++        ['    $CB = \'lib/CashbookService.php\'; $PAGE = \'tabs/accounts/cashbook.php\'; $CEO = \'tabs/admin/ceo_dashboard.php\'; $TOOL = \'tools/cash_in_hand.php\';
++    $NAV = \'includes/navigation.php\';
++    $NAVIF = "<?php if(\\$_cat103Nav->open() && (\\$can(\'plans\') || \\$can(\'hardware\'))): /* 5.18.103 (§G.3) */ ?>";
++',
++         '    $CB = \'lib/CashbookService.php\'; $PAGE = \'tabs/accounts/cashbook.php\'; $CEO = \'tabs/admin/ceo_dashboard.php\'; $TOOL = \'tools/cash_in_hand.php\';
++'],
++        ['            "if (true) {\\n    echo \\"\\\\n  the ledger\'s cash in hand"]]],
++        // 5.18.103: the menu entry\'s count is not idle — drawn where the quoting organization is not in force, and not drawn
++        [\'5.18.103: the uCRM catalogue\\\'s menu entry drawn on every tenant\', [\'SS\', \'SN\'], [[$NAV, $NAVIF,
++            "<?php if(\\$can(\'plans\') || \\$can(\'hardware\')): /* 5.18.103 (§G.3) */ ?>"]]],
++        [\'5.18.103: the uCRM catalogue\\\'s menu entry not drawn\', [\'UP\'], [[$NAV, $NAVIF, "<?php if(false): /* 5.18.103 (§G.3) */ ?>"]]],
++',
++         '            "if (true) {\\n    echo \\"\\\\n  the ledger\'s cash in hand"]]],
++'],
++    ],
 +];
 +
 +/** 5.18.102's text of $rel from this release's $src; $src itself for any other file; null when a declared change is not found exactly once. */
@@ -6783,7 +6858,7 @@ index 0000000..a78b2f8
 +    return $src;
 +}
 diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/I_boundary.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/I_boundary.php
-index ab90df3..42c4f91 100644
+index ab90df3..bc15798 100644
 --- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/I_boundary.php
 +++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/I_boundary.php
 @@ -18,6 +18,13 @@ declare(strict_types=1);
@@ -6800,7 +6875,7 @@ index ab90df3..42c4f91 100644
   */
  
  const QFU_I_BASE = 'f2055baf';
-@@ -31,6 +38,11 @@ const QFU_I_RUNTIME = [
+@@ -31,6 +38,12 @@ const QFU_I_RUNTIME = [
      'tabs/sales/kyc_form.php', 'tabs/sales/product_mapping.php', 'tabs/sales/send_quote.php',
      'tabs/sales/subscription_plans.php',
  ];
@@ -6808,11 +6883,12 @@ index ab90df3..42c4f91 100644
 +const QFU_I_R103 = [
 +    'includes/navigation.php', 'includes/post/post_leads.php', 'public.php', 'lib/UcrmCatalogue.php',
 +    'tabs/sales/ucrm_catalogue.php', 'tests/test_catalogue_direct.php', 'tests/fixtures/r103_revert.php',
++    'tests/test_cash_in_hand_p3b_south_sudan.php',   // rewritten on purpose: the uCRM catalogue's menu entry taken out and counted
 +];
  /** The manifest (its version line) and the documents in the plugin's own directory. */
  const QFU_I_OTHER = ['SAFETY.md', 'manifest.json'];
  /** Tests and fixtures 5.18.102 adds or rewrites on purpose (§L.2); tests/quote_from_ucrm/ is this test's own directory. */
-@@ -104,10 +116,10 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -104,10 +117,10 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
          if (hash_file('sha256', $p) !== hash_file('sha256', $base[$rel])) $changed[] = $rel;
      }
      foreach ($base as $rel => $p) if (!isset($tree[$rel])) $removed[] = $rel;
@@ -6825,7 +6901,7 @@ index ab90df3..42c4f91 100644
      sort($want);
  
      // I1 — exactly the declared files
-@@ -116,16 +128,17 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -116,16 +129,17 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
          'I1 against ' . QFU_I_BASE . ' the tree changes or adds exactly the ' . count($want) . ' declared files (and this test\'s own directory), and removes none');
      // 5.18.102 D14 (rewritten on purpose, docs/71 §R.11): the link judge is the third new file
      $c->eq(array_values(array_filter($added, fn($r) => !$own($r))),
@@ -6847,7 +6923,7 @@ index ab90df3..42c4f91 100644
      $kept = [];
      foreach (QFU_I_KEPT as $rel) if (!is_file($T . '/' . $rel) || !is_file($B . '/' . $rel) || hash_file('sha256', $T . '/' . $rel) !== hash_file('sha256', $B . '/' . $rel)) $kept[] = $rel;
      $c->eq($kept, [], 'I2 the ' . count(QFU_I_KEPT) . ' files §L.4 keeps are ' . QFU_I_BASE . '\'s, byte for byte (webhook.php, QuoteOrganization.php, post_kyc.php, api_retailer.php …)');
-@@ -152,10 +165,11 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -152,10 +166,11 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
              $span = implode("\n", array_slice($nl, $from, $to - $from + ($len === 0 ? 1 : 0)));
              $hunkLines = array_slice($nl, $len === 0 ? $start : $start - 1, $len);
              $closer = $hunkLines !== [] && array_filter($hunkLines, fn($x) => !preg_match('/^\s*(?:<\?php\s+(?:endif|else|endforeach);\s*\?>|[})\];,]+)\s*$/', $x)) === [];
@@ -6861,7 +6937,7 @@ index ab90df3..42c4f91 100644
  
      // I4 — php -l on every new or changed PHP file; the PHP 7.4 rules on every added code line of the runtime files
      // The PHP code only: comments and a page's inline HTML/JavaScript taken out (the line count kept), so the PHP 7.4 rules
-@@ -302,10 +316,15 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -302,10 +317,15 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
      $c->eq([$pq['lib/KycCrmSync.php ugQuote'] ?? null, $pq['lib/KycService.php makeQuotation'] ?? null], [true, true],
          'I5 … ugQuote and makeQuotation each post the lines retryLines() gave, after it');
      $hn = (string)file_get_contents($T . '/lib/KycService.php');
@@ -6881,7 +6957,7 @@ index ab90df3..42c4f91 100644
      $qs = (string)file_get_contents($T . '/lib/QuotationService.php');
      $ok = true;
      foreach (['sendLeadQuote', 'sendManualQuote'] as $f) {
-@@ -339,11 +358,13 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -339,11 +359,13 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
          foreach ($am[1] as $rhs) if (!$judgeOf($rhs, $src, $depth + 1)) return false;
          return true;
      };
@@ -6896,7 +6972,7 @@ index ab90df3..42c4f91 100644
          if (!preg_match_all('#(new\s+UcrmQuoteLines|UcrmQuoteLines::forPage)\s*\(#', $src, $sm, PREG_OFFSET_CAPTURE)) continue;
          foreach ($sm[0] as $k => [$hit, $off]) {
              $isNew = strpos($sm[1][$k][0], 'new') === 0;
-@@ -366,11 +387,18 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -366,11 +388,18 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
      }
      ksort($sites);
      $c->eq($sites, [
@@ -6916,7 +6992,7 @@ index ab90df3..42c4f91 100644
      $ctl = 'function f() { $a = UcrmQuoteLinks::fromStore($s, $t); $b = $a; $c2 = null; $x = new UcrmQuoteLines($k, $t, $b); }';
      $c->eq([$judgeOf('$b', $ctl), $judgeOf('$c2', $ctl), $judgeOf('null', $ctl), $judgeOf('$zz', $ctl)], [true, false, false, false],
          'I6 control: the judge check follows a variable to fromStore(), and refuses null, a variable assigned null, and one never assigned');
-@@ -411,8 +439,8 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
+@@ -411,8 +440,8 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
          }
          return $o;
      };
@@ -6927,6 +7003,212 @@ index ab90df3..42c4f91 100644
      $c->eq([is_file($T . '/lib/UcrmQuoteLinks.php'), $incl($T . '/lib/UcrmQuoteLinks.php')], [true, []],
          'I7 lib/UcrmQuoteLinks.php holds no require, require_once, include or include_once');
      $c->eq(substr_count($code((string)file_get_contents($T . '/lib/UcrmQuoteLines.php')), "require_once __DIR__ . '/UcrmQuoteLinks.php'"), 1,
+diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants.php
+index 0e148c5..512658c 100644
+--- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants.php
++++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants.php
+@@ -42,7 +42,7 @@ $QFU_MUTANTS = [
+      'old' => "        return QuoteOrganization::plain(\$name !== '' ? \$name : (\$item === 'plan' ? 'The plan' : 'A hardware item'));",
+      'new' => "        return (\$name !== '' ? \$name : (\$item === 'plan' ? 'The plan' : 'A hardware item'));", 'sections' => 'A', 'pattern' => '/A15/'],
+     ['label' => 'MA10 a failed page read cached', 'file' => $U,
+-     'old' => "        if (!empty(\$cat['ok'])) {\n            @file_put_contents(", 'new' => "        if (true) {\n            @file_put_contents(",
++     'old' => "        if (!empty(\$cat['ok'])) {\n            \$json = json_encode(", 'new' => "        if (true) {\n            \$json = json_encode(",
+      'sections' => 'A', 'pattern' => '/A18/'],
+     ['label' => 'MA11 one installation per kit', 'file' => $U,
+      'old' => "                \$lines[] = \$inst['line'];",
+@@ -121,8 +121,8 @@ $QFU_MUTANTS = [
+      'sections' => 'A', 'pattern' => '/A32/'],
+     // 5.18.102 D14 review (T7): an existing customer's kept sale read as web at the retry without the marker
+     ['label' => 'MC9b saleFromApp reads a kept quote_sale_kit_qty other than 1 as web (an app sale priced at its retry)', 'file' => $K,
+-     'old' => "            'entry'             => (\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',",
+-     'new' => "            'entry'             => ((\$app['quote_sale_entry'] ?? null) === 'web' || (string)(\$app['quote_sale_kit_qty'] ?? '1') !== '1') ? 'web' : 'app',",
++     'old' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : ((\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app'),",
++     'new' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : (((\$app['quote_sale_entry'] ?? null) === 'web' || (string)(\$app['quote_sale_kit_qty'] ?? '1') !== '1') ? 'web' : 'app'),",
+      'sections' => 'C', 'pattern' => '/C9 .*without the marker/'],
+     ['label' => 'MC9c handleExisting stores web for an unpriced sale that has a cart, marker or not', 'file' => $K,
+      'old' => "            'quote_created'         => false,\n        ], \$ug !== null ? self::linesRecord(\$ug, \$post, \$connectivity) : []));   // 5.18.102 (Uganda): docs/71 §F.3\n"
+@@ -136,8 +136,8 @@ $QFU_MUTANTS = [
+      'new' => "        if (\$item === 'kit' && UcrmQuoteLinks::offeredKit(\$row ?? []) && \$clash['install']) {",
+      'sections' => 'A', 'pattern' => '/A32 a sale holding an inactive kit row/'],
+     ['label' => 'ML38 (A) a post without the marker taken as web (an app sale priced through a plan link)', 'file' => $K,
+-     'old' => "            'entry'             => (\$post['ucrm_quote_form'] ?? null) === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app',",
+-     'new' => "            'entry'             => 'web',", 'sections' => 'A', 'pattern' => '/A33/'],
++     'old' => "            \$entry = \$marker === UcrmQuoteLines::FORM_MARKER ? 'web' : 'app';",
++     'new' => "            \$entry = 'web';", 'sections' => 'A', 'pattern' => '/A33/'],
+     ['label' => 'ML38 (A) the entry point ignored by the resolver', 'file' => $U,
+      'old' => "        if (\$entry !== 'web') { \$out['reason'] = self::ENTRY_REASON; return \$out; }\n", 'new' => '',
+      'sections' => 'A', 'pattern' => '/A33/'],
+diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_C.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_C.php
+index 20a3b67..b7d5702 100644
+--- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_C.php
++++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_C.php
+@@ -29,15 +29,15 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'old' => "            if (abs(round((float)\$current[\$pid]['price'], 2) - round((float)(\$l['price'] ?? 0), 2)) > 0.0001) return \$repriced(\$label);\n",
+      'new' => '', 'sections' => 'C', 'pattern' => '/C11 the kit re-priced|C3 /'],
+     ['label' => 'ML38 (C) the entry point ignored at the retries: every stored application read as web', 'file' => $K,
+-     'old' => "            'entry'             => (\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',",
+-     'new' => "            'entry'             => 'web',", 'sections' => 'C', 'pattern' => '/C10 at the|C12 /'],
++     'old' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : ((\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app'),",
++     'new' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : 'web',", 'sections' => 'C', 'pattern' => '/C10 at the|C12 /'],
+     ['label' => 'ML59 an application stored without quote_sale_entry resolved as web at a retry', 'file' => $K,
+-     'old' => "            'entry'             => (\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app',",
+-     'new' => "            'entry'             => (\$app['quote_sale_entry'] ?? 'web') === 'web' ? 'web' : 'app',",
++     'old' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : ((\$app['quote_sale_entry'] ?? null) === 'web' ? 'web' : 'app'),",
++     'new' => "            'entry'             => \$direct ? UcrmQuoteLines::DIRECT_ENTRY : ((\$app['quote_sale_entry'] ?? 'web') === 'web' ? 'web' : 'app'),",
+      'sections' => 'C', 'pattern' => '/C10 at the .* stored without quote_sale_entry/'],
+     ['label' => 'ML59 the entry rule applied to unmarked lines only (marked lines confirmed whatever the entry)', 'file' => $K,
+-     'old' => "        if (\$sale['entry'] !== 'web') {",
+-     'new' => "        if (\$sale['entry'] !== 'web' && !((\$app['quote_lines_source'] ?? '') === UcrmQuoteLines::SOURCE && is_array(\$app['quote_items'] ?? null) && \$app['quote_items'] !== [])) {",
++     'old' => "        } elseif (\$sale['entry'] !== 'web') {",
++     'new' => "        } elseif (\$sale['entry'] !== 'web' && !((\$app['quote_lines_source'] ?? '') === UcrmQuoteLines::SOURCE && is_array(\$app['quote_items'] ?? null) && \$app['quote_items'] !== [])) {",
+      'sections' => 'C', 'pattern' => '/C10 at the .*a hand-seeded marked one/'],
+     ['label' => 'ML51 (C) P1_UNLINKED not used at submission new (handleNew)', 'file' => $K,
+      'old' => "            \$out['refused'] = self::newCustomerNoQuote(\$clientId, self::p1Text(\$ug));   // 5.18.102 (D14, §R.4.1)",
+@@ -48,7 +48,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'new' => "                \$ugNoQuote = UcrmQuoteLines::text('P1', ['{REASON}' => (string)\$ug['reason']]);",
+      'sections' => 'C', 'pattern' => '/C27 submission existing/'],
+     ['label' => 'ML51 (C) P1_UNLINKED not used at retryLines (the cron retry, retry_quote, Make the quotation)', 'file' => $K,
+-     'old' => "                    'text' => self::p1Text(['reason' => \$reason, 'unlinked' => \$unlinked, 'entry' => \$sale['entry']])];",
++     'old' => "                    'text' => self::p1Text(['reason' => \$reason, 'unlinked' => \$unlinked, 'entry' => \$sale['entry'], 'why' => \$why],\n                        \$cat->direct())];",
+      'new' => "                    'text' => UcrmQuoteLines::text('P1', ['{REASON}' => \$reason])];",
+      'sections' => 'C', 'pattern' => '/C27 retryLines, a web/'],
+     ['label' => 'ML51 (C) P1_UNLINKED used for an app-origin application at a retry (its entry reason taken for "not linked")', 'edits' => [
+@@ -63,14 +63,14 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'old' => "            && empty(\$app['quote_created'])\n            && empty(\$app['quote_found_in_ucrm']);",
+      'new' => "            && empty(\$app['quote_created']);", 'sections' => 'C', 'pattern' => '/C13 /'],
+     ['label' => 'ML53 Make the quotation drawn for an app-origin registration (the entry condition dropped)', 'file' => $K,
+-     'old' => "        return (\$app['quote_sale_entry'] ?? null) === 'web'\n            && !empty(\$app['crm_client_id'])",
++     'old' => "        return (\$entry === UcrmQuoteLines::DIRECT_ENTRY || (\$entry === 'web' && !\$directOn))\n            && !empty(\$app['crm_client_id'])",
+      'new' => "        return !empty(\$app['crm_client_id'])", 'sections' => 'C', 'pattern' => '/C13 |C12 /'],
+     ['label' => 'ML53 Make the quotation drawn for a staff member who is not an admin', 'file' => $O,
+-     'old' => "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):",
+-     'new' => "<?php if (\$ugOrders102 && KycService::canMakeQuotation(\$a)):", 'sections' => 'C', 'pattern' => '/C13 … not drawn for a staff member/'],
++     'old' => "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):",
++     'new' => "<?php if (\$ugOrders102 && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):", 'sections' => 'C', 'pattern' => '/C13 … not drawn for a staff member/'],
+     ['label' => 'ML53 Make the quotation drawn with the gate off', 'edits' => [
+-        [$O, "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):",
+-             "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):"],
++        [$O, "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):",
++             "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):"],
+         [$O, "\$ugQuoteLink102 = null;\n", "require_once dirname(__DIR__, 2) . '/lib/KycService.php';\n\$ugQuoteLink102 = null;\n"]],
+      'sections' => 'C', 'pattern' => '/C13 … (South Sudan|Uganda with the setting)/'],
+ 
+@@ -181,8 +181,8 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'old' => "                    'quote_made_by_id' => (int)(\$actor['id'] ?? 0),\n                    'quote_made_via'   => \$via,\n", 'new' => '',   // re-anchored (D14-MQ-THROW-AFTER-POST)
+      'sections' => 'C', 'pattern' => '/C26 a quotation made|C18 .*quote_made_via/'],
+     ['label' => 'ML79 quote_made_by_id and quote_made_via recorded on a refusal', 'file' => $K,
+-     'old' => "                self::recordNoQuote(\$this->store, \$appId, \$r['code'], \$r['text']);\n                return self::madeAnswer(409, 'refused', null, 0, null, \$r['text']);",
+-     'new' => "                self::recordNoQuote(\$this->store, \$appId, \$r['code'], \$r['text']);\n                \$this->store->updateOne('kyc_applications.json', 'id', \$appId, ['quote_made_by_id' => (int)(\$actor['id'] ?? 0), 'quote_made_via' => \$via]);\n                return self::madeAnswer(409, 'refused', null, 0, null, \$r['text']);",
++     'old' => "                self::recordNoQuote(\$this->store, \$appId, \$r['code'], \$r['text'], \$claim);   // round 11 (CK11-B2): never before the claim\n                return self::madeAnswer(409, 'refused', null, 0, null, \$r['text']);",
++     'new' => "                self::recordNoQuote(\$this->store, \$appId, \$r['code'], \$r['text'], \$claim);   // round 11 (CK11-B2): never before the claim\n                \$this->store->updateOne('kyc_applications.json', 'id', \$appId, ['quote_made_by_id' => (int)(\$actor['id'] ?? 0), 'quote_made_via' => \$via]);\n                return self::madeAnswer(409, 'refused', null, 0, null, \$r['text']);",
+      'sections' => 'C', 'pattern' => '/C26 … neither key on a refusal \(refused/'],
+     ['label' => 'ML79 quote_made_via recorded by the cron retry', 'file' => $S,
+      'old' => "            \$this->store->updateOne('kyc_applications.json', 'id', \$id, ['quote_link_ids' => UcrmQuoteLines::linkIds(\$r['link_ids'] ?? [])]);",
+@@ -275,7 +275,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'new' => "                throw \$e;\n",
+      'sections' => 'C', 'pattern' => '/C22 … quote_unconfirmed_at recorded, and the card says/'],
+     ['label' => 'ML85k the box names Make the quotation where the button is not drawn', 'file' => $O,
+-     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make",
++     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make",
+      'new' => "true ? 'Do not make",
+      'sections' => 'C', 'pattern' => '/names none/'],
+     ['label' => 'ML85l quote_unconfirmed_at removed only when the caller\'s (possibly outdated) record held it', 'file' => $K,
+@@ -393,12 +393,12 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'new' => "(!empty(\$a['quote_unconfirmed_at']) || (\$a['quote_refused'] ?? null) === 'P1' && KycService::claimLeftUnsettled(\$a)) && empty(\$a['quote_created'])): /* 5.18.102 D14 review round 3",
+      'sections' => 'C', 'pattern' => '/retry_quote that died after its POST on an application the button does not apply to/'],
+     ['label' => 'ML89d the admin\'s sentence (naming Make the quotation) for any stale claim, button or not', 'file' => $O,
+-     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make",
+-     'new' => "!empty(\$isAdmin) && (KycService::canMakeQuotation(\$a) || is_numeric(\$a['quote_make_claim_ts'] ?? null)) ? 'Do not make",
++     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make",
++     'new' => "!empty(\$isAdmin) && (KycService::canMakeQuotation(\$a, \$ugDirect103) || is_numeric(\$a['quote_make_claim_ts'] ?? null)) ? 'Do not make",
+      'sections' => 'C', 'pattern' => '/retry_quote that died after its POST on an application the button does not apply to/'],
+     ['label' => 'ML89e an agent given the admin\'s sentence when the claim is stale', 'file' => $O,
+-     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make",
+-     'new' => "(!empty(\$isAdmin) && KycService::canMakeQuotation(\$a)) || is_numeric(\$a['quote_make_claim_ts'] ?? null) ? 'Do not make",
++     'old' => "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make",
++     'new' => "(!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103)) || is_numeric(\$a['quote_make_claim_ts'] ?? null) ? 'Do not make",
+      'sections' => 'C', 'pattern' => '/the admin\'s card names Make the quotation, the agent\'s names none|retry_quote that died after its POST/'],
+     // ── 5.18.102 D14 review round 9 (CK9-B1, CK9-T1…T8) ────────────────────────────────────────────────────────────────
+     ['label' => 'ML90a the claim compared with quote_refused_at read in the reader\'s zone (strtotime), not with quote_refused_ts', 'file' => $K,
+diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_F.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_F.php
+index 4e3f2ed..843c608 100644
+--- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_F.php
++++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_F.php
+@@ -51,7 +51,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+      'old' => "    \$plansJson   = json_encode(\$ugPick['plans'], \$ugJsonFlags) ?: '[]';\n", 'new' => '',
+      'sections' => 'F', 'pattern' => '/F5 the picker/'],
+     ['label' => 'MF12 a failed catalogue read kept for the page', 'file' => $UQL,
+-     'old' => "        if (!empty(\$cat['ok'])) {\n            @file_put_contents(\$file,", 'new' => "        if (true) {\n            @file_put_contents(\$file,",
++     'old' => "        if (!empty(\$cat['ok'])) {\n            \$json = json_encode(", 'new' => "        if (true) {\n            \$json = json_encode(",
+      'sections' => 'F', 'pattern' => '/never kept/'],
+     ['label' => 'MF13 the banner\'s reason unescaped', 'file' => $SQ,
+      'old' => "<?= htmlspecialchars((string)(\$ugPick['reason'] ?: \"uCRM's products could not be read\")) ?>",
+diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_G.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_G.php
+index c5903a1..58b057c 100644
+--- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_G.php
++++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_G.php
+@@ -137,8 +137,8 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+     ['label' => 'ML53 (G8) Make the quotation drawn with the gate off', 'edits' => [
+         ['tabs/sales/applications.php', "if (\$ugOrders102) {\n    require_once dirname(__DIR__, 2) . '/lib/KycService.php';",
+                                         "require_once dirname(__DIR__, 2) . '/lib/KycService.php';\nif (\$ugOrders102) {"],
+-        ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):",
+-                                        "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a)):"],
++        ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && !empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):",
++                                        "<?php if (!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */):"],
+      ], 'sections' => 'G', 'pattern' => '/G8 (South Sudan|Uganda with the setting (0|off)): the same web P1|G8 the Orders page/'],
+     ['label' => 'MG22 Auto-Map let through on Uganda', 'file' => $API,
+      'old' => "quotes never read under D14 but 5.18.101 would send after a rollback. Answered after the admin-only gate above.\n        require_once dirname(__DIR__, 2) . '/lib/QuoteOrganization.php';\n        if (QuoteOrganization::setting(",
+@@ -161,7 +161,7 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+     //  off, and G8 sees a fatal error, not the box)
+     ['label' => 'MG26 the "did not finish" box drawn with the gate off', 'edits' => [
+         ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && (!empty(\$a['quote_unconfirmed_at'])", "<?php if ((!empty(\$a['quote_unconfirmed_at'])"],
+-        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make", "!empty(\$isAdmin) ? 'Do not make"]],
++        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make", "!empty(\$isAdmin) ? 'Do not make"]],
+      'sections' => 'G', 'pattern' => '/G8 the Orders page with an application whose last Make the quotation went unconfirmed/'],
+     // 5.18.102 D14 review round 6 (CK6-F1): the in-flight box with the gate off (its constant inlined: KycService is not loaded)
+     ['label' => 'MG27 the "press in flight" box drawn with the gate off', 'edits' => [
+@@ -173,6 +173,6 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
+     ['label' => 'MG28 the "did not finish" box drawn with the gate off for an expired claim', 'edits' => [
+         ['tabs/sales/applications.php', "<?php if (\$ugOrders102 && (!empty(\$a['quote_unconfirmed_at']) || KycService::claimLeftUnsettled(\$a)) && empty(\$a['quote_created'])):",
+             "<?php if (((\$ugOrders102 && !empty(\$a['quote_unconfirmed_at'])) || (is_numeric(\$a['quote_make_claim_ts'] ?? null) && time() - (int)\$a['quote_make_claim_ts'] >= 900 && (\$ugOrders102 ? KycService::claimLeftUnsettled(\$a) : true))) && empty(\$a['quote_created'])):"],
+-        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a) ? 'Do not make", "!empty(\$isAdmin) && \$ugOrders102 && KycService::canMakeQuotation(\$a) ? 'Do not make"]],
++        ['tabs/sales/applications.php', "!empty(\$isAdmin) && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make", "!empty(\$isAdmin) && \$ugOrders102 && KycService::canMakeQuotation(\$a, \$ugDirect103) /* 5.18.103 (§G.8) */ ? 'Do not make"]],
+      'sections' => 'G', 'pattern' => '/G8 the Orders page with an application whose claim expired/'],
+ ]);
+diff --git a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_L.php b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_L.php
+index b5a6613..5148a96 100644
+--- a/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_L.php
++++ b/dishnet-hybrid-sudan/tests/quote_from_ucrm/mutants_L.php
+@@ -241,10 +241,12 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS ?? [], [
+     ['label' => 'ML19 (L) a gate-off path loads the link store (delete_plan\'s hook ungated: the table created on South Sudan)', 'file' => $PS,
+      'old' => "    if (\$delId > 0 && QuoteOrganization::setting(is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)['on']) {\n"
+             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
+-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
++            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
++            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
+      'new' => "    if (\$delId > 0) {\n"
+             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
+-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
++            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
++            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan',",
+      'sections' => 'L', 'pattern' => '/L19 (South Sudan|Uganda with the setting 0): after every/'],   // narrowed (T6): the absence line, never the control's
+     // 5.18.102 D14 review (T6): L19's posts must be shown to run — each copy below stops a post before its handler
+     ['label' => 'ML19h (L) the global gate refuses every post (no L19 post reaches its handler)', 'file' => 'includes/post_handlers.php',
+@@ -254,10 +256,12 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS ?? [], [
+         [$PS, "(\$_POST['action']??'')==='delete_hardware'){", "(\$_POST['action']??'')==='delete_hardware_x'){"],
+         [$PS, "    if (\$delId > 0 && QuoteOrganization::setting(is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)['on']) {\n"
+             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
+-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',",
++            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
++            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',",
+               "    if (\$delId > 0) {\n"
+             . "        require_once dirname(__DIR__, 2) . '/lib/UcrmQuoteLines.php';   // loads lib/UcrmQuoteLinks.php (F-6)\n"
+-            . "        try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',"]],
++            . "        require_once dirname(__DIR__, 2) . '/lib/UcrmCatalogue.php';    // 5.18.103 (root docs/72 §G G-11): frozen while on\n"
++            . "        if (!UcrmCatalogue::forConfig(\$store, is_array(\$config ?? null) ? \$config : [], isset(\$dataDir) ? (string)\$dataDir : null)->direct()) try {\n            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'kit',"]],
+      'sections' => 'L', 'pattern' => '/L19 (South Sudan|Uganda with the setting 0): the control/'],
+     ['label' => 'ML23 (L) delete_plan on Uganda leaves the link active', 'file' => $PS,
+      'old' => "            \$_dlEnded = UcrmQuoteLinks::end(\$store, 'plan', \$delId, UcrmQuoteLinks::WHY_DELETED, (array)(\$auth->currentRetailer() ?? []));",
 diff --git a/dishnet-hybrid-sudan/tests/test_bank_boundaries.php b/dishnet-hybrid-sudan/tests/test_bank_boundaries.php
 index 83a2ad2..3a4a5af 100644
 --- a/dishnet-hybrid-sudan/tests/test_bank_boundaries.php
@@ -6982,8 +7264,85 @@ index 83a2ad2..3a4a5af 100644
          ['manifest.json changed beside its version', ['manifest.json', '    "url": "https://dishnetafrica.com",', '    "url": "https://example.test",']],
      ];
      $mainPass = $pass;                                                      // the child runs sections A–H, exactly what this run passed
+diff --git a/dishnet-hybrid-sudan/tests/test_cash_in_hand_p3b_south_sudan.php b/dishnet-hybrid-sudan/tests/test_cash_in_hand_p3b_south_sudan.php
+index 7bc7991..0a895cf 100644
+--- a/dishnet-hybrid-sudan/tests/test_cash_in_hand_p3b_south_sudan.php
++++ b/dishnet-hybrid-sudan/tests/test_cash_in_hand_p3b_south_sudan.php
+@@ -26,6 +26,13 @@ declare(strict_types=1);
+  * The tool's banner and its new rule line are the only output that changes on every tenant (SPEC §c.2): they are taken
+  * out of the comparison and checked against fixed text. A difference is reported by its position and length only.
+  *
++ * One block is taken out of the pages and counted instead (5.18.103, rewritten on purpose, root docs/72 §G.13): the uCRM
++ * catalogue's menu entry, which includes/navigation.php draws on every dashboard page, for those who may see Plans or
++ * Hardware, wherever the quoting organization is in force, whatever the catalogue's switch says (§G.3) — of these books,
++ * the Uganda one. It is the exact text T3_CATALOGUE_NAV, taken out of this tree's pages only: each must carry it once
++ * where this tree has lib/UcrmCatalogue.php and the book is UP, and never otherwise; f4b4c96's never. Two weakened copies
++ * of navigation.php, the entry drawn on every tenant and the entry not drawn, show the count is not idle.
++ *
+  * Two things are kept apart rather than normalised away, each as narrowly as it can be:
+  *   - the tool's error stream (ConfigVault's notices go there, by error_log()) is compared on its own, byte for byte,
+  *     beside the printed lines: 5.18.96 loads the configuration before its banner, to choose the rule line, and that
+@@ -112,6 +119,10 @@ const T3_NEW_RULE   = '  rule       every entry not voided, any account (as befo
+ const T3_OLD_SENT   = "  the ledger's running balance per currency (rows not voided; accounts and the unassigned split play no part):";
+ const T3_ADMIN      = 'RH-Admin One';
+ const T3_STDERR     = "\n\0 the error stream \0\n";
++// 5.18.103 (root docs/72 §G.3, §G.13): the uCRM catalogue's menu entry, exactly as includes/navigation.php draws it on a
++// page other than the catalogue's own — the one block of these pages that changes where the quoting organization is in force.
++const T3_CATALOGUE_NAV = "<a href=\"?page=dashboard&tab=ucrm_catalogue\" class=\"kyc-tab \">\n"
++                       . "    <span class=\"nav-icon\"><i class=\"bi bi-box-seam\"></i></span> uCRM catalogue\n</a>\n";
+ 
+ // ── 1. The baseline tree ──────────────────────────────────────────────────────
+ if (isset($opt['base'])) {
+@@ -487,15 +498,26 @@ foreach ($BOOKS as $tag => $B) {
+             return $rc . "\n" . (string)preg_replace('/^RULE .*$/m', '', $o);
+         }, false];
+ 
+-        $outside = []; $sameStmt = 0;
++        $outside = []; $sameStmt = 0; $navSeen = [];
+         foreach ($out as $lbl => [$get, $page]) {
+             [$a, $b, $inMinute] = t3_pair($get, $old, $new, $page);
+             if (!$inMinute) { is_(false, "[{$tag}] {$lbl}: read from both trees within one minute"); continue; }
+             [$a, $b] = t3_same_statement($a, $b, $old, $new, $sameStmt);
++            if ($page) {   // 5.18.103: the uCRM catalogue's menu entry, out of this tree's page only, and counted (header)
++                $navSeen[$lbl] = [substr_count($a, T3_CATALOGUE_NAV), substr_count($b, T3_CATALOGUE_NAV)];
++                $b = str_replace(T3_CATALOGUE_NAV, '', $b);
++            }
+             is_($a === $b, "[{$tag}] {$lbl} (" . strlen($b) . ' bytes)', $a === $b ? '' : t3_where($a, $b));
+             $outside[$lbl] = $b;
+         }
+ 
++        // 5.18.103: the uCRM catalogue's menu entry, counted where it was taken out (header)
++        $navWant = ($tag === 'UP' && is_file($root . '/lib/UcrmCatalogue.php')) ? 1 : 0;
++        $navOff  = array_filter($navSeen, function ($p) use ($navWant) { return $p !== [0, $navWant]; });
++        is_(count($navSeen) >= 10 && $navOff === [],
++            "[{$tag}] the uCRM catalogue's menu entry (5.18.103), taken out of the comparison: " . ($navWant ? 'once on each' : 'on none')
++            . ' of this tree\'s ' . count($navSeen) . " pages, on none of f4b4c96's", json_encode($navOff));
++
+         // tools/cash_in_hand.php: the banner and the rule line against fixed text, everything else byte for byte
+         if ($sameStmt > 0) echo "  note [{$tag}] {$sameStmt} page(s) failed on both trees at the same statement; only its line number was normalised\n";
+         // Its error stream apart: ConfigVault's notices go there (error_log), and where they fall among the printed lines
+@@ -567,6 +589,8 @@ if ($withMutants) {
+            . ($fails ? '; first: ' . trim(substr($fails[0], 7, 100)) : '') . "\n";
+     };
+     $CB = 'lib/CashbookService.php'; $PAGE = 'tabs/accounts/cashbook.php'; $CEO = 'tabs/admin/ceo_dashboard.php'; $TOOL = 'tools/cash_in_hand.php';
++    $NAV = 'includes/navigation.php';
++    $NAVIF = "<?php if(\$_cat103Nav->open() && (\$can('plans') || \$can('hardware'))): /* 5.18.103 (§G.3) */ ?>";
+     $GATE = "\$this->cashRuleCache = StaffJobsGate::applies(\$cfg, \$this->dataDir) && !dn_ssp_selectable(\$cfg);";
+     // [label, the books that must catch it (for the M rows, the SPEC's "caught by"), [file, anchor, replacement]...]
+     $MUTANTS = [
+@@ -602,6 +626,10 @@ if ($withMutants) {
+             "if (array_column(\$summary['in'] ?? [[1]], 'total') === []) throw new \\RuntimeException('RH weakened copy');\n\$maxIn=max(1,max(array_column(\$summary['in']??[[1]],'total')));"]]],
+         ['M28: the tool\'s :34 sentence reworded on every tenant', ['SS'], [[$TOOL, "if (\$ruleA) {\n    echo \"\\n  the ledger's cash in hand",
+             "if (true) {\n    echo \"\\n  the ledger's cash in hand"]]],
++        // 5.18.103: the menu entry's count is not idle — drawn where the quoting organization is not in force, and not drawn
++        ['5.18.103: the uCRM catalogue\'s menu entry drawn on every tenant', ['SS', 'SN'], [[$NAV, $NAVIF,
++            "<?php if(\$can('plans') || \$can('hardware')): /* 5.18.103 (§G.3) */ ?>"]]],
++        ['5.18.103: the uCRM catalogue\'s menu entry not drawn', ['UP'], [[$NAV, $NAVIF, "<?php if(false): /* 5.18.103 (§G.3) */ ?>"]]],
+     ];
+ 
+     // A copy runs sections 1–3 and the two closing checks: this run's passes so far, plus those two.
 diff --git a/dishnet-hybrid-sudan/tests/test_cashbook_physical_list.php b/dishnet-hybrid-sudan/tests/test_cashbook_physical_list.php
-index ab45f96..91368bb 100644
+index ab45f96..0655951 100644
 --- a/dishnet-hybrid-sudan/tests/test_cashbook_physical_list.php
 +++ b/dishnet-hybrid-sudan/tests/test_cashbook_physical_list.php
 @@ -701,9 +701,23 @@ function pl_pair(callable $get, SjSandbox $a, SjSandbox $b, bool $page): array
@@ -7033,6 +7392,30 @@ index ab45f96..91368bb 100644
      }
      $WORDS = ['UPDATE', 'DELETE', 'INSERT', 'CREATE', 'ALTER', 'accounts(', 'ensureAccountsTable'];
      foreach ($added as $rel) {
+@@ -1984,13 +2003,22 @@ TXT
+         ],
+     ];
+     $kept = function (string $rel) use ($root, $blob, $bsRevert): ?string {
++        // 5.18.103 (root docs/72 §G.13, rewritten on purpose): tests/test_cash_in_hand_p3b_south_sudan.php takes the uCRM
++        // catalogue's menu entry out of its pages and counts it; held to 5.18.97's bytes with 5.18.103's seven declared
++        // pieces taken out (tests/fixtures/r103_revert.php: each found exactly once, or no match)
++        if ($rel === 'tests/test_cash_in_hand_p3b_south_sudan.php') {
++            if (!is_file($root . '/' . $rel)) return null;
++            require_once __DIR__ . '/fixtures/r103_revert.php';
++            $s = r103_revert($rel, (string)file_get_contents($root . '/' . $rel));
++            return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s);
++        }
+         if ($rel !== 'tests/test_bank_screen.php') return $blob($root . '/' . $rel);
+         if (!is_file($root . '/' . $rel)) return null;
+         $c = (string)file_get_contents($root . '/' . $rel);
+         foreach ($bsRevert as [$new, $old]) { if (substr_count($c, $new) !== 1) return null; $c = str_replace($new, $old, $c); }
+         return sha1('blob ' . strlen($c) . "\0" . $c);
+     };
+-    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files; tests/test_bank_screen.php with 5.18.100\'s one declared change taken out)',
++    t('the tests that must stay green unedited are 5.18.97\'s, byte for byte (' . count($keep) . ' files; tests/test_bank_screen.php with 5.18.100\'s one declared change taken out, tests/test_cash_in_hand_p3b_south_sudan.php with 5.18.103\'s)',
+         array_values(array_filter($keep, function ($rel) use ($BASEB, $kept) { return !isset($BASEB[$rel]) || $kept($rel) !== $BASEB[$rel]; })), []);
+ } catch (\Throwable $e) { pl_threw('section M', $e); }
+ 
 diff --git a/dishnet-hybrid-sudan/tests/test_catalogue_direct.php b/dishnet-hybrid-sudan/tests/test_catalogue_direct.php
 new file mode 100644
 index 0000000..1a0e295
@@ -7203,15 +7586,17 @@ index 5cf642a..3f98be4 100644
  exec('rm -rf ' . escapeshellarg($tmp));
  echo "\n$pass passed, $fail failed\n";
 diff --git a/dishnet-hybrid-sudan/tests/test_quote_company.php b/dishnet-hybrid-sudan/tests/test_quote_company.php
-index aa1358b..45d4148 100644
+index aa1358b..5605ae4 100644
 --- a/dishnet-hybrid-sudan/tests/test_quote_company.php
 +++ b/dishnet-hybrid-sudan/tests/test_quote_company.php
-@@ -1977,7 +1977,7 @@ is_($RBASE !== null && $mig($T) === $mig($RBASE), 'I5 this tree\'s migrations/ i
+@@ -1977,8 +1977,8 @@ is_($RBASE !== null && $mig($T) === $mig($RBASE), 'I5 this tree\'s migrations/ i
  $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
  t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
      [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
 -$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.102",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';
+-t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.102 (a later release moves this pin on; was 5.18.101)',
 +$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.103",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.103 (was 5.18.102)
- t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.102 (a later release moves this pin on; was 5.18.101)',
++t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.103 (a later release moves this pin on; was 5.18.102, 5.18.101)',
      [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
  
+ // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's
