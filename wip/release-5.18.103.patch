@@ -2076,3 +2076,1148 @@ index 0000000..75f9ed1
 +<?php endif; endif; ?>
 +  </div>
 +</div>
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/A_store.php b/dishnet-hybrid-sudan/tests/catalogue_direct/A_store.php
+new file mode 100644
+index 0000000..7171b0d
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/A_store.php
+@@ -0,0 +1,166 @@
++<?php
++declare(strict_types=1);
++/**
++ * Section A — 5.18.103 (root docs/72 §G.3, G-1, G-2): the uCRM catalogue's store, lib/UcrmCatalogue.php. The gate (nothing
++ * opened where it is closed, no table created), the readers (fail safe: two records in force read as none), every write
++ * under the lock with its refusals, the gate re-read inside the lock, and the provenance and history each write keeps.
++ */
++$CD_SECTIONS['A'] = ['title' => 'the uCRM catalogue store (UcrmCatalogue)', 'run' => function (QfuCtx $c) {
++    cd_fake($c);
++    $admin = ['id' => 4, 'name' => 'Test Admin'];
++
++    // ── A0 the positive control: on Uganda the store opens, reads and writes ─────────────────────────────────────────
++    $r = $c->child('
++$set = QuoteOrganization::setting($s->load("kyc_config.json") ?? [], $dir);
++$cat = UcrmCatalogue::fromStore($s, $set);
++$w = UcrmCatalogue::setInstall($s, 70, "Professional Installation", ["id" => 4, "name" => "Test Admin"], $s->load("kyc_config.json") ?? [], $dir);
++$after = UcrmCatalogue::fromStore($s, $set);
++return ["gate" => UcrmCatalogue::gateOpen($set), "open" => $cat->open(), "w" => $w["kind"], "install" => $after->installProductId(),
++        "rec" => $after->installRecord()];
++');
++    $v = $r['value'];
++    $c->eq($v['gate'] ?? null, true, 'A0 the gate is open on Uganda (the profile\'s quoting organization 1)');
++    $c->eq($v['open'] ?? null, true, 'A0 the store opens');
++    $c->eq([$v['w'] ?? null, $v['install'] ?? null], ['set', 70], 'A0 the installation product is set and read back');
++    $c->eq([$v['rec']['by_id'] ?? null, $v['rec']['by_name'] ?? null, is_int($v['rec']['at_ts'] ?? null), array_key_exists('ended_at_ts', (array)($v['rec'] ?? [])) ? $v['rec']['ended_at_ts'] : 'x'],
++        [4, 'Test Admin', true, null], 'A0 the record carries who and when, in force');
++
++    // ── A1 the gate closed: South Sudan, and Uganda with the quoting organization off — nothing opened, no table ─────
++    foreach ([['south-sudan', []], ['uganda', ['ucrm_quote_organization_id' => 'off']]] as [$tenant, $cfg]) {
++        $r = $c->child('
++$set = QuoteOrganization::setting($s->load("kyc_config.json") ?? [], $dir);
++$cat = UcrmCatalogue::fromStore($s, $set);
++$fc  = UcrmCatalogue::forConfig($s, $s->load("kyc_config.json") ?? [], $dir);
++$t = $s->getPdo()->query("SELECT COUNT(*) FROM sqlite_master WHERE name = \'ucrm_catalogue\'")->fetchColumn();
++$w = UcrmCatalogue::setMode($s, false, null, ["id" => 4, "name" => "A"], $s->load("kyc_config.json") ?? [], $dir);
++return ["open" => $cat->open(), "fc" => $fc->open(), "direct" => $fc->direct(), "table_before_write" => (int)$t, "w" => $w["kind"]];
++', ['tenant' => $tenant, 'cfg' => $cfg]);
++        $v = $r['value'];
++        $c->eq([$v['open'] ?? null, $v['fc'] ?? null, $v['direct'] ?? null], [false, false, false], "A1 {$tenant}" . ($cfg ? ' (off)' : '') . ': closed, opens nothing, the switch reads off');
++        $c->eq($v['table_before_write'] ?? null, 0, "A1 {$tenant}" . ($cfg ? ' (off)' : '') . ': no ucrm_catalogue table is created by reading');
++        $c->eq($v['w'] ?? null, 'gate', "A1 {$tenant}" . ($cfg ? ' (off)' : '') . ': a write is refused by the gate inside the lock');
++    }
++
++    // ── A2 the switch: on needs the judged installation to be the one in force; off never needs anything ─────────────
++    $r = $c->child(cd_seed([]) . '
++$cfg = $s->load("kyc_config.json") ?? [];
++$set = QuoteOrganization::setting($cfg, $dir);
++$a = ["id" => 4, "name" => "Test Admin"];
++$out = [];
++$out[] = UcrmCatalogue::setMode($s, true, null, $a, $cfg, $dir)["kind"];          // nothing judged
++$out[] = UcrmCatalogue::setMode($s, true, 70, $a, $cfg, $dir)["kind"];            // judged 70, none in force
++UcrmCatalogue::setInstall($s, 70, "Inst", $a, $cfg, $dir);
++$out[] = UcrmCatalogue::setMode($s, true, 71, $a, $cfg, $dir)["kind"];            // judged another
++$out[] = UcrmCatalogue::fromStore($s, $set)->direct();
++$out[] = UcrmCatalogue::setMode($s, true, 70, $a, $cfg, $dir)["kind"];
++$out[] = UcrmCatalogue::fromStore($s, $set)->direct();
++$out[] = UcrmCatalogue::setMode($s, true, 70, $a, $cfg, $dir)["kind"];
++$out[] = UcrmCatalogue::setMode($s, false, null, $a, $cfg, $dir)["kind"];
++$out[] = UcrmCatalogue::fromStore($s, $set)->direct();
++$out[] = UcrmCatalogue::setMode($s, false, null, $a, $cfg, $dir)["kind"];
++$h = UcrmCatalogue::fromStore($s, $set)->history("mode");
++$out[] = count($h);
++$out[] = count(array_filter($h, function ($r) { return $r["ended_at_ts"] === null; }));
++return $out;
++');
++    $c->eq($r['value'], ['changed', 'changed', 'changed', false, 'on', true, 'already', 'off', false, 'already', 2, 1],
++        'A2 on refused unless the judged installation is the one in force; on, already, off, already; history kept, one in force');
++
++    // ── A3 the readers fail safe ─────────────────────────────────────────────────────────────────────────────────────
++    $r = $c->child('
++$two = UcrmCatalogue::fromRecords([
++    ["id" => 1, "kind" => "mode", "on" => true, "ended_at_ts" => null],
++    ["id" => 2, "kind" => "mode", "on" => true, "ended_at_ts" => null],
++    ["id" => 3, "kind" => "install", "product_id" => 70, "ended_at_ts" => null],
++    ["id" => 4, "kind" => "install", "product_id" => 71, "ended_at_ts" => null],
++]);
++$str = UcrmCatalogue::fromRecords([["id" => 1, "kind" => "mode", "on" => "1", "ended_at_ts" => null],
++                                   ["id" => 2, "kind" => "install", "product_id" => "70", "ended_at_ts" => null]]);
++$ended = UcrmCatalogue::fromRecords([["id" => 1, "kind" => "mode", "on" => true, "ended_at_ts" => 5]]);
++$closed = UcrmCatalogue::fromRecords([["id" => 1, "kind" => "mode", "on" => true, "ended_at_ts" => null]], false);
++return [$two->direct(), $two->installProductId(), $str->direct(), $str->installProductId(), $ended->direct(), $closed->direct()];
++');
++    $c->eq($r['value'], [false, null, false, null, false, false],
++        'A3 two switch or installation records in force, a non-boolean on, a string id, an ended record, a closed store: off / not set');
++
++    // ── A4 keeping a product off, and offering it again ──────────────────────────────────────────────────────────────
++    $r = $c->child(cd_seed([]) . '
++$cfg = $s->load("kyc_config.json") ?? [];
++$set = QuoteOrganization::setting($cfg, $dir);
++$a = ["id" => 4, "name" => "Test Admin"];
++$k = [];
++$k[] = UcrmCatalogue::setHidden($s, 57, true, "Pipe <b>Adapter</b>", $a, $cfg, $dir)["kind"];
++$k[] = UcrmCatalogue::setHidden($s, 57, true, "x", $a, $cfg, $dir)["kind"];
++$k[] = UcrmCatalogue::setHidden($s, 56, true, "Mini", $a, $cfg, $dir)["kind"];
++$ids1 = UcrmCatalogue::fromStore($s, $set)->hiddenIds();
++$name = UcrmCatalogue::fromStore($s, $set)->hiddenRecords()[0]["product_name"] ?? null;
++$k[] = UcrmCatalogue::setHidden($s, 57, false, "", $a, $cfg, $dir)["kind"];
++$k[] = UcrmCatalogue::setHidden($s, 57, false, "", $a, $cfg, $dir)["kind"];
++return ["k" => $k, "ids1" => $ids1, "ids2" => UcrmCatalogue::fromStore($s, $set)->hiddenIds(), "name" => $name,
++        "hist" => count(UcrmCatalogue::fromStore($s, $set)->history("hidden"))];
++');
++    $v = $r['value'];
++    $c->eq($v['k'] ?? null, ['hidden', 'already', 'hidden', 'shown', 'already'], 'A4 kept off, already, another, offered again, already');
++    $c->eq([$v['ids1'] ?? null, $v['ids2'] ?? null], [[56, 57], [56]], 'A4 the ids kept off, before and after offering one again');
++    $c->eq($v['name'] ?? null, 'Pipe bAdapter/b', 'A4 a stored name is plain text (no markup characters)');
++    $c->eq($v['hist'] ?? null, 2, 'A4 offering again ends the record; no new record is written for it');
++
++    // ── A5 standard quotations: the shape, the limit of ten, replacing, the clash with the installation, stopping ────
++    $r = $c->child(cd_seed([]) . '
++$cfg = $s->load("kyc_config.json") ?? [];
++$set = QuoteOrganization::setting($cfg, $dir);
++$a = ["id" => 4, "name" => "Test Admin"];
++$ok = ["title" => "Mini + Residential", "plan" => ["sp" => 6, "p" => 12], "hw" => [["p" => 56, "q" => 1]], "install" => true];
++$bad = [
++  "no title"   => ["title" => "  "] + $ok,
++  "no plan"    => ["plan" => ["sp" => 6]] + $ok,
++  "q 0"        => ["hw" => [["p" => 56, "q" => 0]]] + $ok,
++  "q 100"      => ["hw" => [["p" => 56, "q" => 100]]] + $ok,
++  "q string"   => ["hw" => [["p" => 56, "q" => "1"]]] + $ok,
++  "twice"      => ["hw" => [["p" => 56, "q" => 1], ["p" => 56, "q" => 2]]] + $ok,
++  "11 items"   => ["hw" => array_map(function ($i) { return ["p" => 100 + $i, "q" => 1]; }, range(1, 11))] + $ok,
++  "install ?"  => ["install" => "yes"] + $ok,
++];
++$out = [];
++foreach ($bad as $k => $std) $out[$k] = UcrmCatalogue::saveStandard($s, null, $std, $a, $cfg, $dir)["kind"];
++$out["first"] = UcrmCatalogue::saveStandard($s, null, $ok, $a, $cfg, $dir);
++$first = (int)$out["first"]["record"]["id"];
++for ($i = 2; $i <= 10; $i++) UcrmCatalogue::saveStandard($s, null, ["title" => "S" . $i] + $ok, $a, $cfg, $dir);
++$out["eleventh"] = UcrmCatalogue::saveStandard($s, null, ["title" => "S11"] + $ok, $a, $cfg, $dir)["kind"];
++$out["replace"] = UcrmCatalogue::saveStandard($s, $first, ["title" => "Mini + Residential v2"] + $ok, $a, $cfg, $dir);
++$out["replace_ended"] = UcrmCatalogue::saveStandard($s, $first, $ok, $a, $cfg, $dir)["kind"];
++$out["count"] = count(UcrmCatalogue::fromStore($s, $set)->standards());
++UcrmCatalogue::setInstall($s, 70, "Inst", $a, $cfg, $dir);
++$out["clash"] = UcrmCatalogue::saveStandard($s, null, ["hw" => [["p" => 70, "q" => 1]]] + $ok, $a, $cfg, $dir)["kind"];
++$out["install_clash"] = UcrmCatalogue::setInstall($s, 56, "Mini", $a, $cfg, $dir)["kind"];
++$out["end"] = UcrmCatalogue::endStandard($s, (int)$out["replace"]["record"]["id"], $a, $cfg, $dir)["kind"];
++$out["end_again"] = UcrmCatalogue::endStandard($s, (int)$out["replace"]["record"]["id"], $a, $cfg, $dir)["kind"];
++$out["count2"] = count(UcrmCatalogue::fromStore($s, $set)->standards());
++$out["title"] = UcrmCatalogue::saveStandard($s, null, ["title" => "  A  <b>&\"x\"  "] + $ok, $a, $cfg, $dir)["record"]["title"] ?? null;
++return $out;
++');
++    $v = $r['value'];
++    foreach (['no title', 'no plan', 'q 0', 'q 100', 'q string', 'twice', '11 items', 'install ?'] as $k) {
++        $c->eq($v[$k] ?? null, 'invalid', "A5 refused before the lock: {$k}");
++    }
++    $c->eq([$v['first']['kind'] ?? null, $v['first']['record']['hw'] ?? null], ['saved', [['p' => 56, 'q' => 1]]], 'A5 a well-formed standard quotation is saved by its ids');
++    $c->t(!array_key_exists('price', (array)($v['first']['record'] ?? [])) && strpos(json_encode($v['first']['record'] ?? []), 'price') === false,
++        'A5 no price is stored (G-12)');
++    $c->eq($v['eleventh'] ?? null, 'full', 'A5 an eleventh is refused');
++    $c->eq([$v['replace']['kind'] ?? null, $v['replace_ended'] ?? null, $v['count'] ?? null], ['saved', 'changed', 10],
++        'A5 replacing ends the old version (a second replace of it is refused); still ten in force');
++    $c->eq([$v['clash'] ?? null, $v['install_clash'] ?? null], ['clash', 'clash'],
++        'A5 the installation product as hardware is refused, both ways round');
++    $c->eq([$v['end'] ?? null, $v['end_again'] ?? null, $v['count2'] ?? null], ['ended', 'changed', 9], 'A5 stopping one, and again');
++    $c->eq($v['title'] ?? null, 'A bx', 'A5 the title is stored as plain text, spaces collapsed');
++
++    // ── A6 the gate re-read inside the lock: the quoting organization turned off between the read and the write ──────
++    $r = $c->child(cd_seed(cd_records(false)) . '
++$cfg = $s->load("kyc_config.json") ?? [];
++$off = ["ucrm_quote_organization_id" => "off"] + $cfg;
++$w = UcrmCatalogue::setMode($s, true, 70, ["id" => 4, "name" => "A"], $off, $dir);
++$after = UcrmCatalogue::fromStore($s, QuoteOrganization::setting($cfg, $dir));
++return [$w["kind"], $after->direct(), count($after->records())];
++');
++    $c->eq($r['value'], ['gate', false, 2], 'A6 the write re-reads the gate inside the lock: refused, nothing written');
++}];
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/B_offered.php b/dishnet-hybrid-sudan/tests/catalogue_direct/B_offered.php
+new file mode 100644
+index 0000000..64e06c5
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/B_offered.php
+@@ -0,0 +1,222 @@
++<?php
++declare(strict_types=1);
++/**
++ * Section B — 5.18.103 (root docs/72 §G.4, §G.6, §G.8, G-3–G-6, G-12): what the forms offer (UcrmQuoteLines::offered()),
++ * a direct sale priced (resolveDirect()), stored lines confirmed (confirmDirect()), a standard quotation priced
++ * (standardFrom()), the token and the parsers, and the page cache's shape and last good copy. Each through the child
++ * process on the judged tree, against the fake uCRM serving the direct-mode catalogue of _lib.php.
++ */
++$CD_SECTIONS['B'] = ['title' => 'what the forms offer, and a direct sale priced (UcrmQuoteLines)', 'run' => function (QfuCtx $c) {
++    $offered = function (array $set = [], ?int $install = CD_INSTALL, array $kept = []) use ($c): array {
++        cd_fake($c, $set);
++        $r = $c->child(cd_uql_php() . '
++$o = $__u->offered(' . var_export($install, true) . ', ' . var_export($kept, true) . ');
++$o["reads"] = $__u->reads();
++return $o;
++');
++        return is_array($r['value']) ? $r['value'] : ['_err' => $r['out'] . $r['errlog']];
++    };
++    $why = function (array $o, string $kind, int $id): ?string {
++        foreach ((array)($o['not_offered'] ?? []) as $n) if ($n['kind'] === $kind && (int)$n['id'] === $id) return (string)$n['why'];
++        return null;
++    };
++
++    // ── B0 the positive control: the catalogue read once, two plan pairs, the hardware, the installation ────────────
++    $o = $offered();
++    $c->eq($o['ok'] ?? null, true, 'B0 the catalogue reads', (string)($o['_err'] ?? ''));
++    $c->eq($o['reads'] ?? null, 1, 'B0 one read for the whole answer');
++    $c->eq(array_map(function ($p) { return [$p['sp'], $p['p'], $p['price'], $p['unit']]; }, $o['plans'] ?? []),
++        [[CD_PLAN_RES, 12, 100, 'month'], [CD_PLAN_BIZ, 17, 300, 'month']], 'B0 the plan pairs (G-4), by price: product line, the 1-month price, unit month');
++    $c->eq(array_map(function ($h) { return $h['p']; }, $o['hardware'] ?? []), [CD_ACC, CD_MINI, CD_KIT],
++        'B0 the hardware (G-5), by price; the plans\' products, the installation, a product priced 0 and an archived one left out');
++    $c->eq([$o['install']['ok'] ?? null, $o['install']['p'] ?? null, $o['install']['line']['unit'] ?? null], [true, CD_INSTALL, 'Job'],
++        'B0 the installation product, judged by its own rules');
++    $c->eq([$why($o, 'plan', 8), $why($o, 'product', 80), $why($o, 'product', 81)], ['plan_no_product', 'bad', 'archived'],
++        'B0 not offered, each with its why: a plan no product is spelled like, a product priced 0, an archived one');
++    $nm = '';
++    foreach ((array)($o['not_offered'] ?? []) as $n) if ((int)$n['id'] === 81) $nm = (string)$n['name'];
++    $c->eq($nm, 'Old Kit (TEST)', 'B0 a row uCRM filters out is named, not only numbered (excluded_names)');
++    $c->t(strlen((string)($o['plans'][0]['token'] ?? '')) === 16, 'B0 every item carries its 16-hex token');
++
++    // ── B1 the plan pair (G-4): counted before judging, exactly one product, same price, the service plan's rules ────
++    $o = $offered(['products' => cd_products([18 => ['id' => 18, 'name' => 'Business  Plus TEST', 'price' => 0, 'unit' => 'Pc']])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'plan_two_products', 'B1 two products spelled like a plan — one priced 0 — the plan is not offered (counted before judging)');
++    $o = $offered(['products' => cd_products([17 => ['price' => 299]])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'price_differs', 'B1 the product\'s price differs from the 1-month price: not offered');
++    $o = $offered(['service_plans' => cd_plans([CD_PLAN_BIZ => ['periods' => [['period' => 1, 'price' => 300, 'enabled' => false]]]])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'no_month', 'B1 no enabled 1-month price: not offered');
++    $o = $offered(['service_plans' => cd_plans([9 => ['id' => 9, 'name' => 'Starlink Business Plus (TEST)', 'periods' => [['period' => 1, 'price' => 300, 'enabled' => true]], 'isActive' => false]])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'plan_twin', 'B1 another service plan, inactive, spelled alike: not offered');
++    $o = $offered(['products' => cd_products([17 => ['taxable' => true]])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'bad', 'B1 the plan\'s product taxable: not offered');
++    $o = $offered(['products' => cd_products([17 => ['organizationId' => 3]])]);
++    $c->eq($why($o, 'plan', CD_PLAN_BIZ), 'plan_no_product', 'B1 the plan\'s only product is another organization\'s: not offered');
++
++    // ── B2 hardware (G-5, G-6): the rules, rule 7, the installation, kept off ─────────────────────────────────────────
++    $o = $offered([], CD_INSTALL, [CD_MINI]);
++    $c->eq([$why($o, 'product', CD_MINI), in_array(CD_MINI, array_column($o['hardware'] ?? [], 'p'), true)], ['kept_off', false],
++        'B2 a product kept off is not offered, and says so');
++    $o = $offered([], null);
++    $c->eq([in_array(CD_INSTALL, array_column($o['hardware'] ?? [], 'p'), true), $o['install']['ok'] ?? null, $o['install']['why'] ?? null],
++        [true, false, 'install_unset'], 'B2 with no installation product set, it is offered as hardware like any product, and the installation is unset');
++    $o = $offered(['products' => cd_products([CD_ACC => ['price' => 50.555]])]);
++    $c->eq($why($o, 'product', CD_ACC), 'bad', 'B2 more than 2 decimals: not offered');
++    $o = $offered(['products' => cd_products([CD_ACC => ['invoiceLabel' => 'Something else']])]);
++    $c->eq($why($o, 'product', CD_ACC), 'bad', 'B2 an invoice label unlike the name: not offered');
++    $o = $offered(['products' => cd_products([CD_ACC => ['name' => 'Lonely Plan TEST', 'price' => 60]])]);   // 60: not the plan's 50, so no pair
++    $c->eq($why($o, 'product', CD_ACC), 'like_plan', 'B2 a product spelled like a service plan (rule 7): never hardware');
++    $o = $offered(['products' => cd_products([CD_INSTALL => ['price' => 0]])]);
++    $c->eq([$o['install']['ok'] ?? null, $o['install']['why'] ?? null], [false, 'bad'], 'B2 the installation product priced 0: not usable');
++    $o = $offered(['products' => cd_products([CD_INSTALL => ['name' => 'Business Plus (TEST) install']])]);
++    $c->eq($o['install']['ok'] ?? null, true, 'B2 control: an installation product spelled unlike any plan is usable');
++    $o = $offered(['products' => cd_products([CD_INSTALL => ['archived' => true]])]);
++    $c->t(($o['install']['ok'] ?? true) === false && strpos((string)($o['install']['reason'] ?? ''), 'archived in uCRM') !== false
++        && strpos((string)($o['install']['reason'] ?? ''), 'link') === false,
++        'B2 an archived installation product: not usable, said in direct mode\'s words (no link to make, G-3)', (string)($o['install']['reason'] ?? ''));
++    $o = $offered(['products_down' => true]);
++    $c->eq([$o['ok'] ?? null, $o['plans'] ?? null, $o['hardware'] ?? null], [false, [], []], 'B2 uCRM down: nothing offered (fail closed)');
++
++    // ── B3 resolveDirect (§G.6): priced, every refusal, the names kept, the tokens ──────────────────────────────────
++    $resolve = function (array $sale, array $set = [], ?int $install = CD_INSTALL, array $kept = []) use ($c): array {
++        cd_fake($c, $set);
++        $sale += ['direct_plan' => ['sp' => CD_PLAN_RES, 'p' => 12], 'direct_cart' => [['p' => CD_KIT, 'q' => 2]],
++                  'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection', 'install_by' => 'dishnet', 'entry' => 'web-direct'];
++        $r = $c->child(cd_uql_php() . 'return $__u->resolveDirect(json_decode(' . var_export(json_encode($sale), true) . ', true), '
++            . var_export($install, true) . ', ' . var_export($kept, true) . ');');
++        return is_array($r['value']) ? $r['value'] : ['_err' => $r['out'] . $r['errlog']];
++    };
++    $r = $resolve([]);
++    $c->eq([$r['status'] ?? null, $r['total'] ?? null], ['priced', 3300], 'B3 control: plan 100 + 2 × kit 1500 + installation 200', (string)($r['_err'] ?? ''));
++    $c->eq(array_map(function ($l) { return [$l['productId'], $l['price'], $l['quantity'], $l['unit']]; }, $r['lines'] ?? []),
++        [[12, 100, 1, 'month'], [CD_KIT, 1500, 2, 'Pc'], [CD_INSTALL, 200, 1, 'Job']], 'B3 the lines, uCRM\'s prices and units (a plan: month)');
++    $c->eq($r['item_ids'] ?? null, ['plan' => ['sp' => CD_PLAN_RES, 'p' => 12], 'hw' => [['p' => CD_KIT, 'q' => 2]], 'install' => CD_INSTALL], 'B3 item_ids');
++    $c->eq([$r['link_ids'] ?? null, $r['offer']['name'] ?? null, $r['device']['title'] ?? null, $r['plan_price'] ?? null, $r['device_price'] ?? null],
++        [[], 'Residential Standard (TEST)', 'Standard Kit (TEST)', 100, 1500], 'B3 no link ids; the names the application keeps; the plan and first hardware prices');
++    $c->eq($r['tokens'] ?? null, [cd_token(12, 'Residential Standard (TEST)', 100, 'month'), cd_token(CD_KIT, 'Standard Kit (TEST)', 1500, 'Pc'),
++        cd_token(CD_INSTALL, 'Professional Installation', 200, 'Job')], 'B3 the tokens: sha256 over id, label, cents and unit, first 16 hex');
++    $c->eq($r['cart_rows'] ?? null, [['title' => 'Standard Kit (TEST)', 'price' => 1500, 'qty' => 2]], 'B3 the cart rows the application keeps (no id)');
++    $r = $resolve(['install_by' => 'customer']);
++    $c->eq([$r['status'] ?? null, $r['total'] ?? null, array_key_exists('install', (array)($r['item_ids'] ?? [])) ? $r['item_ids']['install'] : 'x'], ['priced', 3100, null], 'B3 the customer installs: no installation line');
++    $cases = [
++        'entry app'        => [['entry' => 'app'], 'entry'],
++        'Fiber'            => [['customer_type' => 'Fiber'], 'fiber'],
++        'no install answer'=> [['install_by' => ''], 'no_install_answer'],
++        'kept off'         => [['direct_cart' => [['p' => CD_MINI, 'q' => 1]]], 'kept_off', [], CD_INSTALL, [CD_MINI]],
++        'install as hw'    => [['direct_cart' => [['p' => CD_INSTALL, 'q' => 1]]], 'install_product'],
++        'archived hw'      => [['direct_cart' => [['p' => 81, 'q' => 1]]], 'unlisted'],
++        'unknown hw'       => [['direct_cart' => [['p' => 999, 'q' => 1]]], 'unlisted'],
++        'priced 0 hw'      => [['direct_cart' => [['p' => 80, 'q' => 1]]], 'bad'],
++        'plan as hw'       => [['direct_cart' => [['p' => 17, 'q' => 1]]], 'like_plan'],
++        'plan not offered' => [['direct_plan' => ['sp' => 8, 'p' => 12]], 'plan_no_product'],
++        'plan swapped'     => [['direct_plan' => ['sp' => CD_PLAN_RES, 'p' => 17]], 'plan_product_changed'],
++        'install unset'    => [[], 'install_unset', [], null],
++        'unreadable'       => [[], 'unreadable', ['products_down' => true]],
++    ];
++    foreach ($cases as $k => $cs) {
++        $r = $resolve($cs[0], $cs[2] ?? [], array_key_exists(3, $cs) ? $cs[3] : CD_INSTALL, $cs[4] ?? []);
++        $c->eq([$r['status'] ?? null, $r['why'] ?? null], ['unpriced', $cs[1]], "B3 unpriced: {$k}", (string)($r['reason'] ?? ($r['_err'] ?? '')));
++    }
++    $r = $resolve(['direct_plan' => null]);
++    $c->eq($r['status'] ?? null, 'no_plan', 'B3 no plan pair: no_plan');
++    $r = $resolve(['direct_cart' => null]);
++    $c->eq([$r['status'] ?? null, $r['why'] ?? null], ['invalid', 'cart'], 'B3 a cart that could not be read: invalid, never priced');
++    $r = $resolve(['direct_cart' => [['p' => CD_MINI, 'q' => 1]]], ['products_down' => true]);
++    $c->eq([$r['item_ids']['hw'] ?? null, $r['cart_rows'] ?? null], [[['p' => CD_MINI, 'q' => 1]], [['title' => '', 'price' => null, 'qty' => 1]]],
++        'B3 uCRM down: the ids still kept for the retry, no names');
++
++    // ── B4 the parsers, the token and the set comparison ────────────────────────────────────────────────────────────
++    $r = $c->child('
++return [
++  "cart" => [UcrmQuoteLines::parseCart(\'[{"p":5,"q":2},{"p":5,"q":3}]\'), UcrmQuoteLines::parseCart(\'[{"p":5,"q":100}]\'),
++             UcrmQuoteLines::parseCart(\'[{"p":5,"q":60},{"p":5,"q":40}]\'), UcrmQuoteLines::parseCart(\'[{"p":0,"q":1}]\'),
++             UcrmQuoteLines::parseCart(\'{"a":1}\'), UcrmQuoteLines::parseCart("x"), UcrmQuoteLines::parseCart(""),
++             UcrmQuoteLines::parseCart(json_encode(array_fill(0, 31, ["p" => 5, "q" => 1]))), UcrmQuoteLines::parseCart(\'[{"p":"7","q":"2"}]\')],
++  "plan" => [UcrmQuoteLines::parsePlan("6:12"), UcrmQuoteLines::parsePlan("6:0"), UcrmQuoteLines::parsePlan("6"), UcrmQuoteLines::parsePlan(" 6:12 "),
++             UcrmQuoteLines::parsePlan("06:12"), UcrmQuoteLines::parsePlan(["6:12"])],
++  "seen" => [UcrmQuoteLines::seenItemsMatch("aaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbb", ["bbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaa"]),
++             UcrmQuoteLines::seenItemsMatch("aaaaaaaaaaaaaaaa,aaaaaaaaaaaaaaaa", ["aaaaaaaaaaaaaaaa"]),
++             UcrmQuoteLines::seenItemsMatch("aaaaaaaaaaaaaaaa", ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"]),
++             UcrmQuoteLines::seenItemsMatch("", []), UcrmQuoteLines::seenItemsMatch(null, ["aaaaaaaaaaaaaaaa"]),
++             UcrmQuoteLines::seenItemsMatch("AAAAAAAAAAAAAAAA", ["aaaaaaaaaaaaaaaa"])],
++  "tok" => [UcrmQuoteLines::token(["productId" => 12, "label" => "X", "price" => 100, "unit" => "Month"]),
++            UcrmQuoteLines::token(["productId" => 12, "label" => "X", "price" => 100.0, "unit" => "Month"]),
++            UcrmQuoteLines::token(["productId" => 12, "label" => "X", "price" => 100.01, "unit" => "Month"]),
++            UcrmQuoteLines::token(["productId" => 12, "label" => "Y", "price" => 100, "unit" => "Month"])],
++  "ids" => [UcrmQuoteLines::itemIds(["plan" => ["sp" => 6, "p" => 12], "hw" => [["p" => 55, "q" => 2]], "install" => 70]),
++            UcrmQuoteLines::itemIds(["plan" => ["sp" => 6, "p" => 12], "hw" => [["p" => 55, "q" => 2], ["p" => 55, "q" => 1]], "install" => null]),
++            UcrmQuoteLines::itemIds(["plan" => ["sp" => "6", "p" => 12], "hw" => [], "install" => null]),
++            UcrmQuoteLines::itemIds(["plan" => ["sp" => 6, "p" => 12], "hw" => [], "install" => "70"])],
++];');
++    $v = $r['value'];
++    $c->eq($v['cart'] ?? null, [[['p' => 5, 'q' => 5]], null, null, null, null, null, [], null, [['p' => 7, 'q' => 2]]],
++        'B4 parseCart: merged, q over 99, merged over 99, id 0, an object, not JSON, empty, 31 entries, digit strings');
++    $c->eq($v['plan'] ?? null, [['sp' => 6, 'p' => 12], null, null, ['sp' => 6, 'p' => 12], null, null], 'B4 parsePlan');
++    $c->eq($v['seen'] ?? null, [true, true, false, false, false, false], 'B4 seenItemsMatch compares sets; empty, missing and malformed are false');
++    $c->t(($v['tok'][0] ?? 'a') === ($v['tok'][1] ?? 'b') && ($v['tok'][0] ?? '') !== ($v['tok'][2] ?? '') && ($v['tok'][0] ?? '') !== ($v['tok'][3] ?? ''),
++        'B4 the token: 100 and 100.0 alike (cents); a cent or a letter changes it');
++    $c->eq($v['ids'] ?? null, [['plan' => ['sp' => 6, 'p' => 12], 'hw' => [['p' => 55, 'q' => 2]], 'install' => 70], null, null, null],
++        'B4 itemIds: well formed; a product twice, a string id and a string installation are refused');
++
++    // ── B5 confirmDirect (§G.8): the rules, never kept off; a price change said in words; the installation as stored ──
++    $confirm = function (array $set, array $lines, array $ids) use ($c): string {
++        cd_fake($c, $set);
++        $r = $c->child(cd_uql_php() . 'return $__u->confirmDirect(json_decode(' . var_export(json_encode($lines), true) . ', true), json_decode('
++            . var_export(json_encode($ids), true) . ', true));');
++        return is_string($r['value']) ? $r['value'] : 'ERR ' . $r['out'] . $r['errlog'];
++    };
++    $lines = [['productId' => 12, 'label' => 'Residential Standard (TEST)', 'price' => 100, 'quantity' => 1, 'unit' => 'Month'],
++              ['productId' => CD_MINI, 'label' => 'Mini Kit (TEST)', 'price' => 900, 'quantity' => 1, 'unit' => 'Pc'],
++              ['productId' => CD_INSTALL, 'label' => 'Professional Installation', 'price' => 200, 'quantity' => 1, 'unit' => 'Job']];
++    $ids = ['plan' => ['sp' => CD_PLAN_RES, 'p' => 12], 'hw' => [['p' => CD_MINI, 'q' => 1]], 'install' => CD_INSTALL];
++    $c->eq($confirm([], $lines, $ids), '', 'B5 control: the stored lines confirm');
++    $got = $confirm(['products' => cd_products([CD_MINI => ['price' => 950]])], $lines, $ids);
++    $c->t($got !== '' && strpos($got, 'changed') !== false && !preg_match('/9[05]0/', $got), 'B5 a price changed: refused, in words, never the figure', $got);
++    $c->eq($confirm(['products' => cd_products([CD_MINI => ['archived' => true]])], $lines, $ids) !== '', true, 'B5 an item archived since: refused');
++    $c->eq($confirm(['products' => cd_products([CD_INSTALL => null, 71 => ['id' => 71, 'name' => 'New Install', 'price' => 200, 'unit' => 'Job']])], $lines, $ids) !== '',
++        true, 'B5 the stored installation product gone: refused');
++    $c->eq($confirm([], array_slice($lines, 0, 2), $ids) !== '', true, 'B5 a line missing against the ids: refused');
++    $c->eq($confirm([], $lines, ['install' => null] + $ids) !== '', true, 'B5 a line not among the ids: refused');
++
++    // ── B6 standardFrom (G-12): whole or nothing ─────────────────────────────────────────────────────────────────────
++    cd_fake($c);
++    $r = $c->child(cd_uql_php() . '
++$o = $__u->offered(70, [57]);
++$std = ["title" => "T", "plan" => ["sp" => 6, "p" => 12], "hw" => [["p" => 56, "q" => 2]], "install" => true];
++return [
++  "ok"      => UcrmQuoteLines::standardFrom($std, $o),
++  "plan"    => UcrmQuoteLines::standardFrom(["plan" => ["sp" => 8, "p" => 12]] + $std, $o)["ok"],
++  "kept"    => UcrmQuoteLines::standardFrom(["hw" => [["p" => 57, "q" => 1]]] + $std, $o)["ok"],
++  "inst"    => UcrmQuoteLines::standardFrom($std, ["install" => ["ok" => false, "reason" => "x"]] + $o)["ok"],
++  "noinst"  => UcrmQuoteLines::standardFrom(["install" => false] + $std, ["install" => ["ok" => false, "reason" => "x"]] + $o)["ok"],
++  "down"    => UcrmQuoteLines::standardFrom($std, ["ok" => false, "reason" => "down"])["ok"],
++];');
++    $v = $r['value'];
++    $c->eq([$v['ok']['ok'] ?? null, $v['ok']['total'] ?? null, count($v['ok']['lines'] ?? [])], [true, 2100, 3], 'B6 control: 100 + 2 × 900 + 200, three lines');
++    $c->eq([$v['plan'] ?? null, $v['kept'] ?? null, $v['inst'] ?? null, $v['noinst'] ?? null, $v['down'] ?? null], [false, false, false, true, false],
++        'B6 unusable when its plan, a hardware item (kept off) or the installation is not offered; without installation it needs none');
++
++    // ── B7 the page cache's shape and the last good copy (§G.3, §G.5) ────────────────────────────────────────────────
++    cd_fake($c);
++    $r = $c->child('
++$set = QuoteOrganization::setting($s->load("kyc_config.json") ?? [], $dir);
++$lk = UcrmQuoteLinks::fromRecords([], []);
++$a = UcrmQuoteLines::forDirectPage($crm, [], $set, $dir);
++$okA = !empty($a["uql"]->catalogue()["ok"]);
++$cache = json_decode((string)file_get_contents($dir . "/ucrm_quote_catalogue_cache.json"), true);
++$hasLast = is_file($dir . "/ucrm_quote_catalogue_last_good.json");
++UcrmQuoteLines::dropPageCache($dir);
++$lastKept = is_file($dir . "/ucrm_quote_catalogue_last_good.json");
++$old = $cache; $old["shape"] = "d14-1"; $old["at"] = time();
++file_put_contents($dir . "/ucrm_quote_catalogue_cache.json", json_encode($old));
++$down = new class { public function get($u) { return null; } public function withTimeouts($a, $b) { return $this; } };
++$b = UcrmQuoteLines::forDirectPage($down, [], $set, $dir);
++return ["okA" => $okA, "shape" => $cache["shape"] ?? null, "names" => isset($cache["excluded_names"]), "hasLast" => $hasLast,
++        "lastKept" => $lastKept, "staleB" => $b["stale"], "okB" => !empty($b["uql"]->catalogue()["ok"]), "readsB" => $b["uql"]->reads()];
++');
++    $v = $r['value'];
++    $c->eq([$v['okA'] ?? null, $v['shape'] ?? null, $v['names'] ?? null, $v['hasLast'] ?? null], [true, 'd103-1', true, true],
++        'B7 a successful page read writes the cache (shape d103-1, with excluded_names) and the last good copy');
++    $c->eq($v['lastKept'] ?? null, true, 'B7 dropping the page cache keeps the last good copy');
++    $c->eq([$v['staleB'] ?? null, $v['okB'] ?? null, $v['readsB'] ?? null], [true, true, 0],
++        'B7 a 5.18.102 cache (shape d14-1) is a miss; with uCRM down the last good copy is drawn, stale, read from nothing');
++}];
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/C_submission.php b/dishnet-hybrid-sudan/tests/catalogue_direct/C_submission.php
+new file mode 100644
+index 0000000..8713f79
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/C_submission.php
+@@ -0,0 +1,170 @@
++<?php
++declare(strict_types=1);
++/**
++ * Section C — 5.18.103 (root docs/72 §G.5–§G.7, G-7–G-9): the KYC submission (KycService::process) with the uCRM catalogue.
++ * A direct sale priced and quoted by uCRM id; a Cash sale collecting exactly the total, refused on a changed total or a
++ * changed item (the tokens); every refusal before anything is written; an unpriced Credit sale registered with its ids
++ * (P1_DIRECT); the record field by field — no uCRM id in a plugin-id field, the cart rebuilt by the server; a form opened
++ * before the switch read as 'app'; the switch off refusing the direct form; uCRM down; South Sudan untouched.
++ */
++$CD_SECTIONS['C'] = ['title' => 'the KYC submission with the uCRM catalogue (KycService)', 'run' => function (QfuCtx $c) {
++    $wallet = [7 => 100000];
++    $quotes = function () use ($c) { return $c->bodies('kyc', 'POST', '/clients/\d+/quotes'); };
++    $creates = function () use ($c) { return $c->bodies('kyc', 'POST', '/clients'); };
++    $app = function (array $r): array { $a = (array)($r['value']['apps'] ?? []); return $a === [] ? [] : (array)end($a); };
++    $submit = function (array $post, ?array $records, array $o = []) use ($c, $wallet) {
++        // the store's ucrm_catalogue.json is set before the submission: the child seeds it with the apps
++        $o += ['wallet' => $wallet];
++        $o['cfg'] = ($o['cfg'] ?? []);
++        $body = cd_seed($records);
++        $agent = $o['agent'] ?? ['id' => 7, 'name' => 'Test Agent', 'role' => 'sales', 'is_admin' => false];
++        $post += ['action' => 'kyc_submit', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection',
++                  'firstname' => 'Test', 'lastname' => 'Cd' . mt_rand(100, 999), 'mobile' => '+256 700 002 ' . mt_rand(100, 999),
++                  'email' => '', 'address_1' => 'Test Road', 'sales_type' => 'Credit', 'priority' => 'Low', 'sales_person' => 'Tester'];
++        $post = array_filter($post, function ($v) { return $v !== null; });
++        return $c->child($body . '
++$w = new WalletService($s, $s->getPdo());
++$k = new KycService($crm, $s, $w, new CrmQueue($s), $dir);
++$r = $k->process(json_decode(' . var_export(json_encode($post), true) . ', true), [], json_decode(' . var_export(json_encode($agent), true) . ', true));
++return ["success" => !empty($r["success"]), "message" => (string)($r["message"] ?? ""), "apps" => $s->load("kyc_applications.json") ?? [],
++        "wallet" => $w->getBalance(' . (int)$agent['id'] . ')];
++', $o);
++    };
++    $T = function (int $pid, string $label, $price, string $unit) { return cd_token($pid, $label, $price, $unit); };
++    $SALE_TOKENS = implode(',', [$T(12, 'Residential Standard (TEST)', 100, 'month'), $T(CD_KIT, 'Standard Kit (TEST)', 1500, 'Pc'),
++                                 $T(CD_INSTALL, 'Professional Installation', 200, 'Job')]);
++
++    // ── C0 the positive control: a direct Credit sale, priced, quoted by uCRM id ─────────────────────────────────────
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 2]]), cd_records(true));
++    $a = $app($r);
++    $q = $quotes()[0] ?? [];
++    $c->t(!empty($r['value']['success']) && count($quotes()) === 1, 'C0 the control: a direct Credit sale is registered and quoted',
++        json_encode([$r['value']['message'] ?? null, substr($r['out'], 0, 400), substr($r['errlog'], 0, 600)]));
++    $c->eq(array_map(function ($i) { return [$i['productId'] ?? null, $i['label'], $i['price'], $i['quantity'], $i['unit']]; }, $q['items'] ?? []),
++        [[12, 'Residential Standard (TEST)', 100, 1, 'month'], [CD_KIT, 'Standard Kit (TEST)', 1500, 2, 'Pc'], [CD_INSTALL, 'Professional Installation', 200, 1, 'Job']],
++        'C0 the quotation\'s lines: the plan\'s product, the kit × 2, the installation — uCRM ids, names, prices, units');
++
++    // ── C1 the stored record, field by field (§G.7, G-7) ─────────────────────────────────────────────────────────────
++    $c->eq([$a['quote_sale_entry'] ?? null, $a['quote_lines_source'] ?? null, $a['quote_items_total'] ?? null],
++        ['web-direct', 'ucrm-direct-5.18.103', 3300], 'C1 entry web-direct, the direct source, the total');
++    $c->eq($a['quote_item_ids'] ?? null, ['plan' => ['sp' => CD_PLAN_RES, 'p' => 12], 'hw' => [['p' => CD_KIT, 'q' => 2]], 'install' => CD_INSTALL],
++        'C1 quote_item_ids: the plan pair, the cart, the installation');
++    $c->eq([$a['package_choice'] ?? 'x', $a['device_id'] ?? 'x', array_key_exists('quote_link_ids', $a), array_key_exists('quote_sale_cart', $a)],
++        ['', '', false, false], 'C1 package_choice and device_id empty; no quote_link_ids, no quote_sale_cart');
++    $c->eq(json_decode((string)($a['hw_cart_json'] ?? ''), true), [['id' => 0, 'title' => 'Standard Kit (TEST)', 'price' => 1500, 'qty' => 2]],
++        'C1 hw_cart_json rebuilt by the server: id 0, uCRM\'s name and price, no ucrm_product_id');
++    $c->eq([$a['offer_name'] ?? null, $a['offer_price'] ?? null, $a['device_title'] ?? null, $a['device_price'] ?? null, (string)($a['kitQty'] ?? '')],
++        ['Residential Standard (TEST)', 100, 'Standard Kit (TEST)', 1500, '2'], 'C1 offer and device names and prices from uCRM; kitQty the first item\'s');
++    $cr = $creates()[0] ?? [];
++    $c->eq((string)($cr['note'] ?? ''), 'Standard Kit (TEST) / Residential Standard (TEST)', 'C1 the uCRM client\'s note carries uCRM\'s names');
++
++    // ── C2 the browser's plugin-id fields are never kept, and never reach uCRM (G-7) ─────────────────────────────────
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_MINI, 1]], ['package_choice' => '1', 'device_id' => '3', 'kitQty' => '7',
++        'hw_cart_json' => json_encode([['id' => 3, 'title' => 'Browser Kit', 'price' => 1, 'qty' => 1, 'ucrm_product_id' => 98]])]), cd_records(true));
++    $a = $app($r);
++    $c->eq([$a['package_choice'] ?? 'x', $a['device_id'] ?? 'x', (string)($a['kitQty'] ?? '')], ['', '', '1'], 'C2 the posted package_choice, device_id and kitQty are replaced');
++    $c->eq(json_decode((string)($a['hw_cart_json'] ?? ''), true), [['id' => 0, 'title' => 'Mini Kit (TEST)', 'price' => 900, 'qty' => 1]],
++        'C2 the posted hw_cart_json (a plugin id, a browser title and price, a product id) is replaced');
++    $body = json_encode($creates()[0] ?? []);
++    $c->t(strpos($body, 'Browser Kit') === false && !preg_match('/"value":"(1|3)"/', $body), 'C2 nothing the browser posted in those fields reaches the uCRM client create', $body);
++
++    // ── C3 Cash: exactly the total; refused on a changed total, a changed item, missing tokens; nothing written ───────
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 2]], ['sales_type' => 'Cash', 'ucrm_total_seen' => '3300', 'ucrm_items_seen' => $SALE_TOKENS]), cd_records(true));
++    $a = $app($r);
++    $c->eq([!empty($r['value']['success']), $a['amount_charged'] ?? null, $r['value']['wallet'] ?? null], [true, 3300, 100000 - 3300],
++        'C3 control: a direct Cash sale collects exactly the quotation\'s total', json_encode($r['value']['message'] ?? $r['out']));
++    $refusals = [
++        'the total differs'        => [['ucrm_total_seen' => '3200', 'ucrm_items_seen' => $SALE_TOKENS], 'Prices in uCRM changed since the form was opened'],
++        'no total'                 => [['ucrm_items_seen' => $SALE_TOKENS], 'did not send the total the form showed'],
++        'an item changed (tokens)' => [['ucrm_total_seen' => '3300', 'ucrm_items_seen' => ($SALE_TOKENS[0] === '0' ? '1' : '0') . substr($SALE_TOKENS, 1)], 'An item on this sale changed in uCRM since the form was opened'],
++        'no tokens'                => [['ucrm_total_seen' => '3300'], 'An item on this sale changed in uCRM since the form was opened'],
++        'a token missing'          => [['ucrm_total_seen' => '3300', 'ucrm_items_seen' => substr($SALE_TOKENS, 0, 33)], 'An item on this sale changed in uCRM since the form was opened'],
++    ];
++    foreach ($refusals as $k => [$more, $text]) {
++        cd_fake($c);
++        $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 2]], ['sales_type' => 'Cash'] + $more), cd_records(true));
++        $c->t(empty($r['value']['success']) && strpos((string)($r['value']['message'] ?? ''), $text) !== false
++            && ($r['value']['apps'] ?? null) === [] && ($r['value']['wallet'] ?? null) === 100000 && $creates() === [],
++            "C3 Cash refused, nothing written, no money taken: {$k}", json_encode($r['value']['message'] ?? $r['out']));
++    }
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 2]], ['sales_type' => 'Cash', 'ucrm_total_seen' => '3300', 'ucrm_items_seen' => $SALE_TOKENS]), cd_records(true, null));
++    $c->t(empty($r['value']['success']) && strpos((string)($r['value']['message'] ?? ''), 'No usable price in uCRM: the installation product is not set') === 0
++        && ($r['value']['apps'] ?? null) === [], 'C3 Cash refused when the installation product is not set (CASH_UNPRICED, its reason)', json_encode($r['value']['message'] ?? ''));
++
++    // ── C4 refused before anything is written, Cash or Credit: the switch off, no plan, a cart that cannot be read ────
++    $before = [
++        'the switch off'        => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]]), cd_records(false), 'This form was opened under the uCRM catalogue, which an admin has since turned off'],
++        'no switch record'      => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]]), [], 'This form was opened under the uCRM catalogue, which an admin has since turned off'],
++        'no plan'               => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['ucrm_plan' => null]), cd_records(true), 'Please select a service plan.'],
++        'a malformed plan'      => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['ucrm_plan' => '6']), cd_records(true), 'Please select a service plan.'],
++        'a cart not JSON'       => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['ucrm_cart_json' => '[{p:1']), cd_records(true), 'The sale\'s hardware could not be read'],
++        'a quantity of 100'     => [cd_post([CD_PLAN_RES, 12], [[CD_KIT, 100]]), cd_records(true), 'The sale\'s hardware could not be read'],
++    ];
++    foreach ($before as $k => [$post, $recs, $text]) {
++        cd_fake($c);
++        $r = $submit($post, $recs);
++        $c->t(empty($r['value']['success']) && strpos((string)($r['value']['message'] ?? ''), $text) === 0 && ($r['value']['apps'] ?? null) === []
++            && $creates() === [], "C4 refused before anything is written: {$k}", json_encode($r['value']['message'] ?? $r['out']));
++    }
++
++    // ── C5 an unpriced Credit sale: registered with its ids, P1_DIRECT, no quotation ──────────────────────────────────
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]]), cd_records(true, null));
++    $a = $app($r);
++    $c->eq([!empty($r['value']['success']), array_key_exists('quote_items', $a) ? $a['quote_items'] : 'x', $a['quote_unpriced_why'] ?? null, $a['quote_refused'] ?? null, count($quotes())],
++        [true, null, 'install_unset', 'P1', 0], 'C5 registered, no lines, why install_unset, P1, no quotation');
++    $c->t(strpos((string)($a['quote_refused_text'] ?? ''), 'No quotation was made: the installation product is not set') !== false
++        && strpos((string)($a['quote_refused_text'] ?? ''), 'Make the quotation in uCRM by hand, or — once the reason is put right — an admin makes it from the Orders card.') !== false,
++        'C5 the text is P1_DIRECT\'s, with the reason', (string)($a['quote_refused_text'] ?? ''));
++    $c->eq([$a['quote_item_ids']['hw'] ?? null, $a['quote_sale_entry'] ?? null, $a['package_choice'] ?? 'x'], [[['p' => CD_KIT, 'q' => 1]], 'web-direct', ''],
++        'C5 the ids kept for the retry; web-direct; no plugin id');
++    cd_fake($c);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['install_by' => '']), cd_records(true));
++    $a = $app($r);
++    $c->t(strpos((string)($a['quote_refused_text'] ?? ''), 'No quotation was made: the sale does not say who installs') !== false
++        && strpos((string)($a['quote_refused_text'] ?? ''), 'Make the quotation in uCRM (Send Quotation, or ask an admin).') !== false,
++        'C5 a sale that does not say who installs keeps P1\'s text', (string)($a['quote_refused_text'] ?? ''));
++
++    // ── C6 uCRM down at submission: Credit goes in unpriced with its ids; Cash refused ───────────────────────────────
++    cd_fake($c, ['products_down' => true]);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]]), cd_records(true));
++    $a = $app($r);
++    $c->eq([!empty($r['value']['success']), $a['quote_unpriced_why'] ?? null, $a['quote_item_ids']['plan'] ?? null],
++        [true, 'unreadable', ['sp' => CD_PLAN_RES, 'p' => 12]], 'C6 uCRM down: the Credit sale is registered unpriced, its ids kept', json_encode($r['value']['message'] ?? ''));
++    cd_fake($c, ['products_down' => true]);
++    $r = $submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['sales_type' => 'Cash', 'ucrm_total_seen' => '1800']), cd_records(true));
++    $c->t(empty($r['value']['success']) && strpos((string)($r['value']['message'] ?? ''), 'No usable price in uCRM') === 0, 'C6 uCRM down: Cash refused');
++
++    // ── C7 the switch on, a form opened before it (marker 5.18.102, plugin ids): read as 'app', Credit P1 ────────────
++    cd_fake($c, ['catalogue' => true]);
++    $r = $submit(['ucrm_quote_form' => '5.18.102', 'package_choice' => '1', 'device_id' => '3', 'install_by' => 'dishnet'], cd_records(true));
++    $a = $app($r);
++    $c->eq([!empty($r['value']['success']), $a['quote_sale_entry'] ?? null, (string)($a['package_choice'] ?? ''), $a['quote_refused'] ?? null, count($quotes())],
++        [true, 'app', '1', 'P1', 0], 'C7 registered as app, its plugin plan id kept, P1, no quotation', json_encode($r['value']['message'] ?? $r['out']));
++    $c->t(strpos((string)($a['quote_refused_text'] ?? ''), 'this sale did not come from the KYC form of this release') !== false, 'C7 the reason is the entry rule\'s');
++    cd_fake($c, ['catalogue' => true]);
++    $r = $submit(['ucrm_quote_form' => '5.18.102', 'package_choice' => '1', 'device_id' => '3', 'install_by' => 'dishnet', 'sales_type' => 'Cash',
++                  'ucrm_total_seen' => '1800', 'ucrm_links_seen' => '1,2,3'], cd_records(true));
++    $c->t(empty($r['value']['success']) && strpos((string)($r['value']['message'] ?? ''), 'No usable price in uCRM') === 0 && ($r['value']['apps'] ?? null) === [],
++        'C7 … and as Cash, refused before anything is written', json_encode($r['value']['message'] ?? ''));
++    // the control on C7: with the switch off, the same 5.18.102 post is priced by its links, as 5.18.102 prices it
++    cd_fake($c, ['catalogue' => true]);
++    $r = $submit(['ucrm_quote_form' => '5.18.102', 'package_choice' => '1', 'device_id' => '3', 'install_by' => 'dishnet'], cd_records(false));
++    $a = $app($r);
++    $c->eq([$a['quote_sale_entry'] ?? null, $a['quote_lines_source'] ?? null, count($quotes())], ['web', 'ucrm-5.18.102', 1],
++        'C7 control: the switch off, the same post is 5.18.102\'s web sale, quoted by its links');
++
++    // ── C8 South Sudan: the direct marker means nothing; the store is never opened ────────────────────────────────────
++    $c->ctl('kyc', '/__test/reset?scenario=sudan');
++    $r = $c->submit(cd_post([CD_PLAN_RES, 12], [[CD_KIT, 1]], ['package_choice' => '1', 'device_id' => '3', 'customer_type' => 'StarLink']),
++        ['tenant' => 'south-sudan', 'wallet' => $wallet, 'links' => null]);
++    $a = $app($r);
++    $t = $c->child('return (int)$s->getPdo()->query("SELECT COUNT(*) FROM sqlite_master WHERE name = \'ucrm_catalogue\'")->fetchColumn();',
++        ['tenant' => 'south-sudan', 'dir' => $r['dir'], 'tree' => $r['tree']]);
++    $c->eq([!empty($r['value']['success']), array_key_exists('quote_item_ids', $a), array_key_exists('quote_sale_entry', $a), (string)($a['package_choice'] ?? ''), $t['value']],
++        [true, false, false, '1', 0], 'C8 South Sudan: registered as before, no direct field stored, no ucrm_catalogue table', json_encode($r['value']['message'] ?? $r['out']));
++}];
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/D_retries.php b/dishnet-hybrid-sudan/tests/catalogue_direct/D_retries.php
+new file mode 100644
+index 0000000..29d19c9
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/D_retries.php
+@@ -0,0 +1,168 @@
++<?php
++declare(strict_types=1);
++/**
++ * Section D — 5.18.103 (root docs/72 §G.8, G-10): a direct application retried and quoted. Stored lines re-confirmed by
++ * the rules (never "kept off"); an unpriced sale resolved again ("kept off" applying); the Cash rule (P2); P1_DIRECT; the
++ * branch chosen by the record, never the switch; a 5.18.102 web application with the switch on (no Make the quotation, the
++ * card's remedy); KycCrmSync's create-and-quote, and both gate-off builders refusing a direct record; the Orders card's
++ * press and retry_quote through the judged tree's own handlers (tests/quote_from_ucrm/c_lib.php).
++ */
++require_once dirname(__DIR__) . '/quote_from_ucrm/c_lib.php';
++
++$CD_SECTIONS['D'] = ['title' => 'retries, Make the quotation and the gate off, for a direct application', 'run' => function (QfuCtx $c) {
++    $quotes = function () use ($c) { return $c->bodies('kyc', 'POST', '/clients/\d+/quotes'); };
++    $LINES = [['productId' => 12, 'label' => 'Residential Standard (TEST)', 'price' => 100, 'quantity' => 1, 'unit' => 'month'],
++              ['productId' => CD_KIT, 'label' => 'Standard Kit (TEST)', 'price' => 1500, 'quantity' => 2, 'unit' => 'Pc'],
++              ['productId' => CD_INSTALL, 'label' => 'Professional Installation', 'price' => 200, 'quantity' => 1, 'unit' => 'Job']];
++    $IDS = ['plan' => ['sp' => CD_PLAN_RES, 'p' => 12], 'hw' => [['p' => CD_KIT, 'q' => 2]], 'install' => CD_INSTALL];
++    // A direct application as 5.18.103 stores one (§G.7): priced (lines) or not
++    $direct = function (array $over = [], bool $priced = true) use ($LINES, $IDS) {
++        $base = ['id' => 41, 'mobile' => '+256 700 003 041', 'firstname' => 'Test', 'lastname' => 'Direct', 'email' => '',
++            'address_1' => 'Test Road', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection', 'package_choice' => '',
++            'device_id' => '', 'kitQty' => '2', 'sales_type' => 'Credit', 'sales_person' => 'Tester', 'retailer_name' => 'Test Agent',
++            'priority' => 'Low', 'crm_client_id' => null, 'crm_sync_status' => 'pending', 'submitted_at' => date('Y-m-d H:i:s'),
++            'is_lead' => true, 'amount_charged' => 0, 'quote_created' => false, 'status' => 'new', 'install_by' => 'dishnet',
++            'quote_sale_entry' => 'web-direct', 'quote_item_ids' => $IDS, 'offer_name' => 'Residential Standard (TEST)',
++            'hw_cart_json' => json_encode([['id' => 0, 'title' => 'Standard Kit (TEST)', 'price' => 1500, 'qty' => 2]])];
++        $base += $priced
++            ? ['quote_items' => $LINES, 'quote_lines_source' => 'ucrm-direct-5.18.103', 'quote_items_total' => 3300, 'offer_price' => 100, 'device_price' => 1500]
++            : ['quote_items' => null, 'offer_price' => null, 'device_price' => null, 'quote_unpriced_why' => 'install_unset'];
++        return $over + $base;
++    };
++    $retry = function (array $app, ?array $records, array $set = []) use ($c) {
++        cd_fake($c, $set);
++        $r = $c->child(cd_seed($records) . cd_uql_php() . '
++return KycService::retryLines(json_decode(' . var_export(json_encode($app), true) . ', true), $__u, $s, $s->load("kyc_config.json") ?? [], $__cat);');
++        return is_array($r['value']) ? $r['value'] : ['_err' => $r['out'] . $r['errlog']];
++    };
++
++    // ── D0 the positive control: stored lines re-confirmed and quoted as stored ──────────────────────────────────────
++    $r = $retry($direct(), cd_records(true));
++    $c->eq([$r['ok'] ?? null, $r['lines'] ?? null, $r['link_ids'] ?? null], [true, $LINES, []], 'D0 the control: a priced direct application\'s lines re-confirmed, as stored', (string)($r['_err'] ?? ''));
++
++    // ── D1 confirmDirect at retry: a price changed, Cash (P2), kept off does not apply, the switch does not decide ────
++    $r = $retry($direct(), cd_records(true), ['products' => cd_products([CD_KIT => ['price' => 1600]])]);
++    $c->t(($r['ok'] ?? true) === false && ($r['code'] ?? '') === 'P1' && strpos((string)($r['text'] ?? ''), "Standard Kit (TEST)'s price in uCRM changed after this application was saved") !== false
++        && strpos((string)($r['text'] ?? ''), 'Make the quotation in uCRM by hand, or — once the reason is put right') !== false && strpos((string)($r['text'] ?? ''), '1600') === false,
++        'D1 a price changed since: P1_DIRECT, in words, no figure', (string)($r['text'] ?? ''));
++    $r = $retry($direct(['sales_type' => 'Cash', 'amount_charged' => 3300]), cd_records(true));
++    $c->eq([$r['ok'] ?? null, count($r['lines'] ?? [])], [true, 3], 'D1 Cash, lines totalling the cash collected: quoted');
++    $r = $retry($direct(['sales_type' => 'Cash', 'amount_charged' => 3300]), cd_records(true), ['products' => cd_products([CD_KIT => ['price' => 1600]])]);
++    $c->eq([$r['ok'] ?? null, $r['code'] ?? null], [false, 'P2'], 'D1 Cash, a price changed since: P2 — never re-priced');
++    $r = $retry($direct(), cd_records(true, CD_INSTALL, [CD_KIT]));
++    $c->eq($r['ok'] ?? null, true, 'D1 a priced sale whose kit is kept off since: still quoted (kept off decides what the form offers, not a sale already made)');
++    $r = $retry($direct(), cd_records(false));
++    $c->eq([$r['ok'] ?? null, $r['lines'] ?? null], [true, $LINES], 'D1 the switch off: the direct application is still retried by its uCRM ids (G-10)');
++    $r = $retry($direct(), cd_records(true, 71));
++    $c->eq($r['ok'] ?? null, true, 'D1 the installation product changed since (to one uCRM does not list): the stored one is judged, and still stands');
++    $r = $retry($direct(['quote_item_ids' => ['plan' => ['sp' => 'x']]]), cd_records(true));
++    $c->eq([$r['ok'] ?? null, $r['code'] ?? null], [false, 'P1'], 'D1 stored ids that cannot be read: not quoted');
++
++    // ── D2 an unpriced direct sale resolved again: kept off applies; fixed, it is priced ─────────────────────────────
++    $r = $retry($direct([], false), cd_records(true, null));
++    $c->t(($r['ok'] ?? true) === false && strpos((string)($r['text'] ?? ''), 'the installation product is not set') !== false, 'D2 still unpriced while the installation is not set');
++    $r = $retry($direct([], false), cd_records(true));
++    $c->eq([$r['ok'] ?? null, array_column($r['lines'] ?? [], 'productId')], [true, [12, CD_KIT, CD_INSTALL]], 'D2 the installation set since: priced now, from uCRM');
++    $r = $retry($direct([], false), cd_records(true, CD_INSTALL, [CD_KIT]));
++    $c->t(($r['ok'] ?? true) === false && strpos((string)($r['text'] ?? ''), 'kept off the forms') !== false,
++        'D2 its kit kept off since: stays unpriced on every automatic retry (kept off applies to an unpriced sale)', (string)($r['text'] ?? ''));
++
++    // ── D3 a 5.18.102 web application unlinked: the switch decides its words and its button ──────────────────────────
++    $web = ['id' => 42, 'quote_sale_entry' => 'web', 'package_choice' => '1', 'device_id' => '3', 'customer_type' => 'StarLink',
++            'connectivity_type' => 'New Connection', 'install_by' => 'dishnet', 'sales_type' => 'Credit', 'quote_items' => null];
++    $r = $retry($web, cd_records(true), ['catalogue' => true]);
++    $c->eq($r['text'] ?? null, 'This registration was made before the uCRM catalogue was turned on, and its items are the plugin\'s, which are no longer linked — make its quotation in uCRM by hand.',
++        'D3 the switch on: a 5.18.102 web sale left unlinked is told to be quoted in uCRM by hand');
++    $r = $retry($web, cd_records(false), ['catalogue' => true]);
++    $c->t(strpos((string)($r['text'] ?? ''), 'Do not make it by hand — once the item is linked, an admin makes it from the Orders card.') !== false,
++        'D3 control: the switch off, the same sale keeps 5.18.102\'s P1_UNLINKED', (string)($r['text'] ?? ''));
++    $r = $c->child('
++$m = function ($e, $on) { return KycService::canMakeQuotation(["quote_sale_entry" => $e, "crm_client_id" => 901, "quote_refused" => "P1"], $on); };
++return [$m("web-direct", true), $m("web-direct", false), $m("web", true), $m("web", false), $m("app", false), $m(null, false),
++        KycService::canMakeQuotation(["quote_sale_entry" => "web", "crm_client_id" => 901, "quote_refused" => "P1"])];');
++    $c->eq($r['value'], [true, true, false, true, false, false, true], 'D3 canMakeQuotation: web-direct always; web only with the switch off; app never; the old one-argument call as 5.18.102');
++
++    // ── D4 KycCrmSync: a pending direct application created and quoted; with the gate off, never quoted ─────────────
++    $sync = function (array $app, ?array $records, array $o = []) use ($c) {
++        return $c->child(cd_seed($records) . '
++$sync = new KycCrmSync($s, $crm, $s->load("kyc_config.json") ?? []);
++$r = $sync->syncOne(' . (int)$app['id'] . ', false, "admin:Tester");
++return ["r" => $r, "app" => $s->findOne("kyc_applications.json", "id", ' . (int)$app['id'] . ')];
++', $o + ['apps' => [$app]]);
++    };
++    cd_fake($c);
++    $res = $sync($direct(), cd_records(true));
++    $a = (array)($res['value']['app'] ?? []);
++    $c->eq([count($quotes()), array_column($quotes()[0]['items'] ?? [], 'productId'), array_key_exists('quote_link_ids', $a)], [1, [12, CD_KIT, CD_INSTALL], false],
++        'D4 a pending direct application is created and quoted from its stored lines; no link ids recorded', substr($res['errlog'], 0, 600));
++    cd_fake($c);
++    $res = $sync($direct([], false), cd_records(true, null));
++    $a = (array)($res['value']['app'] ?? []);
++    $c->eq([count($quotes()), $a['quote_refused'] ?? null], [0, 'P1'], 'D4 a pending unpriced one still unpriced: created, no quotation, P1');
++    cd_fake($c);
++    $res = $sync($direct(), cd_records(true), ['cfg' => ['ucrm_quote_organization_id' => 'off']]);
++    $a = (array)($res['value']['app'] ?? []);
++    $c->t(count($quotes()) === 0 && ($a['quote_refused'] ?? null) === 'P1'
++        && strpos((string)($a['quote_refused_text'] ?? ''), 'a sale from the uCRM catalogue is not quoted while the quoting organization is off') !== false,
++        'D4 the quoting gate off: a direct application is never quoted by the gate-off builder (no free plan line)', (string)($a['quote_refused_text'] ?? ''));
++    cd_fake($c);
++    $res = $sync($direct(['quote_sale_entry' => 'app']), cd_records(true), ['cfg' => ['ucrm_quote_organization_id' => 'off']]);
++    $c->eq(count($quotes()), 1, 'D4 control: the same record not marked web-direct is quoted by the gate-off builder (5.18.101\'s path)');
++
++    // ── D5 the Orders card and retry_quote, through the judged tree's own handlers ───────────────────────────────────
++    cd_fake($c);
++    $srv = qfu_c_servers($c);
++    $dir = qfu_c_seed($c, [$direct(['crm_client_id' => 901, 'crm_sync_status' => 'synced', 'quote_refused' => 'P1'], false)], ['links' => null]);
++    qfu_c_table($c, $dir, 'ucrm_catalogue.json', cd_records(true));
++    $c->ctl('kyc', '/__test/set', ['clients' => [['id' => 901, 'organizationId' => 1, 'firstName' => 'Test', 'lastName' => 'Direct', 'contacts' => []]]]);
++    $p = qfu_c_press($c, $srv, $dir, 41);
++    $a = qfu_c_app($dir, 41);
++    $c->eq([count($quotes()), !empty($a['quote_created']), array_key_exists('quote_link_ids', $a)], [1, true, false],
++        'D5 Make the quotation on an unpriced direct application, now priceable: made, from uCRM, no link ids', json_encode([$p['flash'] ?? null, substr($p['log'] ?? '', 0, 400)]));
++    $dir2 = qfu_c_seed($c, [['id' => 42, 'quote_sale_entry' => 'web', 'crm_client_id' => 902, 'quote_refused' => 'P1', 'quote_refused_text' => 'old text',
++        'package_choice' => '1', 'device_id' => '3', 'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection', 'install_by' => 'dishnet',
++        'sales_type' => 'Credit', 'quote_items' => null, 'quote_created' => false, 'mobile' => '+256 700 003 042']], ['links' => null]);
++    qfu_c_table($c, $dir2, 'ucrm_catalogue.json', cd_records(true));
++    cd_fake($c);
++    $p = qfu_c_press($c, $srv, $dir2, 42);
++    $flash = is_array($p['flash'] ?? null) ? (string)($p['flash']['msg'] ?? '') : (string)($p['flash'] ?? '');
++    $c->t(count($quotes()) === 0 && strpos($flash, 'Make the quotation does not apply to application #42 now') !== false,
++        'D5 the switch on: Make the quotation on a 5.18.102 web application is refused by the handler', json_encode($p['flash'] ?? null));
++    // The Orders card as qfu_c_card() draws it, on a data directory holding the uCRM catalogue's records
++    $card = function (array $apps, array $records) use ($c, $srv): string {
++        $r = $c->child(cd_seed($records) . '
++error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
++if (!function_exists("h")) { function h($s) { return htmlspecialchars((string)($s ?? ""), ENT_QUOTES, "UTF-8"); } }
++if (!function_exists("csrfToken")) { function csrfToken() { return "TEST-CSRF"; } }
++if (!function_exists("csrfField")) { function csrfField() { return "<input type=\\"hidden\\" name=\\"_csrf\\" value=\\"TEST-CSRF\\">"; } }
++require_once $root . "/lib/currency.php";
++$store = $s; $config = $s->load("kyc_config.json"); $dataDir = $dir; $isAdmin = true;
++$_SERVER["HTTP_HOST"] = "crm.example.test"; $_GET = [];
++$myApps = json_decode(' . var_export(json_encode($apps), true) . ', true);
++ob_start(); include $root . "/tabs/sales/applications.php"; $html = ob_get_clean();
++return ["html" => $html];
++', ['tree' => $srv['tree'], 'links' => null]);
++        return (string)($r['value']['html'] ?? ('NO OUTPUT ' . substr($r['errlog'], 0, 1500) . ' … ' . substr($r['out'], -1500)));
++    };
++    $webCard = ['id' => 42, 'firstname' => 'Test', 'lastname' => 'Window', 'mobile' => '+256 700 003 042', 'email' => '', 'address_1' => 'Test Road',
++        'customer_type' => 'StarLink', 'connectivity_type' => 'New Connection', 'package_choice' => '1', 'device_id' => '3', 'kitQty' => '1',
++        'install_by' => 'dishnet', 'sales_type' => 'Credit', 'sales_person' => 'Tester', 'retailer_name' => 'Test Agent', 'priority' => 'Low',
++        'crm_client_id' => '902', 'crm_sync_status' => 'synced', 'submitted_at' => date('Y-m-d H:i:s'), 'status' => 'new', 'amount_charged' => 0,
++        'is_lead' => true, 'quote_created' => false, 'quote_sale_entry' => 'web', 'quote_items' => null, 'quote_refused' => 'P1',
++        'quote_refused_text' => 'OLD-TEXT once the item is linked'];
++    $html = $card([$webCard], cd_records(true));
++    $c->t(strpos($html, 'make its quotation in uCRM by hand') !== false && count(qfu_c_buttons($html)) === 0 && strpos($html, 'OLD-TEXT') === false,
++        'D5 the card, the switch on: the remedy that works, no Make the quotation', substr($html, 0, 300));
++    $html = $card([$webCard], cd_records(false));
++    $c->t(strpos($html, 'OLD-TEXT') !== false && count(qfu_c_buttons($html)) === 1,
++        'D5 control: the switch off, the stored text and the button, as 5.18.102', substr($html, 0, 300));
++    $html = $card([$direct(['crm_client_id' => '904', 'crm_sync_status' => 'synced', 'quote_refused' => 'P1', 'quote_refused_text' => 'DIRECT-TEXT'], false)], cd_records(true));
++    $c->t(strpos($html, 'DIRECT-TEXT') !== false && count(qfu_c_buttons($html)) === 1, 'D5 a direct application\'s card: its text and the button', substr($html, 0, 300));
++
++    // ── D6 retry_quote with the gate off refuses a direct application ────────────────────────────────────────────────
++    cd_fake($c);
++    $dir3 = qfu_c_seed($c, [$direct(['crm_client_id' => 903, 'crm_sync_status' => 'synced'])], ['links' => null, 'cfg' => ['ucrm_quote_organization_id' => 'off', 'crm_auth_token' => 'TEST-TOKEN']]);
++    $rq = qfu_c_retry($c, $srv, $dir3, 41);
++    $c->t(count($quotes()) === 0 && $rq['code'] === 409 && strpos($rq['body'], 'a sale from the uCRM catalogue is not quoted while the quoting organization is off') !== false,
++        'D6 retry_quote, the gate off: refused for a direct application, nothing posted', substr($rq['body'], 0, 300));
++}];
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/F_screen.php b/dishnet-hybrid-sudan/tests/catalogue_direct/F_screen.php
+new file mode 100644
+index 0000000..2f1b69c
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/F_screen.php
+@@ -0,0 +1,156 @@
++<?php
++declare(strict_types=1);
++/**
++ * Section F — 5.18.103 (root docs/72 §G.3, G-1, G-11): the uCRM catalogue screen and its five actions, through the judged
++ * tree's own public.php gate and includes/post/post_sync.php (tests/quote_from_ucrm/l_run.php). The guards in 5.18.102's
++ * order (an admin re-read fresh, the own-page check, the setting); turning on only when its three conditions hold, turning
++ * off with uCRM down; the installation product, keeping off, standard quotations; the link store frozen while the switch
++ * is on (saves, clears and deletes); the Plans and Hardware screens replaced by a card; South Sudan untouched.
++ */
++require_once dirname(__DIR__) . '/quote_from_ucrm/l_lib.php';
++
++$CD_SECTIONS['F'] = ['title' => 'the uCRM catalogue screen and its actions', 'run' => function (QfuCtx $c) {
++    $cat = function (string $dir): array {
++        $r = qfu_l_rows_of($dir, 'ucrm_catalogue');
++        return $r === null ? [] : array_values($r);
++    };
++    $inForce = function (array $recs, string $kind): array {
++        return array_values(array_filter($recs, function ($r) use ($kind) { return ($r['kind'] ?? null) === $kind && array_key_exists('ended_at_ts', $r) && $r['ended_at_ts'] === null; }));
++    };
++    $seed = function (?array $records, array $o = []) use ($c): string {
++        $dir = qfu_l_seed($c, $o);
++        if ($records !== null) qfu_l_put($dir, 'ucrm_catalogue', $records);
++        return $dir;
++    };
++    $post = function (string $dir, array $fields, array $o = []) use ($c): array { return qfu_l_post($c, $dir, $fields, $o); };
++    $page = function (string $dir, string $file = 'ucrm_catalogue.php', bool $admin = true) use ($c): string {
++        @unlink($dir . '/ucrm_quote_catalogue_last_good.json');
++        return qfu_l_page($c, $dir, $file, [], $admin)['html'];
++    };
++
++    // ── F0 the positive control: the screen draws what the forms would offer ─────────────────────────────────────────
++    cd_fake($c);
++    $dir = $seed(cd_records(false));
++    $h = $page($dir);
++    $c->t(strpos($h, 'The switch: <span style="color:#9a3412;">OFF</span>') !== false && strpos($h, 'Plans offered (2)') !== false
++        && strpos($h, 'Hardware offered (3)') !== false && strpos($h, 'Residential Standard (TEST)') !== false, 'F0 the control: the screen, the switch off, two plans and three hardware items', substr($h, 0, 400));
++    $c->t(strpos($h, 'Lonely Plan (TEST)') !== false && strpos($h, 'no uCRM product is spelled like the service plan') !== false
++        && strpos($h, 'Old Kit (TEST)') !== false, 'F0 not offered, with the reasons, the filtered rows named');
++    $c->t(strpos($h, 'name="action" value="ucrm_cat_mode"') !== false && strpos($h, 'name="on" value="1"') !== false, 'F0 the admin sees Turn on (its conditions met)');
++    $hA = $page($dir, 'ucrm_catalogue.php', false);
++    $c->t(strpos($hA, 'Plans offered (2)') !== false && strpos($hA, 'name="action"') === false, 'F0 a non-admin sees the lists, and no control at all');
++
++    // ── F1 the guards, in 5.18.102's order; nothing written by a refusal ─────────────────────────────────────────────
++    cd_fake($c);
++    $dir = $seed(cd_records(false));
++    $before = $cat($dir);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1'], ['session' => QFU_L_AGENT]);
++    $c->eq([$r['code'] ?? null, strpos((string)($r['buffer'] ?? ''), QFU_L_DENIED) !== false, $r['msg'], $r['requests'], $cat($dir) === $before],
++        [403, true, '', [], true], 'F1 a non-admin: 403, no flash, uCRM not asked, nothing written');
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1'], ['token' => false]);
++    // the global CSRF gate (includes/post_handlers.php) answers first when no token is sent at all; the handler's own check after it
++    $c->t(in_array($r['msg'], [QFU_L_SECURITY, 'Security token mismatch. Please try again.'], true) && $cat($dir) === $before, 'F1 no form token: refused, nothing written', $r['msg']);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1'], ['headers' => ['HTTP_SEC_FETCH_SITE' => 'cross-site', 'HTTP_ORIGIN' => 'https://evil.example']]);
++    $c->t($r['msg'] === QFU_L_SECURITY && $cat($dir) === $before, 'F1 a cross-site post: the security flash, nothing written', $r['msg']);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1'], ['cfg' => ['ucrm_quote_organization_id' => 'abc']]);
++    $c->t(strpos($r['msg'], 'The company the app quotes under is not set correctly') === 0 && $cat($dir) === $before, 'F1 the setting invalid: one fixed flash, nothing written', $r['msg']);
++
++    // ── F2 turning on: its three conditions; turning off needs no uCRM ───────────────────────────────────────────────
++    cd_fake($c);
++    $dir = $seed(cd_records(false, null));
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1']);
++    $c->t(strpos($r['msg'], 'installation product is not set') !== false && $inForce($cat($dir), 'mode')[0]['on'] === false, 'F2 the installation not set: not turned on', $r['msg']);
++    cd_fake($c, ['service_plans' => cd_plans([CD_PLAN_RES => null, CD_PLAN_BIZ => null])]);
++    $dir = $seed(cd_records(false));
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1']);
++    $c->t(strpos($r['msg'], 'No plan is offered from uCRM yet') === 0 && $inForce($cat($dir), 'mode')[0]['on'] === false, 'F2 no plan offered: not turned on', $r['msg']);
++    cd_fake($c, ['products_down' => true]);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1']);
++    $c->t(strpos($r['msg'], 'uCRM could not be read, so the uCRM catalogue was not turned on') === 0, 'F2 uCRM down: not turned on', $r['msg']);
++    cd_fake($c, ['products' => cd_products([CD_INSTALL => ['taxable' => true]])]);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1']);
++    $c->t(strpos($r['msg'], 'taxable') !== false && $inForce($cat($dir), 'mode')[0]['on'] === false, 'F2 the installation product failing its rules now: not turned on', $r['msg']);
++    cd_fake($c);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '1']);
++    $m = $inForce($cat($dir), 'mode');
++    $c->eq([strpos($r['msg'], 'The uCRM catalogue is on') === 0, count($m), $m[0]['on'] ?? null, $m[0]['by_id'] ?? null], [true, 1, true, 1],
++        'F2 the three conditions met: turned on, by the admin re-read fresh', $r['msg']);
++    cd_fake($c, ['products_down' => true]);
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '0']);
++    $c->eq([strpos($r['msg'], 'The uCRM catalogue is off') === 0, $inForce($cat($dir), 'mode')[0]['on'] ?? null], [true, false], 'F2 turned off with uCRM down: no uCRM read needed', $r['msg']);
++
++    // ── F3 the installation product, keeping off, standard quotations ───────────────────────────────────────────────
++    cd_fake($c);
++    $dir = $seed([]);
++    $r = $post($dir, ['action' => 'ucrm_cat_install', 'product_id' => '80']);
++    $c->t(strpos($r['msg'], 'Nothing was changed') === 0 && $inForce($cat($dir), 'install') === [], 'F3 a product priced 0 cannot be the installation', $r['msg']);
++    $r = $post($dir, ['action' => 'ucrm_cat_install', 'product_id' => '17']);
++    $c->t(strpos($r['msg'], 'Nothing was changed') === 0 && $inForce($cat($dir), 'install') === [], 'F3 a plan\'s product (spelled like a service plan) cannot be the installation', $r['msg']);
++    $r = $post($dir, ['action' => 'ucrm_cat_install', 'product_id' => '70']);
++    $i = $inForce($cat($dir), 'install');
++    $c->eq([count($i), $i[0]['product_id'] ?? null, $i[0]['product_name'] ?? null], [1, 70, 'Professional Installation'], 'F3 the installation product set, its name from uCRM', $r['msg']);
++    $r = $post($dir, ['action' => 'ucrm_cat_hidden', 'product_id' => (string)CD_ACC, 'hide' => '1']);
++    $hid = $inForce($cat($dir), 'hidden');
++    $c->eq([count($hid), $hid[0]['product_id'] ?? null, $hid[0]['product_name'] ?? null], [1, CD_ACC, 'Pipe Adapter (TEST)'], 'F3 a product kept off, named from uCRM (never the browser)');
++    $post($dir, ['action' => 'ucrm_cat_hidden', 'product_id' => (string)CD_ACC, 'hide' => '0']);
++    $c->eq($inForce($cat($dir), 'hidden'), [], 'F3 offered again');
++    $std = ['action' => 'ucrm_cat_standard_save', 'title' => 'Mini + Residential', 'plan' => CD_PLAN_RES . ':12', 'hw_p' => [(string)CD_MINI, ''], 'hw_q' => ['1', '1'], 'install' => '1'];
++    $r = $post($dir, $std);
++    $s1 = $inForce($cat($dir), 'standard');
++    $c->eq([count($s1), $s1[0]['hw'] ?? null, $s1[0]['install'] ?? null, $s1[0]['plan'] ?? null],
++        [1, [['p' => CD_MINI, 'q' => 1]], true, ['sp' => CD_PLAN_RES, 'p' => 12]], 'F3 a standard quotation saved by ids (an empty row skipped)', $r['msg']);
++    $r = $post($dir, ['plan' => '8:12'] + $std);
++    $c->t(strpos($r['msg'], 'Nothing was saved: its plan is not offered now') === 0 && count($inForce($cat($dir), 'standard')) === 1, 'F3 its plan not offered: refused', $r['msg']);
++    $r = $post($dir, ['hw_p' => ['80'], 'hw_q' => ['1']] + $std);
++    $c->t(strpos($r['msg'], 'Nothing was saved') === 0 && count($inForce($cat($dir), 'standard')) === 1, 'F3 a hardware item not offered: refused', $r['msg']);
++    $r = $post($dir, ['hw_q' => ['100', '1']] + $std);
++    $c->t(strpos($r['msg'], 'Nothing was saved') === 0, 'F3 a quantity of 100: refused', $r['msg']);
++    $r = $post($dir, ['standard_id' => (string)$s1[0]['id'], 'title' => 'Mini + Residential (v2)'] + $std);
++    $s2 = $inForce($cat($dir), 'standard');
++    $c->eq([count($s2), $s2[0]['title'] ?? null, $s2[0]['id'] !== $s1[0]['id']], [1, 'Mini + Residential (v2)', true], 'F3 edited: the old version ended, a new one in force');
++    $post($dir, ['action' => 'ucrm_cat_standard_end', 'standard_id' => (string)$s2[0]['id']]);
++    $c->eq($inForce($cat($dir), 'standard'), [], 'F3 stopped');
++
++    // ── F4 the link store frozen while the switch is on: saves, clears and deletes leave it untouched (G-11) ─────────
++    cd_fake($c);
++    $links = [qfu_link(1, 'plan', 1, QFU_PLAN_STAMP, 12, 6), qfu_link(2, 'kit', 3, QFU_KIT_STAMP, 55)];
++    $dir = $seed(cd_records(true), ['links' => $links]);
++    $r = qfu_l_link($c, $dir, 'kit', 4, CD_MINI);
++    $c->t(strpos($r['msg'], 'Nothing was linked: on Uganda, plans and hardware now come straight from uCRM') === 0 && qfu_l_links_of($dir) === $links,
++        'F4 the switch on: a link save is refused, the store untouched', $r['msg']);
++    $r = qfu_l_unlink($c, $dir, 'kit', 3);
++    $c->t(strpos($r['msg'], 'Nothing was unlinked') === 0 && qfu_l_links_of($dir) === $links, 'F4 … an unlink refused', $r['msg']);
++    $post($dir, ['action' => 'delete_plan', 'plan_id' => '1']);
++    $c->eq(count(qfu_l_active(qfu_l_links_of($dir), 'plan', 1)), 1, 'F4 … deleting the plan row ends none of its links');
++    $dir = $seed(cd_records(false), ['links' => $links]);
++    $post($dir, ['action' => 'delete_plan', 'plan_id' => '1']);
++    $c->eq(count(qfu_l_active(qfu_l_links_of($dir), 'plan', 1)), 0, 'F4 control: the switch off, deleting the plan row ends its links, as 5.18.102');
++
++    // ── F5 the Plans and Hardware screens: a card while the switch is on, opening nothing; 5.18.102's otherwise ──────
++    cd_fake($c);
++    $dir = $seed(cd_records(true), ['links' => null]);
++    foreach (['subscription_plans.php', 'hardware.php'] as $f) {
++        $h = $page($dir, $f);
++        $c->t(strpos($h, 'come straight from uCRM') !== false && strpos($h, 'tab=ucrm_catalogue') !== false && strpos($h, 'uCRM link') === false
++            && !in_array('ucrm_quote_links', qfu_l_tables($dir), true), "F5 {$f}, the switch on: one card, no link store opened", substr($h, 0, 300));
++    }
++    $dir = $seed(cd_records(false), ['links' => null]);
++    $h = $page($dir, 'subscription_plans.php');
++    $c->t(strpos($h, 'come straight from uCRM') === false && strpos($h, 'uCRM link') !== false, 'F5 control: the switch off, 5.18.102\'s Plans screen');
++
++    // ── F6 the screen lists the web registrations waiting with P1 (G-10) ────────────────────────────────────────────
++    cd_fake($c);
++    $dir = $seed(cd_records(false), ['apps' => [['id' => 51, 'quote_sale_entry' => 'web', 'quote_refused' => 'P1', 'quote_created' => false],
++        ['id' => 52, 'quote_sale_entry' => 'web-direct', 'quote_refused' => 'P1'], ['id' => 53, 'quote_sale_entry' => 'web', 'quote_created' => true]]]);
++    $h = $page($dir);
++    $c->t(strpos($h, '1 registration(s) made before the switch are waiting with no quotation (application #51)') !== false,
++        'F6 the switch off: the 5.18.102 web applications waiting with P1 are listed by id, only those', substr($h, strpos($h, 'registration') ?: 0, 200));
++
++    // ── F7 South Sudan: the screen says it does not apply; the actions fall through; no table ───────────────────────
++    $dir = qfu_l_seed($c, ['k' => 'ss']);
++    $h = $page($dir);
++    $c->t(strpos($h, 'applies only where quotations are made under the quoting organization') !== false && strpos($h, 'Plans offered') === false,
++        'F7 South Sudan: the screen does not apply', substr($h, 0, 200));
++    $r = $post($dir, ['action' => 'ucrm_cat_mode', 'on' => '0']);
++    $c->t($r['msg'] === '' && !in_array('ucrm_catalogue', qfu_l_tables($dir), true), 'F7 South Sudan: an action falls through, nothing written, no table', $r['msg']);
++}];
+diff --git a/dishnet-hybrid-sudan/tests/catalogue_direct/_lib.php b/dishnet-hybrid-sudan/tests/catalogue_direct/_lib.php
+new file mode 100644
+index 0000000..5d1f216
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/catalogue_direct/_lib.php
+@@ -0,0 +1,123 @@
++<?php
++declare(strict_types=1);
++/**
++ * Shared by tests/test_catalogue_direct.php and its sections (5.18.103, root docs/72 §G). TEST ONLY.
++ *
++ * The sections run on tests/quote_from_ucrm/_lib.php's QfuCtx: child() runs a body on a copy of the judged tree's lib/
++ * and profiles/ against the fake uCRM (fixtures/fake_ucrm_kyc.php). This file adds the direct-mode fixtures: a uCRM
++ * catalogue with two plan pairs, kits, an accessory, the installation and rows each rule refuses, and the records of the
++ * uCRM catalogue's store (ucrm_catalogue.json) a body seeds itself (cd_seed()). Every name, number and price is
++ * fictitious.
++ */
++
++const CD_PLAN_RES = 6;     // service plan "Residential Standard (TEST)", paired with product 12
++const CD_PLAN_BIZ = 7;     // service plan "Business Plus (TEST)", paired with product 17
++const CD_KIT      = 55;    // "Standard Kit (TEST)"
++const CD_MINI     = 56;    // "Mini Kit (TEST)"
++const CD_ACC      = 57;    // "Pipe Adapter (TEST)"
++const CD_INSTALL  = 70;    // "Professional Installation"
++
++/** The service plans the fake serves in direct mode ($over: id => fields | null, as qfu_kyc_products). */
++function cd_plans(array $over = []): array
++{
++    $mk = function (int $id, string $name, $price, array $more = []): array {
++        return ['id' => $id, 'name' => $name, 'periods' => [['period' => 1, 'price' => $price, 'enabled' => true]],
++                'downloadSpeed' => 100] + $more;
++    };
++    $p = [
++        CD_PLAN_RES => $mk(CD_PLAN_RES, 'Residential Standard (TEST)', 100),
++        CD_PLAN_BIZ => $mk(CD_PLAN_BIZ, 'Business Plus (TEST)', 300),
++        8           => $mk(8, 'Lonely Plan (TEST)', 50),                    // no product spelled like it
++    ];
++    foreach ($over as $id => $set) {
++        if ($set === null) { unset($p[$id]); continue; }
++        $p[$id] = isset($p[$id]) ? array_merge($p[$id], $set) : $set;
++    }
++    return array_values($p);
++}
++
++/** The products the fake serves in direct mode ($over: id => fields | null). */
++function cd_products(array $over = []): array
++{
++    $p = [
++        12         => ['id' => 12,         'name' => 'Residential Standard (TEST)', 'price' => 100,  'unit' => 'Month', 'taxable' => false],
++        17         => ['id' => 17,         'name' => 'Business Plus (TEST)',        'price' => 300,  'unit' => 'Month', 'taxable' => false],
++        CD_KIT     => ['id' => CD_KIT,     'name' => 'Standard Kit (TEST)',         'price' => 1500, 'unit' => 'Pc',    'taxable' => false],
++        CD_MINI    => ['id' => CD_MINI,    'name' => 'Mini Kit (TEST)',             'price' => 900,  'unit' => 'Pc',    'taxable' => false],
++        CD_ACC     => ['id' => CD_ACC,     'name' => 'Pipe Adapter (TEST)',         'price' => 50,   'unit' => 'Pc',    'taxable' => false],
++        CD_INSTALL => ['id' => CD_INSTALL, 'name' => 'Professional Installation',   'price' => 200,  'unit' => 'Job',   'taxable' => false],
++        80         => ['id' => 80,         'name' => 'Free Thing (TEST)',           'price' => 0,    'unit' => 'Pc',    'taxable' => false],
++        81         => ['id' => 81,         'name' => 'Old Kit (TEST)',              'price' => 700,  'unit' => 'Pc',    'taxable' => false, 'archived' => true],
++    ];
++    foreach ($over as $id => $set) {
++        if ($set === null) { unset($p[$id]); continue; }
++        $p[$id] = isset($p[$id]) ? array_merge($p[$id], $set) : $set;
++    }
++    return array_values($p);
++}
++
++/** Reset the fake to the Uganda scenario and serve the direct-mode catalogue (and any other state keys). */
++function cd_fake(QfuCtx $c, array $set = []): void
++{
++    $c->ctl('kyc', '/__test/reset?scenario=uganda');
++    $c->ctl('kyc', '/__test/set', $set + ['products' => cd_products(), 'service_plans' => cd_plans()]);   // the caller's keys win
++}
++
++/** One record of ucrm_catalogue.json in its stored shape, in force, by a fictitious admin. */
++function cd_rec(int $id, string $kind, array $fields, array $more = []): array
++{
++    return array_merge(['id' => $id, 'kind' => $kind] + $fields + [
++        'by_id' => 1, 'by_name' => 'Test Admin', 'at' => '2026-11-01 10:00:00', 'at_ts' => 1793527200 + $id,
++        'ended_at' => null, 'ended_at_ts' => null, 'ended_by_id' => null,
++    ], $more);
++}
++
++/** The usual records: the switch on (or off), the installation product, products kept off, standard quotations. */
++function cd_records(bool $on = true, ?int $install = CD_INSTALL, array $hidden = [], array $standards = []): array
++{
++    $r = [cd_rec(1, 'mode', ['on' => $on])];
++    if ($install !== null) $r[] = cd_rec(2, 'install', ['product_id' => $install, 'product_name' => 'Professional Installation']);
++    $id = 10;
++    foreach ($hidden as $pid) $r[] = cd_rec($id++, 'hidden', ['product_id' => $pid, 'product_name' => 'TEST #' . $pid]);
++    foreach ($standards as $s) $r[] = cd_rec($id++, 'standard', $s);
++    return $r;
++}
++
++/** A standard quotation's fields. */
++function cd_std(string $title, int $sp, int $p, array $hw, bool $install): array
++{
++    return ['title' => $title, 'plan' => ['sp' => $sp, 'p' => $p], 'hw' => $hw, 'install' => $install];
++}
++
++/** PHP for a child body's first lines: the store's ucrm_catalogue.json set to $records ([] empties it; null leaves it). */
++function cd_seed(?array $records): string
++{
++    if ($records === null) return '';
++    return '$s->save("ucrm_catalogue.json", json_decode(' . var_export(json_encode($records), true) . ', true));' . "\n";
++}
++
++/** The child's resolver, direct mode: the plugin's client on the fake, the quoting organization 1, no link. */
++function cd_uql_php(): string
++{
++    return '$__set = QuoteOrganization::setting($s->load("kyc_config.json") ?? [], $dir);
++$__u = new UcrmQuoteLines($crm, $__set, UcrmQuoteLinks::fromRecords([], []));
++$__cat = UcrmCatalogue::fromStore($s, $__set);' . "\n";
++}
++
++/** The direct form's post, over the KYC defaults QfuCtx::submit() adds: plan, cart, who installs, the marker. */
++function cd_post(array $plan, array $cart, array $more = []): array
++{
++    return array_merge([
++        'ucrm_quote_form' => '5.18.103-direct',
++        'ucrm_plan'       => $plan[0] . ':' . $plan[1],
++        'ucrm_cart_json'  => json_encode(array_map(function ($e) { return ['p' => $e[0], 'q' => $e[1]]; }, $cart)),
++        'install_by'      => 'dishnet',
++        'package_choice'  => null, 'device_id' => null, 'kitQty' => null,   // the direct form draws none of them
++    ], $more);
++}
++
++/** A line's token, as the resolver computes it (for posts that must match). */
++function cd_token(int $pid, string $label, $price, string $unit): string
++{
++    return substr(hash('sha256', $pid . '|' . $label . '|' . (string)(int)round(((float)$price) * 100) . '|' . $unit), 0, 16);
++}
+diff --git a/dishnet-hybrid-sudan/tests/test_catalogue_direct.php b/dishnet-hybrid-sudan/tests/test_catalogue_direct.php
+new file mode 100644
+index 0000000..1a0e295
+--- /dev/null
++++ b/dishnet-hybrid-sudan/tests/test_catalogue_direct.php
+@@ -0,0 +1,98 @@
++<?php
++declare(strict_types=1);
++/**
++ * test_catalogue_direct.php — 5.18.103 (Uganda, root docs/72 §G): the catalogue straight from uCRM ("direct mode"). The
++ * uCRM catalogue's switch and settings (lib/UcrmCatalogue.php), what the forms offer (UcrmQuoteLines::offered()), a direct
++ * sale priced, stored, retried and quoted, Send Quotation's picked lines, the standard quotations, the screen and its
++ * guards, South Sudan and the switch off as before, the rollback reading, and the release's boundary from Git.
++ *
++ * The sections are the files tests/catalogue_direct/<Letter>_*.php, each registering one section in $CD_SECTIONS. They
++ * run on tests/quote_from_ucrm/_lib.php's QfuCtx (the child processes, the fake uCRM). Every section starts with its
++ * positive control. Then the weakened copies (tests/catalogue_direct/mutants*.php): each a copy of the plugin with one
++ * edit, judged by THIS file run with --root=<the copy> --sections=<the letters it names>; a copy is caught only when every
++ * section it names fails (and, where a pattern is given, a FAIL line matches it). A copy whose anchor is not found exactly
++ * once is a failure of this test, never a skip.
++ *
++ *   cd tests && DN_VAULT_FILE=$(mktemp -d)/v.json php test_catalogue_direct.php [--root=DIR] [--sections=REGEX]
++ *        [--no-mutants] [--mutants=REGEX]
++ *
++ * Development and release suites only. Every person, number, address and document is fictitious; nothing leaves the
++ * machine.
++ */
++$opt  = getopt('', ['root:', 'sections:', 'no-mutants', 'mutants:']);
++$ROOT = isset($opt['root']) ? rtrim((string)$opt['root'], '/') : dirname(__DIR__);
++$SECT = isset($opt['sections']) ? (string)$opt['sections'] : '.';
++$withMutants = !isset($opt['no-mutants']);
++// The zone section F's book runs under (qcj_book() takes it from its caller). A test file may pin a zone; its section files
++// may not: tests/test_timezone.php exempts the files named test_*, so the zone is named here and nowhere under quote_from_ucrm/.
++if (!defined('QFU_TZ')) define('QFU_TZ', 'Africa/Kampala');
++
++$own = rtrim((string)(getenv('TMPDIR') ?: sys_get_temp_dir()), '/') . '/cd-' . getmypid() . '-' . bin2hex(random_bytes(3));
++mkdir($own, 0700, true);
++putenv('TMPDIR=' . $own);
++putenv('DN_VAULT_FILE=' . $own . '/vault.json');
++register_shutdown_function(function () use ($own) { exec('rm -rf ' . escapeshellarg($own)); });
++
++require_once __DIR__ . '/quote_from_ucrm/_lib.php';
++require_once __DIR__ . '/catalogue_direct/_lib.php';
++$CD_SECTIONS = [];
++foreach (glob(__DIR__ . '/catalogue_direct/[A-Z]_*.php') ?: [] as $f) require $f;
++ksort($CD_SECTIONS);
++
++$ctx = new QfuCtx($ROOT, $own);
++foreach ($CD_SECTIONS as $letter => $sec) {
++    if (!preg_match('/' . $SECT . '/', $letter)) continue;
++    echo "\n{$letter}. {$sec['title']}\n";
++    try {
++        ($sec['run'])($ctx);
++    } catch (\Throwable $e) {
++        $ctx->t(false, "{$letter} ran to its end", get_class($e) . ': ' . $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine());
++    }
++}
++$ctx->stop();
++
++// ── the weakened copies ──────────────────────────────────────────────────────────────────────────────────────────────
++if ($withMutants && !isset($opt['root'])) {
++    require_once __DIR__ . '/fixtures/staff_jobs_sandbox.php';   // sj_weakened_copy()
++    $QFU_MUTANTS = [];
++    // Each section's copies: tests/catalogue_direct/mutants_<Letter>.php appends to $QFU_MUTANTS.
++    foreach (glob(__DIR__ . '/catalogue_direct/mutants_[A-Z].php') ?: [] as $f) require $f;
++    $only = isset($opt['mutants']) ? (string)$opt['mutants'] : null;
++    echo "\nW. Weakened copies (" . count($QFU_MUTANTS) . ")\n";
++    foreach ($QFU_MUTANTS as $m) {
++        if ($only !== null && !preg_match('/' . $only . '/', $m['label'])) continue;
++        $edits = $m['edits'] ?? [[$m['file'], $m['old'], $m['new']]];
++        [$copy, $n] = sj_weakened_copy($ROOT, $edits[0][0], $edits[0][1], $edits[0][2]);
++        $bad = $n === 1 ? '' : "anchor 1 found {$n} times";
++        foreach (array_slice($edits, 1) as $i => [$rel, $old, $new]) {
++            if ($bad !== '') break;
++            $src = (string)@file_get_contents($copy . '/' . $rel);
++            $k = substr_count($src, $old);
++            if ($k !== 1) { $bad = 'anchor ' . ($i + 2) . " found {$k} times"; break; }
++            file_put_contents($copy . '/' . $rel, str_replace($old, $new, $src));
++        }
++        foreach ($edits as [$rel]) {
++            if ($bad === '' && substr($rel, -4) === '.php') {
++                exec('php -l ' . escapeshellarg($copy . '/' . $rel) . ' 2>&1', $lo, $lrc);
++                if ($lrc !== 0) $bad = "the copy's {$rel} does not lint";
++            }
++        }
++        if ($bad !== '') { $ctx->t(false, "{$m['label']}: the copy was made", $bad); exec('rm -rf ' . escapeshellarg($copy)); continue; }
++        $out = [];
++        exec('php ' . escapeshellarg(__FILE__) . ' --no-mutants --root=' . escapeshellarg($copy)
++            . ' --sections=' . escapeshellarg('[' . $m['sections'] . ']') . ' 2>&1', $out);
++        $failedIn = []; $cur = '';
++        foreach ($out as $l) {
++            if (preg_match('/^([A-Z])\. /', $l, $h)) { $cur = $h[1]; continue; }
++            if (strpos($l, '  FAIL ') === 0 && (!isset($m['pattern']) || preg_match($m['pattern'], $l))) $failedIn[$cur] = true;
++        }
++        $want = str_split($m['sections']);
++        $missed = array_values(array_filter($want, fn($s) => empty($failedIn[$s])));
++        $ctx->t($missed === [], "{$m['label']} is caught by " . implode(', ', $want),
++            'not caught in: ' . implode(', ', $missed) . "\n" . implode("\n", array_slice($out, -25)));
++        exec('rm -rf ' . escapeshellarg($copy));
++    }
++}
++
++printf("\n%d passed, %d failed\n", $ctx->pass, $ctx->fail);
++exit($ctx->fail === 0 ? 0 : 1);
