@@ -15349,3 +15349,13 @@ as root on the server, after 5.18.101's record above.
   - `--after-only` once every offered item is linked (QL-LK1), then the quarantine's `--check`, each its own command;
   - Make the quotation for the window's web registrations that QL-LK1 counts; the agents told that Cash is back;
   - `--after-only` again the next day after 15:00 UTC; the next real KYC quotation, the second proof.
+- **The after-checks, 1 Nov** (`after-20261101T074621Z.log` and `after-20261101T093107Z.log`): each **118 and 119 ok,
+  1 failed** — QL-LK1, by design while items are not linked: 3 of 12 resolve (the two kits, and the import tool's
+  "Professional Installation" kit row, which was linked though step 7 says to deactivate it), 9 not linked (the 7
+  plans, "Starlink Mini Package" and the installation card). The second run's R19 is conclusive: the retry job ran
+  at 09:25:03 UTC, after the copy, and the quarantine holds. Nothing else failed; uCRM was asked GETs only.
+- **The operator's decision, 1 Nov (root `docs/72` D6, D7): the plans are not linked.** 5.18.102 stays live; until
+  the next build no quotation is made from the plugin — quotations are made in uCRM by hand, a KYC Cash sale is refused
+  and a Credit one gets no automatic quotation. The next build, 5.18.103, takes plans and hardware straight from uCRM
+  and hides the plugin's own lists on Uganda. The kit-row link to the installation product stays until then: no sale
+  can use it while the plans are unpriced.

@@ -24,7 +24,9 @@ Status: **decisions recorded; design in progress; nothing built, nothing deploye
 | D2 | **The AI service for voice notes, photos and documents is OpenAI**, as in South Sudan: Whisper for voice, GPT-4o for images and PDFs. The customer's voice notes, photos and documents are sent to OpenAI to be read |
 | D3 | **A quote with no reply is chased on day 1, day 3 and day 7**, from the number the customer spoke to, 08:00–20:00 Kampala, never on Sunday, stopping on any reply, a payment, STOP or a person taking over; each salesperson also gets a daily list of open quotes |
 | D4 | **One release, switched on step by step**: every new part ships OFF and is turned on one at a time, each with its own check |
-| D5 | **Until then, 5.18.102 stays live** and the admin links its 5 plans (`docs/07`, "5.18.102 DEPLOYED") |
+| D5 | ~~Until then, 5.18.102 stays live and the admin links its 5 plans~~ — replaced by D6 the same day |
+| D6 | **5.18.102 stays live, its plans not linked; until the next build no quotation is made from the plugin** — the owner, 1 Nov: *"i dont want to link plan lets focus on next build where it will show all the plans from ucrm. remove or hide plugin plans"*, then *"i will not create quotation from plugin until next build"*. Quotations are made in uCRM by hand meanwhile; a KYC Cash sale is refused and a Credit one gets no automatic quotation, as 5.18.102 does with an item not linked |
+| D7 | **The catalogue goes first, as its own release, 5.18.103**: plans and hardware straight from uCRM, the plugin's own plan and hardware lists hidden on Uganda, and the one-click standard quotation. The AI's senses, the quote follow-up, the daily list and after-sales follow as the release after it, each part switched on step by step (D4 now applies to that release). The read-only report (§D item 1) may come at any time, being a tool and not a release |
 
 Advice given and not yet decided (§E): e-mail broadcasts through uCRM's own Tools → Messaging, which sends e-mail (and
 SMS only where a gateway is set), never WhatsApp; WhatsApp marketing to all customers only through the official
