@@ -11,7 +11,7 @@ src = os.path.join(repo, "scripts/deploy-5.18.102.sh")
 doc = Doc(open(src, encoding="utf-8").read())
 ctx = {"repo": rel, "plugin": "dishnet-hybrid-sudan", "base_full": "1a0ea5f103f237db0c7c103c9efd8d38408fbac9", "pin_full": pin}
 parts = [partA]
-for extra in ("partB", "partC", "partE", "partF", "partD", "partH1", "partH2", "partH3", "partH4", "partG", "partI"):
+for extra in ("partB", "partC", "partE", "partF", "partD", "partH1", "partH2", "partH3", "partH4", "partG", "partI", "partJ"):
     parts.append(__import__(extra))
 for p in parts:
     p.apply(doc, ctx)

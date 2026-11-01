@@ -8,4 +8,7 @@ Nothing here is deployed or deployable.
 `derive-5.18.103/` derives `scripts/deploy-5.18.103.sh` from `scripts/deploy-5.18.102.sh` by asserted text edits
 (each part asserts its anchor, its count, its replacements and its result): `python3 -I derive103.py REPO RELEASE_REPO
 PIN_FULL OUT`, with RELEASE_REPO a checkout of release/5.18.103 at PIN_FULL. NOT for use yet: the pin is a work-in-progress
-commit, the script is unrehearsed and under review; it goes to `scripts/` only with the final release commit.
+commit, the script is unrehearsed and under review; it is re-derived on the final release commit.
+`scripts/deploy-5.18.103.sh` is that derivation's current output, committed so the rehearsal being written can read it:
+NOT for use — it pins a work-in-progress commit that is not cut on 1a0ea5f, so its stage A refuses every run (A0), and
+release/5.18.103 is not on origin.
