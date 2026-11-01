@@ -15312,3 +15312,40 @@ quoted by 5.18.101's cron at price 0 and WhatsApped, as above.
       Proved alone after the suite: section C 410 passed and the copy is caught by C, 411 passed, 0 failed, exit 0. Its
       commit was on the lost local branch; the change is made again with the next release.
     - **The owner's decision, 1 Nov: keep `1a0ea5f`** and record this limit, as 5.18.101 did its known limit 8.
+
+## 1 Nov — 5.18.102 DEPLOYED (copy 07:37:25 UTC) — PASSED 186 ok / 0 failed / 30 notes
+
+**From the operator's terminal**, pasted on 1 Nov from the summary up and from stage A's last part down (the log's
+opening lines were not in the paste); the script prints no secret and no figure there. Two runs, each its own command,
+as root on the server, after 5.18.101's record above.
+
+- **The check** (`--check`, begun 07:15:34 UTC): **GO, 67 ok, 0 failed, 25 notes**; nothing backed up, copied or
+  deployed; uCRM asked 25 GETs and nothing else. QL-G1: the form offers 7 plans, 4 kits and the installation, all *not
+  linked*; uCRM offers 5 plan pairs and 31 products an admin could link. QL-N1: no client attribute keyed `salesPerson`.
+  - **Between the two runs:** the operator added the "Sales Person" client attribute; the first one made took the key
+    `salesperson` (uCRM derives the key from the name, and a name typed as one word lost its capital), so it was
+    replaced by one named "Sales Person", key `salesPerson` (#7). On the sheet, two plans (DishNet Business 500 and 1TB)
+    had no uCRM item, and two kit rows were not to be linked (the import tool's "Professional Installation" row, and
+    "Starlink Mini Package", which uCRM does not have): the operator chose to switch those four rows off after the
+    deploy and link the rest.
+- **The deploy** (begun 07:35:04 UTC; the backup in `/root/dnb-5.18.102/backup-20261101T073504Z`): every check of stage
+  A held, then GO; `DEPLOY` typed; **the container serves `1a0ea5f`**, the copy at 07:37:25 UTC. After the copy: V1–V13
+  over the public address, BA4, CA4, Q-CA4, Q-CA5, QL-CA3; then R1–R26, BA1, BA2, BK3, CA2, CA3, Q-CA1–Q-CA6,
+  TN-CA1–TN-CA3, QS-CA1, QL-CA1, QL-CA2, Z1 and Z2. **PASSED, 186 ok, 0 failed, 30 notes.** uCRM was asked 44 GETs and
+  nothing else.
+  - QL-N1 and QL-CA2: exactly one client attribute keyed `salesPerson`, #7 — "Prepared by" is set on each new KYC
+    customer.
+  - QL-CA1: the installed resolver gives the 24 items it compares the verdicts stage A gave them, none different; 7
+    plans, 4 kits and the installation not linked, as expected right after the copy.
+  - The cash, bank and copy checks (A23, BK1, C1–C5, R23, BA2, CA2): cash in hand the same to the last digit under both
+    codes; CA3: no drift since stage A. South Sudan, Domain B, the pilot, every switch and the quotation summary's
+    sign-off as before.
+  - The notes include R19: not yet conclusive — the retry job last ran at 07:35:04 UTC, before the copy; run
+    `--after-only` after 07:57:25 UTC. QL-N2: quotation 000314 unreadable (http404); Q-N2: the five clients still under
+    organization #2; Q-N3's `?:http404`.
+- **Still to come:**
+  - the picks on the Plans and Hardware screens (step 7): the 5 plans and 2 kits uCRM has, and the installation card;
+    the four rows above switched off;
+  - `--after-only` once every offered item is linked (QL-LK1), then the quarantine's `--check`, each its own command;
+  - Make the quotation for the window's web registrations that QL-LK1 counts; the agents told that Cash is back;
+  - `--after-only` again the next day after 15:00 UTC; the next real KYC quotation, the second proof.
