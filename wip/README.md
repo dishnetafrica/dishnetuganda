@@ -12,3 +12,10 @@ commit, the script is unrehearsed and under review; it is re-derived on the fina
 `scripts/deploy-5.18.103.sh` is that derivation's current output, committed so the rehearsal being written can read it:
 NOT for use — it pins a work-in-progress commit that is not cut on 1a0ea5f, so its stage A refuses every run (A0), and
 release/5.18.103 is not on origin.
+
+`tests-5.18.103/` holds three tools used on the release's copy of `tests/test_quote_from_ucrm.php`, none of them part
+of the release. `plantable_qfu.php TREE` reads every weakened copy and says which cannot be planted on TREE (each
+anchor exactly once, applied in order as the runner applies them); it writes nothing. `reanchor_qfu.py TREE` rewrites
+the 20 copies whose code 5.18.103 moved (19) or that 5.18.102's round 11 had already left unplantable (ML79's refusal
+copy) so each plants the same fault where the code now lives; every edit asserts its anchor, count and result.
+`remaining_qfu.php TREE LOG` prints, as one anchored --mutants regex, the copies a log does not show caught.
