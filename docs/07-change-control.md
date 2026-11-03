@@ -15714,6 +15714,15 @@ as root on the server, after 5.18.103's entry above.
   R19 conclusive: the retry job ran at 09:55:04 UTC, after the copy, and the quarantine holds. The book's copy has 258
   tables, 257 at the deploy: the uCRM catalogue's table, made by its first save. Q-CA3: uCRM asked 18 GETs and nothing
   else; CA3: no drift; the cash, bank and copy checks as at the deploy.
+- **Found on the screen, 3 Nov — an order trap, for the next release.** The admin had saved both standard quotations
+  with the uCRM product *Professional Installation* as a hardware line, before any installation product was set. Then
+  neither way forward saves: the installation product is refused while a standard quotation lists that product as
+  hardware (`UcrmCatalogue::setInstall`, *"change it first"*), and a standard quotation with *includes installation*
+  ticked is refused while no installation product is set (`UcrmQuoteLines::standardFrom`: *"Nothing was saved: the
+  installation product is not set"*), so the switch stays off. The way through is three saves in order: each standard
+  quotation without that line and without the tick; then the installation product; then each one again with the tick.
+  My first instructions to the operator gave the wrong order (the tick in the same save). Nothing was written wrongly:
+  every refusal changed nothing.
 - **Still to come**, the summary's *your steps*:
   - on the uCRM catalogue screen, as an admin: check what it offers, keep off the forms any product not to be sold (a
     fee, a service), set the installation product, save the standard quotations wanted, title the stock categories as
