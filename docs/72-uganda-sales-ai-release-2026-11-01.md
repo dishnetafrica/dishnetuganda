@@ -1,6 +1,6 @@
 # 72 — Uganda: one release for sales — the catalogue straight from uCRM, an AI that hears, sees and reads, quotes chased, a daily list and a read-only report (design, 1 Nov 2026)
 
-Status: **decisions recorded; 5.18.103's design final (§G), being built; nothing deployed.** The base is the live release,
+Status: **decisions recorded; 5.18.103 built and tested (§G.16), not pushed, not deployed.** The base is the live release,
 `release/5.18.102` (`1a0ea5f`), never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
 
 ## A. The request (the owner, 1 Nov 2026)
@@ -1812,3 +1812,55 @@ path.
 | picked lines dropped by the price filter (B-F14) | split before the filter (§G.9) |
 | token format (B-F15) | PHP only, integer cents, set comparison (§G.4, §G.6) |
 | citations (B-F17) | corrected: `seenLinksMatch` `:695-702`; the Bidal job runs only in `handleExisting` (`L:lib/KycService.php:464`), so it is not on the direct path; `customer_id` is drawn empty and `kycUseExisting` has no caller; the app lists kits with plugin prices; the table is created by the first read |
+
+### G.16 Status, 3 Nov — built and tested; NOT deployed
+
+- **Built:** `release/5.18.103` = **`221c9dc`**, one commit on 5.18.102 (`1a0ea5f`): 59 files, 26 added, 33 changed; no
+  migration. **Not pushed** — `release/5.18.103` goes to GitHub on the owner's word.
+- **Re-cut once.** The first cut, `c09c03c` (kept on `wip/5.18.103-first-cut`, never pushed), failed one test of its own
+  in its first suite pass, stopped at file 223 of 300: `tests/test_cash_in_hand_p3b_south_sudan.php`, 148 passed, 18
+  failed. On its Uganda book every one of its 17 rendered pages differed from `f4b4c96`'s by exactly 148 bytes, the uCRM
+  catalogue's menu entry. That entry is drawn wherever the quoting organization is in force for a user with the Plans or
+  Hardware permission, whatever the switch. §G.13's list named the tests that hold `navigation.php`, but not this one,
+  which holds whole rendered pages. **The release was right and the list was incomplete.** The test is rewritten on
+  purpose, never weakened:
+  - the entry is taken out of the judged tree's pages only, and counted on each page: once on each Uganda page where the
+    tree has `lib/UcrmCatalogue.php`, and never otherwise or on `f4b4c96`'s;
+  - two new weakened copies of `navigation.php` are each caught by exactly their books: the entry drawn on every tenant,
+    and the entry not drawn;
+  - 171 passed, 0 failed (was 166 assertions).
+
+  `SAFETY.md`'s *"Off = 5.18.102 exactly"* now names the menu entry. An independent review of the re-cut confirmed that
+  one finding and refuted four.
+- **The deploy script:** `scripts/deploy-5.18.103.sh`, re-derived on `221c9dc` by the same asserted edits (`d28c8f3`),
+  10,137 lines.
+- **Where the build differs from §G.13's plan** — found by the build, or by the fact-check of the release record (2
+  Nov), each now in root `docs/07`'s 5.18.103 entry:
+  - `test_cash_in_hand_p3b_south_sudan` was missing from its list of rewritten tests (above);
+  - `navigation.php` and `public.php` are not handed to the new boundary: `test_bank_boundaries` (both files) and
+    `test_cashbook_physical_list` (`navigation.php`) still hold every byte but 5.18.103's declared lines, read through
+    `tests/fixtures/r103_revert.php`, and those lines are held by `test_catalogue_direct` I;
+  - `test_quote_from_ucrm`'s section I is not re-pointed: it is still measured against `f2055baf`, its declared files
+    gain 5.18.103's and I6 its direct sites (30 → 31 checks), and the boundary against `1a0ea5f` is
+    `test_catalogue_direct` I;
+  - the deploy script retires five of 5.18.102's checks, not two: QL-LK1 and QL-CA1 as planned, and QL-RB1–QL-RB3 with
+    `--rollback-unpriced-pending`, which guarded a rollback to 5.18.101;
+  - QC-ON4 judges G-7 on a fresh copy of the book, never the live records.
+- **The release suite, twice on `221c9dc`:** **pass A2**, 2 Nov 01:11:24 – 06:55:20 UTC, and **pass B3**, 3 Nov
+  01:14:03 – 07:32:08 UTC: each 300 files, 18,856 passed, 7 failed — only `test_install_authorisation` 2,
+  `test_mail_quote` 1, `test_migration_integrity` 1 and `test_secure_file` 3, the same checks in both, which fail the
+  same way on `1a0ea5f` in this container (root `docs/07` 5.18.103, known limit 9). Pass B2 was cut off by a container
+  restart in file 221 and does not count.
+- **The rehearsal:** `scripts/harness/deploy-5.18.103/rehearse.sh`, chained on 5.18.102's. Trial 3 (on `d28c8f3`) found
+  one defect, the rehearsal's own: check 4e looked for the summary's QC-N4 sentence without the `docs/72 G-10;` that the
+  deploy script prints, so it could never match. The rehearsal was fixed in `8b9191b`; the deploy script is unchanged.
+  **Trial 4, the record, 2 Nov 12:41:22 – 18:14:24 UTC on `8b9191b`: 2,103 ok, 3 failed** — exactly the three inherited
+  checks that read development branches absent from this container and from GitHub (98-0, 99-0, 100-0); **5.18.103's own
+  sections 182 ok, 0 failed.** Not a clean trial under the 23 Oct rule; whether that is enough to deploy is the owner's
+  decision, as for 5.18.99.
+- **Found after the suite passes:** one sentence of the release's `SAFETY.md` (Operator action, step 3) says the
+  screen lists the waiting 5.18.102 web registrations once the switch is on; it lists them only while the switch is
+  off. Recorded as root `docs/07` 5.18.103's known limit 12, not re-cut; their ids are on the deploy's sheet (QC-N4).
+- **Next — the owner's:** the go-ahead to push `release/5.18.103`, then the deploy (root `docs/07`'s 5.18.103 entry is
+  the runbook). After the deploy the switch is still OFF; an admin turns it on from *uCRM catalogue* once the
+  installation product is set. §G.14's three questions are still open, and none blocks the deploy.

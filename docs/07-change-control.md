@@ -15359,3 +15359,313 @@ as root on the server, after 5.18.101's record above.
   and a Credit one gets no automatic quotation. The next build, 5.18.103, takes plans and hardware straight from uCRM
   and hides the plugin's own lists on Uganda. The kit-row link to the installation product stays until then: no sale
   can use it while the plans are unpriced.
+
+## 1–3 Nov — 5.18.103: on Uganda the uCRM catalogue — plans and hardware straight from uCRM's Products and Service Plans, by uCRM id at uCRM's prices, nothing linked; standard quotations in one click; the plugin's Plans and Hardware leave the menu; all behind an admin's switch, OFF until an admin turns it on, and off it quotes as 5.18.102 exactly (an admin's menu gains the screen's entry); South Sudan, and Uganda with the quoting organization 0/off, as 5.18.102; no migration. `release/5.18.103` = `221c9dc`, one commit on 5.18.102 (`1a0ea5f`) — re-cut once, after the first cut's suite found a test it had to rewrite and had not — NOT pushed; `scripts/deploy-5.18.103.sh` pinned to it; the release suite twice on it (300 files): pass A2 (2 Nov) and pass B3 (3 Nov) each 18,856 passed and 7 failed — in both only the same seven checks in four files, which fail the same way on `1a0ea5f` in this container (known limit 9); a pass B2 between them was cut off by a container restart and does not count; the rehearsal, trial 4 (2 Nov, on `8b9191b`): 2,103 ok and 3 failed — only the three inherited checks no trial in this container can pass (known limit 10); 5.18.103's own sections 182 ok, 0 failed; not a clean trial, so the deploy is the operator's decision; NOT deployed
+
+**Request.** The owner, 1 Nov, after linking 5.18.102's plans, kits and installation to uCRM items by hand proved hard
+(root `docs/72` §A; at 5.18.102's after-checks 9 of its 12 items were not linked, QL-LK1): *"i dont want to link plan
+lets forcs on next build where it will show all the plans from ucrm .remove or hide plugin plans please"*, *"instead of
+matching why dont we show all the things of hardaware lets show in plugin as well same like website and give standard
+one click predefind quote"*, and *"i will not create quotation from plugin until next build"* (D6). Asked what the next
+release holds first, they chose *"Yes, catalogue first"* (D7): this release is the catalogue and the standard quotation;
+AI media (D2), the day 1/3/7 follow-ups (D3), the daily list and after-sales follow as one release after it, each part
+switched on step by step (D4); the read-only report may come at any time, being a tool, not a release (D7). The design
+is root `docs/72` §G, reviewed adversarially before it was built (§G.15).
+
+### Release notes (Uganda, with the quoting organization in force; root `docs/72` §G, the release's `SAFETY.md`)
+
+- **The switch, OFF until an admin turns it on**, on a new screen, *uCRM catalogue* (`tabs/sales/ucrm_catalogue.php`),
+  shown to those who may see Plans or Hardware; its settings are an admin's. Turning it on reads uCRM fresh and needs at
+  least one plan offered and the installation product set and passing its rules; turning it off reads nothing. **Off, the
+  forms and the quotations are 5.18.102's exactly:** the deploy changes nothing an agent sees; an admin's menu (Plans or
+  Hardware permission) gains the screen's entry, the one change to the pages.
+- **The store, `lib/UcrmCatalogue.php` (new):** the table `ucrm_catalogue` in `plugin.sqlite3`, created by the first save
+  behind the gate — no migration — holding the switch, the installation product, the products kept off the forms and up
+  to ten standard quotations (ids only, never a price); one record per act, with who and when; a change ends the record
+  in force and keeps it.
+- **What is offered (`UcrmQuoteLines::offered()`):** a plan is a uCRM pair — a Service Plan passing 5.18.102's rules and
+  exactly one Product spelled like it — at its 1-month price; hardware is every Product the website would show that
+  passes 5.18.102's product rules, is not spelled like a plan, is not the installation and is not kept off, grouped as
+  the website groups them. The screen lists every other item with why it is not offered.
+- **With the switch on:** the KYC form, Send Quotation and the lead quotes offer those items by uCRM id at uCRM's prices,
+  with the standard quotations as buttons (they fill the form, never submit it); a direct sale is priced once from a
+  fresh read before anything is written and stores its uCRM items (`quote_sale_entry = 'web-direct'`); a Cash sale
+  collects exactly the quotation's total and is refused on a changed total or item; every picked line is re-priced
+  inside `QuotationService` at the send, the mobile API's sends too; the plugin's Plans and Hardware leave the menu and
+  their link pickers refuse; when uCRM cannot be read the form shows the last good list, out of date, Cash disabled,
+  Credit still accepted. A 5.18.102 web registration left unpriced gets no Make the quotation: its Orders card says to
+  quote it in uCRM by hand, and the deploy's QC-N4 puts their ids on its sheet; the uCRM catalogue screen lists those
+  waiting only while the switch is off.
+- **Unchanged:** the retailer app and the mobile API keep the plugin's lists (`docs/72` §G.11); South Sudan, and Uganda
+  with `ucrm_quote_organization_id` 0/off, byte for byte 5.18.102; `webhook.php`, `cron_quote_wa.php`, `api/index.php`,
+  `QuoteOrganization`, `PublicPriceFeed`, `UcrmQuoteLinks`, the Cashbook, ECO Bank and every Balance.
+
+**Files** (against `1a0ea5f`): 59 — 26 added, 33 changed; 6,148 insertions, 113 deletions; no migration. The added ones
+are the two new files above, the new test `tests/test_catalogue_direct.php`, its folder `tests/catalogue_direct/` and
+the fixture `tests/fixtures/r103_revert.php`; the changed ones include `UcrmQuoteLines`, `KycService`, `KycCrmSync`,
+`QuotationService`, the KYC form, Send Quotation, the Plans, Hardware, Orders and Product Mapping screens,
+`post_sync.php`, `post_leads.php`, `navigation.php`, `public.php`, the cron debug and products admin APIs, the manifest,
+`SAFETY.md` and the rewritten tests (`docs/72` §G.13), `test_cash_in_hand_p3b_south_sudan` among them since the re-cut.
+
+**Ancestry.** `221c9dc` (5.18.103, release) ← `1a0ea5f` (5.18.102, release; DEPLOYED 1 Nov, copy 07:37:25 UTC — its
+record above). The release is one commit, squashed from its working commits (kept on `wip/5.18.103-pre-squash`,
+`bfab0dc`) and the re-cut's six files, all tests or documents (Tests, below); its tree identical to the one tested. The
+first cut, `c09c03c`, is kept on `wip/5.18.103-first-cut`; it was never pushed.
+
+### Tests
+
+- **`tests/test_catalogue_direct.php` (new):** 504 passed, 0 failed — A the store and the switch 33, B what the forms
+  offer and a direct sale priced 62, C the KYC submission 35, D retries, Make the quotation and the gate off 24, E Send
+  Quotation and lead quotes 87 (its E9 drives the two pages in headless Chromium), F the uCRM catalogue screen and its
+  actions 38, G the KYC form 115 (55 of them browser checks in headless Chromium), I the release's boundary from Git
+  against `1a0ea5f` 12, R the rollback reading — 5.18.102's code, from Git, on what 5.18.103 leaves — 7; and **91
+  weakened copies**, each one fault planted in a copy of the plugin and caught by the section that guards it.
+- **`tests/test_quote_from_ucrm.php`:** 1,722 passed, 0 failed — sections A–I and L 1,354 (section I rewritten on
+  purpose, still measured against `f2055baf`: its declared files gain 5.18.103's and I6 its direct sites, 30 → 31;
+  5.18.103's own boundary against `1a0ea5f` is `test_catalogue_direct`'s section I), and all **368 weakened copies**
+  caught, the ones anchored on lines this release changes re-anchored (`docs/72` §G.13). 5.18.102's known limit 13 —
+  ML79's copy that could not be planted — no longer occurs.
+- **Rewritten on purpose, never weakened** (`docs/72` §G.13): the manifest version pins (`test_quote_company` 291/0 and
+  its weakened copies 83/0, `test_bank_boundaries` 157/0, `test_cashbook_physical_list` 496/0, the five
+  `test_distributor_*` files 61, 33, 66, 59, 47 — each 0 failed); `navigation.php` and `public.php` (held byte for byte
+  by `test_bank_boundaries`, `navigation.php` also by `test_cashbook_physical_list`) are still held whole but for
+  5.18.103's declared lines, read through `tests/fixtures/r103_revert.php`; those lines are held by the new boundary
+  (`test_catalogue_direct` I). **And one the review's list missed, found by the suite:**
+  `test_cash_in_hand_p3b_south_sudan`, which holds whole rendered pages — 171/0 (was 166 assertions), its two new
+  weakened copies of `navigation.php` each caught by exactly their books. The re-cut (`docs/72` §G.16) changed six files
+  against `c09c03c`, 113 lines in and 4 out, all tests or documents: this test, `tests/fixtures/r103_revert.php`,
+  `test_cashbook_physical_list.php`, the two section I files (`catalogue_direct/I_boundary.php`,
+  `quote_from_ucrm/I_boundary.php`) and `SAFETY.md`.
+- **The first cut's pass, stopped (not counted):** `c09c03c`, 1 Nov 17:01:51 UTC, stopped by hand at 21:37 UTC in file
+  223 of 300 (`test_quote_from_ucrm`, its process ended; the runner went on through file 224 into 225 before the log
+  ends) when the release had to be re-cut. The 222 files before file 223: 13,339 passed, 39 failed — 18 the defect
+  (`test_cash_in_hand_p3b_south_sudan` 148/18), the rest this container's (`test_cli_data_dir` 10/9, run from a folder
+  the test's `nobody` user could not read: 19/0 from a world-readable one), the clock's (`test_pilot_safety` 157/8,
+  Sunday 07:00–19:00 UTC), and three of the four environmental files below (`test_secure_file` comes later and was not
+  reached).
+- **The release, the full suite twice**, on `221c9dc` in a frozen, world-readable worktree, no other suite or trial
+  running beside it:
+  - **Pass A2** 2 Nov 01:11:24 – 06:55:20 UTC: **300 files, 18,856 passed, 7 failed, EXIT=1**, every failure this
+    container's and identical, check by check, on `1a0ea5f` here (known limit 9): `test_install_authorisation`
+    379/2 and `test_mail_quote` 91/1 (the decoded e-mail subject keeps the whitespace between encoded words under this
+    container's PHP 8.3.6; the server runs 8.1.34; `MailService` is untouched by this release);
+    `test_migration_integrity` 27/1 (*"while the run that trimmed it is still recorded"*); `test_secure_file` 22/3 (the
+    0600 checks). No test ran at an hour that fails it or cuts it short: `test_cashbook_physical_list` 496/0 and its
+    mutants 48/0, outside its 21:00–24:00 UTC window; `test_pilot_safety` 177/0 and `test_sales_pilot` 125/0, on a
+    Monday inside their follow-up sending window.
+  - **Pass B3** 3 Nov 01:14:03 – 07:32:08 UTC: **300 files, 18,856 passed, 7 failed, EXIT=1** — the same seven checks in
+    the same four files as pass A2, check by check, and every file's count equal to A2's. It began after 01:00 UTC:
+    `test_cashbook_physical_list` 496/0 and its mutants 48/0; `test_pilot_safety` 177/0 and `test_sales_pilot` 125/0, on
+    a Tuesday inside their follow-up sending window, as each test's output says. Pass B2, begun 2 Nov 23:32:43 UTC, does
+    not count: a restart of this container killed it at 01:12 UTC in file 221 (`test_quote_company_mutants`), with 220
+    files complete — 13,258 passed, 7 failed. It had also begun inside 5.18.102's known limit 12 window (carried in
+    known limit 8): `test_cashbook_physical_list`, the 35th file, ran before midnight and failed as that limit records
+    (495/1, its mutants 4/2); every other complete file's count equals B3's.
+  - **Against 1a0ea5f's release suite** (299 files): one file more, `test_catalogue_direct`; `test_quote_from_ucrm`
+    1,720/1 → 1,722/0; `test_cash_in_hand_p3b_south_sudan` 166 → 171. With the clock (`test_sales_pilot` 119 → 125, its
+    pass B having run on a Sunday) and the seven environmental checks, the totals reconcile exactly with its pass B:
+    18,346 + 504 + 2 + 5 + 6 − 7 = 18,856. The four environmental files fail the same way on `1a0ea5f` in this
+    container; they passed on 31 Oct–1 Nov in the earlier one. (Its per-file logs are not in this container, so the
+    comparison is by the record's counts.)
+  - **Beside the suite:** nothing. `test_customer_pwa` (unchanged by this release) left its `php -S` server running
+    after its run, in both passes; it was stopped by hand after pass A2, and after pass B3 it was left running, on
+    loopback, serving the temporary folder the test had already removed, because this session was not permitted to
+    stop it.
+- **T1 and T4, the script's signatures:** `test_cash_in_hand_p3b.php` *"548 passed, 0 failed"* rc=0, and
+  `test_d1_bank_balance_readers.php --no-mutants` *"20 passed, 0 failed, 0 skipped"* rc=0, on `221c9dc` — as
+  `T1_SIGNATURE` and `T4_SIGNATURE` expect.
+
+### `scripts/deploy-5.18.103.sh` — 10,137 lines, sha256 `00b585c73d4eb38a…`
+
+**How it is made.** From 5.18.102's script by asserted edits (`wip/derive-5.18.103/`), every anchor found exactly the
+stated number of times, every new text present and every superseded one absent, or nothing is written; the release
+commit, the file lists, the counts (59 pinned, 33 of 5.18.102's changed, 97 kept), every sha256 (the release's 59 at
+`221c9dc`; 5.18.102's 33 changed and 97 kept at `1a0ea5f`, each kept file asserted equal in both) and QC-RB1's 26 marks
+computed from Git and verified against it. Derived first against a work-in-progress pin (`318d43a`, `4a42c63`), then on
+the first cut (`c09c03c`, `104e91e`), then again, the derivation unchanged, on the re-cut (`d28c8f3`): 44 lines differ
+(24 in, 20 out) — the pin; the counts (58 → 59, 32 → 33) and the changed-file list; the sha256s of the six files the
+re-cut changed (`test_cash_in_hand_p3b_south_sudan.php` newly pinned in both lists, the other five re-pinned); and
+QC-RB1's two new marks (24 → 26). That the whole script parses, rehearsal trials 3 and 4 show: they ran it. It carries
+every check of 5.18.102's except five: the two `docs/72` §G.13 retires, **QL-LK1** (with the switch on links decide
+nothing, and under D6 every item is unlinked, so it would fail every run) and **QL-CA1** (replaced by QC-CA1); and
+**QL-RB1–QL-RB3**, retired with `--rollback-unpriced-pending` because they guarded a rollback to 5.18.101.
+
+**New — 5.18.103's own checks (QC, "quote catalogue")**, counts and fixed codes only in the log; names, ids and prices
+only on the 0600 cash sheet:
+- **QC-G1, stage A, before anything changes:** what the forms would offer from uCRM in direct mode, through the pin's
+  `offered()` over the copy's catalogue settings, GET-only — plans and hardware offered, and every other item counted by
+  its reason; NO-GO for an unreadable catalogue, a reason the script cannot classify, any request but the two GET lists
+  once each, the copy's catalogue settings unread or created by the reading, a pin without `lib/UcrmCatalogue.php`, or
+  the items' keyed hashes not made; with no quoting organization in force, QC-G1 is a note.
+- **QC-N1–QC-N7, notes:** N1 the switch as stored — **in capitals if it is already on** (a redeploy after a rollback);
+  N2 the installation product and the standard quotations, defined and usable now; N3 the applications by entry
+  (`quote_sale_entry` `web`, `app`, `web-direct` — from an earlier, rolled-back run — or none, saved before 5.18.102) —
+  F11's measure; N4 the 5.18.102 web applications waiting with no quotation, their ids on the sheet; N5 the offered
+  hardware with no active stock category of the same title; N6 the offered items the website's `public_price_exclude`
+  names; N7 the plugin's own active plans by type, none of which direct mode draws.
+- **After the copy:** QC-CA1 the same through the installed code, equal item by item to stage A's; QC-CA2 the new screen
+  without a session (the sign-in page, none of its actions in the answer, no PHP fatal) and the guards on its five
+  actions as text beside the pin's; QC-CA3 Send Quotation's re-pricing as text.
+- **`--after-only`, once the switch is on:** QC-ON1 the switch on; QC-ON2 the installation set and passing; QC-ON3 every
+  standard quotation usable; QC-ON4 G-7 over the book's records, read on a fresh copy — every `web-direct` application
+  with `package_choice` and `device_id` empty and only id 0 in its cart. A run before the switch is on fails QC-ON1 by
+  design.
+- **Rollback:** QC-RB1 the files 5.18.103 adds and the `ucrm_catalogue` table left in place, reached by no 5.18.102
+  file; QC-RB2 the web-direct applications with no quotation counted, their ids on the sheet to quote by hand — a note,
+  never a refusal (5.18.102 quotes nothing at price 0). 5.18.102's `--rollback-unpriced-pending` and QL-RB2's refusal
+  are gone with it: the hazard was 5.18.101's.
+
+**Modes:** as 5.18.102's — a deploy; `--check`; `--after-only`; `--rollback`; `--redeploy`, `--move-list-only`,
+`--check-bank`; flags each the operator's explicit choice (`--accept-unpriced`, now with its deploy and `--check`
+meaning only, `--without-bank-balance`, `--quote-company-off`, `--quote-create-unproven`, `--lead-org-differs`). The
+script's header is the full reference.
+
+### The rehearsal — `scripts/harness/deploy-5.18.103/rehearse.sh`, 1,051 lines, sha256 `e4b43610f1fbe60d…`
+
+Chained on 5.18.102's rehearsal, read up to just before its own last section (the cut asserted: its anchor exactly once,
+its last check the one named), with `rh103-cat.php` (the catalogue settings written as an admin writes them, through the
+release's own `UcrmCatalogue` writers — raw only for the one state they never make, two switch records in force),
+`rh103-ref.php` (the release's own `offered()`, from Git or, once 5.18.103 serves, the installed copy), `rh103-sale.php`
+(a direct sale through the installed `KycService` and `UcrmQuoteLines`) and `rh103q.py`: 103-pre production's state on 1
+Nov; 103-0 the controls; 103-c `--check`; 103-1 QC-G1's refusals and two switch records in force; 103-4 the deploy;
+103-5 `--after-only` before the switch (a FAIL by design), after an admin turns it on, a direct sale and G-7, a standard
+quotation unusable, uCRM unreadable, the screen's guard; 103-6, 6v and 6w the rollback, typed and the deploy's own;
+103-7 `--redeploy` with the switch left on; 103-8 `--quote-company-off`; 103-10 what it left behind. Every pin is read
+from the script and every expectation computed from Git or from the release's own code. Trials, each alone:
+- **trial 1** (2 Nov 06:57 UTC, on `d28c8f3`) refused at once, nothing ran: this container's clone of the repository was
+  shallow, and `git clone --no-hardlinks` of a linked worktree does not carry `.git/shallow`, so the sandbox clone could
+  not be repacked. Fixed in the environment only (`git fetch --unshallow`), no file changed;
+- **trial 2** (06:59 UTC) stopped by hand a minute in, at section 0's pin check: the sandbox clone sees only local
+  heads, and `release/5.18.90`–`93` existed here only as `origin/…`. Fixed in the environment only (local heads made
+  from origin's, 94–102 checked equal), no file changed;
+- **trial 3** (07:00:58 – 12:40:14 UTC, on `d28c8f3`): 2,102 ok, 4 failed — the three inherited checks below, and **one
+  in 5.18.103's own sections** (181 ok, 1 failed): 103-4's check 4e looked for the summary line's QC-N4 sentence
+  without the `docs/72 G-10;` that the deploy script has printed since its first commit, so it could never match. A
+  rehearsal defect, not the script's: the rehearsal fixed in `8b9191b` (that one needle; the deploy script unchanged),
+  and the trial not the record;
+- **trial 4, the record, 2 Nov 12:41:22 – 18:14:24 UTC, on the committed files (`8b9191b`): 2,103 ok,
+  3 failed** — exactly the three inherited checks that read a development branch absent from this container
+  and from GitHub (98-0, 99-0, 100-0; known limit 10), each one counted FAIL, the run going on. **5.18.103's own
+  sections, 103-pre to 103-10: 182 ok, 0 failed.** Under the 23 Oct rule this is not a clean trial (only an
+  inherited A0 false stop may be excused); whether it is enough to deploy is the operator's decision, as for 5.18.99.
+
+### Runbook
+
+As root on the server; each command its own paste; send back each run's **log file**, never a copy of the terminal and
+never a cash sheet. No KYC registration and no quote to try the release: the plugin WhatsApps every new quote.
+
+0. **The release branch is pushed** — on the operator's word. The `--check` and deploy commands below fetch it, and the
+   `&&` stops them if that fails; every run of the script also fetches it itself when the checkout lacks it, and refuses
+   if it still finds no `221c9dc`.
+1. **The quarantine's `--check`, begun after 5.18.102's copy (07:37:25 UTC)**, if none has PASSED since: stage A's A14
+   refuses without one. Its own command:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+2. **Optional, read-only: `--check`.** It changes nothing; its 0600 sheet lists what the forms would offer from uCRM and
+   why every other item is not offered (QC-G1), and the hardware with no active stock category of its title (QC-N5):
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.103 && mkdir -p /root/dnb-5.18.103 && bash scripts/deploy-5.18.103.sh --check 2>&1 | ( umask 077; exec tee /root/dnb-5.18.103/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **Tell every admin**: no one opens the uCRM catalogue screen, links, unlinks, or saves a plan or a kit from the moment
+   the deploy starts until it prints its last line. Nothing changes for the agents at the deploy.
+4. **Deploy**, at a quiet hour, not between 14:55 and 15:10 UTC (the evening WhatsApp, 18:00 Kampala). Type `DEPLOY`
+   when asked:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.103 && mkdir -p /root/dnb-5.18.103 && bash scripts/deploy-5.18.103.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.103/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes; the switch `never set`. Any refusal before `DEPLOY` changed nothing: send the
+   log file and stop.
+5. **On the uCRM catalogue screen, as an admin, once the deploy has printed its last line** (the summary's *your
+   steps*): check what it offers; keep off the forms any product that is not to be sold (a fee, a service); set the
+   installation product; save the standard quotations wanted. Where QC-N5 counted hardware with no active stock category
+   of its title, title those categories as uCRM names the hardware, where stock categories are kept, not on this screen;
+   then, back on the uCRM catalogue screen, turn the switch on.
+6. **`--after-only`**, once the switch is on and at least 20 minutes after the copy (the summary prints the time) —
+   read-only; a run before the switch is on fails QC-ON1 by design:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.103.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.103/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own, the quarantine's `--check`, as in step 1.
+7. **Tell the agents** that on Uganda the KYC form, Send Quotation and the lead quotes offer uCRM's plans and hardware at
+   uCRM's prices, with the standard quotations as buttons; an admin quotes in uCRM by hand each 5.18.102 web
+   registration left unpriced (QC-N4 lists their ids), after checking that the customer has none.
+8. **The next real KYC quotation is the second proof.** Report only what the quotation shows, never the customer's name
+   or number. Run `--after-only` once more the next day after 15:00 UTC, its own command as in step 6.
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, on its own. Do not roll back on your
+own unless staff or customers are affected; send the log file first. It asks you to type `ROLLBACK` before it changes
+anything, puts 5.18.102 (`1a0ea5f`) back and checks it. As root, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.103.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.103/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+Then the quarantine's `--check`, its own command, as in step 1. **What the rollback brings back on Uganda:** the Plans
+and Hardware screens with their uCRM link pickers; the KYC form, Send Quotation and the lead quotes offering the
+plugin's own plans and kits, priced through the uCRM item linked to each — one not linked unpriced, as under 5.18.102.
+**What stays:** ECO Bank, the quoting organization, the channel registry and every number's owner; the quotes already in
+uCRM; the files 5.18.103 adds, on disk, reached by nothing, and the uCRM catalogue's settings in the store, read by
+nothing under 5.18.102 (QC-RB1) — a later deploy of 5.18.103 goes with `--redeploy` and finds them as they were: with the
+switch left on, direct mode comes back the moment its copy lands (its QC-N1 says so in capitals). **After it:** a
+web-direct application stays as written and 5.18.102 never quotes it; an admin quotes each in uCRM by hand — the
+rollback counts them and puts their ids on its sheet (QC-RB2). Nothing is quoted at price 0. The rollback prints a
+by-hand put-back for when the script cannot run; it counts nothing.
+
+### Known limits (recorded, accepted — the release's `SAFETY.md`, `docs/72` §G)
+
+1. **The switch is OFF after the deploy.** Until an admin turns it on, the forms and the quotations are 5.18.102's
+   exactly — the plugin's own plans and kits, priced through the uCRM item linked to each — with 5.18.102's known limits
+   1 (sales from the retailer app or the mobile API, a form opened before its deploy and every application saved before
+   it are quoted in uCRM by hand) and 2 (while an item the form offers is not linked, every Uganda Cash sale is refused
+   and every web Credit sale is registered with no quotation). The one change an admin sees is the uCRM catalogue's menu
+   entry (Plans or Hardware permission).
+2. **Applications on the wrong side of the switch are quoted in uCRM by hand.** With the switch on, a 5.18.102 web
+   application gets no Make the quotation: its Orders card says to quote it in uCRM by hand, and QC-N4 puts their ids
+   on the deploy's sheet (the uCRM catalogue screen lists those waiting only while the switch is off). After a
+   rollback, 5.18.102 never quotes a `web-direct` application: QC-RB2 counts them and puts their ids on its sheet.
+   Nothing is quoted at price 0.
+3. **The retailer app and the mobile API are unchanged** (`docs/72` §G.11): they post plugin ids, so they stay `app` —
+   a Credit sale gets no quotation and a Cash sale is refused — and they list the plugin's kits whole, at the plugin's
+   prices. F11 is measured by the deploy (QC-N3), not settled by this release.
+4. **Stock deduction at job completion matches cart titles to stock categories** (`docs/72` §G.7). A direct sale's cart
+   carries uCRM's names; the deploy counts the offered hardware with no active stock category of the same title (QC-N5),
+   and the categories are titled as in uCRM by hand.
+5. **Who may press a standard quotation** is, by the build's default, whoever may already use the KYC form or Send
+   Quotation; only admins define them. A narrower rule needs a permission, so a migration (`docs/72` §G.14, open).
+6. **Not measured in uCRM**, carried from 5.18.102's known limit 3: what uCRM 4.5.33 does with a quote line's
+   `productId` (every KYC quote is still read back after it is made), and whether it shows `adminNotes` only to staff.
+   That limit's last sentence stands too, until a VAT release: a product marked taxable in uCRM gets no automatic
+   quote — with the switch on it is not offered, and as the installation product it fails its rules, so the switch
+   cannot be turned on with it.
+7. **The deploy proves the catalogue through the release's own code on copies**, GET-only; the quotations are proved in
+   the suite against a fake uCRM, and live by the next real quotation. No test quote is made.
+8. **Carried from 5.18.102 unchanged:** its known limits 4 (no Delivery PDF on Uganda and its two side effects), 6 (Send
+   Quotation's panel manual form and a 0-priced line), 7 (the fallback PDF's tax rows; "Prepared by"), 8 (the two older
+   exposures), 10 (the inherited A0 false stop, which the chained rehearsal still runs), 11 (A13's and R18's lock
+   reading; Q-N3's `?:http404`) and 12 (`test_cashbook_physical_list` between 21:00 and 24:00 UTC). **Its known limit 13
+   is closed:** ML79's weakened copy is re-anchored and all 368 copies are caught.
+9. **Four test files fail in this container and nowhere else on record** — `test_install_authorisation` 379/2,
+   `test_mail_quote` 91/1, `test_migration_integrity` 27/1, `test_secure_file` 22/3 — identically, check by check, on
+   `1a0ea5f` here; on 31 Oct–1 Nov, in the earlier container, `1a0ea5f`'s two passes ran them without a failure. This
+   container runs PHP 8.3.6, the server 8.1.34. None of the four is touched by this release, and the server runs none of
+   them. Cause established for the first two (the decoded subject keeps the whitespace between encoded words); not for
+   the other two.
+10. **No clean rehearsal trial is possible in this container** (the 23 Oct rule: only an inherited A0 false stop may be
+    excused). Three of the chain's inherited checks compare a release with a development branch that existed only in
+    an earlier container and was never pushed — 98-0 (`cash-98`, `5870933d`), 99-0 (`quote-99`, `d813d254`) and 100-0
+    (`tech-100`) — absent here and on GitHub; each is one counted FAIL, and the run goes on. 5.18.103's own sections
+    are judged on their own (the rehearsal, above). **Whether that is enough to deploy is the operator's decision**, as
+    it was for 5.18.99 (its known limit 16).
+11. **The chained rehearsal depends on Git's 7-character short forms.** The sandbox's clone held 15,340 objects when
+    measured before trial 3 (a few more at `8b9191b`); at 16,384 Git lengthens short forms to 8 characters. About 1,000
+    more objects in the repository and a rerun of this chain cannot pass, though it goes on: every check comparing a
+    short form with a 7-character pin fails, each counted, from the quarantine sandbox's real 5.18.93 deploy on, and
+    every deploy script from 5.18.94 on stops at its A0 guard before anything changes. The deploy script carries the
+    same guard (5.18.94's) over the server's checkout: there it stops before anything changes and names the fix, `git -C
+    /opt/dishnet config core.abbrev 7`.
+12. **One sentence of the release's `SAFETY.md` is wrong** (Operator action, step 3): it says that once the switch is
+    on the screen lists the 5.18.102 web registrations still waiting with no quotation. The screen lists them only
+    while the switch is off. Their ids are on the deploy's sheet either way (QC-N4), and with the switch on each one's
+    Orders card says to quote it in uCRM by hand. Found after the suite passes; correcting it would mean a re-cut, so it
+    is recorded here, for the next release's `SAFETY.md` to correct.
