@@ -15708,6 +15708,12 @@ as root on the server, after 5.18.103's entry above.
     `--after-only` after 09:21:02 UTC. Q-G5: inconclusive, no Lead or Manual quote with a uCRM client in 30 days, so
     the first real quotation is the evidence. Q-N2: the five clients still under organization #2. Q-N3 and QL-N2:
     `http404`, as on 1 Nov.
+- **The after-check, 3 Nov** (`--after-only`, begun 10:03:07 UTC, from the terminal pasted): **123 ok, 2 failed, 5
+  notes** — QC-ON1 (the switch not on) and QC-ON2 (the installation product not set), each failing by design until the
+  screen's steps are done. QC-ON3: both standard quotations an admin saved on the screen are usable now.
+  R19 conclusive: the retry job ran at 09:55:04 UTC, after the copy, and the quarantine holds. The book's copy has 258
+  tables, 257 at the deploy: the uCRM catalogue's table, made by its first save. Q-CA3: uCRM asked 18 GETs and nothing
+  else; CA3: no drift; the cash, bank and copy checks as at the deploy.
 - **Still to come**, the summary's *your steps*:
   - on the uCRM catalogue screen, as an admin: check what it offers, keep off the forms any product not to be sold (a
     fee, a service), set the installation product, save the standard quotations wanted, title the stock categories as
