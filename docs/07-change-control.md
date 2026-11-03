@@ -15669,3 +15669,51 @@ by-hand put-back for when the script cannot run; it counts nothing.
     while the switch is off. Their ids are on the deploy's sheet either way (QC-N4), and with the switch on each one's
     Orders card says to quote it in uCRM by hand. Found after the suite passes; correcting it would mean a re-cut, so it
     is recorded here, for the next release's `SAFETY.md` to correct.
+
+## 3 Nov — 5.18.103 DEPLOYED (copy 09:01:02 UTC) — PASSED 190 ok / 0 failed / 37 notes
+
+**From the operator's terminal**, pasted on 3 Nov: the first runs whole, the deploy from the middle of stage A down (the
+log's opening lines were not in the paste); the script prints no secret and no figure there. Each run its own command,
+as root on the server, after 5.18.103's entry above.
+
+- **The quarantine's `--check`** (begun 08:54:13 UTC): **PASSED, 9 ok, 0 failed, 2 notes** — K13: the retry job ran at
+  08:45:05 UTC, after the move, and the quarantine holds. The check stage A's A14 requires, begun after 5.18.102's copy.
+- **A first attempt, 08:55 UTC, changed nothing.** `release/5.18.103` was not yet on GitHub: the deploy command's
+  `git fetch origin release/5.18.103` failed and its `&&` stopped it before the script ran (the `git pull` before it
+  brought the development branch to `28b2b30`). The `--after-only` and `--rollback` commands, run next, each stopped at
+  stage A — *"the checkout does not hold 221c9dc … Nothing was changed"*. The `--after-only` left no log file (its
+  `tee` opened before the script made `/root/dnb-5.18.103`); the `--rollback` left `rollback-20261103T085512Z.log`. A
+  rollback run with no deploy behind it stopped before changing anything, as it must.
+- **The push:** `release/5.18.103` = `221c9dc`, pushed on the operator's word at 08:56:15 UTC.
+- **The deploy** (begun 08:57:28 UTC; the backup in `/root/dnb-5.18.103/backup-20261103T085728Z`): every check of stage
+  A held, then GO; `DEPLOY` typed; **the container serves `221c9dc`**, the copy at 09:01:02 UTC. After the copy: V1–V13
+  over the public address, BA4, CA4, Q-CA4, Q-CA5, QL-CA3, QC-CA2 and QC-CA3; then R1–R26, BA1, BA2, BK3, CA2, CA3,
+  Q-CA1–Q-CA3, Q-CA6, TN-CA1–TN-CA3, QS-CA1, QL-CA2, QC-CA1, Z1 and Z2. **PASSED, 190 ok, 0 failed, 37 notes.** uCRM
+  was asked 44 GETs and nothing else.
+  - QC-G1, then QC-CA1 on the installed code: in direct mode the forms would offer **5 plans and 31 hardware items**,
+    from 6 service plans and 38 products, through both clients alike; 3 not offered — 2 *"no usable price, taxable, or
+    an invoice label unlike its name"*, 1 *"no product spelled like the service plan"*, each reason on the sheet. The
+    installed code offers exactly what stage A's pin offered: 80 compared, 0 different.
+  - QC-N1: the switch never set, so 5.18.103 quotes as 5.18.102 until an admin turns it on. QC-N2: the installation
+    product not set, no standard quotation. QC-N3: the applications by entry — none 11, web 0, app 0, web-direct 0.
+    QC-N4: no 5.18.102 web application waiting. QC-N5: the 31 hardware items have no active stock category of the same
+    title (`rows:1`). QC-N6: `public_price_exclude` names none of them. QC-N7: the plugin's own plans, 7, all
+    Starlink.
+  - QL-G1, 5.18.102's catalogue, which the switch-off path reads: 12 items, 3 resolve, 9 not linked; the link store 3
+    records, 3 active.
+  - The cash, bank and copy checks (A23, BK1, C1–C5, R23, BA2, CA2): cash in hand the same to the last digit under both
+    codes; CA3: no drift since stage A; R7: no migration, the ledger and the file size unchanged. South Sudan, Domain B,
+    the pilot, every switch and the quotation summary's sign-off as before.
+  - The notes include R19: not yet conclusive — the retry job last ran at 09:00:08 UTC, before the copy; run
+    `--after-only` after 09:21:02 UTC. Q-G5: inconclusive, no Lead or Manual quote with a uCRM client in 30 days, so
+    the first real quotation is the evidence. Q-N2: the five clients still under organization #2. Q-N3 and QL-N2:
+    `http404`, as on 1 Nov.
+- **Still to come**, the summary's *your steps*:
+  - on the uCRM catalogue screen, as an admin: check what it offers, keep off the forms any product not to be sold (a
+    fee, a service), set the installation product, save the standard quotations wanted, title the stock categories as
+    uCRM names the hardware where stock is kept (QC-N5), then turn the switch on;
+  - `--after-only` once the switch is on (QC-ON1 fails before that, by design) and after 09:21:02 UTC, then the
+    quarantine's `--check`, each its own command;
+  - the agents told; `--after-only` again the next day after 15:00 UTC; the next real KYC quotation, the second proof;
+  - the owner's three questions (root `docs/72` §G.14): who may press a standard quotation, what the first one holds,
+    which products stay off the forms.

@@ -1,7 +1,8 @@
 # 72 — Uganda: one release for sales — the catalogue straight from uCRM, an AI that hears, sees and reads, quotes chased, a daily list and a read-only report (design, 1 Nov 2026)
 
-Status: **decisions recorded; 5.18.103 built and tested (§G.16), not pushed, not deployed.** The base is the live release,
-`release/5.18.102` (`1a0ea5f`), never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
+Status: **decisions recorded; 5.18.103 built and tested (§G.16), pushed and DEPLOYED 3 Nov (copy 09:01:02 UTC; root
+`docs/07`), its switch off until an admin turns it on.** It was cut on the then-live release, `release/5.18.102`
+(`1a0ea5f`), never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
 
 ## A. The request (the owner, 1 Nov 2026)
 
