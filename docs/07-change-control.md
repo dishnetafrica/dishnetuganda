@@ -15723,6 +15723,16 @@ as root on the server, after 5.18.103's entry above.
   quotation without that line and without the tick; then the installation product; then each one again with the tick.
   My first instructions to the operator gave the wrong order (the tick in the same save). Nothing was written wrongly:
   every refusal changed nothing.
+- **The switch turned ON, 4 Nov 07:13:08 Kampala** (04:13 UTC), by an admin on the uCRM catalogue screen, after the
+  three saves the order trap above requires: both standard quotations without the installation line, the
+  installation product set, both again with *includes installation*.
+- **The second after-check, 4 Nov** (`--after-only`, begun 04:48:10 UTC, from the terminal pasted): **PASSED, 124 ok,
+  0 failed, 6 notes.** QC-ON1: the switch on; QC-ON2: the installation product set and passing through both
+  clients; QC-ON3: both standard quotations usable; QC-CA1: 5 plans and 30 hardware items offered (the installation
+  product is no longer hardware). R19 conclusive again (the retry job ran at 04:35:05 UTC). V4: no fatal or parse
+  error since the deploy, over the evening WhatsApp of 3 Nov, which ran on the new code. Notes: QC-ON4 has no
+  web-direct application yet; CA3: one row added to the book since stage A (staff and webhooks write; every equality
+  held on the copy).
 - **Still to come**, the summary's *your steps*:
   - on the uCRM catalogue screen, as an admin: check what it offers, keep off the forms any product not to be sold (a
     fee, a service), set the installation product, save the standard quotations wanted, title the stock categories as
