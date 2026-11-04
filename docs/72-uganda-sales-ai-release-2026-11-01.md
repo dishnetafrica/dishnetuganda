@@ -1,8 +1,10 @@
 # 72 — Uganda: one release for sales — the catalogue straight from uCRM, an AI that hears, sees and reads, quotes chased, a daily list and a read-only report (design, 1 Nov 2026)
 
 Status: **decisions recorded; 5.18.103 built and tested (§G.16), pushed and DEPLOYED 3 Nov (copy 09:01:02 UTC; root
-`docs/07`), its switch off until an admin turns it on.** It was cut on the then-live release, `release/5.18.102`
-(`1a0ea5f`), never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
+`docs/07`), and switched ON 4 Nov 04:13 UTC: its after-check PASSED 124 ok, 0 failed, 6 notes, and the quarantine's
+`--check` 9 ok, 0 failed, 2 notes (root `docs/07`). 5.18.104 (§H; D8–D16) is designed in root `docs/73`, not
+built, awaiting the owner's approval.** 5.18.103 was cut on the then-live release, `release/5.18.102` (`1a0ea5f`),
+never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
 
 ## A. The request (the owner, 1 Nov 2026)
 
@@ -1875,7 +1877,11 @@ path.
   the runbook). After the deploy the switch is still OFF; an admin turns it on from *uCRM catalogue* once the
   installation product is set. §G.14's three questions are still open, and none blocks the deploy.
 
-## H. 5.18.104 — the sales follow-up (D8–D11; design in progress, 4 Nov 2026)
+## H. 5.18.104 — the sales follow-up (D8–D16; designed in root `docs/73`, 4 Nov 2026)
+
+The design is root `docs/73`: Part F (P1–P3 and the pieces every part shares), Part V (P4, P5), Part O (P6) and
+Part P (P7, D16), with the coordinator's contract and rulings and the owner's questions merged. Its §H.2–§H.5
+continue this section's numbering; only the approved wording stays here.
 
 ### H.1 The approved wording (D9), as the owner approved it on 4 Nov
 
