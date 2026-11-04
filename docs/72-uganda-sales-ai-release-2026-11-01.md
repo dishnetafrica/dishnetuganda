@@ -1869,3 +1869,34 @@ path.
 - **Next — the owner's:** the go-ahead to push `release/5.18.103`, then the deploy (root `docs/07`'s 5.18.103 entry is
   the runbook). After the deploy the switch is still OFF; an admin turns it on from *uCRM catalogue* once the
   installation product is set. §G.14's three questions are still open, and none blocks the deploy.
+
+## H. 5.18.104 — the sales follow-up (D8–D11; design in progress, 4 Nov 2026)
+
+### H.1 The approved wording (D9), as the owner approved it on 4 Nov
+
+`{ref}` is the quotation's number; `{date}` its last valid day. The two wordings of each step alternate. No price, plan
+name or customer name; STOP on every message.
+
+- **Day 1**
+  - A: *Hello, this is DishNet. Do you have any questions about quotation {ref}? Reply here and we will help, or we can
+    book your installation. Reply STOP if you do not want these messages.*
+  - B: *Hello from DishNet. We sent you quotation {ref}. Is anything unclear, or shall we book your installation? Just
+    reply here. Reply STOP to stop these messages.*
+- **Day 3**
+  - A: *Hello, a quick follow-up on quotation {ref} from DishNet. We can answer any question about the kit, the plan or
+    the installation — just reply here. Reply STOP to stop these messages.*
+  - B: *Hello, DishNet here about quotation {ref}. If you would like to compare options or need help deciding, reply
+    here and we will guide you. Reply STOP to stop these messages.*
+- **Day 7**
+  - A: *Hello, quotation {ref} is valid until {date}. If you would like to go ahead, or need another option, reply here
+    and we will take care of it. Reply STOP to stop these messages.*
+  - B: *Hello from DishNet. Your quotation {ref} is valid until {date}. Reply here to go ahead or to ask for a different
+    option. Reply STOP to stop these messages.*
+- **On a salesperson's own number** the first words become *"Hello, this is {first name}'s assistant at DishNet."*
+- **The instant reply to a voice note** (until the AI hears them):
+  - A: *Thanks for your voice note. We can't listen to voice notes automatically yet — could you type your question in a
+    short message? A colleague will also listen and reply.*
+  - B: *We got your voice note, thank you. To help you faster, please type your question here. A member of our team will
+    also listen to it.*
+
+English only; another language would be the owner's to ask for.
