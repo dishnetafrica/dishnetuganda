@@ -32,6 +32,10 @@ Status: **decisions recorded; 5.18.103 built and tested (§G.16), pushed and DEP
 | D9 | **The chase and acknowledgement wording is approved** (the owner, 4 Nov) as put to them: two wordings per step, no price, plan or customer name, STOP on each; on a salesperson's number the first words are "Hello, this is {first name}'s assistant at DishNet." (§H) |
 | D10 | **WhatsApp stays on the Evolution numbers** until an official WhatsApp Business Platform number exists (the owner, 4 Nov: *"keep working Evolution until we get official meta whatsapp"*); the owner starts Meta's business verification. The official number is then added beside them for offers only |
 | D11 | **Offers on Evolution meanwhile, the careful way** (the owner, 4 Nov, taking the recommendation): a daily batch only to customers who chatted in the last 30 days, from the number they chatted on, varied wording, STOP on each, an image allowed; the admin chooses how many — 100, 200 or all — and "all" is sent over days within each number's daily limit, never at once. Designed with the chase so the two share one daily limit and spacing per number; ships OFF |
+| D12 | **Each WhatsApp number sends at most 60 automatic messages a day** — quote chases, offers, reminders and staff lists together; replies to customers are not counted (the owner, 4 Nov, of 30, 60 or 100). Chases come first; offers use what is left |
+| D13 | **The morning list on WhatsApp carries quote numbers and counts only**; customer names appear on a staff page in the plugin, own leads only (the owner, 4 Nov) |
+| D14 | **The Privacy Policy names OpenAI** as the provider that transcribes voice notes (the owner, 4 Nov) |
+| D15 | **The instant reply to a voice note goes out every day, 07:00–21:00 Kampala**, Sundays included: it answers the customer's own message (the owner, 4 Nov) |
 
 Advice given on 1 Nov (§E; D10 and D11 since): e-mail broadcasts through uCRM's own Tools → Messaging, which sends e-mail (and
 SMS only where a gateway is set), never WhatsApp; WhatsApp marketing to all customers only through the official
