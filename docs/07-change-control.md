@@ -15733,6 +15733,9 @@ as root on the server, after 5.18.103's entry above.
   error since the deploy, over the evening WhatsApp of 3 Nov, which ran on the new code. Notes: QC-ON4 has no
   web-direct application yet; CA3: one row added to the book since stage A (staff and webhooks write; every equality
   held on the copy).
+- **The quarantine's `--check`, 4 Nov** (begun 04:57:22 UTC, from the terminal pasted): **PASSED, 9 ok, 0 failed, 2
+  notes** — K13: the retry job ran at 04:50:04 UTC under 5.18.103 and the quarantine holds. 5.18.103's runbook is
+  done but for QC-ON4, which waits for the first direct sale.
 - **Still to come**, the summary's *your steps*:
   - on the uCRM catalogue screen, as an admin: check what it offers, keep off the forms any product not to be sold (a
     fee, a service), set the installation product, save the standard quotations wanted, title the stock categories as
