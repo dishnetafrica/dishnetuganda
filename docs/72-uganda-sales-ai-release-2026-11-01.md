@@ -36,6 +36,7 @@ Status: **decisions recorded; 5.18.103 built and tested (§G.16), pushed and DEP
 | D13 | **The morning list on WhatsApp carries quote numbers and counts only**; customer names appear on a staff page in the plugin, own leads only (the owner, 4 Nov) |
 | D14 | **The Privacy Policy names OpenAI** as the provider that transcribes voice notes (the owner, 4 Nov) |
 | D15 | **The instant reply to a voice note goes out every day, 07:00–21:00 Kampala**, Sundays included: it answers the customer's own message (the owner, 4 Nov) |
+| D16 | **The agent who made a quote gets a visible copy (Cc) of the quotation email** (the owner, 4 Nov: "if agent creating quote and he has his email in system … he also get cc"; of Cc or a hidden Bcc, and of inside 5.18.104 or a release of its own). Part P7 of 5.18.104, its own switch, OFF until switched on, Uganda only. Only when the plugin sends the quotation email — never when uCRM's own mailer does — and only where the agent is known and has a valid email different from the customer's. The copy travels in the same email, so it can never make a second one |
 
 Advice given on 1 Nov (§E; D10 and D11 since): e-mail broadcasts through uCRM's own Tools → Messaging, which sends e-mail (and
 SMS only where a gateway is set), never WhatsApp; WhatsApp marketing to all customers only through the official
