@@ -1,7 +1,7 @@
 # 73 — Uganda: 5.18.104, the sales follow-up — report, quote chase, daily list, voice notes, offers and the agent's copy (design, 4 Nov 2026)
 
-Status: **design complete, not built; awaiting the owner's approval.** No code, branch or server change exists for
-5.18.104. The owner's decisions are root `docs/72` §B (D8–D16) and the wording they approved is `docs/72` §H.1; this
+Status: **design APPROVED by the owner on 5 Nov 2026, with every question's default (§Q); being built, not deployed.**
+No server change exists for 5.18.104. The owner's decisions are root `docs/72` §B (D8–D16) and the wording they approved is `docs/72` §H.1; this
 document continues `docs/72` §H. Its base is the live release 5.18.103 (`release/5.18.103` = `221c9dc`), switched on
 4 Nov (root `docs/07`).
 
@@ -52,6 +52,10 @@ document continues `docs/72` §H. Its base is the live release 5.18.103 (`releas
 ## Q. The questions for the owner, merged from the four parts
 
 Each has a default that ships if it is not answered; only Q1 holds part of the build back, and even it has a fallback.
+
+**Answered 5 Nov 2026:** the owner approved the design and took every default ("go with your recommendation"). So
+Q1's fallback applies until the owner confirms the words: on a salesperson's number the day-3 chase and the
+voice-note reply are held and day 7 uses B; a later confirmation is one command.
 
 **Before the build**
 - **Q1 — the assistant wording on a salesperson's own number** (Part F OQ1, gate B-1). Confirm the exact words of the
