@@ -38,7 +38,9 @@ $convSvc = new ConversationService($dataDir, $pdo);
 $oo      = ContactOptOut::fromStore($store);
 
 $closed = 0;
-foreach ($svc->allOpen(200) as $fu) {
+// 5.18.104 (root docs/73 §H.2.10.7, R104-02): enquiry rows only. Quote rows then neither take these 200 places nor meet
+// the untimed CASE H, which would close every chase on a sticky human_active; without 089's column, 5.18.103's call.
+foreach ($svc->allOpen(200, 'enquiry') as $fu) {
     $conv = $convSvc->getConversation((int)$fu['conversation_id']);
     if ($conv === null) {
         $svc->close((int)$fu['id'], 'cancelled', 'the conversation no longer exists', 'closer');

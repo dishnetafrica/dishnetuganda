@@ -2693,6 +2693,7 @@ $_tabFiles = [
     'subscription_plans' => 'tabs/sales/subscription_plans.php',
     'hardware'           => 'tabs/sales/hardware.php',
     'ucrm_catalogue'     => 'tabs/sales/ucrm_catalogue.php',   // 5.18.103 (root docs/72 §G.3): Uganda's uCRM catalogue
+    'my_quotes'          => 'tabs/sales/my_quotes.php',        // 5.18.104 (root docs/73 §H.2.11.5): My quotations; the page checks its gate itself
 
     //  Support 
     'support_leader_manual' => 'tabs/support/manual_support_leader.php',
@@ -2763,6 +2764,7 @@ $_tabFiles = [
     'engage_failed_queue'  => 'tabs/engage/failed_queue.php',
     'whatsapp'             => 'tabs/engage/whatsapp.php',
     'wa_inbox'             => 'tabs/engage/wa_inbox.php',
+    'wa_offers'            => 'tabs/engage/wa_offers.php',   // 5.18.104 (root docs/73 §H.4.7): WhatsApp offers, Uganda only; the tab guards itself
 
     //  Admin 
     'ceo_dashboard'    => 'tabs/admin/ceo_dashboard.php',
@@ -2901,6 +2903,7 @@ $_tabPerms = [
     'kit_intake'           => '*admin',
     'starlink_session'     => '*admin',
     'followups'            => '*admin',
+    'wa_offers'            => '*admin',   // 5.18.104 (root docs/73 §H.4.7): admins only, so the Staff permission matrix is unchanged
     'knowledge_base'       => '*admin',
     'lifecycle'            => ['support_dash', '*admin'],
     // Admin
@@ -3004,6 +3007,7 @@ if (isset($_tabFiles[$tab])) {
             'my_account'=>'My Cash','leads'=>'Leads','collect_payment'=>'Collect Payment',
             'form'=>'New KYC Registration','hardware'=>'Hardware','subscription_plans'=>'Plans',
             'ucrm_catalogue'=>'uCRM catalogue',   // 5.18.103 (root docs/72 §G.3)
+            'my_quotes'=>'My quotations',         // 5.18.104 (root docs/73 §H.2.11.5)
             'sim_cards'=>'SIM Cards','quote_logs'=>'Quote Logs','all_leads'=>'All Leads',
             'all_collections'=>'All Collections','all_apps'=>'All Orders','wa_leads'=>'WA Leads',
             'support_tickets'=>'Tickets','service_status'=>'Service Status',

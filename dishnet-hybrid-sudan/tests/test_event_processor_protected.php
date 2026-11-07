@@ -19,6 +19,11 @@ declare(strict_types=1);
  * that neither country's list names it — South Sudan keeps its live list, ['ai.reply'] — and that an ai.media event is
  * acknowledged as unknown on both, exactly as on live 5.18.87. Two weakened copies add it back, one per country.
  *
+ * 5.18.104 (root docs/73 §H.3.2, §H.3.24; re-pointed on purpose, never weakened): Uganda's list now names ai.media (the
+ * media worker's) and ai.voice_ack (the reply worker's P5), so this loop never acknowledges either as unknown there;
+ * South Sudan's list is still ['ai.reply'], and both are still unknown types there. The weakened copies drop each from
+ * Uganda's list (V10) and add ai.media to South Sudan's.
+ *
  * Proved by behaviour, against the real EventBus, the real event_processor.php (included as master.php includes it) and
  * the real UcrmLeadWorker against the fake uCRM: success, a transient failure, its retry, and the dead letter. Each
  * weakened copy re-runs the same scenarios through this file in driver mode.
@@ -105,19 +110,21 @@ function ep_scenario(string $root, string $name, int $ucrmPort): array {
     if ($name === 'claim') {
         $ids = [];
         foreach ([['crm.lead.sync', ['lead_id' => 1], 5], ['ai.reply', ['channel' => 'sales'], 3], ['ai.media', ['channel' => 'sales'], 3],
+                  ['ai.voice_ack', ['channel' => 'sales'], 3],   // 5.18.104 (root docs/73 §H.3.2): P5's event
                   ['wa.send', ['phone' => '', 'message' => ''], 5], ['wa.escalation', ['channel' => 'sales', 'reason' => 'test'], 2],
                   ['install.ready', [], 5], ['efris.submit', ['invoice_id' => 1], 5]] as [$t, $p, $prio]) {
             $ids[$t] = $bus->emit($t, 'test', 1, $p, $prio, 'test');
         }
         ep_run($root, $store, $epCfg, $log);
         foreach ($ids as $t => $id) $f['row_' . $t] = ep_row($pdo, $id);
-        foreach (['crm.lead.sync', 'ai.reply', 'ai.media'] as $t) $f['untouched_' . $t] = ep_untouched($f['row_' . $t]);
+        foreach (['crm.lead.sync', 'ai.reply', 'ai.media', 'ai.voice_ack'] as $t) $f['untouched_' . $t] = ep_untouched($f['row_' . $t]);   // 5.18.104 (root docs/73 §H.3.2)
         $lg = (string)@file_get_contents($log);
         $f['log_unknown_escalation'] = strpos($lg, "unknown event type 'wa.escalation'") !== false;
         $f['log_unknown_install_ready'] = strpos($lg, "unknown event type 'install.ready'") !== false;
         $f['log_unknown_efris'] = strpos($lg, "unknown event type 'efris.submit'") !== false;
         $f['log_unknown_lead_sync'] = strpos($lg, "unknown event type 'crm.lead.sync'") !== false;
         $f['log_unknown_media'] = strpos($lg, "unknown event type 'ai.media'") !== false;
+        $f['log_unknown_voice_ack'] = strpos($lg, "unknown event type 'ai.voice_ack'") !== false;   // 5.18.104 (root docs/73 §H.3.2)
     }
 
     if ($name === 'starve') {
@@ -219,8 +226,11 @@ echo "A. The processor never claims a worker's event; every other type is handle
 $c = $drive($root, 'claim'); $d = json_encode($c);
 is_($c['untouched_crm.lead.sync'] === true, 'crm.lead.sync is left for UcrmLeadWorker: still pending, never tried, never locked', $d);
 is_($c['untouched_ai.reply'] === true, 'ai.reply is left alone too — not even claimed and released', $d);
-is_(($c['row_ai.media']['status'] ?? '') === 'done' && $c['log_unknown_media'] === true,
-    'ai.media is on no list (no media layer in this release): acknowledged as an unknown type, exactly as on live 5.18.87', $d);
+// 5.18.104 (root docs/73 §H.3.2, §H.3.24): re-pointed on purpose — Uganda's list now names the voice-note events.
+is_($c['untouched_ai.media'] === true && $c['log_unknown_media'] === false,
+    'ai.media is the media worker\'s on Uganda (5.18.104): left alone, never claimed, never logged as unknown', $d);
+is_($c['untouched_ai.voice_ack'] === true && $c['log_unknown_voice_ack'] === false,
+    'ai.voice_ack is the reply worker\'s on Uganda (5.18.104): left alone, never claimed, never logged as unknown', $d);
 is_(($c['row_wa.escalation']['status'] ?? '') === 'done' && $c['log_unknown_escalation'] === false,
     'wa.escalation is acknowledged as a KNOWN type (the hand-over has already acted), no longer logged as "unknown"', $d);
 is_(($c['row_wa.send']['status'] ?? '') === 'done', 'a type the processor handles (wa.send) is still processed', $d);
@@ -264,6 +274,8 @@ is_(($sc['row_ai.reply']['status'] ?? '') === 'pending' && array_key_exists('loc
     && $sc['row_ai.reply']['locked_by'] === null, 'ai.reply is still claimed and released there', $d);
 is_(($sc['row_ai.media']['status'] ?? '') === 'done' && $sc['log_unknown_media'] === true,
     'South Sudan keeps its live list, [\'ai.reply\']: ai.media is not on it and is acknowledged as unknown, exactly as on live 5.18.87', $d);
+is_(($sc['row_ai.voice_ack']['status'] ?? '') === 'done' && $sc['log_unknown_voice_ack'] === true,   // 5.18.104 (root docs/73 §H.3.26)
+    'and ai.voice_ack is not on it either: acknowledged as unknown there', $d);
 is_(($sc['row_wa.escalation']['status'] ?? '') === 'done' && $sc['log_unknown_escalation'] === true, 'wa.escalation is still logged as unknown there', $d);
 is_(($sc['row_wa.send']['status'] ?? '') === 'done' && ($sc['row_install.ready']['status'] ?? '') === 'done'
     && ($sc['row_efris.submit']['status'] ?? '') === 'done', 'every other type is handled as before there', $d);
@@ -279,8 +291,8 @@ $mutants = [
    "\$events = \$bus->consume(20, '', [], \$_epWorkerOwned);", "\$events = \$bus->consume(20);",
    function () use ($drive) { return [$drive($GLOBALS['__copy'], 'starve'), $drive($GLOBALS['__copy'], 'claim')]; },
    fn(array $m): bool => $m[0]['own_status'] === 'pending' && $m[1]['untouched_crm.lead.sync'] === true],
-  ['crm.lead.sync dropped from the worker-owned list', 'cron/event_processor.php',
-   "\$_epUg ? ['ai.reply', 'crm.lead.sync'] :", "\$_epUg ? ['ai.reply'] :",
+  ['crm.lead.sync dropped from the worker-owned list', 'cron/event_processor.php',   // 5.18.104 (root docs/73 §H.3.2): Uganda's list re-read
+   "\$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] :", "\$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack'] :",
    function () use ($drive) { return [$drive($GLOBALS['__copy'], 'claim'), $drive($GLOBALS['__copy'], 'flow')]; },
    fn(array $m): bool => ($m[0]['row_crm.lead.sync']['status'] ?? '') === 'done' && $m[1]['clients'] === 0],
   ['EventBus ignores the exclusion', 'lib/EventBus.php',
@@ -305,14 +317,19 @@ $mutants = [
    "    \$_epUg = StaffJobsGate::applies(is_array(\$config ?? null) ? \$config : [], \$_epDir);\n", "    \$_epUg = false;\n",
    function () use ($drive) { return [$drive($GLOBALS['__copy'], 'claim')]; },
    fn(array $m): bool => ($m[0]['row_crm.lead.sync']['status'] ?? '') === 'done'],
-  ['ai.media introduced into South Sudan\'s list', 'cron/event_processor.php',
-   "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];", "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply', 'ai.media'];",
+  ['ai.media introduced into South Sudan\'s list', 'cron/event_processor.php',   // 5.18.104 (root docs/73 §H.3.2): Uganda's list re-read
+   "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];", "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply', 'ai.media'];",
    function () use ($drive) { return [$drive($GLOBALS['__copy'], 'ss_claim')]; },
    fn(array $m): bool => ($m[0]['row_ai.media']['status'] ?? '') === 'pending' && $m[0]['log_unknown_media'] === false],
-  ['ai.media introduced into Uganda\'s list', 'cron/event_processor.php',
-   "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];", "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'crm.lead.sync'] : ['ai.reply'];",
+  // 5.18.104 (root docs/73 §H.3.24 V10): re-pointed on purpose — each voice-note event dropped from Uganda's list is swallowed.
+  ['V10 ai.media missing from Uganda\'s list', 'cron/event_processor.php',
+   "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];", "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];",
    function () use ($drive) { return [$drive($GLOBALS['__copy'], 'claim')]; },
-   fn(array $m): bool => $m[0]['untouched_ai.media'] === true && $m[0]['log_unknown_media'] === false],
+   fn(array $m): bool => ($m[0]['row_ai.media']['status'] ?? '') === 'done' && $m[0]['log_unknown_media'] === true],
+  ['V10 ai.voice_ack missing from Uganda\'s list', 'cron/event_processor.php',
+   "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];", "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'ai.media', 'crm.lead.sync'] : ['ai.reply'];",
+   function () use ($drive) { return [$drive($GLOBALS['__copy'], 'claim')]; },
+   fn(array $m): bool => ($m[0]['row_ai.voice_ack']['status'] ?? '') === 'done' && $m[0]['log_unknown_voice_ack'] === true],
 ];
 foreach ($mutants as $i => [$label, $rel, $old, $new, $runIt, $caught]) {
     [$copy, $n] = sj_weakened_copy($root, $rel, $old, $new);

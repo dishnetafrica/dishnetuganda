@@ -25,7 +25,14 @@ declare(strict_types=1);
  * resolveDirect()), the inventory (I6) gains the direct sites, and lib/UcrmQuoteLines.php has a fifth require_once (the
  * website's ShopCatalogue, inside the method that groups kits and accessories). Every check keeps its subject and its
  * strength; the weakened copies of mutants_I.php are each still caught.
+ *
+ * 5.18.104 (root docs/73 §H.2.14 "Tests re-pointed on purpose, never weakened"), re-pointed in stage B10: the judged tree
+ * becomes 221c9dc — the judged tree (--root) with exactly 5.18.104's declared files and hunks taken out
+ * (tests/quote_followup/declared.php, the one merged declared list; qf_n_revert_tree), which for the real tree is
+ * 221c9dc's, file for file (quote_followup N05). Every check keeps its subject and its strength against f2055baf, and a
+ * change 5.18.104 does not declare still meets it here; 5.18.104's own boundary is quote_followup N.
  */
+require_once dirname(__DIR__) . '/quote_followup/declared.php';   // 5.18.104 (root docs/73 §H.2.14): the one merged declared list
 
 const QFU_I_BASE = 'f2055baf';
 const QFU_I_SKIP = ['docs', 'prototype', 'dishnet-mikrotik-control-plane', 'data', '.git', 'scripts'];
@@ -86,7 +93,14 @@ const QFU_I_RULES = [
 
 $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055baf, from Git', 'run' => function (QfuCtx $c) {
     $checkout = dirname(__DIR__, 2);   // this test's own checkout: Git is read here, whatever --root is
-    $T = $c->root;
+    // 5.18.104 (root docs/73 §H.2.14), stage B10: the judged tree with 5.18.104's declared files and hunks taken out
+    [$B221, $why221] = qf_n_base($c->dir('base-221c9dc'));
+    $c->t($B221 !== null, 'I0 the control: Git supplies ' . QF_N_BASE . ' (5.18.103), the tree 5.18.104\'s declared files and hunks are taken out against — a failure, never a skip', $why221);
+    if ($B221 === null) return;
+    $T = $c->dir('judged-less-5.18.104');
+    $left104 = qf_n_revert_tree($c->root, $B221, $T);
+    $c->t(!is_file($T . '/lib/WaSendBudget.php') && is_file($c->root . '/lib/WaSendBudget.php') && strpos((string)file_get_contents($T . '/cron/master.php'), "'offers_send'") === false,
+        'I0 … and the judged tree, 5.18.104 taken out, holds none of its files or lines (' . $left104 . ' unmarked 5.18.104 hunk(s) left, for quote_followup N)');
     // f2055baf's plugin tree, from Git, into the run's own folder
     $B = $c->dir('base-f2055baf');
     // From the repository's top level: run inside dishnet-hybrid-sudan/, git archive keeps only that prefix of the tree

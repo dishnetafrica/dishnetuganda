@@ -276,6 +276,18 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             : [];
 
         $d = new CustomerEmailDispatcher($dataDir, $config, $crm, $pdo);
+        // 5.18.104 (root docs/73 §H.5.8.2) P7: the agent who made this quote, where the plugin knows who that is, is copied
+        // visibly in this same e-mail. Uganda with P7's switch on only; everywhere else, and on any throw, $p7 stays null and the
+        // send below is 5.18.103's.
+        $p7 = null;
+        require_once __DIR__ . '/lib/StaffJobsGate.php';
+        if (StaffJobsGate::applies($config, (string)$dataDir)) {
+            try {
+                require_once __DIR__ . '/lib/QuoteAgentCopy.php';
+                $p7 = QuoteAgentCopy::forWebhook($store, __DIR__, (string)$dataDir, $config, $quoteId, $clientId, $client, $quote);
+                if ($p7 !== null && $p7['address'] !== '') $d->agentCopy($p7['address']);   // the last statement
+            } catch (\Throwable $e) { $p7 = null; }
+        }
         // The quote id as the dedupe key, so the dispatcher records this send
         // in customer_email_log — reference, recipient, sender, outcome, time.
         // Until now the only durable evidence a quotation was ever emailed was
@@ -291,6 +303,12 @@ function whQuotationEmail(int $quoteId, int $clientId, string $name, array $clie
             'amount'       => $total,
             'pdf_attached' => $pdf !== '',
         ], (string)$quoteId, $atts);
+        if ($p7 !== null) {   // 5.18.104 (root docs/73 §H.5.8.2) P7: the decision as the dispatcher carried it out; never the address
+            try {
+                [$p7, $p7Rcpt] = QuoteAgentCopy::afterSend($p7, $r);
+                QuoteAgentCopy::record($store, 'webhook', $quoteId, $number, $p7, !empty($r['sent']), $p7Rcpt);
+            } catch (\Throwable $e) {}
+        }
 
         if ($r['sent']) {
             whLog($changeType ?: 'email', "Quotation email sent to {$r['to']} (PDF: {$src})");

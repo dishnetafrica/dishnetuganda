@@ -542,6 +542,54 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.104 (root docs/73 §H.2.3; built 2026-11-06, not deployed) — Uganda: the sales follow-up — a read-only report, quotations tracked and chased, a morning list per salesperson, voice notes heard through OpenAI with an instant reply meanwhile, offers on the Evolution numbers, the agent's copy of the quotation e-mail; one send ledger; everything OFF; South Sudan unchanged; migrations 089, 090, 091
+
+### Why
+The owner's decisions D8–D16 (root docs/72 §B), approved with every default on 5 Nov 2026 (root docs/73 §Q: Q1 is
+unanswered, so the composed salesperson forms of the chase stay held while `sf_persona_confirmed` is unset). The design
+is root docs/73: Part F (P1–P3 and what every part shares), Part V (P4, P5), Part O (P6), Part P (P7).
+
+### What (Uganda only — `StaffJobsGate::applies($config, $dataDir)` first, then each part's own switch; all OFF)
+- **P1** `tools/sales_followup_report.php`: a read-only report over a copy of the book. **P2** every Uganda quotation
+  tracked (`quote_tracker`) and chased on day 1, 3 and 7 with the approved wording; it stops when the customer writes, a
+  person takes over (C7, `lib/HumanTakeover.php`), STOP, acceptance or expiry. **P3** a morning list per salesperson
+  (quote numbers and counts only) and the staff page `tabs/sales/my_quotes.php`.
+- **P4/P5** voice notes fetched and transcribed through OpenAI in four rungs (measure, dry run, transcript to staff, the
+  AI answers in text), each with its own check; until then an instant acknowledgement 07:00–21:00. The key is never
+  printed: pages say "set" or "not set".
+- **P6** offers on the Evolution numbers: an admin screen (`tabs/engage/wa_offers.php`) that exists only while the
+  offers test step is on; a daily batch to customers warm in the last 30 days, from the number they chatted on, STOP on
+  every message. **P7** the agent who made a quotation in a visible Cc of the plugin's quotation e-mail.
+- **One ledger, one budget per handset** (`wa_auto_sends`, `lib/WaSendBudget.php`): every automated proactive send
+  claims before it sends and settles after; replies and staff alerts are recorded, never deferred. At most 60 a day
+  per number, 15 an hour, 60–180 s apart, 08:00–20:00 Kampala, never Sunday; chases first, offers use what is left.
+- **cron/master.php**: four jobs LAST in `$_m_jobs`, in this order and with these bytes (ruling R1) — `quote_chase`
+  540 s, `quote_daily_list` 240 s, `ai_media` 60 s, `offers_send` 240 s — each `'uganda' => true` with its `'flag'`; a
+  job marked so is dispatched only on Uganda and only while its switch is on (no run, no schedule row).
+  `tools/cron_status.php` lists a dark one `OFF (switch)` on Uganda and never lists the four on South Sudan.
+- **Migrations 089, 090, 091** each verify themselves (a `_schema_checks` row); their tables stay empty off Uganda.
+
+### Rules for whoever edits next
+1. **Every 5.18.104 switch goes through `tools/sales_followup.php`** (`show`, `on`, `skip`, `off`, `--check`, `set`,
+   `erase`, `doctor`) — never `tools/set_config.php`, never a hand edit. One order (C6): a step turns on only after the
+   step before it passed its check. `off all --rollback` is the one rollback sequence, and a redeploy starts dark.
+2. **A new automated WhatsApp sender claims in the ledger first** (`WaSendBudget::claim`, then `settle`); one that only
+   reports sends is a record-only hook. Never send around the ledger on Uganda.
+3. **Never reorder or rewrite master's four lines.** `tests/test_master_104.php`, `tests/test_cron_keepalive_order.php`
+   and the offers switch's own precondition read them byte for byte; every new job bounds itself by `$_m_deadline`.
+4. **Staff-facing WhatsApp texts carry quote numbers and counts only**; customer names only on a staff page, own leads
+   only. New logs carry counts and fixed codes only.
+5. **The boundary**: `tests/quote_followup/declared.php` is the one merged declared list of every file 5.18.104 adds or
+   changes; `quote_followup N` holds the tree to it from Git against 221c9dc, and every hunk in an existing file
+   carries a `5.18.104 (root docs/73 §H…)` marker. Edit the list and the marker together, never one without the other.
+
+### Tests
+`tests/test_quote_followup.php` (A–N and OH), `tests/test_wa_send_budget.php`, `tests/test_sales_followup_tool.php`,
+`tests/test_master_104.php`, `tests/test_sales_followup_report.php`, the `tests/test_voice_*` files,
+`tests/test_media_foundation.php`, `tests/test_migration_090.php`, `tests/test_openai_transcriber.php`,
+`tests/test_wa_offers.php` and `tests/test_quote_agent_copy.php`, each with weakened copies that must fail it. The
+5.18.103 boundaries now judge this tree with 5.18.104's declared files and hunks taken out (221c9dc, from Git).
+
 ## 5.18.103 (2026-11-01) — Uganda: plans and hardware straight from uCRM (the uCRM catalogue), behind an admin's switch; standard quotations in one click; nothing linked; South Sudan unchanged; no migration
 
 ### Why

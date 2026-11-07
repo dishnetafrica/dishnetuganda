@@ -299,11 +299,22 @@ $_m_jobs = [
     // (lib/NotificationRetry.php). Never a message that may already have reached the customer. 240, not 300: master
     // runs on a ~300 s heartbeat, and an interval of exactly 300 can skip a cycle (test_cron_keepalive_order.php).
     'notify_retry'  => ['interval' => 240, 'gate' => 'retries', 'script' => __DIR__ . '/notify_retry.php'],
+
+    // ── 5.18.104 (root docs/73 §H.2.13, C5): the sales follow-up's four jobs, Uganda only, each only while its switch is on.
+    // LAST on purpose: a slow cycle defers these, never the backup, the reminders or the retries before them; and each one
+    // bounds itself against $_m_deadline, so none of them carries a cycle past master_budget_seconds.
+    // Intervals carry the heartbeat margin (see notify_retry): 540 gives C5's 600 s, 240 gives its 300 s (amendment A-C5-1).
+    // offers_send is last: the lowest priority (C3) and the only ban-risk sends; ai_media before it serves customers already waiting.
+    'quote_chase'      => ['interval' => 540, 'uganda' => true, 'flag' => 'quote_tracking_enabled',   'script' => __DIR__ . '/quote_chase.php'],
+    'quote_daily_list' => ['interval' => 240, 'uganda' => true, 'flag' => 'quote_daily_list_enabled', 'script' => __DIR__ . '/quote_daily_list.php'],
+    'ai_media'         => ['interval' => 60,  'uganda' => true, 'flag' => 'ai_media_enabled',         'script' => dirname(__DIR__) . '/run_media_worker.php'],
+    'offers_send'      => ['interval' => 240, 'uganda' => true, 'flag' => 'offers_live_enabled',      'script' => __DIR__ . '/offers_send.php'],
 ];
 
 // ── 5.18.54: gated jobs and the reminder window (docs/46 rows 5-8) ──────────────────────────────────────────
 require_once dirname(__DIR__) . '/lib/NotifyGate.php';
 require_once dirname(__DIR__) . '/lib/JobWindow.php';
+require_once dirname(__DIR__) . '/lib/StaffJobsGate.php';   // 5.18.104 (root docs/73 §H.2.13.2): the 'uganda' key's one spelling
 $_m_remHour  = (int)($_m_config['reminder_hour'] ?? 9);
 $_m_remUntil = (int)($_m_config['reminder_until_hour'] ?? 17);
 if ($_m_remHour < 0 || $_m_remHour > 23) $_m_remHour = 9;
@@ -322,6 +333,13 @@ foreach ($_m_jobs as $_m_name => $_m_job) {
 
     // 5.18.54: a job that belongs to one install is not dispatched elsewhere — no run, no schedule row
     if (isset($_m_job['gate']) && !NotifyGate::applies((string)$_m_job['gate'], is_array($_m_config) ? $_m_config : [], $dataDir)) continue;
+    // 5.18.104 (root docs/73 §H.2.13.2, C5): a job marked 'uganda' is dispatched only where StaffJobsGate says Uganda — no run, no schedule row
+    if (!empty($_m_job['uganda']) && !StaffJobsGate::applies(is_array($_m_config) ? $_m_config : [], $dataDir)) continue;
+    // … and a job with a 'flag' only while that switch is on (the development tree's rule, dev:cron/master.php:333-336)
+    if (isset($_m_job['flag'])) {
+        $_m_flagVal = is_array($_m_config) ? ($_m_config[(string)$_m_job['flag']] ?? null) : null;
+        if (!in_array(strtolower(trim((string)($_m_flagVal ?? ''))), ['1', 'true', 'on', 'yes'], true)) continue;
+    }
 
     $_m_scriptPath = $_m_job['script'];
 

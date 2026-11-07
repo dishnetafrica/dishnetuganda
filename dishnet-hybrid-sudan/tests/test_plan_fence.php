@@ -128,6 +128,22 @@ $ledger = [
     // never to a customer. So the plan fence (which guards model text in front of a customer) does not
     // apply. It is also NOT bound in the pilot: the live binding is NullWhatsAppChannel, which sends nothing.
     'WhatsAppChannel.php'      => 'distributor',
+    // 5.18.104 (root docs/73 §H.3.2): lib/Handover.php is ported from the development tree byte for byte, with this
+    // decision (dev:tests/test_plan_fence.php). Handover::escalate() — AiReplyWorker::escalate() moved into a library
+    // class so the media worker hands a voice note to a person through the same path — sends a customer ONE text, the
+    // operator's own ai_handover_message, verbatim: a fixed line with no model output, so the plan fence does not apply.
+    // Its staff alert goes through AlertService ('staff' above).
+    'Handover.php'             => 'fixed',
+    // 5.18.104 (root docs/73 §H.3.15): lib/VoiceAck.php, P5, sends a customer who sent a voice note ONE of two fixed
+    // texts, D9's approved A or B (§H.1) verbatim, on a salesperson's line prefixed with the fixed persona sentence and
+    // the owner's first name from the registry: no model output, so the plan fence does not apply. Its staff alert goes
+    // through Handover ('fixed' above) and AlertService ('staff').
+    'VoiceAck.php'             => 'fixed',
+    // 5.18.104 (root docs/73 §H.4.11): lib/EvolutionOfferGateway.php, P6's gateway, sends a customer one of the offer's
+    // wordings that a DishNet admin wrote and tested on the offers screen (OfferText::validate), verbatim, followed by
+    // §H.1's fixed STOP line; and sends the admin's test of it to the admin's own phone of record. No model output, so
+    // the plan fence does not apply.
+    'EvolutionOfferGateway.php' => 'fixed',
 ];
 // WaAutoReplyService is deliberately absent: it calls sendText nowhere. It
 // produces the reply and fences it in guard(), and something else posts it.

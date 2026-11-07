@@ -86,11 +86,17 @@ $doomed = (int)$pdo->query("SELECT COUNT(*) FROM wa_conversations WHERE {$where}
 if ($doomed === 0) { echo "  nothing matches — inbox unchanged.\n"; exit(0); }
 
 $pdo->exec('BEGIN');
+// 5.18.104 (root docs/73 §H.3.21): a voice note's record goes with its conversation, where the table exists.
+$vm = 0;
+if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wa_media'")->fetchColumn() !== false) {
+    $vm = (int)$pdo->exec("DELETE FROM wa_media WHERE conversation_id IN (SELECT id FROM wa_conversations WHERE {$where})");
+}
 $m = $pdo->exec("DELETE FROM wa_messages WHERE conversation_id IN (SELECT id FROM wa_conversations WHERE {$where})");
 $c = $pdo->exec("DELETE FROM wa_conversations WHERE {$where}");
 $pdo->exec('COMMIT');
 echo "  deleted {$c} conversation(s) and {$m} message(s)"
    . ($MODE === 'sudan' ? ' with Sudan (249…) numbers' : '') . ".\n";
+if ($vm > 0) echo "  and {$vm} voice-note record(s) with them.\n";   // 5.18.104 (root docs/73 §H.3.21): only when it deleted rows
 try { $pdo->exec('VACUUM'); } catch (\Throwable $e) { /* size only, not correctness */ }
 
 echo "  To undo: stop writes briefly and copy the backup over plugin.sqlite3.\n";

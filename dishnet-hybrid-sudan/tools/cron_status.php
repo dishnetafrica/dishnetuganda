@@ -50,6 +50,9 @@ $schedule = SqliteStore::create($dataDir)->load('master_schedule.json') ?? [];
 require_once $root . '/lib/PluginConfig.php';
 require_once $root . '/lib/NotifyGate.php';
 $gateCfg = (array)(SqliteStore::create($dataDir)->load('kyc_config.json') ?? []) + PluginConfig::load($root, $dataDir);
+// 5.18.104 (root docs/73 §H.2.13.2; ruling R1): the 'uganda' key's gate, and the switches master reads ($_m_config, the store copy)
+require_once $root . '/lib/StaffJobsGate.php';
+$flagCfg = (array)(SqliteStore::create($dataDir)->load('kyc_config.json') ?? []);
 if (NotifyGate::applies(NotifyGate::WATCHDOG, $gateCfg, $dataDir)) {
     require_once $root . '/lib/timezone.php';
     dn_tz_apply();
@@ -72,6 +75,12 @@ foreach (explode("\n", $src) as $line) {
     if (strpos($t, '//') === 0 || strpos($t, '*') === 0) continue;
     if (preg_match("/'([a-z0-9_]+)'\s*=>\s*\['interval'\s*=>\s*(\d+)/i", $line, $one)) {
         if (preg_match("/'gate'\s*=>\s*'([a-z_]+)'/", $line, $g) && !NotifyGate::applies($g[1], $gateCfg, $dataDir)) continue;
+        // 5.18.104 (root docs/73 §H.2.13.2; ruling R1): a job master dispatches only on Uganda is not listed where StaffJobsGate
+        // is false (South Sudan never lists the four); on Uganda one whose 'flag' is off is listed OFF (switch), never as late
+        // or never run, so an operator never reads a missing line as a removed job.
+        if (preg_match("/'uganda'\s*=>\s*true/", $line) && !StaffJobsGate::applies($gateCfg, $dataDir)) continue;
+        $one['off'] = preg_match("/'flag'\s*=>\s*'([a-z0-9_]+)'/", $line, $fl) === 1
+            && !in_array(strtolower(trim((string)($flagCfg[$fl[1]] ?? ''))), ['1', 'true', 'on', 'yes'], true);
         // Hour-gated jobs are not late when they have not run — master.php
         // skips them until their hour comes round. Listing them as NEVER RUN
         // put eight healthy daily jobs in a report about broken ones.
@@ -125,13 +134,15 @@ foreach ($m as $j) {
 
     $rows[] = ['name' => $name, 'interval' => $interval, 'effective' => $effective,
                'at' => $lastAt, 'elapsed' => $elapsed, 'overdue' => $overdue, 'died' => $died,
-               'hour' => $j['hour'], 'dow' => $j['dow'], 'order' => $order++];
+               'hour' => $j['hour'], 'dow' => $j['dow'], 'order' => $order++,
+               'off' => !empty($j['off'])];   // 5.18.104 (root docs/73 §H.2.13.2): its switch is off
 }
 
 /** Most overdue first; registration order breaks ties, since that is the thing
  *  that decides who gets starved when the budget runs out. */
 usort($rows, function ($a, $b) {
-    return $b['overdue'] <=> $a['overdue'] ?: $a['order'] <=> $b['order'];
+    // 5.18.104 (root docs/73 §H.2.13.2): a job whose switch is off goes after every dispatched one
+    return ($a['off'] <=> $b['off']) ?: ($b['overdue'] <=> $a['overdue'] ?: $a['order'] <=> $b['order']);
 });
 
 $dayName = function (int $d): string {
@@ -164,24 +175,29 @@ echo "  " . str_repeat('─', 72) . "\n";
 printf("  %-3s %-20s %9s %9s  %-19s %s\n", '#', 'job', 'every', 'last run', 'at', 'state');
 
 $shown = 0;
+$shownOff = 0;   // 5.18.104 (root docs/73 §H.2.13.2): listed OFF (switch) with or without --all; not counted as a late row
 foreach ($rows as $r) {
     $daily = ($r['hour'] !== null);
-    $late  = !$daily && $r['overdue'] > $r['effective'];  // missed a whole cycle it could have made
-    if (!$all && !$late && !$r['died']) continue;
-    $shown++;
+    $late  = !$r['off'] && !$daily && $r['overdue'] > $r['effective'];  // missed a whole cycle it could have made
+    if (!$all && !$late && !$r['died'] && !$r['off']) continue;
+    if ($r['off']) $shownOff++; else $shown++;   // 5.18.104 (root docs/73 §H.2.13.2)
     // "30s*" — it asks for 30s, it gets the dispatch period. The star is the
     // honest bit: the number in the column is what the job requested, not what
     // it can have.
     $every = $r['interval'] . 's' . ($r['effective'] > $r['interval'] ? '*' : '');
     printf("  %-3d %-20s %9s %9s  %-19s %s\n",
         $r['order'] + 1, $r['name'], $every, $ago($r['elapsed']), $r['at'],
-        $r['died'] ? 'DID NOT FINISH'
+        $r['off'] ? 'OFF (switch)' : ($r['died'] ? 'DID NOT FINISH'
           : ($daily ? 'waits ' . sprintf('%02d:00', $r['hour'])
                     . ($r['dow'] !== null ? ' ' . $dayName($r['dow']) : '')
-                    : ($r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : ''))));
+                    : ($r['elapsed'] === null ? 'NEVER RUN' : ($late ? 'OVERDUE' : '')))));   // 5.18.104: OFF (switch) first
 }
 
 $waiting = count(array_filter($rows, function ($r) { return $r['hour'] !== null; }));
+if ($shownOff > 0) {   // 5.18.104 (root docs/73 §H.2.13.2; ruling R1)
+    echo "\n  OFF (switch): " . $shownOff . " job(s) whose switch is off — master.php does not dispatch them until\n";
+    echo "  tools/sales_followup.php turns them on. Not late, not removed.\n";
+}
 if (!$all && $waiting > 0) {
     echo "\n  " . $waiting . " daily job(s) waiting for their hour — not late. --all to see them.\n";
 }
@@ -192,7 +208,7 @@ if ($shown === 0) {
     exit(0);
 }
 
-$died = array_filter($rows, function ($r) { return $r['died']; });
+$died = array_filter($rows, function ($r) { return $r['died'] && !$r['off']; });   // 5.18.104: an off job is not dispatched
 if ($died !== []) {
     echo "\n  DID NOT FINISH means the job started and never returned: it ended\n";
     echo "  master.php's process, so nothing after it ran that cycle. Look there\n";

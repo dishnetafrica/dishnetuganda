@@ -380,6 +380,9 @@ function renderChat(conv, msgs, isNewConv, hasNew){
         var time=isNaN(loc)?(m.sent_at||'').substring(11,16):pad(loc.getHours())+':'+pad(loc.getMinutes());
         var body=esc(m.body||'').replace(/\n/g,'<br>');
         if(m.media_type&&m.media_type!=='null') body='<span class="media-tag">['+esc(m.media_type)+']</span> '+body;
+<?php if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)): /* 5.18.104 (root docs/73 §H.3.11): the R3 machine transcript, labelled, under the voice note — drawn on Uganda only, so South Sudan's page stays 5.18.103's byte for byte */ ?>
+        if(m.voice_transcript){ body+='<div class="wai-voice-tx"><b>[voice message \u2014 machine transcript for staff, check it against the audio]</b> '+esc(m.voice_transcript).replace(/\n/g,'<br>')+'</div>'; }
+<?php endif; /* 5.18.104 (root docs/73 §H.3.11) */ ?>
         // Who said it, on every line. Reviewing a conversation means asking
         // "did the AI quote the right price, and did a human step in?" -- a
         // faint caption under some bubbles does not answer that at a glance.

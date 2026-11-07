@@ -59,6 +59,14 @@ $holdSql .= $autoSql;
 $holdArgs = array_merge($holdArgs, $autoArgs);
 
 $maxAge  = (float)($config['followup_max_age_hours'] ?? 336);   // two weeks
+
+// 5.18.104 (root docs/73 §H.2.10.7, R-06): a phone whose quotation is being chased, or whose chase closed after the
+// customer's last message, gets no enquiry follow-up beside it, on any conversation. Added only where the column is
+// there (hasKind(), S2-19), so a book whose 089 ALTER failed runs 5.18.103's SQL.
+$quoteSql = $svc->hasKind()
+    ? " AND NOT EXISTS (SELECT 1 FROM followups q WHERE q.kind='quote' AND q.phone=c.phone AND (q.closed_at IS NULL OR q.closed_at > c.last_customer_at))"
+    : '';
+$holdSql .= $quoteSql;   // it takes no argument, so $holdArgs is unchanged
 $perScan = (int)($config['followup_scan_limit'] ?? 25);
 
 // Candidates: the customer spoke last, long enough ago, and no follow-up is

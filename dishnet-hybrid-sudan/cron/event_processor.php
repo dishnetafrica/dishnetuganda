@@ -58,7 +58,9 @@ try {
 } catch (\Throwable $e) {
     $_epUg = false;
 }
-$_epWorkerOwned = $_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];
+// 5.18.104 (root docs/73 §H.3.2): on Uganda the voice-note events are their workers' too — ai.media is MediaWorker's,
+// ai.voice_ack AiReplyWorker's (P5) — so this loop never acknowledges one as unknown. South Sudan's list is unchanged.
+$_epWorkerOwned = $_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];
 
 // ── Consume events ──────────────────────────────────────────────────────────
 if ($_epUg) {

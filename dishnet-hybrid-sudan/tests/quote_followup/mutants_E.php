@@ -1,0 +1,50 @@
+<?php
+declare(strict_types=1);
+/**
+ * Weakened copies for section E of tests/test_quote_followup.php (5.18.104, root docs/73 §H.2.14: QM7, QM13, QM31, QM53,
+ * and the guards E names — the spoke-to window, its tie, staff conversations, force-accounts, a transient refusal,
+ * ambiguous and a colleague's number). Appended to $M by the runner. TEST ONLY.
+ */
+$T = 'lib/QuoteTracker.php';
+$E = 'lib/QuoteSendEvidence.php';
+$M = array_merge($M, [
+    ['label' => 'QM13a spoke-to on the last nine digits', 'file' => $T,
+     'old' => "                               FROM wa_conversations c WHERE c.phone = ?\");",
+     'new' => "                               FROM wa_conversations c WHERE substr(c.phone, -9) = substr(?, -9)\");",
+     'sections' => 'E', 'cases' => 'E01', 'pattern' => '/E01 /'],
+    ['label' => 'QM13b the conversations of p on the last nine digits', 'file' => $T,
+     'old' => "\$st = \$pdo->prepare(\"SELECT id FROM wa_conversations WHERE phone = ? AND COALESCE(category, '') <> 'staff'\");",
+     'new' => "\$st = \$pdo->prepare(\"SELECT id FROM wa_conversations WHERE substr(phone, -9) = substr(?, -9) AND COALESCE(category, '') <> 'staff'\");",
+     'sections' => 'E', 'cases' => 'E01', 'pattern' => '/E01 /'],
+    ['label' => 'QM7 the owned hold ignored', 'file' => $T,
+     'old' => "            if (\$owned->holds(\$chan)) return \$none('owned_number');\n", 'new' => '',
+     'sections' => 'E', 'cases' => 'E06', 'pattern' => '/E06 /'],
+    ['label' => 'QM53 a partner number chased', 'file' => $T,
+     'old' => "            if (\$ch !== null && (string)(\$ch['owner_type'] ?? '') === 'partner') return \$none('partner_number');\n", 'new' => '',
+     'sections' => 'E', 'cases' => 'E07', 'pattern' => '/E07 /'],
+    ['label' => 'QM31 a cold chase on accounts (the conversation\'s channel taken as the Evolution channel)', 'file' => $E,
+     'old' => "        return (\$convChannel === 'accounts' || \$forceAccounts) ? 'account' : 'support';",
+     'new' => "        return \$forceAccounts ? 'account' : (\$convChannel === 'accounts' ? 'accounts' : 'support');",
+     'sections' => 'E', 'cases' => 'E04', 'pattern' => '/E04 /'],
+    ['label' => 'E-WIN the 30-day window dropped from spoke-to', 'file' => $E,
+     'old' => "\$t <= \$sent - self::SPOKE_WINDOW_S || ", 'new' => '',
+     'sections' => 'E', 'cases' => 'E02', 'pattern' => '/E02 /'],
+    ['label' => 'E-TIE a tie not given to a sales-role channel', 'file' => $E,
+     'old' => "\$rank = [\$t, ((string)(\$c['role'] ?? '') === 'sales') ? 1 : 0, -(int)(\$c['id'] ?? 0)];", 'new' => "\$rank = [\$t, -(int)(\$c['id'] ?? 0)];",
+     'sections' => 'E', 'cases' => 'E03', 'pattern' => '/E03 /'],
+    ['label' => 'E-STF a staff-filed conversation taken as spoke-to', 'file' => $E,
+     'old' => "            if (strtolower(trim((string)(\$c['category'] ?? ''))) === 'staff') continue;\n            \$li = ", 'new' => '            $li = ',
+     'sections' => 'E', 'cases' => 'E03', 'pattern' => '/E03 /'],
+    ['label' => 'E-FA wa_force_accounts ignored', 'file' => $E,
+     'old' => "        return \$v === true || \$v === '1' || \$v === 1;", 'new' => '        return false;',
+     'sections' => 'E', 'cases' => 'E05', 'pattern' => '/E05 /'],
+    ['label' => 'E-TR a transient refusal closed as final', 'file' => $T,
+     'old' => "            if (\\AutomationPolicy::transient(\$why)) return ['conv_id' => \$conv, 'channel' => \$chan, 'hold' => null, 'wait' => \$why, 'cold' => \$cold];\n", 'new' => '',
+     'sections' => 'E', 'cases' => 'E08', 'pattern' => '/E08 /'],
+    ['label' => 'E-AMB the ambiguous hold dropped', 'file' => $T,
+     'old' => "            if (\\FollowUpPolicy::contentLevel(\$conv) === \\FollowUpPolicy::CONTENT_NONE) return 'ambiguous';", 'new' => '',
+     'sections' => 'E', 'cases' => 'E09', 'pattern' => '/E09 /'],
+    ['label' => 'E-COL a colleague\'s number tracked as a customer\'s', 'file' => $T,
+     'old' => "            \$status = 'colleague'; \$reason = 'colleague_number';", 'new' => '',
+     'sections' => 'E', 'cases' => 'E09', 'pattern' => '/E09 /'],
+]);

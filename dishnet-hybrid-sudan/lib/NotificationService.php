@@ -1742,6 +1742,20 @@ class NotificationService
                     && isset($respData['success']) && $respData['success'] === true;
         }   // ← end of the WASender branch
 
+        // 5.18.104 (root docs/73 §H.2.6.1, C3): an automated send from a handset goes into the one ledger — never deferred,
+        // never refused; a record that cannot be written never stops a send. Uganda with the ledger on; nothing at all otherwise.
+        if ((string)($this->evoConfig['wa_send_ledger'] ?? '') === 'on') {
+            try {
+                require_once __DIR__ . '/WaSendBudget.php';
+                if ($evoRes !== null) {
+                    WaSendBudget::recordNotify($this->store, $this->evoConfig, $this->evoChannelFor($sender),
+                        (string)$event, (string)$to, (bool)$success, (string)($evoRes['error'] ?? ''), (string)$response);
+                } else {   // Q17-F01: WASender carried it; no handset, so a content-free count for L-ON
+                    WaSendBudget::countWasender($this->store, $this->evoConfig, (string)$event);
+                }
+            } catch (\Throwable $e) { /* the send matters more than its record */ }
+        }
+
         // Track result for retry mode
         $this->_lastSendSuccess = $success;
         $this->_lastHttpCode    = $httpCode;
@@ -1840,6 +1854,20 @@ class NotificationService
         $success  = !$curlErr && $httpCode >= 200 && $httpCode < 300
                     && isset($respData['success']) && $respData['success'] === true;
         }   // ← end of the WASender branch
+
+        // 5.18.104 (root docs/73 §H.2.6.1, C3): an automated send from a handset goes into the one ledger — never deferred,
+        // never refused; a record that cannot be written never stops a send. Uganda with the ledger on; nothing at all otherwise.
+        if ((string)($this->evoConfig['wa_send_ledger'] ?? '') === 'on') {
+            try {
+                require_once __DIR__ . '/WaSendBudget.php';
+                if ($evoRes !== null) {
+                    WaSendBudget::recordNotify($this->store, $this->evoConfig, $this->evoChannelFor($sender),
+                        (string)$event, (string)$to, (bool)$success, (string)($evoRes['error'] ?? ''), (string)$response);
+                } else {   // Q17-F01: WASender carried it; no handset, so a content-free count for L-ON
+                    WaSendBudget::countWasender($this->store, $this->evoConfig, (string)$event);
+                }
+            } catch (\Throwable $e) { /* the send matters more than its record */ }
+        }
 
         $this->_lastSendSuccess = $success;
         $this->_lastHttpCode    = $httpCode;
@@ -2378,6 +2406,20 @@ class NotificationService
         $success = !$curlErr && $httpCode >= 200 && $httpCode < 300
                    && isset($respData['success']) && $respData['success'] === true;
         }   // ← end of the WASender branch
+
+        // 5.18.104 (root docs/73 §H.2.6.1, C3): an automated send from a handset goes into the one ledger — never deferred,
+        // never refused; a record that cannot be written never stops a send. Uganda with the ledger on; nothing at all otherwise.
+        if ((string)($this->evoConfig['wa_send_ledger'] ?? '') === 'on') {
+            try {
+                require_once __DIR__ . '/WaSendBudget.php';
+                if ($evoRes !== null) {
+                    WaSendBudget::recordNotify($this->store, $this->evoConfig, $this->evoChannelFor($sender),
+                        (string)$event, (string)$to, (bool)$success, (string)($evoRes['error'] ?? ''), (string)$response);
+                } else {   // Q17-F01: WASender carried it; no handset, so a content-free count for L-ON
+                    WaSendBudget::countWasender($this->store, $this->evoConfig, (string)$event);
+                }
+            } catch (\Throwable $e) { /* the send matters more than its record */ }
+        }
 
         // Track result for retry mode
         $this->_lastSendSuccess = $success;

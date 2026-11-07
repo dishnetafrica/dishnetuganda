@@ -763,11 +763,22 @@ class QuotationService
         }
 
         $madeId = null;   // 5.18.99: kept outside the try, so a failure after uCRM made the quote says so
+        // 5.18.104 (root docs/73 §H.5.8.1) P7: who is making this quote, for a quote.add that may e-mail it before this request
+        // has stored anything (§H.5.5). Uganda only — South Sudan never loads P7 — with P7's switch on; else 0 and nothing written.
+        $p7Maker = 0;
+        require_once __DIR__ . '/StaffJobsGate.php';
+        if (StaffJobsGate::applies($this->config, $this->dataDir)) {
+            try {
+                require_once __DIR__ . '/QuoteAgentCopy.php';
+                $p7Maker = QuoteAgentCopy::markMaking($this->store, dirname(__DIR__), $this->dataDir, $crmClientId, $retailer);
+            } catch (\Throwable $e) { $p7Maker = 0; }
+        }
         try {
             $resp = $this->crm->post('billing/quotes', $payload);
             if (!empty($resp['id'])) {
                 $quoteId    = (int)$resp['id'];
                 $madeId     = $quoteId;
+                if ($p7Maker > 0) { try { QuoteAgentCopy::markResult($this->store, $p7Maker, $quoteId); } catch (\Throwable $e) {} }   // 5.18.104 (root docs/73 §H.5.8.1) P7: made
                 // Use UCRM's number (e.g. PF003847) — fetch if not in POST response
                 $ucrmNumber = $resp['number'] ?? null;
                 if (!$ucrmNumber) {
@@ -798,9 +809,11 @@ class QuotationService
                 return ['ok' => true, 'quote_id' => $quoteId, 'quote_number' => $ucrmNumber,
                         'emailed_by_plugin' => $viaPlugin, 'email_error' => $emailErr];
             }
+            if ($p7Maker > 0) { try { QuoteAgentCopy::markResult($this->store, $p7Maker, 0); } catch (\Throwable $e) {} }   // 5.18.104 (root docs/73 §H.5.8.1) P7: none made
             if ($this->quoteOrg()['on']) return $this->quoteNotMade($crmClientId, $where, $resp, null, null);   // 5.18.99
             return ['ok' => false, 'error' => 'UCRM did not return quote ID.'];
         } catch (\Throwable $e) {
+            if ($p7Maker > 0) { try { QuoteAgentCopy::markResult($this->store, $p7Maker, 0); } catch (\Throwable $e2) {} }   // 5.18.104 (root docs/73 §H.5.8.1) P7: none made
             if ($this->quoteOrg()['on']) return $this->quoteNotMade($crmClientId, $where, null, $e, $madeId);   // 5.18.99
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -1409,6 +1422,22 @@ class QuotationService
                 $qcc = EmailRecipients::ccFor($client, $email);
                 if ($qcc) $qHeaders['Cc'] = implode(', ', $qcc);
             }
+            // 5.18.104 (root docs/73 §H.5.8.1) P7: the account this quote was made as is copied, visibly, in this same e-mail —
+            // Uganda with P7's switch on, an agent whose address is usable, is not the customer's and fits the Cc line. Off, on
+            // South Sudan, or on any throw: the headers above are 5.18.103's, and no decision is recorded.
+            $p7 = null;
+            require_once __DIR__ . '/StaffJobsGate.php';
+            if (StaffJobsGate::applies($this->config, $this->dataDir)) {
+                try {
+                    require_once __DIR__ . '/QuoteAgentCopy.php';
+                    $p7 = QuoteAgentCopy::forActor($this->store, dirname(__DIR__), $this->dataDir, $retailer, $email, $qcc ?? []);
+                    if ($p7 !== null && $p7['address'] !== '') {
+                        [$p7Cc, $p7Code] = QuoteAgentCopy::mergeCc($qcc ?? [], $p7['address'], $email);
+                        if ($p7Code !== '') $p7 = QuoteAgentCopy::skipped($p7, $p7Code);
+                        else $qHeaders['Cc'] = implode(', ', $p7Cc);                         // the last statement: nothing after it can throw
+                    }
+                } catch (\Throwable $e) { $p7 = null; }
+            }
             $send = $mail->send($email, $name !== '' ? $name : 'Customer',
                 $subject, $built['html'], $built['text'],
                 $qHeaders,
@@ -1418,6 +1447,12 @@ class QuotationService
                     'content' => $pdf,
                 ]]
             );
+            if ($p7 !== null) {   // 5.18.104 (root docs/73 §H.5.8.1) P7: the decision, after the send; never the address
+                try {
+                    QuoteAgentCopy::record($this->store, 'plugin', $quoteId, $number, $p7, !empty($send['ok']),
+                        QuoteAgentCopy::rcptOutcome((array)($send['log'] ?? []), $p7['address']));
+                } catch (\Throwable $e) {}
+            }
             if (empty($send['ok'])) {
                 CustomerEmailDispatcher::releaseClaim($this->emailPdo(), "QEMAIL{$quoteId}");
                 return [false, (string)($send['error'] ?? 'send failed')];

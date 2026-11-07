@@ -131,6 +131,8 @@ $messages = isset($data['key']) ? [$data] : (is_array($data) ? array_values($dat
 $queued  = 0;
 $skipped = 0;
 $_evoJ8  = null;   // 5.18.50 (docs/44 J8): Uganda's active staff numbers, read once per request when first needed
+$mediaQueued = 0; $ackQueued = 0;   // 5.18.104 (root docs/73 §H.3.4): voice notes recorded for the media worker; acknowledgements queued
+$_evoVoiceUg = null;                // 5.18.104 (root docs/73 §H.3.4): Uganda, for step 8c, computed once per request
 $bus     = new EventBus($pdo);
 $convSvc = new ConversationService($dataDir, $pdo);
 
@@ -181,6 +183,14 @@ foreach ($messages as $msg) {
         // OUR number here, which is why it is not consulted.
         $custPhone = EvolutionApiService::phoneFromJid($remoteJid);
         $ownText   = evoExtractText($msg);
+        // 5.18.104 (root docs/73 §H.2.7.3, R-07): a colleague who answers from the handset with a voice note, a photo or a
+        // document without a caption leaves no stored message (the store below needs text). On Uganda, with the ledger on, a
+        // content-free mark says a person wrote to this customer — no text, no file, no state — so a quote chase and the
+        // voice-note acknowledgement stop. Our own sends are told apart when the mark is read (HumanTakeover), not here.
+        if ($custPhone !== '' && $ownText === '' && (string)($config['wa_send_ledger'] ?? '') === 'on') {
+            require_once __DIR__ . '/lib/WaSeenMarks.php';
+            WaSeenMarks::note($pdo, $config, $dataDir, 'out', $custPhone, $channel, $instance, $messageId, $msg);
+        }
         if ($custPhone !== '' && $ownText !== '') {
             try {
                 $conv = $convSvc->ensureConversation($custPhone, $channel, null, 'import');
@@ -233,7 +243,13 @@ foreach ($messages as $msg) {
     // Prefer senderPn when present — @lid JIDs carry no phone number.
     $phone = EvolutionApiService::phoneFromJid((string)($key['senderPn'] ?? ''));
     if ($phone === '') $phone = EvolutionApiService::phoneFromJid($remoteJid);
-    if ($phone === '') { $skipped++; continue; }
+    if ($phone === '') {
+        if ((string)($config['wa_send_ledger'] ?? '') === 'on') {   // 5.18.104 (root docs/73 §H.2.7.3, §H.2.17): the key first
+            require_once __DIR__ . '/lib/WaSeenMarks.php';
+            WaSeenMarks::noNumber($pdo, $config, $dataDir, $channel, $instance, $messageId);   // 5.18.104 (root docs/73 §H.2.7.3): counted only
+        }
+        $skipped++; continue;
+    }
 
     $text = evoExtractText($msg);
     $pushName = trim((string)($msg['pushName'] ?? ''));
@@ -274,6 +290,14 @@ foreach ($messages as $msg) {
         $convId = $convSvc->importEvoMessage($msg, $channel);
     } catch (\Throwable $e) {
         error_log('[evo_webhook] conversation store failed: ' . $e->getMessage());
+    }
+
+    // 5.18.104 (root docs/73 §H.2.7.3, R-01): a disappearing or view-once message is not stored (importEvoMessage reads top-level
+    // keys only, lib/ConversationService.php:1163-1199), so a reply or a STOP inside one is invisible. A content-free mark
+    // records that this customer wrote; the chase treats it as a reply. Not unwrapped here (§H.2.7.4).
+    if ($convId === null && $text === '' && (string)($config['wa_send_ledger'] ?? '') === 'on') {
+        require_once __DIR__ . '/lib/WaSeenMarks.php';
+        WaSeenMarks::note($pdo, $config, $dataDir, 'in', $phone, $channel, $instance, $messageId, $msg);
     }
 
     // ── 8a. A colleague's number (5.18.50, docs/44 J8, Uganda only) ───────
@@ -373,6 +397,52 @@ foreach ($messages as $msg) {
         continue;
     }
 
+    // ── 8c. 5.18.104 (root docs/73 §H.3.4): a voice note on Uganda — P4 records it for the media worker, P5 queues the
+    // instant acknowledgement. Inserts and emits only: no Evolution or OpenAI call from the webhook. A failure here is
+    // logged by class and the message goes on to step 9 exactly as in 5.18.103.
+    if ($_evoVoiceUg === null) {
+        try {
+            require_once __DIR__ . '/lib/StaffJobsGate.php';
+            $_evoVoiceUg = StaffJobsGate::applies(is_array($config) ? $config : [], $dataDir);
+            if ($_evoVoiceUg) {
+                require_once __DIR__ . '/lib/MediaPolicy.php';
+                require_once __DIR__ . '/lib/InboundMedia.php';
+                if (is_file(__DIR__ . '/lib/VoiceAck.php')) require_once __DIR__ . '/lib/VoiceAck.php';   // P5's own file (root docs/73 §H.3.15)
+            }
+        } catch (\Throwable $e) { $_evoVoiceUg = false; }
+    }
+    if ($_evoVoiceUg) {
+        try {
+            $vMedia = InboundMedia::fromEvoMessage($msg);
+            if ($vMedia !== null && $vMedia['kind'] === 'audio') {
+                $vCfg = is_array($config) ? $config : [];
+                $vP4  = MediaPolicy::enabled($vCfg, $dataDir);
+                $vP5  = class_exists('VoiceAck', false) && VoiceAck::enabled($vCfg, $dataDir) && MediaPolicy::voiceMode($vCfg, $dataDir, $channel) !== 'reply';
+                if ($vP4 || $vP5) {
+                    $vConv = $convId ?: InboundMedia::conversationFor($pdo, $messageId, $phone, $channel);
+                    if (!$vConv) {
+                        error_log('[evo_webhook] voice note not stored on this channel (wrapped: '
+                            . (InboundMedia::wasWrapped($msg) ? 'yes' : 'no') . ') — not recorded, not acknowledged (' . $channel . ')');
+                    } else {
+                        if ($vP4) {
+                            $vId = InboundMedia::record($pdo, (int)$vConv, $vMedia, $instance, $channel, $messageId);
+                            if ($vId) { $bus->emit('ai.media', 'media', $vId, ['media_id' => $vId], 3, 'evo_webhook'); $mediaQueued++; }
+                        }
+                        if ($vP5) {
+                            $bus->emit('ai.voice_ack', 'conversation', (int)$vConv, [
+                                'channel' => $channel, 'whatsapp_instance' => $instance, 'customer_phone' => $phone,
+                                'wa_message_id' => $messageId, 'received_at' => gmdate('c'), 'ptt' => !empty($vMedia['ptt']),
+                            ], 3, 'evo_webhook');
+                            $ackQueued++;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[evo_webhook] voice note step failed: ' . get_class($e) . ' (' . $channel . ')');
+        }
+    }
+
     // ── 9. Queue for the AI ──────────────────────────────────────────────
     // Media-only messages are stored and surfaced to staff but not sent to the
     // AI, which cannot act on them yet. A location pin is no longer one of
@@ -415,7 +485,8 @@ foreach ($messages as $msg) {
 // Kick a worker now so the customer is not waiting for the next scheduled
 // run. Best-effort: if exec() is unavailable in this container, main.php
 // picks the work up within a minute instead. Nothing is lost either way.
-if ($queued > 0) {
+// 5.18.104 (root docs/73 §H.3.4 (e)): an acknowledgement rides the reply worker; with both new counters 0 this is 5.18.103's path.
+if ($queued + $ackQueued > 0) {
     $worker = __DIR__ . '/run_worker.php';
     $execOk = function_exists('exec')
         && !in_array('exec', array_map('trim', explode(',', (string)ini_get('disable_functions'))), true);
@@ -451,11 +522,55 @@ if ($queued > 0) {
     }
 }
 
+// 5.18.104 (root docs/73 §H.3.4 (e)): the media worker, in its own process, when a voice note was recorded — the same
+// PHP CLI discovery as above. Never with $mediaQueued 0 (South Sudan, or dark).
+if ($mediaQueued > 0) {
+    $_evoMw = __DIR__ . '/run_media_worker.php';
+    $_evoMwExec = function_exists('exec')
+        && !in_array('exec', array_map('trim', explode(',', (string)ini_get('disable_functions'))), true);
+    if (is_file($_evoMw) && $_evoMwExec) {
+        $_evoMwPhp = '';
+        $_evoMwCand = [];
+        if (defined('PHP_BINDIR') && PHP_BINDIR !== '') $_evoMwCand[] = PHP_BINDIR . '/php';
+        $_evoMwCand[] = '/usr/local/bin/php';
+        $_evoMwCand[] = '/usr/bin/php';
+        if (defined('PHP_BINARY') && PHP_BINARY !== '' && basename(PHP_BINARY) === 'php') $_evoMwCand[] = PHP_BINARY;
+        foreach ($_evoMwCand as $c) {
+            if (@is_executable($c)) { $_evoMwPhp = $c; break; }
+        }
+        if ($_evoMwPhp !== '') {
+            @exec(escapeshellarg($_evoMwPhp) . ' ' . escapeshellarg($_evoMw) . ' --spawned > /dev/null 2>&1 &');
+        } else {
+            error_log('[evo_webhook] no PHP CLI binary found — voice notes will wait for the scheduled run');
+        }
+    }
+}
+
 // Opportunistic housekeeping, roughly 1 request in 200.
 if (random_int(1, 200) === 1) $guard->prune();
 
-error_log(EvoWebhookGuard::safeLogLine($event, $instance, "queued={$queued} skipped={$skipped}"));
-evoRespond(200, 'accepted', ['channel' => $channel, 'queued' => $queued, 'skipped' => $skipped]);
+// 5.18.104 (root docs/73 §H.3.4 (d)): on Uganda, the keys of the parts that are on; otherwise 5.18.103's line and answer exactly.
+$_evoOut = ['channel' => $channel, 'queued' => $queued, 'skipped' => $skipped];
+$_evoLine = "queued={$queued} skipped={$skipped}";
+if ($_evoVoiceUg === null) {   // no message reached step 8c in this request: the same gate, so the keys do not depend on it
+    try {
+        require_once __DIR__ . '/lib/StaffJobsGate.php';
+        $_evoVoiceUg = StaffJobsGate::applies(is_array($config) ? $config : [], $dataDir);
+        if ($_evoVoiceUg) {
+            require_once __DIR__ . '/lib/MediaPolicy.php';
+            if (is_file(__DIR__ . '/lib/VoiceAck.php')) require_once __DIR__ . '/lib/VoiceAck.php';
+        }
+    } catch (\Throwable $e) { $_evoVoiceUg = false; }
+}
+if ($_evoVoiceUg) {
+    try {
+        $_evoCfg = is_array($config) ? $config : [];
+        if (MediaPolicy::enabled($_evoCfg, $dataDir)) { $_evoOut['media_queued'] = $mediaQueued; $_evoLine .= " media={$mediaQueued}"; }
+        if (class_exists('VoiceAck', false) && VoiceAck::enabled($_evoCfg, $dataDir)) { $_evoOut['ack_queued'] = $ackQueued; $_evoLine .= " ack={$ackQueued}"; }
+    } catch (\Throwable $e) { /* the 5.18.103 answer */ }
+}
+error_log(EvoWebhookGuard::safeLogLine($event, $instance, $_evoLine));
+evoRespond(200, 'accepted', $_evoOut);
 
 
 /**

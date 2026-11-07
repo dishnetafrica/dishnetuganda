@@ -121,7 +121,7 @@ foreach (['dist_region_add', 'dist_area_add', 'dist_attribute'] as $a) {
 
 echo "\nG. manifest version\n";
 $mani = json_decode((string)file_get_contents($root . '/manifest.json'), true);
-is_(($mani['information']['version'] ?? '') === '5.18.103', 'manifest version is 5.18.71');   // 5.18.103 (was 5.18.102)
+is_(($mani['information']['version'] ?? '') === '5.18.104', 'manifest version is 5.18.71');   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103, 5.18.102)
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo "\n$pass passed, $fail failed\n";

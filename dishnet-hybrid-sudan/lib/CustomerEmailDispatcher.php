@@ -41,6 +41,11 @@ class CustomerEmailDispatcher
     /** @var array */  private $config;
     /** @var object|null */ private $crm;
     /** @var PDO|null */    private $pdo;
+    /** @var string 5.18.104 (root docs/73 §H.5.8.3) P7: one extra visible copy for the next quotation send; '' = none */
+    private $agentCopy = '';
+
+    /** 5.18.104 (root docs/73 §H.5.8.3) P7: set only by whQuotationEmail, only on Uganda with P7's switch on, with an address QuoteAgentCopy validated. */
+    public function agentCopy(string $address): void { $this->agentCopy = $address; }
 
     public function __construct(string $dataDir, array $config, $crm = null, $pdo = null)
     {
@@ -237,6 +242,12 @@ class CustomerEmailDispatcher
     public function send(string $key, $to, string $name, array $data, string $dedupe = '', array $attachments = []): array
     {
         try {
+            $p7Copy = '';
+            $p7Code = '';
+            if ($this->agentCopy !== '') {   // 5.18.104 (root docs/73 §H.5.8.3) P7: taken once and cleared here; any key but 'quotation' ignores it
+                if ($key === 'quotation') $p7Copy = $this->agentCopy;
+                $this->agentCopy = '';
+            }
             if (!self::enabled($key, $this->config)) {
                 return $this->result(false, 'switched off', '');
             }
@@ -275,6 +286,12 @@ class CustomerEmailDispatcher
             // the log would otherwise let a retry send it again, and a customer
             // would rather miss an email than get it twice.
             if ($mark !== '') $this->claim($mark, $key, $email, $sender);
+            if ($p7Copy !== '') {   // 5.18.104 (root docs/73 §H.5.8.3) P7: after the client's own copies; never the To; only while the Cc line fits
+                try {
+                    require_once __DIR__ . '/QuoteAgentCopy.php';
+                    [$cc, $p7Code] = QuoteAgentCopy::mergeCc($cc, $p7Copy, $email);
+                } catch (\Throwable $e) { $p7Code = 'error'; }   // the client's own Cc, as 5.18.103
+            }
 
             $headers = ['Reply-To' => EmailTemplate::replyTo($this->config)];
             if ($cc) $headers['Cc'] = implode(', ', $cc);
@@ -284,6 +301,13 @@ class CustomerEmailDispatcher
 
             $ok = !empty($res['ok']);
             if ($mark !== '') $this->settle($mark, $ok, (string)($res['error'] ?? ''));
+            if ($p7Copy !== '') {   // 5.18.104 (root docs/73 §H.5.8.3) P7: what became of the copy — never the address
+                try {
+                    $p7r = $p7Code !== '' ? ['agent_rcpt' => 'excluded', 'agent_code' => $p7Code]
+                        : ['agent_rcpt' => QuoteAgentCopy::rcptOutcome((array)($res['log'] ?? []), strtolower(trim($p7Copy)))];
+                    return $p7r + $this->result($ok, $ok ? 'sent' : (string)($res['error'] ?? 'send failed'), $email);
+                } catch (\Throwable $e) {}
+            }
             return $this->result($ok, $ok ? 'sent' : (string)($res['error'] ?? 'send failed'), $email);
         } catch (\Throwable $e) {
             // Deliberately swallowed: see the class comment. The caller has

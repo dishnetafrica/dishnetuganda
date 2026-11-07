@@ -1931,16 +1931,20 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     }
     t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
         [$since, count($held)], [[], 6]);
-    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.103",', $mr, $mtn);   // 5.18.103 (was 5.18.102)
-    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.103",
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.104",', $mr, $mtn);   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.104",
         [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {
         // 5.18.103 (root docs/72 §G.13, rewritten on purpose): navigation.php read without 5.18.103's declared lines
         // (tests/fixtures/r103_revert.php; the lines themselves held by tests/test_catalogue_direct.php I)
         require_once __DIR__ . '/fixtures/r103_revert.php';
+        // 5.18.104 (root docs/73 §H.2.14; coordinator items 8, 10a): and without 5.18.104's two declared blocks first
+        // (tests/fixtures/r104_revert.php; the lines themselves held by tests/test_quote_followup.php N)
+        require_once __DIR__ . '/fixtures/r104_revert.php';
         $r103 = function (string $f) use ($blob, $root, $rel) { if ($rel !== 'includes/navigation.php' || !is_file($f)) return $blob($f);
-            $s = r103_revert($rel, (string)file_get_contents($f)); return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s); };
+            $s4 = r104_revert($rel, (string)file_get_contents($f));   // 5.18.104 (root docs/73 §H.2.14)
+            $s = $s4 === null ? null : r103_revert($rel, $s4); return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s); };
         t("{$rel} is byte-identical to " . PL_BASE, [isset($BASEB[$rel]), $r103($root . '/' . $rel) === ($BASEB[$rel] ?? 'absent')], [true, true]);
     }
     $WORDS = ['UPDATE', 'DELETE', 'INSERT', 'CREATE', 'ALTER', 'accounts(', 'ensureAccountsTable'];
@@ -2010,6 +2014,14 @@ TXT
             if (!is_file($root . '/' . $rel)) return null;
             require_once __DIR__ . '/fixtures/r103_revert.php';
             $s = r103_revert($rel, (string)file_get_contents($root . '/' . $rel));
+            return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s);
+        }
+        // 5.18.104 (root docs/73 §H.2.14; coordinator item 2): tests/test_bank_store.php's "091 last" re-point taken out
+        // (tests/fixtures/r104_revert.php: found exactly once, or no match); then the file byte for byte, as before
+        if ($rel === 'tests/test_bank_store.php') {
+            if (!is_file($root . '/' . $rel)) return null;
+            require_once __DIR__ . '/fixtures/r104_revert.php';
+            $s = r104_revert($rel, (string)file_get_contents($root . '/' . $rel));
             return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s);
         }
         if ($rel !== 'tests/test_bank_screen.php') return $blob($root . '/' . $rel);

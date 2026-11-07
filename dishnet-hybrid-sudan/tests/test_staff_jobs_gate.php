@@ -112,6 +112,108 @@ foreach ($it as $f) {
 is_($calls >= 12, "the gate is called at {$calls} places");
 is_($bad === [], 'every call passes the data directory as its second argument', implode(', ', $bad));
 
+// 5.18.104 (root docs/73 §H.3.24, re-pointed on purpose): the voice predicates ask the gate themselves, so every call of
+// a MediaPolicy or VoiceAck method that asks the gate passes the data directory too — a second top-level argument.
+// 5.18.104 (root docs/73 §H.3.24; B5-fix1, notes/B5.md item 14): which methods the scan covers is DERIVED from the
+// source, never listed. A static method of MediaPolicy or VoiceAck asks the gate when its body calls
+// StaffJobsGate::applies, or a method of either class that does (to a fixed point). D §H.3.2 (line 4199) has every
+// MediaPolicy method take (array $config, ?string $dataDir…) and §H.3.24 (line 5682) every call pass $dataDir; but the
+// byte-for-byte MediaFetcher (line 4194) calls MediaPolicy::maxBytes($this->config), and it and the byte-for-byte
+// MediaBlob call baseMime/kindSupported/allowed with no configuration at all. So the claim is held where it has
+// subject matter: every method that asks the gate declares ?string $dataDir second, and every call of one passes it.
+// The setting readers (privacyLineOk, keySet, maxBytes, sttModel, …) never ask the gate and keep (array $config); one
+// that starts asking it joins the scan by itself, and its callers must then pass the data directory.
+function sj_gate_askers(array $classes): array {
+    $methods = [];
+    foreach ($classes as $cls => $src) {
+        preg_match_all('/\b(public|private|protected)\s+static\s+function\s+(\w+)\s*\(([^)]*)\)[^{;]*\{/', $src, $mm,
+            PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        foreach ($mm as $m) {
+            $start = $m[0][1] + strlen($m[0][0]); $depth = 1;
+            for ($j = $start; $j < strlen($src) && $depth > 0; $j++) {
+                if ($src[$j] === '{') $depth++;
+                elseif ($src[$j] === '}') $depth--;
+            }
+            $methods[$cls][$m[2][0]] = ['public' => $m[1][0] === 'public', 'params' => array_map('trim', explode(',', $m[3][0])),
+                                        'body' => substr($src, $start, $j - $start)];
+        }
+    }
+    $ask = [];
+    do {
+        $grew = false;
+        foreach ($methods as $cls => $ms) {
+            foreach ($ms as $name => $m) {
+                if (isset($ask[$cls][$name])) continue;
+                $hit = strpos($m['body'], 'StaffJobsGate::applies(') !== false;
+                if (!$hit && preg_match_all('/\b(self|static|MediaPolicy|VoiceAck)::(\w+)\(/', $m['body'], $cc, PREG_SET_ORDER)) {
+                    foreach ($cc as $c) {
+                        $to = ($c[1] === 'self' || $c[1] === 'static') ? $cls : $c[1];
+                        if (isset($ask[$to][$c[2]])) { $hit = true; break; }
+                    }
+                }
+                if ($hit) { $ask[$cls][$name] = true; $grew = true; }
+            }
+        }
+    } while ($grew);
+    return [$methods, $ask];
+}
+[$vMethods, $vAsk] = sj_gate_askers([
+    'MediaPolicy' => (string)@file_get_contents("{$root}/lib/MediaPolicy.php"),
+    'VoiceAck'    => (string)@file_get_contents("{$root}/lib/VoiceAck.php"),
+]);
+$vSeen = function (string $cls, array $names) use ($vMethods): bool {
+    foreach ($names as $n) if (!isset($vMethods[$cls][$n])) return false;
+    return true;
+};
+$vAsks = function (string $cls, array $names) use ($vAsk): array {
+    return array_values(array_filter($names, function ($n) use ($vAsk, $cls) { return isset($vAsk[$cls][$n]); }));
+};
+$vPred = ['enabled', 'voiceEnabled', 'voiceHandoverEnabled', 'voiceReplyEnabled', 'voiceMode'];
+$vRead = ['privacyLineOk', 'keySet', 'maxBytes', 'timeoutSeconds', 'voiceMaxSeconds', 'voiceTimeoutSeconds',
+          'voiceDailyMinutes', 'voiceConversationDailyMax', 'sttModel'];
+$vMime = ['baseMime', 'kindSupported', 'allowed'];   // take no configuration, so can never ask the gate
+is_($vSeen('MediaPolicy', array_merge($vPred, $vRead, $vMime)) && $vSeen('VoiceAck', ['enabled', 'personaConfirmed', 'metaHas'])
+    && $vAsks('MediaPolicy', $vMime) === [] && $vAsks('VoiceAck', ['metaHas']) === [],
+    'control: the reader parses every method, and sees ones that do not ask the gate (the mime helpers, VoiceAck::metaHas)',
+    json_encode(['parsed' => array_map('array_keys', $vMethods), 'asking' => array_map('array_keys', $vAsk)]));
+is_($vAsks('MediaPolicy', $vPred) === $vPred && $vAsks('VoiceAck', ['enabled']) === ['enabled'],
+    'the five rung predicates and VoiceAck::enabled are found asking the gate',
+    json_encode(array_map('array_keys', $vAsk)));
+echo '       note: setting readers asking the gate today: ' . count($vAsks('MediaPolicy', $vRead)) . ' of ' . count($vRead)
+    . " (they keep (array \$config); one that starts asking joins the scan below)\n";
+$vNoDir = [];
+foreach ($vAsk as $cls => $ns) {
+    foreach (array_keys($ns) as $n) {
+        if (!preg_match('/^\?string\s+\$dataDir\b/', (string)($vMethods[$cls][$n]['params'][1] ?? ''))) $vNoDir[] = "{$cls}::{$n}";
+    }
+}
+is_($vNoDir === [], 'every method that asks the gate declares ?string $dataDir as its second parameter', implode(', ', $vNoDir));
+$vAlt = [];
+foreach ($vAsk as $cls => $ns) foreach (array_keys($ns) as $n) if ($vMethods[$cls][$n]['public']) $vAlt[] = preg_quote("{$cls}::{$n}", '/');
+$vRe = '/\b(' . implode('|', $vAlt) . ')\(/';
+$vCalls = 0; $vBad = [];
+$vIt = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($vIt as $f) {
+    $p = $f->getPathname();
+    if (substr($p, -4) !== '.php' || strpos($p, '/tests/') !== false || strpos($p, '/docs/') !== false) continue;
+    $src = (string)file_get_contents($p);
+    if ($vAlt === [] || !preg_match_all($vRe, $src, $mm, PREG_OFFSET_CAPTURE)) continue;
+    foreach ($mm[0] as [$hit, $at]) {
+        if (strpos(substr($src, max(0, $at - 30), 30), 'function') !== false) continue;   // a definition
+        $j = $at + strlen($hit); $depth = 1; $comma = false;
+        for (; $j < strlen($src) && $depth > 0; $j++) {
+            $c = $src[$j];
+            if ($c === '(' || $c === '[') $depth++;
+            elseif ($c === ')' || $c === ']') $depth--;
+            elseif ($c === ',' && $depth === 1) $comma = true;
+        }
+        $vCalls++;
+        if (!$comma) $vBad[] = substr($p, strlen($root) + 1) . ': ' . $hit;
+    }
+}
+is_($vCalls >= 10, "the voice predicates are called at {$vCalls} places");
+is_($vBad === [], 'every call of a voice predicate (a method that asks the gate) passes the data directory', implode(', ', $vBad));
+
 // ── 2. On Uganda, through the real pages and API ─────────────────────────────
 echo "\n2. On Uganda (selected by the vault, as the live box is before D8)\n";
 $ug = SjSandbox::start($root, ['timezone' => 'Africa/Kampala'], 'sjgate');
@@ -211,14 +313,33 @@ if ($withMutants) {
          "if (false && \$act === 'auto_map_ucrm_users' && \$met === 'POST') {", 'auto-map still writing on Uganda'],
         ['includes/api/api_scheduling.php', "if (\$_sjUganda && \$act === 'get_ucrm_users') {", "if (false && \$act === 'get_ucrm_users') {",
          'get_ucrm_users back to the South Sudan list'],
+        // 5.18.104 (root docs/73 §H.3.24): a voice predicate asked without the data directory
+        ['run_media_worker.php', 'if (!MediaPolicy::enabled($config, $dataDir)) {', 'if (!MediaPolicy::enabled($config)) {',
+         'a voice predicate asked without the data directory'],
+        // 5.18.104 (root docs/73 §H.3.24; B5-fix1): the scan's set is derived — a setting reader that starts asking the
+        // gate joins it by itself (a listed set missed this copy: 36/0), and an asker must declare the data directory.
+        ['lib/MediaPolicy.php',
+         "    public static function keySet(array \$config): bool\n    {\n        return trim((string)(\$config['openai_api_key'] ?? '')) !== '';",
+         "    public static function keySet(array \$config, ?string \$dataDir = null): bool\n    {\n        return self::enabled(\$config, \$dataDir) && trim((string)(\$config['openai_api_key'] ?? '')) !== '';",
+         'a setting reader that asks the gate, its callers still passing the configuration alone',
+         'every call of a voice predicate (a method that asks the gate) passes the data directory'],
+        ['lib/MediaPolicy.php',
+         "    public static function sttModel(array \$config): string\n    {\n        \$m = trim(",
+         "    public static function sttModel(array \$config): string\n    {\n        if (!self::enabled(\$config, null)) return '';\n        \$m = trim(",
+         'a method that asks the gate without taking the data directory',
+         'every method that asks the gate declares ?string $dataDir as its second parameter'],
     ];
-    foreach ($MUTANTS as [$rel, $old, $new, $label]) {
+    foreach ($MUTANTS as $mut) {
+        [$rel, $old, $new, $label] = $mut;
+        $must = $mut[4] ?? '';   // 5.18.104 (root docs/73 §H.3.24; B5-fix1): the assertion that must be the one to fail
         [$tmp, $n] = sj_weakened_copy($root, $rel, $old, $new);
         if ($n !== 1) { is_(false, "weakened copy \"{$label}\": its anchor occurs once in {$rel}", "found {$n} times"); exec('rm -rf ' . escapeshellarg($tmp)); continue; }
         $out = [];
         exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__FILE__) . ' --root=' . escapeshellarg($tmp) . ' --no-mutants 2>&1', $out, $rc);
         $fails = array_values(array_filter($out, function ($l) { return strpos($l, '  FAIL ') === 0; }));
-        is_($rc !== 0 && $fails !== [], "caught: {$label}", 'exit ' . $rc . ', ' . count($fails) . ' failure(s)');
+        $named = $must === '' || array_filter($fails, function ($l) use ($must) { return strpos($l, $must) !== false; }) !== [];
+        is_($rc !== 0 && $fails !== [] && $named, "caught: {$label}", 'exit ' . $rc . ', ' . count($fails) . ' failure(s)'
+            . ($must !== '' && !$named ? ", none of them \"{$must}\"" : ''));
         if ($fails) echo '         first: ' . trim(substr($fails[0], 7, 110)) . "\n";
         exec('rm -rf ' . escapeshellarg($tmp));
     }

@@ -35,6 +35,18 @@
     } catch (\Throwable $_e) { $myLeadCount = 0; }
     if ($myLeadCount > 0): ?><span class="nav-badge orange"><?= $myLeadCount ?></span><?php endif; ?>
 </a>
+<?php /* 5.18.104 (root docs/73 §H.2.11.5): My quotations, drawn only while QuoteDailyList::pageOpen() — Uganda and the daily list
+on. With the list's key absent (South Sudan, and Uganda until the list is switched on) nothing is loaded and nothing is drawn. */
+$_mq104Nav = false;
+if (!empty($config['quote_daily_list_enabled'])) {
+    require_once dirname(__DIR__) . '/lib/QuoteDailyList.php';
+    $_mq104Nav = QuoteDailyList::pageOpen(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+}
+if ($_mq104Nav): ?>
+<a href="?page=dashboard&tab=my_quotes" class="kyc-tab <?= $tab==='my_quotes'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-clipboard-check"></i></span> My quotations
+</a>
+<?php endif; ?>
 <?php if($can('collect_payment')): ?>
 <a href="?page=dashboard&tab=collect_payment" class="kyc-tab <?= $tab==='collect_payment'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-cash-coin"></i></span> Collect Payment
@@ -490,6 +502,19 @@ try {
 <a href="?page=dashboard&tab=followups" class="kyc-tab <?= $tab==='followups'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-chat-left-heart" style="color:#7C3AED;"></i></span> Customer Follow-ups
 </a>
+<?php /* 5.18.104 (root docs/73 §H.4.7): WhatsApp offers, Uganda only, drawn only while OfferSwitch::screen() — Uganda and
+offers_test_enabled on. With the key absent (South Sudan, and Uganda until offers-test is switched on) nothing is loaded and
+nothing is drawn. */
+$_wo104Nav = false;
+if (!empty($config['offers_test_enabled'])) {
+    require_once dirname(__DIR__) . '/lib/OfferSwitch.php';
+    $_wo104Nav = OfferSwitch::screen(is_array($config ?? null) ? $config : [], isset($dataDir) ? (string)$dataDir : null);
+}
+if ($_wo104Nav): ?>
+<a href="?page=dashboard&tab=wa_offers" class="kyc-tab <?= $tab==='wa_offers'?'active':'' ?>">
+    <span class="nav-icon"><i class="bi bi-megaphone" style="color:#7C3AED;"></i></span> WhatsApp offers
+</a>
+<?php endif; ?>
 <a href="?page=dashboard&tab=starlink_suspensions" class="kyc-tab <?= $tab==='starlink_suspensions'?'active':'' ?>">
     <span class="nav-icon"><i class="bi bi-shield-slash-fill" style="color:#D41C1C;"></i></span> Starlink Suspensions
 </a>

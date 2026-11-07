@@ -709,6 +709,10 @@ $splynxStatus = $splynx->isConfigured() ? $splynx->testConnection() : ['ok' => f
 
         <!-- AI Bot Settings Section -->
         <?php
+        // 5.18.104 (root docs/73 §H.3.18, C9): on Uganda the stored OpenAI key is never printed into this page — only
+        // whether one is set. Saving the form with the field blank keeps the saved key (includes/post/post_admin.php).
+        require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+        $_aiKeyUg = StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null);
         $_aiProvider    = $config['ai_provider'] ?? 'claude';
         $_hasClaudeKey  = !empty($config['claude_api_key']);
         $_hasOpenaiKey  = !empty($config['openai_api_key']);
@@ -763,11 +767,13 @@ $splynxStatus = $splynx->isConfigured() ? $splynx->testConnection() : ['ok' => f
                         <?php if ($_hasOpenaiKey && $_aiProvider==='openai'): ?>
                         <span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-left:4px;">ACTIVE</span>
                         <?php elseif ($_hasOpenaiKey): ?>
-                        <span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;margin-left:4px;">Saved</span>
+                        <span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;margin-left:4px;"><?= $_aiKeyUg ? 'set' : 'Saved' ?></span>
+                        <?php elseif ($_aiKeyUg): /* 5.18.104 (root docs/73 §H.3.18) */ ?>
+                        <span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;margin-left:4px;">not set</span>
                         <?php endif; ?>
                     </label>
                     <input type="password" name="openai_api_key" class="form-control"
-                           value="<?= h($config['openai_api_key'] ?? '') ?>"
+                           value="<?= $_aiKeyUg ? '' : h($config['openai_api_key'] ?? '') /* 5.18.104 (root docs/73 §H.3.18): never printed on Uganda */ ?>"
                            placeholder="sk-proj-..."
                            autocomplete="new-password"
                            style="font-family:monospace;font-size:12px;">

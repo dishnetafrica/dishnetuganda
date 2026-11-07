@@ -1973,12 +1973,20 @@ t('I4 … and outside the walk (documents and tests) it changes exactly the ' . 
 $mig = function (?string $t) use ($files) { if ($t === null) return null; $o = []; foreach (glob($t . '/migrations/*') ?: [] as $f) $o[basename($f)] = hash_file('sha256', $f); ksort($o); return $o; };
 is_($BASE !== null && $RBASE !== null && $mig($RBASE) === $mig($BASE) && count((array)$mig($RBASE)) > 50,
     'I5 ' . QC_DELTA_REL . '\'s migrations/ is ' . QC_BASE_COMMIT . '\'s, file for file (' . count((array)$mig($RBASE)) . ' files): 5.18.99 adds no migration');
-is_($RBASE !== null && $mig($T) === $mig($RBASE), 'I5 this tree\'s migrations/ is ' . QC_DELTA_REL . '\'s, file for file (' . count((array)$mig($T)) . ' files): no migration since (5.18.100)');
+// 5.18.104 (root docs/73 §H.2.14; coordinator items 2, 9b, 10c), re-pointed on purpose, never weakened: no migration since
+// 5.18.100 but 5.18.104's three — 089, 090 and 091, declared in tests/quote_followup/declared.php (QF_N_MIGRATIONS), 091
+// the last; every one of ca05ada5's byte for byte, and nothing else new. quote_followup N holds the three.
+require_once __DIR__ . '/quote_followup/declared.php';
+$mig104 = (array)$mig($T);
+$mig104new = array_diff_key($mig104, (array)$mig($RBASE));
+$mig104sql = array_values(array_filter(array_keys($mig104), function ($f) { return substr($f, -4) === '.sql'; }));
+is_($RBASE !== null && array_intersect_key($mig104, (array)$mig($RBASE)) === $mig($RBASE) && array_keys($mig104new) === array_values(QF_N_MIGRATIONS) && end($mig104sql) === '091_wa_offers.sql',
+    'I5 this tree\'s migrations/ is ' . QC_DELTA_REL . '\'s, file for file, plus exactly 5.18.104\'s 089, 090 and 091, 091 the last (' . count($mig104) . ' files): no other migration since (5.18.100)');
 $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
 t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
     [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
-$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.103",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.103 (was 5.18.102)
-t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.103 (a later release moves this pin on; was 5.18.102, 5.18.101)',
+$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.104",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
+t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.104 (a later release moves this pin on; was 5.18.103, 5.18.102, 5.18.101)',
     [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
 
 // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's

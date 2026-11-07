@@ -54,7 +54,7 @@ require_once __DIR__ . '/ConversationService.php';
 final class BrainContext
 {
     /**
-     * The contract. Fourteen top-level keys, and the only fourteen.
+     * The contract. Fifteen top-level keys, and the only fifteen. (Fourteen until 5.18.104 (root docs/73 §H.3.12) added 'voice'.)
      *
      * Each entry names the leaves that survive under it; '*' is a scalar
      * that travels as itself.
@@ -85,6 +85,11 @@ final class BrainContext
         // assistant at DishNet", never the person). Only the first name — letters, apostrophe, hyphen, at most 30
         // characters — never their number, id or full name; absent on every department number.
         'line_owner'     => ['*'],
+        // 5.18.104 (root docs/73 §H.3.12; dev :85-88): this turn's message is the transcript of a voice note the
+        // customer sent, at R4. Presence is the fact the prompt acts on (DishNetAiBrain's VOICE MESSAGE block: an
+        // automatic transcript, every name and figure unconfirmed, ask rather than guess); the one leaf is the
+        // announced duration.
+        'voice'          => ['seconds'],
     ];
 
     /**
@@ -170,6 +175,13 @@ final class BrainContext
             $out['location'] = ['lat' => (float)$loc['lat'], 'lng' => (float)$loc['lng'], 'in_bounds' => !empty($loc['in_bounds'])];
             $name = self::str($loc['name'] ?? '');
             if ($name !== '') $out['location']['name'] = $name;
+        }
+
+        // 5.18.104 (root docs/73 §H.3.12; dev :192-197): the voice note this turn's message was transcribed from. Only
+        // when the caller says so (an array), and only its duration travels — 0 when unknown.
+        $voice = $in['voice'] ?? null;
+        if (is_array($voice)) {
+            $out['voice'] = ['seconds' => max(0, (int)(self::int($voice['seconds'] ?? 0) ?? 0))];
         }
 
         // The public catalogue. Not customer data — identical for every

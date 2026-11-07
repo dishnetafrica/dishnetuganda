@@ -473,8 +473,29 @@ if ($gdM === null || $wbM === null || $mbM === null || $wrM === null || $mrM ===
     $backM = $spanM === '' ? null : substr($wrM, 0, $startM) . $oldLineM . substr($wrM, $startM + strlen($spanM));
     is_($backM !== null && substr_count($spanM, "\n") === 3 && substr_count($wbM, $oldLineM) === 1 && $backM === $wbM,
         'M ' . QS_M_REL . '\'s webhook.php is ' . QS_M_BASE . '\'s with one change: the sign-off line and its two lines of comment (3 lines for 1)');
-    is_((string)@file_get_contents($root . '/webhook.php') === $wrM,
-        'M this tree\'s webhook.php is ' . QS_M_REL . '\'s, byte for byte (a later release must not change it unless it re-points this)');
+    // 5.18.104 (root docs/73 §H.5.13): re-pointed on purpose, never weakened. Part P (P7) adds exactly two marked hunks to
+    // whQuotationEmail (§H.5.8.2). Each is taken out, found by its own marker exactly once — from the start of its marker's
+    // line through the first line after it that closes its block at the function body's indent — and what is left must be
+    // f2055baf's webhook.php byte for byte. Every other byte is still held: a one-character change outside the hunks fails it.
+    $p7OutM = function (string $src): ?string {
+        foreach (['        // 5.18.104 (root docs/73 §H.5.8.2) P7: the agent who made this quote',
+                  '        if ($p7 !== null) {   // 5.18.104 (root docs/73 §H.5.8.2) P7: the decision'] as $markM) {
+            if (substr_count($src, $markM) !== 1) return null;
+            $aM = strpos($src, $markM);
+            if ($aM === false || ($aM > 0 && $src[$aM - 1] !== "\n")) return null;
+            $zM = strpos($src, "\n        }\n", $aM);
+            if ($zM === false) return null;
+            $src = substr($src, 0, $aM) . substr($src, $zM + strlen("\n        }\n"));
+        }
+        return $src;
+    };
+    $thisM = (string)@file_get_contents($root . '/webhook.php');
+    is_($p7OutM($thisM) === $wrM,
+        'M this tree\'s webhook.php, its two 5.18.104 P7 hunks (root docs/73 §H.5.8.2) taken out by their markers, is ' . QS_M_REL . '\'s, byte for byte (a later release must not change it unless it re-points this)');
+    $offM = strpos($thisM, '"Quotation email sent to {$r[\'to\']}');
+    $weakM = $offM === false ? null : substr_replace($thisM, 'q', $offM + 1, 1);
+    is_($weakM !== null && $p7OutM($weakM) !== null && $p7OutM($weakM) !== $wrM,
+        'M control: the same comparison on a copy with one character changed outside the hunks fails');
     $lintM = [];
     $binsM = ['php ' . PHP_VERSION => PHP_BINARY];
     $w74M = trim((string)shell_exec('command -v php7.4 2>/dev/null'));

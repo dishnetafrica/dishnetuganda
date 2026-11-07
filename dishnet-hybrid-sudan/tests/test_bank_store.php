@@ -282,8 +282,11 @@ echo "\nA. Migration 088, through the real runner\n";
 $TPL = bk_open($T . '/books/template');
 $tp = $TPL['pdo'];
 $applied = $tp->query('SELECT filename FROM _migrations ORDER BY filename')->fetchAll(PDO::FETCH_COLUMN);
-t('SqliteStore::create() applies every migration, 088 last', [count($applied), (string)end($applied)],
-    [count(glob($root . '/migrations/*.sql') ?: []), '088_bank_statements.sql']);
+// 5.18.104 (root docs/73 §H.2.14; coordinator items 2, 9b, 10c): re-pointed on purpose, never weakened — every migration
+// applied, by name, 088 among them and 5.18.104's 091 the last (089-091 are 5.18.104's, held by quote_followup N)
+$wantMig = array_map('basename', glob($root . '/migrations/*.sql') ?: []); sort($wantMig);
+t('SqliteStore::create() applies every migration, 088 among them, 091 last', [$applied, in_array('088_bank_statements.sql', $applied, true), (string)end($applied)],
+    [$wantMig, true, '091_wa_offers.sql']);
 $mlog = (string)@file_get_contents($TPL['dir'] . '/migration.log');
 t('088: migration.log holds OK: 088_bank_statements.sql (27 stmts,', strpos($mlog, 'OK: 088_bank_statements.sql (27 stmts,') !== false, true);
 $bad088 = array_values(array_filter(explode("\n", $mlog), function ($l) { return strpos($l, '088_') !== false && strpos($l, 'OK: ') === false; }));

@@ -27,12 +27,24 @@ class AlertService
     private $store;
     private array $config;
     private $evo;   // EvolutionApiService|null — injectable for tests
+    /** @var array|null 5.18.104 (root docs/73 §H.2.6.2, A11-01): the last sendText answer, for the daily list; null = none */
+    private $lastResult = null;
 
     public function __construct($store, array $config, $evo = null)
     {
         $this->store  = $store;
         $this->config = $config;
         $this->evo    = $evo;
+    }
+
+    /**
+     * 5.18.104 (root docs/73 §H.2.6.2, A11-01): the answer sendText gave in the last notify()/notifyTo(), or null when
+     * none came (a cooldown, no number, a throwable before an answer). The daily list settles its ledger claim from
+     * it; nothing else reads it, and every caller's own answer is unchanged.
+     */
+    public function lastResult(): ?array
+    {
+        return $this->lastResult;
     }
 
     /** The number alerts go to. Empty string means alerts are disabled. */
@@ -51,6 +63,7 @@ class AlertService
      */
     public function notify(string $key, string $text, int $cooldownMin = 240): array
     {
+        $this->lastResult = null;   // 5.18.104 (root docs/73 §H.2.6.2): this call's answer, never an earlier one
         $to = $this->target();
         if ($to === '') { $this->record($key, '', $text, null, 'no_alert_number'); return ['sent' => false, 'reason' => 'no_alert_number']; }
         return $this->sendTo($to, $key, $text, $cooldownMin);
@@ -64,6 +77,7 @@ class AlertService
      */
     public function notifyTo(string $to, string $key, string $text, int $cooldownMin = 240): array
     {
+        $this->lastResult = null;   // 5.18.104 (root docs/73 §H.2.6.2): this call's answer, never an earlier one
         $to = (string)preg_replace('/[^0-9+]/', '', $to);
         if ($to === '') return ['sent' => false, 'reason' => 'no_number'];
         return $this->sendTo($to, $key, $text, $cooldownMin);
@@ -123,6 +137,12 @@ class AlertService
                 $evo = new EvolutionApiService($this->config);
             }
             $r = $evo->sendText('sales', $to, $text, ContactOptOut::CLASS_STAFF);
+            $this->lastResult = is_array($r) ? $r : null;   // 5.18.104 (root docs/73 §H.2.6.2, A11-01)
+            // 5.18.104 (root docs/73 §H.2.6.2, C3): recorded, never deferred. The daily list claims its own place first (quote_list:).
+            if ((string)($this->config['wa_send_ledger'] ?? '') === 'on' && strpos($key, 'quote_list:') !== 0) {
+                try { require_once __DIR__ . '/WaSendBudget.php'; WaSendBudget::recordAlert($this->store, $this->config, $evo, $key, $r); }
+                catch (\Throwable $e) { /* the alert matters more than its record */ }
+            }
             if (empty($r['ok'])) {
                 if (!$this->mayHaveGone($r)) $this->recordSent($key, 0);   // release: let the next run retry
                 $this->record($key, $to, $text, false, (string)($r['error'] ?? '?'), isset($r['http']) ? (int)$r['http'] : null);

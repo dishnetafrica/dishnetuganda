@@ -75,5 +75,36 @@ is_(strpos($src, 'BUDGET EXCEEDED') !== false && strpos($src, 'break;') !== fals
     'master.php still stops dispatching when the budget is spent',
     'if this guard is gone, the ordering rule above needs revisiting');
 
+// 5.18.104 (root docs/73 §H.3.24 "Re-pointed on purpose", §H.2.13; ruling R1): the keep-alive is still first, and the
+// four new jobs are last — ruling R1's lines, byte for byte, in their order (ai_media third, offers_send last), straight
+// after notify_retry: the same text tests/test_master_104.php (MS) and the offers switch's P-O1-6 read.
+echo "\nRuling R1's four lines are last, in their order, byte for byte (5.18.104)\n";
+$R1 = [
+    "    'quote_chase'      => ['interval' => 540, 'uganda' => true, 'flag' => 'quote_tracking_enabled',   'script' => __DIR__ . '/quote_chase.php'],",
+    "    'quote_daily_list' => ['interval' => 240, 'uganda' => true, 'flag' => 'quote_daily_list_enabled', 'script' => __DIR__ . '/quote_daily_list.php'],",
+    "    'ai_media'         => ['interval' => 60,  'uganda' => true, 'flag' => 'ai_media_enabled',         'script' => dirname(__DIR__) . '/run_media_worker.php'],",
+    "    'offers_send'      => ['interval' => 240, 'uganda' => true, 'flag' => 'offers_live_enabled',      'script' => __DIR__ . '/offers_send.php'],",
+];
+$r1Tail = function (string $text): array {
+    $jobs = [];
+    foreach (explode("\n", $text) as $line) {
+        $tl = ltrim($line);
+        if ($tl === '' || strpos($tl, '//') === 0 || strpos($tl, '*') === 0 || $tl[0] === '#') continue;
+        if (preg_match("/^\s*'([a-z0-9_]+)'\s*=>\s*\['interval'/", $line, $mm)) $jobs[$mm[1]] = $line;
+    }
+    $names = array_keys($jobs);
+    $at = array_search('notify_retry', $names, true);
+    return [$at === false ? [] : array_slice($names, $at + 1), array_slice(array_values($jobs), -4), $names[0] ?? null];
+};
+[$after, $lastFour, $first] = $r1Tail($src);
+is_($after === ['quote_chase', 'quote_daily_list', 'ai_media', 'offers_send'], 'after notify_retry come exactly quote_chase, quote_daily_list, ai_media, offers_send — offers_send last',
+    json_encode($after));
+is_($lastFour === $R1, 'each of the four is ruling R1\'s line byte for byte (interval, uganda, flag, script)', json_encode($lastFour));
+is_($first === 'starlink_alive', 'and starlink_alive is still the first job', (string)$first);
+// The control on the check: the same reading over master's text with offers_send moved before ai_media must fail it.
+$swapped = str_replace($R1[2] . "\n" . $R1[3], $R1[3] . "\n" . $R1[2], $src, $swN);
+is_($swN === 1 && $r1Tail($swapped)[0] !== ['quote_chase', 'quote_daily_list', 'ai_media', 'offers_send'],
+    'control: with ai_media and offers_send swapped in a copy of the text, the order check fails');
+
 echo "\n{$pass} passed, {$fail} failed\n";
 exit($fail > 0 ? 1 : 0);

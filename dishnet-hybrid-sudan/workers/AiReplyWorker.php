@@ -96,6 +96,12 @@ class AiReplyWorker extends WorkerBase
 
     protected function getEventTypes(): array
     {
+        // 5.18.104 (root docs/73 §H.3.15): on Uganda the voice note's instant acknowledgement (P5) rides this worker too;
+        // every other install consumes exactly what 5.18.103 did.
+        try {
+            require_once dirname(__DIR__) . '/lib/StaffJobsGate.php';
+            if (\StaffJobsGate::applies($this->config, $this->dataDir !== '' ? $this->dataDir : null)) return ['ai.reply', 'ai.voice_ack'];
+        } catch (\Throwable $e) { /* the 5.18.103 list */ }
         return ['ai.reply'];
     }
 
@@ -163,6 +169,8 @@ class AiReplyWorker extends WorkerBase
 
     protected function handle(array $event): void
     {
+        // 5.18.104 (root docs/73 §H.3.15): an acknowledgement event is P5's decision, before anything below reads the payload.
+        if (($event['event_type'] ?? '') === 'ai.voice_ack') { $this->handleVoiceAck($event); return; }
         $this->turnIds = [];
         $this->lineOwner = null;
         $p       = $event['_payload'] ?? [];
@@ -226,8 +234,21 @@ class AiReplyWorker extends WorkerBase
             }
         }
 
+        // 5.18.104 (root docs/73 §H.3.12, F20 and R-13): on Uganda, where R4 answers this number's voice notes, a typed
+        // message waits for an earlier voice note still being heard, and a voice turn that comes up after a later message
+        // was answered, or after R4 was switched off, goes to a person. Off Uganda nothing here runs.
+        $voiceTurn = $this->voiceUg() && (string)($p['origin'] ?? '') === 'voice';
+        if ($this->voiceUg() && !$voiceTurn && $convId > 0) $this->waitForEarlierVoice($event, $convId, $channel);
+        if ($voiceTurn && $convId > 0 && $this->voiceAnsweredOutOfOrder($p, $convId)) {
+            $this->escalate($convId, $channel, $phone,
+                'a voice note arrived before a message that has already been answered — read its transcript in the Inbox', true);
+            return;
+        }
+
         // One line per message: enough to trace the pipeline, no content.
-        $this->log('info', sprintf('conv %d: in channel=%s len=%d', $convId, $channel, mb_strlen($message)));
+        // 5.18.104 (root docs/73 §H.3.12 (d)): a transcript says so.
+        $this->log('info', sprintf('conv %d: in channel=%s len=%d%s', $convId, $channel, mb_strlen($message),
+            (string)($p['origin'] ?? '') === 'voice' ? ' origin=voice' : ''));
 
         // Let the customer see something is happening while the model thinks.
         $this->evo->sendTyping($channel, $phone);
@@ -236,6 +257,13 @@ class AiReplyWorker extends WorkerBase
         $context = $this->buildContext($role, $phone, $message, $p, $convId);
         if ($this->evo->registryOn()) $this->turnIds['channel_id'] = $channel;   // for the guard's audit row, never the brain
 
+        // 5.18.104 (root docs/73 §H.3.12, R-13): a voice turn re-checks R4 on the configuration read again now, never the
+        // worker's start-time one (B13-03), immediately before the brain is asked. Off now: a person, no AI answer.
+        if ($voiceTurn && !$this->voiceReplyStillOn($channel)) {
+            $this->escalate($convId, $channel, $phone,
+                'a voice note arrived while the assistant answered voice notes; that is off now — read its transcript in the Inbox', false);
+            return;
+        }
         $ai = $this->askBrain($context);
         if ($ai === null) {
             // Throw: EventBus retries with backoff. The customer has not been
@@ -399,6 +427,10 @@ class AiReplyWorker extends WorkerBase
             // prose: the description the model reads is in 'message', but what
             // gets written down comes from here.
             'location'          => is_array($p['location'] ?? null) ? $p['location'] : null,
+            // 5.18.104 (root docs/73 §H.3.12 (e); dev :404-407): this turn's message is the transcript of a voice note,
+            // queued by VoiceTranscription with origin=voice. Presence is the fact; the one leaf is the announced duration.
+            'voice'             => (($p['origin'] ?? '') === 'voice' && is_array($p['voice'] ?? null))
+                                   ? ['seconds' => max(0, (int)($p['voice']['seconds'] ?? 0))] : null,
             // 5.18.89 (docs/65 §AA, D3): the first name of the salesperson whose own line this is; absent otherwise.
             'line_owner'        => $this->lineOwner !== null ? $this->lineOwner->firstName() : null,
         ];
@@ -599,6 +631,8 @@ class AiReplyWorker extends WorkerBase
                     // customers send their location — never showed the assistant the pin block, because the
                     // contract had no key for it; support and account did.
                     'location'  => $ctx['location'] ?? null,
+                    // 5.18.104 (root docs/73 §H.3.12 (e); dev :622): the voice note this message was transcribed from, if it was.
+                    'voice'     => $ctx['voice'] ?? null,
                     // 5.18.89 (docs/65 §AA, D3): whose own line this is, if a salesperson's.
                     'line_owner' => $ctx['line_owner'] ?? null,
                 ]);
@@ -847,6 +881,9 @@ class AiReplyWorker extends WorkerBase
                 'channel'         => (string)($this->turnIds['channel_id'] ?? ($ctx['channel'] ?? '')),
                 'provider'        => 'ai_reply_worker',
                 'blocked_length'  => strlen($reply),
+                // 5.18.104 (root docs/73 §H.3.12 (f); dev :878-882): the audit event's own modality field — voice when the
+                // turn that produced the blocked reply was a transcript, text otherwise (its default).
+                'modality'        => is_array($ctx['voice'] ?? null) ? 'voice' : 'text',
             ]));
         } catch (\Throwable $e) {
             $this->log('warn', 'guard event not stored: ' . $e->getMessage());
@@ -1474,6 +1511,9 @@ class AiReplyWorker extends WorkerBase
      */
     protected function onDead(array $event, \Throwable $e): void
     {
+        // 5.18.104 (root docs/73 §H.3.15): an acknowledgement is never a hand-over — P5 escalates only after a send that
+        // went or may have gone; a dead acknowledgement event tells nobody, and the watchdog still pages the note.
+        if (($event['event_type'] ?? '') === 'ai.voice_ack') return;
         $p       = $event['_payload'] ?? [];
         $channel = (string)($p['channel'] ?? '');
         $phone   = (string)($p['customer_phone'] ?? '');
@@ -1578,63 +1618,135 @@ class AiReplyWorker extends WorkerBase
     private function escalate(int $convId, string $channel, string $phone, string $reason,
                               bool $alreadyAnswered = false): void
     {
-        $this->log('info', "conv {$convId}: HANDOFF to human — {$reason}");
+        // 5.18.104 (root docs/73 §H.3.2 (a); dev :1614-1621): the hand-over itself lives in lib/Handover.php, so the media
+        // worker and P5 hand a voice note to a person through EXACTLY this path — needs_human, the wa.escalation event,
+        // the staff alert, the holding line once. The statements are the ones that stood here, in their order; the
+        // private name and this signature are kept (tests/test_handover_message.php reflects on them).
+        if (!class_exists('Handover')) require_once dirname(__DIR__) . '/lib/Handover.php';
+        \Handover::escalate($this->pdo, $this->bus, $this->store, (array)$this->config, $this->evo, $this->convSvc,
+            $convId, $channel, $phone, $reason, $alreadyAnswered,
+            function (string $level, string $message): void { $this->log($level, $message); }, 'ai_reply_worker',
+            $this->handoverOwner($channel));
+    }
+
+    // ── 5.18.104 (root docs/73 §H.3.12, §H.3.15): Part V's voice paths, Uganda only ──────────────────────────────
+
+    /** @var bool|null Uganda, for Part V's voice paths (StaffJobsGate, with the data directory); asked once per run. */
+    private $voiceUgMemo = null;
+
+    /** 5.18.104 (root docs/73 §H.3.12): Uganda, for F20 and R-13; false on any doubt. */
+    private function voiceUg(): bool
+    {
+        if ($this->voiceUgMemo === null) {
+            try {
+                require_once dirname(__DIR__) . '/lib/StaffJobsGate.php';
+                $this->voiceUgMemo = \StaffJobsGate::applies($this->config, $this->dataDir !== '' ? $this->dataDir : null);
+            } catch (\Throwable $e) {
+                $this->voiceUgMemo = false;
+            }
+        }
+        return $this->voiceUgMemo;
+    }
+
+    /** 5.18.104 (root docs/73 §H.3.15): P5's decision, lib/VoiceAck.php, with this worker's echo claim and logger. */
+    private function handleVoiceAck(array $event): void
+    {
+        if (!class_exists('VoiceAck')) require_once dirname(__DIR__) . '/lib/VoiceAck.php';
+        $log  = function (string $level, string $message): void { $this->log($level, $message); };
+        $echo = function ($send, $ch, $src) { return $this->claimOwnEcho($send, $ch, $src); };
+        (new \VoiceAck($this->pdo, $this->bus, $this->store, $this->config, $this->dataDir, $this->evo, $this->convSvc, $log, $echo))
+            ->acknowledge($event);
+    }
+
+    /**
+     * 5.18.104 (root docs/73 §H.3.12, ruling R19): the configuration read again from the files now
+     * (lib/PluginConfig.php:75-79); null when it cannot be read.
+     */
+    private function freshConfig(): ?array
+    {
         try {
-            if ($convId > 0) {
-                $this->pdo->prepare(
-                    "UPDATE wa_conversations SET state = 'needs_human', updated_at = datetime('now') WHERE id = ?"
-                )->execute([$convId]);
-            }
-            $this->bus->emit('wa.escalation', 'conversation', $convId, [
-                'channel' => $channel,
-                'phone'   => $phone,
-                'reason'  => $reason,
-            ], 2, 'ai_reply_worker');
-
-            // Tell a person now. The Inbox tab turning red only works if
-            // someone is looking at it; the phone in their pocket always is.
-            // 30-minute cooldown per conversation, so a customer who trips
-            // escalation three times in a row is one buzz, not three.
-            require_once dirname(__DIR__) . '/lib/AlertService.php';
-            $alerts = new \AlertService($this->store, $this->config, $this->evo);
-            // 5.18.89 (docs/65 §AA, D4): on a salesperson's own number the salesperson is alerted too; with no owner
-            // this is the alert it always was — the same key, the same text, the central number.
-            $owner = $this->handoverOwner($channel);
-            $sent  = $alerts->handover($convId, $phone, $channel, $reason, $owner);
-            if ($owner !== null && !isset($sent['owner'])) {
-                $this->log('warn', "conv {$convId}: the line's owner has no phone on record — the central alert number only");
-            }
-
-            // ── And tell the customer ────────────────────────────────────
-            // A handoff sent them nothing at all. The team gets a buzz, the
-            // Inbox turns red, and the person who asked the question hears
-            // silence — indistinguishable from being ignored. Six
-            // conversations were sitting like that, one of them since nine
-            // that morning.
-            //
-            // Empty by default: an installation that has not set a line keeps
-            // the old behaviour exactly.
-            $holding = trim((string)($this->config['ai_handover_message'] ?? ''));
-            if ($holding !== '' && $phone !== '' && !$alreadyAnswered && !$this->alreadySaid($convId, $holding)) {
-                $send = $this->evo->sendText($channel, $phone, $holding, ContactOptOut::CLASS_REPLY);
-                if (!empty($send['ok'])) {
-                    if ($convId > 0) {
-                        $this->convSvc->storeMessage($convId, [
-                            'direction'     => 'out',
-                            'role'          => 'assistant',
-                            'body'          => $holding,
-                            'agent_name'    => 'DishNet AI',
-                            'wa_message_id' => (string)($send['data']['key']['id'] ?? '') ?: null,
-                            'metadata'      => json_encode(['channel' => $channel, 'handover' => true]),
-                        ]);
-                    }
-                } else {
-                    $this->log('warn', "conv {$convId}: handover line not sent: "
-                        . (string)($send['error'] ?? '?'));
-                }
-            }
+            if (!class_exists('PluginConfig')) require_once dirname(__DIR__) . '/lib/PluginConfig.php';
+            return \PluginConfig::read(dirname(__DIR__), $this->dataDir);
         } catch (\Throwable $e) {
-            $this->log('error', 'escalation failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 5.18.104 (root docs/73 §H.3.12), F20 rule 1: where R4 answers this number, a typed message waits while an earlier voice note
+     * of the conversation is still being heard — created at or before this message's received_at, under 90 s old, and
+     * unsettled. Throws WorkerDefer(15), which keeps the attempt count; past 90 s the text is answered. The mode is read on
+     * a fresh read (ruling R19), and only when such a note exists.
+     */
+    private function waitForEarlierVoice(array $event, int $convId, string $channel): void
+    {
+        $received = $this->receivedAt($event);
+        if ($received <= 0) return;
+        try {
+            if (!$this->pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wa_media'")->fetchColumn()) return;
+            $st = $this->pdo->prepare("SELECT 1 FROM wa_media WHERE conversation_id = ? AND kind = 'audio'
+                                         AND created_at <= ? AND created_at > ?
+                                         AND (status IN ('pending', 'fetching', 'transcribing')
+                                              OR (status = 'fetched' AND understanding IS NULL)
+                                              OR (status = 'failed' AND attempts < 3)) LIMIT 1");
+            $st->execute([$convId, UtcClock::stamp($received), UtcClock::stamp(time() - 90)]);
+            if ($st->fetchColumn() === false) return;
+        } catch (\Throwable $e) {
+            return;   // a text is never held on a read that failed
+        }
+        $fresh = $this->freshConfig();
+        if ($fresh === null) return;
+        if (!class_exists('MediaPolicy')) require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
+        if (\MediaPolicy::voiceMode($fresh, $this->dataDir !== '' ? $this->dataDir : null, $channel) !== 'reply') return;
+        $this->log('info', "conv {$convId}: a typed message waits for an earlier voice note being transcribed");
+        throw new WorkerDefer(15, 'voice: an earlier voice note is being transcribed');
+    }
+
+    /**
+     * 5.18.104 (root docs/73 §H.3.12), F20 rule 2: a voice turn whose conversation has, after the note, an inbound row and after that
+     * an outbound assistant row — a later message already answered — goes to a person. By row order, anchored on the
+     * note's own row (its wa_message_id); without that row, on the note's received_at.
+     */
+    private function voiceAnsweredOutOfOrder(array $p, int $convId): bool
+    {
+        try {
+            $wa = trim((string)($p['wa_message_id'] ?? ''));
+            $anchor = 0;
+            if ($wa !== '') {
+                $st = $this->pdo->prepare('SELECT id FROM wa_messages WHERE conversation_id = ? AND wa_message_id = ?');
+                $st->execute([$convId, $wa]);
+                $anchor = (int)($st->fetchColumn() ?: 0);
+            }
+            if ($anchor > 0) {
+                $st = $this->pdo->prepare("SELECT MIN(id) FROM wa_messages WHERE conversation_id = ? AND direction = 'in' AND id > ?");
+                $st->execute([$convId, $anchor]);
+            } else {
+                $recv = UtcClock::parse((string)($p['received_at'] ?? ''));
+                if ($recv <= 0) return false;
+                $st = $this->pdo->prepare("SELECT MIN(id) FROM wa_messages WHERE conversation_id = ? AND direction = 'in' AND created_at > ?");
+                $st->execute([$convId, UtcClock::stamp($recv)]);
+            }
+            $later = (int)($st->fetchColumn() ?: 0);
+            if ($later <= 0) return false;
+            $st = $this->pdo->prepare("SELECT 1 FROM wa_messages WHERE conversation_id = ? AND direction = 'out' AND role = 'assistant'
+                                         AND id > ? LIMIT 1");
+            $st->execute([$convId, $later]);
+            return $st->fetchColumn() !== false;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /** 5.18.104 (root docs/73 §H.3.12), R-13: R4 still on for this number, on a fresh read; a read that throws counts as off. */
+    private function voiceReplyStillOn(string $channel): bool
+    {
+        $fresh = $this->freshConfig();
+        if ($fresh === null) return false;
+        try {
+            if (!class_exists('MediaPolicy')) require_once dirname(__DIR__) . '/lib/MediaPolicy.php';
+            return \MediaPolicy::voiceReplyEnabled($fresh, $this->dataDir !== '' ? $this->dataDir : null, $channel);
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 
@@ -1649,31 +1761,5 @@ class AiReplyWorker extends WorkerBase
         return ($ctx !== null && $ctx->handoverTo() === 'owner') ? $this->lineOwner : null;
     }
 
-    /**
-     * Have we said this already in the last few turns?
-     *
-     * A customer who trips the handoff three times running should hear it
-     * once. The team alert has a 30-minute cooldown for the same reason, and
-     * repeating a holding line at somebody already waiting reads worse than
-     * saying nothing.
-     *
-     * On any error it answers false: a duplicate is a smaller failure than
-     * another silence.
-     */
-    private function alreadySaid(int $convId, string $text): bool
-    {
-        if ($convId <= 0) return false;
-        try {
-            $stmt = $this->pdo->prepare(
-                "SELECT body FROM wa_messages
-                  WHERE conversation_id = ? AND direction = 'out'
-                  ORDER BY id DESC LIMIT 3"
-            );
-            $stmt->execute([$convId]);
-            foreach ((array)$stmt->fetchAll(\PDO::FETCH_COLUMN) as $b) {
-                if (trim((string)$b) === trim($text)) return true;
-            }
-        } catch (\Throwable $e) { /* fall through */ }
-        return false;
-    }
+    // 5.18.104 (root docs/73 §H.3.2 (a)): alreadySaid() moved with the hand-over, to Handover::alreadySaid().
 }

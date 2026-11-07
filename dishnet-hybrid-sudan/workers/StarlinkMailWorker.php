@@ -300,6 +300,15 @@ class StarlinkMailWorker
             if ($text === '') return false;
             $channel = (string)($this->config['starlink_notify_channel'] ?? 'support');
             $r = $this->evo->sendText($channel, $phone, $text, ContactOptOut::CLASS_TRANSACTIONAL);
+            // 5.18.104 (root docs/73 §H.2.6.3, C3): an order message from a handset is recorded — never deferred.
+            if ((string)($this->config['wa_send_ledger'] ?? '') === 'on') {
+                try { require_once dirname(__DIR__) . '/lib/WaSendBudget.php';
+                      require_once dirname(__DIR__) . '/lib/bootstrap_data.php';
+                      $dd = $this->config['_data_dir'] ?? ($GLOBALS['dataDir'] ?? null);   // as internationalUg() reads it
+                      $dd = is_string($dd) && $dd !== '' ? $dd : getDataDir(dirname(__DIR__));
+                      WaSendBudget::recordDirect($this->pdo, $this->config, $dd, $this->evo, $channel, 'other', 's', $r); }
+                catch (\Throwable $e) { /* the order message matters more than its record */ }
+            }
             return is_array($r) ? !empty($r['ok']) || !isset($r['ok']) : (bool)$r;
         } catch (\Throwable $e) {
             return false;

@@ -222,9 +222,30 @@ require_once dirname(__DIR__, 2) . '/lib/InboxReplyRoute.php';  // 5.18.86 (docs
         $limit  = min((int)($_GET['limit'] ?? 100), 500);
         $offset = max((int)($_GET['offset'] ?? 0), 0);
         $_convSvc->markRead($convId);
+        $_msgs = $_convSvc->getMessages($convId, $limit, $offset);
+        // 5.18.104 (root docs/73 §H.3.11): on Uganda, at R3, the machine transcript of a voice note is shown to staff
+        // under the note. It travels as its own field, never in the body: the body stays [AUDIO], which is all the
+        // assistant's history and the follow-up evaluator read. Off Uganda, or before 090, the answer is 5.18.103's.
+        try {
+            if (!class_exists('StaffJobsGate')) require_once dirname(__DIR__, 2) . '/lib/StaffJobsGate.php';
+            if (StaffJobsGate::applies(is_array($config ?? null) ? $config : [], $dataDir ?? null)
+                && $store->getPdo()->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wa_media'")->fetchColumn()) {
+                $_vq = $store->getPdo()->prepare("SELECT wa_message_id, understanding FROM wa_media
+                                                   WHERE conversation_id = ? AND voice_rung = 'handover' AND understanding IS NOT NULL");
+                $_vq->execute([$convId]);
+                $_vTx = [];
+                foreach ($_vq->fetchAll(PDO::FETCH_ASSOC) as $_vr) $_vTx[(string)$_vr['wa_message_id']] = (string)$_vr['understanding'];
+                if ($_vTx !== []) {
+                    foreach ($_msgs as $_vi => $_vm) {
+                        $_vk = (string)($_vm['wa_message_id'] ?? '');
+                        if ($_vk !== '' && isset($_vTx[$_vk])) $_msgs[$_vi]['voice_transcript'] = $_vTx[$_vk];
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* the transcript is a convenience: the thread loads without it */ }
         $ok2([
             'conversation' => $conv,
-            'messages'     => $_convSvc->getMessages($convId, $limit, $offset),
+            'messages'     => $_msgs,   // 5.18.104 (root docs/73 §H.3.11): the messages read above, a transcript added on Uganda
             'total'        => $_convSvc->countMessages($convId),
         ]);
     }
