@@ -345,6 +345,19 @@ if not bad: print(f'  plans on (SELL_PLANS, the kits and homepage grids, the hom
 sys.exit(bad)
 PYHOLD
 
+echo "== privacy: voice notes and OpenAI =="
+# Root docs/73 §H.3.23 (C10, D14), approved by the owner on 5 Nov 2026: the Privacy Policy names OpenAI before any voice
+# note is sent to it (5.18.104's rung R2, gated on ai_media_voice_privacy_line). The built page, the one customers read,
+# must carry the paragraph exactly once, inside section 7; the body it is built from is the control.
+n_body=$(grep -cF 'send the recording to OpenAI' "$HERE/policies/bodies/privacy.html")
+n_site=$(grep -cF 'send the recording to OpenAI' "$HERE/site/privacy.html")
+sec7=$(sed -n '/<h3 id="automated">/,/<h3 id="keep">/p' "$HERE/site/privacy.html" | grep -cF 'send the recording to OpenAI')
+if [ "$n_body" = 1 ] && [ "$n_site" = 1 ] && [ "$sec7" = 1 ]; then
+  echo "  the built privacy.html names OpenAI for voice notes once, in section 7 (its body likewise)"
+else
+  echo "  privacy.html: the OpenAI voice-note paragraph found body=$n_body site=$n_site section7=$sec7 (each must be 1)"; fail=1
+fi
+
 echo
 [ $fail -eq 0 ] && echo "PASS" || echo "FAIL"
 exit $fail
