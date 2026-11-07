@@ -5,6 +5,11 @@
 It is replaced at each milestone and the folder is removed when the release branch is pushed on the operator's word.
 Nothing here is deployed or deployable.
 
+`release-5.18.104.patch` is `git diff 221c9dc..994d660`: the 5.18.104 release (root `docs/73`), squashed on
+`origin/release/5.18.103` (`221c9dc`) as the local commit `994d660`, under its release suite, not yet a release. Apply with
+`git apply` on a checkout of `221c9dc`. Kept here only so a container restart cannot lose it; the release branch is
+pushed on the operator's word alone. Nothing here is deployed or deployable.
+
 `derive-5.18.103/` derives `scripts/deploy-5.18.103.sh` from `scripts/deploy-5.18.102.sh` by asserted text edits
 (each part asserts its anchor, its count, its replacements and its result): `python3 -I derive103.py REPO RELEASE_REPO
 PIN_FULL OUT`, with RELEASE_REPO a checkout of release/5.18.103 at PIN_FULL. NOT for use yet: the pin is a work-in-progress
