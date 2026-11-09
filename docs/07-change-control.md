@@ -16709,9 +16709,12 @@ as root on the server, after 5.18.104's entry above.
   - **Step 2, `ack`**: on at 04:26:06 UTC — its preconditions read (step 1 PASS, 089's and 090's self-checks present,
     `dn_tz()` Africa/Kampala, the assistant on, `VoiceAckLimits` valid); the ledger and the voice-note acknowledgement
     on. `--check ack` `NOT_YET too_soon` (L-ON and VA-ON1), as it must for the first 24 hours.
+- **The quarantine's `--check`, 9 Nov** (begun 04:39:36 UTC, from the terminal pasted): **PASSED, 9 ok, 0 failed, 2
+  notes** — K13: the retry job ran at 04:35:04 UTC under 5.18.104 and the quarantine holds; K2: the container serves
+  `994d660`; K7: `config.json` in `<plugin>/data` rewritten by another writer since the move (names only; judged only
+  for a database).
 - **Still to come**, the summary's *your steps*:
-  - the quarantine's `--check`, its own command; `--after-only` again the next day after 15:00 UTC, once the evening
-    WhatsApp has run on the new code;
+  - `--after-only` again after 15:00 UTC on 9 Nov, once the evening WhatsApp has run on the new code;
   - the agents told that nothing changes for them until a step is on;
   - the report (`scripts/sales-followup-report.sh`), then `on report --ran <its Kampala date>` and its `--check`, then
     each step in the ladder's order, each after its check. Step 6 (`chase`) and step 12 (`offers-live`) wait for
