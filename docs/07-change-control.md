@@ -16270,8 +16270,8 @@ The trials:
 - It is `evo_webhook.php`'s opt-out line, which this release does not change. 5o13 leaves that one exact form out of
   its name scan and counts it: exactly one, from 5o11's STOP, the positive control that the form excluded is the form
   written. Every other line is scanned as before. The line's history, the three older lines that also carry a number
-  and the owner's rulings (steps 6, `chase`, and 12, `offers-live`, wait for 5.18.105 to be deployed) are known
-  limit 13.
+  and the owner's rulings (step 12, `offers-live`, waits for 5.18.105 to be deployed; step 6, `chase`, does not) are
+  known limit 13.
 
 ### Runbook
 
@@ -16428,12 +16428,9 @@ clears it. A needed check that still reads `NOT_YET no_traffic` after 72 hours o
   when the customer writes, a person takes over, the customer says STOP, or the quotation is accepted or expires. It
   needs tracking on for at least 72 hours. `on chase` prints what it would do — the R-01 measurement, the would-be
   chases by handset (named by role and index, never a phone), the holds by reason, the persona state, the enquiry
-  drafts that become paced — and asks you to type `yes`: run it in a terminal, never piped. **Not until 5.18.105 is
-  deployed** (the owner's ruling, 9 Nov): each chase ends with STOP, and each STOP the webhook records writes the
-  customer's number to its log (known limit 13). Tracking's 72 hours run meanwhile. If 5.18.105 is not deployed when
-  they end, `skip chase` with `--reason "…"` lets steps 7–9 and 11 come on (only step 10, `cold`, needs the chase),
-  and a later `on chase` clears the skip. 5.18.104's tool does not check for 5.18.105: run the two commands below
-  only once it serves.
+  drafts that become paced — and asks you to type `yes`: run it in a terminal, never piped. It comes on once tracking
+  has run 72 hours, without waiting for 5.18.105 (the owner's ruling, 9 Nov, which replaces their earlier one of the
+  same day; known limit 13): each STOP it brings writes one more line of a kind the logs already carry every day.
 
       cd /opt/dishnet && bash scripts/sales-followup.sh on chase
 
@@ -16649,6 +16646,11 @@ nothing.
     - **The owner ruled on 9 Nov** that step 6 (`chase`) waits for 5.18.105 too: each chase ends with STOP, and each
       STOP the webhook records writes the line. Tracking's 72 hours run meanwhile; `skip chase` lets the voice steps
       and `offers-test` come on if 5.18.105 is later than that (the runbook, step 6).
+    - **Later on 9 Nov, the owner replaced that ruling.** 5.18.105's design (root `docs/74`) found about 25 more log
+      lines that carry a customer's or a staff member's number on Uganda every day — invoices, the quotation
+      WhatsApps, the lead and watchdog jobs, staff reminders — so the chase's STOPs add little. The owner ruled: the
+      chase comes on once tracking has run 72 hours, without waiting; `offers-live` still waits for 5.18.105; and
+      5.18.105 masks every log line that can carry a number on Uganda, not only these four.
 
     This release's own rule, that new logs carry counts and fixed codes only, holds for every line it adds; these four
     are older.
@@ -16717,6 +16719,6 @@ as root on the server, after 5.18.104's entry above.
   - `--after-only` again after 15:00 UTC on 9 Nov, once the evening WhatsApp has run on the new code;
   - the agents told that nothing changes for them until a step is on;
   - the report (`scripts/sales-followup-report.sh`), then `on report --ran <its Kampala date>` and its `--check`, then
-    each step in the ladder's order, each after its check. Step 6 (`chase`) and step 12 (`offers-live`) wait for
-    5.18.105 (the owner's rulings, 8 and 9 Nov); step 7 (`voice-dry-run`) waits for the Privacy Policy page to be
-    published and its date recorded.
+    each step in the ladder's order, each after its check. Step 12 (`offers-live`) waits for 5.18.105; step 6
+    (`chase`) comes on once tracking has run 72 hours (the owner's rulings, 8 and 9 Nov, known limit 13); step 7
+    (`voice-dry-run`) waits for the Privacy Policy page to be published and its date recorded.

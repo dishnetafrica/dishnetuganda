@@ -9737,7 +9737,8 @@ hand: after pass A3, and in pass B at 15:47 UTC, after its test ended, while the
     number, and three older lines carry a number (one of them a staff member's) in `cron/staff_ssp_report.php`,
     `lib/QuotationService.php` and `lib/WaAutoReplyService.php`. The owner ruled on 8 Nov: 5.18.105 masks all four,
     and is ready before step 12, `offers-live`, is switched on; 5.18.104 deploys as built. On 9 Nov the owner ruled
-    that step 6, `chase`, waits for 5.18.105 too: each chase ends with STOP.
+    that step 6, `chase`, waits for 5.18.105 too, then, shown that about 25 more log lines carry a number every day,
+    replaced that ruling: the chase does not wait, and 5.18.105 masks every such line on Uganda.
 - **The record trial** (the whole chain, unrestored, on the committed files): begun 8 Nov at 18:46:07 UTC on `9cf9b86`, which adds T8-a, ended 9 Nov at 01:00:30 UTC: **2,584 ok, 3 failed** — the three inherited checks, 98-0, 99-0 and 100-0, and none in this release's own sections (489 ok from 104-0 on). 6-5, 5p' and 5o13' passed: no acknowledgement left pending, and the admin's session held through every offers action. Every R24 line its deploy records held when they were read during 104-7c, 40, read T4 as pinned, `20 passed, 0 failed, 0 skipped rc=0`; the runs after that reading are not counted, their records having gone with the sandbox, which the run removes at its end.
 
 ### S.5 Next — the owner's
@@ -9747,8 +9748,7 @@ hand: after pass A3, and in pass B at 15:47 UTC, after its test ended, while the
   carry `scripts/deploy-5.18.104.sh` and its two wrappers, on top of `29797c8` (the runbook's step 0):
   done on 9 Nov — they arrive in `befe95b`, pushed with these records. After the deploy every switch is still OFF.
 - Then each part on in the one order, each after its check has passed. Step 7, `voice-dry-run`, waits for the Privacy
-  Policy page to be published and its date recorded. Steps 6, `chase`, and 12, `offers-live`, wait until 5.18.105 is
-  deployed: 5.18.105 masks the four older log lines that carry a phone number (the owner's rulings, 8 and 9 Nov), and
-  5.18.104's tool does not check for it. The chase needs 72 hours of tracking first; if 5.18.105 is later than that,
-  `skip chase` lets steps 7–9 and 11 come on, and a later `on chase` clears the skip.
+  Policy page to be published and its date recorded. Step 12, `offers-live`, waits until 5.18.105 is deployed:
+  5.18.105 masks every log line that can carry a phone number on Uganda (the owner's rulings, 8 and 9 Nov), and
+  5.18.104's tool does not check for it. Step 6, `chase`, comes on once tracking has run 72 hours, without waiting.
 - Q1 (the assistant wording on a salesperson's own number) is still open; its fallback holds until it is answered.
