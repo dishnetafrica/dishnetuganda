@@ -1,6 +1,7 @@
 # 73 — Uganda: 5.18.104, the sales follow-up — report, quote chase, daily list, voice notes, offers and the agent's copy (design, 4 Nov 2026)
 
-Status: **design APPROVED by the owner on 5 Nov 2026, with every question's default (§Q); being built, not deployed.**
+Status: **design APPROVED by the owner on 5 Nov 2026, with every question's default (§Q); built and tested (§S):
+`release/5.18.104` = `994d660`, pushed 7 Nov on the owner's word; `scripts/deploy-5.18.104.sh` rehearsed; NOT deployed.**
 No server change exists for 5.18.104. The owner's decisions are root `docs/72` §B (D8–D16) and the wording they approved is `docs/72` §H.1; this
 document continues `docs/72` §H. Its base is the live release 5.18.103 (`release/5.18.103` = `221c9dc`), switched on
 4 Nov (root `docs/07`).
@@ -9573,3 +9574,178 @@ above are kept as they were):
 | Q16-P02 (Q15-P02; ruling R18) | The same finding as Q15-P02, folded here. AC-ON's rule 2 is a printed note, never a status: AC-ON prints the one line of the row's own precondition, `preconditions()`, and its status comes from the other rules (`NOT_YET no_traffic` with no traffic, as with both quotation paths off). `mail_not_configured` is only `on agent-cc`'s refusal; §H.5.7's comment on `preconditions()` says so, so the A11-07 row's "AC-ON's own code" no longer holds; that row stands as a record. Verified at `221c9dc`: Settings → System → Email writes `use_ucrm_email` and `smtp_host` (`tabs/admin/settings.php:308,311`) through `lib/EmailSettingsWriter.php:35-36`, and `emailQuotePdf` returns before P7's hunk when plugin mail is not configured (`lib/QuotationService.php:1348-1350`). The new G8 (mail switched off, then `use_ucrm_email` on with no uCRM request) reads PASS with the note; G3 drops `mail_not_configured`; PW65 is re-pointed (the note dropped, or judged by `MailService::getConfig()`), and PW71, which keeps the FAIL, is caught by G8 | §H.5.7, §H.5.10.4, §H.5.12 (G3, G8, PW65, PW71) |
 | Q16-P03 (Q15-P03; rulings R18, R19) | The same finding as Q15-P03, folded here. §H.5.10.4 states that AC-ON judges each decision only by what its own row recorded (`path`, `outcome`, `code`, `source`, `rule`, `agent_id`, `send_ok`, `rcpt`; the item's list plus `path` and `outcome`, the row's other judged fields), never by `retailers.json`, `quote_agent_cc_admins` or `email_settings.json` as they read now, and never runs `decide()` again; rule 8 says it reads the row alone. The rows record neither the setting nor the account's state, and no clause needs either. The new G9 (an administrator's copy `added`, then `set agent-cc-admins 0`) and G10 (an `added` copy, then its account deactivated, re-addressed and made an administrator) read PASS; their weakened copies, PW72 (rule 8 re-running the administrator rule on today's setting) and PW73 (rule 8 requiring the agent's row to be active or usable now), are caught. Verified: `quote_agent_cc_admins` may be narrowed by `set` (Part F §H.2.12.7, its settings table), and `StaffDirectory::isActive()`, `isAdmin()` and `email()` read the live row (`lib/StaffDirectory.php:33-41`, `:53-56`). Ruling R19: §H.5.7 states, once, the read P7 decides on — the one `state()` takes through `PluginConfig::read` inside each send's own call, immediately before the send — and what still comes from the caller's configuration (the install's country; the client's own copies, as the send it rides on builds them; on path 3 the request's `kyc_auto_quote_enabled`, which can only narrow). Verified at `221c9dc`: `PluginConfig::read` re-reads the three files on every call and keeps no copy of them (`lib/PluginConfig.php:75-90`, `:113-128`), and `StaffJobsGate::applies` takes only the country (`lib/StaffJobsGate.php:18-35`). The status cites rulings R18 and R19 | status, §H.5.7, §H.5.10.4, §H.5.12 (G9, G10, PW72, PW73), §H.5.20 |
 | Q17-P03 (ruling R18) | Present in this part's text until now: a decision row was stamped `at` when `record()` ran, after the send returned, and path 1 was paired by count over it, so a correct copy whose decision fell just before the window's lower edge and whose `quote_mail.log` line fell on it read FAIL `decision_missing`, for good (the edge never moves, and rule 3 then refuses every later `on`). Verified at `221c9dc`: P7's record call sits before `if (empty($send['ok']))` (`lib/QuotationService.php:1421`) and the line is stamped after it (`:1426-1427`), `[<UTC>] <number> -> <address> sent`, by the only writer of `quote_mail.log`; `appendWithId` (`lib/SqliteStore.php:716`) can wait up to `busy_timeout` 5000 ms (`:158`); `$number` is uCRM's number, else the plugin's reference (`:771-776`, `:789-791`; `LEAD-` `:191`, `MAN-` `:410`, `LTE-<date>-<record id>` `includes/api/api_crm_misc.php:608`), holding no address, name or phone; the webhook's is at `webhook.php:272`; a `customer_email_log` row is claimed, `created_at` set, inside the dispatcher's `send()` (`lib/CustomerEmailDispatcher.php:277`, `:534-544`). Applied: `forActor` and `forWebhook` take `decided_at` once, when `state()` reads on, and every answer carries it; `record()` gains `string $number` and writes `number` and `decided_at` in place of `at`, eleven fields (test I, §H.5.9, §H.5.11, P-D9); both call sites pass their `$number`; AC-ON places decisions by `decided_at` (rules 3 and 4), takes them from `since` on in rule 6, pairs path 1 by quote number, per number by count, and path 3 by id; rule 9 also refuses a `decided_at` that is not a stamp; "no log line" is counted per number. The item's fix is taken with two changes: `at` is replaced, not kept beside `decided_at`, so no later stamp is left for a clause to read; and path 1 counts per number rather than asking only that a decision exists for the number, so two lines of one number with one decision still read `decision_missing`. New: G11 (driven and planted, path 1 and path 3), G3's path-1 cases by number, C7's and G5's assertions, PW74–PW79. The P7K-05 row stands as a record | status, §H.5.2 P-D9, §H.5.7, §H.5.8.1, §H.5.8.2, §H.5.9, §H.5.10.4, §H.5.11, §H.5.12 (C7, G3, G5, G11, I, PW74–PW79), §H.5.20 |
+
+## S. Status, 9 Nov 2026 — built and tested; NOT deployed
+
+### S.1 The release
+
+- **Built:** `release/5.18.104` = **`994d660`**, one commit on 5.18.103 (`221c9dc`): 260 files, 215 added, 45 changed;
+  43,561 insertions, 151 deletions; three migrations, **089, 090 and 091**, each verifying itself. **Pushed 7 Nov on the
+  owner's word** (*"push it."*): `origin/release/5.18.104` = `994d660`, after a scan of every added line for keys,
+  tokens, phone numbers and e-mail addresses (none real). Any later change to the release is a new commit on top of it.
+- **How it was built:** in ten stages (B1–B10), each built, then reviewed by someone who had not built it, then fixed,
+  then rechecked: 23 working commits (`abfccb7` … `1845009`, kept locally under `refs/keep/wip/5.18.104`), squashed
+  into the release. The release's tree is identical to `1845009`'s, the one the stage runs tested. The development
+  branch keeps the release as a patch (`wip/release-5.18.104.patch`, `git diff 221c9dc..994d660`), so a container
+  restart cannot lose it.
+- **The stages:** B1 the ledger (089) and what every part shares · B2 quote tracking and the chase · B3 the daily list,
+  *My quotations* and the report · B4 Part P (the agent's Cc) · B5 Part V's media chain (090) · B6 Part V's replies ·
+  B7 Part O's engine (091) · B8 Part O's screen and switch · B9 the switch tool and its one ladder · B10 `cron/master.php`,
+  `cron_status`, the boundary, South Sudan, logging and the re-pointed tests. Every stage's review found something and
+  every finding was verified against this design and the code before it was fixed; nothing is open.
+- **Everything is OFF.** After the deploy no switch is on, no new job runs and no message is sent that 5.18.103 would
+  not send. `tools/sales_followup.php` turns each part on in the one order (C6), each step only after the step before it
+  has passed its check.
+- **Q1 is still unanswered**, so its fallback ships (§Q): while `sf_persona_confirmed` is unset, on a salesperson's own
+  number the day-3 chase and the voice-note reply are held and day 7 uses form B. A later answer is one command,
+  `set persona-confirmed <date>`.
+- **The Privacy Policy paragraph Q7 approved (§H.3.23)** is in the website's source, committed on the development
+  branch (`29797c8`), and **not published**. Step 7, `voice-dry-run` (P4's second rung, the first that sends a recording
+  to OpenAI), refuses until the publish date is recorded with `set ai_media_voice_privacy_line <date>`, and so does
+  `MediaPolicy::voiceEnabled` at run time.
+
+### S.2 Where the build differs from this design
+
+Each was found by a stage, or by the review of one, and decided by the coordinator; none changes what the owner
+approved. Where this list and §H disagree, this list records what was built.
+
+1. **Tests re-pointed on purpose, beyond §H.2.14's list.** Each keeps its assertion's force against `221c9dc`:
+   - `test_bank_store`'s "088 is the last migration" and `test_quote_company`'s I5 (`migrations/` pinned to
+     `ca05ada5`, so `test_quote_company_mutants`' control too) now read **091**, re-pointed once after Part O, never
+     stage by stage;
+   - the `navigation.php`, `public.php` and `post_handlers.php` pins that 5.18.104's declared hunks move:
+     `test_bank_boundaries` (8 checks, the eighth its existing "`post_handlers.php` byte-identical to `ec0accd4`",
+     which P6's `require` line broke),
+     `test_cashbook_physical_list` (1) and `test_catalogue_direct` I3. The revert they read through takes out exactly
+     5.18.104's declared lines in all three files: both `navigation.php` blocks (*My quotations*; *WhatsApp offers*),
+     `public.php`'s four lines and `post_handlers.php`'s one `require` line;
+   - the 5.18.103 boundaries (`tests/catalogue_direct/I_boundary.php`, `tests/quote_from_ucrm/I_boundary.php`): their
+     kept-files lists named `webhook.php`, which P7 changes by a declared hunk (§H.5.13), and their I1–I3 now list P6's
+     new and changed files. One merged declared list (`tests/quote_followup/declared.php`, section N) feeds them all;
+   - `test_cron_keepalive_order` and the master/`cron_status` half of `test_voice_south_sudan` go with
+     `cron/master.php`'s `ai_media` line.
+2. **`MediaPolicy`'s readers keep `(array $config)`.** §H.3's port table says every `MediaPolicy` method takes `$dataDir`
+   (the `lib/MediaPolicy.php` row), and that `MediaFetcher`, which calls `maxBytes($this->config)`, is ported byte for
+   byte (its row). The byte-for-byte port was kept; `test_staff_jobs_gate` now derives the methods that ask the gate
+   from the code, rather than listing them.
+3. **A dead voice acknowledgement with no decision reads FAIL coverage** at VA-ON1, as §H.3 says. The ladder then refuses
+   a later `on` until `off ack` and `on ack` re-stamp it; the tool's message says so.
+4. **No staff id in the Offers screen's log line.** §H.4.7 step 4 says the log carries *"the action, the
+   offer id, the staff id and a fixed code"*; §H.2.14 M, §C C8 and 5.18.103's rule say no log line carries
+   a staff id. The shared rule was taken: the line is `<action> offer=<id> code=<code>`, and who acted is in the book,
+   `wa_offer_events.by_id` (091). M's logging check now finds a person's data by the words of a variable's name and by a
+   literal that labels an id, with one pinned exemption: the report's owners' sheet, opened `'x'` at mode 0600.
+5. **`OfferSwitch` and the ladder:** `OfferSwitch` requires `lib/SalesFollowupLadder.php` and refuses
+   `keys_undeclared` without it; the offers-test and offers-live preconditions hold Uganda and the settings ranges.
+   `cron/master.php` carries ruling R1's four lines, so `OfferSwitch`'s P-O1-6 holds on the real tree.
+6. **The South Sudan webhook comparison** (§H.2.17.2 item 4) gained a wrapped inbound message and an `@lid` message with
+   no number. Before, the wrapped-inbound mark never ran on South Sudan in any test.
+7. **The South Sudan hand-over alert:** L04 now calls `AlertService::handover()` from both trees and compares their sends,
+   Message Log rows, answers and cooldowns. A stage note had said `221c9dc` has no `handover()`; it has (line 82),
+   unchanged by this release.
+8. **Recorded, not changed:** on a book that `ConversationService` never ran on, `wa_conversations.crm_link_method` is
+   absent (it is added at run time, `lib/ConversationService.php:92`), so `OfferAudience::build()` fails closed with
+   `audience_unreadable:ambiguous_identity`. That is not a production state.
+9. **Recorded, not changed:** `test_cashbook_physical_list`'s section I fails at about 02:30 Kampala on `221c9dc` as on
+   5.18.104: a time-of-day dependency that is not this release's. A suite run that shows it records the hour.
+
+### S.3 The release suite
+
+Two full passes on `994d660`, exactly as pushed, in a frozen, clean worktree, with no other suite or trial running
+beside either:
+
+- **Pass A3**, 7 Nov 04:37:26 – 09:31:39 UTC: **316 files, 22,578 passed, 7 failed, EXIT=1**.
+- **Pass B**, 7 Nov 13:46:13 – 18:55:54 UTC: **316 files, 22,578 passed, 7 failed, EXIT=1** — the same seven checks in
+  the same four files as pass A3, and every file's count equal to A3's.
+
+The seven are this container's, in the four files and with the counts that 5.18.103's two passes on `221c9dc` recorded
+(root `docs/07`, the 5.18.103 entry, its known limit 9): `test_install_authorisation` 379/2, `test_mail_quote` 91/1,
+`test_migration_integrity` 27/1 and `test_secure_file` 22/3. This release touches none of the four. Passes A and A2 do
+not count: restarts of this container cut both in file 226 of 316 (`test_quote_company_mutants`), with 225 files
+complete. Neither counted pass ran at an hour that fails a test or cuts it short: `test_cashbook_physical_list` 496/0
+and its mutants 48/0, outside its 21:00–24:00 UTC window; `test_pilot_safety` 185/0 and `test_sales_pilot` 125/0.
+`test_customer_pwa` (31/0, unchanged since 5.18.40) leaves its built-in server running after it ends; it was stopped by
+hand: after pass A3, and in pass B at 15:47 UTC, after its test ended, while the suite went on.
+
+### S.4 The deploy script and its rehearsal
+
+- **`scripts/deploy-5.18.104.sh`** (14,499 lines, sha256 `1aafc15bd1cdb1d7…`), pinned to `994d660`: derived
+  from 5.18.103's by asserted edits in eleven parts, 394 edits, every pin, count and sha256 read off Git, each fix
+  round derived twice byte for byte. It keeps every 5.18.103 check and places all 78 of this design's deploy codes,
+  each in its stage: QF 28 (§H.2.15–§H.2.16), VN and VA 26 (§H.3.25), OF 16 (§H.4.18–§H.4.19), AC 8
+  (§H.5.14–§H.5.15). It adds `--clear-switches` (§H.2.15.1) and runs the one rollback sequence, QF-RB1, before any
+  put-back, in `--rollback` and in V1's automatic rollback alike. Beside it are two wrappers:
+  `scripts/sales-followup.sh` runs the switch tool as the book's owner, and `scripts/sales-followup-report.sh` runs P1
+  on a copy.
+- **Where the script reads this design its own way.** Each was decided in its stage and reviewed:
+  1. `--clear-switches` is refused on a book 5.18.104 never ran on: the pin's tool would migrate the live book before
+     the copy. A key held by `data/config.json` or `<data>/config.json` is NO-GO even with the flag, because the tool
+     never writes those files.
+  2. The clear and the redeploy baseline run after DEPLOY is typed and before the checkout, so a stop leaves the
+     checkout where it was.
+  3. On a first deploy, any of 090's tables or a voice event is NO-GO, where §H.3.25 exempts only the redeploy; so is
+     any `wa_offer*` table, where §H.4.18 says only that none is expected. An unreadable redeploy baseline is NO-GO too.
+  4. QF-RB1 also runs before V1's automatic put-back, and its failure stops there as well. After a verified V1,
+     QF-RB3 reads the put-back.
+  5. AC-CA2 keeps only the copy's book: its configuration is replaced by the check's own and read back before every
+     drive. That is stronger than §H.5.14's "blank `evo_api_url` and `evo_api_key`".
+  6. 5.18.103's QC-N1 is a note either way, and QC-ON1–QC-ON3 judge the catalogue switch as found: production's has
+     been on since 4 Nov, an admin's choice. V3g names, in a note, a key the switch tool removes where this run runs it.
+- **Reviews.** DS1–DS4 found 11, 3, 2 and 1 findings, all fixed and rechecked. One of DS1's was a blocker: QF-G2
+  would have stopped every redeploy. DS5 audited every text carried from 5.18.103. It confirmed 189 carried lines
+  that, one release on, said false things — most naming the wrong release, some mechanism defects of the same kind
+  (QC-N1's capitals, QC-ON1–QC-ON3) — and part C's 184 asserted edits correct them; one was a rollback note that,
+  followed, risked a second quotation to a customer. It also fixed the rehearsal build's four script findings, S1–S4,
+  and its own review's four items. The development trials found three more, each fixed in the derivation:
+  - T-D1: R6 failed every deploy over two literals 5.18.104 moves on purpose.
+  - T-D2: QF-N2's drafts by age always read 0.
+  - T-D3: 28 readings of a copy named no vault of their own. None loads the configuration, and no live vault was
+    touched.
+- **The rehearsal** is `scripts/harness/deploy-5.18.104/rehearse.sh`, with `rh104-clock.c`, `rh104-live.php`,
+  `rh104-ref.php`, `rh104-seed.php` and `rh104q.py`. It is chained on 5.18.103's, read up to that rehearsal's last
+  section, and was built in five stages (RH1–RH5), each reviewed and fixed.
+  - **One deviation, accepted:** §H.4.18 asks for three handsets, and the rehearsal has two. Production's support and
+    account numbers share one Evolution instance, so the release's audience yields two; a third needs 5.18.90's
+    registry on.
+  - **The chain's snapshot** (7 Nov, 09:32–13:37 UTC): 2,078 ok, and exactly the three inherited checks failed (98-0,
+    99-0, 100-0; root `docs/07`, 5.18.103's known limit 10).
+  - **Development trials from that snapshot** found rehearsal defects, fixed in the rehearsal, and the script's
+    T-D1–T-D3:
+
+    | Trial | ok | failed |
+    |---|---|---|
+    | 2 | 2,470 | 107 |
+    | 3 | 2,487 | 90 |
+    | 4 | 2,546 | 31 |
+    | 5 | 2,554 | 25 |
+    | 6 | 2,574 | 7 |
+
+    Trial 6's seven were the three inherited checks and four rehearsal expectations whose fixes (T5-e, T6-a) came after
+    it began.
+    Trial 7 (8 Nov 09:57–12:19 UTC, at `8243cf2`, with those fixes):
+    2,575 ok, 9 failed: the three inherited checks and six of 104-5o's. 5o9's Start landed on the sign-in page —
+    the admin's session file was gone, where trial 6, with the same steps, kept it — and 5o10–5o13 followed from it;
+    7c1, 7c3, 10h and 7o5 passed, so T5-e and T6-a held. The likeliest cause, PHP's 1 % session clean-up in a redirect
+    followed inside one curl call right after a session write (the file then carries the kernel's time, which the clock
+    never moves), is closed by T7-a (a stamper beside the served plugin; any offers action that lands on the sign-in
+    page recorded and failed by name in 5o13', with a control) and T7-b (each redirect followed as a request of its
+    own, after a stamp).
+    A first full run (12:21–18:45 UTC, at `9bcd2e2`): 2,582 ok, 4 failed — the three inherited and 6-5, an
+    acknowledgement 104-5p's twentieth note left deferred by the release's gap; fixed in the rehearsal by T8-a.
+  - **A known older issue, recorded.** Since 12 Sep, `evo_webhook.php`'s opt-out log line has carried the customer's
+    number, and three older lines carry a number (one of them a staff member's) in `cron/staff_ssp_report.php`,
+    `lib/QuotationService.php` and `lib/WaAutoReplyService.php`. The owner ruled on 8 Nov: 5.18.105 masks all four,
+    and is ready before step 12, `offers-live`, is switched on; 5.18.104 deploys as built.
+- **The record trial** (the whole chain, unrestored, on the committed files): begun 8 Nov at 18:46:07 UTC on `9cf9b86`, which adds T8-a, ended 9 Nov at 01:00:30 UTC: **2,584 ok, 3 failed** — the three inherited checks, 98-0, 99-0 and 100-0, and none in this release's own sections (489 ok from 104-0 on). 6-5, 5p' and 5o13' passed: no acknowledgement left pending, and the admin's session held through every offers action. Every R24 line its deploy records held when they were read during 104-7c, 40, read T4 as pinned, `20 passed, 0 failed, 0 skipped rc=0`; the runs after that reading are not counted, their records having gone with the sandbox, which the run removes at its end.
+
+### S.5 Next — the owner's
+
+- The deploy. `release/5.18.104` is already pushed (§S.1); root `docs/07`'s 5.18.104 entry is the runbook, with the
+  rollback in its own block. The development branch the deploy command pulls, `claude/study-this-jhe2eg`, must first
+  carry `scripts/deploy-5.18.104.sh` and its two wrappers, on top of `29797c8` (the runbook's step 0):
+  done on 9 Nov — they arrive in `befe95b`, pushed with these records. After the deploy every switch is still OFF.
+- Then each part on in the one order, each after its check has passed. Step 7, `voice-dry-run`, waits for the Privacy
+  Policy page to be published and its date recorded. Step 12, `offers-live`, waits until 5.18.105 is deployed:
+  5.18.105 masks the four older log lines that carry a phone number (the owner's ruling, 8 Nov), and 5.18.104's tool
+  does not check for it.
+- Q1 (the assistant wording on a salesperson's own number) is still open; its fallback holds until it is answered.

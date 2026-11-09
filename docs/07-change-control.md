@@ -15745,3 +15745,901 @@ as root on the server, after 5.18.103's entry above.
   - the agents told; `--after-only` again the next day after 15:00 UTC; the next real KYC quotation, the second proof;
   - the owner's three questions (root `docs/72` §G.14): who may press a standard quotation, what the first one holds,
     which products stay off the forms.
+
+## 4–9 Nov — 5.18.104: on Uganda, the sales follow-up — a read-only sales report; every quotation tracked and chased on day 1, 3 and 7; a morning list for each salesperson and a *My quotations* page; voice notes heard through OpenAI in four rungs, with an instant reply meanwhile; offers on the Evolution numbers; the agent's visible Cc of the quotation e-mail — one send ledger, at most 60 automatic messages a day per number; every part OFF, switched on only through `tools/sales_followup.php` in one order, each step after the step before it has passed its check; South Sudan as 5.18.103; migrations 089, 090, 091, each verifying itself. `release/5.18.104` = `994d660`, one commit on 5.18.103 (`221c9dc`), pushed 7 Nov on the owner's word; `scripts/deploy-5.18.104.sh` pinned to it; the release suite twice on it (7 Nov, 316 files): passes A3 and B each 22,578 passed and 7 failed, in both only the same seven checks in four files that fail on `221c9dc` in this container (known limit 11); passes A and A2, cut by container restarts in file 226, do not count; the rehearsal's record, the whole chain unrestored, 2,584 ok and 3 failed, only the three inherited checks; NOT deployed
+
+**Request.** The owner, 4 Nov, after 5.18.103 was switched on: *"now lets foucs on how to incease sales"*. Of the
+recommendation they chose *"lets do all three"* (root `docs/72` §B D8): the read-only report, the day 1/3/7 quote chase,
+the morning list per salesperson, voice notes heard through OpenAI with the AI answering in text, and meanwhile an
+instant acknowledgement of a voice note. Then: *"keep working Evolution until we get official meta whatsapp"* (D10);
+offers on the Evolution numbers the careful way, *"we have option to send all or to send 100 or 200 … and we are allow
+to send images"* (D11); at most 60 automatic messages a day per number (D12); quote numbers and counts only in the
+morning list (D13); the Privacy Policy names OpenAI (D14); the voice-note reply every day, 07:00–21:00 Kampala (D15).
+And: *"if agent creating quote and he has his email in system … he also get cc"*, as a visible Cc inside 5.18.104
+(D16). The design is root `docs/73`, reviewed adversarially before it was built; the owner approved it on 5 Nov with
+every question's default (*"approved and go with your recommandation"*). Q1, the assistant wording on a salesperson's
+own number, is unanswered, so its fallback ships.
+
+### Release notes (Uganda only; root `docs/73`, the release's `SAFETY.md`)
+
+- **Everything ships OFF.** After the deploy no part is on and no new job runs: the four new jobs in
+  `cron/master.php` are dispatched only on Uganda and only while their switch is on, and `tools/cron_status.php` lists
+  them `OFF (switch)`. With every switch off, the enquiry follow-ups send what 5.18.103 sends, the quotation e-mail's
+  headers are 5.18.103's, and neither *My quotations* nor *WhatsApp offers* is in the menu.
+- **One switch tool, one order** (`tools/sales_followup.php`: `show`, `on`, `skip`, `off`, `--check`, `set`, `erase`,
+  `doctor`). A step turns on only after the step before it has passed its check; `off all --rollback` is the one
+  rollback sequence. The order, `docs/73` §H.2.12.2: 1 `report` · 1b `agent-cc` (optional) · 2 `ack` (the ledger and
+  P5) · 3 `tracking` · 4 `list` · 5 `voice-measure` · 6 `chase` (after 72 h of tracking) · 7 `voice-dry-run` ·
+  8 `voice-staff` · 9 `voice-reply` · 10 `cold` (optional) · 11 `offers-test` · 12 `offers-live`.
+- **One ledger and one budget per WhatsApp number** (`wa_auto_sends`, `lib/WaSendBudget.php`, migration 089): every
+  automated proactive send claims before it sends and settles after; replies to customers and staff alerts are
+  recorded, never deferred. At most 60 a day per number, 15 an hour, 60–180 s apart, 08:00–20:00 Kampala, never on
+  Sunday; chases first, offers use what is left. On a payment-reminder day, chases and offers wait for the reminder job.
+- **P1, the report** (`tools/sales_followup_report.php`): run by hand over a copy of the book; it changes nothing.
+- **P2, the chase:** every Uganda quotation is tracked (`quote_tracker`) and chased on day 1, 3 and 7 with D9's
+  approved wording, STOP on each. It stops when the customer writes, a person takes over (`lib/HumanTakeover.php`),
+  the customer says STOP, or the quotation is accepted or expires.
+- **P3, the morning list:** each salesperson gets their own list on WhatsApp — quote numbers and counts only — and the
+  names are on *My quotations* (`tabs/sales/my_quotes.php`), their own leads only.
+- **P4, voice notes** (migration 090, `workers/MediaWorker.php`, `lib/OpenAiTranscriber.php`): four rungs, each with its
+  own check — measure only; transcribe without acting; staff see the transcript in the Inbox; the AI answers in text.
+  The second rung, the first that sends a recording to OpenAI, refuses until the Privacy Policy paragraph naming OpenAI
+  is published and its date recorded (`set ai_media_voice_privacy_line <date>`). The OpenAI key is never printed:
+  pages and the tool say "set" or "not set".
+- **P5, the instant reply to a voice note** (`lib/VoiceAck.php`): every day 07:00–21:00 Kampala, until the AI hears
+  voice notes.
+- **P6, offers** (migration 091, `tabs/engage/wa_offers.php`, `cron/offers_send.php`): an admin screen that exists only
+  while `offers-test` is on; a daily batch to customers who chatted in the last 30 days, from the number they chatted
+  on, varied wording, STOP on each, an optional image; 100, 200 or all, "all" spread over days within each number's
+  limit; preview, a test to the admin's own phone, then start, pause and stop.
+- **P7, the agent's copy** (`lib/QuoteAgentCopy.php`): when the plugin — never uCRM's own mailer — sends the quotation
+  e-mail, the agent who made the quotation is in its visible Cc, in the same e-mail, where the agent is known and has
+  a valid address different from the customer's.
+- **Unchanged:** South Sudan, byte for byte 5.18.103 in what it sends, stores and shows (`test_voice_south_sudan`,
+  `test_quote_followup` L); the Cashbook, ECO Bank, the uCRM catalogue, the quoting organization and every Balance.
+
+**Files** (against `221c9dc`): 260 — 215 added, 45 changed; 43,561 insertions, 151 deletions; migrations 089, 090 and
+091. Of the 215 added, 165 (the 16 new test files, the 144 files in their seven folders and
+5 new fixtures in `tests/fixtures/`) are tests and their folders; the rest are the parts' new files (above) and
+`run_media_worker.php`. The 45 changed include `cron/master.php`, `cron/followup_send.php`, `evo_webhook.php`,
+`webhook.php`, `lib/QuotationService.php`, `workers/AiReplyWorker.php`, `lib/AlertService.php`, `navigation.php`,
+`public.php`, `post_handlers.php`, `tools/cron_status.php`, the manifest, `SAFETY.md` and the re-pointed tests (below).
+
+**Ancestry.** `994d660` (5.18.104, release) ← `221c9dc` (5.18.103, release; DEPLOYED 3 Nov, copy 09:01:02 UTC, switched
+on 4 Nov — its record above). The release is one commit, squashed from 23 working commits (`abfccb7` … `1845009`, kept
+locally under `refs/keep/wip/5.18.104`, never pushed); its tree is identical to `1845009`'s. The development branch
+keeps it as a patch (`wip/release-5.18.104.patch`) against a container restart.
+
+### Tests
+
+- **The release's new tests — 16 files: 3,686 passed, 0 failed, and 1,043 weakened copies, every one caught.** Each
+  copy plants one fault in a copy of the plugin, and the section that guards it catches it. Each file's count is the
+  same in both suite passes (below). By part of `docs/73`:
+  - **Part F (P1–P3 and what every part shares): 5 files, 1,518 passed, 451 copies.**
+    - **`tests/test_quote_followup.php`, 760.** A migration 089 75 · B evidence and tracking 52 · C owners, the cursor
+      and `ref_conflict` 15 · D the chase's schedule, opening and drafting 36 · E which number 18 · F a person took
+      over, and the seen marks 82 · G the sender, `cron/followup_send.php`'s two passes 58 · H STOP, the kill switch and
+      the enquiry engine 15 · I the templates and `approve()` 17 · J the daily list and *My quotations* 70 · L South
+      Sudan unchanged, proved against `221c9dc` 21 · M logging, counts and fixed codes only 16 · N the boundary, the one
+      merged declared list against `221c9dc` from Git 20 · OH the offers hold 18 · and 247 weakened copies.
+    - **`test_wa_send_budget`, 244**: LG the ledger 139, HK the record-only hooks 37, and 68 copies.
+    - **`test_sales_followup_tool`, 397**: TL the tool and its one ladder 241, CK the checks after the world moved 54,
+      and 102 copies.
+    - **`test_sales_followup_report`, 57**: K the read-only report 36, and 21 copies.
+    - **`test_master_104`, 60**: master's four lines read as text; dispatch, in a copy whose job scripts are stubs;
+      `JobBudget` against master's deadline; `cron_status` showing `OFF (switch)` on Uganda and never listing the four
+      jobs on South Sudan; and 13 copies.
+  - **Part V (P4, P5): 9 files, 880 passed, 261 copies.**
+    - **`test_voice_media`, 255** (A–K): the rungs, the webhook's step 8c, R1 to R4, the budget, the runner, dead
+      letters, the prune, and the hand-over moved into `lib/Handover.php`; and 75 copies.
+    - **`test_voice_ack`, 342**: A–H P5, R4 in the reply worker and R3's transcript in the Inbox; K `VoiceSteps`;
+      L–P the checks VA-ON1 and VN-ON1 to VN-ON4; and 124 copies.
+    - **The seven smaller files**: `test_media_foundation` 30 (8 copies), `test_migration_090` 46 (8),
+      `test_openai_transcriber` 54 (16), `test_voice_duration` 44 (8), `test_voice_key_never_printed` 19 (3),
+      `test_voice_south_sudan` 40 (9) and `test_voice_switches` 50 (10).
+  - **Part O (P6): `tests/test_wa_offers.php`, 931 passed, 227 copies.** A migration 091 74 · B the switch's callables
+    107 · C the Offers screen and its seven actions 54 · D the audience 59 · E STOP 15 · F the sender 92 · G the
+    gateway 28 · H per-offer counts 8 · I the job 13 · J South Sudan 24 · K Part F's ledger, hold and person rule under
+    P6's calls 196 · L logging 11 · M the boundary 9 · and 227 weakened copies. Then **CC, the control on the controls,
+    14 checks**: the tree judged is `221c9dc`'s, without P6, and it fails every one of the thirteen sections.
+  - **Part P (P7): `tests/test_quote_agent_copy.php`, 357 passed, 104 copies.** A the rules 61 · B the app path 28 ·
+    C the webhook path 31 · D the dispatcher 17 · E the relay 16 · F row 1b's precondition 32 · G the check AC-ON 22 ·
+    H South Sudan, and Uganda with P7 off, as `221c9dc` 27 · I privacy and logging 7 · J P7's slice of the boundary
+    against `221c9dc` 12 · and 104 weakened copies.
+  - **New fixtures**: `fake_openai_server.php`, `fake_smtp_refuse.php`, `ogg_opus.php`, `r104_revert.php` and
+    `sales_followup_report_book.php`. `fake_evo_server.php` gains the development tree's media additions.
+- **Rewritten on purpose, never weakened** (`docs/73` §H.2.14, §H.3.24, §H.5.13; `docs/73` §S.2 item 1). These are 18
+  of the 45 changed files: 15 test files, the two section I files and the fake Evolution server. Each test among them
+  still holds its assertion against `221c9dc`.
+  - **The manifest version pin, 5.18.103 → 5.18.104, and the migration pins**:
+    - the five `test_distributor_*` files: 61, 33, 66, 59 and 47;
+    - `test_quote_company` 291/0. Its I5 also holds `migrations/` to 5.18.103's plus exactly 089, 090 and 091, with
+      091 the last. Its weakened copies, `test_quote_company_mutants`, read 83/0.
+    - `test_bank_store` 255/0: "088 is the last migration" now reads 091.
+  - **`navigation.php`, `public.php` and `post_handlers.php`** are held whole except for 5.18.104's declared lines,
+    which are read through the new `tests/fixtures/r104_revert.php`:
+    - `test_bank_boundaries` 157/0, the same count as before: its manifest pin moves, and its eight checks that
+      5.18.104's declared lines broke, `post_handlers.php` byte-identical to `ec0accd4` among them, now read their files
+      through `r104_revert.php`;
+    - `test_cashbook_physical_list` 496/0, and its mutants 48/0.
+  - **5.18.103's own boundaries** (`tests/catalogue_direct/I_boundary.php`, `tests/quote_from_ucrm/I_boundary.php`) now
+    list P6's files and `webhook.php`'s declared P7 hunks, from the one merged declared list:
+    - `test_catalogue_direct` 506/0 (section I 12 → 14), with all 91 weakened copies caught;
+    - `test_quote_from_ucrm` 1,724/0 (section I 31 → 33), with all 368 caught.
+  - **Six more files**:
+    - `test_quote_summary` 58/0 (was 57): section M takes `webhook.php`'s two P7 hunks out by their markers, with a
+      control.
+    - `test_cron_keepalive_order` 12/0 (was 8): ruling R1's four lines are last, byte for byte.
+    - `test_event_processor_protected` 45/0 (was 41): Uganda's list now names `ai.media` and `ai.voice_ack`; South
+      Sudan's is still `ai.reply` alone.
+    - `test_brain_context` 132/0 (was 128): a fifteenth key, `voice`, which carries the note's duration only.
+    - `test_plan_fence` 55/0 (was 52): `Handover.php`, `VoiceAck.php` and `EvolutionOfferGateway.php` send fixed
+      texts, no model output.
+    - `test_staff_jobs_gate` 49/0 (was 41): the methods that ask the gate are now derived from the code, not listed
+      (`docs/73` §S.2 item 2).
+  - **`test_pilot_safety` is unchanged and reads 185/0 (was 177).** Its *Media (development tree)* section (5 checks
+    and 3 weakened copies) runs only where `workers/MediaWorker.php` exists, and this release adds that file. The clock
+    plays no part here.
+- **The release: the full suite twice** on `994d660`, exactly as pushed. Both passes ran in a frozen, clean,
+  world-readable worktree, with no other suite or trial running beside either:
+  - **Pass A3**, 7 Nov 04:37:26 – 09:31:39 UTC: **316 files, 22,578 passed, 7 failed, EXIT=1.** The seven are this
+    container's, in four files (known limit 11): `test_install_authorisation` 379/2, `test_mail_quote` 91/1,
+    `test_migration_integrity` 27/1 and `test_secure_file` 22/3.
+  - **Pass B**, 7 Nov 13:46:13 – 18:55:54 UTC: **316 files, 22,578 passed, 7 failed, EXIT=1.** The seven FAIL lines are
+    A3's, and every file's count equals A3's (316 compared, none differs).
+  - **The seven failures are word for word the same as in 5.18.103's passes A2 and B3 on `221c9dc`.**
+  - **Passes A and A2 do not count.** This container stopped under each of them in file 226 of 316
+    (`test_quote_company_mutants`), with 225 files complete before it: A at about 02:58 UTC on a restart, A2 at
+    04:33:53 UTC on a SIGTERM from outside. Before each cut only the known container failures had failed. 5.18.103's
+    pass B2 was cut in the same file; why is not established.
+  - **Hours and folder.** Neither counted pass ran at an hour or from a folder that fails a test or cuts it short:
+    - `test_cashbook_physical_list` 496/0 and its mutants 48/0. Its window is 21:00–24:00 UTC (00:00–03:00 Kampala);
+      A3 ran 04:37–09:31 UTC and B 13:46–18:55 UTC.
+    - `test_pilot_safety` 185/0 and `test_sales_pilot` 125/0, on a Saturday inside their follow-up sending window, as
+      each test's output says.
+    - `test_cli_data_dir` 19/0, because the worktree is world-readable.
+  - **Against `221c9dc`'s pass B3** (300 files, 18,856 passed):
+    - 16 files more, with 3,686 passed;
+    - the eight re-pointed files that grew add 28;
+    - `test_pilot_safety` adds 8;
+    - every other file's count is equal.
+
+    So 18,856 + 3,686 + 36 = 22,578, and the seven failures are the same.
+  - **Beside the suite.** `test_customer_pwa` (31/0, unchanged since 5.18.40) left its `php -S` server running after
+    it ended, in both passes. It starts the server through a shell, and ending the shell does not end PHP. The server
+    was stopped by hand each time: after pass A3, and in pass B at 15:47 UTC while the suite went on.
+- **T1 and T4, the script's signatures, are 5.18.103's unchanged**: `548 passed, 0 failed rc=0` and
+  `20 passed, 0 failed, 0 skipped rc=0`.
+  - Both passes read `test_cash_in_hand_p3b` at 548/0.
+  - The suite runs `test_d1_bank_balance_readers` whole (34/0), not `--no-mutants`. T4's `--no-mutants` form is read by
+    the deploy itself, at R24, on the installed files after the copy (A22-T1 runs T1 only): every R24 line in the
+    records of development trials 3–7 read it as pinned, `20 passed, 0 failed, 0 skipped rc=0` (46 in each); the
+    record's own reading is in the rehearsal's record, below.
+
+### `scripts/deploy-5.18.104.sh` — 14,499 lines, sha256 `1aafc15bd1cdb1d7…`
+
+**How it is made.** From 5.18.103's script exactly as committed (sha256 `00b585c73d4eb38a…`) by asserted edits
+(`wip/derive-5.18.104/derive104.py`, root `docs/73` §H.2.15): every anchor found exactly the stated number of times,
+every new text present and every superseded one absent, or the run exits non-zero and writes nothing. The release
+commit is a parameter; the derivation refuses one whose parent is not `221c9dc` or whose manifest does not say
+5.18.104, and it ran on `994d660` itself from its first stage. The file lists and counts (260 files: 215 added,
+45 changed; 158 of 5.18.103's kept, each asserted the same file at both commits), every sha256, the three migrations
+by sha256, md5 and `_schema_checks` count (089 38, 090 79, 091 25), and every value a check carries from the release
+are read off Git, never typed. Eleven parts, in the order they run, 394 edits:
+
+- **A** (41) identity: the pin, the baseline, the earlier releases' state files, the three sha256 lists, the counts;
+- **B** (31) the carried checks 5.18.104's delta moves: A0's migrations (exactly 089, 090 and 091); master's pin
+  (ruling R1's four jobs; the live master and the rollback's stay 5.18.92's); the event processor's Uganda signature
+  (A6, R13, RB: `ai.media` and `ai.voice_ack` now their workers'); the copy's time mark (`lib/NotificationService.php`);
+  R4's undeployed work (the media layer is now this release's, pinned file by file); R7's migration ledger;
+- **F** (10) Part F's QF checks, `--clear-switches`, and the slots the other parts fill;
+- **R** (7) the one rollback sequence — QF-RB1 before the put-back, QF-RB2, QF-RB3 after it, the by-hand put-back —
+  and 5.18.103's QC-RB1 re-pointed to what 5.18.104 adds;
+- **H** (27) what the operator reads: the header, the options, the commands each alone, the summary;
+- **V** (23) Part V's VN and VA; **O** (26) Part O's OF; **P** (15) Part P's AC;
+- **C** (184) the texts carried from 5.18.103 that named the wrong release one step on, and four script findings of the
+  rehearsal's build, S1–S4 (DS5, below);
+- **T** (9) what the rehearsal's development trials found, T-D1–T-D3 (below);
+- **Z** (21) the consistency pass: the 20 slots closed (17 filled, three left empty under the comment that says why),
+  no marker left; the design's 78 deploy codes — QF 28, VN and VA 26, OF 16, AC 8 — each reported in a function
+  reached from its own stage's root, the stages disjoint; 5.18.102's five retired codes silent; the summary's steps in
+  the ladder's order (`SalesFollowupLadder::STEPS`, from Git) and the printed rollback block in the one sequence.
+
+Before anything is written the result and both wrappers pass `bash -n`, and the result passes a folder check: on every
+call path, the run's folder in the container's `/tmp` is made in the main shell before any `$( … )` reads it
+(269 functions, 3,104 subshells), beside three weakened copies it must refuse, each for its own reason. Every fix round
+derived it twice, byte for byte the same. The script itself never ran during the derivation. Its PHP fragments were
+linted (`php -l`); Part O's by-hand statements ran in Python's `sqlite3` (below); T-D1's and T-D2's fixes (part T)
+were tried on their own: R6's new lines pass on the pin's files and fail on 5.18.103's, and QF-N2's cast reads one draft
+per age bucket where the text binds read none. What the script prints, the rehearsal measures. The rehearsal was first
+written against DS4's fixed build (14,339 lines); DS5's texts and the trials' fixes came after, the rehearsal
+re-pointed where it quotes them.
+
+**The two wrappers beside it.** `scripts/sales-followup.sh` (89 lines, sha256 `bbde2d04…`), the operator's
+one way to run the installed switch tool: inside the container as the book's owner, never root; a terminal only for
+`erase`, `on chase` and `on cold`; everything the tool prints also to a log of its own under umask 077, any run of 9 or
+more digits masked. `scripts/sales-followup-report.sh` (157 lines, `c2bb770262a0b877…`), P1's report on a copy of the
+book, written by the derivation with its pins from Git: the release commit, the report's and `QuoteSendEvidence`'s
+sha256, the five installed files it reads asserted equal at `221c9dc` and the pin (so it runs on 5.18.103 too), and the
+23 settings keys its copy keeps beside the tenant selectors (`tenant_profile` is in both), read off the code that
+reads them, none a secret.
+
+**New — 5.18.104's own checks**, counts, fixed codes, key names and handset labels in the log; ids, the baselines'
+largest ids and the report's owners on the 0600 cash sheet:
+
+- **Part F (QF, "follow-up"; `docs/73` §H.2.15–§H.2.16).** Stage A, on copies through the pin's code: QF-G1 the copy's
+  shape — 088 last and none of 089–091 (a first deploy), or all three applied (a redeploy after its rollback), anything
+  else NO-GO; QF-G2 the one migration trial for every part (ruling R10) — 089 → 090 → 091 through the pin's
+  `MigrationRunner`, each `_schema_checks` row at its count, the pin's doctor, and Part V's negative control (an
+  085-shaped `wa_media`: PARTIAL, no row); QF-G3 the record-only hooks and marks as text, and HK7, the pin's send-site
+  inventory scanned on its own tree (an unclassified Evolution send site is NO-GO); QF-G4 the one rule for every part's
+  keys (ruling R7): every key of `SalesFollowupLadder::allKeys()` unset in the live files and the store row; notes
+  QF-N1–QF-N7. After the copy, through the installed code, QF-CA1–QF-CA8: 089–091 applied at the first boot; nothing
+  written by the dark build and no run of the four jobs; the four jobs listed `OFF (switch)`; the tool's `show` with
+  every step off, and "not this install" as South Sudan. `--after-only`: QF-ON0–QF-ON5. Rollback: QF-RB1–QF-RB3.
+- **Part V (VN, VA; §H.3.25).** Nothing calls OpenAI; the key is "set" or "not set". VN-G1–VN-G7 at stage A (090's
+  objects and row, the voice gates as text, no voice event on a first deploy); VN-M1, VN-M2, VN-CA1–VN-CA4, VN-K1 (the
+  key in none of the plugin's logs) and VN-K2 (the installed key field, empty) after the copy; VA-ON1, VN-ON1–VN-ON4;
+  VN-RB1–VN-RB4 before the put-back, VN-RB5 and VN-RB6 after it — an instruction to rotate the key whenever OpenAI was
+  called, printed also when that count cannot be read.
+- **Part O (OF; §H.4.18–§H.4.19).** Nothing is ever sent: every OF reading runs with PHP's network and process
+  functions off. OF-G1 and OF-G2 on QF-G2's trial copy — 091 at 25 of 25, `OfferSchema::check()` sound, every existing
+  table's rows unchanged by count and by a hash of every row — and the notes OF-N1–OF-N3 (the audience through the pin's
+  store-free `OfferAudience::build()`); OF-M1, OF-M2, OF-CA1–OF-CA5 after the copy (the job, included as South Sudan on
+  a scratch folder with no book, writes nothing and loads no sender); OF-ON1, OF-ON2; OF-RB1 before the put-back, OF-RB2
+  after. Part O's four by-hand statements were asserted equal to §H.4.19's and run at derive time in Python's `sqlite3`
+  against 091's own tables, beside two weakened statements 091 must refuse.
+- **Part P (AC; §H.5.14–§H.5.15).** Nothing asks uCRM, and no e-mail leaves the container. AC-L1, a NO-GO before
+  anything is copied: the server's PHP lints the pin's `lib/QuoteAgentCopy.php` and the three files P7 changes, each by
+  sha256. AC-N1, AC-N2 notes. AC-CA1, and AC-CA2 — the positive and negative controls on a copy of the book, its
+  configuration replaced by the check's own and read back before every drive: twelve drives through the installed code
+  and 5.18.103's, uCRM the pin's recording fake, the pin's relay on 127.0.0.1, fixture accounts under `example.test`
+  only (its two files are the only sandbox test files the server runs). AC-ON1, with `quote_mail.log` copied before the
+  book, so that no line it reads can lack its decision. AC-RB1 before the put-back, AC-RB2 after.
+
+**Carried: every 5.18.103 check** (§H.2.15 retires none; 5.18.102's QL-CA1, QL-LK1 and QL-RB1–QL-RB3 stay retired),
+re-pointed only where 5.18.104 moves what it reads: QC-RB1 to what 5.18.104 adds (no file of 5.18.103's, as installed
+after a rollback, names any of its 56 words — classes, jobs, screens, tools and 089–091's tables — each read beside its
+control on the pin); QC-N1 a note either way, and QC-ON1–QC-ON3 judged on the uCRM catalogue's switch as found (on in
+production since 4 Nov, an admin's choice; off, one note); R6 on the pin's worker-owned list and owner hand-over
+(T-D1); V3g's one exception, the keys the switch tool removes where this run runs it, each named in a note (S2).
+Recorded, not changed: QL-G1 still refuses, with the catalogue switch on and without `--accept-unpriced`, a kind for
+which uCRM offers nothing an admin could link — latent: 5.18.103's deploy record shows it passing.
+
+**Every reading of a copy names its own vault** — the header's ON COPIES rule, 5.18.103's, now for 5.18.104's own
+readings too: the 16 that load the plugin's configuration read the copy's `vault.json`, a copy of the live vault cut
+to the keys they need, never a secret; the 28 that load none name a vault never made, in the reading's own folder, by
+a line in their own source (T-D3); the 17 that read live files by design name none. 61 reading modes in all, traced
+statically over all 71 calls of the four readers.
+
+**Modes.** As 5.18.103's — a deploy; `--check`; `--after-only`; `--rollback`; `--redeploy`, `--move-list-only`,
+`--check-bank`; the flags each the operator's explicit choice — and one new flag, `--clear-switches`:
+
+- **The deploy:** stage A; DEPLOY typed; then, before the checkout, so that a stop leaves it where it was, the clear
+  where `--clear-switches` is typed, QF-G4 read again, and on a redeploy a 6 s pause (`busy_timeout` plus 1 s) and the
+  redeploy baseline — QF's, VN-CA4's and OF-CA3's, in one PHP call, at one moment; then the copy, V, R, Z and the
+  summary: every switch OFF, every command alone, the rollback once, after the verdict, its own block. A deploy that
+  finds 5.18.104 already serving runs the `--after-only` checks instead.
+- **`--check`:** stage A alone, stopped before the backup — nothing backed up, copied or deployed; with `--redeploy`
+  and the flags, as the deploy would run with them, `--clear-switches` clearing nothing and saying what the deploy
+  would clear. The deploy command it prints carries a flag only where its check needed one.
+- **`--redeploy`:** after its own rollback. QF-G1 reads 089–091 applied, QF-G2 applies none, every key must read
+  unset; QF-CA2, QF-CA3, VN-CA4 and OF-CA3 judge the dark build against the baseline — a write it could have made, in a
+  later second than the copy's start, FAILs; what earlier acts left is counted and printed.
+- **`--clear-switches`:** with a redeploy or `--check`. The keys an earlier 5.18.104 left set, rolled back without its
+  off, are cleared once DEPLOY is typed and before the copy, by the pin's `tools/sales_followup.php off all --rollback`
+  as the book's owner, every part's hooks; the keys cleared go on the sheet. Refused on a book 5.18.104 never ran on,
+  and for a key held by `data/config.json` or `<data>/config.json`, which the tool never writes.
+- **`--after-only`:** the after-the-copy checks again, and the ON checks of each step that is on — QF-ON0–QF-ON5,
+  VA-ON1, VN-ON1–VN-ON4, OF-ON1, OF-ON2, AC-ON1, through the installed tool's `--check` on a copy; a step that is off
+  reads "OFF — not judged". At least 20 minutes after the copy, again the next day after 15:00 UTC, and after each step
+  of the ladder.
+- **`--rollback`:** ROLLBACK typed. QF-RB1 runs `scripts/sales-followup.sh off all --rollback`, the checkout's wrapper
+  running the installed tool — the one sequence, O (12, 11) → F (10, 6) → V (9, 8, 7, 5) → 4, 3 → 2 → the record keys
+  and Part P's two, each end state asserted and every key read back — and VN-RB1–VN-RB4, OF-RB1 and AC-RB1 read its
+  result. Any failure — a hook, a
+  key still set, Part P still on, an open quote follow-up (5.18.103's follow-up run has no kind filter and would draft
+  about it) — stops before the put-back and prints the by-hand put-back, its own block. Then 5.18.103 is put back and
+  QF-RB3 reads it (the 45 files by `221c9dc`'s sha256, master with none of the four jobs, no 5.18.104 key, no open quote
+  follow-up), with VN-RB5, VN-RB6, OF-RB2 and AC-RB2. 089–091's tables and the 215 added files stay, reached by nothing
+  (QF-RB2, QC-RB1).
+- **V1's automatic rollback**, for a deploy whose public sign-in page redirects: QF-RB1 first, the put-back, QC-RB2
+  counted, and QF-RB3 once the put-back verifies; one that does not verify says it did not complete and prints
+  5.18.103's by-hand put-back.
+
+**What it never does**, beyond 5.18.103's list (the header's is the full one): turn a step or a switch on, or set a
+setting — its only write to the settings is the switch tool's `off all --rollback` (QF-G4's `--clear-switches` with the
+pin's tool, QF-RB1 with the installed one), which clears 5.18.104's own keys only, never a setting such as
+`sf_persona_confirmed` or `quote_agent_cc_admins`, and whose off-hooks close or pause rows; apply or undo a migration;
+send anything but AC-CA2's drives to its own loopback relay; call Evolution, Splynx or a model; print the OpenAI key, a
+phone, a person's name or a staff id.
+
+**Reviewed, stage by stage.** Each stage was built, then reviewed by someone who had not built it; every finding was
+verified against the design and the release before it was fixed, then rechecked:
+
+- **DS1** (the frame, identity, QF, the rollback, both wrappers): 11 findings, one a blocker — QF-G2 would have stopped
+  every redeploy, because the runner logs nothing for a migration already applied. Also QC-RB1, which could not pass,
+  re-pointed; the vault of QF's copy readings; HK7 run rather than read; QF-N4 per handset and Kampala day; the report
+  wrapper's copy without `wa_force_accounts`. All fixed in DS1-fix1.
+- **DS2** (VN, VA): 3 — VN's copy readings named no vault, so a tenant held only in the vault read absent; the
+  transcriber factory's "none" could not fail (now judged with a sentinel key, beside a control that must build one);
+  VN-RB6's instruction skipped when the count could not be read.
+- **DS3** (OF): 2 — in an explicit `--rollback` the run's folder was first made inside a `$( … )`, so every later
+  reading of a copy, 5.18.103's included, read "could not be read" (now made in the main shell by each part's entry,
+  proved by the folder check); OF-RB1 bounded by QF-RB1's start, not by the copy's moment.
+- **DS4** (AC and the consistency pass): 1 — AC-ON1 judged a copy that held neither `quote_mail.log` nor
+  `email_settings.json`.
+- **DS5** (the carried texts): while the rehearsal was being written, sentences carried from 5.18.103 were found that,
+  with the release variables one step on, said false things — QC-N1, in capitals, telling the operator that a
+  rolled-back 5.18.104 had left the catalogue switched on, and the rollback's notes describing a put-back to 5.18.102,
+  which, followed, risked a second quotation to a customer. Every carried text was audited: 384 suspects, 216 distinct
+  lines, 189 confirmed by at least two adversarial readings, 27 refuted; part C's 184 asserted edits write each fixed
+  release as a literal read off Git, and each of the 174 hunks against DS4's fixed build maps to a confirmed line or a
+  finding. With them, the rehearsal build's four script findings: S1 a NO-GO's reason lost in a subshell; S2 V3g failing
+  on keys the switch tool clears by design; S3 V1's rollback skipping QF-RB3; S4 a stop that printed prose after a
+  command on its line, a copy hazard. Its review: 4, fixed and rechecked.
+- **Found by the rehearsal's development trials**, fixed in part T: **T-D1** (trial 2, 7 Nov) every 5.18.104 deploy and
+  `--after-only` failed R6 (*"R6 incomplete: event-processor:lists ai-worker:no-owner-handover"*) — two carried
+  literals that 5.18.104 moves on purpose, the event processor's worker-owned list and the owner hand-over, now in
+  `lib/Handover.php`; **T-D2** (trial 2) QF-N2's approved drafts by age always read 0 — its limits were bound as text
+  against an expression with no affinity; now cast to REAL; **T-D3** (seen in trial 3, 7 Nov; measured over trial 4's
+  98 runs, 8 Nov) 28 of 5.18.104's readings of a copy named no vault of their own. None of the 28 loads the
+  configuration and no live vault was touched, so no verdict changes; each now names one never made (above). Seven
+  weakened copies of part T were each refused; its review's items (a comment, part T's header, and a control proving
+  the rehearsal can still count a reading with no vault) fixed.
+
+### The rehearsal — `scripts/harness/deploy-5.18.104/rehearse.sh`, 4,522 lines, sha256 `d217e8b1a62b7839…`
+
+**What it builds.** It is chained on 5.18.103's rehearsal, read up to just before that rehearsal's last section, 103-10.
+The cut is asserted: its anchor exactly once and after line 900; its last check the one 103-8 ends on, read from the
+file; and the one line that names its own folder pointed at that folder, also exactly once. 5.18.103's rehearsal builds
+every earlier sandbox from its own rehearsal. When 5.18.104's sections begin, 5.18.103 has been deployed, rolled back,
+deployed again and rolled back by its 103-8, so 5.18.102 is serving. Five helpers are copied into the sandbox:
+
+- `rh104-seed.php`, the fixtures, written through the code root's own writers (the installed 5.18.103's before the
+  deploy), never raw SQL;
+- `rh104-ref.php`, the release's own reading, which the script's lines are set against: the pin's code from Git, run on
+  scratch copies of the book;
+- `rh104-live.php`, the live cases' acts, each through the installed code: switch keys through
+  `PluginConfig::saveOverrides`, a quotation stored as the Send Quotation path stores it, master's schedule, a ledger
+  claim, a webhook payload POSTed to the real `evo_webhook.php`, the installed `MediaWorker`, and an admin's offer acts;
+- `rh104-clock.c`, the clock (below);
+- `rh104q.py`, the rehearsal's own reading of the store and of the runs' records. It is written in Python, opens the
+  store read-only and never goes through the release's code, so the script's reading is set against an independent
+  one.
+
+5.18.103's copy audit becomes `rh104.py` by asserted replacements. The chain's fake docker, which records every exec,
+learns this release's folders in `/tmp` and the wrapper's `-it` in the same way.
+
+The sections: 104-pre production's state on 4 Nov; 104-0 the controls; 104-c `--check`; 104-1 QF-G's refusals and
+`--clear-switches`; 104-4 the deploy; 104-5, 5v, 5o, 5p `--after-only` and the ladder step by step, the voice rungs,
+offers and Part P; 104-6, 6v, 6w the rollback, typed and the deploy's own; 104-7f/p/v/o `--redeploy --clear-switches`
+with acts moved around the clear; 104-7c the controls on the redeploy baseline; 104-10 what it left behind.
+
+**How it judges.** Every pin is read from the script. Every expectation is computed from Git or from the release's own
+code; no commit, count of files, line count or hash is written in the rehearsal.
+- From Git: the delta, the sha256 lists, and 089–091's tables and columns.
+- From the pin's code on scratch copies: the keys, the ladder's order, and the readings of the book.
+- Beside both: the rehearsal's own reading of the store.
+
+Every command is run as the script's summary prints it, through a pseudo-terminal wherever it asks a question.
+Everything seeded is fictitious: names, phones, e-mail addresses, quotation numbers and keys. Each is an `RH104SECRET-`
+value or a number of the rehearsal's own range, listed in its 0600 pattern files for the sweeps. It refuses to run
+where the server could be: where `/data/ucrm`, `/opt/dishnet` or a Docker socket exists.
+
+It was written in five stages, RH1–RH5, on 7 and 8 Nov, each reviewed and fixed. Nothing of it ran while it was written:
+`bash -n`, `php -l` and Python's compiler only. Every result below is a trial's. DS5's re-pointed texts and S1–S4 moved
+its expectations with them (`8597193`).
+
+**The stand-ins**, all on 127.0.0.1. Each records what it is asked, and none is on the network:
+- **Evolution**: the chain's stand-in, taught two answers by asserted edits of its router. Each answer works only
+  while a file of the rehearsal's is beside the router:
+  - a voice note's bytes (a 7-second Ogg Opus note);
+  - a send answered as Evolution answers it, with a message id (`key.id`).
+
+  It records each request by method and path alone. Every case's own sends are counted and moved aside where the case
+  made them. That is how 104-10 can say that no deploy called it.
+- **OpenAI**: the release's own fake (`tests/fixtures/fake_openai_server.php`, from Git); every answer is an
+  `RH104SECRET-` transcript.
+  - The installed `OpenAiTranscriber` points at api.openai.com, and its one production construction names no other
+    endpoint (a control reads this from the release's code). So the installed `MediaWorker` is driven through its own
+    seam, `useTranscriber()`, with the installed transcriber pointed at the stand-in under its loopback rule.
+  - The webhook is served with `exec` disabled, so it starts neither worker.
+  - The key is fictitious.
+  - Before the key is stored, the assistant's provider is moved off OpenAI on the copy. Rungs 7–9 and every
+    reply-worker run are gated on a reading that the assistant can reach no provider.
+  - The book, the vault and the settings are put back afterwards.
+- **uCRM**: the chain's stand-in (5.18.99's). An asserted edit teaches it the client and the quotation PDF of the
+  rehearsal's e-mails, only while its file is there. It answers GETs only, and records each request's path and whether
+  a key was present, never the key.
+- **SMTP**: the release's own fake relay (`tests/fixtures/fake_smtp_server.php`, from Git). Its transcript holds every
+  message it is handed — sender, recipients and message — so a Cc is counted as the relay saw it.
+- **IMAP**: one of the rehearsal's own, for AC-CA2. The live e-mail settings, made hostile, point the sent-mail copy at
+  it. It records every connection it is offered, and is offered none.
+
+**The clock** is `rh104-clock.c`, compiled by the rehearsal and given with `LD_PRELOAD` to 104-5's runs and every later
+one: the tool, `--after-only`, master, the webhook's server and the live acts. With it, the days the ladder needs pass
+as they would on the server: L-ON's 24 h, step 6's 72 h, VN-ON1's 48 h, and a chase's days.
+- It moves `time()`, `gettimeofday()` and `clock_gettime(CLOCK_REALTIME)` by an offset it reads from a file at every
+  call, and only ever forward.
+- Monotonic clocks and the kernel's file times do not move. So the served plugin's session files are stamped with the
+  clock's time before each request, because PHP's session clean-up compares them with the moved `time()`.
+- **It preloads the system SQLite after the shim.** PHP loads its extensions with `RTLD_DEEPBIND`. So the `libsqlite3`
+  that `pdo_sqlite` pulls in bound `gettimeofday()` to libc, past the shim: PHP's `time()` moved and SQLite's `'now'`
+  did not (trial 2: off by exactly −86,400 s). Loaded at start-up instead, the library is relocated in the global
+  scope, where the shim comes first.
+- Its control: under the shim, a day ahead, PHP's `time()`, SQLite's `'now'` and `date` all read a day ahead. Without
+  the shim, and under it at an offset of 0, all read the wall clock.
+
+**Weakened copies and controls.** Each weakened copy is an asserted edit of the script's own text, its anchor found
+exactly once and its replacement different. Each is caught by the check it weakens:
+- each QF-G guard, and the guards of `--clear-switches` (104-1);
+- AC-CA2 skipping its fresh settings file (104-5p);
+- the by-hand put-back printed beside a command, QF-RB1's guard and QF-RB3 (104-6);
+- VN-G6 (104-7v);
+- in 104-7c, the redeploy baseline taken in stage A (W1), "at or after" the copy's start (W2), no pause before the
+  baseline (W3), and absolute counts or every added row judged FAIL (W4).
+
+The rehearsal's instruments have controls of their own. Where a control could itself be hollow, there is a control
+on the control:
+- an entry missing from the anchor table is recorded;
+- a replacement given a script that holds its anchor twice refuses and changes nothing;
+- check 10's audit is shown to count a reading of a copy with no vault (T-D3's line taken out);
+- 10h's pause sweep counts a planted pause, and sets aside only the rehearsal's own committed source, and only while
+  that source is byte-identical.
+
+**One deviation, printed in every run as an `RH-NOTE`, accepted.** 104-5o starts its offer over two handsets, where
+`docs/73` §H.4.18 names three. Production's support and account numbers share one Evolution instance, so with the
+channel registry off, the release's audience yields two handsets. A third would need 5.18.90's registry switched on,
+which would route every later section through it.
+
+**Trials, each alone.** 5.18.103's chain takes about four hours to reach 5.18.104's sections, so the development trials
+ran from a snapshot of it.
+- The chain was run once, up to 5.18.103's 103-10 anchor (7 Nov 09:32:34–13:37:35 UTC): 2,078 ok, 3 failed. The three
+  failures are exactly the inherited checks (5.18.103's known limit 10).
+- The snapshot saved the chain's shell (its variables, functions and trap), its sandbox's files with their owners and
+  modes, and its four stand-in servers.
+- Each trial restored the snapshot with a development runner (`devsnap104`/`devres104`, not committed) and ran
+  5.18.104's sections alone. The rehearsal's header names the one block such a runner may skip.
+- Trials 1–4 ran one after another in one detached worktree, apart from the working branch `wip/dev-5.18.104` (where
+  DS5 was being written); the fixes from them, T1-a–T1-n, were committed in that worktree (T1-d is the derivation's
+  part T, the rest the rehearsal's). Trials 5, 6 and 7 each ran in a detached worktree of its own, so no fix committed
+  in the meantime could change them. Each trial below names the rehearsal commit it ran (local working commits, never
+  pushed).
+
+**What the trials found, by kind. None was a defect of this release's own code; one older issue was recorded (below).**
+- **Three defects in the deploy script:** T-D1 and T-D2 (trial 2), and T-D3 (seen in trial 3, measured over trial
+  4's runs). Each was fixed by asserted edits in the derivation's part T. The derivation was run twice, byte for byte
+  the same, and the rehearsal was re-pointed wherever it quotes them.
+- **Defects in the rehearsal:** T1-a–T1-c and T1-e–T1-n (trials 1–4), T5-a–T5-e (trial 5), T6-a (trial 6) and
+  T7-a, T7-b (trial 7) and T8-a (the first full run), each a commit of its own.
+- **Two in the development runner**, fixed there: trial 1's restored file identities, and trial 3's deploy script taken
+  from the chain's checkout. The record trial uses no such runner.
+- **In the release's own code, nothing.** Where a failure first looked like the release's or the script's, they were
+  right:
+  - Evolution answers a send with a message id; the stand-in did not (trial 3).
+  - An admin cannot press Start in the same second as the server-side `on offers-live` (trial 5).
+  - OF-CA3's baseline is read after QF-G4's clear, as the design (`docs/73` §H.4.18, Q18-O03) and the script have it
+    (trial 6).
+
+The trials:
+
+- **Trial 1** (7 Nov, from 19:09 UTC; the rehearsal at `7630095`; the script at `9b9cd3a`, sha256 `ff45e83a…`, 14,339
+  lines) was stopped by hand in 104-1 after a cascade: a restore artefact of the development runner (A14's quarantine
+  record names the data folder by inode and birth time, which an untar renews; fixed in the runner only, a path the
+  record never takes) and T1-a.
+- **Trial 2** (7 Nov, ended 21:28 UTC; `6b0fb08`; the same script): 2,470 ok, 107 failed — 3 inherited and 104 in its
+  own sections (392 ok there), most of the 104 cascades of T-D1 and of the clock. It found T-D1, T-D2, T1-b, T1-c and
+  T1-e.
+- **Trial 3** (7 Nov 21:35–23:51 UTC; `8646a94`): 2,487 ok, 90 failed — 3 inherited, 87 own, 409 ok. The clock held.
+  It found the runner's gap (it took the deploy script from the chain's checkout, still `9b9cd3a`'s, so part T never
+  ran), T1-f–T1-j, and first saw T-D3.
+- **Trial 4** (8 Nov 00:09–02:23 UTC; `1a9958a`; the first script with T-D1's and T-D2's fixes, sha256 `b881ff84…`):
+  2,546 ok, 31 failed — 3 inherited, 28 own, 468 ok. It found T1-k–T1-n, measured T-D3 over its 98 runs, and found the
+  opt-out line (5o13, below).
+- **Trial 5** (8 Nov 05:10–07:31 UTC; `fe0eb2a`, the first with DS5's script, sha256 `d19e4989…`): 2,554 ok, 25 failed
+  — 3 inherited, 22 own, 476 ok; check 10 still counted T-D3, whose fix came after it began. It found T5-a–T5-e.
+- **Trial 6** (8 Nov 07:33–09:56 UTC; `75f0174`, with T-D3's fix; the script at sha256 `1aafc15b…`, 14,499 lines):
+  2,574 ok, 7 failed — 3 inherited, 4 own, 496 ok. The four, 7c1, 7c3, 10h and 7o5, failed in trial 5 too, each a
+  rehearsal expectation whose fix (T5-e, T6-a) came after trial 6 began. Every other check trial 5 failed on passed:
+  check 10, the offers week, 6-4 and the checks that followed from it, 7v1r, 7x, 10d and 1k-d. It found T6-a.
+- **Trial 7** (8 Nov 09:57–12:19 UTC; `8243cf2`, which adds T5-e and T6-a; the script as in trial 6):
+  2,575 ok, 9 failed: the three inherited checks and six of 104-5o's. 5o9's Start landed on the sign-in page —
+    the admin's session file was gone, where trial 6, with the same steps, kept it — and 5o10–5o13 followed from it;
+    7c1, 7c3, 10h and 7o5 passed, so T5-e and T6-a held. The likeliest cause, PHP's 1 % session clean-up in a redirect
+    followed inside one curl call right after a session write (the file then carries the kernel's time, which the clock
+    never moves), is closed by T7-a (a stamper beside the served plugin; any offers action that lands on the sign-in
+    page recorded and failed by name in 5o13', with a control) and T7-b (each redirect followed as a request of its
+    own, after a stamp).
+- **A first full run** (8 Nov 12:21:17–18:45 UTC; the whole chain unrestored, on `9bcd2e2`, which adds T7-a and T7-b):
+  2,582 ok, 4 failed — the three inherited checks and one in this release's own sections, 6-5, which counted four
+  acknowledgement events pending where three were planted. The twentieth of 104-5p's voice notes had left its
+  acknowledgement deferred by the release's own gap (`wa_voice_ack_gap_s`, 20 s from the last claim on the number;
+  the notes are 25 s apart, so a worker that claims a few seconds late defers the next), and no later note's worker
+  took it. A rehearsal defect, not the release's: T8-a runs the installed reply worker once more after the gap, as the
+  webhook's next spawn would, and 5p' checks that none is left. So that run is not the record.
+- **The record**, the whole chain run unrestored on the committed files at the working branch's last commit, as
+  5.18.103's record ran: begun 8 Nov at 18:46:07 UTC on `9cf9b86`, which adds T8-a, ended 9 Nov at 01:00:30 UTC: **2,584 ok, 3 failed** — the three inherited checks, 98-0, 99-0 and 100-0, and none in this release's own sections (489 ok from 104-0 on). 6-5, 5p' and 5o13' passed: no acknowledgement left pending, and the admin's session held through every offers action. Every R24 line its deploy records held when they were read during 104-7c, 40, read T4 as pinned, `20 passed, 0 failed, 0 skipped rc=0`; the runs after that reading are not counted, their records having gone with the sandbox, which the run removes at its end.
+
+**A known older issue, printed by 5o13 since trial 6:**
+
+> RH-NOTE KNOWN OLDER ISSUE (owner's ruling, 8 Nov: masked in 5.18.105, before offers are switched on): the webhook
+> logs an opted-out customer's number — 1 such line(s) in this section's webhook log, left out of 5o13's name scan by
+> their exact form
+
+- It is `evo_webhook.php`'s opt-out line, which this release does not change. 5o13 leaves that one exact form out of
+  its name scan and counts it: exactly one, from 5o11's STOP, the positive control that the form excluded is the form
+  written. Every other line is scanned as before. The line's history, the three older lines that also carry a number
+  and the owner's ruling (step 12, `offers-live`, waits for 5.18.105 to be deployed) are known limit 13.
+
+### Runbook
+
+As root on the server; each command its own paste; send back each run's **log file**, never a copy of the terminal,
+never a cash sheet and never the report's sheet. Each log is 0600 and goes where its script puts it: the deploy
+script's runs under `/root/dnb-5.18.104/`; the report's under `/root/dnb-report/`; the switch tool's wrapper writes its
+own, `/root/dnb-sales/followup-<UTC>.log`, and prints its path at the end; the quarantine's `--check` under
+`/root/dnb-stray-quarantine/`. The report's and the switch tool's folders are the ones the design names (root `docs/73`
+§H.2.8.5 and §H.2.12.1, approved with it on 5 Nov); the scripts print them and the rehearsal checks them line by
+line. The quarantine's folder is every release's. Send each log from the folder its command names. No KYC
+registration and no quote to try the release: the plugin WhatsApps every new quote.
+
+**The deploy**
+
+0. **Both branches are on GitHub.** `release/5.18.104` = `994d660`, pushed 7 Nov on the owner's word. The `--check` and
+   deploy commands below fetch it, and the `&&` stops them if that fails; every run of the script also fetches it when
+   the checkout lacks it, and refuses if it still finds no `994d660`. `claude/study-this-jhe2eg`, which they pull, must
+   carry `scripts/deploy-5.18.104.sh` (sha256 `1aafc15bd1cdb1d7…`) and its two wrappers, on top of `29797c8` (the
+   Privacy Policy's source, step 7): done on 9 Nov — they arrive in `befe95b`, pushed with these records.
+1. **The quarantine's `--check`, begun after 5.18.103's copy (3 Nov, 09:01:02 UTC)**: stage A's A14 refuses without
+   one. One PASSED on 4 Nov, begun 04:57:22 UTC (5.18.103's deploy record above). Run it again only if none has PASSED
+   since, or if A14 asks for it (it then prints this command); never while a deploy, an `--after-only` or a rollback is
+   running. Its own command:
+
+       ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+2. **Optional, read-only: `--check`.** Stage A alone: nothing is backed up, copied, deployed or switched, and it writes
+   only its own 0600 cash sheet and row digest. Its notes print what the design could not establish without the server
+   (known limit 9): the sends per number and Kampala day against the 60 (QF-N4), the master cycle's durations and when
+   the reminder job finishes (QF-N5), the baseline audience for offers (OF-N1), whether the OpenAI key is set (VN-G3),
+   and how plugin mail is configured, which `agent-cc` needs (AC-N1). It ends GO or NO-GO; a GO prints the deploy
+   command, with a flag only where a check needed one (each flag your explicit choice); with none, it is step 4's. The
+   `--check`, its own command:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.104 && mkdir -p /root/dnb-5.18.104 && bash scripts/deploy-5.18.104.sh --check 2>&1 | ( umask 077; exec tee /root/dnb-5.18.104/check-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+3. **Tell every admin and the agents** that nothing changes for them at the deploy: every switch of the sales follow-up
+   is off, and 5.18.104 sends, writes and shows nothing 5.18.103 does not — but, on Uganda, the WhatsApp AI screen's
+   OpenAI key field, which says *set* or *not set* and never shows the key. No one turns a step on until the deploy
+   has printed its last line. While the deploy, its `--after-only` or a rollback runs, no one uses the Salesperson
+   numbers card, ECO Bank (keep no statement), Send Quotation, the KYC form, `tools/set_config.php` or Settings; and
+   from the moment the deploy starts until its last line, no admin touches the uCRM catalogue screen, makes or removes a
+   uCRM link, saves a plan or a kit, or changes uCRM's Products, Service Plans or client attributes.
+4. **Deploy**, at a quiet hour, not between 14:55 and 15:10 UTC (the evening WhatsApp, 18:00 Kampala). Type `DEPLOY`
+   when asked:
+
+       cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.104 && mkdir -p /root/dnb-5.18.104 && bash scripts/deploy-5.18.104.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.104/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Expected: PASSED, 0 failed, with notes; every switch off (QF-CA5: all 13 steps off and the ledger off); 089, 090 and
+   091 applied at the first boot, each verifying itself (QF-CA1); master's four new jobs registered and none dispatched
+   (QF-CA3). Any refusal before `DEPLOY` changed nothing: send the log file and stop. A deploy whose public sign-in page
+   redirects rolls itself back at once — QF-RB1 first, then 5.18.103 — and says so. Run it once: a second run that
+   finds 5.18.104 serving runs the `--after-only` checks instead. The cash sheet is read on the server only (`less`, its
+   path in the log). Where QC-N4 counts web applications still waiting, their ids are on that sheet: an admin
+   quotes each in uCRM by hand only after checking in uCRM that the customer has no quotation yet (known limit 10).
+5. **`--after-only`**, at least 20 minutes after the copy (the summary prints the time) — read-only:
+
+       cd /opt/dishnet && bash scripts/deploy-5.18.104.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.104/after-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+   Then, on its own, the quarantine's `--check`, as in step 1. Run `--after-only` again the next day after 15:00 UTC,
+   once the evening WhatsApp has run on the new code, and after each step below: QF-ON0–QF-ON5, VA-ON1, VN-ON1–VN-ON4,
+   OF-ON1, OF-ON2 and AC-ON1 judge each step that is on; a step that is off reads `OFF — not judged`.
+
+**The steps — yours alone, one at a time, only in this order** (root `docs/73` §H.2.12; the release's `SAFETY.md`:
+every switch through the tool, never `tools/set_config.php`, never a hand edit). The deploy script turns none on.
+`scripts/sales-followup.sh` runs the installed `tools/sales_followup.php` as the book's owner, never as root; its exit
+is 0 done, 2 refused (nothing saved), 3 a check, hook or assertion failed, and 1 when the wrapper itself refuses, having
+changed nothing. Each `on` refuses, saving nothing, unless every step before it is on, skipped or optional (1b and 10) —
+so `voice-measure` is on or skipped before `chase`, and 7–9 before `cold` and the offers; no step before it that is on
+reads FAIL (a FAIL is turned off or skipped, never stepped past); the checks its row needs read PASS; and its own
+precondition holds. A step that is off is not judged, so each comes on first and is checked after: its `--check`, then
+`--after-only` (the deploy's step 5, above). Where the ladder stands, read-only:
+
+    cd /opt/dishnet && bash scripts/sales-followup.sh show
+
+A step not wanted yet is passed with `skip`, the step and `--reason "…"` in your own words, no number: refused while
+the step is on, never for `report` or `agent-cc`, and it skips every step that needs it, each named; a later `on`
+clears it. A needed check that still reads `NOT_YET no_traffic` after 72 hours on may be accepted with
+`--accept-not-yet "…"` on the next `on`, the reason in your own words, no number (it is stored, and `show` prints it)
+— never a FAIL, never the voice chain's needs nor offers' L-ON.
+
+- **1 `report`** (P1) — read-only, on a copy of the book. First the report, its log
+  `/root/dnb-report/report-<UTC>.log` (the sheet it keeps in the same folder, `owners-<UTC>.txt`, holds the owners'
+  staff ids, owner n = staff id: read it on the server, never send it; send the `.log` only):
+
+      cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-report && bash scripts/sales-followup-report.sh 2>&1 | ( umask 077; exec tee /root/dnb-report/report-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+  then, once you have read it, its record. `--ran` is the day the report ran, in Kampala; run on another day, put that
+  day, `YYYY-MM-DD`, in place of the `$( … )`:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on report --ran $(TZ=Africa/Kampala date +%Y-%m-%d)
+
+  then its check, PASS once the report is recorded:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check report
+
+- **1b `agent-cc`, optional** (P7) — the agent who made a quotation in the visible Cc of the quotation e-mail when the
+  plugin sends it (never uCRM's own mailer), where the agent is known and has a valid address other than the
+  customer's. It needs step 1 and plugin mail configured (AC-N1 says how it is); an administrator who quotes is copied
+  too, unless `set agent-cc-admins 0`. While it is on and its check reads FAIL, every later `on` is refused until
+  `off agent-cc`. Its first live copies are the proof of DishNet's relay (known limit 7): report only whether the
+  agent's copy arrived, never the customer's name, number or e-mail address, and never forward the e-mail.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on agent-cc
+
+  then its check (AC-ON):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check agent-cc
+
+- **2 `ack`** (the ledger and P5) — the one send ledger per WhatsApp number comes on (at most 60 automatic messages a
+  day per number; chases first, offers use what is left), and with it P5, the instant reply to a voice note, every day
+  07:00–21:00 Kampala. Its precondition: 089's and 090's self-checks, `dn_tz()` Africa/Kampala and the AI on
+  (`ai_enabled`); where you want the ledger without the voice-note reply, `skip ack` instead.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on ack
+
+  then its check, L-ON and VA-ON1 read as one status, the worse of the two (L-ON reads `NOT_YET too_soon` for the
+  first 24 h the ledger is on, and a `too_soon` is never accepted, so `on tracking` waits a day):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check ack
+
+  If VA-ON1 reads FAIL for an acknowledgement that died with no decision, every later `on` is refused until `off ack`
+  and `on ack` again; the tool says so.
+- **3 `tracking`** (P2a) — every Uganda quotation tracked; nothing is sent. It needs the ledger on and L-ON.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on tracking
+
+  then its check (Q1-ON, `NOT_YET` until 24 h and one quote):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check tracking
+
+- **4 `list`** (P3) — each salesperson's morning list on WhatsApp, Monday to Saturday 08:00–11:00 Kampala, quote
+  numbers and counts only; *My quotations* appears in their menu with the names, their own leads only. Tell the
+  salespeople.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on list
+
+  then its check (Q2-ON, `NOT_YET` until the first Monday to Saturday after switch-on, after 11:00):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check list
+
+- **5 `voice-measure`** (P4, first rung) — voice notes fetched and measured only: nothing goes to OpenAI and nothing is
+  done with them. It needs the ledger on.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on voice-measure
+
+  then its check, VN-ON1, `NOT_YET` until 2 days and 20 audio rows:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check voice-measure
+
+  `FAIL fetch_unavailable` means Evolution may not keep media: `off voice-measure`, then `skip voice-measure`. The
+  voice rungs stop there; chases and offers stay open.
+- **6 `chase`** (P2b) — each quotation chased on day 1, 3 and 7 with the approved wording, STOP on each; the chase stops
+  when the customer writes, a person takes over, the customer says STOP, or the quotation is accepted or expires. It
+  needs tracking on for at least 72 hours. `on chase` prints what it would do — the R-01 measurement, the would-be
+  chases by handset (named by role and index, never a phone), the holds by reason, the persona state, the enquiry
+  drafts that become paced — and asks you to type `yes`: run it in a terminal, never piped.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on chase
+
+  then its check (Q3-ON, `NOT_YET` until an open day with a chase due):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check chase
+
+  Tell the agents: a customer who writes back, or whom a colleague answers, is chased no more.
+- **7 `voice-dry-run`** (P4, second rung: transcribed, nothing acted on) — the first rung that sends a recording to
+  OpenAI, so it refuses, and so does the voice worker, until the Privacy Policy paragraph naming OpenAI is published on
+  the website (in its source on the development branch, `29797c8`; a website deploy, the owner's) and its publish date
+  is recorded — the date it went live in place of `YYYY-MM-DD`, which the tool refuses as written:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh set ai_media_voice_privacy_line YYYY-MM-DD
+
+  It also needs the OpenAI key saved on the WhatsApp AI screen (the tool can never set it; `show` says *set* or *not
+  set*), the model in its allow-list (`whisper-1` by default) and `voice-measure` at VN-ON1 PASS. Before it, confirm on
+  OpenAI's own pages the ten points of root `docs/73` §H.3.22, each with the date you read it.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on voice-dry-run
+
+  then its check, VN-ON2, `NOT_YET` until 2 days and 10 calls (`FAIL opus_rejected`: OpenAI refuses WhatsApp's audio
+  on this model — do not go on):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check voice-dry-run
+
+  To take steps 10–12 before the Privacy Policy is live, skip it instead — 8 and 9 are skipped with it, and a later
+  `on voice-dry-run` clears its own skip:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh skip voice-dry-run --reason "waiting for the Privacy Policy"
+
+- **8 `voice-staff`** (third rung) — each voice note handed to a person with its transcript in the Inbox; the AI does
+  not answer it. It needs VN-ON2 at PASS. Tell staff to judge the transcripts' quality in the Inbox, Luganda and
+  Swahili above all, and to report their judgement, never a transcript or a customer's number: going on to step 9 is
+  the owner's decision.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on voice-staff
+
+  then its check, VN-ON3, `NOT_YET` for 7 days:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check voice-staff
+
+- **9 `voice-reply`** (fourth rung) — the AI answers voice notes in text on the numbers listed, and the instant reply
+  stops there. It needs VN-ON3 at PASS and the owner's approval, recorded by its date in place of `YYYY-MM-DD`;
+  `--channels` is `all`, or the numbers chosen, comma-separated — registry ids with the channel registry on, `sales`,
+  `support` or `account` with it off:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on voice-reply --channels all --owner-approved=YYYY-MM-DD
+
+  then its check, VN-ON4, `NOT_YET` for 3 days on the listed numbers:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check voice-reply
+
+- **10 `cold`, optional** (Q5) — a cold chase leaves from the quotation's own number (support or account), and a reply
+  is answered there in that number's role. It needs `chase` on for at least 72 hours and Q3-ON. `on cold` prints what it
+  would chase and what it refuses, by reason, and asks for one line on the state of support's assistant (no number):
+  run it in a terminal, never piped.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on cold
+
+  then its check (Q5-ON):
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check cold
+
+- **11 `offers-test`** (P6) — the *WhatsApp offers* screen opens for admins: an offer drafted with two or three
+  wordings, an optional image and 100, 200 or all; its preview; a test of each wording to the admin's own phone of
+  record. Nothing reaches a customer. It needs the ledger with L-ON at PASS and tracking with Q1-ON, at least one active
+  admin with a phone, and no offer running; `on offers-test` prints the baseline audience, counts only.
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on offers-test
+
+  then its check, `NOT_YET no_test` until each wording of an offer has a recorded test:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check offers-test
+
+- **12 `offers-live`** (P6) — **not until 5.18.105 is deployed.** Since 12 Sep the webhook's opt-out log line
+  (`evo_webhook.php`) carries the customer's number, as three older lines in `cron/staff_ssp_report.php`,
+  `lib/QuotationService.php` and `lib/WaAutoReplyService.php` carry a number; the owner ruled on 8 Nov that 5.18.105
+  masks all four and is ready before this step is switched on. The masking holds only once 5.18.105 serves, and
+  5.18.104's tool does not check for it: run the two commands below only then. It needs `offers-test` on with its
+  check at PASS. Then an admin presses Start on the screen — Pause and Stop are there too: a daily batch to customers
+  who chatted in the last 30 days, from the number they chatted on, STOP on each, "all" spread over days. WhatsApp's
+  tolerance of offers on these numbers is not known (known limit 4).
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh on offers-live
+
+  then its check:
+
+      cd /opt/dishnet && bash scripts/sales-followup.sh --check offers-live
+
+**Q1 is unanswered** (known limit 2): while `sf_persona_confirmed` is unset, on a salesperson's own number the day-3
+chase and the voice-note reply are held and day 7 uses form B. Once the owner answers, its date in place of
+`YYYY-MM-DD` — unless the words change, which is a rebuild:
+
+    cd /opt/dishnet && bash scripts/sales-followup.sh set persona-confirmed YYYY-MM-DD
+
+### Rollback — its own block, never pasted with the deploy
+
+Only if it is needed. Every deploy and `--after-only` prints it after the verdict, on its own. Do not roll back on your
+own unless staff or customers are affected; send the log file first. To stop one part only, turn its step off instead,
+with the same tool, in a command of its own (`off` and the step's name). The steps that need it go off with it, each
+named, and a step's off-hook runs where its row has one: the offers' hooks pause running offers; the chase's runs only
+in a rollback, so a plain `off chase` closes no open quote follow-up. `off sending` takes the ledger off, and every send
+that claims in it stops. That is not a rollback: 5.18.104 stays, and the step comes back with `on`, in its order.
+
+The rollback asks you to type `ROLLBACK` before it changes anything. As root, on its own:
+
+    cd /opt/dishnet && bash scripts/deploy-5.18.104.sh --rollback 2>&1 | ( umask 077; exec tee /root/dnb-5.18.104/rollback-$(date -u +%Y%m%dT%H%M%SZ).log )
+
+Then the quarantine's `--check`, its own command, as in the deploy's step 1 (the runbook, above).
+
+**What it does, in order.** First QF-RB1, under 5.18.104's installed code: `scripts/sales-followup.sh off all
+--rollback` turns every 5.18.104 switch off in the one sequence — offers (12, 11) → `cold` and `chase` (10, 6) → the
+voice rungs (9, 8, 7, 5) → `list`, `tracking` (4, 3) → `ack` (P5's keys, then the ledger last) → the record keys and
+`agent-cc`'s two, last — each part's hook asserted and every key read back. Running offers are paused and their claimed
+recipients settled `uncertain` or returned to `queued`, so nothing is sent twice; open quote follow-ups are closed and
+their drafts expired, none left (5.18.103's follow-up run has no kind filter and would draft about them); pending audio
+rows are settled and the voice turns drained; a key held by `data/config.json` or `<data>/config.json` fails
+`key_outside_overrides`. **Any failure stops before the put-back and puts nothing back**: it prints what is still open —
+rows and key names — with their by-hand put-back, in its own block; send the log file before doing anything by hand.
+Then 5.18.103 (`221c9dc`) is put back and checked (QF-RB3): the 45 files 5.18.104 changes, 5.18.103's by sha256;
+master with none of the four jobs; no 5.18.104 key; no open quote follow-up. It refuses a copy that stopped part-way,
+and prints 5.18.103's by-hand put-back.
+
+**What it brings back on Uganda:** 5.18.103 — no chase, no morning list, no voice-note handling, no acknowledgement, no
+offers screen, no agent Cc. 5.18.103's WhatsApp AI screen prints the stored OpenAI key into its page again, so wherever
+OpenAI was ever called, or that count cannot be read, the rollback says to rotate the key (VN-RB6): do it.
+
+**What stays:** 089's, 090's and 091's tables, columns, ledger and marks, read by nothing under 5.18.103 (QF-RB2); the
+215 files 5.18.104 adds, on disk, reached by nothing; the rows the hooks wrote — quote follow-ups closed, never resumed;
+offers paused, resumed only by an admin after a redeploy with `offers-test` and `offers-live` on again; every setting,
+`sf_persona_confirmed` and `quote_agent_cc_admins` among them, which `off` never clears. The uCRM catalogue, 5.18.103's
+own, exactly as an admin left it; ECO Bank, its switch and every statement kept; the quoting organization; the channel
+registry and every number's owner; the quotes already in uCRM. The web-direct applications with no quotation are
+counted for the record (QC-RB2): 5.18.103 handles each as 5.18.104 does, and none is left to quote by hand.
+
+**After it:** a later deploy of 5.18.104 goes with `--redeploy` (the rollback's summary prints it, its own command, to
+run only once the cause is understood), finds every switch off (QF-G4), and each step comes on again in its order with
+its check. Where 5.18.104's keys were left set — a put-back by hand without its `off` — QF-G4 refuses, and
+`--clear-switches`, typed with the redeploy, clears them once `DEPLOY` is typed; its `--check` says so first. **Only if
+the script cannot run**, every deploy and `--after-only` prints the same put-back by hand, two commands, each its own:
+first every switch off with the installed tool, and only once that has exited 0, 5.18.103's put-back, which counts
+nothing.
+
+### Known limits (recorded, accepted — the release's `SAFETY.md`, `docs/73`)
+
+1. **Every part is OFF after the deploy**, and each is switched on by hand, in the one order. A step turns on only
+   after the step before it has passed its check; step 6, the chase, needs tracking on for 72 hours first.
+2. **Q1 is unanswered.** While `sf_persona_confirmed` is unset, on a salesperson's own number the day-3 chase and the
+   voice-note reply are held and day 7 uses form B. A later answer is one command, `set persona-confirmed <date>`,
+   unless the words change, which is a rebuild.
+3. **The Privacy Policy paragraph naming OpenAI is not published.** It is in the website's source on the development
+   branch (`29797c8`). Until it is published and its date recorded, step 7 and the voice worker refuse.
+4. **WhatsApp's tolerance of offers on these numbers is not known.** The ban risk is reduced, not removed (`docs/73`
+   §H.4.21): marketing at scale belongs on the official WhatsApp Business Platform (D10).
+5. **What a message the webhook cannot store hides.** A reply or a STOP sent in disappearing-message or view-once mode
+   is not stored; offers leave out any phone with such a mark, but an `@lid` sender with no number cannot be marked. A
+   colleague's voice note or captionless media from the handset stops the chase and the acknowledgement, but does not
+   stand the AI down, as today (`docs/73` OQ3).
+6. **The stop-word scans read English only.** A stop in another language is missed; a false match costs only offers.
+   A spoken STOP is heard only once the AI hears voice notes (step 9).
+7. **The quotation e-mail's copy depends on DishNet's relay**, which the suite proves only against a fake one: how the
+   relay answers an extra `RCPT` and what header length it refuses are measured by the first live copies.
+8. **Observed in passing and not changed** (`docs/73` §H.5.18): the double quotation e-mails OB1 and OB2 that are
+   already live; `quote_mail.log` writes the customer's address in clear (OB3); `tools/quote_email_send.php` sends
+   without the client's other contacts (OB4).
+9. **Not established, read-only, until the deploy prints it**: the server's values, the volumes per number, the
+   reminder job's usual finish, and the master cycle's real durations (`docs/73` §H.2.20, §H.3.28, §H.4.22, §H.5.19).
+10. **Carried from 5.18.103:** its known limits 2 (with the switch on, a 5.18.102 web registration still waiting is
+    quoted in uCRM by hand, its id on QC-N4's sheet, once an admin has checked in uCRM that the customer has no
+    quotation yet, as QC-N4's own note says,
+    and nothing is quoted at price 0; its sentence on a rollback, that 5.18.102 never quotes a `web-direct` application,
+    does not apply, since a rollback of this release puts back 5.18.103, which keeps the uCRM catalogue and quotes
+    `web-direct` applications itself, so QC-RB2 is a record only), 3 (the retailer app and the
+    mobile API keep the plugin's lists), 4 (stock deduction matches cart titles; QC-N5), 5 (who may press a standard
+    quotation; `docs/72` §G.14's three questions are still open), 6 (not measured in uCRM 4.5.33: a quote line's
+    `productId`, and whether it shows `adminNotes` only to staff; a taxable product gets no automatic quote), 7 (the
+    deploy proves the catalogue on copies, GET-only, and makes no test quote; real quotations prove it live), 8
+    (5.18.102's 4, 6, 7, 8, 10, 11 and 12), 10 (no clean rehearsal trial in this container: the three inherited checks
+    98-0, 99-0 and 100-0) and 11 (Git's 7-character short forms: on 7 Nov, after three `wip/*` heads were moved to
+    `refs/keep/` in this container's repository only, a repacked scratch clone held 15,707 objects and wrote `994d660`
+    and `221c9dc` in 7 characters; the rehearsal's own control, 104-0, then read 15,707 in trials 1–3, 15,857 in trial
+    4, 15,909 in trial 5, 15,960 in trial 6 and 15,972 in trial 7, 412 under the limit, and 15,987 (397 under) in the
+    record); its 9 is limit 11 below and its 12 limit 12. **Its known limit 1 no longer describes the server:** an admin
+    turned the uCRM catalogue's switch on on 4 Nov, at 07:13:08 Kampala (its record above); this release leaves the
+    catalogue's files, settings and switch as they are, and if an admin turned the switch off, limit 1 would hold again
+    as written.
+11. **Four test files fail in this container and nowhere else on record** — `test_install_authorisation` 379/2,
+    `test_mail_quote` 91/1, `test_migration_integrity` 27/1, `test_secure_file` 22/3 — 5.18.103's known limit 9,
+    unchanged: the same seven FAIL lines, word for word, in 5.18.103's passes A2 and B3 on `221c9dc` and this release's
+    A3 and B on `994d660`, and the build's stage runs read the same on `221c9dc` beside their own. This release touches
+    none of the four, nor `lib/MailService.php` or `lib/SecureFile.php`, and the server runs none of them. Cause
+    established for the first two (the decoded subject keeps the whitespace between encoded words:
+    `mb_decode_mimeheader` under this container's PHP 8.3.6; the server runs 8.1.34); not for the other two.
+12. **5.18.103's known limit 12 is not corrected here.** The one wrong sentence of 5.18.103's `SAFETY.md` (Operator
+    action, step 3) is still in this release's `SAFETY.md`; it is left for the next release.
+13. **Phone numbers in four log lines, older than this release, to be masked in 5.18.105.** `evo_webhook.php`
+    writes `opt-out recorded for <number> (matched "…")` each time it records a new opt-out.
+    - **Its history:** it has done so since `88c317a` (12 Sep). It is in 5.18.103 as deployed, and this release leaves
+      it unchanged (line 357 there, 381 here). Every STOP the webhook records as a new opt-out writes one such line.
+    - **Three older lines also log a number:**
+      - `cron/staff_ssp_report.php:123`: a staff member's name and number, in its "sent" line;
+      - `lib/QuotationService.php:1585`: the number a quotation's WhatsApp could not reach;
+      - `lib/WaAutoReplyService.php:1576`: the number a CRM job was created for.
+    - **How it was found:** by the rehearsal's log scan in its offers week (5o13). The scan now leaves out that one exact
+      form and counts it: one line, from 5o11's STOP, which proves the form excluded is the form written. It prints a
+      note, `RH-NOTE KNOWN OLDER ISSUE`, with that count, never the line itself. Every other line is scanned as before.
+    - **The owner ruled on 8 Nov:**
+      - 5.18.104 deploys as built.
+      - 5.18.105 masks all four lines, and is ready before step 12 (`offers-live`) is switched on. Step 12 is not
+        switched on until 5.18.105 is deployed: the masking holds only once it serves, and 5.18.104's tool does not
+        check for it (the runbook, step 12).
+
+    This release's own rule, that new logs carry counts and fixed codes only, holds for every line it adds; these four
+    are older.

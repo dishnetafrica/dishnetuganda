@@ -3,7 +3,7 @@
 Status: **decisions recorded; 5.18.103 built and tested (§G.16), pushed and DEPLOYED 3 Nov (copy 09:01:02 UTC; root
 `docs/07`), and switched ON 4 Nov 04:13 UTC: its after-check PASSED 124 ok, 0 failed, 6 notes, and the quarantine's
 `--check` 9 ok, 0 failed, 2 notes (root `docs/07`). 5.18.104 (§H; D8–D16) is designed in root `docs/73`,
-APPROVED 5 Nov with every default (its §Q), and being built.** 5.18.103 was cut on the then-live release, `release/5.18.102` (`1a0ea5f`),
+APPROVED 5 Nov with every default (its §Q), and built and tested (its §S), NOT deployed.** 5.18.103 was cut on the then-live release, `release/5.18.102` (`1a0ea5f`),
 never the development branch's tip: that tip lacks 5.18.99–5.18.102 (§C.4).
 
 ## A. The request (the owner, 1 Nov 2026)
