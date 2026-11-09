@@ -16692,9 +16692,16 @@ as root on the server, after 5.18.104's entry above.
     quotation summary's sign-off as before.
   - R19: not yet conclusive. The retry job last ran at 03:50:07 UTC, before the copy; run `--after-only` after
     04:10:25 UTC.
+- **The after-check, 9 Nov** (`--after-only`, begun 04:18:36 UTC, from the terminal pasted): **PASSED, 146 ok, 0
+  failed, 28 notes.** R19 conclusive: the retry job ran at 04:15:03 UTC, after the copy, and the quarantine holds. V4:
+  no fatal or parse error since the deploy (3,971 log lines read). QC-ON1–QC-ON3 as on 4 Nov, and **QC-ON4 now
+  passes**: the four web-direct applications on the copy each keep G-7 — the check 5.18.103's runbook had left
+  waiting for the first direct sale. QF-CA5 and QF-ON0–QF-ON5, VA-ON1, VN-ON1–VN-ON4, OF-ON1, OF-ON2 and AC-ON1: all
+  13 steps and the ledger off, each `OFF — not judged`. Z1: the live vault unwritten since the deploy's stage A. uCRM
+  was asked 22 GETs and nothing else.
 - **Still to come**, the summary's *your steps*:
-  - `--after-only` after 04:10:25 UTC, then the quarantine's `--check`, each its own command; `--after-only` again the
-    next day after 15:00 UTC, once the evening WhatsApp has run on the new code;
+  - the quarantine's `--check`, its own command; `--after-only` again the next day after 15:00 UTC, once the evening
+    WhatsApp has run on the new code;
   - the agents told that nothing changes for them until a step is on;
   - the report (`scripts/sales-followup-report.sh`), then `on report --ran <its Kampala date>` and its `--check`, then
     each step in the ladder's order, each after its check. Step 6 (`chase`) and step 12 (`offers-live`) wait for
