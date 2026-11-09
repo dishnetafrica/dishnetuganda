@@ -16652,3 +16652,51 @@ nothing.
 
     This release's own rule, that new logs carry counts and fixed codes only, holds for every line it adds; these four
     are older.
+
+## 9 Nov — 5.18.104 DEPLOYED (copy 03:50:25 UTC) — PASSED 231 ok / 0 failed / 57 notes
+
+**From the operator's terminal**, pasted on 9 Nov: the `--check` whole, the deploy from the middle of stage A down (the
+log's opening lines were not in the paste); the script prints no secret and no figure there. Each run its own command,
+as root on the server, after 5.18.104's entry above.
+
+- **The `--check`** (begun 03:43:21 UTC; its `git pull` brought the checkout from `28b2b30` to `347e557`, and
+  `release/5.18.104` was fetched for the first time): **GO, 81 ok, 0 failed, 51 notes**; nothing was backed up, copied
+  or switched. A0: the release delta exactly the 260 pinned files and the 3 migrations. BR1 and Q-G1: the installed
+  plugin was 5.18.103 (`221c9dc`), all 1,545 tracked files byte for byte. A14: the quarantine's `--check` of 4 Nov
+  (04:57:22 UTC) accepted, so none was needed. QF-G1: a first deploy. QF-G2: on a copy, 089, 090 and 091 applied
+  through the release's runner, each verifying itself (38, 79 and 25 checks), with Part V's negative control. QF-G4:
+  none of the 55 switch and record keys set. VN-G3: the OpenAI key is set (never printed).
+  - **The migration trial also printed `071_dpo_payments.sql:checksum_mismatch`.** Not 5.18.104's: 071 was edited on
+    13 Sep (`df5a100`, `cd65458`) after the server had applied it, so `MigrationRunner` has warned about it and skipped
+    it at every boot since, under 5.18.103 as now. 5.18.104 changes neither 071 nor the runner, and the script names
+    this case as the book's history, not judged. Left for a later release.
+  - **AC-N1:** one active account's e-mail address is the company's Reply-To or sender. If step 1b (`agent-cc`) is
+    ever turned on, a customer would see that address in Cc on that agent's quotations (`docs/73` PQ4).
+  - Other notes: the PHP log could not be read (QF-N6, VN-G5, OF-N2), so those counts come from the marks once step 2
+    is on; QF-N5's longest master cycle not established; Q-G5 inconclusive; Q-N3 and QL-N2 `http404`, as before; QC-N5:
+    the 31 hardware items still have no stock category of the same title.
+- **The deploy** (begun 03:47:12 UTC; the backup in `/root/dnb-5.18.104/backup-20261109T034712Z`: the book, one
+  consistent copy, integrity ok, 259 tables; the data folder; the installed 5.18.103; the stray folder's files; the
+  vault; the event queue, 0 events not done; the QL key): every check of stage A held again, then GO; `DEPLOY` typed;
+  **the container serves `994d660`**, the copy at 03:50:25 UTC. After the copy: V1–V13 over the public address, BA4,
+  CA4, Q-CA4, Q-CA5, QL-CA3, QC-CA2 and QC-CA3; then R1–R26, BA1, BA2, BK3, CA2, CA3, Q-CA1–Q-CA3, Q-CA6,
+  TN-CA1–TN-CA3, QS-CA1, QL-CA2, QC-CA1, QF-CA1–QF-CA8, VN-M1, VN-M2, VN-CA1–VN-CA4, VN-K1, VN-K2, OF-M1, OF-M2,
+  OF-CA1–OF-CA5, AC-CA1, AC-CA2, Z1 and Z2. **PASSED, 231 ok, 0 failed, 57 notes.** uCRM was asked 48 GETs and
+  nothing else.
+  - R7: the migration ledger moved by exactly 089, 090 and 091, applied at the first boot (84 rows to 87); QF-CA1,
+    VN-M1 and OF-M1: each verifying itself. QF-CA5: all 13 steps off and the ledger off. QF-CA3: master registers the
+    four new jobs and dispatches none.
+  - VN-K1: the OpenAI key is in none of the plugin's 19 log files. QC-CA1: the forms offer exactly what stage A's pin
+    offered, 82 compared, 0 different. CA3: no drift since stage A; BA2: cash in hand the same under both codes. V4: no
+    fatal or parse error since the copy. South Sudan, Domain B, the pilot, every switch, the Cashbook, ECO Bank and the
+    quotation summary's sign-off as before.
+  - R19: not yet conclusive. The retry job last ran at 03:50:07 UTC, before the copy; run `--after-only` after
+    04:10:25 UTC.
+- **Still to come**, the summary's *your steps*:
+  - `--after-only` after 04:10:25 UTC, then the quarantine's `--check`, each its own command; `--after-only` again the
+    next day after 15:00 UTC, once the evening WhatsApp has run on the new code;
+  - the agents told that nothing changes for them until a step is on;
+  - the report (`scripts/sales-followup-report.sh`), then `on report --ran <its Kampala date>` and its `--check`, then
+    each step in the ladder's order, each after its check. Step 6 (`chase`) and step 12 (`offers-live`) wait for
+    5.18.105 (the owner's rulings, 8 and 9 Nov); step 7 (`voice-dry-run`) waits for the Privacy Policy page to be
+    published and its date recorded.

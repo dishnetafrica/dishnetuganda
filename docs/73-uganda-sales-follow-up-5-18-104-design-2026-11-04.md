@@ -1,8 +1,9 @@
 # 73 — Uganda: 5.18.104, the sales follow-up — report, quote chase, daily list, voice notes, offers and the agent's copy (design, 4 Nov 2026)
 
 Status: **design APPROVED by the owner on 5 Nov 2026, with every question's default (§Q); built and tested (§S):
-`release/5.18.104` = `994d660`, pushed 7 Nov on the owner's word; `scripts/deploy-5.18.104.sh` rehearsed; NOT deployed.**
-No server change exists for 5.18.104. The owner's decisions are root `docs/72` §B (D8–D16) and the wording they approved is `docs/72` §H.1; this
+`release/5.18.104` = `994d660`, pushed 7 Nov on the owner's word; `scripts/deploy-5.18.104.sh` rehearsed; DEPLOYED 9 Nov
+(copy 03:50:25 UTC; PASSED 231 ok, 0 failed, 57 notes; root `docs/07`), every switch OFF.**
+5.18.104 is installed with every switch off; no step has been turned on. The owner's decisions are root `docs/72` §B (D8–D16) and the wording they approved is `docs/72` §H.1; this
 document continues `docs/72` §H. Its base is the live release 5.18.103 (`release/5.18.103` = `221c9dc`), switched on
 4 Nov (root `docs/07`).
 
