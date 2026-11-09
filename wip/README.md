@@ -9,6 +9,17 @@ Nothing here is deployed or deployable.
 `origin/release/5.18.103` (`221c9dc`). `release/5.18.104` = `994d660` was pushed on the operator's word on 7 Nov, so the
 patch is now only a copy of it. Apply with `git apply` on a checkout of `221c9dc`. Nothing here is deployed.
 
+`release-5.18.105.patch` is `git diff 994d660..f764699`: the 5.18.105 release (root `docs/74`), one commit on
+`origin/release/5.18.104` (`994d660`), squashed from the working branch on 9 Nov. `release/5.18.105` is NOT on origin: it is
+pushed only on the operator's word, and until then this patch is the only copy a container restart cannot lose. Apply
+with `git apply` on a checkout of `994d660`. Nothing here is deployed.
+
+`derive-5.18.105/` derives `scripts/deploy-5.18.105.sh` from `scripts/deploy-5.18.104.sh` by asserted text edits — parts
+A, B, LK, R, V, O, P, L, H, C and Z, each asserting its anchor, its count, its replacements and its result — and renders
+`scripts/sales-followup-report.sh` again for the new pin: `python3 -I derive105.py REPO RELEASE_REPO PIN_FULL`, with
+RELEASE_REPO a clone holding `f764699` (PIN_FULL, the full id of `release/5.18.105`). Run twice, it writes byte-identical
+files, and the committed script and report wrapper are that output.
+
 `derive-5.18.104/` derives `scripts/deploy-5.18.104.sh` from `scripts/deploy-5.18.103.sh` by asserted text edits — parts
 A, B, F, R, H, V, O, P, C, T and Z, each asserting its anchor, its count, its replacements and its result — and renders
 `scripts/sales-followup-report.sh` from `report_wrapper.sh.txt`: `python3 -I derive104.py REPO RELEASE_REPO PIN_FULL [OUT]`,

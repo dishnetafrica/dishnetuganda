@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 #
-# sales-followup-report.sh — P1, 5.18.104's read-only sales follow-up report, run on the server by hand (Uganda; root
-# docs/73 §H.2.8, §H.2.21 9.5). READ-ONLY: it reads a COPY of the book and changes nothing — no table, no key, no file of
-# the plugin's, nothing in uCRM. As root on the host:
+# sales-followup-report.sh — P1, the read-only sales follow-up report at 5.18.105 (5.18.104's, its BY NUMBER column
+# padded by characters: root docs/74 §H.4.2), run on the server by hand (Uganda; root docs/73 §H.2.8, §H.2.21 9.5).
+# READ-ONLY: it reads a COPY of the book and changes nothing — no table, no key, no file of the plugin's, nothing in
+# uCRM. As root on the host:
 #
 #   1. it finds the container, the installed plugin, the data folder and the book's owner (the deploy scripts' discovery),
 #      and refuses a root-owned book;
-#   2. it takes the report, tools/sales_followup_report.php, and the code it reads — lib/QuoteSendEvidence.php and
-#      lib/HumanTakeover.php, which 5.18.103 does not have, the rest of the release's lib/ beside them (WaSendBudget and
-#      its readers, on a book that already holds 089's ledger) and profiles/ — from Git at the reviewed 5.18.104 commit
-#      (994d660), the report's and QuoteSendEvidence's sha256 checked; and it asserts that the INSTALLED PhoneNumber,
-#      TenantProfile, PluginConfig, ConfigVault and ContactOptOut equal that commit's bytes (they are 5.18.103's too, so
-#      the report runs on 5.18.103 as well);
+#   2. it takes the report, tools/sales_followup_report.php, and the code it reads — lib/QuoteSendEvidence.php,
+#      lib/HumanTakeover.php and the rest of the release's lib/ beside them (WaSendBudget and its readers, on a book that
+#      already holds 089's ledger) and profiles/ — from Git at the reviewed 5.18.105 commit (f764699), the report's and
+#      QuoteSendEvidence's sha256 checked; and it asserts that the INSTALLED PhoneNumber, TenantProfile, PluginConfig,
+#      ConfigVault and ContactOptOut equal that commit's bytes (they are 5.18.104's too, so the report runs on 5.18.104,
+#      before the deploy and after a rollback, as well);
 #   3. as the book's owner, in a folder of mode 700 in the container's /tmp: it checks the free space (the book's size
 #      × 3 + 64 MB); makes the copy with VACUUM INTO, runs integrity_check and sets journal_mode=DELETE; cuts the
 #      settings row, with secure_delete=ON, the three settings files' copies and a vault's copy to the tenant keys and the
@@ -26,7 +27,7 @@
 #
 #   cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && mkdir -p /root/dnb-report && bash scripts/sales-followup-report.sh 2>&1 | ( umask 077; exec tee /root/dnb-report/report-$(date -u +%Y%m%dT%H%M%SZ).log )
 #
-# There is no rollback, because nothing changes. This file is written by wip/derive-5.18.104/derive104.py from the
+# There is no rollback, because nothing changes. This file is written by wip/derive-5.18.105/derive105.py from the
 # release commit (its pins come from Git); never edit it by hand.
 set -uo pipefail
 umask 077
@@ -36,11 +37,11 @@ CONTAINER="${UCRM_CONTAINER:-ucrm}"
 IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/$PLUGIN}"
 PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_COMMIT="994d660"; RELEASE_COMMIT_FULL="994d660628cc5b1b42bee648b44b58e389f44bf2"; RELEASE_BRANCH="release/5.18.104"
+RELEASE_COMMIT="f764699"; RELEASE_COMMIT_FULL="f764699efb608deb05141818dc61305230f7ee18"; RELEASE_BRANCH="release/5.18.105"
 REPORT="tools/sales_followup_report.php"
-REPORT_SHA256="577e301ec053a2cbc7d6fbb8a50d0ff5719f56384f9457fb8b9b836a3175213d"
+REPORT_SHA256="691ef613ba20c584a840d9070fe9217f188b8a7d3002b1e3b306ad7aede6e479"
 QSE_SHA256="852a12ceb55a3dcb77c5f9a94b232ad17c922fb0ad903e3947b1223b1d04c540"   # lib/QuoteSendEvidence.php at the release commit
-# the installed files the report reads that 5.18.103 and 5.18.104 share byte for byte (§H.2.21 9.5 step 2)
+# the installed files the report reads that 5.18.104 and 5.18.105 share byte for byte (§H.2.21 9.5 step 2)
 INSTALLED_SUMS="$(cat <<'SUMS'
 ee36e20115aea190212b62a7b1ef5bbeac965114df4e8bf8474c309b6e5909d2  lib/PhoneNumber.php
 6e37597c1e62fc7520c21feebc522ce0d07522dc41a81387fcff54203d185053  lib/TenantProfile.php
@@ -88,7 +89,7 @@ while read -r s f; do
   [ "$(sha256sum "$DEST/$f" 2>/dev/null | cut -c1-64)" = "$s" ] || BAD="$BAD $f"
 done <<< "$INSTALLED_SUMS"
 [ -z "$BAD" ] || stop "these installed files are not the reviewed bytes the report was built against:$BAD"
-echo "  code            $REPORT (sha256 ${REPORT_SHA256:0:16}…), lib/ and profiles/ from Git at $RELEASE_COMMIT; the installed $N files it shares with 5.18.103 equal that commit's bytes"
+echo "  code            $REPORT (sha256 ${REPORT_SHA256:0:16}…), lib/ and profiles/ from Git at $RELEASE_COMMIT; the installed $N files it shares with 5.18.104 equal that commit's bytes"
 mkdir -p "$HOSTW/c" && git -C "$REPO" archive "$RELEASE_COMMIT_FULL" "$PLUGIN/$REPORT" "$PLUGIN/lib" "$PLUGIN/profiles" | tar --no-same-owner -xf - -C "$HOSTW/c" \
   && chmod -R a+rX "$HOSTW/c" || stop "the release's code could not be taken from Git"
 

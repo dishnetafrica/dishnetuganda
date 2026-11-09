@@ -1,0 +1,265 @@
+# ── 5.18.105: the masked lines (LM; root docs/74 §H.4.5) ─────────────────────────────────────────────────────────────────
+# The line list comes from the build, never from a fixed four (gap 6): derive105.py computes 5.18.105's hunks in its
+# runtime files from Git (994d660 → the pin, diff -U0) and pins them here, one entry per hunk — its file, its label (the
+# LN its marker names; "tail", "report" or "loader" for the helper, the report's column fix and webhook.php's loader),
+# and the line count and sha256 of its old text and of its new text, each taken as one block (the lines joined by
+# newlines), the 5.18.105 marker lines left out: markers are never counted, and this script carries no source text. A
+# block is found in a file as a run of that many consecutive lines whose joined text has that sha256 — counted as blocks,
+# never single lines, since an added line need not be unique (LN-03's loader already stands in lib/QuotationService.php).
+# Every count below was asserted on Git's two trees by the derivation. An entry that only inserts has no old block (0|-).
+LM_HUNKS="$(cat <<'HUNKS'
+@@LM_HUNKS@@
+HUNKS
+)"
+LM_N=@@LM_N@@        # the entries above
+LM_LN_N=@@LM_LN_N@@     # of them, the masked log lines (an LN, with an old block): what a rollback writes numbers in again
+# The on-chase precondition's two strings are not carried here — this script carries no source text it can read from
+# Git: lm_w2_strings reads them at run time from the pin's lib/SalesFollowupChecks.php (held by PREV_KEPT, 994d660's
+# bytes in both releases), the two needles of the one `if (strpos($src, "…") === false || strpos($src, "…") === false) {`
+# line of its case 'chase', PHP's \$ read as $, and prints them one per line — or nothing when that line is not found
+# exactly once. The derivation asserted that this reading gives the two strings it read itself (derive105.py, partL).
+# evo_webhook.php must hold each once, or `on chase` refuses with w2_missing (LM-G2, LM-CA1).
+lm_w2_strings() {
+  local l
+  l="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/lib/SalesFollowupChecks.php" 2>/dev/null \
+    | sed -n "/^ *case 'chase':\$/,/^ *case '/p" \
+    | grep -E '^ *if \(strpos\(\$src, "[^"]+"\) === false \|\| strpos\(\$src, "[^"]+"\) === false\) \{$')"
+  [ "$(grep -c . <<< "$l")" = "1" ] || return 0
+  sed -E 's/^ *if \(strpos\(\$src, "([^"]+)"\) === false \|\| strpos\(\$src, "([^"]+)"\) === false\) \{$/\1\n\2/; s/\\\$/$/g' <<< "$l"
+}
+LM_PHP="$(cat <<'PHP'
+// LM_PHP — 5.18.105's masked lines (root docs/74 §H.4.5), one mode per call, as the database's owner in the container.
+// "count" reads a file's text on stdin and counts LM_HUNKS' blocks in it; "sinks" reads the logs read-only — the PHP log's
+// tail, the data folder's logs, plugin.log, and activity_log in the book opened SQLITE_OPEN_READONLY — and prints counts
+// only, never a line. PHP 7.4 syntax.
+$mode = (string)($argv[1] ?? '');
+$a = array_slice($argv, 2);
+try {
+    switch ($mode) {
+    case 'count':  // count FILE HUNKS < TEXT — each of FILE's entries: label=<runs of its old block>/<runs of its new block>
+        [$file, $hunks] = $a;
+        $lines = explode("\n", (string)stream_get_contents(STDIN));
+        $m = count($lines); $out = [];
+        $runs = function (int $n, string $sha) use ($lines, $m): int {
+            if ($n <= 0) return -1;
+            $k = 0;
+            for ($i = 0; $i + $n <= $m; $i++) if (hash('sha256', implode("\n", array_slice($lines, $i, $n))) === $sha) $k++;
+            return $k;
+        };
+        foreach (explode("\n", (string)$hunks) as $h) {
+            $p = explode('|', $h);
+            if (count($p) !== 6 || $p[0] !== $file) continue;
+            $out[] = $p[1] . '=' . $runs((int)$p[2], $p[3]) . '/' . $runs((int)$p[4], $p[5]);
+        }
+        echo $out === [] ? 'none' : implode(' ', $out);
+        break;
+
+    case 'sinks':  // sinks COPYUNIX PHPLOG PDD PLUGINROOT — LM-CA2: in the PHP log (its last 32 MiB), the old-form opt-out lines
+                   // ("opt-out recorded for " and a number) stamped 60 s or more after the copy, and those in the minute after
+                   // it (in flight); in each sink 5.18.105's lines write, the records stamped 60 s or more after the copy that
+                   // hold a run of 9 or more digits — overdue_cron_status.json judged only when its run started then, and only
+                   // its output field. Counts only.
+        [$cu, $plog, $pdd, $proot] = [(int)$a[0], (string)$a[1], (string)$a[2], (string)$a[3]];
+        $from = $cu + 60;
+        $long = '/(?<![\d.])\d{9,}(?!\d)/';
+        $tail = function (string $f) {
+            if ($f === '' || !is_file($f) || !is_readable($f)) return null;
+            $h = @fopen($f, 'rb'); if (!$h) return null;
+            $s = (int)filesize($f); if ($s > 33554432) fseek($h, $s - 33554432);
+            $t = (string)stream_get_contents($h); fclose($h); return $t;
+        };
+        $when = function ($v) {
+            if (is_int($v) || (is_string($v) && ctype_digit($v))) { $v = (int)$v; return $v > 100000000000 ? intdiv($v, 1000) : $v; }
+            if (!is_string($v) || trim($v) === '') return null;
+            $t = strtotime($v); return $t === false ? null : $t;
+        };
+        $stampOf = function (array $r) use ($when) {
+            foreach (['time', 'timestamp', 'ts', 'created_at', 'at', 'date', 'logged_at', 'when'] as $k) {
+                if (array_key_exists($k, $r)) { $t = $when($r[$k]); if ($t !== null) return [$t, $k]; }
+            }
+            return [null, null];
+        };
+        $out = [];
+        $t = $tail($plog);
+        if ($t === null) $out[] = 'phplog=unreadable';
+        else {
+            $late = 0; $infl = 0; $und = 0;
+            foreach (explode("\n", $t) as $ln) {
+                if (!preg_match('/opt-out recorded for \+?\d/', $ln)) continue;
+                $ts = preg_match('/^\[([^\]]+)\]/', $ln, $mm) ? $when($mm[1]) : null;
+                if ($ts === null) $und++; elseif ($ts >= $from) $late++; elseif ($ts >= $cu) $infl++;
+            }
+            $out[] = 'phplog=read optout_late=' . $late . ' optout_inflight=' . $infl . ' optout_undated=' . $und;
+        }
+        $s = [];
+        foreach (['webhook_log.json' => $pdd . '/webhook_log.json', 'quote_wa_log.json' => $pdd . '/quote_wa_log.json'] as $n => $f) {
+            $j = $tail($f);
+            if ($j === null) { $s[] = $n . ':absent'; continue; }
+            $d = json_decode($j, true);
+            if (!is_array($d)) { $s[] = $n . ':unreadable'; continue; }
+            $k = 0; $h = 0; $u = 0;
+            foreach ($d as $r) {
+                if (!is_array($r)) continue;
+                [$ts, $key] = $stampOf($r);
+                if ($ts === null) { $u++; continue; }
+                if ($ts < $from) continue;
+                $k++; unset($r[$key]);
+                if (preg_match($long, (string)json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))) $h++;
+            }
+            $s[] = $n . ':' . $k . '/' . $h . ($u ? '/undated' . $u : '');
+        }
+        foreach (['invoice_notify_cron.log' => $pdd . '/invoice_notify_cron.log', 'evo_sync.log' => $pdd . '/evo_sync.log', 'plugin.log' => $proot . '/data/plugin.log'] as $n => $f) {
+            $x = $tail($f);
+            if ($x === null) { $s[] = $n . ':absent'; continue; }
+            $k = 0; $h = 0;
+            foreach (explode("\n", $x) as $ln) {
+                if (!preg_match('/^\[?(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[^\]\s]*)\]?\s?(.*)$/', $ln, $mm)) continue;
+                $ts = $when($mm[1]);
+                if ($ts === null || $ts < $from) continue;
+                $k++; if (preg_match($long, $mm[2])) $h++;
+            }
+            $s[] = $n . ':' . $k . '/' . $h;
+        }
+        if (!is_file($pdd . '/plugin.sqlite3')) $s[] = 'activity_log.json:nodb';
+        else {
+            $p = new PDO('sqlite:' . $pdd . '/plugin.sqlite3', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15,
+                                                                                PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
+            $p->exec('PRAGMA query_only = ON');
+            $q = $p->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'activity_log'"); $q->execute();
+            if ($q->fetchColumn() === false) $s[] = 'activity_log.json:absent';
+            else {
+                $k = 0; $h = 0;
+                foreach ($p->query('SELECT data FROM activity_log ORDER BY id DESC LIMIT 2000')->fetchAll(PDO::FETCH_COLUMN) as $j) {
+                    $r = json_decode((string)$j, true); if (!is_array($r)) continue;
+                    [$ts, $key] = $stampOf($r);
+                    if ($ts === null || $ts < $from) continue;
+                    $k++; unset($r[$key]);
+                    if (preg_match($long, (string)json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))) $h++;
+                }
+                $s[] = 'activity_log.json:' . $k . '/' . $h;
+            }
+        }
+        $x = $tail($pdd . '/overdue_cron_status.json');
+        if ($x === null) $s[] = 'overdue_cron_status.json:absent';
+        else {
+            $d = json_decode($x, true); $st = is_array($d) ? $when($d['started_at'] ?? null) : null;
+            if (!is_array($d)) $s[] = 'overdue_cron_status.json:unreadable';
+            elseif ($st === null || $st < $from) $s[] = 'overdue_cron_status.json:before';
+            else $s[] = 'overdue_cron_status.json:1/' . (preg_match($long, is_scalar($d['output'] ?? null) ? (string)$d['output'] : (string)json_encode($d['output'] ?? null)) ? 1 : 0);
+        }
+        echo implode(' ', $out), ' sinks=', implode(',', $s);
+        break;
+
+    default:
+        echo '?mode'; exit(2);
+    }
+} catch (Throwable $e) { echo '?', get_class($e); exit(3); }
+PHP
+)"
+lm_php() { docker exec -i -u "$DB_OWNER" "$CONTAINER" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -r "$LM_PHP" "$@" 2>/dev/null; }   # lm_php MODE ARG… <STDIN — one line
+lm_files() { printf '%s\n' "$LM_HUNKS" | cut -d'|' -f1 | grep . | sort -u; }
+# lm_count pin|base|inst — every entry counted in its file: the pin's or 994d660's from Git, or the installed one; prints
+# label=old/new words (-1 where an entry has no old block; a file that cannot be read counts as empty)
+lm_count() {
+  local f o all="" x="$OUT/.lm-$TS-$$"
+  for f in $(lm_files); do
+    case "$1" in
+      pin) git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$f" > "$x" 2>/dev/null || : > "$x" ;;
+      base) git -C "$REPO" show "$BASELINE_COMMIT:$PLUGIN/$f" > "$x" 2>/dev/null || : > "$x" ;;
+      *) cat -- "$DEST/$f" > "$x" 2>/dev/null || : > "$x" ;;
+    esac
+    o="$(lm_php count "$f" "$LM_HUNKS" < "$x")"
+    all="$all $o"
+  done
+  rm -f "$x"
+  printf '%s' "${all# }"
+}
+# lm_expect pin|base — what each entry must read: in the pin, its new block once and its old block nowhere (0/1, or
+# -1/1 for an insert); in 994d660, its old block once and its new block nowhere (1/0, or -1/0)
+lm_expect() {
+  local f id on os nn ns w=""
+  while IFS='|' read -r f id on os nn ns; do
+    [ -n "$id" ] || continue
+    if [ "$1" = "pin" ]; then w="$w $id=$( [ "$on" = "0" ] && echo -1 || echo 0)/1"
+    else w="$w $id=$( [ "$on" = "0" ] && echo -1 || echo 1)/0"; fi
+  done <<< "$LM_HUNKS"
+  printf '%s' "${w# }"
+}
+# lm_diff GOT WANT — the labels whose counts are not as wanted, each with what was read (old/new runs), names only
+lm_diff() {
+  local w v miss=""
+  for w in $2; do
+    case " $1 " in *" $w "*) continue ;; esac
+    v="$(printf '%s\n' $1 | sed -n "s/^${w%%=*}=//p" | head -1)"
+    miss="$miss ${w%%=*}(${v:-unread})"
+  done
+  printf '%s' "${miss# }"
+}
+# lm_w2 TEXT_SOURCE — LM-G2's reading of evo_webhook.php (pin: from Git; inst: installed): each W2 string's lines, and the
+# control — the same file with that string's lines cut must read 0; prints "<n>/<control>" per string, or
+# "strings-unread" when lm_w2_strings did not give exactly two strings, each with no escape left in it
+lm_w2() {
+  local s w x="$OUT/.lmw2-$TS-$$" r=""
+  w="$(lm_w2_strings)"
+  [ "$(grep -c . <<< "$w")" = "2" ] || { printf 'strings-unread'; return 0; }
+  case "$w" in *'\'*) printf 'strings-unread'; return 0 ;; esac
+  case "$1" in
+    pin) git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/evo_webhook.php" > "$x" 2>/dev/null || : > "$x" ;;
+    *) cat -- "$DEST/evo_webhook.php" > "$x" 2>/dev/null || : > "$x" ;;
+  esac
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    r="$r $(grep -cF -- "$s" "$x")/$(grep -vF -- "$s" "$x" | grep -cF -- "$s")"
+  done <<< "$w"
+  rm -f "$x"
+  printf '%s' "${r# }"
+}
+# lm_stage — LM-G1 and LM-G2, stage A (a deploy and --check), before anything changes: refusals
+lm_stage() {
+  local g b d w
+  hdr "A. The masked lines ($EXPECTED_VERSION's LM; read-only — the pin's files and $BASELINE_COMMIT's from Git, counted as blocks)"
+  b="$(lm_count base)"; d="$(lm_diff "$b" "$(lm_expect base)")"
+  [ -z "$d" ] || stop "NO-GO (LM-G1): the control did not hold — in $BASELINE_COMMIT's files from Git each entry's old block must read once and its new block nowhere ($d; label(old/new runs)): the reader, or this list, cannot see the release. Nothing was changed. Send the log file"
+  g="$(lm_count pin)"; d="$(lm_diff "$g" "$(lm_expect pin)")"
+  [ -z "$d" ] || stop "NO-GO (LM-G1): the pin's files from Git do not hold $EXPECTED_VERSION's masked lines as the derivation pinned them ($d; label(old/new runs)) — this script is for another build. Nothing was changed. Send the log file"
+  ok "LM-G1 in the pin's files from Git each of the $LM_N entries' new block reads once and its old block nowhere — $LM_LN_N masked log lines, the helper, the report's column fix and webhook.php's loader — and in $BASELINE_COMMIT's (the control) each old block once and each new block nowhere; counted as blocks, markers aside"
+  w="$(lm_w2 pin)"
+  [ "$w" = "1/0 1/0" ] || stop "NO-GO (LM-G2): the pin's evo_webhook.php does not hold each of the on-chase precondition's two strings once, or the control — the file with that string cut — does not read 0, or the two strings could not be read from the pin's lib/SalesFollowupChecks.php ($w): \`on chase\` would refuse with w2_missing. Nothing was changed. Send the log file"
+  ok "LM-G2 the pin's evo_webhook.php holds each of the two strings lib/SalesFollowupChecks.php requires for \`on chase\` once — read from the pin's lib/SalesFollowupChecks.php at run time — ($w; the control, each string cut, reads 0) — the chase's precondition holds under $EXPECTED_VERSION"
+}
+# lm_after — after the copy (stage R): LM-CA1 (the deploy run) or LM-ON (--after-only) — LM-G1's and LM-G2's readings on
+# the installed files — and LM-CA2: the logs since the copy, counts only. Reports; never stops.
+lm_after() {
+  local c g d w cu pl o s
+  c="$( [ "$MODE" = "after" ] && echo LM-ON || echo LM-CA1)"
+  g="$(lm_count inst)"; d="$(lm_diff "$g" "$(lm_expect pin)")"
+  if [ -z "$d" ]; then ok "$c the installed files hold each of the $LM_N entries' new block once and its old block nowhere — $EXPECTED_VERSION's masked lines in place, counted as blocks"
+  else bad "$c the installed files do not hold $EXPECTED_VERSION's masked lines ($d; label(old/new runs))"; fi
+  w="$(lm_w2 inst)"
+  [ "$w" = "1/0 1/0" ] && ok "$c the installed evo_webhook.php holds each of the on-chase precondition's two strings once ($w; the control reads 0)" \
+    || bad "$c the installed evo_webhook.php does not hold each of the on-chase precondition's two strings once, or they could not be read from the pin's lib/SalesFollowupChecks.php ($w) — \`on chase\` would refuse with w2_missing"
+  c="$( [ "$MODE" = "after" ] && echo LM-ON || echo LM-CA2)"
+  cu="${COPY_AT:-}"; [ "$MODE" = "after" ] && cu="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"
+  case "$cu" in ''|*[!0-9]*) note "$c the copy's time is not known (${cu:-unset}) — the logs since the copy are not counted"; return ;; esac
+  pl="$(dxo php -r 'echo (string)ini_get("error_log");')"
+  o="$(lm_php sinks "$cu" "$pl" "$PDD_IN" "$IN_CONTAINER" </dev/null)"
+  case "$o" in
+    "phplog=unreadable"*) note "$c the PHP log could not be read (${pl:-no error_log set}) — NOT ESTABLISHED whether an old-form opt-out line was written after the copy (5.18.104's deploy found it so on production)" ;;
+    "phplog=read "*)
+      if [ "$(qf_kv "$o" optout_late)" = "0" ]; then ok "$c the PHP log holds no old-form opt-out line (a number after \"opt-out recorded for\") stamped 60 s or more after the copy$( [ "$(qf_kv "$o" optout_inflight)" = "0" ] || echo "; $(qf_kv "$o" optout_inflight) in the minute after it — requests in flight, a note")"
+      else bad "$c the PHP log holds $(qf_kv "$o" optout_late) old-form opt-out line(s) stamped 60 s or more after the copy — evo_webhook.php still writes the number"; fi ;;
+    *) note "$c the logs could not be read (${o:-not read})"; return ;;
+  esac
+  s="$(qf_kv "$o" sinks)"
+  note "$c the sinks $EXPECTED_VERSION's lines write, records stamped 60 s or more after the copy and of them those holding a run of 9 or more digits (records/with-digits; a note — other values there may be long numbers that are not a person's; the suite and the rehearsal are the strict checks): $(printf '%s' "$s" | tr ',' ' ')"
+}
+# lm_rb1 — LM-RB1, after the put-back (RB105): the installed text holds each entry's old block once and its new block
+# nowhere, counted as blocks — 994d660's lines back; the count of log lines that write a number again, in capitals.
+lm_rb1() {
+  local g d
+  g="$(lm_count inst)"; d="$(lm_diff "$g" "$(lm_expect base)")"
+  if [ -z "$d" ]; then ok "LM-RB1 the installed files hold each of the $LM_N entries' old block once and its new block nowhere — $BASELINE_VERSION's lines back, counted as blocks"
+    note "LM-RB1 $LM_LN_N LOG LINES WRITE PHONE NUMBERS AGAIN UNDER $BASELINE_VERSION — THE LINES $EXPECTED_VERSION MASKED, THE OPT-OUT LINE OF evo_webhook.php AMONG THEM"
+  else bad "LM-RB1 the installed files are not $BASELINE_VERSION's where $EXPECTED_VERSION masked its lines ($d; label(old/new runs))"; fi
+}
+

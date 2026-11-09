@@ -1,0 +1,105 @@
+# ── 5.18.105: the rollback keeps every switch (root docs/74 §H.5) ─────────────────────────────────────────────────────────
+# The rollback — --rollback, and V1's automatic one — puts 994d660 back through do_rollback (git checkout, the documented
+# deploy, stamp_copy on COPY_MARK, RB_COPY_AT) and nothing else: no switch needs to move, since 994d660 is the code the
+# ladder was built on, its tool and its two ladder classes the installed ones in both releases, so every key keeps its
+# meaning; the copy leaves ./data alone (scripts/deploy-hybrid.sh), so the keys, the store row, 089–091's tables and P7's
+# collections stay as they are. It never runs the switch tool — not off all --rollback (5.18.104's QF-RB1), nor any other
+# verb — nor a by-hand SQL put-back of rows or keys (5.18.104's qf_byhand), at either call site. PUTBACK_SHOW stays:
+# 994d660's code put-back only, in its own block. A rollback is an emergency act: the ladder never blocks it.
+# rb_pre105 — before ROLLBACK is typed (root docs/74 §H.5.3; read-only): LK-RB0 — the ladder's keys in the four places under
+# the kept LK key (one of this run's own when the deploy's key file is not there), the rows RB105 judges "never fell"
+# against, and the tool's show on a copy (the pin's tools/, 994d660's bytes); QC-RB2 was counted in stage A, as before.
+# A NOTICE IN CAPITALS when offers_live_enabled is set — 994d660 writes numbers again in the LM_LN_N log lines 5.18.105
+# masked while offers run, against the ruling that step 12 waits for 5.18.105 — with the operator's own alternative. The
+# operator is never told to change a switch while this script waits at the ROLLBACK prompt: LK-RB0 is already read, a
+# switch changed now would read as a FAIL in LK-RB1, and §H.4.7 forbids scripts/sales-followup.sh while the rollback
+# runs. The alternative is: answer anything but ROLLBACK (nothing has been changed), turn offers-live off with its own
+# command, alone, then run the rollback again, whose LK-RB0 then reads the ladder as the operator left it. That command
+# is printed alone on its own line, never run by this script and never in one block with the rollback command (root
+# docs/44 §16.9). A chase that is on is a plain note.
+rb_pre105() {
+  local o sub=""
+  hdr "B. Before ROLLBACK: the ladder as it stands (LK-RB0; read-only — the rollback keeps every switch, root docs/74 §H.5)"
+  cih_main || note "LK-RB0 the run's folder in the container's /tmp could not be made (${CIH_VAULT_SAYS:-?}) — the readings below say they could not be read"
+  lk_key_init || true
+  o="$(lk_read)"
+  if lk_ok "$o"; then
+    LK_RB0="$o"
+    note "LK-RB0 the ladder's keys as found before the rollback, $( [ "$LK_KEY_FROM" = "kept" ] && echo "under the deploy's kept key ($LK_KEY_FILE)" || echo "under a key of this run's own (the deploy's key file is not there)"): $(lk_say "$o") — the rollback keeps every one"
+    qf_sheet "LK-RB0 the ladder's keys before the rollback, key|place|hash (no value)" "$(lk_map "$o" | tr ',' '\n')"
+  else LK_RB0=""; note "LK-RB0 the ladder's keys could not be read before the rollback (${o%% map=*}) — LK-RB1 will have nothing of this run's to compare with; the rollback proceeds (the ladder never blocks it)"; fi
+  LK_RB0_ROWS="$(qf_php lkrows "$PDD_IN/plugin.sqlite3" 0)"
+  case "$LK_RB0_ROWS" in
+    "rows="*" sc="*" max="*) note "LK-RB0 the rows before the rollback (RB105 judges \"never fell\" against them): ${LK_RB0_ROWS%% sc=*}" ;;
+    *) note "LK-RB0 the rows could not be read before the rollback (${LK_RB0_ROWS:-not read})"; LK_RB0_ROWS="" ;;
+  esac
+  LK_RB0_SHOW=""
+  if [ -n "${P3B_PIN:-}" ] && sub="$(qf_copy rb0 "$P3B_PIN")"; then LK_RB0_SHOW="$(lk_show_lines "$(qf_tool "$sub" show)")"; cih_drop "$sub"; fi
+  if [ -n "$LK_RB0_SHOW" ]; then note "LK-RB0 the tool's show on a copy, before the rollback: $(lk_show_say "$LK_RB0_SHOW")"
+  else note "LK-RB0 the tool's show could not be read on a copy before the rollback (${sub:-no copy of the code})"; fi
+  case ",$(lk_map "${LK_RB0:-}")," in *",offers_live_enabled|"*)
+    note "STEP 12 (OFFERS-LIVE) IS ON. $BASELINE_COMMIT WRITES PHONE NUMBERS AGAIN IN THE $LM_LN_N LOG LINES $EXPECTED_VERSION MASKED — THE OPT-OUT LINE OF evo_webhook.php AMONG THEM — WHILE OFFERS RUN, AGAINST THE OWNER'S RULING THAT STEP 12 WAITS FOR $EXPECTED_VERSION. THIS SCRIPT NEVER TURNS IT OFF AND THE ROLLBACK IS NEVER BLOCKED BY IT. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS. YOUR OWN ALTERNATIVE, IF YOU CHOOSE IT: ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — THEN TURN OFFERS-LIVE OFF WITH ITS OWN COMMAND, ALONE — PRINTED BELOW ON ITS OWN LINE; THIS SCRIPT NEVER RUNS IT — AND THEN RUN THE ROLLBACK AGAIN:"
+    echo
+    echo "      cd $REPO && bash $QF_WRAPPER off offers-live"
+    echo ;;
+  esac
+  case ",$(lk_map "${LK_RB0:-}")," in *",quote_chase_enabled|"*) note "LK-RB0 step 6 (chase) is on: under $BASELINE_VERSION its STOPs write the number again, as they did before $EXPECTED_VERSION — the owner accepted that on 9 Nov" ;; esac
+  return 0
+}
+# rb105 — RB105, after the put-back (root docs/74 §H.5.4; read-only): master as 5.18.104 left it, the four jobs last (the
+# carried RB reads every other file — 5.18.105's changed ones by Git's sha and by PREV_CHANGED_SHA256S, PREV_KEPT by its
+# own — and the event processor's signatures); LK-RB1 — every ladder key in every place equal to LK-RB0's (V1's automatic
+# rollback, which takes no LK-RB0, compares with the deploy's LK-B1), the installed tool's show equal to LK-RB0's, and
+# LK-CA2's "never fell" against LK-RB0's rows; the open quote follow-ups and the running offers counted, a note (994d660's
+# own, which carry on); LM-RB1, the old lines back; then Part V's, Part O's and Part P's notes. Reports; never stops.
+# RB_NOTHING — set only by --rollback when the container already served 994d660 as the run began (nothing to roll back:
+# a completed rollback checked again, or a by-hand put-back checked). That run types no ROLLBACK and puts nothing back,
+# so it takes no LK-RB0 (root docs/74 §H.5.3: LK-RB0 is read before ROLLBACK is typed) and LK-RB1 — which §H.5.4 judges
+# across the put-back, against LK-RB0 — has no before to compare with. A reading taken by this run itself, moments before
+# the "after" one, would bracket no rollback, and an ok over it would claim a kept switch nobody observed. So rb105 says
+# plainly that the three comparisons (the keys, the tool's show, the rows) are not judged, with the ladder as it reads
+# now for the record; master, the counts, LM-RB1 and Parts V, O and P are absolute and run as on every path.
+RB_NOTHING=""
+rb105() {
+  local o v sub="" ref
+  cih_main || true   # the run's folder, made in this shell before the readings below, which run in $( … ) (DS3-fix1)
+  v="$(vn_r1 < "$DEST/$MASTER" 2>/dev/null)"
+  if [ "$(sha256sum "$DEST/$MASTER" 2>/dev/null | cut -c1-64)" = "$MASTER_BASE_SHA256" ] && [ "$v" = "jobs=quote_chase,quote_daily_list,ai_media,offers_send r1_at=3" ]; then
+    ok "RB105 the installed $MASTER is $BASELINE_VERSION's byte for byte (sha256 ${MASTER_BASE_SHA256:0:16}…): 5.18.92's lock, and quote_chase, quote_daily_list, ai_media and offers_send registered last, as $EXPECTED_VERSION kept it"
+  else bad "RB105 the installed $MASTER is not $BASELINE_VERSION's, or its last four jobs are not ruling R1's ($v)"; fi
+  if [ -n "$RB_NOTHING" ]; then
+    lk_key_init || true   # --rollback: the kept key, or one of this run's own — never written
+    o="$(lk_read)"
+    note "LK-RB1 not judged: this run rolled nothing back — the container already served $BASELINE_COMMIT ($BASELINE_VERSION) when it began — so no ROLLBACK was typed, no LK-RB0 was read, and the ladder's keys, the tool's show and the rows (\"never fell\") have no reading from before a put-back to be compared with. The rollback that put $BASELINE_VERSION back was judged by the run that made it (its own LK-RB1); a put-back by hand was judged by none$(lk_ok "$o" && echo ". The ladder's keys now, for the record: $(lk_say "$o")")"
+  else
+    ref="${LK_RB0:-${LK_B1:-}}"
+    o="$(lk_read)"
+    if [ -z "$ref" ]; then bad "LK-RB1 no reading of the ladder's keys from before the rollback to compare with (LK-RB0, or the deploy's LK-B1)$(lk_ok "$o" && echo " — now: $(lk_say "$o")")"
+    elif ! lk_ok "$o"; then bad "LK-RB1 the ladder's keys could not be read after the rollback (${o%% map=*})"
+    elif [ "$(lk_map "$o")" = "$(lk_map "$ref")" ]; then ok "LK-RB1 every ladder key, in every place, reads after the rollback exactly as before it$( [ -n "${LK_RB0:-}" ] || echo " (V1's automatic rollback: against the deploy's LK-B1)") — the rollback kept every switch: $(lk_say "$o")"
+    else
+      qf_sheet "LK-RB1 the ladder's keys that changed across the rollback, key|place: hash before -> now (no value)" "$(lk_diff_sheet "$(lk_map "$ref")" "$(lk_map "$o")")"
+      bad "LK-RB1 a ladder key changed, was added or was removed across the rollback: $(lk_diff "$(lk_map "$ref")" "$(lk_map "$o")") (the hashes on the sheet) — the rollback writes none; was scripts/sales-followup.sh run while it ran?"
+    fi
+    ref="${LK_RB0_SHOW:-${LK_SHOW_A:-}}"; v=""
+    if [ -n "${P3B_BASE:-}" ] && sub="$(qf_copy rb1 "$P3B_BASE")"; then v="$(lk_show_lines "$(qf_tool "$sub" show)")"; cih_drop "$sub"; fi
+    if [ -z "$v" ] || [ -z "$ref" ]; then bad "LK-RB1 the tool's show after the rollback could not be compared with the one before it (now: ${v:+read}${v:-not read, ${sub:-no copy of the code}}; before: ${ref:+read}${ref:-not read})"
+    elif [ "$v" = "$ref" ]; then ok "LK-RB1 $BASELINE_VERSION's tool (its bytes the installed ones) shows on a copy, line for line, what it showed before the rollback: $(lk_show_say "$v")"
+    else bad "LK-RB1 the tool's show after the rollback differs from the one before it: $(lk_show_changed "$ref" "$v")"; fi
+    ref="${LK_RB0_ROWS:-${LK_ROWS_B:-}}"
+    if [ -n "$ref" ]; then
+      o="$(qf_php lkrows "$PDD_IN/plugin.sqlite3" "$(qf_kv "$ref" max)")"
+      case "$o" in "rows="*" sc="*" max="*) lk_rows_judge LK-RB1 "$ref" "$o" "across the rollback" ;; *) bad "LK-RB1 the rows could not be read after the rollback (${o:-not read})" ;; esac
+    else bad "LK-RB1 no row reading from before the rollback — \"never fell\" is not judged"; fi
+  fi
+  o="$(qf_php rbn "$PDD_IN")"
+  case "$o" in
+    open_quote=*) note "RB105 open quote follow-ups $(qf_kv "$o" open_quote), offers running $(qf_kv "$o" running_offers) — $BASELINE_VERSION's own, which carry on under it as their switches say (root docs/74 §H.5.4)" ;;
+    *) note "RB105 the open quote follow-ups and the running offers could not be counted (${o:-not read})" ;;
+  esac
+  lm_rb1        # LM-RB1 — the old lines back, counted as blocks (root docs/74 §H.4.5)
+  vn_rb_after   # VN-RB5 — a note: 090's tables stay and continue under 994d660
+  of_rb_after   # OF-RB2 — a note: the four offer tables stay and continue under 994d660 as its switches say
+  ac_rb_after   # AC-RB2 — a note: P7's two collections stay and continue under 994d660 as its switch says
+}
+

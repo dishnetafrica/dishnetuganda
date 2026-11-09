@@ -1,0 +1,49 @@
+    case 'lk':     // lk ROOT LIVEROOT PDD KEYFILE — 5.18.105's ladder rule (LK; root docs/74 §H.4.3), read-only: every key
+                   // of ROOT's SalesFollowupLadder::allKeys() and settingKeys() in the four places — <data>/kyc_config.json
+                   // (k), its store row (s: kyc_config, id 0, opened SQLITE_OPEN_READONLY), <plugin>/data/config.json (p)
+                   // and <data>/config.json (d) — by name and count; the steps on and skipped and the ledger as the tool's
+                   // show derives them (isOn, isSkipped, ledgerOn over PluginConfig::read); then " map=" and, for each key
+                   // present in a place, key|place|the first 16 hex of HMAC-SHA256 over its JSON value under KEYFILE's key.
+                   // An absent file holds no key; one that cannot be read or decoded is "unread". Never a value.
+        [$root, $live, $pdd, $kf] = $a;
+        $L = $ladder($root);
+        $key = trim((string)@file_get_contents($kf));
+        if (strlen($key) < 32) { echo 'lk=nokey'; break; }
+        $doc = []; $unread = [];
+        foreach (['k' => $pdd . '/kyc_config.json', 'p' => $live . '/data/config.json', 'd' => $pdd . '/config.json'] as $c => $f) {
+            if (!file_exists($f)) { $doc[$c] = []; continue; }
+            $j = $readJson($f);
+            if ($j === null) { $unread[] = $c; $doc[$c] = []; } else { $doc[$c] = $j; }
+        }
+        if (!is_file($pdd . '/plugin.sqlite3')) { $unread[] = 's'; $doc['s'] = []; }
+        else {
+            try { $doc['s'] = $storeRow($ro($pdd . '/plugin.sqlite3')); } catch (Throwable $se) { $unread[] = 's'; $doc['s'] = []; }
+        }
+        $hm = function ($v) use ($key): string {
+            return substr(hash_hmac('sha256', (string)json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $key), 0, 16);
+        };
+        $n = ['k' => 0, 's' => 0, 'p' => 0, 'd' => 0]; $held = []; $heldS = 0; $differ = []; $map = []; $setn = [];
+        foreach (array_values(array_unique(array_merge($L['all'], $L['settings']))) as $k) {
+            $isAll = in_array($k, $L['all'], true); $h = [];
+            foreach (['k', 's', 'p', 'd'] as $c) {
+                if (!array_key_exists($k, $doc[$c])) continue;
+                $n[$c]++; $h[$c] = $hm($doc[$c][$k]); $map[] = $k . '|' . $c . '|' . $h[$c];
+            }
+            if ($isAll && $h !== []) $setn[] = $k;
+            if (isset($h['p']) || isset($h['d'])) { if ($isAll) $held[] = $k; else $heldS++; }
+            if (($h['k'] ?? '') !== ($h['s'] ?? '')) $differ[] = $k;
+        }
+        require_once $live . '/lib/PluginConfig.php';
+        $cfg = PluginConfig::read($live, $pdd);
+        $on = []; $sk = [];
+        foreach (SalesFollowupLadder::steps() as $s) {
+            if (SalesFollowupLadder::isOn($cfg, $s)) $on[] = $s; elseif (SalesFollowupLadder::isSkipped($cfg, $s)) $sk[] = $s;
+        }
+        echo 'keys=', count($L['all']), ' settings=', count($L['settings']), ' file=', $n['k'], ' store=', $n['s'],
+             ' pfile=', $n['p'], ' dfile=', $n['d'], ' held=', count($held), ' held_settings=', $heldS,
+             ' heldnames=', $held === [] ? '-' : implode(',', $held), ' setnames=', $setn === [] ? '-' : implode(',', $setn),
+             ' differ=', $differ === [] ? '-' : implode(',', $differ), ' on=', $on === [] ? '-' : implode(',', $on),
+             ' skipped=', $sk === [] ? '-' : implode(',', $sk), ' ledger=', SalesFollowupLadder::ledgerOn($cfg) ? 'on' : 'off',
+             ' unread=', $unread === [] ? '-' : implode(',', $unread), ' map=', $map === [] ? '-' : implode(',', $map);
+        break;
+

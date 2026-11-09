@@ -1,0 +1,228 @@
+
+# ── 5.18.105: the ladder rule (LK; root docs/74 §H.4.3) — every switch kept exactly as found ─────────────────────────────
+# The ladder's keys — the pin's SalesFollowupLadder::allKeys() and settingKeys(), lib/SalesFollowupLadder.php being
+# 994d660's bytes in both releases (PREV_KEPT) — read read-only in the four places: <data>/kyc_config.json (k), its
+# store row (s, SQLITE_OPEN_READONLY), <plugin>/data/config.json (p) and <data>/config.json (d). One reading (QF_PHP lk)
+# prints counts, key and step names, and after " map=" each present key's place and the first 16 hex of an HMAC-SHA256
+# of its value under LK_KEY. The log gets the line up to " map=" (lk_say); the map goes only to the state file (LK_MAP)
+# and the 0600 sheet. No value, date, staff id or number is ever logged; LK_KEY is never printed and never goes into the
+# state file or the sheet. Nothing here runs the switch tool's on, off, skip, set or erase, or scripts/sales-followup.sh.
+LK_KEY=""; LK_KEY_FILE="$OUT/lk-key-$EXPECTED_VERSION"; LK_KEY_NEW=""; LK_KEY_FROM=""
+LK_G1=""; LK_B1=""; LK_ON=""; LK_SKIP=""; LK_SET_NAMES=""; LK_AT=""; LK_ROWS_B=""; LK_SHOW_A=""; LK_ON_A=""; LK_RB0=""; LK_RB0_ROWS=""; LK_RB0_SHOW=""
+# lk_key_init — LK_KEY for this run, in the main shell (never in $( … ): a key made in a subshell is lost to this one).
+# --check: a key of its own, never written. A deploy: the kept key when LK_KEY_FILE holds one (one LK_KEY= line of 48
+# hex, mode 0600, beside the state file and outside its glob — QL_KEY_FILE's precedent), else a new one, written with the
+# backup (LK_KEY_NEW). --after-only and --rollback: the kept key, or one of this run's own (LK_KEY_FROM=own: a reading
+# under it compares with nothing the deploy kept).
+lk_key_init() {
+  [ -n "$LK_KEY" ] && return 0
+  local k; k="$(sed -n 's/^LK_KEY=//p' "$LK_KEY_FILE" 2>/dev/null | tail -n1)"
+  case "$k" in ''|*[!0-9a-f]*) k="" ;; esac
+  [ "${#k}" = "48" ] || k=""
+  if [ -n "$k" ] && [ -z "$CHECK_ONLY" ]; then LK_KEY="$k"; LK_KEY_FROM="kept"
+  else
+    LK_KEY="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"; LK_KEY_FROM="own"
+    if [ "$MODE" = "deploy" ] && [ -z "$CHECK_ONLY" ]; then LK_KEY_NEW=1; LK_KEY_FROM="new"; fi
+  fi
+  [ "${#LK_KEY}" = "48" ]
+}
+# lk_read — one LK reading of the live places (QF_PHP lk, through the pin's ladder where the pin's code is copied, else
+# the installed one — the same file), its key put in the run's folder through stdin (never on a command line) and removed
+# at once. Prints the whole line, its map included, or "lk=<why>". Runs in $( … ): LK_KEY and the folder are made before.
+lk_read() {
+  local f o
+  [ -n "$CIH_BASE" ] || { printf 'lk=nofolder'; return 1; }
+  [ -n "$LK_KEY" ] || { printf 'lk=nokey'; return 1; }
+  f="$CIH_BASE/lk-$$.key"
+  docker exec -i -u "$DB_OWNER" "$CONTAINER" sh -c 'umask 077 && cat > "$1"' _ "$f" >/dev/null 2>&1 <<<"$LK_KEY" || { dxo rm -f "$f"; printf 'lk=keyfile'; return 1; }
+  o="$(qf_php lk "${P3B_PIN:-$IN_CONTAINER}" "$IN_CONTAINER" "$PDD_IN" "$f")"
+  dxo rm -f "$f"
+  printf '%s' "$o"
+}
+lk_ok() { case "$1" in "keys="[1-9]*" settings="*" unread="*" map="*) return 0 ;; esac; return 1; }   # a whole reading
+lk_map() { printf '%s' "${1##* map=}"; }   # the map of a reading (the state file and the sheet only)
+# lk_say LINE — a reading as the log may carry it: counts, step and key names; never the map
+lk_say() {
+  printf 'keys %s and settings %s; set per place k=%s s=%s p=%s d=%s; on: %s; skipped: %s; the ledger %s; file and store disagree on: %s; held by a config.json: %s key(s), %s setting(s)' \
+    "$(qf_kv "$1" keys)" "$(qf_kv "$1" settings)" "$(qf_kv "$1" file)" "$(qf_kv "$1" store)" "$(qf_kv "$1" pfile)" "$(qf_kv "$1" dfile)" \
+    "$(qf_kv "$1" on)" "$(qf_kv "$1" skipped)" "$(qf_kv "$1" ledger)" "$(qf_kv "$1" differ)" "$(qf_kv "$1" held)" "$(qf_kv "$1" held_settings)"
+}
+# lk_diff MAP_A MAP_B — the entries that differ, were added or were removed, as key@place, names only (the log)
+lk_diff() {
+  local x="$OUT/.lkdiff-$TS-$$"
+  printf '%s' "$1" | tr ',' '\n' | grep '|' | sort > "$x.a"
+  printf '%s' "$2" | tr ',' '\n' | grep '|' | sort > "$x.b"
+  comm -3 "$x.a" "$x.b" | tr -d '\t' | awk -F'|' 'NF == 3 { print $1 "@" $2 }' | sort -u | paste -sd' ' -
+  rm -f "$x.a" "$x.b"
+}
+# lk_diff_sheet MAP_A MAP_B — the same, with each hash before and after: for the 0600 sheet only, never the log
+lk_diff_sheet() {
+  local x="$OUT/.lkdiff-$TS-$$"
+  printf '%s' "$1" | tr ',' '\n' | grep '|' > "$x.a"
+  printf '%s' "$2" | tr ',' '\n' | grep '|' > "$x.b"
+  awk -F'|' 'FNR == NR { a[$1 "|" $2] = $3; next } { b[$1 "|" $2] = $3 }
+    END { for (k in a) if (!(k in b)) print k ": " a[k] " -> absent"; else if (a[k] != b[k]) print k ": " a[k] " -> " b[k]
+          for (k in b) if (!(k in a)) print k ": absent -> " b[k] }' "$x.a" "$x.b" | sort
+  rm -f "$x.a" "$x.b"
+}
+# lk_show_lines OUTPUT — the tool's show, its step lines (<label>: on|off|skipped …) and the ledger's line only
+lk_show_lines() { grep -E '^  (1b agent-cc|[0-9]+ [a-z-]+)[^:]*: (on|off|skipped)|^  the ledger: ' <<<"$1"; }
+# lk_show_say LINES — those lines as the log may carry them: each label and its state word, never a date
+lk_show_say() { sed -E 's/^  ([^:]+): (on|off|skipped).*/\1: \2/' <<<"$1" | paste -sd';' - | sed 's/;/; /g'; }
+# lk_show_changed A B — the labels whose lines differ between two such readings, names only
+lk_show_changed() { diff <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sed -nE 's/^[<>] +([^:]+):.*/\1/p' | sort -u | paste -sd',' -; }
+
+# lk_g1 — LK-G1, stage A (a deploy and --check), before anything changes: NO-GO when a place cannot be read, or when a
+# key of allKeys() is held by <plugin>/data/config.json or <data>/config.json (the tool's off would read back FAIL
+# key_outside_overrides, and the operator must always be able to turn a step off — 5.18.104's remedy text); a setting
+# held there is a note (gap 11), compared in LK-CA1. Otherwise never NO-GO for a key that is on: a note gives the steps
+# on, those skipped, the ledger, the count per place and every key where file and store disagree. A NOTE IN CAPITALS
+# when offers_live_enabled is set; quote_chase_enabled set is a plain note (the owner's rulings of 9 Nov).
+lk_g1() {
+  local o
+  cih_main || true   # the run's folder, made in this shell before the reading below, which runs in $( … ) (DS3-fix1)
+  lk_key_init || stop "NO-GO (LK-G1): no key for the ladder's hashes could be made. Nothing was changed. Send the log file"
+  o="$(lk_read)"
+  lk_ok "$o" || stop "NO-GO (LK-G1): the ladder's keys could not be read in the four places (${o%% map=*}) — they cannot be kept as found where they cannot be read. Nothing was changed. Send the log file"
+  [ "$(qf_kv "$o" unread)" = "-" ] || stop "NO-GO (LK-G1): $(qf_kv "$o" unread | tr ',' ' ') could not be read (k <data>/kyc_config.json, s its store row, p <plugin>/data/config.json, d <data>/config.json) — the ladder's keys cannot be kept as found where they cannot be read. Nothing was changed. Send the log file"
+  [ "$(qf_kv "$o" held)" = "0" ] || stop "NO-GO (LK-G1): $(qf_kv "$o" held) of the ladder's switch and record keys (SalesFollowupLadder::allKeys()) are held by <plugin>/data/config.json or <data>/config.json ($(qf_kv "$o" heldnames | tr ',' ' ')), which the switch tool never writes — its off would read back FAIL key_outside_overrides, and the operator must always be able to turn a step off. Remove them there by hand with the plugin's own Settings, never with this script. Nothing was changed. Send the log file"
+  LK_G1="$o"; LK_ON="$(qf_kv "$o" on)"; LK_SKIP="$(qf_kv "$o" skipped)"; LK_SET_NAMES="$(qf_kv "$o" setnames)"
+  note "LK-G1 the ladder's keys as found, kept exactly so by this run (never written; root docs/74 §H.4.3): $(lk_say "$o") — key names only, the per-key hashes on the sheet$( [ "$(qf_kv "$o" held_settings)" = "0" ] || echo "; a setting held by a config.json is a note, compared after the copy (LK-CA1)")"
+  qf_sheet "LK-G1 the ladder's keys, key|place|hash under this run's LK key (k kyc_config.json, s the store row, p <plugin>/data/config.json, d <data>/config.json; no value)" "$(lk_map "$o" | tr ',' '\n')"
+  case ",$(lk_map "$o")," in *",offers_live_enabled|"*) note "LK-G1 OFFERS_LIVE_ENABLED IS SET — STEP 12 (OFFERS-LIVE) IS ALREADY ON UNDER $BASELINE_VERSION, AGAINST THE OWNER'S RULING OF 9 NOV THAT IT WAITS FOR $EXPECTED_VERSION. THIS DEPLOY IS THE REMEDY, AND IT CHANGES THE KEY NEITHER WAY" ;; esac
+  case ",$(lk_map "$o")," in *",quote_chase_enabled|"*) note "LK-G1 quote_chase_enabled is set: step 6 (chase) is on — the owner's later ruling of 9 Nov: the chase does not wait for $EXPECTED_VERSION" ;; esac
+  [ "$LK_KEY_FROM" = "own" ] && [ -n "$CHECK_ONLY" ] && note "LK-G1 --check: the hashes are under a key of this run's own, never written; a deploy keeps its key in $LK_KEY_FILE (mode 0600)"
+  return 0
+}
+# lk_stage_a SUB — stage A's readings for QF-CA5 and LK-ON, through the PIN's tool on SUB, QF-G1's copy (the tool is
+# 994d660's bytes there as after the copy): its show (the step lines and the ledger's, kept in memory, never logged
+# whole) and, for each step on at LK-G1, its --check's status word.
+lk_stage_a() {
+  local o s st
+  o="$(qf_tool "$1" show)"
+  LK_SHOW_A="$(lk_show_lines "$o")"
+  if [ -n "$LK_SHOW_A" ]; then note "QF-CA5 stage A: the pin's tool's show on QF-G1's copy — $(lk_show_say "$LK_SHOW_A") (after the copy the installed tool's must read the same, line for line)"
+  else note "QF-CA5 stage A: the pin's tool's show could not be read on QF-G1's copy — QF-CA5 will have nothing to compare"; fi
+  LK_ON_A=""
+  for s in $(printf '%s' "${LK_ON:-}" | tr ',' ' '); do
+    [ "$s" = "-" ] && continue
+    o="$(qf_tool "$1" --check "$s")"
+    st="$(printf '%s\n' "$o" | grep -m1 "^$s: " | sed "s/^$s: //" | awk '{ print $1 }')"
+    LK_ON_A="$LK_ON_A $s:${st:-none}"
+  done
+  note "LK-ON stage A: each step on, through the pin's tool's --check on QF-G1's copy:${LK_ON_A:- no step is on}"
+}
+# qf_keep_and_baseline — stage B, after DEPLOY is typed and before the checkout and the copy (root docs/74 §H.4.4; it
+# replaces 5.18.104's qf_clear_and_baseline and runs no tool): LK-B1 — the same reading as LK-G1, required equal key by
+# key and place by place, else NO-GO and nothing copied; then the pause (busy_timeout, 5 s, lib/SqliteStore.php:158,
+# plus 1 s); then, always, the baselines at the copy's start: QF's (the moment, wa_auto_sends' largest id, the four
+# jobs' entries), VN-CA4's and OF-CA3's in the same call, and LK-CA2's rows.
+qf_keep_and_baseline() {
+  local o d
+  cih_main || stop "NO-GO (LK-B1): the run's folder could not be made (${CIH_VAULT_SAYS:-?}) — nothing was copied. Send the log file"
+  o="$(lk_read)"
+  lk_ok "$o" || stop "NO-GO (LK-B1): the ladder's keys could not be read again before the copy (${o%% map=*}) — nothing was copied. Send the log file"
+  if [ "$(lk_map "$o")" != "$(lk_map "$LK_G1")" ]; then
+    d="$(lk_diff "$(lk_map "$LK_G1")" "$(lk_map "$o")")"
+    qf_sheet "LK-B1 the ladder's keys that changed during this run, key|place: hash at LK-G1 -> now (no value)" "$(lk_diff_sheet "$(lk_map "$LK_G1")" "$(lk_map "$o")")"
+    stop "NO-GO (LK-B1): a ladder key changed during this run — the switch tool was run meanwhile; nothing was copied (${d:-the readings differ}; the hashes on the sheet). Send the log file"
+  fi
+  LK_B1="$o"; LK_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ok "LK-B1 after DEPLOY, before the copy: every ladder key in the four places reads exactly as at LK-G1, key by key and place by place ($(qf_kv "$o" file) in kyc_config.json, $(qf_kv "$o" store) in the store row; on: $(qf_kv "$o" on)) — this run changes none of them"
+  printf '  …     waiting 6 s (busy_timeout plus 1 s) after LK-B1 before the baselines (root docs/74 §H.4.4)\n'; sleep 6
+  vn_base_prep   # 5.18.104 Part V: the file VN-CA4's baseline is written to, in the same call (root docs/73 §H.3.25 VN-G6)
+  of_base_prep   # 5.18.104 Part O: the file OF-CA3's baseline is written to, in the same call (root docs/73 §H.4.18 OF-G1)
+  QF_BASE="$(qf_php base "$PDD_IN/plugin.sqlite3" "${VN_BASE_F:-}" "${OF_BASE_F:-}")"
+  case "$QF_BASE" in "rows="*" max="*" unix="[0-9]*) ;; *) stop "NO-GO (QF-G1): the baseline could not be read from the live book (${QF_BASE:-not read}) — LK-CA2, VN-CA4 and OF-CA3 would have nothing to judge against. Nothing was copied. Send the log file" ;; esac
+  QF_COPY_AT="$(qf_kv "$QF_BASE" at | tr T ' ')"; QF_COPY_UNIX="$(qf_kv "$QF_BASE" unix)"
+  LK_ROWS_B="$(qf_php lkrows "$PDD_IN/plugin.sqlite3" "$(qf_kv "$QF_BASE" max)")"
+  case "$LK_ROWS_B" in "rows="*" sc="*" max="*) ;; *) stop "NO-GO (LK-CA2): the baseline's rows could not be read from the live book (${LK_ROWS_B:-not read}) — LK-CA2 would have nothing to judge against. Nothing was copied. Send the log file" ;; esac
+  ok "QF-G1 the baseline, read-only from the live book just before the copy: ${QF_BASE%% at=*}; the copy's start $QF_COPY_AT UTC (unix $QF_COPY_UNIX); LK-CA2's rows (${LK_ROWS_B%% sc=*})"
+  vn_baseline   # VN-G6 — VN-CA4's baseline, read in QF-G1's own call above (root docs/73 §H.3.25)
+  of_baseline   # OF-G1 — OF-CA3's baseline, read in QF-G1's own call above (root docs/73 §H.4.18; Q18-O03)
+}
+# lk_ca1 — LK-CA1 (stage R, the deploy run): the reading on the live places must equal LK-B1's — a key changed, added or
+# removed is a FAIL, a setting's included (no run writes one). The log names the key and the place; the sheet both hashes.
+lk_ca1() {
+  local o d
+  cih_main || true
+  [ "$MODE" = "deploy" ] || return 0
+  [ -n "$LK_B1" ] || { bad "LK-CA1 LK-B1's reading is not there to compare with — the ladder's keys after the copy are not judged"; return; }
+  o="$(lk_read)"
+  lk_ok "$o" || { bad "LK-CA1 the ladder's keys could not be read after the copy (${o%% map=*})"; return; }
+  if [ "$(lk_map "$o")" = "$(lk_map "$LK_B1")" ]; then ok "LK-CA1 after the copy every ladder key, switch, record key and setting alike, reads in the four places exactly as at LK-B1 — the deploy kept every switch as found ($(lk_say "$o"))"
+  else
+    d="$(lk_diff "$(lk_map "$LK_B1")" "$(lk_map "$o")")"
+    qf_sheet "LK-CA1 the ladder's keys that changed across the copy, key|place: hash at LK-B1 -> now (no value)" "$(lk_diff_sheet "$(lk_map "$LK_B1")" "$(lk_map "$o")")"
+    bad "LK-CA1 a ladder key changed, was added or was removed across the copy: ${d:-the readings differ} (the hashes on the sheet) — the deploy writes none; was scripts/sales-followup.sh run while it ran?"
+  fi
+}
+# lk_rows_n LINE TABLE — one table's count in an lkrows reading (-1 absent, empty unread)
+lk_rows_n() { qf_kv "$1" rows | tr ',' '\n' | sed -n "s/^$2://p" | head -1; }
+# lk_rows_judge CODE BEFORE AFTER WHEN — two lkrows readings: no table's rows fell (quote_followup_state over its rows NOT
+# LIKE 'list_last:%'), each _schema_checks row unchanged and no entry of the four jobs gone from master_schedule.json — each
+# a FAIL; quote_followup_state's whole count, the four jobs' runs and the claims after BEFORE, a note (the steps that are
+# on run and claim). LK-CA2 across the copy; LK-RB1's rows across a rollback (RB105).
+lk_rows_judge() {
+  local c="$1" b0="$2" a0="$3" w="$4" t a b fell="" jb ja j=""
+  for t in $(qf_kv "$b0" rows | tr ',' '\n' | cut -d: -f1); do
+    b="$(lk_rows_n "$b0" "$t")"; a="$(lk_rows_n "$a0" "$t")"
+    case "$a" in ''|*[!0-9-]*) fell="$fell $t:unread"; continue ;; esac
+    case "$b" in ''|*[!0-9-]*) fell="$fell $t:unread"; continue ;; esac
+    [ "$a" -ge "$b" ] 2>/dev/null || fell="$fell $t:$b>$a"
+  done
+  if [ -z "$fell" ]; then ok "$c no table's rows fell $w — $(qf_kv "$a0" rows | tr ',' ' ') (quote_followup_state counted over its rows NOT LIKE 'list_last:%', which the daily list's sweep deletes)"
+  else bad "$c rows FELL $w:$fell (before>after) — nothing this script runs deletes a row, and no step cuts these tables"; fi
+  if [ "$(qf_kv "$a0" sc)" = "$(qf_kv "$b0" sc)" ]; then ok "$c every _schema_checks row unchanged $w ($(qf_kv "$a0" sc | tr ',' '\n' | grep -c .) rows)"
+  else bad "$c a _schema_checks row changed $w ($(qf_kv "$b0" sc | tr ',' ' ') → $(qf_kv "$a0" sc | tr ',' ' '))"; fi
+  jb="$(qf_kv "$b0" jobs | tr ',' '\n' | cut -d: -f1 | grep -v '^-$')"; ja="$(qf_kv "$a0" jobs | tr ',' '\n' | cut -d: -f1)"
+  for t in $jb; do grep -qxF -- "$t" <<<"$ja" || j="$j $t"; done
+  if [ -z "$j" ]; then ok "$c master_schedule.json keeps every entry of the four jobs it held before ($(printf '%s' "${jb:-none}" | paste -sd' ' -); sched=$(qf_kv "$a0" sched))"
+  else bad "$c master_schedule.json lost the entries of$j $w"; fi
+  note "$c quote_followup_state, whole: $(qf_kv "$b0" qfs_all) → $(qf_kv "$a0" qfs_all) (the daily list's sweep deletes its list_last:* rows inside its own transaction — a note); the four jobs' entries now $(qf_kv "$a0" jobs) (before $(qf_kv "$b0" jobs)); $(qf_kv "$a0" claims) claim(s) in wa_auto_sends since — the steps that are on claim, as expected"
+}
+# lk_ca2 SUB — LK-CA2 on SUB's fresh copy against the baseline taken at the copy's start (LK_ROWS_B; the deploy run)
+lk_ca2() {
+  local o
+  if [ "$MODE" != "deploy" ]; then note "LK-CA2 judges the deploy run, against the baseline taken at the copy's start; here, now: $(qf_php lkrows "$1/plugin.sqlite3" 0 | sed 's/ sc=.*//')"; return; fi
+  [ -n "$LK_ROWS_B" ] || { bad "LK-CA2 the baseline taken at the copy's start is not there — nothing to judge against"; return; }
+  o="$(qf_php lkrows "$1/plugin.sqlite3" "$(qf_kv "$LK_ROWS_B" max)")"
+  case "$o" in "rows="*" sc="*" max="*) ;; *) bad "LK-CA2 the rows could not be read on a copy after the copy (${o:-not read})"; return ;; esac
+  lk_rows_judge LK-CA2 "$LK_ROWS_B" "$o" "across the copy"
+}
+# lk_on INST_ROOT — LK-ON (the deploy run): each step on at LK-G1, judged by the INSTALLED tool's --check on a fresh copy of
+# its own (QF-CA4 and QF-CA8 plant rows and a key on qf_after's), beside stage A's through the pin's tool on QF-G1's copy
+# (LK_ON_A) — the tool is 994d660's bytes in both. PASS before and FAIL after is a FAIL; everything else is a note.
+lk_on() {
+  local s a st o sub
+  [ "$MODE" = "deploy" ] || return 0
+  case "${LK_ON:-}" in ''|-) note "LK-ON no step of the sales follow-up was on at LK-G1 — nothing to judge"; return 0 ;; esac
+  cih_main || true   # the run's folder, made in this shell before the copy below, which runs in $( … ) (DS3-fix1)
+  sub="$(qf_copy lkon "$1")" || { bad "LK-ON a fresh copy of the book could not be made — ${sub:-?}; the steps that are on are not judged"; return; }
+  for s in $(printf '%s' "$LK_ON" | tr ',' ' '); do
+    a="$(printf '%s\n' $LK_ON_A | sed -n "s/^$s://p" | head -1)"
+    o="$(qf_tool "$sub" --check "$s")"
+    st="$(printf '%s\n' "$o" | grep -m1 "^$s: " | sed "s/^$s: //" | awk '{ print $1 }')"
+    if [ "$a" = "PASS" ] && [ "$st" = "FAIL" ]; then qf_show_tool "$o" 30; bad "LK-ON $s: PASS at stage A through the pin's tool, FAIL now through the installed one, on a fresh copy — the tool is the same bytes in both; the lines above say which check"
+    else note "LK-ON $s: ${a:-not read} at stage A, ${st:-not read} now (the installed tool's --check on a fresh copy)"; fi
+  done
+  cih_drop "$sub"
+}
+# lk_ao — LK-AO (--after-only): the reading under the kept key against the deploy's LK_MAP, a note naming every key
+# changed since the deploy (the operator may turn a step on by then, offers-live among them). Without the key file the
+# note says "cannot be compared", never "the same".
+lk_ao() {
+  local o m at
+  cih_main || true
+  lk_key_init || true
+  o="$(lk_read)"
+  lk_ok "$o" || { note "LK-AO the ladder's keys could not be read (${o%% map=*})"; return; }
+  m="$(sed -n 's/^LK_MAP=//p' "$STATE" 2>/dev/null | tail -n1)"; at="$(sed -n 's/^LK_AT=//p' "$STATE" 2>/dev/null | tail -n1)"
+  if [ "$LK_KEY_FROM" != "kept" ]; then note "LK-AO the deploy's key file ($LK_KEY_FILE) is not there or holds no key: the ladder's keys cannot be compared with the deploy's; as they stand now: $(lk_say "$o")"
+  elif [ -z "$m" ]; then note "LK-AO the state file ($STATE) holds no LK_MAP: the ladder's keys cannot be compared with the deploy's; as they stand now: $(lk_say "$o")"
+  elif [ "$m" = "$(lk_map "$o")" ]; then note "LK-AO the ladder's keys read exactly as the deploy left them at ${at:-?} (LK_MAP, under the kept key): $(lk_say "$o")"
+  else
+    qf_sheet "LK-AO the ladder's keys changed since the deploy, key|place: hash at the deploy -> now (no value)" "$(lk_diff_sheet "$m" "$(lk_map "$o")")"
+    note "LK-AO the ladder's keys changed since the deploy (${at:-?}): $(lk_diff "$m" "$(lk_map "$o")") — the operator's steps; now: $(lk_say "$o"); the hashes on the sheet"
+  fi
+}

@@ -1,0 +1,51 @@
+    case 'lkrows': // lkrows DB MAX — LK-CA2 (root docs/74 §H.4.3), read-only (the live book at the baseline, a fresh copy
+                   // after the copy): the rows that never fall, by table — quote_followup_state over its rows NOT LIKE
+                   // 'list_last:%' only, since the daily list's sweep deletes those inside its transaction
+                   // (lib/QuoteDailyList.php:542), and whole (a note); every _schema_checks row; the four jobs' entries in
+                   // master_schedule.json; wa_auto_sends' largest id and its claims above MAX. Counts and names only.
+        [$db, $max] = [(string)$a[0], (int)($a[1] ?? 0)];
+        $p = $ro($db);
+        $cnt = function (string $t, string $w = '') use ($p, $has, $one): int {
+            return $has($p, $t) ? (int)$one($p, 'SELECT COUNT(*) FROM [' . $t . ']' . $w) : -1;
+        };
+        $r = [];
+        foreach (['quote_tracker', 'wa_auto_sends', 'quote_list_sends', 'wa_seen_marks', 'wa_media', 'wa_voice_calls', 'wa_voice_acks',
+                  'wa_offers', 'wa_offer_recipients', 'wa_offer_tests', 'wa_offer_events', 'quote_agent_makers', 'quote_agent_copies'] as $t) {
+            $r[] = $t . ':' . $cnt($t);
+        }
+        $r[] = 'followups_quote:' . ($col($p, 'followups', 'kind') ? (int)$one($p, "SELECT COUNT(*) FROM followups WHERE kind = 'quote'") : -1);
+        $r[] = 'quote_followup_state_kept:' . $cnt('quote_followup_state', " WHERE k NOT LIKE 'list_last:%'");
+        $sc = [];
+        if ($has($p, '_schema_checks')) {
+            foreach ($p->query('SELECT migration, expected, found FROM _schema_checks ORDER BY migration, expected, found')->fetchAll(PDO::FETCH_NUM) as $x) {
+                $sc[] = (string)$x[0] . ':' . (int)$x[2] . '/' . (int)$x[1];
+            }
+        }
+        $ms = $flat($p, 'master_schedule.json'); $e = []; [$sst, $sot] = $sched($p);
+        foreach ($JOBS as $j) if (is_array($ms) && isset($ms[$j]) && is_array($ms[$j])) $e[] = $j . ':' . (int)($ms[$j]['last_run'] ?? 0);
+        $lw = $has($p, 'wa_auto_sends');
+        $mx = $lw ? (int)$one($p, 'SELECT COALESCE(MAX(id), 0) FROM wa_auto_sends') : 0;
+        $cl = $lw ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE id > ? AND mode = 'claim'", [$max]) : 0;
+        echo 'rows=', implode(',', $r), ' qfs_all=', $cnt('quote_followup_state'), ' sc=', $sc === [] ? '-' : implode(',', $sc),
+             ' jobs=', $e === [] ? '-' : implode(',', $e), ' sched=', $sst, ' others=', $sot, ' max=', $mx, ' claims=', $cl, ' unix=', time();
+        break;
+
+    case 'flags':  // flags DB CSV — QF-CA3's cron_status half (root docs/74 §H.4.4) on a copy: each key of CSV as
+                   // tools/cron_status.php reads a job's 'flag' — from the store row (its kyc_config.json document) —
+                   // 1 when it reads on ('1', 'true', 'on', 'yes', trimmed, any case), 0 otherwise
+        $p = $ro($a[0]); $st = $storeRow($p); $o = [];
+        foreach (array_filter(explode(',', (string)($a[1] ?? '')), 'strlen') as $k) {
+            $v = $st[$k] ?? '';
+            $o[] = $k . ':' . (is_scalar($v) && in_array(strtolower(trim((string)$v)), ['1', 'true', 'on', 'yes'], true) ? 1 : 0);
+        }
+        echo 'flags=', $o === [] ? '-' : implode(',', $o);
+        break;
+
+    case 'rbn':    // rbn PDD — RB105's counts after the put-back (root docs/74 §H.5.4), read-only on the live book: the open quote
+                   // follow-ups and the running offers — 994d660's own, which carry on — and wa_voice_calls' rows (a note)
+        $p = $ro($a[0] . '/plugin.sqlite3');
+        echo 'open_quote=', $col($p, 'followups', 'kind') ? (int)$one($p, "SELECT COUNT(*) FROM followups WHERE kind = 'quote' AND closed_at IS NULL") : 0,
+             ' running_offers=', $has($p, 'wa_offers') ? (int)$one($p, "SELECT COUNT(*) FROM wa_offers WHERE state = 'running'") : 0,
+             ' voice_calls=', $has($p, 'wa_voice_calls') ? (int)$one($p, 'SELECT COUNT(*) FROM wa_voice_calls') : 0;
+        break;
+
