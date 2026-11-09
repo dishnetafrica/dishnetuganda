@@ -16699,6 +16699,16 @@ as root on the server, after 5.18.104's entry above.
   waiting for the first direct sale. QF-CA5 and QF-ON0–QF-ON5, VA-ON1, VN-ON1–VN-ON4, OF-ON1, OF-ON2 and AC-ON1: all
   13 steps and the ledger off, each `OFF — not judged`. Z1: the live vault unwritten since the deploy's stage A. uCRM
   was asked 22 GETs and nothing else.
+- **The first steps, 9 Nov** (the terminal pasted; each wrapper wrote its own log in `/root/dnb-sales/`):
+  - **The report** (begun 04:24:39 UTC): read-only on a copy, exit 0. Its headline: of the last 30 days' quotations,
+    46 of 136 neither answered nor chased within 7 days (112 of 319 over 90 days); `AFTER 5.18.104` all zero, nothing
+    tracked yet. Found in it, for 5.18.105: in the BY NUMBER table a four-digit conversation count runs into the
+    masked number before it (`••••57` and `1013` print as one field).
+  - **Step 1, `report`**: `on report --ran 2026-11-09` at 04:25:09 UTC, run a second time at 04:25:25 (the same key
+    written again); `--check report` PASS.
+  - **Step 2, `ack`**: on at 04:26:06 UTC — its preconditions read (step 1 PASS, 089's and 090's self-checks present,
+    `dn_tz()` Africa/Kampala, the assistant on, `VoiceAckLimits` valid); the ledger and the voice-note acknowledgement
+    on. `--check ack` `NOT_YET too_soon` (L-ON and VA-ON1), as it must for the first 24 hours.
 - **Still to come**, the summary's *your steps*:
   - the quarantine's `--check`, its own command; `--after-only` again the next day after 15:00 UTC, once the evening
     WhatsApp has run on the new code;
