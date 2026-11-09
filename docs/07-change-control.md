@@ -16270,7 +16270,8 @@ The trials:
 - It is `evo_webhook.php`'s opt-out line, which this release does not change. 5o13 leaves that one exact form out of
   its name scan and counts it: exactly one, from 5o11's STOP, the positive control that the form excluded is the form
   written. Every other line is scanned as before. The line's history, the three older lines that also carry a number
-  and the owner's ruling (step 12, `offers-live`, waits for 5.18.105 to be deployed) are known limit 13.
+  and the owner's rulings (steps 6, `chase`, and 12, `offers-live`, wait for 5.18.105 to be deployed) are known
+  limit 13.
 
 ### Runbook
 
@@ -16427,7 +16428,12 @@ clears it. A needed check that still reads `NOT_YET no_traffic` after 72 hours o
   when the customer writes, a person takes over, the customer says STOP, or the quotation is accepted or expires. It
   needs tracking on for at least 72 hours. `on chase` prints what it would do — the R-01 measurement, the would-be
   chases by handset (named by role and index, never a phone), the holds by reason, the persona state, the enquiry
-  drafts that become paced — and asks you to type `yes`: run it in a terminal, never piped.
+  drafts that become paced — and asks you to type `yes`: run it in a terminal, never piped. **Not until 5.18.105 is
+  deployed** (the owner's ruling, 9 Nov): each chase ends with STOP, and each STOP the webhook records writes the
+  customer's number to its log (known limit 13). Tracking's 72 hours run meanwhile. If 5.18.105 is not deployed when
+  they end, `skip chase` with `--reason "…"` lets steps 7–9 and 11 come on (only step 10, `cold`, needs the chase),
+  and a later `on chase` clears the skip. 5.18.104's tool does not check for 5.18.105: run the two commands below
+  only once it serves.
 
       cd /opt/dishnet && bash scripts/sales-followup.sh on chase
 
@@ -16640,6 +16646,9 @@ nothing.
       - 5.18.105 masks all four lines, and is ready before step 12 (`offers-live`) is switched on. Step 12 is not
         switched on until 5.18.105 is deployed: the masking holds only once it serves, and 5.18.104's tool does not
         check for it (the runbook, step 12).
+    - **The owner ruled on 9 Nov** that step 6 (`chase`) waits for 5.18.105 too: each chase ends with STOP, and each
+      STOP the webhook records writes the line. Tracking's 72 hours run meanwhile; `skip chase` lets the voice steps
+      and `offers-test` come on if 5.18.105 is later than that (the runbook, step 6).
 
     This release's own rule, that new logs carry counts and fixed codes only, holds for every line it adds; these four
     are older.
