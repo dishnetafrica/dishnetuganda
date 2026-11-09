@@ -1,0 +1,298 @@
+# ── 5.18.104: Part O's checks — the offers (OF; root docs/73 §H.4.18, §H.4.19; rulings R7, R12, R13, R17, R18) ────────────
+# Read-only, as every reading here, on COPIES — QF-G2's trial copy at stage A (the census before its trial, then OF-G2,
+# OF-N1 and OF-N3 on it once 089 → 090 → 091 have run there, through the PIN's code), Part F's qf_copy after the copy
+# (through the INSTALLED code), and Part V's vn_book_copy (the book alone) in the rollback — and as text: the pin's files
+# from Git and the installed files on the host (OF-CA1's menu entry, OF-CA2's master). Two readings go to the live data
+# folder, neither writing it: OF-M1's bounded wait reads 091's row of the migration ledger with SQLITE_OPEN_READONLY, and
+# OF-CA3's redeploy baseline is read in Part F's own baseline call (QF-G1's one moment, root docs/73 §H.2.15.1, §H.4.18
+# OF-G1). NOTHING HERE SENDS AN OFFER, AND NOTHING REACHES EVOLUTION: every OF reading runs in a PHP process whose network
+# functions are off (OF_NONET, allow_url_fopen=0), OF-CA4's job is included on a scratch settings folder that holds no
+# book, only after live() there reads false and its data folder resolves to that scratch, and the tool is asked `show`
+# and `--check` only. Nothing here writes the live book: on a redeploy every key Part O owns is cleared by QF-G4 alone
+# (ruling R7), and in a rollback by QF-RB1 alone, Part O's hook inside it (OfferSwitch::offHook, before its keys clear;
+# rulings R12, R13). The log carries counts, fixed codes, key and schema names, handset labels and PASS/FAIL/NOTE; offer
+# ids, the baseline's largest ids and the copy's start go to the run's 0600 sheet (root docs/73 §H.4.15).
+OF_PHP="$(cat <<'PHP'
+@@OF_PHP@@
+PHP
+)"
+OF_NONET="@@OF_NONET@@"   # the functions every OF reading runs without: no request can leave it, whatever the code it loads does
+OF_091_MD5="@@OF_091_MD5@@"; OF_091_SC="@@OF_091_SC@@"   # from Git: 091's md5 (the ledger's checksum) and its _schema_checks count
+OF_NAV_SHA="@@OF_NAV_SHA@@"   # from Git: the sha256 of the pin's offers block in includes/navigation.php, as of_nav_block reads it
+OF_R1_LINES="$(cat <<'TXT'
+@@OF_R1_LINES@@
+TXT
+)"   # ruling R1's four lines, byte for byte, in its order (root docs/73 §R1; OfferSwitch::masterLines() at the pin, from Git)
+OF_G2_PRE=""; OF_G2_POST=""; OF_G1_IDS=""; OF_N1=""; OF_N3=""; OF_BASE=""; OF_BASE_F=""
+QF_RB1_START=""   # QF-RB1's start (UTC seconds), taken in qf_rb1 before the installed tool runs: OF-RB1 bounds its test clause by it
+of_php() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -d allow_url_fopen=0 -d "disable_functions=$OF_NONET" -r "$OF_PHP" "$@"; }   # of_php MODE ARG… — one line
+# the offers block of includes/navigation.php, from its 5.18.104 comment to its endif: OF-CA1 compares its sha256 with the
+# pin's (the derivation computed OF_NAV_SHA with this same reader); of_nav_counts the file's counts of what the block holds:
+# the block, the wa_offers link, and the one assignment from OfferSwitch::screen( (the block's comment names it too)
+of_nav_block() {
+  awk 'index($0, "<?php /* 5.18.104 (root docs/73 ") == 1 && index($0, "): WhatsApp offers, Uganda only") > 0 { f = 1 }
+       f { print }
+       f && $0 == "<?php endif; ?>" { exit }'
+}
+of_nav_counts() {
+  awk 'index($0, "<?php /* 5.18.104 (root docs/73 ") == 1 && index($0, "): WhatsApp offers, Uganda only") > 0 { b++; f = 1 }
+       index($0, "tab=wa_offers") { t++; if (f) ti++ }
+       index($0, "= OfferSwitch::screen(") { s++; if (f) si++ }
+       f && $0 == "<?php endif; ?>" { f = 0 }
+       END { printf "blocks=%d tabs=%d/%d screen=%d/%d\n", b, ti, t, si, s }'
+}
+# master's last four job lines of $_m_jobs (indentation and comment lines aside, as OfferSwitch::masterCheck reads them),
+# then the count of 'offers_send' in the whole file
+of_master() {
+  awk 'index($0, "$_m_jobs = [") == 1 { f = 1; next }
+       f && $0 == "];" { f = 0 }
+       f { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l)
+           if (l != "" && index(l, "//") != 1 && index(l, "#") != 1 && index(l, "/*") != 1 && index(l, "*") != 1) { n++; L[n] = l } }
+       { c += gsub(/\047offers_send\047/, "&") }
+       END { for (i = n - 3; i <= n; i++) if (i >= 1) print L[i]; print "offers_send_count=" c }'
+}
+
+# of_g2_pre SUB / of_g2_post SUB — OF-G1's and OF-G2's reads of QF-G2's one trial copy (ruling R10), called inside QF-G2:
+# the census of every existing table before the trial (to the reading's folder) and, on a redeploy, the offers not closed
+# (their ids for the sheet); then, once the trial and the pin's doctor have run on that copy, the census again over the
+# same columns, OfferSchema::check(), and OF-N1's and OF-N3's readings on the same copy (091 applied there alone). Sets
+# OF_G2_PRE, OF_G1_IDS, OF_G2_POST, OF_N1, OF_N3; judged in of_stage. Touches nothing of QF-G2's own.
+of_g2_pre() {
+  OF_G2_PRE="$(of_php pre "$1/plugin.sqlite3" "$1/of-census.txt" "$1/of-ids.txt")"
+  OF_G1_IDS="$(dxo cat "$1/of-ids.txt" 2>/dev/null)"
+}
+of_g2_post() {
+  OF_G2_POST="$(of_php post "$1/code" "$1" "$1/of-census.txt")"
+  OF_N1="$(of_php n1 "$1/code" "$1" "${QF_G1:-}")"
+  OF_N3="$(of_php n3 "$1/code" "$1")"
+}
+
+# of_stage — OF-G1, OF-G2 and OF-N1–OF-N3, stage A, before anything changes (a deploy and --check): OF-G1 a read of
+# QF-G4's result for Part O's keys (ruling R7: Part O clears nothing itself), and the copy's shape for Part O; OF-G2 Part
+# O's share of QF-G2's one trial; the notes. A refusal stops here: nothing has changed. (OF-CA3's redeploy baseline is
+# taken at QF-G1's one moment, stage B: of_baseline.)
+of_stage() {
+  local o v k os g1 tr ap ver lg bad=""
+  hdr "A. The offers (5.18.104, Part O's OF; read-only, on QF-G2's trial copy through the pin's code; nothing is sent)"
+  # OF-G1 — a read of QF-G4's result (ruling R7): Part O's switch and record keys among those QF-G4 found set
+  o="$(of_php okeys "$P3B_PIN")"
+  case "$o" in oswitch=[1-9]*" osettings="*) ;; *) stop "NO-GO (OF-G1): Part O's keys could not be read through the pin's ladder (${o:-not read}). Nothing was changed. Send the log file" ;; esac
+  os=""; for k in $(qf_kv "$o" oswitchnames | tr ',' ' '); do case ",${QF_G4_NAMES:-}," in *",$k,"*) os="$os $k" ;; esac; done
+  if [ -n "$os" ]; then note "OF-G1 PART O'S KEYS SET:$(printf '%s' "$os" | tr 'a-z' 'A-Z') — QF-G4's one rule decides (ruling R7): $( [ -n "$QF_CLEAR" ] && echo "--clear-switches has the pin's tool clear them after DEPLOY, Part O's hook (OfferSwitch::offHook) before its keys, every part's hooks with it" || echo "they would stop the run") — Part O clears nothing itself"
+  else ok "OF-G1 none of Part O's $(qf_kv "$o" oswitch) switch and record keys (offers_test_enabled, offers_live_enabled, offers_live_since and their skip and override keys) is set — QF-G4's read (ruling R7); Part O clears nothing itself, and its $(qf_kv "$o" osettings) settings are printed by OF-N3, never NO-GO (ruling R5)"; fi
+  g1="$OF_G2_PRE"
+  case "$g1" in "tables="*" of_any="*" offers="*) ;; *) stop "NO-GO (OF-G1): QF-G2's copy could not be read before its trial (${g1:-not read}) — OF-G1 and OF-G2 rest on that reading. Nothing was changed. Send the log file" ;; esac
+  case "$QF_G1" in
+    first)
+      [ "$(qf_kv "$g1" of_any)" = "0" ] || stop "NO-GO (OF-G1): a book $EXPECTED_VERSION never ran on (QF-G1: 088 last) already holds $(qf_kv "$g1" of_any) wa_offer* table(s) — an earlier, unreviewed offers table would stand where 091 creates its own. Nothing was changed. Send the log file"
+      ok "OF-G1 a first deploy: no wa_offer* table on the copy, and no offers_* switch or stamp set (QF-G4) — both as expected" ;;
+    redeploy)
+      qf_sheet "OF-G1 the offers not closed on this redeploy's book, by state (offer ids; never paste)" "${OF_G1_IDS:-not read}"
+      note "OF-G1 091 IS ALREADY APPLIED ON THIS BOOK — A REDEPLOY: ITS OFFER TABLES ($(qf_kv "$g1" of_tables)) STAY AS THE ROLLBACK LEFT THEM. OFFERS BY STATE: $(qf_kv "$g1" offers | tr 'a-z,' 'A-Z ') (EVERY ONE NOT CLOSED, BY ID, ON THE SHEET); recipients by state $(qf_kv "$g1" recipients), tests $(qf_kv "$g1" tests), events $(qf_kv "$g1" events) — history, never a fault (OF-RB2): a paused offer resumes only when an admin presses Resume, once offers-test and offers-live are on again with their checks$(case ",$(qf_kv "$g1" offers)," in *",running:"*) echo "; AN OFFER STILL RUNNING IS PAUSED AT THE SENDER'S FIRST RUN BY THE LIVE-SINCE GUARD (O-D19), never sent" ;; esac)" ;;
+    *) stop "NO-GO (OF-G1): QF-G1 did not say what this book is (${QF_G1:-unset}). Nothing was changed. Send the log file" ;;
+  esac
+  # OF-G2 — Part O's share of QF-G2's one trial (ruling R10): 091 ok, not partial, its row at its count; OfferSchema::check()
+  # empty; every existing table's rows unchanged by count and by a hash of every row. Any failure is NO-GO.
+  tr="$QF_G2_TRIAL"; ap="$(qf_kv "$tr" applied)"; ver="$(qf_kv "$tr" verdicts)"; lg="$(qf_kv "$tr" log)"
+  case ",$ver," in *",091_wa_offers.sql=$OF_091_SC/$OF_091_SC/$OF_091_SC,"*) ;; *) bad="$bad 091:verdict" ;; esac
+  if [ "$QF_G1" = "first" ]; then
+    case ",$ap," in *",091_wa_offers.sql:ok,"*) ;; *) bad="$bad 091:not-ok" ;; esac
+    case ",$lg," in *",091_wa_offers.sql=OK,"*) ;; *) bad="$bad 091:log-not-OK" ;; esac
+  else
+    case ",$ap," in *",091_wa_offers.sql:"*) bad="$bad 091:applied-on-a-redeploy" ;; esac
+  fi
+  v="$OF_G2_POST"
+  case "$v" in "tables="*" schema="*" changes="*) ;; *) bad="$bad after-the-trial:unread(${v:-not read})" ;; esac
+  [ "$(qf_kv "$v" schema)" = "sound" ] || bad="$bad OfferSchema:$(qf_kv "$v" schema)"
+  [ "$(qf_kv "$v" changed)|$(qf_kv "$v" unread)" = "-|-" ] || bad="$bad tables-changed:$(qf_kv "$v" changed)|unread:$(qf_kv "$v" unread)"
+  { [ "$(qf_kv "$v" same)" = "$(qf_kv "$v" tables)" ] && [ "$(qf_kv "$v" tables)" = "$(qf_kv "$g1" tables)" ] && [ "$(qf_kv "$g1" tables)" -ge 1 ] 2>/dev/null; } \
+    || bad="$bad census:$(qf_kv "$v" same)-of-$(qf_kv "$v" tables)-of-$(qf_kv "$g1" tables)"
+  [ "$(qf_kv "$v" expected)" = "$OF_091_SC" ] || bad="$bad OfferSchema::EXPECTED:$(qf_kv "$v" expected)"
+  [ "$(qf_kv "$v" changes)" = "0" ] || bad="$bad the-read-changed-the-copy:$(qf_kv "$v" changes)"
+  [ -z "$bad" ] || stop "NO-GO (OF-G2): Part O's share of QF-G2's one trial (089 → 090 → 091 through the pin's runner, on a copy) did not read as reviewed:$bad. Nothing was changed. Send the log file"
+  ok "OF-G2 Part O's share of QF-G2's one trial (ruling R10): $( [ "$QF_G1" = "first" ] && echo "091 applied ok, never partial, its migration.log line OK, and" || echo "on this redeploy 091 already applied (none pending, none with other bytes), and" ) its _schema_checks row $OF_091_SC of $OF_091_SC; OfferSchema::check() empty through the pin's OfferSchema on the trial copy; each of the copy's $(qf_kv "$v" tables) existing tables (the runner's ledger aside) holds the same rows after the trial — $(qf_kv "$g1" rows) rows, by count and by a hash of every row over its columns as they were before it; the copy read with nothing written"
+  # OF-N1 — the baseline audience on the same copy, through the pin's store-free OfferAudience::build() (counts only)
+  o="$OF_N1"
+  case "$o" in "eligible="*)
+      note "OF-N1 the baseline audience, size all, through the pin's store-free OfferAudience::build() on QF-G2's trial copy (091 applied on that copy alone; read-only, total_changes() $(qf_kv "$o" changes)): $(qf_kv "$o" eligible) eligible, by handset $(qf_kv "$o" by_handset); $(qf_kv "$o" left) left out, by reason $(qf_kv "$o" left_out); waiting $(qf_kv "$o" waiting); compared loosely (last nine digits, exclusion only) $(qf_kv "$o" loose); the warm window $(qf_kv "$o" warm) days — how many customers wrote in that window, per number, counts only$( [ "$(qf_kv "$o" not_measured)" = "-" ] || echo ". A first deploy: $(qf_kv "$o" not_measured | tr ',' ' ') read \"not measured before 089\" (their sources are new in 089–091 and empty on this copy), and $(qf_kv "$o" partly | tr ',' ' ') are counted on their pre-existing sources alone (marked (part)) — so the eligible count is an upper bound")" ;;
+    *) note "OF-N1 the baseline audience could not be read on the trial copy (${o:-not read}) — NOT ESTABLISHED" ;;
+  esac
+  # OF-N2 — R-01 before 089: the PHP log's lines for a disappearing or view-once message, over 30 days
+  v="$(of_php n2 "$(dxo php -r 'echo (string)ini_get("error_log");' 2>/dev/null)" 2>/dev/null)"
+  case "$v" in "log=read "*) note "OF-N2 R-01 before 089, \"no text to answer\" lines for a disappearing or view-once message in the PHP log over 30 days: $(qf_kv "$v" lines30) (ephemeralMessage $(qf_kv "$v" ephemeralMessage), viewOnceMessage $(qf_kv "$v" viewOnceMessage), viewOnceMessageV2 $(qf_kv "$v" viewOnceMessageV2); older $(qf_kv "$v" older), undated $(qf_kv "$v" undated)) — from step 2 the marks count them (C-O1-5)" ;;
+    *) note "OF-N2 not measured — the PHP log could not be read (${v:-not read}); from step 2 the marks count them (C-O1-5)" ;; esac
+  # OF-N3 — the settings offers read, Part O's keys as stored, and the staff without a phone of record
+  o="$OF_N3"
+  case "$o" in "tz="*) note "OF-N3 as the copy's settings read through the pin's PluginConfig: dn_tz() $(qf_kv "$o" tz)$( [ "$(qf_kv "$o" tz)" = "Africa/Kampala" ] || echo " (NOT Africa/Kampala: P-O1-5 refuses on offers-test until it is)"), multi_number_channels_enabled $(qf_kv "$o" multi_number_channels_enabled), wa_human_cooldown_minutes $(qf_kv "$o" wa_human_cooldown_minutes), reminder_hour $(qf_kv "$o" reminder_hour), reminder_until_hour $(qf_kv "$o" reminder_until_hour); offers_test_enabled $(qf_kv "$o" offers_test_enabled), offers_live_enabled $(qf_kv "$o" offers_live_enabled), offers_live_since $(qf_kv "$o" offers_live_since); the six settings as stored: offers_warm_days $(qf_kv "$o" offers_warm_days), offers_recent_days $(qf_kv "$o" offers_recent_days), offers_daily_max_per_handset $(qf_kv "$o" offers_daily_max_per_handset), offers_on_owned_numbers $(qf_kv "$o" offers_on_owned_numbers), offers_stop_pause_pct $(qf_kv "$o" offers_stop_pause_pct), offers_max_days $(qf_kv "$o" offers_max_days) (unset reads its default; out of range: $(qf_kv "$o" invalid)); active staff accounts $(qf_kv "$o" staff_active), $(qf_kv "$o" staff_no_phone) of them with no phone of record (never excluded as a colleague by number, and never a test's recipient), active admins with one $(qf_kv "$o" admins_with_phone) (P-O1-7 needs at least one)" ;;
+    *) note "OF-N3 the settings offers read could not be read on the trial copy (${o:-not read}) — NOT ESTABLISHED" ;; esac
+}
+
+# of_base_prep / of_baseline — OF-CA3's redeploy baseline (Q18-O03), read-only from the live book in Part F's own baseline
+# call (qf_php base), after QF-G4 returned and the pause, at QF-G1's one moment, before the copy's start is stamped: each
+# P6 table's row count and largest id, wa_auto_sends' largest id with its counts of kind offer and of refs offer_test:*,
+# and evo_webhook_seen's largest id (0 for an empty table). The counts go to the log; the largest ids and the copy's start
+# (QF_COPY_AT, QF_COPY_UNIX) to the sheet. Stage A's copy is not this baseline: on the --clear-switches path it was taken
+# before the clear, and Part O's own hook then writes its paused_by_rollback events. Unreadable: stops before the checkout.
+of_base_prep() { OF_BASE_F=""; cih_init && OF_BASE_F="$CIH_BASE/of-base.txt" && dxo rm -f "$OF_BASE_F"; return 0; }
+of_baseline() {
+  local o=""
+  [ -n "$OF_BASE_F" ] && o="$(dxo cat "$OF_BASE_F")"
+  [ -n "$OF_BASE_F" ] && dxo rm -f "$OF_BASE_F"
+  case "$o" in "rows="*" max="*" ledger_max="*" seen_max="*) OF_BASE="$o" ;;
+    *) stop "NO-GO (OF-G1): OF-CA3's redeploy baseline could not be read from the live book in QF-G1's call (${o:-not read}) — OF-CA3 would have nothing to judge against. Nothing was copied. Send the log file" ;; esac
+  qf_sheet "OF-G1 OF-CA3's redeploy baseline: the largest ids, and the copy's start (never paste)" "wa_offers, wa_offer_recipients, wa_offer_tests, wa_offer_events: largest id $(qf_kv "$o" max); wa_auto_sends: largest id $(qf_kv "$o" ledger_max); evo_webhook_seen: largest id $(qf_kv "$o" seen_max); the copy's start $QF_COPY_AT UTC (unix $QF_COPY_UNIX)"
+  note "OF-G1 OF-CA3's redeploy baseline, read-only from the live book in QF-G1's one call, just before the copy and after QF-G4's clear and the pause: rows of wa_offers, wa_offer_recipients, wa_offer_tests, wa_offer_events $(qf_kv "$o" rows); wa_auto_sends rows of kind offer $(qf_kv "$o" ledger_offer), with a ref offer_test:* $(qf_kv "$o" ledger_test); their largest ids, evo_webhook_seen's and the copy's start are on the sheet — printed, never NO-GO"
+}
+
+# of_after INST_ROOT — after the copy (stage R; --after-only too): OF-M1 and OF-M2 (091 on the book), OF-CA1–OF-CA5 on a
+# fresh copy through the INSTALLED code (ICODE_R) and the installed files. OF-CA1's "off" and OF-CA3 judge what the deploy
+# did, so only the deploy run judges them; --after-only prints them. Reports; never stops. Nothing is sent.
+of_after() {
+  local inst="$1" sub o v i d oj ot b n bad=""
+  hdr "R. The offers, installed (5.18.104, Part O's OF; read-only, on a copy through the installed code; nothing is sent)"
+  [ -n "$inst" ] || { bad "OF-M1 no copy of the installed code to read with — OF-M1, OF-M2 and OF-CA1–OF-CA5 are not judged"; return; }
+  # OF-M1 waits for 091's ledger row, bounded (60 s), reading the live ledger alone, read-only; then reads on a fresh copy
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do [ "$(of_php ledger "$PDD_IN/plugin.sqlite3")" = "mig091=1" ] && break; sleep 5; done
+  sub="$(qf_copy of "$inst")" || { bad "OF-M1 a copy of the book could not be made — $QF_ROOT_ERR; OF-M1, OF-CA1's reading, OF-CA3, OF-CA4 and OF-CA5 are not judged"; sub=""; }
+  if [ -n "$sub" ]; then
+    o="$(of_php m1 "$sub/code" "$sub/plugin.sqlite3")"
+    if [ "$(qf_kv "$o" ledger)|$(qf_kv "$o" sc)|$(qf_kv "$o" schema)|$(qf_kv "$o" control)" = "$OF_091_MD5|$OF_091_SC/$OF_091_SC|sound|yes" ]; then
+      ok "OF-M1 091 on the book after the copy: its ledger row's md5 the pin's file's (${OF_091_MD5:0:12}…), the 091 _schema_checks row $OF_091_SC of $OF_091_SC, and OfferSchema::check() empty through the installed OfferSchema; wa_messages read (the positive control)"
+    else bad "OF-M1 091 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+  fi
+  # OF-M2 — migration.log's line for 091 (the row in OF-M1 is the verdict; the log may have been trimmed)
+  v="$(docker exec "$CONTAINER" sh -c 'l="$(grep -F 091_wa_offers.sql "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) echo PARTIAL ;; *OK:*) echo OK ;; "") echo none ;; *) echo other ;; esac' _ "$PDD_IN" 2>/dev/null </dev/null)"
+  case "$v" in
+    OK) ok "OF-M2 migration.log's last line for 091 reads OK:, never PARTIAL:" ;;
+    PARTIAL) bad "OF-M2 migration.log's last line for 091 reads PARTIAL: — a statement of 091 failed (its _schema_checks row, OF-M1, says which half holds)" ;;
+    *) note "OF-M2 migration.log holds ${v:-no readable} line for 091 (none: trimmed, or the first boot has not run) — OF-M1's _schema_checks row is the verdict" ;;
+  esac
+  # OF-CA1 — the installed menu entry as text: the offers block once, its link inside OfferSwitch::screen(, as the pin's
+  o="$(of_nav_counts <"$DEST/includes/navigation.php" 2>/dev/null)"; v="$(of_nav_block <"$DEST/includes/navigation.php" 2>/dev/null | sha256sum | cut -c1-64)"
+  if [ "$o" = "blocks=1 tabs=1/1 screen=1/1" ] && [ "$v" = "$OF_NAV_SHA" ]; then
+    ok "OF-CA1 the installed includes/navigation.php holds the offers block once, its one wa_offers link drawn only inside OfferSwitch::screen( (the pin's block, sha256 ${OF_NAV_SHA:0:12}…, read as text)"
+  else bad "OF-CA1 the installed menu entry is not the pin's offers block, once, inside OfferSwitch::screen( (${o:-not read}; block sha256 ${v:0:12}…)"; fi
+  if [ -n "$sub" ]; then
+    # OF-CA1 — through the installed code on the copy: screen() and live(), and the tab included as admin, beside its controls
+    o="$(of_php ca1 "$sub/code" "$sub")"
+    case "$o" in "gate="*)
+        if [ "$(qf_kv "$o" ctl_admin)" != "admin" ]; then bad "OF-CA1 the tab's control did not hold — included as a non-admin it did not answer with its admin alert ($o), so its dark card says nothing"
+        elif [ "$(qf_kv "$o" gate)" != "1" ]; then bad "OF-CA1 the copy does not read as Uganda through the installed StaffJobsGate (its own vault read; $o) — the screen half is not judged"
+        elif [ "$(qf_kv "$o" ctl_screen)|$(qf_kv "$o" ctl_switch)" != "1|admin" ]; then bad "OF-CA1 the switch's control did not hold — with offers_test_enabled on in a scratch settings folder the installed screen() did not open, or the tab still drew its dark card ($o)"
+        elif [ "$MODE" = "deploy" ]; then
+          [ "$(qf_kv "$o" screen)|$(qf_kv "$o" live)|$(qf_kv "$o" tab)" = "0|0|card" ] \
+            && ok "OF-CA1 through the installed code on a copy (tenant uganda, its own vault read): OfferSwitch::screen() and live() false; the tab, included as the dashboard includes it, as an admin and with no store at all, prints only its \"Offers are not switched on here.\" card — beside its controls: as a non-admin it answers with its admin alert, and with offers_test_enabled on in a scratch settings folder the screen opens and the tab goes past the card" \
+            || bad "OF-CA1 after the copy, the offers screen is not off as every Part O key must read unset ($o)"
+        else note "OF-CA1 through the installed code on a copy, as it reads now (an --after-only run): screen() $(qf_kv "$o" screen), live() $(qf_kv "$o" live), the tab as an admin with no store: $(qf_kv "$o" tab) (the controls held)"; fi ;;
+      *) bad "OF-CA1 the installed offers switch and tab could not be read on the copy (${o:-not read})" ;;
+    esac
+  fi
+  # OF-CA2 — the installed master's four lines (ruling R1), as text, and the installed OfferSwitch::masterCheck (P-O1-6)
+  o="$(of_master <"$DEST/$MASTER" 2>/dev/null)"; v=""; [ -n "$sub" ] && v="$(of_php ca2 "$sub/code")"
+  if [ "$(printf '%s\n' "$o" | head -4)" = "$OF_R1_LINES" ] && [ "$(printf '%s\n' "$o" | tail -1)" = "offers_send_count=1" ] && { [ -z "$sub" ] || [ "$v" = "master=r1" ]; }; then
+    ok "OF-CA2 the installed $MASTER ends \$_m_jobs with ruling R1's four lines byte for byte, in its order — quote_chase, quote_daily_list, ai_media, offers_send — 'offers_send' named once, last, interval 240, 'uganda' => true, 'flag' => 'offers_live_enabled'$( [ -n "$sub" ] && echo "; the installed OfferSwitch::masterCheck (P-O1-6) agrees")"
+  else bad "OF-CA2 the installed $MASTER does not end \$_m_jobs with ruling R1's four lines, offers_send once and last ($(printf '%s\n' "$o" | tail -1); the installed masterCheck: ${v:-not read})"; fi
+  if [ -n "$sub" ]; then
+    # OF-CA3 — nothing of Part O written during the deploy (Q16-O05; ruling R18): the deploy run only
+    o="$(of_php ca3 "$sub/plugin.sqlite3" "$( [ "${QF_G1:-}" = "redeploy" ] && printf '%s' "${OF_BASE:-}")" "${QF_COPY_UNIX:-0}")"
+    case "$o" in "rows="*) ;; *) o="" ;; esac
+    if [ -z "$o" ]; then bad "OF-CA3 the offer tables, the ledger and evo_webhook_seen could not be read on the copy — what the deploy wrote is not established"
+    elif [ "$MODE" = "deploy" ] && [ "$QF_G1" = "first" ]; then
+      [ "$(qf_kv "$o" rows)|$(qf_kv "$o" ledger_offer)|$(qf_kv "$o" seen_offer)" = "0,0,0,0|0|0" ] \
+        && ok "OF-CA3 a first deploy: wa_offers, wa_offer_recipients, wa_offer_tests and wa_offer_events hold no row after the copy; no wa_auto_sends row of kind offer or with a ref offer_test:*, and no evo_webhook_seen row with an event offer.* — nothing of Part O was written" \
+        || bad "OF-CA3 a first deploy, and Part O's rows exist after the copy (tables $(qf_kv "$o" rows); ledger rows of kind offer or offer_test:* $(qf_kv "$o" ledger_offer); offer.* echoes $(qf_kv "$o" seen_offer)) — something of Part O wrote with every key unset"
+    elif [ "$MODE" = "deploy" ] && [ "$QF_G1" = "redeploy" ]; then
+      b="$(qf_kv "$OF_BASE" rows)"; n=""
+      for i in 1 2 3 4; do [ "$(printf '%s' "$(qf_kv "$o" rows)" | cut -d, -f$i)" -ge "$(printf '%s' "$b" | cut -d, -f$i)" ] 2>/dev/null || n="$n table$i"; done
+      v="$(qf_kv "$o" late_claims)|$(qf_kv "$o" late_echoes)|$(qf_kv "$o" late_tests)|$(qf_kv "$o" bad_test_rows)"
+      if [ "$v" = "0|0|0|0" ] && [ -z "$n" ]; then
+        ok "OF-CA3 a redeploy, against OF-CA3's baseline taken just before the copy (rows then $b, now $(qf_kv "$o" rows) — none fell): no offer claim, no offer.send echo and no test above the baseline stamped in a later second than the copy's start (on the sheet), and no offer_test:* ledger row naming no test or a test so started; counted and printed, never FAIL (ruling R18; §H.4.21): added offer claims at or before that second $(qf_kv "$o" added_claims), tests started then $(qf_kv "$o" added_tests) with $(qf_kv "$o" added_test_rows) offer_test:* row(s), offer.* echoes $(qf_kv "$o" added_echoes), rows added $(qf_kv "$o" added), events added by action $(qf_kv "$o" added_events); the tables hold, by state: offers $(qf_kv "$o" offers), recipients $(qf_kv "$o" recipients), tests $(qf_kv "$o" tests) — history (OF-RB2)"
+      else bad "OF-CA3 a redeploy: above OF-CA3's baseline, in a later second than the copy's start (on the sheet), $(qf_kv "$o" late_claims) offer claim(s), $(qf_kv "$o" late_echoes) offer.send echo(es), $(qf_kv "$o" late_tests) test(s), and $(qf_kv "$o" bad_test_rows) offer_test:* ledger row(s) naming no test or a test so started$( [ -z "$n" ] || echo "; and a count fell below the baseline's (${n# }: 091's never-deleted triggers forbid it)") — the dark build wrote with every key unset (rows then $b, now $(qf_kv "$o" rows))"; fi
+    else note "OF-CA3 judges the dark build in the deploy run; here, now: the four offer tables $(qf_kv "$o" rows) (offers $(qf_kv "$o" offers), recipients $(qf_kv "$o" recipients), tests $(qf_kv "$o" tests)); ledger rows of kind offer or offer_test:* $(qf_kv "$o" ledger_offer); offer.* echoes $(qf_kv "$o" seen_offer)"; fi
+    # OF-CA4 — South Sudan with both offer keys on: live() false; the job, included directly on a scratch folder with no
+    # book, writes nothing, loads no sender and prints nothing, the network off in its process; the tool "not this install"
+    d="$sub/of4"; oj=""; ot=""
+    if dxo mkdir -m 700 "$d" && qf_root "$inst" "$d/code" "$sub/conf" \
+       && dxo sh -c 'rm -f "$1/code/data/ucrm.json" && printf "{\"pluginDataDir\":\"%s\"}" "$1" > "$1/code/ucrm.json"' _ "$d"; then
+      v="$(of_php prep4 "$sub" "$d")"
+      o="$(of_php ca4 "$sub/code" "$sub")"
+      case "$v" in "prep=ok book=none "*) oj="$(of_php job "$d/code" "$d")"; ot="$(qf_tool "$d" show)" ;; *) oj="?prep($v)" ;; esac
+    else o="?scratch"; fi
+    if [ "$(qf_kv "$o" ug_screen)" != "1" ]; then bad "OF-CA4 the control did not hold — the same keys on Uganda did not open the installed screen() ($o), so South Sudan's \"off\" says nothing"
+    elif [ "$(qf_kv "$o" ss_live)|$(qf_kv "$o" ss_screen)" = "0|0" ] \
+         && [ "$oj" = "datadir=scratch pre_live=0 net=off thrown=- out_bytes=0 book=none wal=none sender=0 audience=0 gateway=0" ] \
+         && [ "$(printf '%s\n' "$ot" | head -1)" = "not this install" ]; then
+      ok "OF-CA4 forced South Sudan with both offer keys on (offers_live_since now) on a scratch copy of the settings: the installed OfferSwitch::live() and screen() false — the gate, not the switches: the same keys on Uganda open the screen (the control; live() $(qf_kv "$o" ug_live) there$( [ "$(qf_kv "$o" ug_live)" = "1" ] || echo ", a setting out of range — OF-N3")); the installed cron/offers_send.php, included directly as master includes it, on that scratch (no book in it, its data folder resolved to it, the network off in its process), wrote nothing (no book appeared), loaded no sender, audience or gateway class and printed nothing; the installed tool's show says \"not this install\""
+    else bad "OF-CA4 forced South Sudan with both offer keys on, Part O is not inert (in memory: $o; the job: ${oj:-not run}; the tool: $(printf '%s\n' "$ot" | head -1 | cut -c1-120))"; fi
+    # OF-CA5 (S2-11) — the installed OfferSwitch::declaredKeys() inside the installed ladder's two lists (ruling R5)
+    o="$(of_php ca5 "$sub/code")"
+    case "$o" in "declared=9 all="*" outside=-") [ "$(qf_kv "$o" all)" -ge 1 ] 2>/dev/null && [ "$(qf_kv "$o" settings)" -ge 1 ] 2>/dev/null \
+        && ok "OF-CA5 the installed OfferSwitch::declaredKeys() — its 2 switches, offers_live_since and its 6 settings — all inside the installed SalesFollowupLadder::allKeys() ($(qf_kv "$o" all)) and settingKeys() ($(qf_kv "$o" settings)) (ruling R5)" \
+        || bad "OF-CA5 the installed ladder's lists read empty ($o)" ;;
+      *) bad "OF-CA5 the installed OfferSwitch::declaredKeys() is not inside the installed ladder's allKeys() and settingKeys() (${o:-not read})" ;;
+    esac
+    cih_drop "$sub"
+  fi
+}
+
+# of_on SUB — --after-only (read-only, on qf_on's fresh copy, through the INSTALLED tool): OF-ON1 `--check offers-test`
+# (C-O1-1 … C-O1-6; C-O1-4 is judged until the first Start and is a note after it, so a live run alone never turns it to
+# FAIL) and OF-ON2 `--check offers-live` (C-O2-1 … C-O2-12). A step that is off prints "OFF — not judged"; a result is
+# PASS, FAIL <code> or NOT_YET too_soon|no_traffic|no_test (ruling R6).
+of_on() {
+  qf_on_one "$1" OF-ON1 offers-test offers-test
+  qf_on_one "$1" OF-ON2 offers-live offers-live
+}
+
+# of_rb1 — OF-RB1, Part O's read of QF-RB1's result, after the installed tool's off all --rollback exited 0 and before the
+# put-back (rulings R7, R11, R12, R13): the tool's own lines (QF_RB1_OUT) — Part O's two rows first in the one sequence,
+# 12 then 11, each with its hook's counts printed BEFORE its keys cleared — and a copy of the book taken now: no offer
+# running, no recipient claimed, no test still sending that had been sending over 15 minutes when QF-RB1 began
+# (QF_RB1_START: the hooks ran after it, so each such test is one they had to settle — a test younger then is one they
+# rightly left, however old it reads by the time the copy is made; ruling R18), what the hook paused, settled and
+# returned. OF-RB1 is no run of its own.
+of_rb1() {
+  local o="$QF_RB1_OUT" first ord hl ht sw won d r ids
+  first="$(printf '%s\n' "$o" | grep -E '^OFF ' | head -2 | paste -sd' ' -)"
+  ord="$(printf '%s\n' "$o" | awk 'index($0, "  hook offers-live: ") == 1 && !a { a = NR } $0 == "OFF offers-live" && !b { b = NR }
+                                   index($0, "  hook offers-test: ") == 1 && !c { c = NR } $0 == "OFF offers-test" && !e { e = NR }
+                                   END { print (a && b && c && e && a < b && b < c && c < e) ? "ok" : "hook12:" a "/off12:" b "/hook11:" c "/off11:" e }')"
+  hl="$(printf '%s\n' "$o" | sed -n 's/^  hook offers-live: //p' | head -1)"; ht="$(printf '%s\n' "$o" | sed -n 's/^  hook offers-test: //p' | head -1)"
+  sw="$(of_php okeys "${P3B_PIN:-$IN_CONTAINER}" 2>/dev/null)"; sw="$(qf_kv "$sw" oswitchnames | tr ',' '\n')"
+  won="$(printf '%s\n' "$o" | sed -n 's/^was on: //p' | grep -cxF -f <(printf '%s\n' "$sw" | grep .) 2>/dev/null)"
+  if [ "$first" = "OFF offers-live OFF offers-test" ] && [ "$ord" = "ok" ]; then
+    ok "OF-RB1 the one sequence began with Part O — 12 (offers-live), then 11 (offers-test) — each step's OfferSwitch::offHook run on the tool's own connection with why rollback BEFORE its keys cleared (rulings R7, R13), and QF-RB1 read every key back unset; ${won:-0} of Part O's keys were on, by name on the sheet with QF-RB1's"
+  else bad "OF-RB1 the tool's lines do not show Part O's rows first, each hook before its keys (${first:-no OFF line}; $ord)"; fi
+  if [ -n "$hl" ] && [ -n "$ht" ]; then
+    note "OF-RB1 Part O's hook, by step (counts only): offers-live — offers paused $(qf_kv "$hl" paused), claimed recipients with a ledger claim settled uncertain (maybe sent, ruling R2) $(qf_kv "$hl" settled_uncertain) ($(qf_kv "$hl" already_settled) already settled by the ledger), without one returned to queued $(qf_kv "$hl" requeued) (ruling R12), tests left sending over 15 minutes made uncertain $(qf_kv "$hl" tests_uncertain); offers-test — $(qf_kv "$ht" paused), $(qf_kv "$ht" settled_uncertain) ($(qf_kv "$ht" already_settled)), $(qf_kv "$ht" requeued), $(qf_kv "$ht" tests_uncertain)"
+  else bad "OF-RB1 Part O's hook printed no counts (offers-live: ${hl:-none}; offers-test: ${ht:-none}) — it did not run as reviewed"; fi
+  d="$(vn_book_copy ofrb)" || d=""
+  r=""; [ -n "$d" ] && r="$(of_php rb "$d/plugin.sqlite3" "$d/of-ids.txt" "${QF_RB1_START:-}")"
+  case "$r" in "tables=present "*) ids="$(dxo cat "$d/of-ids.txt" 2>/dev/null)" ;; *) ids="" ;; esac
+  [ -n "$d" ] && cih_drop "$d"
+  case "$r" in
+    "tables=present "*)
+      qf_sheet "OF-RB1 the offers the rollback left paused (offer ids; never paste)" "${ids:-not read}"
+      [ "$(qf_kv "$r" running)|$(qf_kv "$r" claimed)|$(qf_kv "$r" tests_stale)" = "0|0|0" ] \
+        && ok "OF-RB1 Part O's end state on a copy of the book after QF-RB1: no offer running, no recipient claimed, no test still sending that had been sending over 15 minutes when QF-RB1 began (its hooks ran after that); offers by state $(qf_kv "$r" offers) ($(qf_kv "$r" paused_by_rollback) paused_by_rollback event(s) in all; the paused offers by id on the sheet), recipients by state $(qf_kv "$r" recipients) ($(qf_kv "$r" stale_claim) uncertain as stale claims), tests still sending that were under 15 minutes old when QF-RB1 began $(qf_kv "$r" tests_young) — left by the hook, as it must leave them (ruling R18)" \
+        || bad "OF-RB1 Part O's end state does not hold on a copy of the book after QF-RB1 (running $(qf_kv "$r" running), claimed $(qf_kv "$r" claimed), tests still sending that had been sending over 15 minutes when QF-RB1 began $(qf_kv "$r" tests_stale)) — the tool asserted it; the by-hand put-back (QF-RB1) holds Part O's four statements" ;;
+    "tables=absent") note "OF-RB1 the book holds no offer tables (091 never applied): Part O had nothing to pause or settle" ;;
+    *) bad "OF-RB1 Part O's end state could not be read on a copy of the book (${r:-no copy})" ;;
+  esac
+}
+
+# of_rb_after — OF-RB2 (a note), after the put-back (RB): the four tables and 091's row stay, read by nothing in
+# 5.18.103; a paused offer resumes only when an admin presses Resume, after a redeploy, with offers-test and offers-live
+# switched on again with their checks; were a hook ever not to run, the live-since guard (O-D19) pauses a still-running
+# offer at its first run instead of sending. Read on a copy of the book.
+of_rb_after() {
+  local d o=""
+  d="$(vn_book_copy ofrb2)" || d=""
+  if [ -n "$d" ]; then o="$(of_php rb2 "$d/plugin.sqlite3")"; cih_drop "$d"; fi
+  case "$o" in
+    "tables=4/4 "*) note "OF-RB2 the four offer tables and 091's _schema_checks row ($(qf_kv "$o" sc)) stay, and $BASELINE_VERSION reads none of them; offers by state $(qf_kv "$o" offers): a paused offer ($(qf_kv "$o" paused)) resumes only when an admin presses Resume, after a redeploy, once offers-test and offers-live are switched on again with their checks$( [ "$(qf_kv "$o" running)" = "0" ] && echo "; none is running" || echo "; $(qf_kv "$o" running) OFFER(S) STILL RUNNING ON THE BOOK — nothing in $BASELINE_VERSION sends them, and on a redeploy the live-since guard (O-D19) pauses each at the sender's first run instead of sending")" ;;
+    "tables=0/4 "*) note "OF-RB2 the book holds no offer tables (091 never applied): nothing of Part O stays" ;;
+    "tables="*) bad "OF-RB2 the offer tables are not as the rollback must leave them (${o%% offers=*}) — a rollback removes nothing" ;;
+    *) note "OF-RB2 could not be read on a copy of the book (${o:-no copy}) — the four offer tables stay as QF-RB1 left them, read by nothing in $BASELINE_VERSION; a paused offer resumes only by an admin's Resume after a redeploy" ;;
+  esac
+}

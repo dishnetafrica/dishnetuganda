@@ -5,10 +5,16 @@
 It is replaced at each milestone and the folder is removed when the release branch is pushed on the operator's word.
 Nothing here is deployed or deployable.
 
-`release-5.18.104.patch` is `git diff 221c9dc..994d660`: the 5.18.104 release (root `docs/73`), squashed on
-`origin/release/5.18.103` (`221c9dc`) as the local commit `994d660`, under its release suite, not yet a release. Apply with
-`git apply` on a checkout of `221c9dc`. Kept here only so a container restart cannot lose it; the release branch is
-pushed on the operator's word alone. Nothing here is deployed or deployable.
+`release-5.18.104.patch` is `git diff 221c9dc..994d660`: the 5.18.104 release (root `docs/73`), one commit on
+`origin/release/5.18.103` (`221c9dc`). `release/5.18.104` = `994d660` was pushed on the operator's word on 7 Nov, so the
+patch is now only a copy of it. Apply with `git apply` on a checkout of `221c9dc`. Nothing here is deployed.
+
+`derive-5.18.104/` derives `scripts/deploy-5.18.104.sh` from `scripts/deploy-5.18.103.sh` by asserted text edits — parts
+A, B, F, R, H, V, O, P, C, T and Z, each asserting its anchor, its count, its replacements and its result — and renders
+`scripts/sales-followup-report.sh` from `report_wrapper.sh.txt`: `python3 -I derive104.py REPO RELEASE_REPO PIN_FULL [OUT]`,
+with RELEASE_REPO a clone holding `994d660` (PIN_FULL, the full id of `release/5.18.104`). Run twice, it writes
+byte-identical files, and the committed script and report wrapper are that output (root `docs/07`, 5.18.104's entry).
+`scripts/sales-followup.sh`, the switch tool's wrapper, is written by hand; the derivation only parses it (`bash -n`).
 
 `derive-5.18.103/` derives `scripts/deploy-5.18.103.sh` from `scripts/deploy-5.18.102.sh` by asserted text edits
 (each part asserts its anchor, its count, its replacements and its result): `python3 -I derive103.py REPO RELEASE_REPO

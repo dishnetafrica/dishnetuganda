@@ -1,0 +1,235 @@
+# ── 5.18.104: Part P's checks — the agent's visible copy of the quotation e-mail (AC; root docs/73 §H.5.14, §H.5.15; rulings R11, R13, R18) ──
+# Read-only, as every reading here, on COPIES — Part F's qf_copy (the book's consistent copy, its settings cut to the
+# ladder's keys, the run's vault copy, a code root of its own: the PIN's from Git at stage A, the INSTALLED code after the
+# copy) and Part V's vn_book_copy (the book alone) after the put-back — and as text: the pin's four P7 files from Git
+# (AC-L1), the tool's own lines (AC-RB1). Four readings look at live files and write none: AC-N1's settings (the keys
+# P7's lines read, copied from the live settings files into the reading's copies; email_settings.json cut to the six P7
+# reads, never the mailbox password), AC-N2's quote_mail.log (only its stamps and statuses are looked at), AC-ON1's two files
+# (quote_mail.log copied whole before qf_on's book is, and email_settings.json cut to mailSetting()'s four keys, put into
+# the reading's copy, where the installed tool's AC-ON reads them) and AC-RB1's read-back (PluginConfig::read on the live
+# settings files and vault: it writes nothing). NOTHING HERE ASKS uCRM: plugin mail is
+# judged from email_settings.json (QuoteAgentCopy::mailSetting), and AC-CA2's uCRM is the pin's in-process recording
+# fake. NO E-MAIL LEAVES THE CONTAINER: AC-CA2's only relay is the pin's fake on 127.0.0.1, read back through the
+# installed MailService before anything is driven, and every address is fictitious (example.test). Nothing writes the
+# live book or uCRM. The log carries counts, fixed codes and PASS/FAIL/NOTE only; never an address, a name, a quote
+# number or id, a staff id or a credential.
+AC_PHP="$(cat <<'PHP'
+@@AC_PHP@@
+PHP
+)"
+AC_NONET="@@AC_NONET@@"   # the functions every AC reading but AC-CA2's orchestrator runs without: no request can leave it
+AC_L1_FILES="@@AC_L1_FILES@@"   # AC-L1: the pin's lib/QuoteAgentCopy.php and the three files P7 changes (the delta 5.18.103 → the pin, from Git)
+AC_L1_SUMS="@@AC_L1_SUMS@@"   # AC-L1: each as file:sha256 at the pin, from Git
+AC_DRIVE="tests/quote_agent_copy/drive.php"   # AC-CA2: the pin's own drive (its recording fake uCRM), taken from Git, its sha256 checked in the container
+AC_RB_ADMINS=""
+AC_ON_ML=""   # AC-ON1: onlog's line — the copy of quote_mail.log taken before qf_on's book, and its counts (ac_on_pre)
+ac_php() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -d allow_url_fopen=0 -d "disable_functions=$AC_NONET" -r "$AC_PHP" "$@"; }   # ac_php MODE ARG… — one line
+# AC-CA2's orchestrator spawns the relay and each drive, so its own process keeps proc_open; every drive it spawns runs
+# with curl, every socket function but fsockopen (MailService's, to the loopback relay) and every process function off
+ac_php_ca2() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -d allow_url_fopen=0 -r "$AC_PHP" ca2 "$@"; }
+ac_mail_say() {   # QuoteAgentCopy::preconditions()'s one line for mailSetting()'s via (root docs/73 §H.5.10.3)
+  case "$1" in
+    plugin) echo "plugin mail: plugin SMTP" ;;
+    ucrm_not_asked) echo "plugin mail: uCRM's mailer, not asked" ;;
+    none) echo "plugin mail is not configured (Settings → System → Email)" ;;
+    *) echo "plugin mail is not configured (email_settings.json cannot be read)" ;;
+  esac
+}
+
+# ac_stage — Part P's stage A (a deploy and --check): AC-L1, a NO-GO, then AC-N1 and AC-N2, notes. P7 adds no stage-A rule
+# for its keys: they are QF-G4's, through allKeys() (ruling R7). A refusal stops here: nothing has changed.
+ac_stage() {
+  local f want n=0 bad="" sub o es m
+  # AC-L1 — lint before the copy (P7S-07): the pin's four files, each as Git holds it (its sha256 the derivation's), by the
+  # server's own PHP. A construct newer than this PHP, or a truncated file, would stop Uganda's quoting at P7's first call:
+  # markMaking runs before the POST. South Sudan never loads the file (StaffJobsGate first, root docs/73 §H.5.16).
+  for f in $AC_L1_FILES; do
+    want="$(printf '%s\n' $AC_L1_SUMS | sed -n "s#^$f:##p")"
+    if [ -n "$want" ] && git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$f" > "/tmp/dnb_ac_lint.$$" 2>/dev/null \
+       && [ "$(sha256sum "/tmp/dnb_ac_lint.$$" | cut -c1-64)" = "$want" ] \
+       && docker exec -i "$CONTAINER" php -l < "/tmp/dnb_ac_lint.$$" 2>&1 | drained grep -q '^No syntax errors detected'; then n=$((n + 1))
+    else bad="$bad $f"; fi
+  done
+  rm -f "/tmp/dnb_ac_lint.$$"
+  { [ -z "$bad" ] && [ "$n" = "$(printf '%s\n' $AC_L1_FILES | grep -c .)" ]; } \
+    || stop "NO-GO (AC-L1): PHP ${PHPV:-?} in the container rejects the pin's$bad, or Git does not hold it as reviewed — P7's first call, before the quotation's POST, would stop Uganda's quoting. Nothing was changed. Send the log file"
+  ok "AC-L1 PHP ${PHPV:-?} in the container accepts the pin's $(printf '%s\n' $AC_L1_FILES | paste -sd' ' - | sed 's/ /, /g') — each as Git holds it, by its sha256 — before anything is copied (P7S-07)"
+  # AC-N1, AC-N2 — notes, on a copy of the book through the PIN's code: its settings copies given the keys P7's lines read,
+  # from the live settings files (CustomerEmailDispatcher's three switches, the Reply-To; email_settings.json cut to six keys)
+  sub="$(qf_copy acn "$P3B_PIN")" || { note "AC-N1 and AC-N2 could not be read: a copy of the book could not be made — $QF_ROOT_ERR (notes only)"; return 0; }
+  o="$(ac_php conf "$IN_CONTAINER" "$PDD_IN" "$sub")"
+  es="$(qf_kv "$o" es)"
+  case "$es" in
+    present|absent|unreadable)
+      o="$(ac_php n1 "$sub/code" "$sub" "$es")"
+      case "$o" in
+        mail=*)
+          m="$(ac_mail_say "$(qf_kv "$o" mail)")"
+          note "AC-N1 $m; quote_email_via_plugin (the app's quotations, path 1) $(qf_kv "$o" path1); the webhook's quotation e-mail (path 3) $(qf_kv "$o" quotation) (customer e-mails $(qf_kv "$o" master)); email_cc_contacts $(qf_kv "$o" cc); kyc_quote_send_via_crm $(qf_kv "$o" via_crm)$( [ "$(qf_kv "$o" via_crm)" = "0" ] && echo " — the webhook's e-mail is the only quotation e-mail for KYC quotes" ); kyc_auto_quote_enabled $(qf_kv "$o" auto_quote); accounts, active: $(qf_kv "$o" usable) with a usable address, $(qf_kv "$o" unusable) without one, $(qf_kv "$o" admins) administrator(s) (copied unless set agent-cc-admins 0), $(qf_kv "$o" company) whose address is the company's Reply-To or its sender (the customer would see it in Cc, PQ4)$( [ "$(qf_kv "$o" path1)|$(qf_kv "$o" quotation)" = "off|off" ] && echo "; no plugin quotation e-mail is on — the copy would have nothing to ride on" )$( [ "$(qf_kv "$o" ug)" = "1" ] || echo "; THE COPY DOES NOT READ AS UGANDA through the pin's StaffJobsGate" )" ;;
+        *) note "AC-N1 could not be read on the copy (${o:-not read})" ;;
+      esac ;;
+    *) note "AC-N1 the copy's settings could not be given the keys P7's lines read (${o:-not read})" ;;
+  esac
+  o="$(ac_php n2 "$sub/plugin.sqlite3" "$PDD_IN/quote_mail.log")"
+  case "$o" in
+    p1=*) note "AC-N2 what the copy would have covered over 30 days (UTC) — path 1 (quote_mail.log, the app's, $(qf_kv "$o" p1)): $(qf_kv "$o" p1_sent) sent line(s) ($(qf_kv "$o" p1_other) other, $(qf_kv "$o" p1_older) older, $(qf_kv "$o" p1_undated) undated); path 3 (customer_email_log, the webhook's, $(qf_kv "$o" p3)): by status $(qf_kv "$o" p3_by_status); of its sent rows, the quote id as today's records know it: $(qf_kv "$o" p3_sent_kyc) held by a KYC application, $(qf_kv "$o" p3_sent_log_or_lead) by a quotes_log row or a lead, $(qf_kv "$o" p3_sent_none) by none (typed in uCRM, or never recorded) — an upper bound: at send time the race of §H.5.5 narrows it" ;;
+    *) note "AC-N2 could not be read on the copy (${o:-not read})" ;;
+  esac
+  cih_drop "$sub"
+}
+
+# ac_after INST_ROOT — AC-CA1 and AC-CA2, after the copy (stage R; --after-only too), through the INSTALLED code on fresh
+# copies. Reports; never stops. No e-mail leaves the container; nothing asks uCRM.
+ac_after() {
+  local inst="$1" sub o v miss="" w want
+  [ -n "$inst" ] || { bad "AC-CA1 no copy of the installed code to read with — AC-CA1 and AC-CA2 are not judged"; return; }
+  # AC-CA1 — the installed QuoteAgentCopy::on(): false on the live configuration's copy, true with the key set (the control),
+  # false with the key set and the profile forced to South Sudan; P7's collections on the book, counted, never read
+  sub="$(qf_copy ac1 "$inst")" || sub=""
+  if [ -z "$sub" ]; then bad "AC-CA1 a copy of the book could not be made — $QF_ROOT_ERR; AC-CA1 is not judged"
+  else
+    o="$(ac_php ca1 "$sub/code" "$sub")"; cih_drop "$sub"
+    case "$o" in
+      live=*" ug=1 set=1 ss=0 "*)
+        if [ "$(qf_kv "$o" live)" = "0" ]; then ok "AC-CA1 through the installed QuoteAgentCopy on a copy, its own vault read: on() false on the live configuration's copy; true with quote_agent_cc_enabled set on a scratch copy of those settings (the control); false on that scratch with the profile forced to South Sudan in the file and the vault (the second lock)"
+        elif [ "$MODE" = "after" ]; then note "AC-CA1 the live configuration's copy reads P7 ON — agent-cc switched on since the deploy (an --after-only run; AC-ON1 judges it); the control (the key set: on) and South Sudan (off) hold"
+        else bad "AC-CA1 the installed QuoteAgentCopy::on() reads TRUE on the live configuration's copy after the copy — Part P's key is set where every switch must be off"; fi ;;
+      live=*" ug=0 "*) bad "AC-CA1 the copy does not read as Uganda through the installed StaffJobsGate with its own vault — on()'s control cannot be judged ($o)" ;;
+      live=*" set=0 "*) bad "AC-CA1 the control did not hold: with quote_agent_cc_enabled set on Uganda the installed on() read false, so its false elsewhere says nothing ($o)" ;;
+      live=*" ss=1 "*) bad "AC-CA1 with the key set and the profile forced to South Sudan, the installed on() read TRUE — the second lock does not hold ($o)" ;;
+      *) bad "AC-CA1 could not be read on a copy (${o:-not read})" ;;
+    esac
+    case "$o" in
+      live=*)
+        v="quote_agent_makers $(qf_kv "$o" makers), quote_agent_copies $(qf_kv "$o" copies)"
+        if [ "$MODE" = "deploy" ] && [ "$QF_G1" = "first" ]; then
+          if [ "$(qf_kv "$o" makers)|$(qf_kv "$o" copies)" = "absent|absent" ]; then ok "AC-CA1 a first deploy: the book holds neither quote_agent_makers nor quote_agent_copies after the copy — P7 off writes nothing"
+          else bad "AC-CA1 a first deploy, and P7's collections exist after the copy ($v) — something wrote them with P7 off"; fi
+        else note "AC-CA1 P7's collections on the book, their rows counted and nothing read from them: $v$( [ "$MODE" = "after" ] && echo " (an --after-only run)" || echo " (a redeploy: kept from the earlier $EXPECTED_VERSION, read by nothing while P7 is off)" )"; fi ;;
+    esac
+  fi
+  # AC-CA2 — the positive and negative controls on a copy (P7S-02), through the installed code and $BASELINE_VERSION's from
+  # Git (the tree the deploy keeps for its rollback: P3B_BASE, with its webhook.php), with the pin's drive.php from Git
+  if [ -z "${P3B_BASE:-}" ]; then bad "AC-CA2 $BASELINE_VERSION's code could not be copied into the container's /tmp (${P3B_WHY:-?}) — cases 5 and 6 compare with it; AC-CA2 is not judged"; return; fi
+  sub="$(qf_copy ac2 "$inst")" || { bad "AC-CA2 a copy of the book could not be made — $QF_ROOT_ERR; AC-CA2 is not judged"; return; }
+  if dxo cp -R "$P3B_BASE" "$sub/b103" \
+     && git -C "$REPO" show "$BASELINE_COMMIT:$PLUGIN/webhook.php" 2>/dev/null | docker exec -i -u "$DB_OWNER" "$CONTAINER" sh -c 'cat > "$1"' _ "$sub/b103/webhook.php" 2>/dev/null \
+     && git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$AC_DRIVE" 2>/dev/null | docker exec -i -u "$DB_OWNER" "$CONTAINER" sh -c 'cat > "$1"' _ "$sub/drive.php" 2>/dev/null; then
+    o="$(ac_php_ca2 "$sub/code" "$sub/b103" "$sub" "$sub/drive.php")"
+  else o="refused=trees_not_copied"; fi
+  cih_drop "$sub"
+  case "$o" in *"refused="*) bad "AC-CA2 REFUSED, nothing driven: $(qf_kv "$o" refused) — the copy could not be shown unable to reach a live system, or the harness's own files are not the pin's (P7S-02) ($o)"; return ;; esac
+  want="c6a=same c6b=same c6_loaded=0 c6_tables=same c5a=same c5b=same c5_rows=0 c1=ok c2=ok c3=ok c4=ok"
+  for w in $want; do case " $o " in *" $w "*) ;; *) miss="$miss ${w%%=*}" ;; esac; done
+  if [ -z "$miss" ]; then ok "AC-CA2 on a copy of the book, through the installed code and $BASELINE_VERSION's, uCRM the pin's recording fake and the pin's fake relay on 127.0.0.1 — the copy first made unable to reach a live system (a fresh email_settings.json: plugin SMTP on loopback, use_ucrm_email and sent_copy_enabled off; no ucrm.json in reach; the harness's own configuration, no WhatsApp sender; fixture accounts only, under example.test) and read back so through the installed MailService before anything ran (P7S-02): 1 the app path, one session, the customer's RCPT then the agent's, one DATA, the agent alone in Cc, decided added and accepted; 2 the actor's address the customer's, no Cc, same_as_customer; 3 the webhook path with a KYC application, the agent's RCPT, added (kyc_submitter); 4 a quote with no record, no Cc, no_agent; 5 the key unset, the transcript, uCRM's requests and the answers equal to $BASELINE_VERSION's on both paths, no decision row; 6 the key set as South Sudan, equal to $BASELINE_VERSION's, QuoteAgentCopy never loaded, no P7 table or row added ($(qf_kv "$o" sessions) sessions, $(qf_kv "$o" drives) drives)"
+  else bad "AC-CA2 the controls on a copy do not read as reviewed:$miss ($o) — counts and codes only; no transcript line is printed"; fi
+}
+
+# ac_on_pre INST_ROOT — in qf_on, just BEFORE its copy of the book: AC-ON1's copy of the live quote_mail.log, into a folder
+# of the run's (onlog; read-only on the live side, counts only). Before, because the app path records P7's decision and only
+# then writes its log line (lib/QuotationService.php): a log taken before the book holds no line whose decision the book's
+# copy could lack, however long qf_on's other readings run before AC-ON reads the copy with the tool's own clock — a log
+# taken after it could read FAIL decision_missing for an e-mail sent in between. ac_on puts it where the tool reads it.
+ac_on_pre() {
+  AC_ON_ML=""
+  { [ -n "$CIH_BASE" ] && [ -n "$1" ]; } || return 0
+  dxo mkdir -m 700 "$CIH_BASE/ac-on-log" || return 0
+  AC_ON_ML="$(ac_php onlog "$1" "$PDD_IN" "$CIH_BASE/ac-on-log")"
+  return 0
+}
+# ac_on SUB — AC-ON1 (--after-only, on qf_on's copy): AC-ON through the installed tool's --check agent-cc, judged only
+# while P7 is on; "OFF — not judged" otherwise (root docs/73 §H.5.10.2 item 6). AC-ON reads two files beside the book, in
+# the tool's data folder, which is this copy (§H.5.10.4): quote_mail.log, path 1's e-mails (rule 4), and email_settings.json,
+# plugin mail (rule 2, through mailSetting()). qf_copy makes neither, so they are put there first (onfiles) — without them
+# path 1 reads as no e-mail at all, rule 6's control on it cannot fail, and a hook that wrote no decision would read
+# NOT_YET no_traffic, or PASS. The controls, through the installed QuoteAgentCopy, the reader AC-ON uses: the log's copy holds
+# the live file's dated sent lines (between its counts just before and just after the copy was taken), the same where the
+# tool reads it; plugin mail reads on the copy as on the live data folder. Any of them unmet: AC-ON1 is NOT judged — never
+# a PASS over an unread input. AC-ON's notes are its fixed lines — plugin mail as it reads now, kyc_quote_send_via_crm, the
+# sends that failed carrying a copy — what P7 could not have known, printed, never a FAIL (ruling R18).
+ac_on_notes() { printf '%s\n' "$1" | awk 'index($0, "  AC-ON: ") == 1 { f = 1; next } f && /^  [^ ]/ { exit } f && /^    note: / { print }' | head -12 | cut -c1-200 | sed 's/^ */  tool    | /'; }
+ac_on() {
+  local o rc st ps cn f ml n0 nc n1 why=""
+  f="$(ac_php onfiles "$1/code" "$PDD_IN" "$CIH_BASE/ac-on-log" "$1")"   # the two files AC-ON reads, into the tool's data folder, before it runs
+  o="$(qf_tool "$1" --check agent-cc)"; rc=$?
+  st="$(printf '%s\n' "$o" | grep -m1 '^agent-cc: ' | sed 's/^agent-cc: //')"
+  if [ "$st" = "OFF — not judged" ]; then note "AC-ON1 OFF — not judged (agent-cc is off)"; return; fi
+  ml="$(qf_kv "$AC_ON_ML" ml)"; n0="$(qf_kv "$AC_ON_ML" live)"; nc="$(qf_kv "$AC_ON_ML" copy)"; n1="$(qf_kv "$AC_ON_ML" after)"
+  case "$ml" in
+    copied|absent)
+      case "$n0:$nc:$n1" in   # three counts, each digits: an empty or other field is no count
+        *[!0-9:]*|:*|*:|*::*) why="the copy of quote_mail.log was not counted (${AC_ON_ML:-not taken})" ;;
+        *) { [ "$n0" -le "$nc" ] && [ "$nc" -le "$n1" ]; } || why="the copy of quote_mail.log holds $nc dated sent line(s), the live file $n0 just before it was taken and $n1 just after" ;;
+      esac ;;
+    unreadable) why="the live quote_mail.log cannot be read by the book's owner, so no copy of it holds path 1's e-mails" ;;
+    *) why="quote_mail.log could not be copied before the book (${AC_ON_ML:-not taken})" ;;
+  esac
+  if [ -z "$why" ] && { [ "$(qf_kv "$f" ml)" != "$ml" ] || [ "$(qf_kv "$f" ml_lines)" != "$nc" ]; }; then
+    why="quote_mail.log where the tool reads it is not the copy taken before the book ($(qf_kv "$f" ml_lines) dated sent line(s) there, $nc taken; ${f:-not put there})"
+  fi
+  if [ -z "$why" ]; then
+    case "$(qf_kv "$f" es)|$(qf_kv "$f" es_same)" in
+      "present|1"|"absent|1") ;;
+      unreadable\|*) why="the live email_settings.json cannot be read by the book's owner, so no copy of it reads plugin mail as it reads now" ;;
+      *) why="email_settings.json could not be put where the tool reads it, or reads otherwise there than on the live data folder (${f:-not put there})" ;;
+    esac
+  fi
+  if [ -n "$why" ]; then bad "AC-ON1 agent-cc is on and NOT judged: $why — AC-ON reads path 1 (the app's quotation e-mails) from quote_mail.log and plugin mail from email_settings.json beside the book, and over a copy without them a missing decision could never read FAIL"; return; fi
+  ps="$(printf '%s\n' "$o" | grep -m1 '^  AC-ON: ' | sed 's/^  AC-ON: //')"
+  cn="$(printf '%s\n' "$o" | awk 'index($0, "  AC-ON: ") == 1 { f = 1; next } f && /^  [^ ]/ { exit } f && /^    counts: / { sub(/^    counts: /, ""); print; exit }' | cut -c1-600)"
+  case "$ps" in
+    PASS) ok "AC-ON1 agent-cc: PASS — every plugin quotation e-mail in the window has its decision, each added one names its agent${cn:+ (counts: $cn)}; path 1 read from quote_mail.log as it stood just before the book was copied ($nc dated sent line(s), counted again where the tool reads it), plugin mail as it reads now"; ac_on_notes "$o" ;;
+    "NOT_YET "*) note "AC-ON1 agent-cc: $ps${cn:+ (counts: $cn)}; path 1 read from quote_mail.log as it stood just before the book was copied ($nc dated sent line(s))"; ac_on_notes "$o" ;;
+    "FAIL "*) qf_show_tool "$o" 40; bad "AC-ON1 agent-cc: $ps (exit $rc; the tool's lines above) — while agent-cc reads FAIL, the tool refuses every later on until off agent-cc" ;;
+    *) qf_show_tool "$o" 20; bad "AC-ON1 the installed tool's --check agent-cc gave no AC-ON status (exit $rc)" ;;
+  esac
+}
+
+# ac_rb_pre — in QF-RB1, before the installed tool's off all --rollback: quote_agent_cc_admins as it reads now, through the
+# installed PluginConfig::read (a setting: the one sequence never clears it, and AC-RB1 asks that it be as it was)
+ac_rb_pre() { AC_RB_ADMINS="$(qf_kv "$(ac_php admins "$IN_CONTAINER" "$PDD_IN")" admins)"; return 0; }
+# ac_rb1 — AC-RB1, after QF-RB1's tool exited 0 and its own read found no key set, before the put-back (rulings R7, R11;
+# P7S-08): the tool's own lines — Part P's two keys cleared last, with the record keys, after the ledger; no hook for P7;
+# "quotation e-mails are as 5.18.103 from the next one" and no FAIL key_outside_overrides — then a read-back of its own
+# through the installed QuoteAgentCopy::state() and PluginConfig::read on the live settings files and vault (never the
+# book): P7 off, both keys unset, neither held by any file, quote_agent_cc_admins as it was. A key still read set stops the
+# rollback before the put-back, as QF-RB1's own read does.
+ac_rb1() {
+  local o="$QF_RB1_OUT" offs last prev r bad=""
+  offs="$(printf '%s\n' "$o" | grep -E '^OFF ' | sed 's/ — .*//')"
+  last="$(printf '%s\n' "$offs" | tail -1)"; prev="$(printf '%s\n' "$offs" | tail -2 | head -1)"
+  [ "$last" = "OFF the record keys and agent-cc" ] || bad="$bad not-last(${last:-none})"
+  [ "$prev" = "OFF sending" ] || bad="$bad ledger-not-just-before(${prev:-none})"
+  printf '%s\n' "$o" | drained grep -qxF 'quotation e-mails are as 5.18.103 from the next one' || bad="$bad no-read-back-line"
+  if printf '%s\n' "$o" | drained grep -q '^FAIL key_outside_overrides'; then bad="$bad key_outside_overrides"; fi
+  if printf '%s\n' "$o" | drained grep -q '^  hook agent-cc'; then bad="$bad a-hook-ran"; fi
+  r="$(ac_php rb1 "$IN_CONTAINER" "$PDD_IN")"
+  case "$r" in
+    "on=0 set=0 held=- admins="*) ;;
+    "on="*) qf_byhand; stop "AC-RB1 FAILED: after QF-RB1, Part P still reads on ($(qf_kv "$r" on)) or its keys still read set ($(qf_kv "$r" set) of 2; held by: $(qf_kv "$r" held)) through the installed PluginConfig::read — FAIL key_outside_overrides: remove them there by hand with the plugin's own Settings. Nothing was put back. The by-hand put-back is above" ;;
+    *) qf_byhand; stop "AC-RB1 FAILED: Part P's state could not be read back through the installed code (${r:-not read}) — the rollback does not put back over a part it cannot read. Nothing was put back. The by-hand put-back is above" ;;
+  esac
+  [ "$(qf_kv "$r" admins)" = "${AC_RB_ADMINS:-?}" ] || bad="$bad agent-cc-admins-changed(${AC_RB_ADMINS:-not read}→$(qf_kv "$r" admins))"
+  if [ -z "$bad" ]; then ok "AC-RB1 the one sequence cleared Part P's two keys last, with the record keys, after the ledger (ruling R11; no hook), and read the gate back (\"quotation e-mails are as 5.18.103 from the next one\"); read again here through the installed QuoteAgentCopy::state() and PluginConfig::read: P7 off, quote_agent_cc_enabled and quote_agent_cc_since unset and in no file, quote_agent_cc_admins as it was ($(qf_kv "$r" admins))"
+  else bad "AC-RB1 Part P's place in the one sequence, or its setting, is not as reviewed:$bad"; fi
+}
+
+# ac_rb_after — AC-RB2 (a note), after the put-back (RB): P7's two collections stay, read by nothing — none of the PHP files
+# 5.18.103 has, as installed now, names them or QuoteAgentCopy (the control: lib/QuoteAgentCopy.php, which 5.18.104 added
+# and the put-back leaves on disk, is read by the same reader and names it); a redeploy starts dark (QF-G4) and P7 comes
+# back only with on agent-cc, judged by AC-ON
+ac_rb_after() {
+  local d o="" n c
+  d="$(vn_book_copy acrb2)" || d=""
+  if [ -n "$d" ]; then o="$(ac_php rb2 "$d/plugin.sqlite3")"; cih_drop "$d"; fi
+  n="$( cd "$DEST" 2>/dev/null && git -C "$REPO" ls-tree -r --name-only "$BASELINE_COMMIT" -- "$PLUGIN" 2>/dev/null | sed "s#^$PLUGIN/##" | grep '\.php$' \
+        | tr '\n' '\0' | xargs -0 grep -lF -e quote_agent_makers -e quote_agent_copies -e QuoteAgentCopy -- 2>/dev/null | grep -c . )"
+  c="$( cd "$DEST" 2>/dev/null && printf '%s\0' lib/QuoteAgentCopy.php | xargs -0 grep -lF -e quote_agent_makers -e quote_agent_copies -e QuoteAgentCopy -- 2>/dev/null | grep -c . )"
+  if [ "${n:-x}" != "0" ] || [ "${c:-0}" != "1" ]; then
+    bad "AC-RB2 whether $BASELINE_VERSION's installed files name P7's collections could not be shown: $BASELINE_VERSION's PHP files naming them ${n:-not read}, the control (lib/QuoteAgentCopy.php, left on disk) ${c:-not read} of 1"
+  fi
+  case "$o" in
+    makers=*) note "AC-RB2 P7's two collections stay — quote_agent_makers $(qf_kv "$o" makers) ($(qf_kv "$o" making) still making: inert hand-offs), quote_agent_copies $(qf_kv "$o" copies) — and $BASELINE_VERSION reads neither (none of its PHP files, as installed now, names them); a redeploy starts dark, and P7 comes back only with on agent-cc, judged by AC-ON" ;;
+    *) note "AC-RB2 could not be read on a copy of the book (${o:-no copy}) — P7's collections stay as the rollback left them, read by nothing in $BASELINE_VERSION" ;;
+  esac
+}

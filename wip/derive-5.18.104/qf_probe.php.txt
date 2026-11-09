@@ -1,0 +1,618 @@
+// QF_PHP — 5.18.104's Part F readings (root docs/73 §H.2.15), one mode per call, as the database's owner in the
+// container. Every mode but "g4", "base" and "rb3" reads only a COPY in a folder of this run's; those three open the live
+// book with SQLITE_OPEN_READONLY and read its files as text — counts and key names only, never a value. Output: one
+// line of key=value words (counts, fixed codes, key names); never a phone, a name, an amount, a staff id or a secret.
+// PHP 7.4 syntax (the release's).
+$mode = (string)($argv[1] ?? '');
+$a = array_slice($argv, 2);
+// A reading of a COPY reads the copy's own vault — DN_VAULT_FILE, the reading's folder's vault.json (qf_copy's: the live
+// vault's book keys and the keys the readings keep, never a secret) — and never ConfigVault::path()'s default beside the
+// code root, which holds nothing: without it a copy whose tenant or instances live only in the vault would read as South
+// Sudan, or as having no instance (5.18.103 sets DN_VAULT_FILE for every in-process reading). Each of these modes takes
+// [ROOT, DIR], DIR the reading's folder.
+if (in_array($mode, ['notes', 'ca4', 'ca6', 'ca8', 'on3', 'lon'], true)) putenv('DN_VAULT_FILE=' . rtrim((string)($a[1] ?? ''), '/') . '/vault.json');
+$ro = function (string $db) {
+    $p = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15,
+                                                PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
+    $p->exec('PRAGMA query_only = ON');
+    return $p;
+};
+$rw = function (string $db) {
+    $p = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15]);
+    $p->exec('PRAGMA busy_timeout = 5000');
+    return $p;
+};
+$has = function (PDO $p, string $t): bool {
+    $s = $p->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"); $s->execute([$t]);
+    return $s->fetchColumn() !== false;
+};
+$col = function (PDO $p, string $t, string $c) use ($has): bool {
+    if (!$has($p, $t)) return false;
+    foreach ($p->query('PRAGMA table_info(' . $t . ')')->fetchAll(PDO::FETCH_ASSOC) as $r) if ((string)$r['name'] === $c) return true;
+    return false;
+};
+$one = function (PDO $p, string $sql, array $x = []) { $s = $p->prepare($sql); $s->execute($x); return $s->fetchColumn(); };
+$ladder = function (string $root): array {
+    require_once $root . '/lib/UtcClock.php';
+    require_once $root . '/lib/SalesFollowupLadder.php';
+    return ['all' => SalesFollowupLadder::allKeys(), 'settings' => SalesFollowupLadder::settingKeys(),
+            'pre' => SalesFollowupLadder::preexistingKeys()];
+};
+$secret = function (string $root): array {
+    require_once $root . '/lib/PluginConfig.php';
+    $s = PluginConfig::SECRET_KEYS;
+    foreach (['admin_token', 'crm_auth_token', 'webhook_secret_file', 'smtp_pass', 'smtp_password'] as $k) $s[] = $k;
+    return array_values(array_unique($s));
+};
+$setNow = function (array $c, string $k): bool { return array_key_exists($k, $c) && $c[$k] !== null && $c[$k] !== '' && $c[$k] !== false; };
+$readJson = function (string $f) { if (!is_file($f) || !is_readable($f)) return null; $d = json_decode((string)@file_get_contents($f), true); return is_array($d) ? $d : null; };
+$storeRow = function (PDO $p) use ($has): array {
+    if (!$has($p, 'kyc_config')) return [];
+    $j = $p->query('SELECT data FROM kyc_config WHERE id = 0 LIMIT 1')->fetchColumn();
+    $d = is_string($j) ? json_decode($j, true) : null;
+    return is_array($d) ? $d : [];
+};
+// a SqliteStore JSON document, read as SqliteStore::load() reads it (lib/SqliteStore.php:339): the table is the file's
+// name; a config document (master_schedule.json) is one row with the sentinel id 0, a record list (retailers.json) a row each
+$flat = function (PDO $p, string $name) use ($has) {
+    $t = preg_replace('/[^a-zA-Z0-9_]/', '_', preg_replace('/\.json$/', '', $name));
+    if (!$has($p, $t)) return null;
+    $j = $p->query('SELECT data FROM [' . $t . '] WHERE id = 0 LIMIT 1')->fetchColumn();
+    $d = is_string($j) ? json_decode($j, true) : null;
+    return is_array($d) ? $d : null;
+};
+$docRows = function (PDO $p, string $name) use ($has) {
+    $t = preg_replace('/[^a-zA-Z0-9_]/', '_', preg_replace('/\.json$/', '', $name));
+    if (!$has($p, $t)) return null;
+    $out = [];
+    foreach ($p->query('SELECT data FROM [' . $t . '] ORDER BY id ASC')->fetchAll(PDO::FETCH_COLUMN) as $j) { $d = json_decode((string)$j, true); if (is_array($d)) $out[] = $d; }
+    return $out;
+};
+$JOBS = ['quote_chase', 'quote_daily_list', 'ai_media', 'offers_send'];
+// master_schedule.json as read: 'read' (its row decoded), 'absent' (no table, or no row) or 'unreadable' (a row that is
+// not JSON); and how many entries it holds besides the four jobs' — the positive control that the schedule was read at
+// all, without which "no entry for the four" would pass over a schedule nobody read (QF-CA3, the redeploy baseline)
+$sched = function (PDO $p) use ($has, $JOBS): array {
+    if (!$has($p, 'master_schedule')) return ['absent', 0];
+    $j = $p->query('SELECT data FROM [master_schedule] WHERE id = 0 LIMIT 1')->fetchColumn();
+    if (!is_string($j)) return ['absent', 0];
+    $d = json_decode($j, true);
+    if (!is_array($d)) return ['unreadable', 0];
+    $n = 0; foreach ($d as $k => $e) if (is_array($e) && !in_array((string)$k, $JOBS, true)) $n++;
+    return ['read', $n];
+};
+$T4 = ['quote_tracker', 'wa_auto_sends', 'quote_list_sends', 'wa_seen_marks'];
+$SC = [];
+foreach (explode(' ', '@@SC_EXPECT@@') as $x) { [$f, $n] = explode(':', $x); $SC[$f] = (int)$n; }
+try {
+    switch ($mode) {
+    case 'keys':   // keys ROOT — the ladder's three lists, by name
+        $L = $ladder($a[0]);
+        echo 'all=', count($L['all']), ' settings=', count($L['settings']), ' pre=', count($L['pre']),
+             ' allnames=', implode(',', $L['all']), ' settingnames=', implode(',', $L['settings']);
+        break;
+
+    case 'g4':     // g4 ROOT LIVEROOT PDD — QF-G4's read of the live files and the store row (read-only)
+        [$root, $live, $pdd] = $a;
+        $L = $ladder($root);
+        $kyc = $readJson($pdd . '/kyc_config.json');
+        $cfgf = $readJson($pdd . '/config.json');
+        $rootf = $readJson($live . '/data/config.json');
+        $store = is_file($pdd . '/plugin.sqlite3') ? $storeRow($ro($pdd . '/plugin.sqlite3')) : [];
+        require_once $live . '/lib/PluginConfig.php';
+        $merged = PluginConfig::read($live, $pdd);
+        $set = []; $nf = 0; $ns = 0; $nr = 0; $held = 0;
+        foreach ($L['all'] as $k) {
+            $f = is_array($kyc) && array_key_exists($k, $kyc); $s = array_key_exists($k, $store); $r = $setNow($merged, $k);
+            $h = (is_array($cfgf) && array_key_exists($k, $cfgf)) || (is_array($rootf) && array_key_exists($k, $rootf));
+            if ($f) $nf++; if ($s) $ns++; if ($r) $nr++; if ($h) $held++;
+            if ($f || $s || $r || $h) $set[] = $k;
+        }
+        echo 'keys=', count($L['all']), ' set=', count($set), ' file=', $nf, ' store=', $ns, ' reads=', $nr, ' held=', $held,
+             ' names=', $set === [] ? '-' : implode(',', $set);
+        break;
+
+    case 'conf':   // conf ROOT LIVEROOT PDD DEST — the settings copies for the QF readings: the ladder's keys, the
+                   // pre-existing keys it declares and the book's, never a secret (PluginConfig::SECRET_KEYS and the rest)
+        [$root, $live, $pdd, $dest] = $a;
+        $L = $ladder($root);
+        $book = ['tenant_profile', 'currency_code', 'currency_symbol', 'cashbook_base_currency', 'cashbook_currencies', 'bank_screen_enabled'];
+        $n1 = ['followup_enabled', 'followup_auto_send', 'followup_daily_cap', 'followup_not_before', 'multi_number_channels_enabled',
+               'wa_followups_on_owned_numbers', 'wa_force_accounts', 'kyc_messages_like_crm', 'kyc_quote_validity_days',
+               'reminder_hour', 'reminder_until_hour', 'timezone', 'wasender_api_url', 'wasender_enabled', 'ai_provider',
+               'alert_hours_from', 'alert_hours_to'];
+        $keep = array_values(array_diff(array_unique(array_merge($L['all'], $L['settings'], $L['pre'], $book, $n1)), $secret($root)));
+        $o = []; $kept = 0;
+        foreach (['root' => $live . '/data/config.json', 'config' => $pdd . '/config.json', 'kyc' => $pdd . '/kyc_config.json'] as $n => $f) {
+            $d = $readJson($f);
+            if ($d === null) { $o[] = $n . '=' . (is_file($f) ? 'unreadable' : 'absent'); continue; }
+            $c = []; foreach ($keep as $k) if (array_key_exists($k, $d)) $c[$k] = $d[$k];
+            $kept += count($c);
+            if (@file_put_contents($dest . '/' . $n . '.json', json_encode($c, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT)) === false) { echo '?write'; exit(3); }
+            @chmod($dest . '/' . $n . '.json', 0600);
+            $o[] = $n . '=present';
+        }
+        echo implode(' ', $o), ' keys=', count($keep), ' kept=', $kept, ' csv=', implode(',', $keep);
+        break;
+
+    case 'vault':  // vault ROOT LIVEVAULT OUTFILE KEEPCSV — the readings' one copy of the live vault, read-only: its book keys
+                   // and the keys the readings keep (conf's csv), never a secret (PluginConfig::SECRET_KEYS and the rest); none
+                   // written when the live vault is absent or unreadable, as CIHP_PHP's vault does
+        [$root, $vf, $outf, $csv] = $a;
+        $book = ['tenant_profile', 'currency_code', 'currency_symbol', 'cashbook_base_currency', 'cashbook_currencies', 'bank_screen_enabled'];
+        $keys = array_values(array_diff(array_unique(array_merge($book, array_filter(explode(',', (string)$csv), 'strlen'))), $secret($root)));
+        @unlink($outf);
+        $v = $readJson($vf);
+        if ($v === null) { echo is_file($vf) ? 'vault=unreadable keys=0' : 'vault=absent keys=0'; break; }
+        $c = []; if (is_array($v['config'] ?? null)) foreach ($keys as $k) if (array_key_exists($k, $v['config'])) $c[$k] = $v['config'][$k];
+        if (@file_put_contents($outf, json_encode(['config' => $c], JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT)) === false) { echo '?write'; exit(3); }
+        @chmod($outf, 0600);
+        echo 'vault=present keys=', count($c);
+        break;
+
+    case 'g1':     // g1 DB — QF-G1: the copy's shape (088 last, or 089–091 applied)
+        $p = $ro($a[0]);
+        $last = (string)$one($p, 'SELECT filename FROM _migrations ORDER BY id DESC LIMIT 1');
+        $mig = []; foreach (array_keys($SC) as $f) $mig[] = (int)$one($p, 'SELECT COUNT(*) FROM _migrations WHERE filename = ?', [$f]);
+        $sc = []; foreach (array_keys($SC) as $f) $sc[] = $has($p, '_schema_checks') ? (int)$one($p, 'SELECT COUNT(*) FROM _schema_checks WHERE migration = ? AND found = expected', [$f]) : 0;
+        $t = []; foreach (['quote_tracker', 'wa_auto_sends', 'wa_seen_marks'] as $x) $t[] = $has($p, $x) ? 1 : 0;
+        echo 'last=', $last === '' ? '-' : $last, ' mig=', implode('', $mig), ' sc=', implode('', $sc), ' tables=', implode('', $t),
+             ' kind=', $col($p, 'followups', 'kind') ? 1 : 0, ' control=', $has($p, 'wa_messages') ? 1 : 0;
+        break;
+
+    case 'base':   // base DB — the redeploy baseline, read-only from the LIVE book (QF-G1): the four tables' row counts,
+                   // wa_auto_sends' largest id, the four jobs' master_schedule.json entries (name:last_run), the moment
+        $p = $ro($a[0]);
+        $n = []; foreach ($T4 as $x) $n[] = $has($p, $x) ? (int)$one($p, 'SELECT COUNT(*) FROM ' . $x) : -1;
+        $max = $has($p, 'wa_auto_sends') ? (int)$one($p, 'SELECT COALESCE(MAX(id), 0) FROM wa_auto_sends') : 0;
+        $ms = $flat($p, 'master_schedule.json'); $e = []; [$sst, $sot] = $sched($p);
+        foreach ($JOBS as $j) if (is_array($ms) && isset($ms[$j]) && is_array($ms[$j])) $e[] = $j . ':' . (int)($ms[$j]['last_run'] ?? 0);
+        $t = time();
+        echo 'rows=', implode(',', $n), ' max=', $max, ' entries=', $e === [] ? '-' : implode(',', $e), ' sched=', $sst, ' others=', $sot,
+             ' at=', gmdate('Y-m-d\TH:i:s', $t), ' unix=', $t;
+        break;
+
+    case 'trial':  // trial ROOT DIR — QF-G2: 089 → 090 → 091 on DIR's copy through ROOT's (the pin's) MigrationRunner
+        [$root, $dir] = $a;
+        foreach (['StoreInterface', 'MigrationRunner'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $p = $rw($dir . '/plugin.sqlite3');
+        $fuCols = $has($p, 'followups') ? array_map(function ($r) { return (string)$r['name']; }, $p->query('PRAGMA table_info(followups)')->fetchAll(PDO::FETCH_ASSOC)) : [];
+        $fuHash = function () use ($p, $fuCols) {
+            if ($fuCols === []) return '0:-';
+            $h = hash_init('sha256'); $n = 0;
+            foreach ($p->query('SELECT ' . implode(',', array_map(function ($c) { return '"' . $c . '"'; }, $fuCols)) . ' FROM followups ORDER BY id')->fetchAll(PDO::FETCH_NUM) as $r) { $n++; hash_update($h, json_encode($r) . "\n"); }
+            return $n . ':' . substr(hash_final($h), 0, 16);
+        };
+        $before = $fuHash();
+        $res = (new MigrationRunner($p, $root . '/migrations', $dir . '/migration.log'))->run();
+        $st = []; foreach ($res as $r) $st[] = (string)$r['file'] . ':' . (string)$r['status'];
+        $v = []; foreach ($SC as $f => $want) {
+            $r = $has($p, '_schema_checks') ? $p->query("SELECT expected, found FROM _schema_checks WHERE migration = " . $p->quote($f))->fetch(PDO::FETCH_NUM) : false;
+            $v[] = $f . '=' . ($r ? (int)$r[1] . '/' . (int)$r[0] : 'missing') . '/' . $want;
+        }
+        $log = (string)@file_get_contents($dir . '/migration.log'); $l = [];
+        foreach (array_keys($SC) as $f) {
+            $w = 'none';
+            foreach (explode("\n", $log) as $line) { if (strpos($line, $f) === false) continue; $w = strpos($line, 'PARTIAL:') !== false ? 'PARTIAL' : (strpos($line, 'OK:') !== false ? 'OK' : 'other'); }
+            $l[] = $f . '=' . $w;
+        }
+        echo 'applied=', $st === [] ? '-' : implode(',', $st), ' verdicts=', implode(',', $v), ' log=', implode(',', $l),
+             ' followups=', $before, '>', $fuHash();
+        break;
+
+    case 'neg':    // neg ROOT DIR — Part V's negative control on a further copy: 089, then an 085-shaped wa_media, then 090 alone
+        [$root, $dir] = $a;
+        foreach (['StoreInterface', 'MigrationRunner'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $p = $rw($dir . '/plugin.sqlite3');
+        @mkdir($dir . '/m1', 0700); @mkdir($dir . '/m2', 0700);
+        foreach (glob($root . '/migrations/*.sql') ?: [] as $f) if (strcmp(basename($f), '090') < 0) copy($f, $dir . '/m1/' . basename($f));
+        copy($root . '/migrations/090_wa_voice.sql', $dir . '/m2/090_wa_voice.sql');
+        (new MigrationRunner($p, $dir . '/m1', $dir . '/m1.log'))->run();
+        $cols = explode(',', '@@COLS085@@'); $def = [];
+        foreach ($cols as $c) $def[] = $c === 'id' ? 'id INTEGER PRIMARY KEY AUTOINCREMENT' : $c . ' TEXT';
+        $reset = 0;
+        if ($has($p, 'wa_media')) {   // a redeploy's copy: 090 was applied — take its objects off this throwaway copy first
+            foreach (['wa_media', 'wa_voice_calls', 'wa_voice_acks'] as $x) $p->exec('DROP TABLE IF EXISTS ' . $x);
+            if ($has($p, '_schema_checks')) $p->exec("DELETE FROM _schema_checks WHERE migration = '090_wa_voice.sql'");
+            $p->exec("DELETE FROM _migrations WHERE filename = '090_wa_voice.sql'");
+            $reset = 1;
+        }
+        $p->exec('CREATE TABLE wa_media (' . implode(', ', $def) . ')');
+        $p->exec('CREATE UNIQUE INDEX idx_wa_media_wa_message_id ON wa_media(wa_message_id)');
+        $p->exec('CREATE INDEX idx_wa_media_status ON wa_media(status, created_at)');
+        $p->exec('CREATE INDEX idx_wa_media_conversation ON wa_media(conversation_id, id)');
+        $res = (new MigrationRunner($p, $dir . '/m2', $dir . '/m2.log'))->run();
+        $log = (string)@file_get_contents($dir . '/m2.log');
+        $row = $has($p, '_schema_checks') ? (int)$one($p, "SELECT COUNT(*) FROM _schema_checks WHERE migration = '090_wa_voice.sql'") : 0;
+        echo 'reset=', $reset, ' cols=', count($cols), ' status=', (string)($res[0]['status'] ?? '-'), ' partial=', strpos($log, 'PARTIAL: 090_wa_voice.sql') !== false ? 1 : 0,
+             ' check=', stripos($log, 'CHECK constraint failed') !== false ? 1 : 0, ' row=', $row;
+        break;
+
+    case 'notes':  // notes ROOT DIR — QF-N1, QF-N2, QF-N4, QF-N7 on the copy in DIR (its settings copies beside it)
+        [$root, $dir] = $a;
+        foreach (['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'StaffJobsGate', 'StaffDirectory', 'WaSendBudget', 'QuoteSendEvidence', 'SalesFollowupChecks'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $c = PluginConfig::read($root, $dir);
+        $p = $ro($dir . '/plugin.sqlite3');
+        $w = function ($k) use ($c, $setNow) { if (!$setNow($c, $k)) return 'unset'; $v = $c[$k]; return is_bool($v) ? ($v ? 'on' : 'off') : (is_scalar($v) ? preg_replace('/[^A-Za-z0-9_.:\/+-]/', '', (string)$v) : 'set'); };
+        $n1 = [];
+        foreach (['followup_enabled', 'followup_auto_send', 'followup_daily_cap', 'followup_not_before', 'multi_number_channels_enabled',
+                  'wa_followups_on_owned_numbers', 'wa_force_accounts', 'kyc_messages_like_crm', 'kyc_quote_validity_days',
+                  'reminder_hour', 'reminder_until_hour'] as $k) $n1[] = $k . '=' . $w($k);
+        $wasender = ($setNow($c, 'wasender_api_url') || $setNow($c, 'wasender_enabled')) ? 'configured' : 'not-configured';
+        $chan = [];
+        if ($has($p, 'wa_channels')) {
+            $cc = array_map(function ($r) { return (string)$r['name']; }, $p->query('PRAGMA table_info(wa_channels)')->fetchAll(PDO::FETCH_ASSOC));
+            $sel = (in_array('status', $cc, true) ? 'status' : "'-'") . ', ' . (in_array('ai_enabled', $cc, true) ? 'ai_enabled' : "'-'");
+            foreach ($p->query('SELECT ' . $sel . ' AS s, COUNT(*) FROM wa_channels GROUP BY 1, 2')->fetchAll(PDO::FETCH_NUM) as $r) $chan[] = preg_replace('/[^a-z0-9_-]/', '', strtolower((string)$r[0])) . '/ai' . (string)$r[1] . ':' . (int)$r[2];
+        }
+        // QF-N2: open enquiry follow-ups; approved drafts by age with whether followup_enabled is on; follow-ups with 3+ failed events
+        $n2 = 'followups=absent';
+        if ($has($p, 'followups')) {
+            $open = (int)$one($p, 'SELECT COUNT(*) FROM followups WHERE closed_at IS NULL');
+            $ages = [];
+            if ($has($p, 'followup_drafts')) foreach ([['<1d', 0, 1], ['1-7d', 1, 7], ['>7d', 7, 100000]] as [$lb, $lo, $hi])
+                $ages[] = $lb . ':' . (int)$one($p, "SELECT COUNT(*) FROM followup_drafts WHERE status = 'approved' AND julianday('now') - julianday(created_at) >= ? AND julianday('now') - julianday(created_at) < ?", [$lo, $hi]);
+            $f3 = $has($p, 'followup_events') ? (int)$one($p, "SELECT COUNT(*) FROM (SELECT followup_id FROM followup_events WHERE event = 'failed' GROUP BY followup_id HAVING COUNT(*) >= 3)") : -1;
+            $n2 = 'open=' . $open . ' approved=' . implode(',', $ages) . ' followup_enabled=' . $w('followup_enabled') . ' failed3=' . $f3;
+        }
+        // QF-N4: per handset (by role) and per Kampala day over 30 days, the Message Log's Evolution sends by the pin's kind
+        // map — what reminders, win-back and briefs take of the daily cap (wa_send_daily_cap as the copy reads it, else
+        // WaSendBudget's default, the 60) and the transactional total beside it, the same day and handset. A row's handset is
+        // its sender's channel as the copy's configuration routes it now (NotificationService::evoChannelFor: accounts →
+        // account, support → account under wa_force_accounts, else support; AlertService logs as sales), labelled by
+        // SalesFollowupChecks::handsetLabels (h1 (sales) …, never an instance name). Rows written before any send are left
+        // out and AlertService's rows mapped by their event, as L-ON does. On the 088-shaped copy no hook has counted
+        // anything: a baseline print, never a status (Q17-F01). Per handset: the days it sent, its peak day (the proactive
+        // count and the transactional total that day), the days at or over the cap and at or over half of it, the 30 days'
+        // reminders, win-back and briefs, and its largest transactional day.
+        $labels = SalesFollowupChecks::handsetLabels($c);
+        $force = QuoteSendEvidence::forceAccounts($c);
+        $capRaw = $c['wa_send_daily_cap'] ?? null;
+        $cap = (is_int($capRaw) || (is_string($capRaw) && preg_match('/^\s*\d{1,6}\s*$/', $capRaw))) ? (int)trim((string)$capRaw) : (int)WaSendBudget::DEFAULTS['wa_send_daily_cap'];
+        $hOf = function (string $s) use ($c, $labels, $force): string {
+            $s = strtolower(trim($s));
+            $ch = ($s === 'accounts' || $s === 'account') ? 'account' : ($s === 'support' ? ($force ? 'account' : 'support') : ($s === 'sales' ? 'sales' : ''));
+            if ($ch === '') return 'other';
+            $h = WaSendBudget::handset((string)($c['evo_instance_' . $ch] ?? ''));
+            if ($h === '') return $ch . '-noinstance';
+            return isset($labels[$h]) ? (string)preg_replace('/\s+/', '', $labels[$h]) : 'unlabelled';
+        };
+        $n4 = 'log=absent';
+        if ($has($p, 'notification_audit_log')) {
+            $z = new DateTimeZone('Africa/Kampala'); $by = []; $sun = 0; $tot = 0; $trans = 0; $remPh = []; $enqPh = [];
+            $person = class_exists('HumanTakeover') ? HumanTakeover::personEvents() : [];
+            $st = $p->prepare('SELECT sender, event, phone, success, http_code, sent_at FROM notification_audit_log WHERE sent_at >= ? ORDER BY id');
+            $st->execute([gmdate('Y-m-d H:i:s', time() - 31 * 86400)]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $ev = (string)$r['event'];
+                if ($ev === '' || in_array($ev, $person, true) || substr($ev, -18) === '_suppressed_optout') continue;
+                if ((int)$r['success'] === 0 && $r['http_code'] === null) continue;
+                $kind = SalesFollowupChecks::kindOfEvent($ev);
+                try { $t = new DateTime((string)$r['sent_at'], new DateTimeZone(dn_tz($c))); } catch (Throwable $e) { continue; }
+                $t->setTimezone($z); $day = $t->format('Y-m-d');
+                if ($t->getTimestamp() < time() - 30 * 86400) continue;
+                $h = $hOf((string)$r['sender']);
+                $tot++;
+                $d = $by[$h][$day] ?? ['p' => 0, 't' => 0, 'reminder' => 0, 'winback' => 0, 'brief' => 0];
+                if (in_array($kind, ['reminder', 'winback', 'brief'], true)) { $d['p']++; $d[$kind]++; } else { $d['t']++; $trans++; }
+                $by[$h][$day] = $d;
+                if ((int)$t->format('N') === 7) $sun++;
+                $ph = preg_replace('/\D/', '', (string)$r['phone']);
+                if ($ph !== '' && $kind === 'reminder') $remPh[$day . '|' . $ph] = true;
+            }
+            if ($has($p, 'followup_sends')) {
+                $fc = array_map(function ($r) { return (string)$r['name']; }, $p->query('PRAGMA table_info(followup_sends)')->fetchAll(PDO::FETCH_ASSOC));
+                if (in_array('phone', $fc, true) && in_array('sent_at', $fc, true)) {
+                    $st = $p->prepare('SELECT phone, sent_at FROM followup_sends WHERE sent_at >= ?'); $st->execute([gmdate('Y-m-d H:i:s', time() - 31 * 86400)]);
+                    foreach ($st->fetchAll(PDO::FETCH_NUM) as $r) {
+                        try { $t = new DateTime((string)$r[1], new DateTimeZone('UTC')); } catch (Throwable $e) { continue; }
+                        $t->setTimezone($z); $ph = preg_replace('/\D/', '', (string)$r[0]);
+                        if ($ph !== '') $enqPh[$t->format('Y-m-d') . '|' . $ph] = true;
+                    }
+                }
+            }
+            $both = count(array_intersect_key($remPh, $enqPh));
+            $parts = []; ksort($by);
+            foreach ($by as $h => $days) {
+                ksort($days);
+                $peak = ''; $pp = -1; $pt = 0; $full = 0; $half = 0; $tmax = 0; $sum = ['reminder' => 0, 'winback' => 0, 'brief' => 0];
+                foreach ($days as $day => $d) {
+                    if ($d['p'] > $pp) { $pp = $d['p']; $pt = $d['t']; $peak = $day; }
+                    if ($cap > 0 && $d['p'] >= $cap) $full++;
+                    if ($cap > 0 && 2 * $d['p'] >= $cap) $half++;
+                    $tmax = max($tmax, $d['t']);
+                    foreach ($sum as $k => $v) $sum[$k] += $d[$k];
+                }
+                $parts[] = $h . '{days=' . count($days) . ',peak=' . $peak . ':p=' . $pp . '/t=' . $pt . ',at_cap=' . $full . ',at_half=' . $half
+                         . ',reminder=' . $sum['reminder'] . ',winback=' . $sum['winback'] . ',brief=' . $sum['brief'] . ',tmax=' . $tmax . '}';
+            }
+            $n4 = 'rows=' . $tot . ' cap=' . $cap . ' handsets=' . ($parts === [] ? '-' : implode('', $parts)) . ' transactional=' . $trans . ' sunday=' . $sun . ' reminder+enquiry_same_day=' . $both;
+        }
+        // QF-N7: active accounts with a phone, by role (the daily list's size); never an id
+        $n7 = []; $acc = $docRows($p, 'retailers.json');
+        if (is_array($acc)) foreach ($acc as $r) {
+            if (!is_array($r) || !StaffDirectory::isActive($r) || trim((string)($r['phone'] ?? '')) === '') continue;
+            $rl = preg_replace('/[^a-z_]/', '', strtolower((string)($r['role'] ?? 'none'))); $n7[$rl] = ($n7[$rl] ?? 0) + 1;
+        }
+        ksort($n7); $n7s = []; foreach ($n7 as $k => $v) $n7s[] = $k . ':' . $v;
+        $sv = (string)$p->query('SELECT sqlite_version()')->fetchColumn();
+        echo 'n1=', implode(' ', $n1), ' | tz=', dn_tz($c), ' sqlite=', $sv, ' php=', PHP_VERSION, ' wasender=', $wasender,
+             ' channels=', $chan === [] ? '-' : implode(',', $chan), ' | n2=', $n2, ' | n4=', $n4, ' | n7=', $n7s === [] ? '-' : implode(',', $n7s);
+        break;
+
+    case 'n5':     // n5 DIR MASTERLOG — QF-N5: master_schedule.json's last duration_ms per job; the master log's largest cycle and SLOW JOB lines
+        [$dir, $log] = $a;
+        $p = $ro($dir . '/plugin.sqlite3');
+        $ms = $flat($p, 'master_schedule.json'); $d = [];
+        if (is_array($ms)) foreach ($ms as $j => $e) if (is_array($e) && isset($e['duration_ms'])) $d[] = preg_replace('/[^a-z0-9_]/', '', (string)$j) . ':' . (int)$e['duration_ms'];
+        $rem = is_array($ms) && isset($ms['customer_reminders']['last_run']) ? gmdate('Y-m-d\TH:i\Z', (int)$ms['customer_reminders']['last_run']) : '-';
+        $max = -1; $slow = 0; $lr = 'unreadable';
+        if (is_file($log) && is_readable($log)) {
+            $lr = 'read';
+            foreach (@file($log) ?: [] as $l) {
+                if (preg_match('/Cycle complete in ([0-9.]+)\s*s/', $l, $m)) $max = max($max, (float)$m[1]);
+                if (strpos($l, 'SLOW JOB') !== false) $slow++;
+            }
+        }
+        echo 'durations=', $d === [] ? '-' : implode(',', $d), ' reminders_last_run=', $rem, ' log=', $lr, ' max_cycle_s=', $max < 0 ? 'NOT-ESTABLISHED' : $max, ' slow_jobs=', $lr === 'read' ? $slow : 'NOT-ESTABLISHED';
+        break;
+
+    case 'n6':     // n6 PHPLOG — QF-N6: "no text to answer — <wrapper key>" lines per day, where the PHP log is readable
+        $log = (string)($a[0] ?? '');
+        if ($log === '' || $log === '-' || !is_file($log) || !is_readable($log)) { echo 'log=unreadable'; break; }
+        $by = [];
+        foreach (@file($log) ?: [] as $l) {
+            if (strpos($l, 'no text to answer') === false) continue;
+            $day = preg_match('/^\[(\d{2}-[A-Za-z]{3}-\d{4})/', $l, $m) ? $m[1] : (preg_match('/(\d{4}-\d{2}-\d{2})/', $l, $m) ? $m[1] : 'undated');
+            $key = preg_match('/no text to answer — ([A-Za-z]+)/u', $l, $m) ? $m[1] : 'other';
+            $by[$day . '/' . $key] = ($by[$day . '/' . $key] ?? 0) + 1;
+        }
+        ksort($by); $o = []; foreach ($by as $k => $v) $o[] = $k . ':' . $v;
+        echo 'log=read lines=', array_sum($by), ' by=', $o === [] ? '-' : implode(',', array_slice($o, -40));
+        break;
+
+    case 'ca1':    // ca1 DB — QF-CA1 on a fresh copy after the copy: the ledger rows and the _schema_checks verdicts
+        $p = $ro($a[0]);
+        $o = [];
+        foreach ($SC as $f => $want) {
+            $m = (int)$one($p, 'SELECT COUNT(*) FROM _migrations WHERE filename = ?', [$f]);
+            $r = $has($p, '_schema_checks') ? $p->query("SELECT expected, found FROM _schema_checks WHERE migration = " . $p->quote($f))->fetch(PDO::FETCH_NUM) : false;
+            $o[] = $f . '=' . $m . ':' . ($r ? (int)$r[1] . '/' . (int)$r[0] : 'missing') . '/' . $want;
+        }
+        echo 'verdicts=', implode(',', $o);
+        break;
+
+    case 'ca2':    // ca2 DB MAX COPYUNIX — QF-CA2/QF-CA3 on a fresh copy: the four tables' rows, the ledger above MAX by mode/kind
+                   // and against the copy's start (claimed_at in a later second = late), and the four jobs' entries
+        [$db, $max, $cu] = [$a[0], (int)$a[1], (int)$a[2]];
+        $p = $ro($db);
+        $n = []; foreach ($T4 as $x) $n[] = $has($p, $x) ? (int)$one($p, 'SELECT COUNT(*) FROM ' . $x) : -1;
+        $late = 0; $same = 0; $early = 0; $rec = []; $kinds = [];
+        if ($has($p, 'wa_auto_sends')) {
+            $st = $p->prepare("SELECT id, mode, kind, CAST(strftime('%s', claimed_at) AS INTEGER) AS t FROM wa_auto_sends WHERE id > ? ORDER BY id"); $st->execute([$max]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $k = (string)$r['mode'] . '/' . (string)$r['kind']; $kinds[$k] = ($kinds[$k] ?? 0) + 1;
+                if ((string)$r['mode'] !== 'claim') continue;
+                $t = (int)$r['t'];
+                if ($t > $cu) $late++; elseif ($t === $cu) $same++; else $early++;
+            }
+        }
+        ksort($kinds); $ks = []; foreach ($kinds as $k => $v) $ks[] = $k . ':' . $v;
+        $ms = $flat($p, 'master_schedule.json'); $e = []; $elate = 0; [$sst, $sot] = $sched($p);
+        foreach ($JOBS as $j) if (is_array($ms) && isset($ms[$j]) && is_array($ms[$j])) { $lr = (int)($ms[$j]['last_run'] ?? 0); $e[] = $j . ':' . $lr; if ($lr > $cu) $elate++; }
+        echo 'rows=', implode(',', $n), ' added=', $ks === [] ? '-' : implode(',', $ks), ' claims_late=', $late, ' claims_same_second=', $same,
+             ' claims_before=', $early, ' entries=', $e === [] ? '-' : implode(',', $e), ' entries_late=', $elate, ' sched=', $sst, ' others=', $sot;
+        break;
+
+    case 'ca4':    // ca4 ROOT DIR — QF-CA4 on the copy, through ROOT's (the installed) FollowUpService: a planted open quote follow-up
+                   // and its approved draft are returned by neither due() nor approvedDrafts(); the positive control, an enquiry
+                   // follow-up and its approved draft planted the same way, by both. Both rows as the fixtures plant them
+                   // (tests/quote_followup/F_stops.php: last_customer_at is NOT NULL with no default, 070), due and decided long
+                   // ago, so each sorts first in due()'s and approvedDrafts()'s order; a limit no copy reaches
+        [$root, $dir] = $a;
+        foreach (['StoreInterface', 'JsonStore', 'SqliteStore', 'FollowUpService'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $p = $rw($dir . '/plugin.sqlite3');
+        $svc = new FollowUpService($p);
+        if (!$svc->hasKind()) { echo 'kind=absent'; break; }
+        $conv = (int)$one($p, 'SELECT COALESCE(MAX(conversation_id), 0) + 1000000 FROM followups');
+        $tag = 'qf-ca4-' . getmypid();
+        $plant = function (int $c, string $kind, ?string $key) use ($p, $tag): int {
+            $p->prepare("INSERT INTO followups (conversation_id, channel, phone, last_customer_at, kind, quote_key, due_at, opened_at, opened_by)
+                         VALUES (?, 'sales', '0', '2000-01-01 00:00:00', ?, ?, '2000-01-01 00:00:00', '2000-01-01 00:00:00', 'qf-ca4')")
+              ->execute([$c, $kind, $key]);
+            $fid = (int)$p->lastInsertId();
+            $p->prepare("INSERT INTO followup_drafts (followup_id, attempt, verdict, reason, body, status, decided_at, decided_by)
+                         VALUES (?, 1, 'SEND', ?, ?, 'approved', '2000-01-01 00:00:00', 'qf-ca4')")->execute([$fid, $tag, $tag]);
+            return $fid;
+        };
+        $fq = $plant($conv, 'quote', 'ref:' . $tag);
+        $fe = $plant($conv + 1, 'enquiry', null);
+        $due = array_map(function ($r) { return (int)$r['id']; }, $svc->due(gmdate('Y-m-d H:i:s'), 1000000));
+        $ap = array_map(function ($r) { return (int)($r['followup_id'] ?? 0); }, $svc->approvedDrafts(1000000));
+        echo 'kind=present planted=2 due_quote=', in_array($fq, $due, true) ? 1 : 0, ' approved_quote=', in_array($fq, $ap, true) ? 1 : 0,
+             ' due_enquiry=', in_array($fe, $due, true) ? 1 : 0, ' approved_enquiry=', in_array($fe, $ap, true) ? 1 : 0,
+             ' due=', count($due), ' approved=', count($ap);
+        break;
+
+    case 'ca6':    // ca6 ROOT DIR — QF-CA6: the installed gates false or no-ops with every key unset (as the copy reads, its own
+                   // vault included); the same with every key set as South Sudan; and the positive control, every key set as
+                   // Uganda (Africa/Kampala), where WaSendBudget::on and QuoteChase::on read true and one mark is written —
+                   // without which "false everywhere" would pass over gates that can never be true. Each case's own mark.
+        [$root, $dir] = $a;
+        foreach (['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'StaffJobsGate', 'SalesFollowupLadder', 'WaSendBudget', 'QuoteChase', 'WaSeenMarks'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $p = $rw($dir . '/plugin.sqlite3');
+        $base = PluginConfig::read($root, $dir);
+        $L = $ladder($root);
+        $off = $base; foreach ($L['all'] as $k) unset($off[$k]);
+        $on = $base; foreach ($L['all'] as $k) $on[$k] = '1';
+        $on['wa_send_ledger'] = 'on';
+        $ss = $on; $ss['tenant_profile'] = 'south-sudan';
+        $ug = $on; $ug['tenant_profile'] = 'uganda'; $ug['timezone'] = 'Africa/Kampala';
+        $ssd = $dir . '/ss'; @mkdir($ssd, 0700); @file_put_contents($ssd . '/kyc_config.json', json_encode(['tenant_profile' => 'south-sudan']));
+        $marks = function () use ($p, $has) { return $has($p, 'wa_seen_marks') ? (int)$p->query('SELECT COUNT(*) FROM wa_seen_marks')->fetchColumn() : -1; };
+        $msg = ['message' => ['ephemeralMessage' => ['message' => ['conversation' => 'x']]]];
+        $tag = 'qf-ca6-' . getmypid();
+        $r = [];
+        $m0 = $marks();
+        $r[] = 'off:' . (WaSendBudget::on($off, $dir) ? 1 : 0) . (QuoteChase::on($off, $dir) ? 1 : 0);
+        WaSeenMarks::note($p, $off, $dir, 'in', '0', 'sales', 'qf-ca6', $tag . '-off', $msg);
+        $m1 = $marks(); $r[] = 'marks_off=' . ($m1 - $m0);
+        $r[] = 'ss:' . (WaSendBudget::on($ss, $ssd) ? 1 : 0) . (QuoteChase::on($ss, $ssd) ? 1 : 0);
+        WaSeenMarks::note($p, $ss, $ssd, 'in', '0', 'sales', 'qf-ca6', $tag . '-ss', $msg);
+        $m2 = $marks(); $r[] = 'marks_ss=' . ($m2 - $m1);
+        $r[] = 'ug:' . (WaSendBudget::on($ug, $dir) ? 1 : 0) . (QuoteChase::on($ug, $dir) ? 1 : 0);
+        WaSeenMarks::note($p, $ug, $dir, 'in', '0', 'sales', 'qf-ca6', $tag . '-ug', $msg);
+        $r[] = 'marks_ug=' . ($marks() - $m2);
+        echo implode(' ', $r);
+        break;
+
+    case 'ca8':    // ca8 ROOT DIR — QF-CA8 on a copy, with wa_send_ledger=on in the copy's config only: the marks and the recorders
+        [$root, $dir] = $a;
+        foreach (['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'StoreInterface', 'JsonStore', 'SqliteStore', 'StaffJobsGate', 'PluginLog', 'HumanTakeover', 'WaSendBudget', 'WaSeenMarks'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $c = PluginConfig::read($root, $dir); $c['wa_send_ledger'] = 'on';
+        if (!StaffJobsGate::applies($c, $dir)) { echo 'tenant=not-uganda'; break; }
+        $store = SqliteStore::create($dir);
+        $p = $store->getPdo();
+        $cnt = function (string $sql) use ($p) { return (int)$p->query($sql)->fetchColumn(); };
+        $inst = trim((string)($c['evo_instance_sales'] ?? '')) !== '' ? 'sales' : (trim((string)($c['evo_instance_support'] ?? '')) !== '' ? 'support' : '');
+        if ($inst === '') { echo 'instance=none'; break; }
+        $w0 = $cnt("SELECT COUNT(*) FROM wa_seen_marks WHERE direction = 'in'"); $o0 = $cnt("SELECT COUNT(*) FROM wa_seen_marks WHERE direction = 'out'");
+        WaSeenMarks::note($p, $c, $dir, 'in', '256700000000', $inst, (string)$c['evo_instance_' . $inst], 'qf-ca8-in-' . getmypid(), ['message' => ['ephemeralMessage' => ['message' => ['conversation' => 'x']]]]);
+        WaSeenMarks::note($p, $c, $dir, 'out', '256700000000', $inst, (string)$c['evo_instance_' . $inst], 'qf-ca8-out-' . getmypid(), ['message' => ['audioMessage' => ['seconds' => 3]]]);
+        $w1 = $cnt("SELECT COUNT(*) FROM wa_seen_marks WHERE direction = 'in'"); $o1 = $cnt("SELECT COUNT(*) FROM wa_seen_marks WHERE direction = 'out'");
+        $k = function (string $kind) use ($cnt) { return $cnt("SELECT COUNT(*) FROM wa_auto_sends WHERE kind = '" . $kind . "' AND mode = 'record'"); };
+        $r0 = $k('reminder'); $x0 = $k('other'); $all0 = $cnt('SELECT COUNT(*) FROM wa_auto_sends');
+        $ok = '{"key":{"id":"QFCA8' . getmypid() . '"}}';
+        WaSendBudget::recordNotify($store, $c, $inst, 'ops_pre_due_d3', '256700000000', true, '', $ok);
+        $r1 = $k('reminder'); $all1 = $cnt('SELECT COUNT(*) FROM wa_auto_sends');
+        WaSendBudget::recordNotify($store, $c, $inst, 'invoice_document', '256700000000', true, '', '{"key":{"id":"QFCA8d' . getmypid() . '"}}');
+        $x1 = $k('other'); $all2 = $cnt('SELECT COUNT(*) FROM wa_auto_sends');
+        WaSendBudget::recordNotify($store, $c, $inst, 'wa_staff_reply', '256700000000', true, '', '{"key":{"id":"QFCA8s' . getmypid() . '"}}');
+        $all3 = $cnt('SELECT COUNT(*) FROM wa_auto_sends');
+        echo 'in=', $w1 - $w0, ' out=', $o1 - $o0, ' reminder=', $r1 - $r0, '/', $all1 - $all0, ' other=', $x1 - $x0, '/', $all2 - $all1, ' staff_reply=', $all3 - $all2;
+        break;
+
+    case 'on3':    // on3 ROOT DIR — QF-ON3 on the copy: the ledger's proactive claims (quote, enquiry, staff_list, offer) judged as the
+                   // built Q3-ON judges a chase (lib/SalesFollowupChecks.php q3On), by the limits each row records (ruling R18):
+                   // the window its row recorded (Sunday never); the day's and the hour's caps over what the claim could count —
+                   // proactive rows of its handset with a smaller id, not not_sent, its local_day, and the 3,600 s before it;
+                   // the spacing MAX(claimed_at + gap_s) over every earlier live row of its handset, any kind or mode, as
+                   // WaSendBudget::claim step 4 decides it; and, for the kinds that need a phone (PHONE_KINDS), one person a
+                   // Kampala day over PERSON_KINDS with a smaller id. A voice_ack claim is VA-ON1's, counted, never judged here
+                   // (Q15-F02); a reminder or win-back stored after a claim is a count (Q15-F01); ledger_orphan as L-ON states
+                   // it, an orphan not yet swept a count (Q16-F06). The ledger's own state first: judged only while it is on.
+        [$root, $dir] = $a;
+        foreach (['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'StaffJobsGate', 'SalesFollowupLadder', 'WaSendBudget'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $c = PluginConfig::read($root, $dir);
+        $p = $ro($dir . '/plugin.sqlite3');
+        $led = SalesFollowupLadder::ledgerOn($c) ? 'on' : 'off';
+        if (!$has($p, 'wa_auto_sends')) { echo 'ledger=', $led, ' table=absent'; break; }
+        $z = new DateTimeZone('Africa/Kampala');
+        $live = "(outcome IS NULL OR outcome <> 'not_sent')";
+        $rows = $p->query("SELECT id, handset, kind, mode, phone, claimed_at, outcome, local_day, win_from, win_to, cap_day, cap_hour
+                             FROM wa_auto_sends WHERE mode = 'claim' AND claimed_at >= datetime('now', '-60 days') ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+        $pro = ['quote', 'enquiry', 'staff_list', 'offer'];
+        $pk = "'" . implode("','", WaSendBudget::PERSON_KINDS) . "'";
+        $f = ['outside_window' => 0, 'cap_day' => 0, 'cap_hour' => 0, 'spacing' => 0, 'phone_today' => 0, 'ledger_orphan' => 0];
+        $n = ['claims' => count($rows), 'judged' => 0, 'voice_ack_left_to_VA-ON1' => 0, 'reminder_after_claim' => 0, 'orphans_unswept' => 0,
+              'total' => (int)$one($p, 'SELECT COUNT(*) FROM wa_auto_sends')];
+        $now = time();
+        foreach ($rows as $r) {
+            $kind = (string)$r['kind']; $h = (string)$r['handset']; $id = (int)$r['id'];
+            if ($kind === 'voice_ack') { $n['voice_ack_left_to_VA-ON1']++; continue; }
+            if (!in_array($kind, $pro, true)) continue;
+            $n['judged']++;
+            $t = UtcClock::parse((string)$r['claimed_at']);
+            $loc = (new DateTime('@' . $t))->setTimezone($z);
+            $hr = (int)$loc->format('G');
+            if ((int)$loc->format('N') === 7 || $r['win_from'] === null || $hr < (int)$r['win_from'] || $hr >= (int)$r['win_to']) $f['outside_window']++;
+            $day = (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE handset = ? AND local_day = ? AND proactive = 1 AND id < ? AND {$live}", [$h, (string)$r['local_day'], $id]);
+            if ($r['cap_day'] === null || $day + 1 > (int)$r['cap_day']) $f['cap_day']++;
+            $hour = (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE handset = ? AND proactive = 1 AND id < ? AND {$live}
+                                   AND CAST(strftime('%s', claimed_at) AS INTEGER) > ?", [$h, $id, $t - 3600]);
+            if ($r['cap_hour'] === null || $hour + 1 > (int)$r['cap_hour']) $f['cap_hour']++;
+            $gap = $one($p, "SELECT MAX(CAST(strftime('%s', claimed_at) AS INTEGER) + gap_s) FROM wa_auto_sends WHERE handset = ? AND id < ? AND {$live}", [$h, $id]);
+            if ($gap !== null && $gap !== false && $t < (int)$gap) $f['spacing']++;
+            $ph = (string)$r['phone'];
+            if ($ph !== '' && in_array($kind, WaSendBudget::PHONE_KINDS, true)) {
+                if ($one($p, "SELECT 1 FROM wa_auto_sends WHERE phone = ? AND local_day = ? AND id < ? AND kind IN ({$pk}) AND {$live} LIMIT 1",
+                         [$ph, (string)$r['local_day'], $id]) !== false) $f['phone_today']++;
+                $n['reminder_after_claim'] += (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE phone = ? AND local_day = ? AND id > ?
+                                                              AND kind IN ('reminder','winback') AND {$live}", [$ph, (string)$r['local_day'], $id]);
+            }
+        }
+        foreach ($p->query("SELECT id, handset, claimed_at FROM wa_auto_sends WHERE outcome IS NULL AND claimed_at >= datetime('now', '-60 days')")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $later = $one($p, "SELECT 1 FROM wa_auto_sends b WHERE b.handset = ? AND b.mode = 'claim' AND b.id > ?
+                                 AND CAST(strftime('%s', b.claimed_at) AS INTEGER) >= CAST(strftime('%s', ?) AS INTEGER) + 900 LIMIT 1",
+                          [(string)$r['handset'], (int)$r['id'], (string)$r['claimed_at']]);
+            if ($later !== false && $later !== null) $f['ledger_orphan']++;
+            elseif ($now - UtcClock::parse((string)$r['claimed_at']) >= 900) $n['orphans_unswept']++;
+        }
+        $o = []; foreach ($f as $k => $v) $o[] = $k . '=' . $v; $q = []; foreach ($n as $k => $v) $q[] = $k . '=' . $v;
+        echo 'ledger=', $led, ' fail{', implode(',', $o), '} counts{', implode(',', $q), '}';
+        break;
+
+    case 'lon':    // lon ROOT DIR — QF-ON0 where step 2 (ack) is off and the ledger is on (`skip ack` keeps the shared ledger,
+                   // §H.2.12.3): the tool's --check ack says "OFF — not judged", and it has no --check sending, so L-ON is
+                   // judged here, through ROOT's (the installed) SalesFollowupLadder::check — the tool's own dispatch to
+                   // SalesFollowupChecks::check — on the copy, read-only. Otherwise only the two states, for the caller.
+        [$root, $dir] = $a;
+        foreach (['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'PluginLog', 'StaffJobsGate', 'SalesFollowupLadder'] as $l) require_once $root . '/lib/' . $l . '.php';
+        $c = PluginConfig::read($root, $dir);
+        $led = SalesFollowupLadder::ledgerOn($c) ? 'on' : 'off'; $ack = SalesFollowupLadder::isOn($c, 'ack') ? 'on' : 'off';
+        if ($led !== 'on' || $ack === 'on') { echo 'ledger=', $led, ' ack=', $ack; break; }
+        if (!StaffJobsGate::applies($c, $dir)) { echo 'ledger=on ack=off tenant=not-uganda'; break; }
+        $r = SalesFollowupLadder::check($ro($dir . '/plugin.sqlite3'), $c, $dir, $root, 'L-ON', time());
+        $s = SalesFollowupLadder::status((string)($r['status'] ?? ''));
+        $cs = []; foreach ((array)($r['counts'] ?? []) as $k => $v) $cs[] = preg_replace('/[^a-z0-9_]/', '', (string)$k) . ':' . (int)$v;
+        $ns = []; foreach ((array)($r['notes'] ?? []) as $x) $ns[] = str_replace(['|', "\n"], ['/', ' '], (string)$x);
+        echo 'ledger=on ack=off status=', $s['kind'], ' code=', $s['code'] === '' ? '-' : $s['code'], ' counts=', $cs === [] ? '-' : implode(',', $cs),
+             ' notes=', count($ns), ' | ', implode(' ; ', array_slice($ns, 0, 30));
+        break;
+
+    case 'on5':    // on5 DIR — QF-ON5: the marks per Kampala day, and the R-05 race count (a Team row carrying an act's own sent id)
+        $p = $ro($a[0] . '/plugin.sqlite3');
+        if (!$has($p, 'wa_seen_marks')) { echo 'marks=absent'; break; }
+        $d = []; foreach ($p->query("SELECT substr(seen_at, 1, 10) AS d, direction, COUNT(*) FROM wa_seen_marks WHERE seen_at >= datetime('now', '-14 days') GROUP BY 1, 2 ORDER BY 1")->fetchAll(PDO::FETCH_NUM) as $r) $d[] = $r[0] . '/' . $r[1] . ':' . (int)$r[2];
+        $race = ($has($p, 'wa_auto_sends') && $has($p, 'wa_messages')) ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends s JOIN wa_messages m ON m.wa_message_id = s.wa_message_id
+                  WHERE s.wa_message_id IS NOT NULL AND s.wa_message_id <> '' AND m.agent_name = 'Team'") : -1;
+        echo 'marks=', $d === [] ? '-' : implode(',', $d), ' r05_team_echo=', $race;
+        break;
+
+    case 'hk7':    // hk7 TREE — QF-G3's HK7 (§H.2.6.7): the pin's send-site inventory over TREE, the pin's own tree from Git (its PHP
+                   // files; tests/ and data/ aside), by the pin's own scan and class table — tests/test_wa_send_budget.php's
+                   // wsb_send_sites() and HK07's $classes, read off Git by the derivation, byte for byte — with HK07's two
+                   // controls: the scan finds at least @@HK7_MIN@@ sites, AiReplyWorker::handle among them. file:method pairs only
+        $tree = rtrim((string)($a[0] ?? ''), '/');
+        if (!is_dir($tree . '/lib') || !function_exists('token_get_all')) { echo '?', is_dir($tree . '/lib') ? 'tokenizer' : 'tree'; exit(3); }
+        if (!function_exists('wsb_send_sites')) {
+@@WSB_SEND_SITES@@
+        }
+        $classes = @@HK7_CLASSES@@;
+        $sites = wsb_send_sites($tree);
+        $un = []; $handle = 0;
+        foreach ($sites as $s) {
+            [$file, $method] = [(string)$s[0], (string)$s[1]];
+            if (!isset($classes[$file][$method])) $un[$file . ':' . $method] = true;
+            if ($file === 'workers/AiReplyWorker.php' && $method === 'handle') $handle = 1;
+        }
+        echo 'sites=', count($sites), ' unclassified=', count($un), ' handle=', $handle, ' classes=', count($classes),
+             ' names=', $un === [] ? '-' : implode(',', array_keys($un));
+        break;
+
+    case 'rb3':    // rb3 ROOT LIVEROOT PDD — QF-RB3's live reads after the put-back (read-only): 5.18.104 keys still set, open
+                   // quote follow-ups, wa_voice_calls rows (VN-RB6's question)
+        [$root, $live, $pdd] = $a;
+        $L = $ladder($root);
+        $kyc = $readJson($pdd . '/kyc_config.json');
+        $p = $ro($pdd . '/plugin.sqlite3'); $store = $storeRow($p);
+        $set = []; foreach ($L['all'] as $k) if ((is_array($kyc) && array_key_exists($k, $kyc)) || array_key_exists($k, $store)) $set[] = $k;
+        $oq = $col($p, 'followups', 'kind') ? (int)$one($p, "SELECT COUNT(*) FROM followups WHERE kind = 'quote' AND closed_at IS NULL") : 0;
+        $vc = $has($p, 'wa_voice_calls') ? (int)$one($p, 'SELECT COUNT(*) FROM wa_voice_calls') : 0;
+        echo 'set=', count($set), ' names=', $set === [] ? '-' : implode(',', $set), ' open_quote=', $oq, ' voice_calls=', $vc;
+        break;
+
+    default:
+        echo '?mode'; exit(2);
+    }
+} catch (Throwable $e) { echo '?', get_class($e); exit(3); }

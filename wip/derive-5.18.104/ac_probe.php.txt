@@ -1,0 +1,591 @@
+// AC_PHP — 5.18.104's Part P readings, the agent's visible copy of the quotation e-mail (root docs/73 §H.5.14, §H.5.15;
+// rulings R11, R13, R18; P7S-02, P7S-08), one mode per call, as the database's owner in the container. Every mode but
+// "ca2" runs with PHP's network functions off (ac_php: allow_url_fopen=0, curl, sockets and processes disabled). "ca2"
+// spawns processes, so it is run without them off (ac_php_ca2), and spawns only two things: the pin's
+// tests/fixtures/fake_smtp_server.php on 127.0.0.1 and the pin's tests/quote_agent_copy/drive.php, each by its sha256 from
+// Git, every drive in a process of its own whose network functions are off but fsockopen — the one MailService opens to the
+// relay it is given, read back through the INSTALLED MailService as 127.0.0.1 before anything is driven. NOTHING HERE ASKS
+// uCRM: the uCRM every drive sees is drive.php's in-process recording fake. NO E-MAIL LEAVES THE CONTAINER: the only relay
+// is the loopback fake, and every address is fictitious, under the reserved domain example.test. Reads: COPIES in a folder
+// of this run's; the live settings files and vault as text, never written ("conf", "admins", "rb1": PluginConfig::read
+// writes nothing); the live quote_mail.log as text ("n2", counts only); and, for AC-ON1, the live quote_mail.log and
+// email_settings.json copied into a reading's folder ("onlog", "onfiles": the latter cut to mailSetting()'s keys, never
+// the mailbox password), read and never written on the live side. Writes: into the reading's own folder only
+// (/tmp/dnb-…). Output: one line of key=value words — counts and fixed codes. Never an address, a name, a quote number or
+// id, a staff id, a key's value or a credential; on a mismatch, codes, never a transcript line. PHP 7.4 syntax (the
+// release's).
+$mode = (string)($argv[1] ?? '');
+$a = array_slice($argv, 2);
+// The modes that read a COPY through the plugin's own PluginConfig::read and TenantProfile::current read the copy's own
+// vault (DN_VAULT_FILE, the reading's folder's vault.json: qf_copy's) and its own data folder (DN_DATA_DIR), as Parts F, V
+// and O's copy modes do; each takes [ROOT, DIR], DIR the reading's folder.
+if (in_array($mode, ['n1', 'ca1'], true)) {
+    $vd = rtrim((string)($a[1] ?? ''), '/');
+    putenv('DN_VAULT_FILE=' . $vd . '/vault.json'); putenv('DN_DATA_DIR=' . $vd);
+}
+$ro = function (string $db) {
+    if (!is_file($db)) throw new RuntimeException('nodb');
+    $p = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15,
+                                                PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
+    $p->exec('PRAGMA query_only = ON');
+    return $p;
+};
+$has = function (PDO $p, string $t): bool {
+    $s = $p->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"); $s->execute([$t]);
+    $r = $s->fetchColumn() !== false; $s->closeCursor(); return $r;
+};
+$one = function (PDO $p, string $sql, array $x = []) { $s = $p->prepare($sql); $s->execute($x); $r = $s->fetchColumn(); $s->closeCursor(); return $r; };
+$rows = function (PDO $p, string $sql, array $x = []): array { $s = $p->prepare($sql); $s->execute($x); return $s->fetchAll(PDO::FETCH_ASSOC); };
+$readJson = function (string $f) { if (!is_file($f) || !is_readable($f)) return null; $d = json_decode((string)@file_get_contents($f), true); return is_array($d) ? $d : null; };
+$put = function (string $f, string $text): bool { if (@file_put_contents($f, $text) === false) return false; @chmod($f, 0600); return true; };
+$mine = function (string $d): bool { return strpos($d, '/tmp/dnb-') === 0 && strpos($d, '..') === false; };
+$lib = function (string $root, array $names) { foreach ($names as $l) require_once rtrim($root, '/') . '/lib/' . $l . '.php'; };
+$tok = function ($s): string { return (string)preg_replace('/[^a-z0-9_]/', '', strtolower((string)$s)); };
+$setNow = function (array $c, string $k): bool { return array_key_exists($k, $c) && $c[$k] !== null && $c[$k] !== '' && $c[$k] !== false; };
+$adm = function (array $c): string {   // quote_agent_cc_admins as stored: absent, 0, 1 or other (a setting, never a person's value)
+    if (!array_key_exists('quote_agent_cc_admins', $c)) return 'absent';
+    $v = $c['quote_agent_cc_admins'];
+    if ($v === true || $v === 1 || $v === '1') return '1';
+    if ($v === false || $v === 0 || $v === '0') return '0';
+    return 'other';
+};
+$CFG = explode(',', '@@AC_CFG_KEYS@@');   // the configuration keys AC-N1 reads besides the ladder's: CustomerEmailDispatcher's three switches, EmailTemplate's Reply-To (from Git)
+$ES = explode(',', '@@AC_ES_KEYS@@');     // the email_settings.json keys AC-N1 reads: QuoteAgentCopy::mailSetting's, the tool's path 1, AC-CA2's refusal (from Git)
+$KEYS = explode(',', '@@AC_KEYS@@');      // Part P's two switch keys, QuoteAgentCopy::KEY and ::SINCE (from Git)
+$MS = explode(',', '@@AC_MS_KEYS@@');     // the email_settings.json keys QuoteAgentCopy::mailSetting() reads, and no other (from Git): AC-ON1's cut
+// email_settings.json cut to KEYS, into DST — never another key, so never the mailbox password: "conf" (AC-N1, $ES) and
+// "onfiles" (AC-ON1, $MS). [absent|unreadable|present|write, the keys kept]. A file that exists but cannot be read is read
+// as QuoteAgentCopy::mailSetting() reads it ("unreadable"), and no copy is made of it.
+$cutEs = function (string $src, string $dst, array $keys) use ($put): array {
+    if (!is_file($src)) return ['absent', 0];
+    $raw = is_readable($src) ? @file_get_contents($src) : false;              // as QuoteAgentCopy::mailSetting reads it
+    if ($raw === false) return ['unreadable', 0];
+    $d = json_decode((string)$raw, true);
+    $c = [];
+    if (is_array($d)) foreach ($keys as $k) if (array_key_exists($k, $d)) $c[$k] = $d[$k];
+    if (!$put($dst, json_encode($c, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT))) return ['write', 0];
+    return ['present', count($c)];
+};
+// QuoteAgentCopy::mailLines(D) of the class loaded (the INSTALLED one, in "onlog" and "onfiles"): the dated "sent" lines of
+// D/quote_mail.log that AC-ON's rule 4 reads, counted — the very reader AC-ON uses, so the controls on the copy count what
+// it will count. Each line's stamp and number stay inside it; nothing of a line is printed.
+$mlCount = function (string $d): int {
+    $m = new ReflectionMethod('QuoteAgentCopy', 'mailLines');
+    if (PHP_VERSION_ID < 80100) $m->setAccessible(true);             // needed before 8.1, a no-op since (and deprecated in 8.5)
+    return count((array)$m->invoke(null, $d));
+};
+try {
+    switch ($mode) {
+    case 'conf':     // conf LIVEROOT PDD DIR — AC-N1's settings on qf_copy's copy in DIR (whose settings copies are cut to the ladder's
+                     // keys): the keys of $CFG, from each live settings file into its copy (DIR/code/data/config.json, DIR/config.json,
+                     // DIR/kyc_config.json), and email_settings.json cut to $ES — never the mailbox password, never any other key. The live
+                     // files are read as text and never written. es= says whether the live email_settings.json could be read.
+        [$live, $pdd, $dir] = $a;
+        if (!$mine($dir)) { echo '?dir'; exit(3); }
+        $n = 0;
+        foreach ([[$live . '/data/config.json', $dir . '/code/data/config.json'], [$pdd . '/config.json', $dir . '/config.json'],
+                  [$pdd . '/kyc_config.json', $dir . '/kyc_config.json']] as $pair) {
+            $s = $readJson($pair[0]);
+            if ($s === null) continue;
+            $d = $readJson($pair[1]);
+            if ($d === null) $d = [];
+            $m = 0;
+            foreach ($CFG as $k) if (array_key_exists($k, $s)) { $d[$k] = $s[$k]; $m++; }
+            if ($m > 0 && !$put($pair[1], json_encode($d, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT))) { echo '?write'; exit(3); }
+            $n += $m;
+        }
+        [$es, $ne] = $cutEs($pdd . '/email_settings.json', $dir . '/email_settings.json', $ES);
+        if ($es === 'write') { echo '?write'; exit(3); }
+        echo 'es=', $es, ' es_keys=', $ne, ' cfg_keys=', $n;
+        break;
+
+    case 'n1':       // n1 ROOT DIR ES — AC-N1 on DIR's copy through ROOT's (the pin's) code, as `on agent-cc` reads it (§H.5.10.3;
+                     // ruling R13): plugin mail from the copy's email_settings.json (QuoteAgentCopy::mailSetting, its one mapping),
+                     // path 1's quote_email_via_plugin from that file, path 3 through CustomerEmailDispatcher (the master switch and
+                     // the quotation's), email_cc_contacts through ::ccEnabled(), kyc_quote_send_via_crm and kyc_auto_quote_enabled
+                     // as stored, and the pure accountCounts() over the copy's retailers rows read read-only (by the SQL of
+                     // OfferAudience::storedRows, through which the tool reads them; the class itself, which loads the offers' gateway,
+                     // is not loaded here). ES is conf's es=: an unreadable live file reads "unreadable", as mailSetting would.
+        [$root, $dir, $es] = $a;
+        $lib($root, ['PluginConfig', 'StaffJobsGate', 'QuoteAgentCopy', 'EmailTemplate']);
+        $c = PluginConfig::read($root, $dir);
+        $GLOBALS['dataDir'] = $dir;                                  // CustomerEmailDispatcher::effectiveConfig() reads this folder's files
+        $lib($root, ['CustomerEmailDispatcher']);
+        $m = $es === 'unreadable' ? ['configured' => false, 'via' => 'unreadable', 'sender' => 'not read'] : QuoteAgentCopy::mailSetting($dir);
+        $e = $readJson($dir . '/email_settings.json');
+        $v = $c['kyc_quote_send_via_crm'] ?? null;
+        $via = !array_key_exists('kyc_quote_send_via_crm', $c) ? 'unset' : (($v === 0 || $v === '0' || $v === false) ? '0' : 'on');
+        $aq = !array_key_exists('kyc_auto_quote_enabled', $c) ? 'unset' : ($c['kyc_auto_quote_enabled'] !== false ? 'on' : 'off');
+        $pr = $ro($dir . '/plugin.sqlite3'); $acc = [];   // the retailers rows as OfferAudience::storedRows() reads them for the tool
+        if ($has($pr, 'retailers')) foreach ($pr->query('@@AC_RETAILERS_SQL@@')->fetchAll(PDO::FETCH_COLUMN) as $j) { $r = json_decode((string)$j, true); if (is_array($r)) $acc[] = $r; }
+        $n = QuoteAgentCopy::accountCounts($acc, ['reply_to' => EmailTemplate::replyTo($c), 'sender' => (string)($m['sender'] ?? 'not read')]);
+        echo 'mail=', $tok($m['via']), ' path1=', (is_array($e) && !empty($e['quote_email_via_plugin'])) ? 'on' : 'off',
+             ' master=', CustomerEmailDispatcher::masterEnabled($c) ? 'on' : 'off',
+             ' quotation=', CustomerEmailDispatcher::enabled('quotation', $c) ? 'on' : 'off',
+             ' cc=', CustomerEmailDispatcher::ccEnabled($c) ? 'on' : 'off', ' via_crm=', $via, ' auto_quote=', $aq,
+             ' ug=', StaffJobsGate::applies($c, $dir) ? 1 : 0,
+             ' usable=', (int)$n['active_usable'], ' unusable=', (int)$n['active_unusable'], ' admins=', (int)$n['administrators'],
+             ' company=', (int)$n['company_mailbox'];
+        break;
+
+    case 'n2':       // n2 DB MAILLOG — AC-N2 over 30 days (UTC), on a copy of the book and the live quote_mail.log read as text: path 1's
+                     // "sent" lines (only their stamp and status are looked at; never the address or the number), path 3's quotation
+                     // rows of customer_email_log by status, and for path 3's sent rows the quote id as today's records know it — held
+                     // by a KYC application, by a quotes_log row or a lead (crm_quote_id), or by none. An upper bound (§H.5.5).
+        [$db, $ml] = $a;
+        $p = $ro($db);
+        $since = time() - 30 * 86400;
+        $stamp = function ($s): ?int {
+            if (!is_string($s) || !preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $s)) return null;
+            $t = strtotime($s . ' UTC'); return $t === false ? null : $t;
+        };
+        $p1 = 'absent'; $sent = 0; $other = 0; $old = 0; $undated = 0;
+        if (is_file($ml)) {
+            $h = is_readable($ml) ? @fopen($ml, 'rb') : false;
+            if ($h === false) $p1 = 'unreadable';
+            else {
+                $p1 = 'read';
+                while (($l = fgets($h)) !== false) {
+                    $l = rtrim($l, "\r\n");
+                    if ($l === '') continue;
+                    $t = preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] /', $l, $mm) ? $stamp($mm[1]) : null;
+                    if ($t === null) { $undated++; continue; }
+                    if ($t < $since) { $old++; continue; }
+                    if (substr($l, -5) === ' sent' && strpos($l, ' -> ') !== false) $sent++; else $other++;
+                }
+                fclose($h);
+            }
+        }
+        $p3 = 'absent'; $by = []; $kyc = 0; $log = 0; $none = 0;
+        if ($has($p, 'customer_email_log')) {
+            $p3 = 'read'; $ids = [];
+            foreach ($rows($p, "SELECT dedupe_key, status, created_at FROM customer_email_log WHERE template = 'quotation'") as $r) {
+                $t = $stamp((string)$r['created_at']);
+                if ($t === null || $t < $since) continue;
+                $s = $tok($r['status']); if ($s === '') $s = 'other';
+                $by[$s] = ($by[$s] ?? 0) + 1;
+                $k = (string)$r['dedupe_key'];
+                if ($s === 'sent' && strpos($k, 'quotation:') === 0 && ctype_digit(substr($k, 10))) $ids[] = (int)substr($k, 10);
+            }
+            $held = function (string $t, string $f) use ($p, $has): array {
+                $o = [];
+                if (!$has($p, $t)) return $o;
+                foreach ($p->query('SELECT data FROM [' . $t . ']')->fetchAll(PDO::FETCH_COLUMN) as $j) {
+                    $d = json_decode((string)$j, true);
+                    $v = is_array($d) ? ($d[$f] ?? null) : null;
+                    if (is_scalar($v) && ctype_digit(trim((string)$v))) $o[(int)trim((string)$v)] = true;
+                }
+                return $o;
+            };
+            $K = $held('kyc_applications', 'quote_id');
+            $L = $held('quotes_log', 'crm_quote_id') + $held('leads', 'crm_quote_id');
+            foreach ($ids as $i) { if (isset($K[$i])) $kyc++; elseif (isset($L[$i])) $log++; else $none++; }
+        }
+        ksort($by);
+        $bs = []; foreach ($by as $k => $v) $bs[] = $k . ':' . $v;
+        echo 'p1=', $p1, ' p1_sent=', $sent, ' p1_other=', $other, ' p1_older=', $old, ' p1_undated=', $undated,
+             ' p3=', $p3, ' p3_by_status=', $bs === [] ? '-' : implode(',', $bs),
+             ' p3_sent_kyc=', $kyc, ' p3_sent_log_or_lead=', $log, ' p3_sent_none=', $none;
+        break;
+
+    case 'ca1':      // ca1 ROOT DIR — AC-CA1 through ROOT's (the installed) QuoteAgentCopy on DIR's copy: on() as the copy reads (the
+                     // live configuration's copy, its own vault); then two scratch settings folders beside it, never the copy's own
+                     // files: the copy's settings with Part P's key set (the control: on() true), and the same with the profile
+                     // forced to South Sudan in the file and the vault (on() false); and the copy's book: Part P's two collections,
+                     // their presence and row counts only — nothing is read from them.
+        [$root, $dir] = $a;
+        if (!$mine($dir)) { echo '?dir'; exit(3); }
+        $lib($root, ['PluginConfig', 'StaffJobsGate', 'QuoteAgentCopy']);
+        $c = PluginConfig::read($root, $dir);
+        $ug = StaffJobsGate::applies($c, $dir) ? 1 : 0;
+        $live = QuoteAgentCopy::on($root, $dir) ? 1 : 0;
+        $mk = function (string $name, array $over, bool $ss) use ($dir, $readJson, $put): string {
+            $d = $dir . '/' . $name;
+            if (!is_dir($d) && !@mkdir($d, 0700)) throw new RuntimeException('scratch');
+            if (is_file($dir . '/config.json') && !@copy($dir . '/config.json', $d . '/config.json')) throw new RuntimeException('scratch');
+            $k = $readJson($dir . '/kyc_config.json'); if ($k === null) $k = [];
+            foreach ($over as $x => $v) $k[$x] = $v;
+            $v = $readJson($dir . '/vault.json'); if ($v === null || !is_array($v['config'] ?? null)) $v = ['config' => []];
+            if ($ss) $v['config']['tenant_profile'] = 'south-sudan';
+            if (!$put($d . '/kyc_config.json', json_encode($k, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT))
+                || !$put($d . '/vault.json', json_encode($v, JSON_UNESCAPED_SLASHES))) throw new RuntimeException('scratch');
+            return $d;
+        };
+        $on = [$KEYS[0] => '1', $KEYS[1] => gmdate('Y-m-d H:i:s', time() - 3600)];
+        $d1 = $mk('ac1set', $on, false);
+        putenv('DN_VAULT_FILE=' . $d1 . '/vault.json'); putenv('DN_DATA_DIR=' . $d1);
+        $set = QuoteAgentCopy::on($root, $d1) ? 1 : 0;
+        $d2 = $mk('ac1ss', $on + ['tenant_profile' => 'south-sudan'], true);
+        putenv('DN_VAULT_FILE=' . $d2 . '/vault.json'); putenv('DN_DATA_DIR=' . $d2);
+        $ss = QuoteAgentCopy::on($root, $d2) ? 1 : 0;
+        $p = $ro($dir . '/plugin.sqlite3'); $t = [];
+        foreach (['quote_agent_makers', 'quote_agent_copies'] as $x) $t[] = $has($p, $x) ? (string)(int)$one($p, 'SELECT COUNT(*) FROM [' . $x . ']') : 'absent';
+        echo 'live=', $live, ' ug=', $ug, ' set=', $set, ' ss=', $ss, ' makers=', $t[0], ' copies=', $t[1];
+        break;
+
+    case 'ca2':      // ca2 CODE BASE DIR DRIVE — AC-CA2 (§H.5.14; P7S-02): positive and negative controls on a copy of the book (qf_copy's,
+                     // in DIR), through CODE's (the INSTALLED) code and BASE's (5.18.103's, from Git — the tree the deploy keeps for its
+                     // rollback), with uCRM the pin's recording fake (DRIVE, the pin's tests/quote_agent_copy/drive.php) and the pin's
+                     // fake relay. Before anything runs: the copy's settings copies and vault are removed, a FRESH email_settings.json is
+                     // written (plugin SMTP on the loopback relay, use_ucrm_email and sent_copy_enabled off), every ucrm.json MailService
+                     // could reach is removed, the configuration is the harness's own (no WhatsApp sender of any kind), only fixture
+                     // accounts it adds are used (ids checked unused on the copy), and it refuses unless the INSTALLED MailService reads
+                     // the sandbox back as plugin SMTP on 127.0.0.1. Then the six cases; each one's verdict as a fixed code, never a line.
+        [$code, $base, $dir, $drive] = $a;
+        $o = [];
+        $fin = function (string $tail) use (&$o) { echo implode(' ', $o), $o === [] ? '' : ' ', $tail; exit(0); };
+        foreach ([$code, $base, $dir, $drive] as $x) if (!$mine($x)) $fin('refused=folder');
+        $relay = $code . '/tests/fixtures/fake_smtp_server.php';
+        if (!is_file($drive) || hash_file('sha256', $drive) !== '@@AC_DRIVE_SHA@@') $fin('refused=drive_sha');
+        if (!is_file($relay) || hash_file('sha256', $relay) !== '@@AC_RELAY_SHA@@') $fin('refused=relay_sha');
+        foreach ([$code, $base] as $t) if (!is_file($t . '/lib/QuotationService.php') || !is_file($t . '/webhook.php') || !is_file($t . '/lib/MailService.php')) $fin('refused=tree');
+        if (!is_file($code . '/lib/QuoteAgentCopy.php') || is_file($base . '/lib/QuoteAgentCopy.php')) $fin('refused=tree_p7');
+        // 1. the two sandboxes: U for the installed code, B for 5.18.103's — the data folder two levels inside this reading's folder
+        $U = $dir . '/ac/u'; $B = $dir . '/ac/b';
+        foreach ([$dir . '/ac', $U, $U . '/data', $B, $B . '/data'] as $d) if (!is_dir($d) && !@mkdir($d, 0700)) $fin('refused=layout');
+        if (!@rename($dir . '/plugin.sqlite3', $U . '/data/plugin.sqlite3')) $fin('refused=book');
+        foreach ([$dir . '/config.json', $dir . '/kyc_config.json', $dir . '/vault.json', $dir . '/email_settings.json',
+                  $code . '/data/config.json', $base . '/data/config.json'] as $f) @unlink($f);
+        // 2. the fixtures: three accounts and three KYC applications, every id far above any real one and checked unused on the copy
+        $ACC = [
+            ['id' => 990000041, 'name' => 'Test Agent One', 'email' => 'agent.one@agents.example.test', 'is_active' => true, 'role' => 'sales'],
+            ['id' => 990000044, 'name' => 'Test Same Four', 'email' => 'billing@cust.example.test', 'is_active' => true, 'role' => 'sales'],
+            ['id' => 990000049, 'name' => 'Test Kyc Nine', 'email' => 'kyc.nine@agents.example.test', 'is_active' => true, 'role' => 'sales'],
+        ];
+        $C = [   // tag => [path, client id, quote id, the actor (app) or the KYC's submitting account (webhook), 0 for none]
+            'c6a' => ['app', 990000961, 990007061, 990000041], 'c6b' => ['webhook', 990000962, 990007062, 990000049],
+            'c5a' => ['app', 990000951, 990007051, 990000041], 'c5b' => ['webhook', 990000952, 990007052, 990000049],
+            'c1'  => ['app', 990000911, 990007011, 990000041], 'c2'  => ['app', 990000921, 990007021, 990000044],
+            'c3'  => ['webhook', 990000931, 990007031, 990000049], 'c4' => ['webhook', 990000941, 990007041, 0],
+        ];
+        $TO = 'billing@cust.example.test'; $AG = 'agent.one@agents.example.test'; $KY = 'kyc.nine@agents.example.test';
+        $pw = new PDO('sqlite:' . $U . '/data/plugin.sqlite3', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15]);
+        foreach (['retailers', 'kyc_applications'] as $t) if (!$has($pw, $t)) $fin('refused=no_' . $t);
+        $cl = []; $qu = []; $ac = [];
+        foreach ($C as $c) { $cl[(string)$c[1]] = 1; $qu[(string)$c[2]] = 1; }
+        foreach ($ACC as $r) $ac[(string)$r['id']] = 1;
+        $used = function (string $t, array $fields, array $vals) use ($pw, $has): int {
+            if (!$has($pw, $t)) return 0;
+            $n = 0;
+            foreach ($pw->query('SELECT id, data FROM [' . $t . ']')->fetchAll(PDO::FETCH_NUM) as $r) {
+                $d = json_decode((string)$r[1], true);
+                foreach ($fields as $f) {
+                    $v = $f === 'id' ? $r[0] : (is_array($d) ? ($d[$f] ?? null) : null);
+                    if (is_scalar($v) && isset($vals[trim((string)$v)])) $n++;
+                }
+            }
+            return $n;
+        };
+        $busy = $used('retailers', ['id'], $ac) + $used('kyc_applications', ['crm_client_id'], $cl) + $used('kyc_applications', ['quote_id'], $qu)
+              + $used('quote_agent_makers', ['client_id'], $cl) + $used('quote_agent_makers', ['quote_id'], $qu) + $used('quote_agent_copies', ['quote_id'], $qu)
+              + $used('quotes_log', ['crm_quote_id'], $qu) + $used('quotes_log', ['crm_client_id'], $cl) + $used('leads', ['crm_quote_id'], $qu);
+        foreach (array_keys($qu) as $q) {
+            if ($has($pw, 'notification_dedup')) $busy += (int)$one($pw, 'SELECT COUNT(*) FROM notification_dedup WHERE dedup_key = ?', ['QEMAIL' . $q]);
+            if ($has($pw, 'customer_email_log')) $busy += (int)$one($pw, 'SELECT COUNT(*) FROM customer_email_log WHERE dedupe_key = ?', ['quotation:' . $q]);
+        }
+        if ($busy > 0) $fin('refused=fixture_ids_in_use');
+        $pw->beginTransaction();
+        $ins = $pw->prepare('INSERT INTO [retailers] (id, data) VALUES (?, ?)');
+        foreach ($ACC as $r) $ins->execute([$r['id'], json_encode($r, JSON_UNESCAPED_SLASHES)]);
+        $kid = (int)$one($pw, 'SELECT COALESCE(MAX(id), 0) FROM [kyc_applications]');
+        $ink = $pw->prepare('INSERT INTO [kyc_applications] (id, data) VALUES (?, ?)');
+        foreach ($C as $c) {
+            if ($c[0] !== 'webhook' || $c[3] <= 0) continue;
+            $kid++;
+            $ink->execute([$kid, json_encode(['id' => $kid, 'crm_client_id' => (string)$c[1], 'quote_id' => $c[2], 'retailer_id' => $c[3]], JSON_UNESCAPED_SLASHES)]);
+        }
+        $pw->commit();
+        $pw->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        $pw = null;
+        clearstatcache();
+        if (is_file($U . '/data/plugin.sqlite3-wal') && filesize($U . '/data/plugin.sqlite3-wal') > 0) $fin('refused=book_wal');
+        // 3. 5.18.103's sandbox: a byte copy of the same book, fixtures included, so both codes start from the same rows
+        $sz = filesize($U . '/data/plugin.sqlite3');
+        if ($sz === false || (float)@disk_free_space($B) < $sz + 67108864) $fin('refused=space');
+        if (!@copy($U . '/data/plugin.sqlite3', $B . '/data/plugin.sqlite3')) $fin('refused=book_copy');
+        $o[] = 'fixtures=ok';
+        // 4. the relay: the pin's fake_smtp_server.php on 127.0.0.1, one for every drive, stopped when this process ends
+        $tr = $dir . '/ac/relay.json'; $port = 0; $rp = null;
+        for ($s = 0; $s < 40 && $port === 0; $s++) {
+            $pt = 21000 + ((getmypid() * 13 + $s * 97 + (int)(microtime(true) * 1000) % 997) % 18000);
+            @unlink($tr);
+            $h = proc_open([PHP_BINARY, $relay, (string)$pt, $tr, '180'], [0 => ['pipe', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp, $dir . '/ac');
+            if (!is_resource($h)) continue;
+            for ($i = 0; $i < 50; $i++) { usleep(60000); clearstatcache(); if (is_file($tr)) break; }
+            if (is_file($tr)) { $port = $pt; $rp = $h; } else { @proc_terminate($h); @proc_close($h); }
+        }
+        if ($port === 0) $fin('refused=relay');
+        register_shutdown_function(function () use (&$rp) { if (is_resource($rp)) { @proc_terminate($rp); @proc_close($rp); } });
+        $o[] = 'relay=ok';
+        $sessions = function () use ($tr): array {
+            clearstatcache();
+            $all = json_decode((string)@file_get_contents($tr), true);
+            if (!is_array($all)) return [];
+            return array_values(array_filter($all, function ($x) { return is_array($x) && (!empty($x['rcpt_to']) || !empty($x['refused'])); }));
+        };
+        // 5. the sandbox's settings: the harness's own, nothing of the copy's (no Evolution, no WASender, no uCRM, no IMAP)
+        $ES7 = ['use_ucrm_email' => false, 'sent_copy_enabled' => false, 'smtp_host' => '127.0.0.1', 'smtp_port' => $port, 'smtp_enc' => '',
+                'smtp_from' => 'quotes@company.example.test', 'quote_email_via_plugin' => true];
+        $cfgOf = function (string $country, bool $p7) use ($KEYS): array {
+            $c = ['tenant_profile' => $country, 'ucrm_quote_organization_id' => '0', 'customer_emails_enabled' => '1', 'customer_email_quotation' => '1',
+                  'quote_company_email' => 'sales@company.example.test', 'email_reply_to' => 'sales@company.example.test', 'kyc_config_ok' => '1'];
+            if ($country === 'uganda') $c['timezone'] = 'Africa/Kampala';
+            if ($p7) { $c[$KEYS[0]] = '1'; $c[$KEYS[1]] = gmdate('Y-m-d H:i:s', time() - 7200); }
+            return $c;
+        };
+        $ALLOWED = array_keys($cfgOf('uganda', true));
+        $setup = function (string $T, array $cfg) use ($put, $ES7): bool {
+            return $put($T . '/data/kyc_config.json', json_encode($cfg, JSON_UNESCAPED_SLASHES))
+                && $put($T . '/vault.json', json_encode(['config' => ['tenant_profile' => $cfg['tenant_profile']]], JSON_UNESCAPED_SLASHES))
+                && $put($T . '/data/email_settings.json', json_encode($ES7, JSON_UNESCAPED_SLASHES));
+        };
+        require_once $code . '/lib/MailService.php';   // the INSTALLED MailService reads each sandbox back (P7S-02 item 5)
+        $refusal = function (string $T, string $root) use ($readJson, $ALLOWED): string {
+            $d = $T . '/data';
+            foreach ([dirname($d), dirname(dirname($d))] as $up) { @unlink($up . '/ucrm.json'); clearstatcache(); if (file_exists($up . '/ucrm.json')) return 'ucrm_json'; }
+            $e = $readJson($d . '/email_settings.json');
+            if (!is_array($e)) return 'email_settings';
+            $want = ['quote_email_via_plugin', 'sent_copy_enabled', 'smtp_enc', 'smtp_from', 'smtp_host', 'smtp_port', 'use_ucrm_email'];
+            $k = array_keys($e); sort($k);
+            if ($k !== $want) return 'email_settings_keys';
+            if (!empty($e['use_ucrm_email']) || !empty($e['sent_copy_enabled'])) return 'email_settings_on';
+            $mc = (new MailService($d))->getConfig();
+            if (($mc['_source'] ?? '') !== 'plugin' || ($mc['host'] ?? '') !== '127.0.0.1') return 'mailservice';
+            if (file_exists($root . '/data/config.json') || file_exists($d . '/config.json')) return 'config_files';
+            $kc = $readJson($d . '/kyc_config.json');
+            if (!is_array($kc) || array_diff(array_keys($kc), $ALLOWED) !== []) return 'config_keys';
+            $v = $readJson($T . '/vault.json');
+            if (!is_array($v) || array_keys($v) !== ['config'] || !is_array($v['config']) || array_keys($v['config']) !== ['tenant_profile']) return 'vault_keys';
+            return '';
+        };
+        if (!$setup($U, $cfgOf('south-sudan', true)) || !$setup($B, $cfgOf('south-sudan', true))) $fin('refused=setup');
+        foreach (['u' => [$U, $code], 'b' => [$B, $base]] as $k => $x) { $why = $refusal($x[0], $x[1]); if ($why !== '') $fin('refused=' . $why . '_' . $k); }
+        $o[] = 'refusal=passed';
+        // 6. one drive: the case's configuration, the refusal again, the pin's drive.php in a process of its own (network functions
+        // off but fsockopen), and what reached the relay
+        $NONET = '@@AC_DRIVE_NONET@@';
+        $n = 0;
+        $drive1 = function (string $T, string $root, string $tag, array $cfg) use (&$n, $C, $drive, $NONET, $sessions, $setup, $refusal): array {
+            [$path, $cid, $qid, $who] = $C[$tag];
+            if (!$setup($T, $cfg)) return ['bad' => 'setup'];
+            if (($why = $refusal($T, $root)) !== '') return ['bad' => 'refused_' . $why];
+            $n++;
+            $client = ['id' => $cid, 'firstName' => 'Test', 'lastName' => 'Customer', 'organizationId' => 1, 'contacts' => [
+                ['email' => 'other@cust.example.test', 'isBilling' => false], ['email' => 'billing@cust.example.test', 'isBilling' => true]]];
+            $step = $path === 'app'
+                ? ['do' => 'app', 'client_id' => $cid, 'retailer' => ['id' => $who, 'name' => 'Test Account'], 'ref' => 'MAN-AC-' . $tag, 'where' => 'manual']
+                : ['do' => 'webhook', 'quote_id' => $qid, 'client_id' => $cid, 'name' => 'Test Customer', 'quote_num' => 'AC-' . $tag, 'amount' => 1000.0,
+                   'quote' => ['id' => $qid, 'status' => 1]];
+            $spec = ['root' => $root, 'data' => $T . '/data', 'config' => $cfg, 'crm' => ['client' => $client, 'quote_id' => $qid], 'mailer' => 'real',
+                     'steps' => [$step], 'out' => $T . '/out-' . $n . '.json', 'error_log' => $T . '/err-' . $n . '.log'];
+            $sf = $T . '/spec-' . $n . '.json';
+            if (@file_put_contents($sf, json_encode($spec, JSON_UNESCAPED_SLASHES)) === false) return ['bad' => 'spec'];
+            $before = count($sessions());
+            $env = ['PATH' => (string)getenv('PATH'), 'HOME' => $T, 'TMPDIR' => $T, 'DN_VAULT_FILE' => $T . '/vault.json', 'DN_DATA_DIR' => $T . '/data'];
+            $h = proc_open([PHP_BINARY, '-d', 'disable_functions=' . $NONET, '-d', 'allow_url_fopen=0', '-d', 'display_errors=0', '-d', 'opcache.enable_cli=0', $drive, $sf],
+                           [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pp, $T, $env);
+            if (!is_resource($h)) return ['bad' => 'spawn'];
+            $t0 = time(); $rc = -1;
+            while (true) {
+                $s = proc_get_status($h);
+                if (!$s['running']) { $rc = (int)$s['exitcode']; break; }
+                if (time() - $t0 > 90) { @proc_terminate($h); $rc = -2; break; }
+                usleep(100000);
+            }
+            @proc_close($h);
+            $out = json_decode((string)@file_get_contents($spec['out']), true);
+            for ($i = 0; $i < 60 && count($sessions()) < $before + 1; $i++) usleep(50000);
+            usleep(300000);                                                         // a second session, were there one, shows here
+            return ['rc' => $rc, 'out' => is_array($out) ? $out : null, 'sess' => array_slice($sessions(), $before), 'path' => $path];
+        };
+        $dec = function (string $T, int $qid) use ($ro, $has): array {
+            $p = $ro($T . '/data/plugin.sqlite3'); $out = [];
+            if (!$has($p, 'quote_agent_copies')) return $out;
+            foreach ($p->query('SELECT data FROM quote_agent_copies ORDER BY id')->fetchAll(PDO::FETCH_COLUMN) as $j) {
+                $d = json_decode((string)$j, true);
+                if (is_array($d) && (int)($d['quote_id'] ?? 0) === $qid) $out[] = $d;
+            }
+            return $out;
+        };
+        $makers = function (string $T, int $cid) use ($ro, $has): int {
+            $p = $ro($T . '/data/plugin.sqlite3'); $k = 0;
+            if (!$has($p, 'quote_agent_makers')) return 0;
+            foreach ($p->query('SELECT data FROM quote_agent_makers')->fetchAll(PDO::FETCH_COLUMN) as $j) { $d = json_decode((string)$j, true); if (is_array($d) && (int)($d['client_id'] ?? 0) === $cid) $k++; }
+            return $k;
+        };
+        $tables = function (string $T) use ($ro): string {
+            $p = $ro($T . '/data/plugin.sqlite3');
+            $t = $p->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'quote_agent_*' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+            $k = 0; foreach ($t as $x) $k += (int)$p->query('SELECT COUNT(*) FROM [' . $x . ']')->fetchColumn();
+            return implode(',', $t) . ':' . $k;
+        };
+        $logSt = function (string $T, int $qid) use ($ro, $has, $one, $tok): string {
+            $p = $ro($T . '/data/plugin.sqlite3');
+            if (!$has($p, 'customer_email_log')) return 'absent';
+            $v = $one($p, 'SELECT status FROM customer_email_log WHERE dedupe_key = ?', ['quotation:' . $qid]);
+            return $v === false ? 'none' : $tok($v);
+        };
+        $dataN = function (array $s): int { return count(array_filter((array)($s['commands'] ?? []), function ($c) { return strtoupper(trim((string)$c)) === 'DATA'; })); };
+        $ccOf = function (array $s): ?array {   // the message's Cc header (unfolded), as lower-case bare addresses; null when there is none
+            $d = (string)($s['data'] ?? '');
+            $i = strpos($d, "\r\n\r\n"); if ($i === false) $i = strpos($d, "\n\n");
+            $h = (string)preg_replace("/\r?\n[ \t]+/", ' ', $i === false ? $d : substr($d, 0, $i));
+            $cc = null; $k = 0;
+            foreach (preg_split("/\r?\n/", $h) as $l) {
+                if (stripos($l, 'Cc:') !== 0) continue;
+                $k++;
+                $cc = array_values(array_filter(array_map(function ($x) { $x = trim($x); if (preg_match('/<([^>]*)>/', $x, $m)) $x = $m[1]; return strtolower(trim($x)); },
+                                                          explode(',', substr($l, 3))), 'strlen'));
+            }
+            return $k > 1 ? ['_more_than_one_cc_line'] : $cc;
+        };
+        $rcpt = function (array $s): array { return array_map(function ($x) { return strtolower(trim((string)$x)); }, (array)($s['rcpt_to'] ?? [])); };
+        // what varies from run to run, masked exactly as the pin's tests/quote_agent_copy/_lib.php qac_mask() masks it
+        $mask = function ($v) use (&$mask) {
+            if (is_array($v)) { foreach ($v as $k => $x) $v[$k] = $mask($x); return $v; }
+            if (!is_string($v)) return $v;
+@@AC_MASK@@
+            return $v;
+        };
+        $sig = function (array $r) use ($mask): string {
+            $st = []; foreach ((array)($r['out']['steps'] ?? []) as $x) $st[] = [$x['ret'] ?? null, $x['exc'] ?? null];
+            return hash('sha256', (string)json_encode([$mask($r['sess']), $r['out']['crm'] ?? null, $st, $r['rc']], JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR));
+        };
+        $basic = function (array $r): array {   // the drive ran, answered, threw nothing, and one message reached the relay with one DATA
+            if (($r['bad'] ?? '') !== '') return [$r['bad']];
+            $b = [];
+            if ($r['rc'] !== 0) $b[] = 'rc';
+            if ($r['out'] === null) { $b[] = 'no_out'; return $b; }
+            if (($r['out']['steps'][0]['exc'] ?? null) !== null) $b[] = 'exc';
+            $ret = $r['out']['steps'][0]['ret'] ?? null;
+            if ($r['path'] === 'app' && (!is_array($ret) || empty($ret['ok']) || empty($ret['emailed_by_plugin']))) $b[] = 'not_by_plugin';
+            if (count($r['sess']) !== 1) $b[] = 'sessions_' . count($r['sess']);
+            return $b;
+        };
+        $res = ['u' => [], 'b' => []];
+        // case 6 first, while the installed code's book has written nothing of P7's, then case 5, on both codes in turn; then 1–4
+        $t0 = $tables($U);
+        foreach (['c6a', 'c6b'] as $tag) { $res['u'][$tag] = $drive1($U, $code, $tag, $cfgOf('south-sudan', true)); $res['b'][$tag] = $drive1($B, $base, $tag, $cfgOf('south-sudan', true)); }
+        $t6 = $tables($U);
+        foreach (['c5a', 'c5b'] as $tag) { $res['u'][$tag] = $drive1($U, $code, $tag, $cfgOf('uganda', false)); $res['b'][$tag] = $drive1($B, $base, $tag, $cfgOf('uganda', false)); }
+        foreach (['c1', 'c2', 'c3', 'c4'] as $tag) $res['u'][$tag] = $drive1($U, $code, $tag, $cfgOf('uganda', true));
+        // the verdicts: 6 and 5 equal to 5.18.103's, transcript (Date, Message-ID and boundaries masked), uCRM requests and answer
+        foreach (['c6a', 'c6b', 'c5a', 'c5b'] as $tag) {
+            $bu = $basic($res['u'][$tag]); $bb = $basic($res['b'][$tag]);
+            if ($bu !== [] || $bb !== []) {
+                $o[] = $tag . '=bad:' . implode(',', array_merge(array_map(function ($x) { return 'u_' . $x; }, $bu), array_map(function ($x) { return 'b_' . $x; }, $bb)));
+                continue;
+            }
+            $o[] = $tag . '=' . ($sig($res['u'][$tag]) === $sig($res['b'][$tag]) ? 'same' : 'differs');
+        }
+        $o[] = 'c6_loaded=' . ((int)!empty($res['u']['c6a']['out']['qac_loaded']) + (int)!empty($res['u']['c6b']['out']['qac_loaded']));
+        $o[] = 'c6_tables=' . ($t6 === $t0 ? 'same' : 'grew');
+        $o[] = 'c5_rows=' . (count($dec($U, $C['c5a'][2])) + count($dec($U, $C['c5b'][2])) + $makers($U, $C['c5a'][1]));
+        $want = [   // tag => [the RCPT list, the Cc header, the one decision's fields, the webhook's customer_email_log row]
+            'c1' => [[$TO, $AG], [$AG], ['path' => 'plugin', 'outcome' => 'added', 'code' => 'added', 'source' => 'actor', 'agent_id' => 990000041, 'rcpt' => 'accepted', 'send_ok' => 1], null],
+            'c2' => [[$TO], null, ['path' => 'plugin', 'outcome' => 'skipped', 'code' => 'same_as_customer', 'source' => 'actor', 'rcpt' => 'none', 'send_ok' => 1], null],
+            'c3' => [[$TO, $KY], [$KY], ['path' => 'webhook', 'outcome' => 'added', 'code' => 'added', 'source' => 'kyc', 'rule' => 'kyc_submitter', 'agent_id' => 990000049, 'rcpt' => 'accepted', 'send_ok' => 1], 'sent'],
+            'c4' => [[$TO], null, ['path' => 'webhook', 'outcome' => 'skipped', 'code' => 'no_agent', 'source' => 'none', 'rcpt' => 'none', 'send_ok' => 1], 'sent'],
+        ];
+        foreach ($want as $tag => $w) {
+            $r = $res['u'][$tag];
+            $b = $basic($r);
+            if ($b === []) {
+                $s = $r['sess'][0];
+                if ($dataN($s) !== 1) $b[] = 'data';
+                if ($rcpt($s) !== $w[0]) $b[] = 'rcpt';
+                if ($ccOf($s) !== $w[1]) $b[] = 'cc';
+                $ds = $dec($U, $C[$tag][2]);
+                if (count($ds) !== 1) $b[] = 'decisions_' . count($ds);
+                else foreach ($w[2] as $k => $v) if ((string)($ds[0][$k] ?? '') !== (string)$v) $b[] = 'decision_' . $k;
+                if ($w[3] !== null && $logSt($U, $C[$tag][2]) !== $w[3]) $b[] = 'log_row';
+            }
+            $o[] = $tag . '=' . ($b === [] ? 'ok' : 'bad:' . implode(',', $b));
+        }
+        $o[] = 'sessions=' . count($sessions());
+        $o[] = 'drives=' . $n;
+        echo implode(' ', $o);
+        break;
+
+    case 'onlog':    // onlog ROOT PDD DIR — AC-ON1's quote_mail.log (§H.5.10.4 rule 4), taken in qf_on BEFORE the book is copied: the
+                     // live file read once, as it stands, and written into DIR (a folder of this run's, 0600); the live side is only
+                     // read. First, because the app path records P7's decision before it writes the log line (lib/QuotationService.php:
+                     // record(), then the line): every line this copy holds has its decision in the book copied after it, however late
+                     // the tool's clock reads them. The control, through ROOT's (the INSTALLED) QuoteAgentCopy::mailLines, AC-ON's own
+                     // reader: the copy's dated "sent" lines lie between the live file's counted just before and just after (the log is
+                     // only appended to; a quiet one gives three equal counts). Counts only; no line is printed.
+        [$root, $pdd, $dir] = $a;
+        if (!$mine($dir)) { echo '?dir'; exit(3); }
+        $lib($root, ['QuoteAgentCopy']);
+        $live = rtrim($pdd, '/') . '/quote_mail.log'; $dst = $dir . '/quote_mail.log';
+        if (file_exists($dst)) { echo '?dest'; exit(3); }
+        $n0 = $mlCount($pdd);
+        if (!is_file($live)) { echo 'ml=absent live=', $n0, ' copy=0 after=', $mlCount($pdd); break; }
+        $raw = is_readable($live) ? @file_get_contents($live) : false;
+        if ($raw === false) { echo 'ml=unreadable live=', $n0, ' copy=0 after=', $mlCount($pdd); break; }
+        if (!$put($dst, (string)$raw)) { echo '?write'; exit(3); }
+        echo 'ml=copied live=', $n0, ' copy=', $mlCount($dir), ' after=', $mlCount($pdd);
+        break;
+
+    case 'onfiles':  // onfiles ROOT PDD PRE SUB — AC-ON1's two files, put where the INSTALLED tool's --check agent-cc reads them: SUB is
+                     // qf_on's copy and the tool's data folder (qf_tool's DN_DATA_DIR, cliDataDir), and QuoteAgentCopy::check reads both
+                     // there. quote_mail.log: onlog's copy in PRE, taken before the book, copied whole and its dated "sent" lines counted
+                     // again in SUB through ROOT's (the installed) QuoteAgentCopy::mailLines. email_settings.json: the live file cut to
+                     // mailSetting()'s keys ($MS; never the mailbox password), by conf's cut; a live file that cannot be read makes no
+                     // copy (es=unreadable). The control on the second: preconditions(), rule 2's one line, the same on SUB as on the
+                     // live data folder. Neither file may be in SUB before (qf_copy makes neither). The live side is only read.
+        [$root, $pdd, $pre, $sub] = $a;
+        if (!$mine($pre) || !$mine($sub)) { echo '?dir'; exit(3); }
+        if (file_exists($sub . '/quote_mail.log') || file_exists($sub . '/email_settings.json')) { echo '?dest'; exit(3); }
+        $lib($root, ['QuoteAgentCopy']);
+        $ml = 'absent';
+        if (is_file($pre . '/quote_mail.log')) {
+            $raw = @file_get_contents($pre . '/quote_mail.log');
+            if ($raw === false || !$put($sub . '/quote_mail.log', (string)$raw)) { echo '?ml_write'; exit(3); }
+            $ml = 'copied';
+        }
+        [$es] = $cutEs(rtrim($pdd, '/') . '/email_settings.json', $sub . '/email_settings.json', $MS);
+        if ($es === 'write') { echo '?es_write'; exit(3); }
+        echo 'ml=', $ml, ' ml_lines=', $mlCount($sub), ' es=', $es,
+             ' es_same=', QuoteAgentCopy::preconditions($sub)['lines'] === QuoteAgentCopy::preconditions($pdd)['lines'] ? 1 : 0;
+        break;
+
+    case 'admins':   // admins LIVEROOT PDD — AC-RB1's reading of quote_agent_cc_admins, through the INSTALLED PluginConfig::read on the
+                     // live settings files and vault (read-only; never the book): absent, 0, 1 or other — a setting, never a person's
+        [$live, $pdd] = $a;
+        $lib($live, ['PluginConfig']);
+        echo 'admins=', $adm(PluginConfig::read($live, $pdd));
+        break;
+
+    case 'rb1':      // rb1 LIVEROOT PDD — AC-RB1's read-back (P7S-08; rulings R11, R13) after QF-RB1 and before the put-back, through the
+                     // INSTALLED (5.18.104) code on the live settings files and vault, read-only, never the book: QuoteAgentCopy::state()
+                     // ['on'], Part P's two keys as PluginConfig::read reads them, which of the three files still holds either (by
+                     // the file's name), and quote_agent_cc_admins as it reads now
+        [$live, $pdd] = $a;
+        $lib($live, ['PluginConfig', 'QuoteAgentCopy']);
+        $c = PluginConfig::read($live, $pdd);
+        $set = 0; foreach ([QuoteAgentCopy::KEY, QuoteAgentCopy::SINCE] as $k) if ($setNow($c, $k)) $set++;
+        $held = [];
+        foreach (['kyc_config' => $pdd . '/kyc_config.json', 'data_config' => $pdd . '/config.json', 'root_config' => $live . '/data/config.json'] as $lb => $f) {
+            $j = $readJson($f);
+            if (is_array($j)) foreach ([QuoteAgentCopy::KEY, QuoteAgentCopy::SINCE] as $k) if (array_key_exists($k, $j)) $held[$lb] = true;
+        }
+        echo 'on=', QuoteAgentCopy::state($live, $pdd)['on'] ? 1 : 0, ' set=', $set, ' held=', $held === [] ? '-' : implode(',', array_keys($held)),
+             ' admins=', $adm($c);
+        break;
+
+    case 'rb2':      // rb2 DB — AC-RB2 on a copy after the put-back: Part P's two collections, their presence and rows, and the hand-off
+                     // rows still "making" (inert: 5.18.103 reads neither collection)
+        $p = $ro($a[0]);
+        $out = []; $mk = 0;
+        foreach (['quote_agent_makers' => 'makers', 'quote_agent_copies' => 'copies'] as $t => $nm) $out[] = $nm . '=' . ($has($p, $t) ? (string)(int)$one($p, 'SELECT COUNT(*) FROM [' . $t . ']') : 'absent');
+        if ($has($p, 'quote_agent_makers')) {
+            foreach ($p->query('SELECT data FROM quote_agent_makers')->fetchAll(PDO::FETCH_COLUMN) as $j) { $d = json_decode((string)$j, true); if (is_array($d) && ($d['state'] ?? '') === 'making') $mk++; }
+        }
+        echo implode(' ', $out), ' making=', $mk;
+        break;
+
+    default:
+        echo '?mode'; exit(2);
+    }
+} catch (Throwable $e) { echo '?', get_class($e); exit(3); }

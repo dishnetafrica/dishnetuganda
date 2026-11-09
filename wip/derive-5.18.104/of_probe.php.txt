@@ -1,0 +1,461 @@
+// OF_PHP — 5.18.104's Part O readings, the offers (root docs/73 §H.4.18, §H.4.19; rulings R7, R12, R13, R17, R18), one
+// mode per call, as the database's owner in the container, with PHP's network functions off (of_php: allow_url_fopen=0
+// and curl, sockets and processes disabled), so that no reading here can reach Evolution whatever the code it loads does.
+// Every mode reads only a COPY in a folder of this run's, but two: "ledger" opens the LIVE book with SQLITE_OPEN_READONLY
+// for 091's migration-ledger row alone (OF-M1's bounded wait, as VN-M1's reads 090's), and "n2" reads the PHP log as text.
+// Five modes write, into the reading's own folder only, each refusing any folder outside this run's (/tmp/dnb-…): "pre"
+// its census and ids, "rb" its ids, "ca1" a scratch settings folder (offers_test_enabled on, its control), "prep4" OF-CA4's
+// scratch settings (no book in it), and "job" includes the INSTALLED cron/offers_send.php on that scratch alone. Output: one line of key=value words — counts, fixed codes, schema and key
+// names, handset labels; offer ids and dates go to a file in the reading's own folder, for the run's 0600 sheet. Never a
+// phone, a name, a wording, a staff id, a key's value or a credential. PHP 7.4 syntax (the release's).
+$mode = (string)($argv[1] ?? '');
+$a = array_slice($argv, 2);
+// The modes that read a COPY through the plugin's own PluginConfig::read and TenantProfile::current read the copy's own
+// vault (DN_VAULT_FILE, the reading's folder's vault.json: qf_copy's, the live vault's book keys and the keys the
+// readings keep, never a secret) and its own data folder (DN_DATA_DIR) — as Part F's and Part V's copy modes do: without
+// them a copy whose tenant selector or Evolution instances live only in the vault would read as South Sudan, or as
+// having no instance. Each of these modes takes [ROOT, DIR], DIR the reading's folder.
+if (in_array($mode, ['n1', 'n3', 'ca1', 'ca4', 'job'], true)) {
+    $vd = rtrim((string)($a[1] ?? ''), '/');
+    putenv('DN_VAULT_FILE=' . $vd . '/vault.json'); putenv('DN_DATA_DIR=' . $vd);
+}
+$ro = function (string $db) {
+    if (!is_file($db)) throw new RuntimeException('nodb');
+    $p = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15,
+                                                PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
+    $p->exec('PRAGMA query_only = ON');
+    return $p;
+};
+$has = function (PDO $p, string $t): bool {
+    $s = $p->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"); $s->execute([$t]);
+    $r = $s->fetchColumn() !== false; $s->closeCursor(); return $r;
+};
+$one = function (PDO $p, string $sql, array $x = []) { $s = $p->prepare($sql); $s->execute($x); $r = $s->fetchColumn(); $s->closeCursor(); return $r; };
+$rows = function (PDO $p, string $sql, array $x = []): array { $s = $p->prepare($sql); $s->execute($x); return $s->fetchAll(PDO::FETCH_ASSOC); };
+$tok = function ($s): string { return (string)preg_replace('/[^A-Za-z0-9_.:\/+-]/', '', (string)$s); };
+$csv = function (array $x): string { return $x === [] ? '-' : implode(',', $x); };
+$lib = function (string $root, array $names) { foreach ($names as $l) require_once rtrim($root, '/') . '/lib/' . $l . '.php'; };
+$mine = function (string $d): bool { return strpos($d, '/tmp/dnb-') === 0 && strpos($d, '..') === false; };
+$put = function (string $f, string $text): bool { if (@file_put_contents($f, $text) === false) return false; @chmod($f, 0600); return true; };
+$setNow = function (array $c, string $k): bool { return array_key_exists($k, $c) && $c[$k] !== null && $c[$k] !== '' && $c[$k] !== false; };
+$by = function (PDO $p, string $t, string $col) use ($has, $rows): string {   // "value:count,…" of one column of a P6 table, or "-"
+    if (!$has($p, $t)) return 'absent';
+    $o = [];
+    foreach ($rows($p, 'SELECT ' . $col . ' AS v, COUNT(*) AS n FROM ' . $t . ' GROUP BY ' . $col . ' ORDER BY ' . $col) as $r) {
+        $o[] = (string)preg_replace('/[^a-z0-9_]/', '', (string)($r['v'] ?? 'null')) . ':' . (int)$r['n'];
+    }
+    return $o === [] ? '-' : implode(',', $o);
+};
+$P6 = ['wa_offers', 'wa_offer_recipients', 'wa_offer_tests', 'wa_offer_events'];
+$WHOLE = explode(',', '@@OF_NEW_WHOLE@@');   // the exclusions whose every source is an 089–091 object (from Git)
+$PART = explode(',', '@@OF_NEW_PART@@');     // the exclusions with one such source beside pre-existing ones (from Git)
+$CARD = '@@OF_CARD@@';                       // the tab's dark card, byte for byte (from Git)
+$ADMIN = '@@OF_ADMIN@@';                     // the tab's "Admin access required." alert, byte for byte (from Git)
+// The census OF-G2 compares: every table of DB but the runner's own ledger (_migrations, _schema_checks — what the trial
+// writes by design, and the verdict QF-G2 reads) and SQLite's own (sqlite_%): its columns as they are now, its row count
+// and a hash of every row over those columns, in rowid order (or every column's, for a table without one). Values are
+// typed and length-prefixed, so a BLOB or a NUL byte hashes as it is.
+$census = function (PDO $p, ?array $cols = null) use ($has): array {
+    $out = [];
+    $names = $cols !== null ? array_keys($cols)
+           : $p->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('_migrations', '_schema_checks') ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($names as $t) {
+        $t = (string)$t;
+        if (!$has($p, $t)) { $out[$t] = ['cols' => $cols[$t] ?? [], 'n' => -1, 'h' => 'absent']; continue; }
+        $c = $cols !== null ? $cols[$t] : array_map(function ($r) { return (string)$r['name']; }, $p->query('PRAGMA table_info("' . str_replace('"', '""', $t) . '")')->fetchAll(PDO::FETCH_ASSOC));
+        $sel = implode(',', array_map(function ($x) { return '"' . str_replace('"', '""', $x) . '"'; }, $c));
+        try {
+            try { $st = $p->query('SELECT ' . $sel . ' FROM "' . str_replace('"', '""', $t) . '" ORDER BY rowid'); }
+            catch (Throwable $e) { $st = $p->query('SELECT ' . $sel . ' FROM "' . str_replace('"', '""', $t) . '" ORDER BY ' . implode(',', range(1, max(1, count($c))))); }
+            $h = hash_init('sha256'); $n = 0;
+            while (($r = $st->fetch(PDO::FETCH_NUM)) !== false) {
+                $n++;
+                foreach ($r as $v) {
+                    if ($v === null) hash_update($h, 'N;');
+                    elseif (is_int($v)) hash_update($h, 'i' . $v . ';');
+                    elseif (is_float($v)) hash_update($h, 'f' . var_export($v, true) . ';');
+                    else { $v = (string)$v; hash_update($h, 's' . strlen($v) . ':' . $v . ';'); }
+                }
+                hash_update($h, "\n");
+            }
+            $st->closeCursor();
+            $out[$t] = ['cols' => $c, 'n' => $n, 'h' => substr(hash_final($h), 0, 32)];
+        } catch (Throwable $e) {
+            $out[$t] = ['cols' => $c, 'n' => -2, 'h' => 'unreadable'];   // never compared as unchanged: OF-G2 says it and refuses
+        }
+    }
+    return $out;
+};
+try {
+    switch ($mode) {
+    case 'okeys':    // okeys ROOT — Part O's switch and record keys (its two rows' rowKeys and their sf_skip_/sf_override_
+                     // keys, as allKeys() has them) and its six settings (settingKeys() whose part is O), from a code root's
+                     // SalesFollowupLadder; and OfferSwitch::declaredKeys(), by name
+        $root = (string)$a[0];
+        $lib($root, ['UtcClock', 'SalesFollowupLadder', 'OfferSwitch']);
+        $all = SalesFollowupLadder::allKeys(); $sw = [];
+        foreach (['offers-test', 'offers-live'] as $s) {
+            if (SalesFollowupLadder::row($s) === null) throw new RuntimeException('step');
+            foreach (SalesFollowupLadder::rowKeys($s) as $k) $sw[] = $k;
+            $sw[] = 'sf_skip_' . $s; $sw[] = 'sf_override_' . $s;
+        }
+        $sw = array_values(array_intersect(array_values(array_unique($sw)), $all));
+        $st = [];
+        foreach (SalesFollowupLadder::SETTINGS as $k => $d) {
+            if ((string)($d['part'] ?? '') === 'O' && in_array($k, SalesFollowupLadder::settingKeys(), true)) $st[] = $k;
+        }
+        echo 'oswitch=', count($sw), ' osettings=', count($st), ' declared=', count(OfferSwitch::declaredKeys()),
+             ' oswitchnames=', $csv($sw), ' osettingnames=', $csv($st);
+        break;
+
+    case 'pre':      // pre DB CENSUS IDS — OF-G1 and OF-G2's "before", on QF-G2's copy just before its trial: the census to
+                     // CENSUS; whether any wa_offer* table exists, and on a redeploy the offers not closed by state (their
+                     // ids to IDS, for the sheet), the recipients and tests by state
+        [$db, $cf, $idf] = $a;
+        if (!$mine($cf) || !$mine($idf)) { echo '?notacopy'; exit(2); }
+        $p = $ro($db);
+        $c = $census($p);
+        $lines = []; $total = 0;
+        foreach ($c as $t => $x) { $lines[] = $t . '|' . implode(',', $x['cols']) . '|' . $x['n'] . '|' . $x['h']; $total += max(0, $x['n']); }
+        if (!$put($cf, implode("\n", $lines) . "\n")) { echo '?write'; exit(3); }
+        $any = (int)$one($p, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name GLOB 'wa_offer*'");
+        $k = 0; foreach ($P6 as $t) if ($has($p, $t)) $k++;
+        $ids = [];
+        if ($has($p, 'wa_offers')) {
+            foreach ($rows($p, "SELECT id, state FROM wa_offers WHERE state NOT IN ('stopped', 'done') ORDER BY state, id") as $r) $ids[(string)$r['state']][] = (int)$r['id'];
+        }
+        $w = []; foreach ($ids as $s => $l) $w[] = $s . ': offer ' . implode(', offer ', $l);
+        if (!$put($idf, ($w === [] ? 'none' : implode("\n", $w)) . "\n")) { echo '?write'; exit(3); }
+        echo 'tables=', count($c), ' rows=', $total, ' of_any=', $any, ' of_tables=', $k, '/', count($P6),
+             ' offers=', $by($p, 'wa_offers', 'state'), ' recipients=', $by($p, 'wa_offer_recipients', 'state'),
+             ' tests=', $by($p, 'wa_offer_tests', 'state'), ' events=', $has($p, 'wa_offer_events') ? (int)$one($p, 'SELECT COUNT(*) FROM wa_offer_events') : 'absent';
+        break;
+
+    case 'post':     // post ROOT DIR CENSUS — OF-G2's "after", on the same copy once QF-G2's trial has run: the census of the
+                     // tables CENSUS names, over the columns it recorded, compared row hash for row hash; OfferSchema::check()
+                     // through ROOT's (the pin's) OfferSchema; the copy opened read-only, its total_changes() 0
+        [$root, $dir, $cf] = $a;
+        $lib($root, ['OfferSchema']);
+        $p = $ro($dir . '/plugin.sqlite3');
+        $want = []; $prev = [];
+        foreach (file($cf, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $l) {
+            $f = explode('|', $l);
+            if (count($f) !== 4) continue;
+            $want[$f[0]] = $f[1] === '' ? [] : explode(',', $f[1]); $prev[$f[0]] = [(int)$f[2], $f[3]];
+        }
+        if ($want === []) { echo '?census'; exit(3); }
+        $now = $census($p, $want);
+        $same = 0; $chg = []; $unread = [];
+        foreach ($prev as $t => $x) {
+            if ($x[1] === 'unreadable' || !isset($now[$t]) || $now[$t]['h'] === 'unreadable') { $unread[] = $t; continue; }
+            if ($now[$t]['n'] === $x[0] && $now[$t]['h'] === $x[1]) $same++; else $chg[] = $t;
+        }
+        $s = OfferSchema::check($p);
+        $tc = (int)$p->query('SELECT total_changes()')->fetchColumn();
+        echo 'tables=', count($prev), ' same=', $same, ' changed=', $csv(array_slice($chg, 0, 8)), ' unread=', $csv(array_slice($unread, 0, 8)), ' schema=', $s === [] ? 'sound' : implode(',', array_slice($s, 0, 8)),
+             ' expected=', OfferSchema::EXPECTED, ' changes=', $tc;
+        break;
+
+    case 'n1':       // n1 ROOT DIR FIRST — OF-N1, the baseline audience on DIR's copy (QF-G2's, 089–091 applied on it alone)
+                     // through ROOT's (the pin's) store-free OfferAudience::build(), size all, at now, read-only: eligible by
+                     // handset (by role and index, never an instance name), left out and waiting by reason, the loose
+                     // counts, the warm window; on a first deploy (FIRST=first) the reasons whose sources are all new in
+                     // 089–091 are "not measured before 089", and those with one such source are counted on their
+                     // pre-existing sources alone (said so)
+        [$root, $dir, $first] = $a + ['', '', ''];
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffJobsGate', 'WaSendBudget', 'SalesFollowupChecks', 'OfferAudience']);
+        $c = PluginConfig::read($root, $dir);
+        $p = $ro($dir . '/plugin.sqlite3');
+        try {
+            $rw = OfferAudience::storedRows($p);
+            $b = OfferAudience::build($p, $c, $dir, $rw['retailers'], $rw['kyc_config'], 'all', time());
+        } catch (Throwable $e) {   // the audience's own fixed codes (audience_unreadable:<list>), never a message of anything else
+            $m = (string)$e->getMessage();
+            echo '?', preg_match('/^audience_unreadable:[a-z_]+$/', $m) ? $m : get_class($e);
+            exit(3);
+        }
+        $labels = SalesFollowupChecks::handsetLabels($c);
+        $lab = function (string $h) use (&$labels): string {   // h1(sales), h2(support+account), h3(anotherline): never an instance name
+            if (!isset($labels[$h])) $labels[$h] = 'h' . (count($labels) + 1) . ' (another line)';
+            return (string)preg_replace('/[^a-z0-9()+]/', '', str_replace(', ', '+', $labels[$h]));
+        };
+        $code = function ($k): string { return (string)preg_replace('/[^a-z0-9_:]/', '', (string)$k); };
+        $h = []; foreach ((array)$b['by_handset'] as $k => $n) $h[] = $lab((string)$k) . ':' . (int)$n;
+        $l = [];
+        foreach ((array)$b['left_out'] as $k => $n) {
+            $k = $code($k);
+            if ($first === 'first' && in_array($k, $WHOLE, true)) continue;
+            $l[] = $k . ':' . (int)$n . ($first === 'first' && in_array($k, $PART, true) ? '(part)' : '');
+        }
+        $wt = []; foreach ((array)$b['waiting'] as $k => $n) $wt[] = $code($k) . ':' . (int)$n;
+        $lo = []; foreach ((array)$b['loose'] as $k => $n) $lo[] = $code($k) . ':' . (int)$n;
+        $tc = (int)$p->query('SELECT total_changes()')->fetchColumn();
+        echo 'eligible=', count((array)$b['eligible']), ' left=', array_sum(array_map('intval', (array)$b['left_out'])), ' warm=', (int)$b['warm'],
+             ' by_handset=', $csv($h), ' left_out=', $csv($l), ' waiting=', $csv($wt), ' loose=', $csv($lo),
+             ' not_measured=', $first === 'first' ? $csv($WHOLE) : '-', ' partly=', $first === 'first' ? $csv($PART) : '-', ' changes=', $tc;
+        break;
+
+    case 'n2':       // n2 PHPLOG — OF-N2, R-01 before 089: the "no text to answer — <wrapper> message stored" lines the live
+                     // webhook writes for a disappearing or view-once message, in the PHP log over 30 days, read line by line
+        $log = (string)($a[0] ?? '');
+        if ($log === '' || $log === '-' || !is_file($log) || !is_readable($log)) { echo 'log=unreadable'; break; }
+        $fh = @fopen($log, 'rb');
+        if ($fh === false) { echo 'log=unreadable'; break; }
+        $from = time() - 30 * 86400; $k = ['ephemeralMessage' => 0, 'viewOnceMessage' => 0, 'viewOnceMessageV2' => 0]; $old = 0; $und = 0;
+        while (($l = fgets($fh)) !== false) {
+            if (strpos($l, 'no text to answer') === false) continue;
+            if (!preg_match('/no text to answer — (ephemeralMessage|viewOnceMessageV2|viewOnceMessage) message stored/u', $l, $m)) continue;
+            $t = false;
+            if (preg_match('/^\[(\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}:\d{2})(?: ([A-Za-z_\/+-]+))?\]/', $l, $d)) $t = strtotime($d[1] . (isset($d[2]) ? ' ' . $d[2] : ' UTC'));
+            elseif (preg_match('/(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})/', $l, $d)) $t = strtotime($d[1] . ' UTC');
+            if ($t === false) { $und++; continue; }
+            if ($t < $from) { $old++; continue; }
+            $k[$m[1]]++;
+        }
+        fclose($fh);
+        echo 'log=read lines30=', array_sum($k), ' ephemeralMessage=', $k['ephemeralMessage'], ' viewOnceMessage=', $k['viewOnceMessage'],
+             ' viewOnceMessageV2=', $k['viewOnceMessageV2'], ' older=', $old, ' undated=', $und;
+        break;
+
+    case 'n3':       // n3 ROOT DIR — OF-N3 on DIR's copy, through ROOT's (the pin's) PluginConfig::read with the copy's own
+                     // vault: dn_tz(), the shared settings offers read, Part O's keys as stored (its switches and stamp set or
+                     // unset, its six settings by value, numbers only), and the staff accounts without a phone of record
+        [$root, $dir] = $a;
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffDirectory', 'OfferSwitch', 'OfferAudience']);
+        $c = PluginConfig::read($root, $dir);
+        $w = function (string $k) use ($c, $setNow, $tok): string {
+            if (!$setNow($c, $k)) return 'unset';
+            $v = $c[$k];
+            return is_bool($v) ? ($v ? 'on' : 'off') : (is_scalar($v) ? $tok($v) : 'set');
+        };
+        $o = ['tz=' . $tok(dn_tz($c))];
+        foreach (['multi_number_channels_enabled', 'wa_human_cooldown_minutes', 'reminder_hour', 'reminder_until_hour'] as $k) $o[] = $k . '=' . $w($k);
+        foreach (array_merge(OfferSwitch::SWITCHES, [OfferSwitch::LIVE_SINCE]) as $k) $o[] = $k . '=' . ($setNow($c, $k) ? 'set' : 'unset');
+        foreach (array_keys(OfferSwitch::SETTINGS) as $k) { $v = $w($k); $o[] = $k . '=' . (preg_match('/^-?\d+$/', $v) || $v === 'unset' ? $v : 'not-a-number'); }
+        $o[] = 'invalid=' . $csv(OfferSwitch::invalidSettings($c));
+        $p = $ro($dir . '/plugin.sqlite3');
+        $sr = OfferAudience::storedRows($p);
+        $t = TenantProfile::current($c, $dir);
+        $act = 0; $nop = 0; $adm = 0;
+        foreach ($sr['retailers'] as $r) {
+            if (!is_array($r) || !StaffDirectory::isActive($r)) continue;
+            $act++;
+            $ph = StaffDirectory::phoneOf($r, $t);
+            if ($ph === null) $nop++;
+            elseif (!empty($r['is_admin'])) $adm++;
+        }
+        $o[] = 'staff_active=' . $act; $o[] = 'staff_no_phone=' . $nop; $o[] = 'admins_with_phone=' . $adm;
+        echo implode(' ', $o);
+        break;
+
+    case 'ledger':   // ledger DB — OF-M1's bounded wait: 091's row in the LIVE book's migration ledger, read-only, the ledger only
+        $p = $ro($a[0]);
+        $n = $has($p, '_migrations') ? (int)$one($p, 'SELECT COUNT(*) FROM _migrations WHERE filename = ?', ['091_wa_offers.sql']) : 0;
+        echo 'mig091=', $n > 0 ? 1 : 0;
+        break;
+
+    case 'm1':       // m1 ROOT DB — OF-M1 on a fresh copy after the copy: 091's ledger row and its checksum (the md5 the runner
+                     // records), the 091 _schema_checks row, OfferSchema::check() through ROOT's (the installed) OfferSchema
+        [$root, $db] = $a;
+        $lib($root, ['OfferSchema']);
+        $p = $ro($db);
+        $led = 'absent';
+        if ($has($p, '_migrations')) { $x = $one($p, 'SELECT checksum FROM _migrations WHERE filename = ?', ['091_wa_offers.sql']); if ($x !== false && $x !== null) $led = $tok($x); }
+        $sc = 'absent';
+        if ($has($p, '_schema_checks')) { $s = $p->prepare('SELECT found, expected FROM _schema_checks WHERE migration = ?'); $s->execute(['091_wa_offers.sql']); $r = $s->fetch(PDO::FETCH_NUM); $s->closeCursor(); if ($r) $sc = (int)$r[0] . '/' . (int)$r[1]; }
+        $k = OfferSchema::check($p);
+        echo 'ledger=', $led, ' sc=', $sc, ' schema=', $k === [] ? 'sound' : implode(',', array_slice($k, 0, 8)), ' control=', $has($p, 'wa_messages') ? 'yes' : 'no';
+        break;
+
+    case 'ca1':      // ca1 ROOT DIR — OF-CA1 through ROOT's (the installed) OfferSwitch, on DIR's copy as it reads (its own
+                     // vault): the gate, screen() and live(); then the installed tab, included as the dashboard includes it,
+                     // with no store at all ($store = null: nothing it could reach writes) — as an admin; as a non-admin (the
+                     // control that the include ran the tab); and as an admin on a scratch settings folder of DIR's with
+                     // offers_test_enabled on (the control that the card is the switch's answer: with no account id the tab
+                     // then refuses with its admin alert, never touching a store)
+        [$root, $dir] = $a;
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffJobsGate', 'OfferSwitch']);
+        $c = PluginConfig::read($root, $dir);
+        $gate = StaffJobsGate::applies($c, $dir) ? 1 : 0;
+        $runTab = function (array $retailer, string $dataDir) use ($root): string {
+            $store = null; $config = []; $tab = 'wa_offers';
+            ob_start();
+            try { include $root . '/tabs/engage/wa_offers.php'; } catch (Throwable $e) { echo "\n?", get_class($e); }
+            return trim((string)ob_get_clean());
+        };
+        $say = function (string $out) use ($CARD, $ADMIN): string { return $out === $CARD ? 'card' : ($out === $ADMIN ? 'admin' : 'other' . strlen($out)); };
+        $t0 = $say($runTab(['is_admin' => true, 'id' => 0], $dir));
+        $t1 = $say($runTab(['is_admin' => false, 'id' => 0], $dir));
+        $sd = $dir . '/ofc';
+        if (!$mine($sd)) { echo '?notacopy'; exit(2); }
+        @mkdir($sd, 0700);
+        foreach (['config.json'] as $f) if (is_file($dir . '/' . $f)) @copy($dir . '/' . $f, $sd . '/' . $f);
+        $k = is_file($dir . '/kyc_config.json') ? json_decode((string)file_get_contents($dir . '/kyc_config.json'), true) : [];
+        if (!is_array($k)) $k = [];
+        $k['offers_test_enabled'] = '1';
+        if (!$put($sd . '/kyc_config.json', json_encode($k, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT))) { echo '?write'; exit(3); }
+        $t2 = $say($runTab(['is_admin' => true, 'id' => 0], $sd));
+        $c2 = PluginConfig::read($root, $sd);
+        echo 'gate=', $gate, ' screen=', OfferSwitch::screen($c, $dir) ? 1 : 0, ' live=', OfferSwitch::live($c, $dir) ? 1 : 0,
+             ' tab=', $t0, ' ctl_admin=', $t1, ' ctl_switch=', $t2, ' ctl_screen=', OfferSwitch::screen($c2, $sd) ? 1 : 0;
+        break;
+
+    case 'ca2':      // ca2 ROOT — OF-CA2's second reader: ROOT's (the installed) OfferSwitch::masterCheck on ROOT's own
+                     // cron/master.php, the precondition P-O1-6 as the installed code applies it ('' = ruling R1's four lines)
+        $lib($a[0], ['OfferSwitch']);
+        $m = OfferSwitch::masterCheck((string)$a[0]);
+        echo 'master=', $m === '' ? 'r1' : $tok(str_replace(' ', '_', $m));
+        break;
+
+    case 'ca3':      // ca3 DB BASE COPYUNIX — OF-CA3 on a fresh copy after the copy (ruling R18): the four P6 tables now (counts
+                     // by table and state, never FAIL as history), and what was added since OF-CA3's redeploy baseline
+                     // (BASE: "max=<4 ids> ledger_max=<id> seen_max=<id>", or empty on a first deploy), each row by its own
+                     // stamp against the copy's start, in a later second ("late") or not
+        [$db, $base, $cu] = $a + ['', '', '0'];
+        $p = $ro($db); $cu = (int)$cu;
+        $bm = []; $lm = 0; $sm = 0;
+        if (preg_match('/(?:^| )max=([0-9,]+)/', (string)$base, $m)) $bm = array_map('intval', explode(',', $m[1]));
+        if (preg_match('/(?:^| )ledger_max=(\d+)/', (string)$base, $m)) $lm = (int)$m[1];
+        if (preg_match('/(?:^| )seen_max=(\d+)/', (string)$base, $m)) $sm = (int)$m[1];
+        $bm = $bm + [0, 0, 0, 0];
+        $n = []; foreach ($P6 as $t) $n[] = $has($p, $t) ? (int)$one($p, 'SELECT COUNT(*) FROM ' . $t) : -1;
+        $late = function (string $col): string { return "CAST(strftime('%s', " . $col . ") AS INTEGER) > :cu"; };
+        $L = $has($p, 'wa_auto_sends'); $S = $has($p, 'evo_webhook_seen');
+        $oAll = $L ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE kind = 'offer' OR ref GLOB 'offer_test:*'") : -1;
+        $eAll = $S ? (int)$one($p, "SELECT COUNT(*) FROM evo_webhook_seen WHERE event GLOB 'offer.*'") : -1;
+        // FAIL: an added offer claim, an added offer.send echo or an added test, each stamped in a later second than the
+        // copy's start; an added offer_test:<id> ledger row that names no test, or a test so started
+        $f1 = $L ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE id > :m AND kind = 'offer' AND " . $late('claimed_at'), [':m' => $lm, ':cu' => $cu]) : 0;
+        $f2 = $S ? (int)$one($p, "SELECT COUNT(*) FROM evo_webhook_seen WHERE id > :m AND event = 'offer.send' AND " . $late('received_at'), [':m' => $sm, ':cu' => $cu]) : 0;
+        $f3 = $has($p, 'wa_offer_tests') ? (int)$one($p, "SELECT COUNT(*) FROM wa_offer_tests WHERE id > :m AND " . $late('started_at'), [':m' => $bm[2], ':cu' => $cu]) : 0;
+        $f4 = 0;
+        if ($L) {
+            foreach ($rows($p, "SELECT ref FROM wa_auto_sends WHERE id > :m AND ref GLOB 'offer_test:*'", [':m' => $lm]) as $r) {
+                $tid = substr((string)$r['ref'], 11);
+                if (!preg_match('/^\d+$/', $tid) || !$has($p, 'wa_offer_tests')) { $f4++; continue; }
+                $s = $one($p, "SELECT CAST(strftime('%s', started_at) AS INTEGER) FROM wa_offer_tests WHERE id = ?", [(int)$tid]);
+                if ($s === false || $s === null || (int)$s > $cu) $f4++;
+            }
+        }
+        // counted and printed: what a writer that decided before the clear may have added (ruling R18; §H.4.21)
+        $c1 = $L ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE id > :m AND kind = 'offer'", [':m' => $lm]) - $f1 : 0;
+        $c2 = $has($p, 'wa_offer_tests') ? (int)$one($p, 'SELECT COUNT(*) FROM wa_offer_tests WHERE id > :m', [':m' => $bm[2]]) - $f3 : 0;
+        $c3 = $L ? (int)$one($p, "SELECT COUNT(*) FROM wa_auto_sends WHERE id > :m AND ref GLOB 'offer_test:*'", [':m' => $lm]) - $f4 : 0;
+        $c4 = $S ? (int)$one($p, "SELECT COUNT(*) FROM evo_webhook_seen WHERE id > :m AND event GLOB 'offer.*'", [':m' => $sm]) - $f2 : 0;
+        $ad = [];
+        if ($has($p, 'wa_offers')) $ad[] = 'offers:' . (int)$one($p, 'SELECT COUNT(*) FROM wa_offers WHERE id > ?', [$bm[0]]);
+        if ($has($p, 'wa_offer_recipients')) $ad[] = 'recipients:' . (int)$one($p, 'SELECT COUNT(*) FROM wa_offer_recipients WHERE id > ?', [$bm[1]]);
+        $ev = [];
+        if ($has($p, 'wa_offer_events')) foreach ($rows($p, 'SELECT action, COUNT(*) AS n FROM wa_offer_events WHERE id > ? GROUP BY action ORDER BY action', [$bm[3]]) as $r) $ev[] = preg_replace('/[^a-z_]/', '', (string)$r['action']) . ':' . (int)$r['n'];
+        echo 'rows=', implode(',', $n), ' ledger_offer=', $oAll, ' seen_offer=', $eAll,
+             ' late_claims=', $f1, ' late_echoes=', $f2, ' late_tests=', $f3, ' bad_test_rows=', $f4,
+             ' added_claims=', $c1, ' added_tests=', $c2, ' added_test_rows=', $c3, ' added_echoes=', $c4,
+             ' added=', $csv($ad), ' added_events=', $csv($ev),
+             ' offers=', $by($p, 'wa_offers', 'state'), ' recipients=', $by($p, 'wa_offer_recipients', 'state'), ' tests=', $by($p, 'wa_offer_tests', 'state');
+        break;
+
+    case 'ca4':      // ca4 ROOT DIR — OF-CA4's in-memory half through ROOT's (the installed) OfferSwitch: DIR's copy's own
+                     // configuration with both offer keys on and offers_live_since now, forced South Sudan (live() and
+                     // screen() false: the gate, not the switches) and on Uganda (the control: both true)
+        [$root, $dir] = $a;
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffJobsGate', 'OfferSwitch']);
+        $c = PluginConfig::read($root, $dir);
+        $c['offers_test_enabled'] = '1'; $c['offers_live_enabled'] = '1'; $c['offers_live_since'] = gmdate('Y-m-d H:i:s');
+        $ss = $c; $ss['tenant_profile'] = 'south-sudan';
+        $ug = $c; $ug['tenant_profile'] = 'uganda';
+        echo 'ss_live=', OfferSwitch::live($ss, $dir) ? 1 : 0, ' ss_screen=', OfferSwitch::screen($ss, $dir) ? 1 : 0,
+             ' ug_live=', OfferSwitch::live($ug, $dir) ? 1 : 0, ' ug_screen=', OfferSwitch::screen($ug, $dir) ? 1 : 0;
+        break;
+
+    case 'prep4':    // prep4 SRC DST — OF-CA4's scratch settings folder DST beside SRC's copy: SRC's settings copies with the
+                     // profile forced to South Sudan and both offer keys on (offers_live_since now), its vault's tenant
+                     // forced the same, and NO book: the job and the tool may open none (a book appearing is the fault)
+        [$src, $dst] = $a;
+        if (!$mine($src) || !$mine($dst) || !is_dir($dst)) { echo '?notacopy'; exit(2); }
+        $k = is_file($src . '/kyc_config.json') ? json_decode((string)file_get_contents($src . '/kyc_config.json'), true) : [];
+        if (!is_array($k)) $k = [];
+        $k['tenant_profile'] = 'south-sudan'; $k['offers_test_enabled'] = '1'; $k['offers_live_enabled'] = '1'; $k['offers_live_since'] = gmdate('Y-m-d H:i:s');
+        if (!$put($dst . '/kyc_config.json', json_encode($k, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT))) { echo '?write'; exit(3); }
+        if (is_file($src . '/config.json') && !@copy($src . '/config.json', $dst . '/config.json')) { echo '?write'; exit(3); }
+        $v = is_file($src . '/vault.json') ? json_decode((string)file_get_contents($src . '/vault.json'), true) : null;
+        if (is_array($v)) {
+            if (!isset($v['config']) || !is_array($v['config'])) $v['config'] = [];
+            $v['config']['tenant_profile'] = 'south-sudan';
+            if (!$put($dst . '/vault.json', json_encode($v, JSON_UNESCAPED_SLASHES))) { echo '?write'; exit(3); }
+        }
+        echo 'prep=ok book=', is_file($dst . '/plugin.sqlite3') ? 'present' : 'none', ' vault=', is_array($v) ? 'forced' : 'none';
+        break;
+
+    case 'job':      // job ROOT DIR — OF-CA4's job: ROOT's (the installed) cron/offers_send.php included directly, as master
+                     // includes it, in this process alone, on the scratch DIR (prep4's): the data folder it resolves must be
+                     // DIR and live() on DIR's settings must read false, or it is never included; then nothing written (no
+                     // book appears in DIR), no sender, audience or gateway class loaded, nothing printed — and the network
+                     // is off in this process whatever it would do
+        [$root, $dir] = $a;
+        if (!$mine($dir) || is_file($dir . '/plugin.sqlite3')) { echo '?notascratch'; exit(2); }
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffJobsGate', 'OfferSwitch']);
+        if (rtrim(getDataDir($root), '/') !== rtrim($dir, '/')) { echo 'refused=datadir'; break; }
+        if (OfferSwitch::live(PluginConfig::read($root, $dir), $dir)) { echo 'refused=live_true'; break; }
+        $net = (string)ini_get('allow_url_fopen') === '0' && strpos((string)ini_get('disable_functions'), 'curl_exec') !== false ? 'off' : 'on';
+        if ($net !== 'off') { echo 'refused=network_on'; break; }
+        $_m_deadline = time() + 30;
+        ob_start();
+        try { include $root . '/cron/offers_send.php'; $thrown = '-'; } catch (Throwable $e) { $thrown = get_class($e); }
+        $out = (string)ob_get_clean();
+        echo 'datadir=scratch pre_live=0 net=off thrown=', $tok($thrown), ' out_bytes=', strlen($out),
+             ' book=', is_file($dir . '/plugin.sqlite3') ? 'created' : 'none',
+             ' wal=', (is_file($dir . '/plugin.sqlite3-wal') || is_file($dir . '/plugin.sqlite3-shm')) ? 'present' : 'none',
+             ' sender=', class_exists('OfferSender', false) ? 1 : 0, ' audience=', class_exists('OfferAudience', false) ? 1 : 0,
+             ' gateway=', class_exists('EvolutionOfferGateway', false) ? 1 : 0;
+        break;
+
+    case 'ca5':      // ca5 ROOT — OF-CA5 (S2-11): ROOT's (the installed) OfferSwitch::declaredKeys() against the union of its
+                     // SalesFollowupLadder::allKeys() and settingKeys() (ruling R5)
+        $lib($a[0], ['UtcClock', 'SalesFollowupLadder', 'OfferSwitch']);
+        $d = OfferSwitch::declaredKeys();
+        $u = array_merge(SalesFollowupLadder::allKeys(), SalesFollowupLadder::settingKeys());
+        $out = array_values(array_diff($d, $u));
+        echo 'declared=', count($d), ' all=', count(SalesFollowupLadder::allKeys()), ' settings=', count(SalesFollowupLadder::settingKeys()), ' outside=', $csv($out);
+        break;
+
+    case 'rb':       // rb DB IDS START — OF-RB1 on a copy taken after QF-RB1, before the put-back: Part O's end state (no
+                     // offer running, no recipient claimed), what its hook left (offers paused by the rollback and their
+                     // events, recipients settled uncertain as stale claims, returned to queued, tests left sending); the
+                     // paused offers' ids to IDS (the sheet). START is QF-RB1's start (UTC seconds, taken before the tool
+                     // ran): the hook makes uncertain every test sending since before ITS moment less STALE_S, and that
+                     // moment is later than START, so a test still sending that had started before START less STALE_S is
+                     // one the hook should have settled (tests_stale); one that started after is one it rightly left,
+                     // under 15 minutes old when it ran (tests_young) — never "now" less 15 minutes: the copy is taken
+                     // after the hooks, the other parts' steps and the read-backs (ruling R18)
+        [$db, $idf, $st0] = array_pad($a, 3, '');
+        if (!$mine($idf)) { echo '?notacopy'; exit(2); }
+        if (!preg_match('/^\d{9,11}$/', (string)$st0)) { echo '?start'; exit(2); }
+        $cut = gmdate('Y-m-d H:i:s', (int)$st0 - @@OF_STALE_S@@);   // UtcClock::stamp()'s form, as started_at is written
+        $p = $ro($db);
+        if (!$has($p, 'wa_offers')) { echo 'tables=absent'; break; }
+        $run = (int)$one($p, "SELECT COUNT(*) FROM wa_offers WHERE state = 'running'");
+        $cl = (int)$one($p, "SELECT COUNT(*) FROM wa_offer_recipients WHERE state = 'claimed'");
+        $sc = (int)$one($p, "SELECT COUNT(*) FROM wa_offer_recipients WHERE state = 'uncertain' AND reason = 'stale_claim'");
+        $stale = (int)$one($p, "SELECT COUNT(*) FROM wa_offer_tests WHERE state = 'sending' AND started_at < ?", [$cut]);
+        $young = (int)$one($p, "SELECT COUNT(*) FROM wa_offer_tests WHERE state = 'sending' AND started_at >= ?", [$cut]);
+        $pe = (int)$one($p, "SELECT COUNT(*) FROM wa_offer_events WHERE action = 'paused_by_rollback'");
+        $ids = array_map('intval', $p->query("SELECT id FROM wa_offers WHERE state = 'paused' ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));
+        if (!$put($idf, ($ids === [] ? 'paused offers: none' : 'paused offers: offer ' . implode(', offer ', array_slice($ids, 0, 200))) . "\n")) { echo '?write'; exit(3); }
+        echo 'tables=present running=', $run, ' claimed=', $cl, ' stale_claim=', $sc, ' tests_stale=', $stale, ' tests_young=', $young,
+             ' paused_by_rollback=', $pe, ' offers=', $by($p, 'wa_offers', 'state'), ' recipients=', $by($p, 'wa_offer_recipients', 'state');
+        break;
+
+    case 'rb2':      // rb2 DB — OF-RB2 on a copy after the put-back: the four tables and 091's _schema_checks row stay; the
+                     // offers by state (a paused one resumes only by an admin's Resume, after a redeploy)
+        $p = $ro($a[0]);
+        $k = 0; foreach ($P6 as $t) if ($has($p, $t)) $k++;
+        $sc = ($has($p, '_schema_checks') && (int)$one($p, 'SELECT COUNT(*) FROM _schema_checks WHERE migration = ? AND found = expected', ['091_wa_offers.sql']) > 0) ? 'present' : 'absent';
+        echo 'tables=', $k, '/', count($P6), ' sc=', $sc, ' offers=', $by($p, 'wa_offers', 'state'),
+             ' running=', $has($p, 'wa_offers') ? (int)$one($p, "SELECT COUNT(*) FROM wa_offers WHERE state = 'running'") : 0,
+             ' paused=', $has($p, 'wa_offers') ? (int)$one($p, "SELECT COUNT(*) FROM wa_offers WHERE state = 'paused'") : 0;
+        break;
+
+    default:
+        echo '?mode'; exit(2);
+    }
+} catch (Throwable $e) { echo '?', get_class($e); exit(3); }

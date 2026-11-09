@@ -1,0 +1,407 @@
+# ── 5.18.104: the sales follow-up (QF, Part F's codes; root docs/73 §H.2.15, §H.2.16) ─────────────────────────────────────
+# Read-only on COPIES, as every reading here: a VACUUM INTO copy of the book as its owner (CIHV_PHP), its settings row cut
+# to the keys the ladder declares — its switch and record keys, its settings, the pre-existing keys it reads and the
+# book's — never a secret (PluginConfig::SECRET_KEYS, crm_auth_token, webhook_secret_file and the rest); copies of the
+# three settings files cut the same way; the readings' one copy of the live vault (QF_VAULT, its book keys and the keys
+# the readings keep, never a secret), named by DN_VAULT_FILE in every reading of a copy; and a code root of its own, a
+# copy of the PIN's code from Git (stage A) or of the INSTALLED code (ICODE_R, after the copy), in the container's /tmp —
+# never the plugin folder. Three readings open the live book itself, read-only (SQLITE_OPEN_READONLY, query_only): QF-G4's
+# keys (the files and the store row), the redeploy baseline (QF-G1) and QF-RB3's keys after a rollback. Nothing here
+# writes the live book but the switch tool, run as the book's owner where docs/73 says so: QF-G4's --clear-switches
+# (the PIN's tool, `off all --rollback`, after DEPLOY is typed) and QF-RB1 (the INSTALLED tool, through
+# scripts/sales-followup.sh, after ROLLBACK is typed). The log carries counts, fixed codes, key names, PASS/FAIL/NOTE and
+# hashes; the tool's own lines pass through qf_safe, which turns any run of 9 or more digits into <digits> (the tool
+# prints none: belt and braces), and its "was on:" lines go to the sheet. Never a phone, a name, an amount, a staff id,
+# a value of a key or a credential; the OpenAI key is "set" or "not set" only.
+QF_PHP="$(cat <<'PHP'
+@@QF_PHP@@
+PHP
+)"
+QF_SC_EXPECT="@@SC_EXPECT@@"   # each migration's _schema_checks key and its expected count, from Git (the verdict, §H.2.4)
+QF_TOOL="tools/sales_followup.php"; QF_REPORT="tools/sales_followup_report.php"; QF_WRAPPER="scripts/sales-followup.sh"
+QF_JOBS="quote_chase quote_daily_list ai_media offers_send"   # ruling R1's four, in their order, last in $_m_jobs
+QF_STEPS="report agent-cc ack tracking list voice-measure chase voice-dry-run voice-staff voice-reply cold offers-test offers-live"
+QF_HOOKS="@@HOOKS@@"   # QF-G3: file|needle|count|method (- the whole file) — the record-only hooks and W1–W3, as the pin has them (from Git)
+QF_EVENTS="@@EVENTS@@"   # QF-G3: WaSendBudget::NOTIFY_KINDS' events, from the pin (each a literal elsewhere in the pin's tree)
+QF_HK7_MIN="@@HK7_MIN@@"   # QF-G3: HK07's control — the scan finds at least this many send sites (tests/test_wa_send_budget.php, from Git)
+QF_G1=""; QF_G1_LINE=""; QF_G4_LINE=""; QF_G4_SET=0; QF_G4_NAMES=""; QF_CLEAR=""; QF_CLEARED=""; QF_BASE=""
+QF_COPY_AT=""; QF_COPY_UNIX=""; QF_KEEP=""; QF_N=0; QF_ROOT_ERR=""
+qf_php() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -r "$QF_PHP" "$@"; }   # qf_php MODE ARG… — one line
+qf_safe() { sed -E 's/[0-9]{9,}/<digits>/g'; }   # no run of 9 or more digits reaches the log or the terminal
+# qf_root SRC DST [log] — a code root of its own for one reading: a copy of SRC (a code root in the container's /tmp),
+# its data/config.json the reading's own copy of <plugin>/data/config.json when there is one (PluginConfig reads it
+# there), and, with "log", a copy of the live data/plugin.log beside it (read by L-ON's hook_write_lost lines and by
+# PluginLog::path(), which is the code root's data/plugin.log): every line PluginLog writes goes to the copy.
+qf_root() {
+  dxo sh -c 'rm -rf "$2" && cp -R "$1" "$2" && mkdir -p "$2/data" && chmod 700 "$2/data" && { [ ! -f "$3/root.json" ] || cp "$3/root.json" "$2/data/config.json"; } && { [ "$4" != log ] || [ ! -f "$5" ] || cp "$5" "$2/data/plugin.log"; } && [ -f "$2/lib/SalesFollowupLadder.php" ]' \
+    _ "$1" "$2" "$3" "${4:-}" "$IN_CONTAINER/data/plugin.log"
+}
+# qf_copy KIND SRC_ROOT [log] — one reading's folder (mode 700, the owner's) under the run's folder: the book's
+# consistent copy (plugin.sqlite3), the settings copies (config.json, kyc_config.json), the run's vault copy
+# (vault.json: QF_VAULT's copy) and a code root (code/) copied from SRC_ROOT. Prints the folder; sets QF_CP_AT and
+# QF_CP_UNIX (the copy's time, UTC) or QF_ROOT_ERR. QF_VAULT — the readings' one copy of the live vault, in the run's
+# folder (qf-vault.json, and qf-vault.keep the keys it was cut to), made once, again only if the keys kept change (the
+# pin's ladder and the installed one name the same): the run's vault copy holds the book's keys alone, and a
+# reading through the plugin's own PluginConfig::read and TenantProfile::current fills the tenant's selectors and the
+# Evolution instances from the vault, so a copy whose values live only there would read as South Sudan, or as having no
+# instance. Read-only, the key names the readings keep (conf's csv) and the book's, never a secret.
+qf_copy() {
+  local kind="$1" src="$2" sub o size free keep
+  QF_ROOT_ERR=""; QF_CP_AT=""; QF_CP_UNIX=""
+  cih_init || { QF_ROOT_ERR="the run's folder in the container's /tmp could not be made (${CIH_VAULT_SAYS:-?})"; return 1; }
+  [ -n "$src" ] || { QF_ROOT_ERR="no code root to read with"; return 1; }
+  size="$(db_state | sed -nE 's/^size=([0-9]+) .*/\1/p')"; free="$(dxo php -r 'echo (int)@disk_free_space($argv[1]);' /tmp)"
+  case "$size$free" in ''|*[!0-9]*) QF_ROOT_ERR="the book's size or the free space could not be read"; return 1 ;; esac
+  [ "$free" -ge $(( size * 2 + 67108864 )) ] || { QF_ROOT_ERR="the container's /tmp has $free bytes free; the copy and its margin need $(( size * 2 + 67108864 ))"; return 1; }
+  QF_N=$((QF_N + 1)); sub="$CIH_BASE/qf-$kind-$QF_N"
+  dxo mkdir -m 700 "$sub" "$sub/conf" || { QF_ROOT_ERR="this reading's folder could not be made"; return 1; }
+  o="$(qf_php conf "$src" "$IN_CONTAINER" "$PDD_IN" "$sub/conf")"
+  case "$o" in root=*" csv="*) keep="${o##* csv=}" ;; *) QF_ROOT_ERR="the settings files could not be copied (${o%% csv=*})"; cih_drop "$sub"; return 1 ;; esac
+  QF_KEEP="$keep"
+  QF_CP_UNIX="$(date -u +%s)"; QF_CP_AT="$(date -u -d "@$QF_CP_UNIX" '+%Y-%m-%d %H:%M:%S')"
+  o="$(dxo php -d display_errors=stderr -r "$CIHV_PHP" "$PDD_IN/plugin.sqlite3" "$sub/plugin.sqlite3" "$BOOK_KEYS_CSV,$keep")"
+  case "$o" in "copy=ok "*" side=no") ;; *) QF_ROOT_ERR="the consistent copy could not be made (${o:-?})"; cih_drop "$sub"; return 1 ;; esac
+  dxo sh -c '{ [ ! -f "$1/config.json" ] || cp "$1/config.json" "$2/config.json"; } && { [ ! -f "$1/kyc.json" ] || cp "$1/kyc.json" "$2/kyc_config.json"; }' _ "$sub/conf" "$sub" \
+    || { QF_ROOT_ERR="the settings copies could not be put beside the copy"; cih_drop "$sub"; return 1; }
+  # qf_copy runs in $( ): what it remembers lives in the run's folder, not in the shell — the keys QF_VAULT was cut to
+  if [ "$(dxo cat "$CIH_BASE/qf-vault.keep")" != "$keep" ]; then
+    o="$(qf_php vault "$src" "$VAULT_IN" "$CIH_BASE/qf-vault.json" "$keep")"
+    case "$o" in vault=*) dxo sh -c 'umask 077 && printf "%s" "$2" > "$1"' _ "$CIH_BASE/qf-vault.keep" "$keep" ;; *) QF_ROOT_ERR="the readings' copy of the vault could not be made (${o:-?})"; cih_drop "$sub"; return 1 ;; esac
+  fi
+  dxo sh -c '[ ! -f "$1" ] || cp "$1" "$2"' _ "$CIH_BASE/qf-vault.json" "$sub/vault.json" || { QF_ROOT_ERR="the vault's copy could not be put beside the copy"; cih_drop "$sub"; return 1; }
+  qf_root "$src" "$sub/code" "$sub/conf" "${3:-}" || { QF_ROOT_ERR="the code root could not be copied beside the copy"; cih_drop "$sub"; return 1; }
+  echo "$sub"
+}
+# qf_tool SUB ARG… — the switch tool of SUB's code root on SUB's copy, as the book's owner (the tool refuses any other uid
+# and any tenant but Uganda), its data folder and vault the reading's own. Prints what it printed, through qf_safe;
+# returns its exit code (0 done, 2 refused, 3 a check, a hook or an assertion failed).
+qf_tool() {
+  local sub="$1"; shift
+  docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$sub" -e DN_VAULT_FILE="$sub/vault.json" -e TMPDIR="$sub" "$CONTAINER" \
+    php -d log_errors=0 -d opcache.enable_cli=0 "$sub/code/$QF_TOOL" "$@" 2>&1 </dev/null | qf_safe; return "${PIPESTATUS[0]}"
+}
+qf_show_tool() { printf '%s\n' "$1" | grep -v '^was on: ' | head -"${2:-40}" | cut -c1-200 | sed 's/^/  tool    | /'; }   # the tool's lines, as the log may carry them
+qf_sheet() {   # qf_sheet TITLE TEXT — onto the run's sheet (mode 0600), never the log
+  sheet_open && { printf '\n== %s ==\n%s\n' "$1" "$2" >> "$SHEET"; } 2>/dev/null
+}
+qf_kv() { kv "$1" "$2"; }
+
+# qf_stage — QF-G1–QF-G4 and QF-N1–QF-N7, stage A, before anything changes (a deploy and --check): on copies, through
+# the PIN's code from Git (P3B_PIN: its lib/, tools/ and migrations/). A refusal stops here: nothing has changed. Sets
+# QF_G1 (first|redeploy), QF_G4_SET and QF_G4_NAMES (and QF_CLEAR when --clear-switches will clear them after DEPLOY).
+qf_stage() {
+  local sub o g1 last n bad="" v ap st
+  [ -n "$P3B_OK" ] || stop "NO-GO (QF-G1): the pin's code could not be copied into the container's /tmp (${P3B_WHY:-?}) — QF-G1 to QF-G4 read the book through it. Nothing was changed. Send the log file"
+  # QF-G1 — the copy's shape
+  sub="$(qf_copy g1 "$P3B_PIN")" || stop "NO-GO (QF-G1): a copy of the book could not be made — $QF_ROOT_ERR. Nothing was changed. Send the log file"
+  g1="$(qf_php g1 "$sub/plugin.sqlite3")"; QF_G1_LINE="$g1"
+  case "$g1" in
+    "last=${MIG88#migrations/} mig=000 sc=000 tables=000 kind=0 control=1") QF_G1=first
+      ok "QF-G1 the copy's last migration is ${MIG88#migrations/}: no quote_tracker, wa_auto_sends or wa_seen_marks, no followups.kind — a first deploy of $EXPECTED_VERSION; wa_messages read (the positive control)" ;;
+    "last="*" mig=111 sc=111 tables=111 kind=1 control=1") QF_G1=redeploy
+      note "QF-G1 089, 090 AND 091 ARE ALREADY APPLIED ON THIS BOOK ($g1) — A REDEPLOY of $EXPECTED_VERSION after its rollback: its tables, its ledger and its marks stay as the rollback left them (QF-RB2); QF-CA2 and QF-CA3 judge them in their redeploy form, against the baseline taken just before the copy$( [ -n "$REDEPLOY" ] || echo " (--redeploy was not given: said, not refused — BR1 says the same of the files)")" ;;
+    *) cih_drop "$sub"; stop "NO-GO (QF-G1): the book is neither at 088 nor carrying all of 089, 090 and 091 ($g1; mig, sc and tables per migration and per table): a part-applied $EXPECTED_VERSION — a migration's _schema_checks row is the verdict, and one is missing. Nothing was changed. Send the log file" ;;
+  esac
+  # QF-N1, QF-N2, QF-N4, QF-N7 on the same copy, through the pin's code — notes, counts only
+  o="$(qf_php notes "$sub/code" "$sub")"
+  case "$o" in "n1="*) ;; *) o="" ;; esac
+  if [ -n "$o" ]; then
+    note "QF-N1 the stored values (as the copy's settings read them): ${o%% | tz=*}"
+    v="${o#* | tz=}"; note "QF-N1 dn_tz() ${v%% | n2=*}"
+    v="${o#* | n2=}"; note "QF-N2 enquiry follow-ups on the copy: ${v%% | n4=*} (approved drafts by age — what S2-01 would have sent with followup_enabled on)"
+    v="${o#* | n4=}"; note "QF-N4 the Message Log's Evolution sends over 30 days, per handset (by role) and per Kampala day, by the pin's kind map, placed by this 088-shaped copy's configuration as it reads now — a baseline print, never a status: per handset its days, its peak day (p= reminders, win-back and briefs, what they take of the daily cap; t= the transactional total that day), the days at or over the cap and at or over half of it, the 30 days' reminders, win-back and briefs, its largest transactional day: ${v%% | n7=*}"
+    note "QF-N7 active accounts with a phone, by role (the daily list's size, R104-10): ${o##* | n7=}"
+  else note "QF-N1, QF-N2, QF-N4, QF-N7 could not be read on the copy — NOT ESTABLISHED"; fi
+  # QF-N3 — the pin's report on the same copy: the baseline headline (owners on the sheet, never the log)
+  o="$(docker exec -u "$DB_OWNER" -e DN_VAULT_FILE="$sub/vault.json" -e TMPDIR="$sub" "$CONTAINER" php -d log_errors=0 -d opcache.enable_cli=0 "$sub/code/$QF_REPORT" "--db=$sub/plugin.sqlite3" "--data=$sub" "--sheet=$sub/report-owners.txt" 2>&1 </dev/null | qf_safe)"; n=$?
+  if printf '%s\n' "$o" | grep -q '^== sales follow-up report (READ-ONLY)'; then
+    note "QF-N3 the pin's report on the copy — the baseline (its own lines, counts only; owners as owner 1…n, their staff ids on the sheet):"
+    printf '%s\n' "$o" | head -60 | cut -c1-200 | sed 's/^/  report  | /'
+    qf_sheet "QF-N3 the report's owners (owner n = staff id): never paste" "$(dxo cat "$sub/report-owners.txt" 2>/dev/null || echo '(none written)')"
+  else note "QF-N3 the pin's report could not be read on the copy ($(printf '%s' "$o" | tail -1 | cut -c1-160)) — NOT ESTABLISHED"; fi
+  # QF-N5, QF-N6 — the master log and the PHP log, where readable
+  note "QF-N5 $(qf_php n5 "$sub" "$IN_CONTAINER/data/plugin.log" 2>/dev/null || echo 'not read') — against reminder_hour (QF-N1)"
+  note "QF-N6 $(qf_php n6 "$(dxo php -r 'echo (string)ini_get("error_log");' 2>/dev/null)" 2>/dev/null || echo 'log=unreadable') — measured by the marks from step 2 where the log is not read"
+  cih_drop "$sub"
+
+  # QF-G2 — the one stage-A migration trial for every part (ruling R10): 089 → 090 → 091 through the pin's runner, on a
+  # second copy; the pin's own doctor reads it; Part V's negative control on a third (an 085-shaped wa_media)
+  sub="$(qf_copy g2 "$P3B_PIN")" || stop "NO-GO (QF-G2): a second copy of the book could not be made — $QF_ROOT_ERR. Nothing was changed. Send the log file"
+  o="$(qf_php trial "$sub/code" "$sub")"
+  echo "  migration trial $o" | cut -c1-600
+  # The verdict is each file's _schema_checks row, at its expected count, on both paths. The trial's own migration.log
+  # (the reading's folder's) is judged only for a file the trial applied: MigrationRunner::run() passes over a file the
+  # copy's ledger already holds and logs nothing for it. So on a first deploy (QF-G1: 088 last) the trial must apply each
+  # of 089, 090 and 091, each ok and each logged OK, never PARTIAL; on a redeploy (QF-G1: all three applied) it must
+  # apply none of them and report none (a checksum_mismatch would mean the book holds other bytes than the pin's under
+  # that name), the rows already there are the verdict, and the live migration.log's own lines for the three are
+  # printed, a note (it may have been trimmed since: MigrationRunner halves it past 256 KiB). A file other than these
+  # three in the trial's results — an older migration's checksum_mismatch, which every boot reports too — is the book's
+  # history, printed on the trial's line above and not judged here.
+  bad=""; ap="$(qf_kv "$o" applied)"
+  [ -n "$ap" ] || bad="$bad applied:unread"
+  for v in $QF_SC_EXPECT; do
+    st="$(printf ',%s,' "$ap" | sed -n "s/.*,${v%%:*}:\([^,]*\),.*/\1/p")"
+    case "$o" in *"${v%%:*}=${v##*:}/${v##*:}/${v##*:}"*) ;; *) bad="$bad ${v%%:*}:verdict" ;; esac
+    if [ "$QF_G1" = "first" ]; then
+      [ "$st" = "ok" ] || bad="$bad ${v%%:*}:applied-${st:-not-at-all}"
+      case "$o" in *"log="*"${v%%:*}=OK"*) ;; *) bad="$bad ${v%%:*}:log-not-OK" ;; esac
+    else
+      [ -z "$st" ] || bad="$bad ${v%%:*}:on-a-redeploy-the-trial-found-it-$st"
+    fi
+  done
+  QF_G2_LIVELOG=""
+  if [ "$QF_G1" = "redeploy" ]; then
+    QF_G2_LIVELOG="$(docker exec "$CONTAINER" sh -c 'for f in 089_quote_followups.sql 090_wa_voice.sql 091_wa_offers.sql; do l="$(grep -F "$f" "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) w=PARTIAL ;; *OK:*) w=OK ;; "") w=none ;; *) w=other ;; esac; printf "%s=%s " "$f" "$w"; done' _ "$PDD_IN" 2>/dev/null </dev/null)"
+    note "QF-G2 a redeploy: 089, 090 and 091 are already in the copy's ledger, so the trial applied none of them and wrote no log line — the verdict is each _schema_checks row already there; the live migration.log's last line for each, as it reads now: ${QF_G2_LIVELOG:-not read}$(case "$QF_G2_LIVELOG" in *PARTIAL*) echo " — A PARTIAL LINE: the rows above still decide, and they read at their counts" ;; esac)"
+  fi
+  v="$(qf_kv "$o" followups)"; [ -n "$v" ] && [ "${v%%>*}" = "${v#*>}" ] || bad="$bad followups-changed(${v:-unread})"
+  o="$(qf_tool "$sub" doctor)"; n=$?
+  qf_show_tool "$o" 12
+  [ "$n" = "0" ] || bad="$bad doctor-rc-$n"
+  for v in $QF_SC_EXPECT; do printf '%s\n' "$o" | grep -qx "PASS ${v%%:*}" || bad="$bad doctor:${v%%:*}"; done
+  printf '%s\n' "$o" | grep -qE '^089 names: 38 of 38 present$' || bad="$bad doctor:089-names"
+  cih_drop "$sub"
+  sub="$(qf_copy g2n "$P3B_PIN")" || stop "NO-GO (QF-G2): a third copy of the book (the negative control) could not be made — $QF_ROOT_ERR. Nothing was changed. Send the log file"
+  o="$(qf_php neg "$sub/code" "$sub")"; cih_drop "$sub"
+  echo "  negative control $o"
+  case "$o" in *"cols=24 status=partial partial=1 check=1 row=0"*) ;; *) bad="$bad negative-control(${o:-unread})" ;; esac
+  [ -z "$bad" ] || stop "NO-GO (QF-G2): the one migration trial (089 → 090 → 091 through the pin's runner, on a copy) did not read as reviewed:$bad. Nothing was changed. Send the log file"
+  ok "QF-G2 on a copy, 089 → 090 → 091 through the pin's MigrationRunner: $( [ "$QF_G1" = "first" ] && echo "each applied, each migration.log line OK, never PARTIAL, and" || echo "none pending on this redeploy's copy (each already in its ledger, none with other bytes), and" ) each _schema_checks row present at its expected count ($QF_SC_EXPECT); the pin's doctor reads PASS for all three and 089's 38 names present; the followups rows and their hash unchanged; Part V's negative control on a further copy (an 085-shaped wa_media, 24 columns): 090 PARTIAL naming CHECK constraint failed, no 090 row"
+  # ── SLOT VN-G7 ── Part V's read of QF-G2's trial (DS2) ──
+
+  # QF-G3 — the pin's events, hooks and marks, read as text from Git; each hook counted in the method that holds it (one
+  # reader: a line naming a function opens that method, as the derivation counted them), NotificationService's three
+  # once each in sendVia, sendDocument and sendImage beside the file's total; then HK7, the pin's send-site inventory
+  bad=""; local f nd want got ev m hkh hkc
+  while IFS='|' read -r f nd want m; do
+    [ -n "$f" ] || continue
+    if [ "$m" = "-" ]; then got="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$f" 2>/dev/null | grep -cF -- "$nd")"
+    else got="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$f" 2>/dev/null | awk -v nd="$nd" -v m="$m" '
+        /^[[:space:]]*((public|private|protected|static|final|abstract)[[:space:]]+)*function[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/ { s = $0; sub(/^.*function[[:space:]]+/, "", s); sub(/[[:space:]]*\(.*/, "", s); cur = s }
+        index($0, nd) > 0 && cur == m { n++ } END { print n + 0 }')"; fi
+    [ "$got" = "$want" ] || bad="$bad ${f##*/}$( [ "$m" = "-" ] || printf ':%s' "$m"):${nd%%(*}×${got:-?}(want-$want)"
+  done <<< "$(printf '%s\n' $QF_HOOKS)"
+  for ev in $QF_EVENTS; do
+    git -C "$REPO" grep -qF "'$ev'" "$EXPECTED_PLUGIN_COMMIT" -- "$PLUGIN" ":(exclude)$PLUGIN/lib/WaSendBudget.php" ":(exclude)$PLUGIN/tests" 2>/dev/null || bad="$bad event:$ev-not-a-literal-in-the-tree"
+  done
+  # HK7 (§H.2.6.7) — the pin's send-site inventory on the pin's own tree: its PHP files from Git (tests/ and data/ aside,
+  # as the scan skips tests/ itself), copied into this run's code folder in the container's /tmp and removed at once,
+  # scanned by the pin's own wsb_send_sites() against HK07's class table and its two controls (QF_PHP hk7). A static read:
+  # nothing of the pin's is run. An unclassified Evolution send site, or a scan that could not run, is NO-GO.
+  hkh="$OUT/qf-hk7-$TS-$$"; hkc="$CHK/qf-hk7-$$"; o=""
+  if rm -rf "$hkh" && mkdir -p "$hkh" && chmod 700 "$hkh" \
+     && git -C "$REPO" archive "$EXPECTED_PLUGIN_COMMIT" "$PLUGIN" | tar --no-same-owner -xf - -C "$hkh" \
+     && rm -rf "$hkh/$PLUGIN/tests" "$hkh/$PLUGIN/data" && find "$hkh/$PLUGIN" -type f ! -name '*.php' -delete \
+     && chmod -R a+rX "$hkh" && docker cp "$hkh" "$CONTAINER:$hkc" >/dev/null 2>&1; then
+    o="$(qf_php hk7 "$hkc/$PLUGIN")"
+  fi
+  docker exec "$CONTAINER" rm -rf "$hkc" >/dev/null 2>&1 </dev/null || true; rm -rf "$hkh"
+  case "$o" in
+    "sites="*" unclassified=0 handle=1 "*) [ "$(qf_kv "$o" sites)" -ge "$QF_HK7_MIN" ] 2>/dev/null || bad="$bad hk7:the-control-found-$(qf_kv "$o" sites)-sites-under-$QF_HK7_MIN" ;;
+    "sites="*) bad="$bad hk7:$(qf_kv "$o" unclassified)-unclassified($(qf_kv "$o" names))-handle-$(qf_kv "$o" handle)" ;;
+    *) bad="$bad hk7:not-run(${o:-the pin's tree could not be copied into the container's /tmp})" ;;
+  esac
+  [ -z "$bad" ] || stop "NO-GO (QF-G3): the pin's record-only hooks, W1–W3, its events or its send-site inventory are not as reviewed:$bad. Nothing was changed. Send the log file"
+  ok "QF-G3 as text in the pin: the record-only hooks — NotificationService's three, once each in sendVia, sendDocument and sendImage, AlertService::sendTo's, StarlinkMailWorker's — and W1–W3 (evo_webhook.php's marks) each present exactly as reviewed, behind the ledger key inside WaSendBudget; each of NOTIFY_KINDS' $(printf '%s\n' $QF_EVENTS | grep -c .) events a literal in the pin's tree; HK7, the pin's send-site inventory on its own tree by its own scan: $(qf_kv "$o" sites) Evolution send sites (the control: at least $QF_HK7_MIN, AiReplyWorker::handle among them), each classified in HK07's table of $(qf_kv "$o" classes) files"
+
+  # QF-G4 — the one stage-A rule for every part's keys (ruling R7): the pin's allKeys(), unset in the live files and the
+  # store row (read-only). Settings (settingKeys()) are never NO-GO and never cleared (ruling R5).
+  o="$(qf_php g4 "$P3B_PIN" "$IN_CONTAINER" "$PDD_IN")"; QF_G4_LINE="${o%% names=*}"
+  case "$o" in keys=[1-9]*" set="*) ;; *) stop "NO-GO (QF-G4): the pin's keys could not be read against the live files and the store row (${o:-not read}). Nothing was changed. Send the log file" ;; esac
+  QF_G4_SET="$(qf_kv "$o" set)"; QF_G4_NAMES="${o##* names=}"
+  if [ "$QF_G4_SET" = "0" ]; then
+    ok "QF-G4 none of the pin's $(qf_kv "$o" keys) switch and record keys (SalesFollowupLadder::allKeys(), every part's) is set — not in kyc_config.json, not in the store row, not in data/config.json or <data>/config.json, and none reads set through PluginConfig::read: $EXPECTED_VERSION starts dark"
+  else
+    note "QF-G4 $(printf '%s' "$QF_G4_NAMES" | tr 'a-z' 'A-Z' | tr ',' ' ') — $QF_G4_SET OF $EXPECTED_VERSION'S KEYS SET ($QF_G4_LINE)"
+    [ "$(qf_kv "$o" held)" = "0" ] || stop "NO-GO (QF-G4): $(qf_kv "$o" held) of those keys are held by data/config.json or <data>/config.json, which the switch tool never writes (its off would read back FAIL key_outside_overrides) — remove them there by hand with the plugin's own Settings, never with this script. Nothing was changed. Send the log file"
+    [ "$QF_G1" = "redeploy" ] || stop "NO-GO (QF-G4): $QF_G4_SET of $EXPECTED_VERSION's keys are set on a book $EXPECTED_VERSION never ran on (QF-G1: 088 last) — set by hand; --clear-switches would run the pin's tool, which migrates the live book before the backup's copy is the only one. Nothing was changed. Send the log file"
+    if [ -z "$CLEAR_SWITCHES" ]; then
+      stop "NO-GO (QF-G4): $QF_G4_SET of $EXPECTED_VERSION's switch and record keys are set (left by an earlier $EXPECTED_VERSION that was rolled back without its off): a redeploy starts dark. To clear them with the pin's own tool — off all --rollback, every part's off-hooks — after you type DEPLOY and before the copy, its own command, alone:$(printf '\n      %s' "$(with_flags --clear-switches)")"
+    fi
+    QF_CLEAR=1
+    if [ -n "$CHECK_ONLY" ]; then note "QF-G4 --clear-switches with --check: nothing is cleared — the deploy with it clears these $QF_G4_SET key(s), after DEPLOY is typed, with the pin's tool"
+    else note "QF-G4 --clear-switches, the operator's explicit choice: once DEPLOY is typed, before the copy, the pin's tool runs off all --rollback as the book's owner, every part's off-hooks included, and the keys it clears go on the sheet"; fi
+  fi
+  # ── SLOT VN-G stage A ── Part V's stage-A codes, VN-G1 (a read of QF-G4) to VN-G6 (DS2) ──
+  # ── SLOT VA-G stage A ── Part V's acknowledgement codes at stage A (DS2) ──
+  # ── SLOT OF-G stage A ── Part O's stage-A codes, OF-G1 (a read of QF-G4), OF-G2 (a read of QF-G2), OF-N* (DS3) ──
+  # ── SLOT AC stage A ── Part P's AC-L1 (a NO-GO before the copy), AC-N1, AC-N2 (DS4) ──
+}
+
+# qf_clear_and_baseline — after DEPLOY is typed, before the copy (stage B): QF-G4's --clear-switches, then on a redeploy
+# QF-G1's pause and the redeploy baseline (Q16-F03, Q18-F02, Q19-F01, Q20-F01). The clear is the PIN's tool on the LIVE
+# data folder, as the book's owner, from a code copy of the pin whose data/config.json is a copy of the live one (so its
+# read-back sees what the live plugin reads), with the run's vault copy: off all --rollback, every part's hooks. Any
+# refusal, hook failure or key left set stops before the copy: the keys the tool reports cleared are on the sheet.
+qf_clear_and_baseline() {
+  local o rc sub d
+  if [ -n "$QF_CLEAR" ]; then
+    cih_init || stop "QF-G4 the run's folder could not be made to run the clear from (${CIH_VAULT_SAYS:-?}) — nothing was cleared and nothing copied"
+    d="$CIH_BASE/qf-clear"; dxo mkdir -m 700 "$d" "$d/conf" || stop "QF-G4 the clear's folder could not be made — nothing was cleared and nothing copied"
+    o="$(qf_php conf "$P3B_PIN" "$IN_CONTAINER" "$PDD_IN" "$d/conf")"
+    case "$o" in root=*) ;; *) stop "QF-G4 the clear's settings copy could not be made (${o%% csv=*}) — nothing was cleared and nothing copied" ;; esac
+    qf_root "$P3B_PIN" "$d/code" "$d/conf" || stop "QF-G4 the pin's code could not be copied to run the clear from — nothing was cleared and nothing copied"
+    cih_vault "$d/vault.json"
+    echo "  clear           the pin's $QF_TOOL off all --rollback, as the book's owner, on the live data folder (QF-G4, --clear-switches)"
+    o="$(docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" -e DN_VAULT_FILE="$d/vault.json" -e TMPDIR="$d" "$CONTAINER" \
+          php -d log_errors=0 -d opcache.enable_cli=0 "$d/code/$QF_TOOL" off all --rollback 2>&1 </dev/null | qf_safe)"; rc=${PIPESTATUS[0]}
+    qf_show_tool "$o" 60
+    QF_CLEARED="$(printf '%s\n' "$o" | sed -n 's/^was on: //p' | paste -sd' ' -)"
+    qf_sheet "QF-G4 the keys --clear-switches cleared (key names; no value)" "${QF_CLEARED:-none reported}"
+    cih_drop "$d"
+    [ "$rc" = "0" ] || stop "NO-GO (QF-G4): the pin's tool did not clear every key (exit $rc; its lines above say which step, hook or read-back failed) — nothing was copied. Send the log file"
+    ok "QF-G4 --clear-switches: the pin's tool ran off all --rollback in the one sequence, every part's off-hooks, and exited 0; $(printf '%s\n' $QF_CLEARED | grep -c .) key(s) it reported on are on the sheet"
+  fi
+  # QF-G4 again, read-only: every key unset now — the moment QF-G4 "returns"
+  o="$(qf_php g4 "$P3B_PIN" "$IN_CONTAINER" "$PDD_IN")"
+  [ "$(qf_kv "$o" set)" = "0" ] || stop "NO-GO (QF-G4): $(qf_kv "$o" set) of $EXPECTED_VERSION's keys still read set before the copy (${o%% names=*}): $(printf '%s' "${o##* names=}" | tr ',' ' ') — nothing was copied. Send the log file"
+  [ "$QF_G1" = "redeploy" ] || return 0
+  # the pause: busy_timeout (5 s, lib/SqliteStore.php:158) plus 1 s, after QF-G4 returned, whether or not it cleared anything
+  printf '  …     waiting 6 s (busy_timeout plus 1 s) after QF-G4 before the redeploy baseline (QF-G1; Q20-F01)\n'; sleep 6
+  QF_BASE="$(qf_php base "$PDD_IN/plugin.sqlite3")"
+  case "$QF_BASE" in "rows="*" max="*" unix="[0-9]*) ;; *) stop "NO-GO (QF-G1): the redeploy baseline could not be read from the live book (${QF_BASE:-not read}) — QF-CA2 and QF-CA3 would have nothing to judge against. Nothing was copied. Send the log file" ;; esac
+  QF_COPY_AT="$(qf_kv "$QF_BASE" at | tr T ' ')"; QF_COPY_UNIX="$(qf_kv "$QF_BASE" unix)"
+  ok "QF-G1 the redeploy baseline, read-only from the live book just before the copy: ${QF_BASE%% at=*}; the copy's start $QF_COPY_AT UTC (unix $QF_COPY_UNIX)"
+  # ── SLOT baseline ── Part O's OF-G1 baseline and Part V's VN-G6 baseline, taken at this one moment (DS2, DS3) ──
+}
+
+# qf_after INST_ROOT — QF-CA1–QF-CA8, after the copy (stage R; --after-only too, where QF-CA2, QF-CA3's dark half and
+# QF-CA5's "every step off" judge the dark build, so only the deploy run judges them): on fresh copies, through the
+# INSTALLED code (ICODE_R). Reports; never stops.
+qf_after() {
+  local inst="$1" sub o n v bad j
+  [ -n "$inst" ] || { bad "QF-CA1 no copy of the installed code to read with — QF-CA1 to QF-CA8 are not judged"; return; }
+  sub="$(qf_copy ca "$inst")" || { bad "QF-CA1 a copy of the book could not be made — $QF_ROOT_ERR; QF-CA1 to QF-CA8 are not judged"; return; }
+  # QF-CA1 — 089, 090 and 091 applied on the live book at the first boot: the ledger rows and the verdicts, on the copy
+  o="$(qf_php ca1 "$sub/plugin.sqlite3")"; bad=""
+  for v in $QF_SC_EXPECT; do case "$o" in *"${v%%:*}=1:${v##*:}/${v##*:}/${v##*:}"*) ;; *) bad="$bad ${v%%:*}" ;; esac; done
+  v="$(docker exec "$CONTAINER" sh -c 'for f in 089_quote_followups.sql 090_wa_voice.sql 091_wa_offers.sql; do l="$(grep -F "$f" "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) w=PARTIAL ;; *OK:*) w=OK ;; "") w=none ;; *) w=other ;; esac; printf "%s=%s " "$f" "$w"; done' _ "$PDD_IN" 2>/dev/null </dev/null)"
+  if [ -z "$bad" ]; then ok "QF-CA1 on a fresh copy after the copy: 089, 090 and 091 each in the migration ledger once, each _schema_checks row present at its expected count — the verdict ($QF_SC_EXPECT); migration.log: ${v:-not read}"
+  else bad "QF-CA1 089–091 are not applied as reviewed on the book after the copy:$bad ($o; migration.log: ${v:-not read}) — the plugin's runner applies them at its first boot after the copy: a book no request has opened since says so here, and --after-only judges it again"; fi
+  # QF-CA2, QF-CA3 — what the dark build could have written (the deploy run only; ruling R18)
+  o="$(qf_php ca2 "$sub/plugin.sqlite3" "${QF_BASE_MAX:-$(qf_kv "${QF_BASE:-}" max)}" "${QF_COPY_UNIX:-0}")"
+  if [ "$MODE" = "deploy" ] && [ "$QF_G1" = "first" ]; then
+    case "$o" in "rows=0,0,0,0 "*) ok "QF-CA2 a first deploy: quote_tracker, wa_auto_sends, quote_list_sends and wa_seen_marks hold no row after the copy (every key unset, every hook inert)" ;;
+      *) bad "QF-CA2 a first deploy, and the new tables already hold rows after the copy (${o%% added=*}) — something wrote with the keys unset" ;; esac
+    # the schedule read at all (its row decoded, and other jobs' entries in it) is the positive control: an absent or
+    # unreadable master_schedule.json also holds "no entry for the four", and would read PASS over nothing
+    case "$(qf_kv "$o" sched):$(qf_kv "$o" entries)" in
+      read:-) if [ "$(qf_kv "$o" others)" -ge 1 ] 2>/dev/null; then ok "QF-CA3 a first deploy: master_schedule.json, read on the copy with $(qf_kv "$o" others) other jobs' entries in it (the control), holds no entry for the four jobs ($QF_JOBS) — their flags are off, master dispatches none"
+              else bad "QF-CA3 a first deploy: master_schedule.json was read on the copy but holds no other job's entry (the control: master writes one for every job it dispatches) — \"no entry for the four\" would say nothing"; fi ;;
+      read:*) bad "QF-CA3 a first deploy, and master_schedule.json holds entries for the four jobs ($(qf_kv "$o" entries)) — master dispatched one with its flag off" ;;
+      *) bad "QF-CA3 a first deploy: master_schedule.json could not be read on the copy (sched=$(qf_kv "$o" sched)) — whether master dispatched any of the four is not established" ;;
+    esac
+  elif [ "$MODE" = "deploy" ] && [ "$QF_G1" = "redeploy" ]; then
+    if [ "$(qf_kv "$o" claims_late)" = "0" ]; then ok "QF-CA2 a redeploy, against the baseline taken just before the copy (${QF_BASE%% at=*}): no claim above its largest id in a later second than the copy's start ($QF_COPY_AT UTC) — now ${o%% added=*}; added since the baseline, by mode and kind: $(qf_kv "$o" added); claims in the copy's start second $(qf_kv "$o" claims_same_second), before it $(qf_kv "$o" claims_before) — counted and printed, never FAIL (ruling R18)"
+    else bad "QF-CA2 a redeploy: $(qf_kv "$o" claims_late) claim(s) above the baseline's largest id were made in a later second than the copy's start ($QF_COPY_AT UTC) — the dark build claimed with every key unset ($o)"; fi
+    if [ "$(qf_kv "$o" sched)|$(qf_kv "$QF_BASE" sched)" != "read|read" ] || ! [ "$(qf_kv "$o" others)" -ge 1 ] 2>/dev/null; then
+      bad "QF-CA3 a redeploy: master_schedule.json was not read with other jobs' entries in it, on the copy (sched=$(qf_kv "$o" sched), others=$(qf_kv "$o" others)) or at the baseline (sched=$(qf_kv "$QF_BASE" sched)) — the four jobs' entries cannot be judged against the copy's start"
+    elif [ "$(qf_kv "$o" entries_late)" = "0" ]; then ok "QF-CA3 a redeploy: master_schedule.json read on the copy and at the baseline ($(qf_kv "$o" others) other jobs' entries, the control); no entry of the four jobs has a last_run in a later second than the copy's start (entries now $(qf_kv "$o" entries); at the baseline $(qf_kv "$QF_BASE" entries)) — an earlier deployment's entries survive under $BASELINE_VERSION and are printed (Q16-F03)"
+    else bad "QF-CA3 a redeploy: $(qf_kv "$o" entries_late) of the four jobs' entries have a last_run in a later second than the copy's start ($QF_COPY_UNIX): a master cycle begun after the clear dispatched one ($(qf_kv "$o" entries))"; fi
+  else note "QF-CA2 and QF-CA3's schedule rows judge the dark build in the deploy run; here, now: ${o%% claims_late=*}"; fi
+  # QF-CA3 — the four jobs as text in the installed master, and cron_status's listing on the copy
+  v="$(awk -v jobs="$QF_JOBS" 'BEGIN { n = split(jobs, J, " ") } /^[[:space:]]*'"'"'notify_retry'"'"'[[:space:]]*=>/ { seen = 1; next }
+         seen && /^[[:space:]]*'"'"'[a-z_]+'"'"'[[:space:]]*=>/ { k++; line = $0; sub(/^[[:space:]]*'"'"'/, "", line); sub(/'"'"'.*/, "", line); got = got (k > 1 ? "," : "") line
+           if (index($0, "'"'"'uganda'"'"' => true") == 0 || index($0, "'"'"'flag'"'"' => '"'"'") == 0) bad = bad " " line ":no-uganda-or-flag" }
+         /^\];/ && seen { exit } END { want = ""; for (i = 1; i <= n; i++) want = want (i > 1 ? "," : "") J[i]; print (got == want ? "order=ok" : "order=" got) (bad == "" ? "" : bad) }' "$DEST/$MASTER" 2>/dev/null)"
+  o="$(docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$sub" -e DN_VAULT_FILE="$sub/vault.json" "$CONTAINER" php -d log_errors=0 "$sub/code/tools/cron_status.php" --all 2>&1 </dev/null | qf_safe)"
+  n=0; for j in $QF_JOBS; do printf '%s\n' "$o" | grep -F -- "$j" | grep -qF 'OFF (switch)' && n=$((n + 1)); done
+  if [ "$v" = "order=ok" ] && { [ "$n" = "4" ] || [ "$MODE" = "after" ]; }; then ok "QF-CA3 the installed master registers the four jobs after notify_retry, in ruling R1's order ($QF_JOBS), each with 'uganda' => true and a 'flag'; cron_status on a copy lists $n of them OFF (switch)$( [ "$MODE" = "after" ] && echo " — the others' switches are on (an --after-only run)")"
+  else bad "QF-CA3 the four jobs are not as reviewed in the installed master or cron_status's listing ($v; OFF (switch): $n of 4)"; fi
+  # QF-CA4 — the F1 filters through the installed FollowUpService on a copy; the installed followup_run completes on it
+  o="$(qf_php ca4 "$sub/code" "$sub")"
+  dxo sh -c 'printf "{\"pluginDataDir\":\"%s\"}" "$2" > "$1/ucrm.json"' _ "$sub/code" "$sub"
+  n="$(docker exec -u "$DB_OWNER" -e DN_VAULT_FILE="$sub/vault.json" -e TMPDIR="$sub" "$CONTAINER" php -d log_errors=0 -d opcache.enable_cli=0 "$sub/code/cron/followup_run.php" >/dev/null 2>&1 </dev/null; echo $?)"
+  case "$o" in
+    "kind=present planted=2 due_quote=0 approved_quote=0 due_enquiry=1 approved_enquiry=1 "*)
+      [ "$n" = "0" ] && ok "QF-CA4 on a copy, through the installed FollowUpService: a planted open quote follow-up and its approved draft are returned by neither due() nor approvedDrafts(), while an enquiry follow-up and its approved draft planted the same way are returned by both (the control; ${o#* approved_enquiry=1 }); the installed followup_run.php completes on that copy (exit 0; the copy holds no AI key, so it reaches no model)" || bad "QF-CA4 the installed followup_run.php did not complete on the copy (exit $n)" ;;
+    "kind=present planted=2 "*" due_enquiry=1 approved_enquiry=1 "*) bad "QF-CA4 the installed FollowUpService returns a quote row to the enquiry engine ($o) — F1: 5.18.103's followup_run would draft about quotations" ;;
+    "kind=present planted=2 "*) bad "QF-CA4 the control did not hold: the planted enquiry follow-up or its approved draft was not returned ($o) — the quote rows' absence says nothing" ;;
+    *) bad "QF-CA4 the planted rows could not be read through the installed FollowUpService on the copy (${o:-not read})" ;;
+  esac
+  # QF-CA5 — the installed tool's show: every step off and the ledger off; and as South Sudan, "not this install"
+  o="$(qf_tool "$sub" show)"; n=$?
+  v="$(printf '%s\n' "$o" | grep -cE '^  (1b agent-cc|[0-9]+ [a-z-]+)( \(optional\))?[^:]*: off')"
+  if [ "$MODE" = "deploy" ]; then
+    { [ "$n" = "0" ] && [ "$v" = "13" ] && printf '%s\n' "$o" | grep -qx '  the ledger: off'; } && ok "QF-CA5 the installed tool's show on a copy: all 13 steps off and the ledger off; the OpenAI key $(printf '%s\n' "$o" | sed -n 's/^openai key: //p' | head -1) (never its value)" \
+      || { qf_show_tool "$o" 30; bad "QF-CA5 the installed tool's show does not read every step off and the ledger off (exit $n; $v of 13 off)"; }
+  else note "QF-CA5 the installed tool's show on a copy: $v of 13 steps off; the ledger $(printf '%s\n' "$o" | sed -n 's/^  the ledger: //p' | head -1) (an --after-only run: the operator's steps)"; fi
+  dxo sh -c 'mkdir -p "$1/ss" && cp "$1/plugin.sqlite3" "$1/ss/plugin.sqlite3" && printf "{\"tenant_profile\":\"south-sudan\"}" > "$1/ss/kyc_config.json" && cp "$1/vault.json" "$1/ss/vault.json" 2>/dev/null; mkdir -p "$1/ss/code" && cp -R "$1/code/." "$1/ss/code/" && rm -f "$1/ss/code/data/config.json"' _ "$sub"
+  o="$(qf_tool "$sub/ss" show)"
+  [ "$(printf '%s\n' "$o" | head -1)" = "not this install" ] && ok "QF-CA5 with the profile forced to South Sudan on a copy, the installed tool's show says \"not this install\" and reads nothing" || bad "QF-CA5 forced to South Sudan, the installed tool's show did not say \"not this install\" ($(printf '%s' "$o" | head -1 | cut -c1-120))"
+  # QF-CA6 — the installed gates false or no-ops, keys unset; and keys set as South Sudan
+  o="$(qf_php ca6 "$sub/code" "$sub")"
+  case "$o" in
+    "off:00 marks_off=0 ss:00 marks_ss=0 ug:11 marks_ug=1") ok "QF-CA6 through the installed code on a copy, its own vault read: WaSendBudget::on and QuoteChase::on false and WaSeenMarks::note a no-op with every key unset; the same with every key set and the profile forced to South Sudan; and the control, every key set on Uganda (Africa/Kampala): both true and one mark written" ;;
+    *" ug:11 marks_ug=1") bad "QF-CA6 an installed gate is not inert where it must be ($o)" ;;
+    *) bad "QF-CA6 the control did not hold — with every key set on Uganda the installed gates did not read true and write one mark ($o), so their false elsewhere says nothing" ;;
+  esac
+  # QF-CA7 — the live vault, unchanged (Z1/Z2, inherited): said by z_stage at the end of the run, against this run's start
+  note "QF-CA7 the live vault's sha256 and time are judged by Z1 at the end of this run, against its start ($(vt_say "$VT_START"))"
+  # QF-CA8 — positive and negative controls on a copy, with wa_send_ledger=on in the copy's config only
+  o="$(qf_php ca8 "$sub/code" "$sub")"
+  case "$o" in "in=1 out=1 reminder=1/1 other=1/1 staff_reply=0") ok "QF-CA8 on a copy, through the installed code, with wa_send_ledger=on in the copy's configuration alone: a wrapped inbound gives one in mark and a fromMe audio one out mark; the reminder hook files one reminder row and the invoice one other row; an Inbox reply (wa_staff_reply) gives no row" ;;
+    *) bad "QF-CA8 the marks and the record-only hooks do not record as reviewed on a copy ($o)" ;; esac
+  cih_drop "$sub"
+  # ── SLOT VN-CA ── Part V's after-the-copy codes (DS2) ──
+  # ── SLOT VA-CA ── Part V's acknowledgement codes after the copy (DS2) ──
+  # ── SLOT OF-CA ── Part O's after-the-copy codes, OF-CA1–OF-CA3 (DS3) ──
+  # ── SLOT AC-CA ── Part P's AC-CA1, AC-CA2 (DS4) ──
+}
+
+# qf_on INST_ROOT — --after-only (read-only, on a fresh copy, through the INSTALLED tool): QF-ON0 L-ON, QF-ON1 Q1-ON, QF-ON2
+# Q2-ON, QF-ON3 the ledger invariants, QF-ON4 Q3-ON and Q5-ON, QF-ON5 the marks and the R-05 race count; and AC-ON1's slot.
+# A step that is off prints the tool's note line "OFF — not judged" and judges nothing (§H.2.15.3).
+qf_on_one() {   # qf_on_one SUB CODE STEP PART — one step through the installed tool's --check: PASS ok, FAIL bad, else a note
+  local o rc st
+  o="$(qf_tool "$1" --check "$3")"; rc=$?
+  st="$(printf '%s\n' "$o" | grep -m1 "^$3: " | sed "s/^$3: //")"
+  case "$st" in
+    "OFF — not judged") note "$2 OFF — not judged ($3 is off)" ;;
+    PASS) ok "$2 $3: PASS$(printf '%s\n' "$o" | grep -E "^  $4: " | head -1 | sed 's/^ */ — /')$(printf '%s\n' "$o" | sed -n 's/^    counts: / (counts: /p' | head -1 | sed 's/$/)/')" ;;
+    "NOT_YET "*) note "$2 $3: $st$(printf '%s\n' "$o" | sed -n 's/^    counts: / (counts: /p' | head -1 | sed 's/$/)/')" ;;
+    "FAIL "*) qf_show_tool "$o" 40; bad "$2 $3: $st (exit $rc; the tool's lines above)" ;;
+    *) qf_show_tool "$o" 20; bad "$2 $3: the installed tool's --check gave no status (exit $rc)" ;;
+  esac
+}
+qf_on() {
+  local inst="$1" sub o
+  [ -n "$inst" ] || { bad "QF-ON0 no copy of the installed code to read with — QF-ON0 to QF-ON5 are not judged"; return; }
+  sub="$(qf_copy on "$inst" log)" || { bad "QF-ON0 a copy of the book could not be made — $QF_ROOT_ERR; QF-ON0 to QF-ON5 are not judged"; return; }
+  # QF-ON0 — L-ON, the ledger's check. With step 2 (ack) on, the installed tool's --check ack judges it, beside VA-ON1.
+  # `skip ack` keeps the shared ledger on with step 2 off (§H.2.12.3), where --check ack prints "OFF — not judged" and the
+  # tool has no --check sending: there L-ON is judged here, through the installed SalesFollowupLadder::check on the copy.
+  # The ledger off: the note line, never a status.
+  o="$(qf_php lon "$sub/code" "$sub")"
+  case "$o" in
+    "ledger="*" ack=on"*) qf_on_one "$sub" QF-ON0 ack L-ON ;;
+    "ledger=off ack=off"*) note "QF-ON0 OFF — not judged (the ledger, wa_send_ledger, is off)" ;;
+    "ledger=on ack=off status=PASS "*) ok "QF-ON0 L-ON: PASS — the ledger on with step 2 off (skip ack), judged through the installed SalesFollowupLadder::check on a copy (counts: $(qf_kv "${o%% | *}" counts))" ;;
+    "ledger=on ack=off status=NOT_YET "*) note "QF-ON0 L-ON: NOT_YET $(qf_kv "${o%% | *}" code) — the ledger on with step 2 off (skip ack), judged on a copy (counts: $(qf_kv "${o%% | *}" counts))" ;;
+    "ledger=on ack=off status=FAIL "*) printf '%s\n' "${o#* | }" | tr ';' '\n' | head -30 | cut -c1-200 | sed 's/^ */  check   | /' | qf_safe
+      bad "QF-ON0 L-ON: FAIL $(qf_kv "${o%% | *}" code) — the ledger on with step 2 off (skip ack), judged through the installed SalesFollowupLadder::check on a copy (counts: $(qf_kv "${o%% | *}" counts); its notes above)" ;;
+    *) bad "QF-ON0 the ledger's and step 2's state, or L-ON, could not be read on the copy (${o:-not read})" ;;
+  esac
+  qf_on_one "$sub" QF-ON1 tracking Q1-ON
+  qf_on_one "$sub" QF-ON2 list Q2-ON
+  # QF-ON3 — the ledger's invariants, judged only while the ledger is on, and only over claims there are: with it off, or
+  # with no proactive claim to judge, a note — never a PASS over nothing (§H.2.15.3)
+  o="$(qf_php on3 "$sub/code" "$sub")"
+  case "$o" in
+    "ledger=off"*) note "QF-ON3 OFF — not judged (the ledger, wa_send_ledger, is off)$(case "$o" in *"counts{"*) echo "; as it stands: ${o#*\} }" ;; esac)" ;;
+    "ledger=on table=absent") bad "QF-ON3 the ledger is on and its table (wa_auto_sends) is absent on the copy" ;;
+    "ledger=on fail{outside_window=0,cap_day=0,cap_hour=0,spacing=0,phone_today=0,ledger_orphan=0} counts{claims="*",judged=0,"*) note "QF-ON3 the ledger is on and holds no proactive claim to judge over 60 days (${o#*\} }) — not judged" ;;
+    "ledger=on fail{outside_window=0,cap_day=0,cap_hour=0,spacing=0,phone_today=0,ledger_orphan=0}"*) ok "QF-ON3 the ledger's proactive claims (quote, enquiry, staff_list, offer), each judged as the installed Q3-ON judges a chase — the window its own row records, the day's and the hour's caps over what it could count, the spacing over every earlier live row of its handset by each one's own gap_s (ruling R18), one person a Kampala day — and no claim in flight over 900 s after a later claim on its handset: ${o#*\} }" ;;
+    "ledger=on fail{"*) bad "QF-ON3 the ledger's invariants: ${o#ledger=on }" ;;
+    *) bad "QF-ON3 the ledger could not be read on the copy (${o:-not read})" ;;
+  esac
+  qf_on_one "$sub" QF-ON4 chase Q3-ON
+  qf_on_one "$sub" QF-ON4 cold Q5-ON
+  o="$(qf_php on5 "$sub")"
+  case "$o" in "marks="*) note "QF-ON5 the marks per day and direction over 14 days, and the R-05 race count: $o" ;; *) bad "QF-ON5 the marks could not be read on the copy (${o:-not read})" ;; esac
+  # ── SLOT VN-ON ── Part V's --after-only codes, VA-ON1 and VN-ON1–VN-ON4 (DS2) ──
+  # ── SLOT OF-ON ── Part O's --after-only codes, offers-test and offers-live (DS3) ──
+  # ── SLOT AC-ON1 ── Part P's AC-ON, while agent-cc is on (DS4) ──
+  cih_drop "$sub"
+}

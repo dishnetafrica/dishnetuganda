@@ -1,0 +1,78 @@
+# ── 5.18.104: the one rollback sequence (QF-RB1–QF-RB3; root docs/73 §H.2.16, rulings R7, R11, R12, R14, R17) ──────────────
+# qf_byhand — the by-hand put-back, printed (never run): only for when QF-RB1 cannot run, each statement on open rows only
+# and valid under 089's and 091's CHECKs and triggers — Part F's two UPDATEs of QF-RB1 item 2 (the quote follow-ups'
+# pending or approved drafts expired, then the open quote follow-ups closed as rollback), Part O's four of §H.4.19
+# (ruling R17), and then every part's keys to take out of kyc_config.json and its store row, by name, Part P's two
+# among them. It is a block of its own, never beside a command of this script's.
+qf_byhand() {
+  local names
+  names="$(qf_php keys "${P3B_PIN:-$IN_CONTAINER}" 2>/dev/null | sed -nE 's/.* allnames=([^ ]*).*/\1/p' | tr ',' ' ')"
+  echo
+  echo "  BY HAND, ONLY IF QF-RB1 CANNOT RUN — SQL on the live book, as its owner, in one sqlite3 session, open rows only"
+  echo "  (never pasted together with any command of this script's; root docs/73 §H.2.16, ruling R17). Part F's two:"
+  echo "      UPDATE followup_drafts SET status = 'expired' WHERE status IN ('pending','approved') AND followup_id IN (SELECT id FROM followups WHERE kind = 'quote' AND closed_at IS NULL);"
+  echo "      UPDATE followups SET closed_at = datetime('now'), close_reason = 'rollback' WHERE kind = 'quote' AND closed_at IS NULL;"
+  echo "  Part O's four (§H.4.19), in the hook's order:"
+  echo "      UPDATE wa_offers SET state = 'paused', updated_at = datetime('now') WHERE state = 'running';"
+  echo "      UPDATE wa_offer_recipients SET state = 'uncertain', reason = 'stale_claim', sent_at = claimed_at, settled_at = datetime('now') WHERE state = 'claimed' AND ledger_claim IS NOT NULL;"
+  echo "      UPDATE wa_offer_recipients SET state = 'queued', not_before = datetime('now') WHERE state = 'claimed' AND ledger_claim IS NULL;"
+  echo "      UPDATE wa_offer_tests SET state = 'uncertain', settled_at = datetime('now') WHERE state = 'sending' AND started_at < datetime('now', '-15 minutes');"
+  echo "  Then every part's switch and record keys, by name, out of <data>/kyc_config.json and the store row's copy of it"
+  echo "  (Part P's two, quote_agent_cc_enabled and quote_agent_cc_since, among them; the settings stay):"
+  printf '%s\n' ${names:-"(the key list could not be read — the pin's lib/SalesFollowupLadder.php allKeys())"} | paste -sd' ' - | fold -s -w 110 | sed 's/^/      /'
+  # ── SLOT VN-RB by hand ── Part V's by-hand lines, if any (DS2) ──
+}
+
+# qf_rb1 — QF-RB1, after ROLLBACK is typed and before the put-back: scripts/sales-followup.sh off all --rollback, as the
+# book's owner, under 5.18.104's INSTALLED code — the one explicit sequence in SalesFollowupLadder: O (12, 11) → F (10, 6)
+# → V (9, 8, 7, 5) → 4, 3 → 2 (P5's keys, then the ledger last) → the record keys and Part P's two keys, last (rulings
+# R7, R11), each step's rollback hook before or after its keys clear as STEPS places it, then the tool's own assertions:
+# Part O's end state (0 running, 0 claimed), Part F's (0 open quote follow-ups, the hook throws otherwise), Part V's (0
+# pending audio rows, its keys unset), and no key of allKeys() set in the files or the store row, each read back through
+# PluginConfig::read (FAIL key_outside_overrides). Any failure exits non-zero and the rollback STOPS before the put-back:
+# nothing is put back until every part reads clean. Then this script reads the keys again itself (read-only).
+qf_rb1() {
+  local o rc
+  hdr "B. QF-RB1 — every $EXPECTED_VERSION switch off, in the one sequence, under the installed code (before the put-back)"
+  [ -f "$DEST/$QF_TOOL" ] || { qf_byhand; stop "NO-GO (QF-RB1): the installed plugin has no $QF_TOOL — it is not $EXPECTED_VERSION as installed, so the one sequence cannot run; nothing was put back. The by-hand put-back is above, its own block"; }
+  [ -f "$REPO/$QF_WRAPPER" ] || stop "NO-GO (QF-RB1): the checkout has no $QF_WRAPPER — pull the branch again; nothing was put back"
+  o="$(UCRM_CONTAINER="$CONTAINER" bash "$REPO/$QF_WRAPPER" off all --rollback 2>&1 </dev/null | qf_safe)"; rc=${PIPESTATUS[0]}
+  qf_show_tool "$o" 80
+  QF_CLEARED="$(printf '%s\n' "$o" | sed -n 's/^was on: //p' | paste -sd' ' -)"
+  qf_sheet "QF-RB1 the keys that were on before the rollback's off all (key names; no value)" "${QF_CLEARED:-none reported}"
+  if [ "$rc" != "0" ]; then
+    qf_byhand
+    stop "QF-RB1 FAILED: the installed tool's off all --rollback exited $rc — a hook threw, a lock was not taken in 70 s, or an end state or a read-back did not hold (its lines above say which: FAIL off_hook, FAIL lock_busy, FAIL rollback_assert, FAIL key_outside_overrides). The rollback STOPS before the put-back: $BASELINE_VERSION is not put back while any part reads unclean. Once the cause is cleared, the same tool again — its own command, alone:$(printf '\n      %s' "cd $REPO && bash $QF_WRAPPER off all --rollback") — or the by-hand put-back above; then this --rollback again"
+  fi
+  o="$(qf_php rb3 "${P3B_PIN:-$IN_CONTAINER}" "$IN_CONTAINER" "$PDD_IN")"
+  [ "$(qf_kv "$o" set)" = "0" ] || { qf_byhand; stop "QF-RB1 FAILED: the tool exited 0, but $(qf_kv "$o" set) of $EXPECTED_VERSION's keys still sit in kyc_config.json or the store row ($(qf_kv "$o" names | tr ',' ' ')). Nothing was put back. The by-hand put-back is above"; }
+  [ "$(qf_kv "$o" open_quote)" = "0" ] || { qf_byhand; stop "QF-RB1 FAILED: $(qf_kv "$o" open_quote) quote follow-up(s) are still open — $BASELINE_VERSION's followup_run has no kind filter and would draft about quotations (F1 in reverse). Nothing was put back. The by-hand put-back is above"; }
+  ok "QF-RB1 the installed tool's off all --rollback ran the one sequence — O (12, 11), F (10, 6), V (9, 8, 7, 5), 4, 3, 2 (P5's keys, then the ledger last), then the record keys and Part P's two — with each part's hook and end state, and exited 0; read again here: no $EXPECTED_VERSION key set in kyc_config.json or the store row, 0 open quote follow-ups; $(printf '%s\n' $QF_CLEARED | grep -c .) key(s) that were on are on the sheet"
+  # ── SLOT OF-RB1 ── Part O's read of QF-RB1's result (DS3) ──
+  # ── SLOT VN-RB ── Part V's reads of QF-RB1's result, VN-RB1–VN-RB4 (DS2) ──
+  # ── SLOT AC-RB1 ── Part P's AC-RB1, a read of QF-RB1's item 7 for its two keys (DS4) ──
+  note "QF-RB2 the tables, the columns, the ledger and the marks $EXPECTED_VERSION made stay (089, 090 and 091; their 400-day and never-deleted triggers), and $BASELINE_VERSION reads none of them; the record-only hooks go with the code"
+}
+
+# qf_rb3 — QF-RB3, after the put-back (RB): the installed code is 5.18.103's where 5.18.104 changed it (master's four
+# jobs and the record-only hooks gone with it), no 5.18.104 key set in the files or the store row, 0 open quote
+# follow-ups, and VN-RB6's instruction whenever OpenAI was ever called from here. Read-only.
+qf_rb3() {
+  local o bad="" f
+  for f in "$MASTER" lib/NotificationService.php lib/AlertService.php workers/StarlinkMailWorker.php evo_webhook.php cron/event_processor.php; do
+    [ "$(sha256sum "$DEST/$f" 2>/dev/null | cut -c1-64)" = "$(git -C "$REPO" show "$BASELINE_COMMIT:$PLUGIN/$f" 2>/dev/null | sha256sum | cut -c1-64)" ] || bad="$bad $f"
+  done
+  for f in $QF_JOBS; do grep -qF "'$f'" "$DEST/$MASTER" 2>/dev/null && bad="$bad master:$f-still-registered"; done
+  o="$(qf_php rb3 "${P3B_PIN:-$IN_CONTAINER}" "$IN_CONTAINER" "$PDD_IN")"
+  case "$o" in "set="*) ;; *) bad="$bad keys-unread(${o:-not read})" ;; esac
+  [ "$(qf_kv "$o" set)" = "0" ] || bad="$bad keys-set:$(qf_kv "$o" names)"
+  [ "$(qf_kv "$o" open_quote)" = "0" ] || bad="$bad open-quote-followups:$(qf_kv "$o" open_quote)"
+  if [ -z "$bad" ]; then ok "QF-RB3 after the put-back: $MASTER, lib/NotificationService.php, lib/AlertService.php, workers/StarlinkMailWorker.php, evo_webhook.php and cron/event_processor.php are $BASELINE_VERSION's byte for byte — master registers none of the four jobs, and the record-only hooks and the marks are gone with the code; no $EXPECTED_VERSION key is set in kyc_config.json or the store row; 0 open quote follow-ups"
+  else qf_byhand; bad "QF-RB3 after the put-back, not as $BASELINE_VERSION must read:$bad — the by-hand put-back is above"; fi
+  if [ "$(qf_kv "$o" voice_calls)" != "0" ] && [ -n "$(qf_kv "$o" voice_calls)" ]; then
+    note "QF-RB3 (VN-RB6) OpenAI was called from here ($(qf_kv "$o" voice_calls) wa_voice_calls row(s)): ROTATE the OpenAI key on OpenAI's own pages — $BASELINE_VERSION's settings page prints it"
+  fi
+  # ── SLOT VN-RB3 ── Part V's rollback notes after the put-back (pending events, R3 bodies), VN-RB5 (DS2) ──
+  # ── SLOT OF-RB2 ── Part O's rollback note after the put-back, paused offers (DS3) ──
+  # ── SLOT AC-RB2 ── Part P's AC-RB2 (DS4) ──
+}

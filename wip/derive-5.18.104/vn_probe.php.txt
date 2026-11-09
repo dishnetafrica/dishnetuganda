@@ -1,0 +1,447 @@
+// VN_PHP — 5.18.104's Part V readings, the voice notes and the acknowledgement (root docs/73 §H.3.25), one mode per
+// call, as the database's owner in the container. Every mode reads only a COPY in a folder of this run's, but three:
+// "g3" and "k1" read the LIVE settings files and the vault through a code root's PluginConfig::read (it writes nothing;
+// the OpenAI key is held in memory only and said as set or not set), and "ledger" opens the LIVE book with
+// SQLITE_OPEN_READONLY for 090's migration-ledger row alone (VN-M1's bounded wait, as db_state reads the ledger).
+// "store" writes a COPY only (its kyc_config.json and its settings row), and refuses any folder outside this run's.
+// Output: one line of key=value words — counts, fixed codes, schema and key names; event ids and dates go to a file in
+// the reading's own folder, for the run's 0600 sheet. Never a phone, a name, an amount, a staff id, a body, a transcript,
+// a key or a value of one. PHP 7.4 syntax (the release's).
+$mode = (string)($argv[1] ?? '');
+$a = array_slice($argv, 2);
+// The three modes that read a COPY through the plugin's own PluginConfig::read and TenantProfile::current read the
+// copy's own vault — DN_VAULT_FILE, the reading's folder's vault.json (qf_copy's: the live vault's book keys and the
+// keys the readings keep, never a secret) — and its own data folder (DN_DATA_DIR: dn_tz()'s fallback reads its
+// kyc_config.json, as the live plugin reads its own), never ConfigVault::path()'s default beside the code root, which
+// holds nothing: without it a copy whose tenant selector, ai_enabled or Evolution instances live only in the vault would
+// read as South Sudan, with the assistant off, or with no instance, and VN-CA1's Uganda half would read "off" because
+// the gate is false, not because Part V's keys are unset (QF's copy modes do the same; 5.18.103 sets both for every
+// in-process reading). Each of these modes takes [ROOT, DIR], DIR the reading's folder.
+if (in_array($mode, ['g1', 'g5', 'ca1'], true)) {
+    $vd = rtrim((string)($a[1] ?? ''), '/');
+    putenv('DN_VAULT_FILE=' . $vd . '/vault.json'); putenv('DN_DATA_DIR=' . $vd);
+}
+$ro = function (string $db) {
+    if (!is_file($db)) throw new RuntimeException('nodb');
+    $p = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15,
+                                                PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
+    $p->exec('PRAGMA query_only = ON');
+    return $p;
+};
+$has = function (PDO $p, string $t): bool {
+    $s = $p->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"); $s->execute([$t]);
+    return $s->fetchColumn() !== false;
+};
+$one = function (PDO $p, string $sql, array $x = []) { $s = $p->prepare($sql); $s->execute($x); return $s->fetchColumn(); };
+$rows = function (PDO $p, string $sql, array $x = []): array { $s = $p->prepare($sql); $s->execute($x); return $s->fetchAll(PDO::FETCH_ASSOC); };
+$tok = function ($s): string { return (string)preg_replace('/[^A-Za-z0-9_.:\/+-]/', '', (string)$s); };
+$setNow = function (array $c, string $k): bool { return array_key_exists($k, $c) && $c[$k] !== null && $c[$k] !== '' && $c[$k] !== false; };
+$flag = function ($v): bool { if (is_bool($v)) return $v; return in_array(strtolower(trim((string)$v)), ['1', 'true', 'on', 'yes'], true); };
+$lib = function (string $root, array $names) { foreach ($names as $l) require_once rtrim($root, '/') . '/lib/' . $l . '.php'; };
+$csv = function (array $x): string { return $x === [] ? '-' : implode(',', $x); };
+$pct = function (array $v, int $q): int {
+    if ($v === []) return 0;
+    sort($v);
+    $i = (int)ceil($q / 100 * count($v)) - 1;
+    return (int)$v[max(0, min(count($v) - 1, $i))];
+};
+$T3 = ['wa_media', 'wa_voice_calls', 'wa_voice_acks'];
+$VSTEPS = ['ack', 'voice-measure', 'voice-dry-run', 'voice-staff', 'voice-reply'];
+$LABEL = '@@VN_LABEL@@';   // VoiceTranscription::LABEL, from Git: R4's labelled body begins with it
+// Part V's switch and record keys (its five rows' rowKeys and their sf_skip_/sf_override_ keys, as allKeys() has them)
+// and its settings (settingKeys() whose part is V), from a code root's SalesFollowupLadder
+$vkeys = function (string $root) use ($lib, $VSTEPS): array {
+    $lib($root, ['UtcClock', 'SalesFollowupLadder']);
+    $all = SalesFollowupLadder::allKeys(); $sw = [];
+    foreach ($VSTEPS as $s) {
+        if (SalesFollowupLadder::row($s) === null) throw new RuntimeException('step');
+        foreach (SalesFollowupLadder::rowKeys($s) as $k) $sw[] = $k;
+        $sw[] = 'sf_skip_' . $s; $sw[] = 'sf_override_' . $s;
+    }
+    $sw = array_values(array_intersect(array_values(array_unique($sw)), $all));
+    $st = [];
+    foreach (SalesFollowupLadder::SETTINGS as $k => $d) {
+        if ((string)($d['part'] ?? '') === 'V' && in_array($k, SalesFollowupLadder::settingKeys(), true)) $st[] = $k;
+    }
+    return [$sw, $st];
+};
+// 090's objects on its three tables, as a code root's own 090 makes them through its own MigrationRunner::splitStatements,
+// executed on an empty database in memory (as BANK_PHP reads 088): by type and name, with tbl_name and SQL text
+$want090 = function (string $root) use ($lib, $T3): array {
+    $lib($root, ['StoreInterface', 'MigrationRunner']);
+    $sql = @file_get_contents(rtrim($root, '/') . '/migrations/090_wa_voice.sql');
+    if (!is_string($sql) || $sql === '') throw new RuntimeException('nofile');
+    $m = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    foreach (MigrationRunner::splitStatements($sql) as $st) $m->exec($st);
+    $w = [];
+    foreach ($m->query("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_ASSOC) as $o) {
+        if (in_array((string)$o['tbl_name'], $T3, true)) $w[(string)$o['type'] . ':' . (string)$o['name']] = $o;
+    }
+    return $w;
+};
+$storeRow = function (PDO $p) use ($has): array {
+    if (!$has($p, 'kyc_config')) return [];
+    $j = $p->query('SELECT data FROM kyc_config WHERE id = 0 LIMIT 1')->fetchColumn();
+    $d = is_string($j) ? json_decode($j, true) : null;
+    return is_array($d) ? $d : [];
+};
+try {
+    switch ($mode) {
+    case 'vkeys':    // vkeys ROOT — Part V's switch and record keys and its settings, by name (the rollback's VN-RB1)
+        [$sw, $st] = $vkeys($a[0]);
+        echo 'vswitch=', count($sw), ' vsettings=', count($st), ' vswitchnames=', $csv($sw), ' vsettingnames=', $csv($st);
+        break;
+
+    case 'g1':       // g1 ROOT DIR — VN-G1 (settings) and VN-CA4 ("no switch changed"): which of Part V's keys and settings
+                     // DIR's settings copies and its copy's store row hold, by name, never a value
+        [$root, $dir] = $a;
+        [$sw, $st] = $vkeys($root);
+        $lib($root, ['bootstrap_data', 'timezone', 'PluginConfig']);
+        $c = PluginConfig::read($root, $dir);
+        $store = is_file($dir . '/plugin.sqlite3') ? $storeRow($ro($dir . '/plugin.sqlite3')) : [];
+        $sws = []; foreach ($sw as $k) if ($setNow($c, $k) || array_key_exists($k, $store)) $sws[] = $k;
+        $sts = []; foreach ($st as $k) if ($setNow($c, $k) || array_key_exists($k, $store)) $sts[] = $k;
+        echo 'vswitch=', count($sw), ' vsettings=', count($st), ' vswset=', count($sws), ' vset=', count($sts),
+             ' vswitchnames=', $csv($sw), ' vswsetnames=', $csv($sws), ' vsetnames=', $csv($sts);
+        break;
+
+    case 'g3':       // g3 ROOT LIVE PDD — VN-G3: through ROOT's (the pin's) PluginConfig::read on the LIVE files and vault —
+                     // it writes nothing — the OpenAI key set or not (never its value), ai_provider, ai_enabled
+        [$root, $live, $pdd] = $a;
+        $lib($root, ['bootstrap_data', 'PluginConfig']);
+        $c = PluginConfig::read($live, $pdd);
+        $k = trim((string)($c['openai_api_key'] ?? '')) !== '' ? 'set' : 'not-set';
+        $c['openai_api_key'] = null;
+        $pv = strtolower(trim((string)($c['ai_provider'] ?? '')));
+        $pv = $pv === '' ? 'unset' : (in_array($pv, ['claude', 'openai'], true) ? $pv : 'other');
+        $ae = array_key_exists('ai_enabled', $c) ? ($flag($c['ai_enabled']) ? 'on' : 'off') : 'unset';
+        echo 'key=', $k, ' provider=', $pv, ' ai_enabled=', $ae;
+        break;
+
+    case 'objects':  // objects DB ROOT — VN-G2 and VN-M1: 090 as DB has it, read-only, against ROOT's 090 ($want090); the
+                     // ledger row and its checksum (the md5 the runner records); the 090 _schema_checks row; the positive
+                     // control (wa_messages). Names of schema objects only, never a row.
+        [$db, $root] = $a;
+        $w = $want090($root);
+        $p = $ro($db);
+        $have = [];
+        foreach ($p->query("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $have[(string)$o['type'] . ':' . (string)$o['name']] = $o;
+        }
+        $tables = 0; foreach ($T3 as $t) if (isset($have['table:' . $t])) $tables++;
+        $present = 0; $exact = 0; $miss = []; $diff = [];
+        foreach ($w as $k => $o) {
+            if (!isset($have[$k])) { $miss[] = (string)$o['name']; continue; }
+            $present++;
+            if ((string)$have[$k]['sql'] === (string)$o['sql'] && (string)$have[$k]['tbl_name'] === (string)$o['tbl_name']) $exact++;
+            else $diff[] = (string)$o['name'];
+        }
+        $extra = [];
+        foreach ($have as $k => $o) if (!isset($w[$k]) && in_array((string)$o['tbl_name'], $T3, true)) $extra[] = (string)$o['name'];
+        $led = 'absent';
+        if (isset($have['table:_migrations'])) {
+            $c = $one($p, 'SELECT checksum FROM _migrations WHERE filename = ?', ['090_wa_voice.sql']);
+            if ($c !== false && $c !== null) $led = $tok($c);
+        }
+        $sc = 'absent';
+        if (isset($have['table:_schema_checks'])) {
+            $s = $p->prepare('SELECT found, expected FROM _schema_checks WHERE migration = ?'); $s->execute(['090_wa_voice.sql']);
+            $r = $s->fetch(PDO::FETCH_NUM);
+            if ($r) $sc = (int)$r[0] . '/' . (int)$r[1];
+        }
+        $l = function (array $x): string { return $x === [] ? '-' : implode(',', array_slice($x, 0, 6)) . (count($x) > 6 ? ',+' : ''); };
+        echo 'tables=', $tables, '/', count($T3), ' objects=', $present, '/', count($w), ' exact=', $exact, '/', count($w),
+             ' extra=', count($extra), ' ledger=', $led, ' sc=', $sc, ' control=', isset($have['table:wa_messages']) ? 'yes' : 'no',
+             ' missing=', $l($miss), ' differs=', $l($diff), ' extras=', $l($extra);
+        break;
+
+    case 'g5':       // g5 ROOT DIR — VN-G5, the voice baseline on DIR's copy over 30 days, counts only: inbound [AUDIO] by
+                     // department channel (any other channel as "other": a registry id can name a person) and per handset per
+                     // Kampala day (p50, p95, max) with the conversations that sent one (p95)
+                     // against wa_voice_ack_daily_max; the share a person answered within 1 h; DishNet Bot rows; the
+                     // settings the part reads; sqlite_version() (090's check needs pragma_table_info, from 3.16); the tenant
+                     // the copy reads as (its own vault), so a handset mapping that reads "unmapped" can be told from a copy
+                     // that read no instance
+        [$root, $dir] = $a;
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'VoiceAckLimits', 'HumanTakeover']);
+        $c = PluginConfig::read($root, $dir);
+        $p = $ro($dir . '/plugin.sqlite3');
+        $sv = (string)$p->query('SELECT sqlite_version()')->fetchColumn();
+        $iv = function (string $k) use ($c, $setNow): string { if (!$setNow($c, $k)) return 'unset'; return is_numeric($c[$k]) ? (string)(int)$c[$k] : 'invalid'; };
+        try { $ten = $tok(TenantProfile::current($c, $dir)->id()); } catch (Throwable $e) { $ten = 'unread'; }
+        $tail = ' | tenant=' . ($ten === '' ? 'unread' : $ten) . ' tz=' . $tok(dn_tz($c)) . ' alert_hours=' . $iv('alert_hours_from') . '-' . $iv('alert_hours_to')
+              . ' cooldown_min=' . $iv('wa_human_cooldown_minutes') . ' handover_msg=' . ($setNow($c, 'ai_handover_message') ? 'set' : 'unset')
+              . ' multi_number=' . ($setNow($c, 'multi_number_channels_enabled') ? ($flag($c['multi_number_channels_enabled']) ? 'on' : 'off') : 'unset')
+              . ' sqlite=' . $tok($sv) . ' pragma_table_info=' . (version_compare($sv, '3.16.0', '>=') ? 'ok' : 'TOO-OLD');
+        if (!$has($p, 'wa_messages') || !$has($p, 'wa_conversations')) { echo 'audio=absent', $tail; break; }
+        $since = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
+        $inst = [];
+        foreach (['sales', 'support', 'account'] as $r) { $i = strtolower(trim((string)($c['evo_instance_' . $r] ?? ''))); if ($i !== '') $inst[$r] = $i; }
+        $lab = []; foreach ($inst as $r => $i) $lab[$i] = isset($lab[$i]) ? $lab[$i] . '+' . $r : $r;
+        $labels = array_values(array_unique(array_merge(HumanTakeover::AUTOMATION_LABELS, ['WhatsApp auto-reply'])));
+        $ph = implode(',', array_fill(0, count($labels), '?'));
+        $z = new DateTimeZone('Africa/Kampala'); $u = new DateTimeZone('UTC');
+        $s = $p->prepare("SELECT m.conversation_id AS cid, c.channel AS ch, m.created_at AS t,
+                                 EXISTS (SELECT 1 FROM wa_messages o WHERE o.conversation_id = m.conversation_id AND o.direction = 'out'
+                                           AND o.role = 'agent' AND COALESCE(o.agent_name, '') NOT IN ($ph)
+                                           AND o.created_at > m.created_at AND o.created_at <= datetime(m.created_at, '+1 hour')) AS ans
+                            FROM wa_messages m JOIN wa_conversations c ON c.id = m.conversation_id
+                           WHERE m.direction = 'in' AND m.body = '[AUDIO]' AND m.created_at >= ? ORDER BY m.id");
+        $s->execute(array_merge($labels, [$since]));
+        $byCh = []; $perDay = []; $convDay = []; $total = 0; $ans = 0;
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $total++;
+            $ch = $tok(strtolower((string)$r['ch'])); if ($ch === '') $ch = 'none';
+            $chk = in_array($ch, ['sales', 'support', 'account'], true) ? $ch : 'other';   // a registry channel's id can name a person: never printed
+            $byCh[$chk] = ($byCh[$chk] ?? 0) + 1;
+            $h = isset($inst[$ch]) ? $lab[$inst[$ch]] : 'unmapped';
+            try { $t = new DateTime((string)$r['t'], $u); } catch (Throwable $e) { continue; }
+            $t->setTimezone($z); $d = $t->format('Y-m-d');
+            $perDay[$h][$d] = ($perDay[$h][$d] ?? 0) + 1;
+            $convDay[$h][$d][(int)$r['cid']] = true;
+            if ((int)$r['ans'] === 1) $ans++;
+        }
+        $lim = VoiceAckLimits::of($c);
+        ksort($byCh); $bc = []; foreach ($byCh as $k => $v) $bc[] = $k . ':' . $v;
+        ksort($perDay); $hs = [];
+        foreach ($perDay as $h => $days) {
+            $v = array_values($days); $cv = [];
+            foreach ($convDay[$h] as $set) $cv[] = count($set);
+            $hs[] = $h . '{days=' . count($v) . ',p50=' . $pct($v, 50) . ',p95=' . $pct($v, 95) . ',max=' . max($v) . ',conv_p95=' . $pct($cv, 95) . '}';
+        }
+        $bot = (int)$one($p, "SELECT COUNT(*) FROM wa_messages WHERE agent_name = 'DishNet Bot' AND created_at >= ?", [$since]);
+        echo 'audio=', $total, ' by_channel=', $csv($bc), ' handsets=', $hs === [] ? '-' : implode('', $hs),
+             ' ack_daily_max=', is_array($lim) ? (int)$lim['daily_max'] : 'INVALID', ' answered_1h=', $ans, '/', $total,
+             ' dishnet_bot=', $bot, $tail;
+        break;
+
+    case 'events':   // events DB — VN-G6 on a copy: the ai.media and ai.voice_ack events, by status
+        $p = $ro($a[0]);
+        if (!$has($p, 'events')) { echo 'events=absent media=0 ack=0'; break; }
+        $n = ['ai.media' => 0, 'ai.voice_ack' => 0]; $o = ['ai.media' => [], 'ai.voice_ack' => []];
+        foreach ($p->query("SELECT event_type, status, COUNT(*) FROM events WHERE event_type IN ('ai.media', 'ai.voice_ack') GROUP BY 1, 2 ORDER BY 1, 2")->fetchAll(PDO::FETCH_NUM) as $r) {
+            $n[(string)$r[0]] += (int)$r[2]; $o[(string)$r[0]][] = $tok($r[1]) . ':' . (int)$r[2];
+        }
+        echo 'events=present media=', $n['ai.media'], ' ack=', $n['ai.voice_ack'], ' media_by=', $csv($o['ai.media']), ' ack_by=', $csv($o['ai.voice_ack']);
+        break;
+
+    case 'ledger':   // ledger DB — VN-M1's bounded wait: 090's row in the LIVE book's migration ledger, read-only, the ledger only
+        $p = $ro($a[0]);
+        $n = $has($p, '_migrations') ? (int)$one($p, 'SELECT COUNT(*) FROM _migrations WHERE filename = ?', ['090_wa_voice.sql']) : 0;
+        echo 'mig090=', $n > 0 ? 1 : 0;
+        break;
+
+    case 'ca1':      // ca1 ROOT DIR — VN-CA1 through ROOT's (the installed) gates, in memory: on Uganda as DIR's copy reads (its
+                     // own vault, so its own tenant: ug_gate, StaffJobsGate::applies on the copy's own configuration, is what
+                     // lets the Uganda half be judged at all) — voiceMode for every channel, VoiceAck::enabled,
+                     // MediaPolicy::enabled; the same with the assistant on (ai_enabled forced on, in memory: then Part V's own
+                     // keys decide, not ai_enabled); the transcriber factory on the copy's own configuration with a sentinel key
+                     // added (so "none" means the provider is unset, not that the copy holds no secret), and its control, the
+                     // same with the provider openai, which builds one; then every voice key on in a scratch configuration,
+                     // forced South Sudan (all off: the gate, not the switches), and the same keys on Uganda (the control that
+                     // they do turn the rungs on). The scratch configurations live in this process alone; the key is a fixed
+                     // sentinel, never stored and never printed; a transcriber built from it only stores its fields
+                     // (OpenAiTranscriber's constructor makes no call), and nothing ever calls transcribe().
+        [$root, $dir] = $a;
+        $lib($root, ['bootstrap_data', 'timezone', 'UtcClock', 'PluginConfig', 'TenantProfile', 'StaffJobsGate', 'MediaPolicy', 'VoiceAckLimits', 'VoiceAck', 'Transcriber']);
+        $c = PluginConfig::read($root, $dir);
+        $gate = StaffJobsGate::applies($c, $dir) ? 1 : 0;
+        try { $ten = $tok(TenantProfile::current($c, $dir)->id()); } catch (Throwable $e) { $ten = ''; }
+        $uai = array_key_exists('ai_enabled', $c) ? ($flag($c['ai_enabled']) ? 'on' : 'off') : 'unset';
+        $chs = ['sales', 'support', 'account'];
+        $p = $ro($dir . '/plugin.sqlite3');
+        if ($has($p, 'wa_conversations')) {
+            foreach ($p->query('SELECT DISTINCT channel FROM wa_conversations LIMIT 50')->fetchAll(PDO::FETCH_COLUMN) as $ch) {
+                $ch = $tok(strtolower((string)$ch)); if ($ch !== '' && !in_array($ch, $chs, true)) $chs[] = $ch;
+            }
+        }
+        $modes = function (array $cfg, string $d) use ($chs): string {
+            $o = []; foreach ($chs as $ch) { $m = MediaPolicy::voiceMode($cfg, $d, $ch); $o[$m] = ($o[$m] ?? 0) + 1; }
+            ksort($o); $x = []; foreach ($o as $k => $v) $x[] = $k . ':' . $v;
+            return implode(',', $x);
+        };
+        $ug = $modes($c, $dir);
+        $cai = $c; $cai['ai_enabled'] = true;   // the copy's own configuration with the assistant on: Part V's own keys decide
+        $SENTINEL = 'vn-ca1-sentinel-not-a-key';
+        $fk = $c; $fk['openai_api_key'] = $SENTINEL;   // the copy's own provider, a key that is no key: none = the provider unset
+        $fkc = $fk; $fkc['ai_transcription_provider'] = 'openai';   // the control: the same with the provider openai builds one
+        $fac = TranscriberFactory::fromConfig($fk) === null ? 'none' : 'built';
+        $facc = TranscriberFactory::fromConfig($fkc) === null ? 'none' : 'built';
+        $fk = null; $fkc = null;
+        $pv = TranscriberFactory::providerName($c);
+        $pv = in_array($pv, ['none', 'openai', 'fake'], true) ? $pv : 'other';
+        $day = gmdate('Y-m-d', time() - 86400);
+        $on = $c;
+        foreach (['ai_enabled' => true, 'ai_media_enabled' => '1', 'ai_media_voice' => '1', 'ai_transcription_provider' => 'openai',
+                  'ai_media_voice_privacy_line' => $day, 'openai_api_key' => $SENTINEL, 'ai_media_voice_handover' => '1',
+                  'ai_media_voice_reply' => '1', 'ai_media_voice_reply_approved' => $day, 'ai_media_voice_reply_channels' => 'all',
+                  'wa_voice_ack_enabled' => '1', 'wa_send_ledger' => 'on'] as $k => $v) $on[$k] = $v;
+        $ss = $dir . '/vss'; @mkdir($ss, 0700); @file_put_contents($ss . '/kyc_config.json', json_encode(['tenant_profile' => 'south-sudan']));
+        $onSs = $on; $onSs['tenant_profile'] = 'south-sudan';
+        $onUg = $on; $onUg['tenant_profile'] = 'uganda';
+        echo 'channels=', count($chs), ' tenant=', $ten === '' ? 'unread' : $ten, ' ug_gate=', $gate, ' ug_ai=', $uai,
+             ' ug=', $ug, ' ug_ack=', VoiceAck::enabled($c, $dir) ? 1 : 0, ' ug_media=', MediaPolicy::enabled($c, $dir) ? 1 : 0,
+             ' ugai=', $modes($cai, $dir), ' ugai_ack=', VoiceAck::enabled($cai, $dir) ? 1 : 0, ' ugai_media=', MediaPolicy::enabled($cai, $dir) ? 1 : 0,
+             ' provider=', $pv, ' factory=', $fac, ' factory_ctl=', $facc, ' ss=', $modes($onSs, $ss), ' ss_ack=', VoiceAck::enabled($onSs, $ss) ? 1 : 0, ' ss_media=', MediaPolicy::enabled($onSs, $ss) ? 1 : 0,
+             ' ctl=', $modes($onUg, $dir), ' ctl_ack=', VoiceAck::enabled($onUg, $dir) ? 1 : 0;
+        break;
+
+    case 'store':    // store DIR KEY=VALUE … — VN-CA2's scratch configuration on a COPY: each key set (an empty value removes it)
+                     // in DIR's kyc_config.json and in the copy's settings row (master and cron_status read the store's)
+        $dir = rtrim((string)array_shift($a), '/');
+        if (strpos($dir, '/tmp/dnb-') !== 0 || strpos($dir, '..') !== false) { echo '?notacopy'; exit(2); }
+        $kv = [];
+        foreach ($a as $x) { $i = strpos((string)$x, '='); if ($i === false || $i === 0) { echo '?arg'; exit(2); } $kv[substr((string)$x, 0, $i)] = substr((string)$x, $i + 1); }
+        $f = $dir . '/kyc_config.json';
+        $j = is_file($f) ? json_decode((string)file_get_contents($f), true) : [];
+        if (!is_array($j)) $j = [];
+        foreach ($kv as $k => $v) { if ($v === '') unset($j[$k]); else $j[$k] = $v; }
+        if (@file_put_contents($f, json_encode($j, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT)) === false) { echo '?write'; exit(3); }
+        @chmod($f, 0600);
+        $p = new PDO('sqlite:' . $dir . '/plugin.sqlite3', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 15]);
+        $p->exec('PRAGMA busy_timeout = 5000');
+        $n = 0;
+        if ($has($p, 'kyc_config')) {
+            $d = $storeRow($p);
+            foreach ($kv as $k => $v) { if ($v === '') unset($d[$k]); else $d[$k] = $v; }
+            $u = $p->prepare('UPDATE kyc_config SET data = ? WHERE id = 0');
+            $u->execute([json_encode($d, JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT)]);
+            $n = $u->rowCount();
+        }
+        echo 'store=ok keys=', count($kv), ' row=', $n;
+        break;
+
+    case 'ca4':      // ca4 DB QFMAX VMAX EVMAX COPYUNIX — VN-CA4 on a fresh copy after the copy (ruling R18): what was added
+                     // since the redeploy baseline (an id above its table's or its event type's largest), each claim, decision
+                     // and call by its own second against the copy's start: in a later second ("late"), the same, or before
+        [$db, $qmax, $vmax, $emax, $cu] = $a + ['', '0', '0,0,0', '0,0', '0'];
+        $qmax = max(0, (int)$qmax); $cu = (int)$cu;
+        $vm = array_map('intval', explode(',', (string)$vmax)) + [0, 0, 0];
+        $em = array_map('intval', explode(',', (string)$emax)) + [0, 0];
+        $p = $ro($db);
+        $cnt = []; $add = [];
+        foreach ($T3 as $i => $t) {
+            $cnt[] = $has($p, $t) ? (int)$one($p, 'SELECT COUNT(*) FROM ' . $t) : -1;
+            $add[] = $has($p, $t) ? (int)$one($p, 'SELECT COUNT(*) FROM ' . $t . ' WHERE id > ?', [max(0, $vm[$i])]) : 0;
+        }
+        $ev = []; $eva = [];
+        foreach (['ai.media', 'ai.voice_ack'] as $i => $x) {
+            $ev[] = $has($p, 'events') ? (int)$one($p, 'SELECT COUNT(*) FROM events WHERE event_type = ?', [$x]) : 0;
+            $eva[] = $has($p, 'events') ? (int)$one($p, 'SELECT COUNT(*) FROM events WHERE event_type = ? AND id > ?', [$x, max(0, $em[$i])]) : 0;
+        }
+        $when = function (int $t) use ($cu): string { return $t > $cu ? 'late' : ($t === $cu ? 'same' : 'before'); };
+        $cl = ['late' => 0, 'same' => 0, 'before' => 0];
+        if ($has($p, 'wa_auto_sends')) {
+            foreach ($rows($p, "SELECT CAST(strftime('%s', claimed_at) AS INTEGER) AS t FROM wa_auto_sends WHERE kind = 'voice_ack' AND mode = 'claim' AND id > ?", [$qmax]) as $r) $cl[$when((int)$r['t'])]++;
+        }
+        $ak = ['late' => 0, 'same' => 0, 'before' => 0]; $nol = 0; $by = [];
+        if ($has($p, 'wa_voice_acks')) {
+            foreach ($rows($p, 'SELECT outcome, reason, ledger_ref FROM wa_voice_acks WHERE id > ? ORDER BY id', [max(0, $vm[2])]) as $r) {
+                $o = (string)$r['outcome'];
+                $k = $tok($o) . '/' . ($r['reason'] === null || (string)$r['reason'] === '' ? '-' : $tok($r['reason']));
+                $by[$k] = ($by[$k] ?? 0) + 1;
+                if ($o !== 'sent' && $o !== 'uncertain') continue;
+                $t = ($has($p, 'wa_auto_sends') && (string)$r['ledger_ref'] !== '')
+                   ? $one($p, "SELECT CAST(strftime('%s', claimed_at) AS INTEGER) FROM wa_auto_sends WHERE kind = 'voice_ack' AND ref = ? ORDER BY id DESC LIMIT 1", [(string)$r['ledger_ref']])
+                   : false;
+                if ($t === false || $t === null) { $nol++; continue; }
+                $ak[$when((int)$t)]++;
+            }
+        }
+        $ca = ['late' => 0, 'same' => 0, 'before' => 0];
+        if ($has($p, 'wa_voice_calls')) {
+            foreach ($rows($p, "SELECT CAST(strftime('%s', created_at) AS INTEGER) AS t FROM wa_voice_calls WHERE id > ?", [max(0, $vm[1])]) as $r) $ca[$when((int)$r['t'])]++;
+        }
+        ksort($by); $bs = []; foreach ($by as $k => $v) $bs[] = $k . ':' . $v;
+        echo 'rows=', implode(',', $cnt), ' events=', implode(',', $ev), ' added=', implode(',', $add), ' ev_added=', implode(',', $eva),
+             ' ack_claims_late=', $cl['late'], ' acks_late=', $ak['late'], ' calls_late=', $ca['late'],
+             ' ack_claims_same=', $cl['same'], ' ack_claims_before=', $cl['before'], ' acks_same=', $ak['same'], ' acks_before=', $ak['before'],
+             ' acks_no_ledger=', $nol, ' calls_same=', $ca['same'], ' calls_before=', $ca['before'], ' decisions=', $csv($bs);
+        break;
+
+    case 'k1':       // k1 ROOT LIVE PDD — VN-K1: the stored OpenAI key, read in memory through ROOT's (the installed)
+                     // PluginConfig::read on the LIVE files and vault — it writes nothing — and never printed, looked for in
+                     // the plugin's log files (the data folder's and the code folder's data/, *.log and *log*.json, and PHP's
+                     // own error_log where it is a readable file), each read in pieces; counts only
+        [$root, $live, $pdd] = $a;
+        $lib($root, ['bootstrap_data', 'PluginConfig']);
+        $c = PluginConfig::read($live, $pdd);
+        $key = trim((string)($c['openai_api_key'] ?? '')); $c = null;
+        $files = [];
+        foreach ([rtrim($pdd, '/'), rtrim($live, '/') . '/data'] as $d) {
+            if ($d === '' || !is_dir($d)) continue;
+            foreach (array_merge(glob($d . '/*.log') ?: [], glob($d . '/*log*.json') ?: []) as $f) if (is_file($f)) $files[] = $f;
+        }
+        $el = (string)ini_get('error_log'); if ($el !== '' && is_file($el)) $files[] = $el;
+        $files = array_values(array_unique($files));
+        if ($key === '') { echo 'key=unset files=', count($files); break; }
+        $hits = 0; $read = 0; $unread = 0; $n = strlen($key);
+        foreach ($files as $f) {
+            $h = @fopen($f, 'rb');
+            if ($h === false) { $unread++; continue; }
+            $read++; $carry = ''; $hit = false;
+            while (!feof($h)) {
+                $b = fread($h, 1048576);
+                if ($b === false || $b === '') break;
+                $b = $carry . $b;
+                if (strpos($b, $key) !== false) { $hit = true; break; }
+                $carry = $n > 1 ? substr($b, -($n - 1)) : '';
+            }
+            fclose($h);
+            if ($hit) $hits++;
+        }
+        $key = '';
+        echo 'key=set files=', count($files), ' read=', $read, ' unreadable=', $unread, ' hits=', $hits;
+        break;
+
+    case 'rb':       // rb DB IDS — VN-RB1b–VN-RB4 on a copy taken after QF-RB1: what Part V's two hooks left (pending audio rows,
+                     // voice turns, acknowledgement and ai.media events), R4's labelled bodies and any body labelled at a lower
+                     // rung; the events' ids go to IDS (the sheet), never the line
+        [$db, $ids] = $a;
+        $p = $ro($db);
+        $ev = function (string $type, array $st, bool $voice) use ($p, $has): array {
+            if (!$has($p, 'events')) return [];
+            $q = "SELECT id FROM events WHERE event_type = ? AND status IN ('" . implode("','", $st) . "')"
+               . ($voice ? " AND payload LIKE '%\"origin\":\"voice\"%'" : '') . ' ORDER BY id';
+            $s = $p->prepare($q); $s->execute([$type]);
+            return array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
+        };
+        $turns = $ev('ai.reply', ['pending', 'processing'], true);
+        $acks = $ev('ai.voice_ack', ['pending', 'processing'], false);
+        $media = $ev('ai.media', ['pending', 'failed', 'processing'], false);
+        $pend = $has($p, 'wa_media') ? (int)$one($p, "SELECT COUNT(*) FROM wa_media WHERE kind = 'audio' AND status = 'pending'") : 0;
+        $r4 = 0; $r3 = 0;
+        if ($has($p, 'wa_media') && $has($p, 'wa_messages')) {
+            $r4 = (int)$one($p, "SELECT COUNT(*) FROM wa_media w JOIN wa_messages m ON m.wa_message_id = w.wa_message_id
+                                  WHERE w.kind = 'audio' AND w.voice_rung = 'reply' AND substr(m.body, 1, ?) = ?", [strlen($LABEL), $LABEL]);
+            $r3 = (int)$one($p, "SELECT COUNT(*) FROM wa_media w JOIN wa_messages m ON m.wa_message_id = w.wa_message_id
+                                  WHERE w.kind = 'audio' AND COALESCE(w.voice_rung, '') <> 'reply' AND substr(m.body, 1, ?) = ?", [strlen($LABEL), $LABEL]);
+        }
+        $say = function (array $x): string { return $x === [] ? 'none' : implode(' ', array_slice($x, 0, 200)) . (count($x) > 200 ? ' …' : ''); };
+        $w = ['voice turns left (ai.reply with origin voice, pending or processing; event ids): ' . $say($turns),
+              'acknowledgement events left (ai.voice_ack, pending or processing; event ids): ' . $say($acks),
+              'ai.media events pending (pending, failed or processing; event ids): ' . $say($media)];
+        if (@file_put_contents($ids, implode("\n", $w) . "\n") === false) { echo '?write'; exit(3); }
+        @chmod($ids, 0600);
+        echo 'pending_audio=', $pend, ' voice_turns=', count($turns), ' ack_events=', count($acks), ' ai_media=', count($media),
+             ' r4_bodies=', $r4, ' r3_bodies=', $r3;
+        break;
+
+    case 'rb5':      // rb5 DB FIRST — VN-RB5 and VN-RB6 on a copy after the put-back: 090's three tables and its _schema_checks
+                     // row, the wa_voice_calls rows; the first call's moment (UTC) to FIRST (the sheet), never the line
+        [$db, $first] = $a;
+        $p = $ro($db);
+        $t = 0; foreach ($T3 as $x) if ($has($p, $x)) $t++;
+        $sc = ($has($p, '_schema_checks') && (int)$one($p, 'SELECT COUNT(*) FROM _schema_checks WHERE migration = ? AND found = expected', ['090_wa_voice.sql']) > 0) ? 'present' : 'absent';
+        $n = $has($p, 'wa_voice_calls') ? (int)$one($p, 'SELECT COUNT(*) FROM wa_voice_calls') : 0;
+        if ($n > 0) {
+            $f = (string)preg_replace('/[^0-9: -]/', '', (string)$one($p, 'SELECT MIN(created_at) FROM wa_voice_calls'));
+            if (@file_put_contents($first, ($f === '' ? 'not readable' : $f . ' UTC') . "\n") !== false) @chmod($first, 0600);
+        }
+        echo 'tables=', $t, '/', count($T3), ' sc=', $sc, ' calls=', $n;
+        break;
+
+    default:
+        echo '?mode'; exit(2);
+    }
+} catch (Throwable $e) { echo '?', get_class($e); exit(3); }

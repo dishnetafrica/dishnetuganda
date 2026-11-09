@@ -1,0 +1,414 @@
+# ── 5.18.104: Part V's checks — the voice notes (VN) and the acknowledgement (VA) (root docs/73 §H.3.25; rulings R7, R14, R18) ──
+# Read-only, as every reading here, on COPIES — Part F's qf_copy (the book's consistent copy, its settings row and the
+# settings files cut to the ladder's keys, never a secret; the run's vault copy; a code root of its own, the PIN's from Git
+# at stage A and the INSTALLED code after the copy), or vn_book_copy (the book alone, its settings row cut to the book's
+# keys) in the rollback — and as text: the pin's files from Git (VN-G4) and the installed files on the host (VN-CA3,
+# VN-K2). Four readings go to the live data folder, none of them writing it: VN-G3 and VN-K1 read the settings files and
+# the vault through a code root's PluginConfig::read (the OpenAI key in memory only: "set" or "not set", never its value),
+# VN-M1's bounded wait reads 090's row of the migration ledger with SQLITE_OPEN_READONLY, and VN-CA4's redeploy baseline
+# is read in Part F's own baseline call (QF-G1's one moment, root docs/73 §H.2.15.1, §H.3.25 VN-G6). Nothing here calls
+# OpenAI, Evolution or uCRM, and nothing here writes the live book: on a redeploy every key Part V owns is cleared by
+# QF-G4 alone (ruling R7), and in a rollback by QF-RB1 alone. The log carries counts, fixed codes, key and schema names
+# and PASS/FAIL/NOTE; event ids, the baseline's largest ids and the first OpenAI call's date go to the run's 0600 sheet.
+# Part V's acknowledgement (VA) has one code of its own, VA-ON1 (--after-only); at stage A and after the copy its keys,
+# events and limits are read by the VN codes (VN-G1, VN-G5, VN-G6, VN-CA1, VN-CA4).
+VN_PHP="$(cat <<'PHP'
+@@VN_PHP@@
+PHP
+)"
+VN_090_MD5="@@VN_090_MD5@@"; VN_090_SC="@@VN_090_SC@@"; VN_OBJ_N="@@VN_OBJ_N@@"   # from Git: 090's md5 (the ledger's checksum), its _schema_checks count, its objects on its three tables
+VN_ASKERS='@@VN_ASKERS@@'   # the methods that ask the gate, derived from the pin's text (MediaPolicy's five predicates, VoiceAck::enabled)
+VN_CALLS_N="@@VN_CALLS_N@@"; VN_8C_IN="@@VN_8C_IN@@"; VN_W1_N="@@VN_W1_N@@"   # from Git: their calls in the pin's tree; 8c's gated lines; W1's lines
+VN_R1_LINE="$(cat <<'TXT'
+@@VN_R1_LINE@@
+TXT
+)"   # ruling R1's ai_media line, byte for byte (root docs/73 §H.3.19), the third of the four new jobs
+VN_EP_LINE="$(cat <<'TXT'
+@@VN_EP_LINE@@
+TXT
+)"   # cron/event_processor.php's two lists, as the pin has them (from Git): Uganda's names ai.media and ai.voice_ack
+VN_STEPS="@@VN_STEPS@@"   # step:check for Part V's five rows, from the pin's SalesFollowupLadder (ack's VA-ON1 beside Part F's L-ON)
+VN_BASE=""; VN_BASE_F=""; VN_SWITCH=""; VN_G4_BAD=""; VN_G4_SAY=""; QF_G2_TRIAL=""; QF_G2_NEG=""; QF_RB1_OUT=""; QF_RB3_VC=""
+vn_php() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -r "$VN_PHP" "$@"; }   # vn_php MODE ARG… — one line
+vn_pin() { git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$1" 2>/dev/null; }   # a file of the pin, as text, from Git
+vn_base_text() { git -C "$REPO" show "$BASELINE_COMMIT:$PLUGIN/$1" 2>/dev/null; }    # a file of 5.18.103, as text, from Git
+# vn_book_copy KIND — the book alone, its consistent copy (VACUUM INTO, its settings row cut to the book's keys) in a
+# folder of mode 700 under the run's own folder in the container's /tmp; prints the folder, or fails
+vn_book_copy() {
+  local d o size free
+  cih_init || return 1
+  size="$(db_state | sed -nE 's/^size=([0-9]+) .*/\1/p')"; free="$(dxo php -r 'echo (int)@disk_free_space($argv[1]);' /tmp)"
+  case "$size$free" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$free" -ge $(( size + 67108864 )) ] || return 1
+  QF_N=$((QF_N + 1)); d="$CIH_BASE/vn-$1-$QF_N"
+  dxo mkdir -m 700 "$d" || return 1
+  o="$(dxo php -d display_errors=stderr -r "$CIHV_PHP" "$PDD_IN/plugin.sqlite3" "$d/plugin.sqlite3" "$BOOK_KEYS_CSV")"
+  case "$o" in "copy=ok "*" side=no") ;; *) cih_drop "$d"; return 1 ;; esac
+  echo "$d"
+}
+
+# ── VN-G4's text readings: each prints one line of counts, from a file's text on stdin (the same rules the derivation
+# asserted on the pin's tree, so a count that moves is a pin that is not the reviewed one) ──
+# 8c's block: every line that reads the gate, a policy, the store or the bus sits between its "try {" and its catch
+vn_8c() {
+  awk 'index($0, "    // ── 8c. 5.18.104") == 1 { b++; inb = 1; t = 0; next }
+       inb && index($0, "    // ── 9. Queue for the AI") == 1 { inb = 0 }
+       inb {
+         if ($0 == "        try {") t = 1
+         else if (index($0, "        } catch (\\Throwable $e)") == 1) t = 0
+         if ($0 ~ /(MediaPolicy|VoiceAck|InboundMedia|StaffJobsGate)::/ || index($0, "$bus->emit(") > 0) { if (t) i++; else o++ }
+         if (index($0, "require_once") > 0 && !t) r++
+       }
+       END { printf "blocks=%d in=%d out=%d require_out=%d\n", b, i, o, r }'
+}
+# every call of a method that asks the gate passes the data directory second: calls, one-argument calls, calls not closed
+# on their line, calls whose second argument does not name the data directory — over the lines `git grep` gives for
+# VN_ASKERS
+vn_calls() {
+  VN_PAT="$VN_ASKERS" awk '{
+      line = $0; sub(/^[^:]*:[^:]*:[0-9]+:/, "", line); rest = line
+      while (match(rest, ENVIRON["VN_PAT"])) {
+        n++; s = substr(rest, RSTART + RLENGTH); depth = 1; commas = 0; q = ""; closed = 0; p1 = 0; p2 = 0
+        for (i = 1; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (q != "") {
+            if (c == "\\") { i++; continue }
+            if (c == q) q = ""
+            continue
+          }
+          if (c == "\"" || c == "\047") { q = c; continue }
+          if (c == "(" || c == "[" || c == "{") depth++
+          else if (c == ")" || c == "]" || c == "}") { depth--; if (depth == 0) { closed = 1; if (!p2) p2 = i; break } }
+          else if (c == "," && depth == 1) { commas++; if (commas == 1) p1 = i; else if (commas == 2) p2 = i }
+        }
+        if (!closed) u++
+        else if (commas < 1) one++
+        else if (index(substr(s, p1 + 1, p2 - p1 - 1), "dataDir") == 0) nodir++
+        rest = substr(rest, RSTART + RLENGTH)
+      }
+    }
+    END { printf "calls=%d one_arg=%d unclosed=%d not_data_dir=%d\n", n, one, u, nodir }'
+}
+# the fromMe branch, from "    if ($fromMe) {" to its closing "    }"
+vn_fromme() { awk '$0 == "    if ($fromMe) {" { f = 1 } f { print } f && $0 == "    }" { exit }'; }
+# the fromMe branch less Part F's W1 block (its R-07 comment to the first "        }" after it); with "count", W1's lines
+# and its out-marks instead
+vn_fromme_w1() {
+  awk -v want="${1:-text}" '!d && index($0, "5.18.104 (root docs/73") && index($0, "R-07)") { d = 1 }
+       d == 1 { n++; if (index($0, "WaSeenMarks::note(") && index($0, "\047out\047")) w++; if ($0 == "        }") d = 2; next }
+       want == "text" { print }
+       END { if (want == "count") printf "w1=%d out_marks=%d\n", n, w }'
+}
+# the settings tab: the OpenAI key's input, its value empty on Uganda, and the one Uganda flag it reads
+vn_tab() {
+  awk 'index($0, "name=\"openai_api_key\"") { inp++; look = 4; next }
+       look > 0 { look--; if (index($0, "value=\"<?= $_aiKeyUg ? \047\047 : ")) { emp++; look = 0 } }
+       index($0, "$_aiKeyUg = StaffJobsGate::applies(") { asg++ }
+       END { printf "inputs=%d empty=%d assign=%d\n", inp, emp, asg }'
+}
+# master's jobs after notify_retry, in order, and the ai_media line exactly ruling R1's (VN_R1_LINE)
+vn_r1() {
+  VN_R1="$VN_R1_LINE" awk '/^[[:space:]]*\047notify_retry\047[[:space:]]*=>/ { seen = 1; next }
+       seen && /^[[:space:]]*\047[a-z_]+\047[[:space:]]*=>/ { k++; l = $0; sub(/^[[:space:]]*\047/, "", l); sub(/\047.*/, "", l); got = got (k > 1 ? "," : "") l
+                                                          if ($0 == ENVIRON["VN_R1"]) at = k }
+       seen && /^\];/ { exit }
+       END { printf "jobs=%s r1_at=%d\n", got, at }'
+}
+# 089's _schema_checks CREATE as one block of text
+vn_sc_create() { awk '/^CREATE TABLE IF NOT EXISTS _schema_checks \(/ { f = 1 } f { print } f && /\);$/ { exit }'; }
+
+# vn_text_gates — VN-G4, the pin's gates read as text from Git; sets VN_G4_BAD (empty when every one holds) and VN_G4_SAY
+vn_text_gates() {
+  local o w b p c89 c90 ln
+  VN_G4_BAD=""; VN_G4_SAY=""
+  o="$(vn_pin evo_webhook.php | vn_8c)"
+  [ "$o" = "blocks=1 in=$VN_8C_IN out=0 require_out=0" ] || VN_G4_BAD="$VN_G4_BAD 8c:$o"
+  VN_G4_SAY="8c ${o#blocks=1 }"
+  o="$(git -C "$REPO" grep -nE "$VN_ASKERS" "$EXPECTED_PLUGIN_COMMIT" -- "$PLUGIN/*.php" ":(exclude)$PLUGIN/tests" ":(exclude)$PLUGIN/docs" 2>/dev/null | vn_calls)"
+  [ "$o" = "calls=$VN_CALLS_N one_arg=0 unclosed=0 not_data_dir=0" ] || VN_G4_BAD="$VN_G4_BAD askers:$o"
+  VN_G4_SAY="$VN_G4_SAY; gate calls $o"
+  b="$(vn_base_text evo_webhook.php | vn_fromme)"; p="$(vn_pin evo_webhook.php | vn_fromme)"
+  w="$(printf '%s\n' "$p" | vn_fromme_w1 count)"
+  if [ -z "$b" ] || [ "$w" != "w1=$VN_W1_N out_marks=1" ] || [ "$(printf '%s\n' "$p" | vn_fromme_w1 text | sha256sum)" != "$(printf '%s\n' "$b" | sha256sum)" ]; then
+    VN_G4_BAD="$VN_G4_BAD fromMe:not-W1-alone($w)"
+  fi
+  o="$(vn_pin tabs/engage/whatsapp.php | vn_tab)"
+  [ "$o" = "inputs=1 empty=1 assign=1" ] || VN_G4_BAD="$VN_G4_BAD settings-tab:$o"
+  o="$(vn_pin "$MASTER" | vn_r1)"
+  [ "$o" = "jobs=quote_chase,quote_daily_list,ai_media,offers_send r1_at=3" ] || VN_G4_BAD="$VN_G4_BAD master:$o"
+  [ "$(vn_pin "$MASTER" | grep -cxF -- "$VN_R1_LINE")" = "1" ] || VN_G4_BAD="$VN_G4_BAD master:ai_media-line-not-R1's"
+  c89="$(vn_pin migrations/089_quote_followups.sql | vn_sc_create)"; c90="$(vn_pin migrations/090_wa_voice.sql | vn_sc_create)"
+  { [ -n "$c89" ] && [ "$c89" = "$c90" ]; } || VN_G4_BAD="$VN_G4_BAD 090:_schema_checks-CREATE-not-089's"
+  ln="$(vn_pin migrations/090_wa_voice.sql | awk '/^CREATE TABLE IF NOT EXISTS _schema_checks \(/ { c = NR } /^INSERT INTO _schema_checks \(migration, expected, found\)$/ { i = NR; getline nx; if (index(nx, "SELECT \047090_wa_voice.sql\047, ") == 1) k++ } END { printf "%d:%d:%d", c, i, k }')"
+  case "$ln" in 0:*|*:0:*|*:*:0) VN_G4_BAD="$VN_G4_BAD 090:insert($ln)" ;; *) [ "${ln%%:*}" -lt "$(printf '%s' "$ln" | cut -d: -f2)" ] && [ "${ln##*:}" = "1" ] || VN_G4_BAD="$VN_G4_BAD 090:insert-order($ln)" ;; esac
+  [ "$(vn_pin migrations/090_wa_voice.sql | grep -ci 'INDEXED BY')" = "0" ] || VN_G4_BAD="$VN_G4_BAD 090:INDEXED-BY"
+}
+
+# vn_stage — VN-G1–VN-G6, stage A, before anything changes (a deploy and --check): VN-G1 a read of QF-G4's result, VN-G2
+# 090's objects, VN-G3 the OpenAI key (set or not), VN-G4 the pin's gates as text, VN-G5 the voice baseline, VN-G6 the
+# events; on a copy, through the PIN's code from Git. A refusal stops here: nothing has changed. (VN-G7, QF-G2's trial
+# read for 090, is said beside QF-G2; VN-G6's redeploy baseline for VN-CA4 is taken at QF-G1's one moment, stage B.)
+vn_stage() {
+  local sub o v vs k
+  hdr "A. The voice notes and the acknowledgement (5.18.104, Part V's VN; read-only, on a copy through the pin's code, and the pin's text)"
+  sub="$(qf_copy vn "$P3B_PIN")" || stop "NO-GO (VN-G1): a copy of the book could not be made — $QF_ROOT_ERR. Nothing was changed. Send the log file"
+  # VN-G1 — a read of QF-G4's result (ruling R7): Part V's switch and record keys among those QF-G4 found set; its settings
+  o="$(vn_php g1 "$sub/code" "$sub")"
+  case "$o" in vswitch=[1-9]*" vsettings="*) ;; *) cih_drop "$sub"; stop "NO-GO (VN-G1): Part V's keys could not be read through the pin's ladder on the copy (${o:-not read}). Nothing was changed. Send the log file" ;; esac
+  VN_SWITCH="$(qf_kv "$o" vswitchnames)"
+  vs=""; for k in $(printf '%s' "$VN_SWITCH" | tr ',' ' '); do case ",${QF_G4_NAMES:-}," in *",$k,"*) vs="$vs $k" ;; esac; done
+  if [ -n "$vs" ]; then note "VN-G1 PART V'S KEYS SET:$(printf '%s' "$vs" | tr 'a-z' 'A-Z') — QF-G4's one rule decides (ruling R7): $( [ -n "$QF_CLEAR" ] && echo "--clear-switches has the pin's tool clear them after DEPLOY, every part's hooks with them" || echo "they would stop the run") — Part V clears nothing itself"
+  else ok "VN-G1 none of Part V's $(qf_kv "$o" vswitch) switch and record keys is set — QF-G4's read (ruling R7); Part V clears nothing itself"; fi
+  v="$(qf_kv "$o" vsetnames)"
+  note "VN-G1 Part V's settings stored: $(qf_kv "$o" vset) of $(qf_kv "$o" vsettings)$( [ "$v" != "-" ] && [ -n "$v" ] && echo " ($(printf '%s' "$v" | tr ',' ' '))") — names only; printed, never NO-GO and never cleared (ruling R5)"
+  # VN-G2 — none of 090's tables on a first deploy; on a redeploy exactly 090's objects and its _schema_checks row
+  o="$(vn_php objects "$sub/plugin.sqlite3" "$sub/code")"
+  case "$QF_G1" in
+    first)
+      case "$o" in "tables=0/3 objects=0/$VN_OBJ_N exact=0/$VN_OBJ_N extra=0 ledger=absent sc=absent control=yes "*)
+          ok "VN-G2 a first deploy: no wa_media, wa_voice_calls or wa_voice_acks on the copy, no 090 row in the ledger or in _schema_checks; wa_messages read (the positive control)" ;;
+        *) cih_drop "$sub"; stop "NO-GO (VN-G2): a book $EXPECTED_VERSION never ran on (QF-G1: 088 last) already holds some of 090's tables or rows (${o%% missing=*}) — an earlier, unreviewed media table would make 090 PARTIAL. Nothing was changed. Send the log file" ;;
+      esac ;;
+    redeploy)
+      if [ "$(qf_kv "$o" tables)|$(qf_kv "$o" objects)|$(qf_kv "$o" exact)|$(qf_kv "$o" extra)|$(qf_kv "$o" sc)|$(qf_kv "$o" control)" = "3/3|$VN_OBJ_N/$VN_OBJ_N|$VN_OBJ_N/$VN_OBJ_N|0|$VN_090_SC/$VN_090_SC|yes" ]; then
+        ok "VN-G2 a redeploy: exactly 090's $VN_OBJ_N objects on its three tables, each as the pin's 090 makes them through the pin's MigrationRunner::splitStatements in memory, none other; the 090 _schema_checks row present ($VN_090_SC of $VN_090_SC); the ledger's checksum $( [ "$(qf_kv "$o" ledger)" = "$VN_090_MD5" ] && echo "the pin's file's" || echo "NOT the pin's file's ($(qf_kv "$o" ledger | cut -c1-12)…: an earlier build's 090 — said, the objects are the verdict)"); wa_messages read (the positive control)"
+      else cih_drop "$sub"; stop "NO-GO (VN-G2): 090 is applied on this book, but not as the pin makes it (${o}) — a table, an index, a hand-made object or the _schema_checks row differs. Nothing was changed. Send the log file"; fi ;;
+    *) cih_drop "$sub"; stop "NO-GO (VN-G2): QF-G1 did not say what this book is (${QF_G1:-unset}). Nothing was changed. Send the log file" ;;
+  esac
+  # VN-G3 — the OpenAI key set or not, ai_provider, ai_enabled (a note)
+  o="$(vn_php g3 "$P3B_PIN" "$IN_CONTAINER" "$PDD_IN")"
+  case "$o" in "key="*) note "VN-G3 the OpenAI key is $(qf_kv "$o" key | sed 's/-/ /') (read in memory through the pin's PluginConfig, never printed); ai_provider $(qf_kv "$o" provider); ai_enabled $(qf_kv "$o" ai_enabled)" ;;
+    *) note "VN-G3 the OpenAI key, ai_provider and ai_enabled could not be read through the pin's PluginConfig (${o:-not read}) — NOT ESTABLISHED" ;; esac
+  # VN-G4 — the pin's gates, as text
+  vn_text_gates
+  [ -z "$VN_G4_BAD" ] || { cih_drop "$sub"; stop "NO-GO (VN-G4): the pin's voice gates are not as reviewed, read as text from Git:$VN_G4_BAD. Nothing was changed. Send the log file"; }
+  ok "VN-G4 as text in the pin: 8c's block holds every gate, policy, store and bus line inside its try/catch ($VN_G4_SAY); every call of a method that asks the gate (MediaPolicy's five predicates and VoiceAck::enabled, derived from their text — D 4199 read as B5-fix1 reads it) passes the data directory; the fromMe branch is $BASELINE_VERSION's but for Part F's W1 ($VN_W1_N lines, one out-mark); the Uganda branch of the settings tab renders the OpenAI key value=\"\"; ai_media's line is ruling R1's byte for byte, the third of the four new jobs; 090 carries 089's _schema_checks CREATE byte for byte, then its INSERT keyed 090_wa_voice.sql, and no INDEXED BY (ruling R9)"
+  # VN-G5 — the voice baseline from the copy, counts only
+  o="$(vn_php g5 "$sub/code" "$sub")"
+  case "$o" in audio=*)
+      note "VN-G5 the voice baseline over 30 days on the copy, counts only: ${o%% | *}"
+      note "VN-G5 the settings Part V reads: ${o##* | }" ;;
+    *) note "VN-G5 the voice baseline could not be read on the copy (${o:-not read}) — NOT ESTABLISHED" ;; esac
+  v="$(qf_php n6 "$(dxo php -r 'echo (string)ini_get("error_log");' 2>/dev/null)" 2>/dev/null)"
+  case "$v" in "log=read "*) k="$(printf '%s' "${v##* by=}" | tr ',' '\n' | grep -E '/(ephemeralMessage|viewOnceMessage):' | paste -sd, -)"
+      note "VN-G5 R-01, \"no text to answer\" lines for a wrapped message per day (ephemeralMessage, viewOnceMessage): ${k:-none}" ;;
+    *) note "VN-G5 R-01's lines could not be read (the PHP log: ${v:-not read}) — the marks measure them from step 2" ;; esac
+  # VN-G6 — the ai.media and ai.voice_ack events
+  o="$(vn_php events "$sub/plugin.sqlite3")"
+  case "$o" in "events="*) ;; *) cih_drop "$sub"; stop "NO-GO (VN-G6): the events could not be read on the copy (${o:-not read}). Nothing was changed. Send the log file" ;; esac
+  if [ "$QF_G1" = "first" ]; then
+    [ "$(qf_kv "$o" media)|$(qf_kv "$o" ack)" = "0|0" ] || { cih_drop "$sub"; stop "NO-GO (VN-G6): a book $EXPECTED_VERSION never ran on holds ai.media or ai.voice_ack events (${o#events=present }) — an unreviewed media pipeline wrote them. Nothing was changed. Send the log file"; }
+    ok "VN-G6 a first deploy: no ai.media and no ai.voice_ack event on the copy"
+  else
+    note "VN-G6 a redeploy: an earlier deployment's events are history, never a fault — ai.media $(qf_kv "$o" media) ($(qf_kv "$o" media_by)), ai.voice_ack $(qf_kv "$o" ack) ($(qf_kv "$o" ack_by)), by status; after its rollback $BASELINE_VERSION's Uganda event_processor acknowledged them as unknown, and a done event goes 30 days after it was processed (Q17-V02). VN-CA4's baseline is taken at QF-G1's one moment, after DEPLOY is typed"
+  fi
+  cih_drop "$sub"
+}
+
+# vn_g7 — VN-G7, Part V's read of QF-G2's one trial (ruling R10): 090's verdict and log line, beside 089's and 091's, and
+# Part V's negative control. QF-G2 refused already if any of them read otherwise; this says Part V's half by name.
+vn_g7() {
+  local v l n89 n91
+  v="$(printf '%s' "$QF_G2_TRIAL" | sed -nE 's/.* verdicts=([^ ]*).*/\1/p' | tr ',' '\n')"
+  l="$(printf '%s' "$QF_G2_TRIAL" | sed -nE 's/.* log=([^ ]*).*/\1/p' | tr ',' '\n')"
+  n89="$(printf '%s\n' "$v" | grep '^089_quote_followups.sql=')"; n91="$(printf '%s\n' "$v" | grep '^091_wa_offers.sql=')"
+  # 090's log line is the trial's only where the trial applied 090 — a first deploy; on a redeploy MigrationRunner passes
+  # over a file the copy's ledger already holds and logs nothing, and QF-G2 takes the verdict from the row (DS1-fix1, R01)
+  if printf '%s\n' "$v" | grep -qx "090_wa_voice.sql=$VN_090_SC/$VN_090_SC/$VN_090_SC" \
+     && { [ "$QF_G1" != "first" ] || printf '%s\n' "$l" | grep -qx '090_wa_voice.sql=OK'; } \
+     && [ -n "$n89" ] && [ -n "$n91" ] && case "$QF_G2_NEG" in *"cols=24 status=partial partial=1 check=1 row=0"*) true ;; *) false ;; esac; then
+    ok "VN-G7 Part V's share of QF-G2's one trial: $( [ "$QF_G1" = "first" ] && echo "090's migration.log line OK and" || echo "on this redeploy 090 already applied (no log line of the trial's), and" ) its _schema_checks row present ($VN_090_SC of $VN_090_SC), beside 089's (${n89#*=}) and 091's (${n91#*=}); Part V's negative control on a further copy (an 085-shaped wa_media) read 090 PARTIAL naming CHECK constraint failed, with no 090 row"
+  else stop "NO-GO (VN-G7): QF-G2's trial does not read for 090 as Part V reviewed it (${QF_G2_TRIAL:-no trial line}; ${QF_G2_NEG:-no control line}). Nothing was changed. Send the log file"; fi
+}
+
+# vn_base_prep / vn_baseline — VN-G6's redeploy baseline for VN-CA4 (Q19-V01), read-only from the live book in Part F's own
+# baseline call (qf_php base), after QF-G4 returned and the pause, at QF-G1's one moment: the row counts and largest ids
+# of wa_media, wa_voice_calls and wa_voice_acks and the largest ai.media and ai.voice_ack event ids, written to a file of
+# the run's folder before the copy's start is stamped. The counts go to the log; the largest ids and the copy's start
+# (QF_COPY_AT, QF_COPY_UNIX) to the sheet. An unreadable baseline stops before the checkout, as QF-G1's does.
+vn_base_prep() { VN_BASE_F=""; cih_init && VN_BASE_F="$CIH_BASE/vn-base.txt" && dxo rm -f "$VN_BASE_F"; return 0; }
+vn_baseline() {
+  local o=""
+  [ -n "$VN_BASE_F" ] && o="$(dxo cat "$VN_BASE_F")"
+  [ -n "$VN_BASE_F" ] && dxo rm -f "$VN_BASE_F"
+  case "$o" in "rows="*" max="*" evmax="*) VN_BASE="$o" ;;
+    *) stop "NO-GO (VN-G6): VN-CA4's redeploy baseline could not be read from the live book in QF-G1's call (${o:-not read}) — VN-CA4 would have nothing to judge against. Nothing was copied. Send the log file" ;; esac
+  qf_sheet "VN-G6 VN-CA4's redeploy baseline: the largest ids, and the copy's start (never paste)" "wa_media, wa_voice_calls, wa_voice_acks: largest id $(qf_kv "$o" max); ai.media, ai.voice_ack events: largest id $(qf_kv "$o" evmax); the copy's start $QF_COPY_AT UTC (unix $QF_COPY_UNIX)"
+  note "VN-G6 VN-CA4's redeploy baseline, read-only from the live book in QF-G1's one call, just before the copy: rows of wa_media, wa_voice_calls, wa_voice_acks $(qf_kv "$o" rows); their largest ids, the largest ai.media and ai.voice_ack event ids and the copy's start are on the sheet — printed, never NO-GO"
+}
+
+# vn_after INST_ROOT — after the copy (stage R; --after-only too): VN-M1 and VN-M2 (090 on the book), VN-CA1–VN-CA4 on a
+# fresh copy through the INSTALLED code (ICODE_R), VN-K1 (the key in no log) and VN-K2 (the installed tab). VN-CA1's
+# Uganda half and VN-CA4 judge what the deploy did, so only the deploy run judges them; --after-only prints them.
+# Reports; never stops.
+vn_after() {
+  local inst="$1" sub o o4 v n i k st u1 u0 s1 s0
+  hdr "R. The voice notes and the acknowledgement, installed (5.18.104, Part V's VN; read-only, on a copy through the installed code)"
+  [ -n "$inst" ] || { bad "VN-M1 no copy of the installed code to read with — VN-M1, VN-M2, VN-CA1–VN-CA4 and VN-K1 are not judged"; return; }
+  # VN-M1 waits for 090's ledger row, bounded (60 s), reading the live ledger alone, read-only; then reads on a fresh copy
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do [ "$(vn_php ledger "$PDD_IN/plugin.sqlite3")" = "mig090=1" ] && break; sleep 5; done
+  sub="$(qf_copy vn "$inst")" || { bad "VN-M1 a copy of the book could not be made — $QF_ROOT_ERR; VN-M1, VN-M2, VN-CA1, VN-CA2 and VN-CA4 are not judged"; sub=""; }
+  if [ -n "$sub" ]; then
+    o="$(vn_php objects "$sub/plugin.sqlite3" "${P3B_PIN:-$inst}")"
+    if [ "$(qf_kv "$o" tables)|$(qf_kv "$o" objects)|$(qf_kv "$o" exact)|$(qf_kv "$o" extra)|$(qf_kv "$o" ledger)|$(qf_kv "$o" sc)|$(qf_kv "$o" control)" = "3/3|$VN_OBJ_N/$VN_OBJ_N|$VN_OBJ_N/$VN_OBJ_N|0|$VN_090_MD5|$VN_090_SC/$VN_090_SC|yes" ]; then
+      ok "VN-M1 090 on the book after the copy: its ledger row's md5 the pin's file's (${VN_090_MD5:0:12}…), the 090 _schema_checks row present ($VN_090_SC of $VN_090_SC), its $VN_OBJ_N objects exact as the pin's 090 makes them and none other; wa_messages read (the positive control)"
+    else bad "VN-M1 090 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+    v="$(docker exec "$CONTAINER" sh -c 'l="$(grep -F 090_wa_voice.sql "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) echo PARTIAL ;; *OK:*) echo OK ;; "") echo none ;; *) echo other ;; esac' _ "$PDD_IN" 2>/dev/null </dev/null)"
+    note "VN-M2 migration.log's line for 090 reads ${v:-not read} — informational: the _schema_checks row in VN-M1 is the evidence"
+    o4="$(vn_php ca4 "$sub/plugin.sqlite3" "$(qf_kv "${QF_BASE:-}" max)" "$(qf_kv "${VN_BASE:-}" max)" "$(qf_kv "${VN_BASE:-}" evmax)" "${QF_COPY_UNIX:-0}")"
+    st="$(vn_php g1 "$sub/code" "$sub")"
+    # VN-CA1 — the installed gates in memory: Uganda as the copy reads (its own vault: ug_gate is the positive control that
+    # the copy reads as Uganda at all, without which "off" would be the gate's, not the switches'); the same with the
+    # assistant forced on, so Part V's own keys decide; the factory with a sentinel key and its control; forced South Sudan
+    # with every voice key on; the control that those keys do turn the rungs on
+    o="$(vn_php ca1 "$sub/code" "$sub")"; n="$(qf_kv "$o" channels)"
+    case "$o" in channels=[1-9]*)
+        if [ "$(qf_kv "$o" ss)|$(qf_kv "$o" ss_ack)|$(qf_kv "$o" ss_media)|$(qf_kv "$o" ctl)|$(qf_kv "$o" ctl_ack)" = "off:$n|0|0|reply:$n|1" ]; then
+          ok "VN-CA1 forced South Sudan with every voice key on in a scratch configuration (in memory): voiceMode off for all $n channels, VoiceAck::enabled and MediaPolicy::enabled false — the gate, not the switches: the same keys on Uganda read reply on all $n and the acknowledgement on (the control)"
+        else bad "VN-CA1 the installed gates are not inert as South Sudan, or the control did not turn on ($o)"; fi
+        if [ "$(qf_kv "$o" ug_gate)" != "1" ]; then
+          bad "VN-CA1 the copy does not read as Uganda (tenant $(qf_kv "$o" tenant), through the installed StaffJobsGate with the copy's own vault) — the Uganda half is not judged"
+        elif [ "$(qf_kv "$o" factory_ctl)" != "built" ]; then
+          bad "VN-CA1 the transcriber factory's control (the copy's configuration, a sentinel key, the provider openai) built none — the factory reading on Uganda is not judged ($o)"
+        elif [ "$MODE" = "deploy" ]; then
+          [ "$(qf_kv "$o" ug)|$(qf_kv "$o" ugai)|$(qf_kv "$o" ug_ack)|$(qf_kv "$o" ugai_ack)|$(qf_kv "$o" ug_media)|$(qf_kv "$o" ugai_media)|$(qf_kv "$o" factory)" = "off:$n|off:$n|0|0|0|0|none" ] \
+            && ok "VN-CA1 on Uganda, as the copy reads after the copy (tenant uganda through the installed gate, the copy's own vault read; the assistant $(qf_kv "$o" ug_ai)): voiceMode off for all $n channels, VoiceAck::enabled and MediaPolicy::enabled false, and the same with the assistant forced on (in memory: Part V's own keys decide); the transcriber factory gives none on the copy's own configuration with a sentinel key added (provider $(qf_kv "$o" provider)), while the same with the provider openai builds one (the control) — every Part V key unset" \
+            || bad "VN-CA1 on Uganda after the copy, a voice gate is not off or the factory builds a transcriber ($o) — every Part V key must read unset after a deploy"
+        else note "VN-CA1 on Uganda, as the copy reads now (tenant uganda; the assistant $(qf_kv "$o" ug_ai)): voiceMode $(qf_kv "$o" ug) over $n channels ($(qf_kv "$o" ugai) with the assistant forced on), the acknowledgement $( [ "$(qf_kv "$o" ug_ack)" = 1 ] && echo on || echo off), the media switch $( [ "$(qf_kv "$o" ug_media)" = 1 ] && echo on || echo off), the transcriber factory $(qf_kv "$o" factory) with a sentinel key (provider $(qf_kv "$o" provider); the control built one) (an --after-only run: the operator's steps)"; fi ;;
+      *) bad "VN-CA1 the installed gates could not be read on the copy (${o:-not read})" ;;
+    esac
+    # VN-CA2 — a read of Part F's MS8 guard (ruling R1) through the installed cron_status, on the copy, its configuration
+    # scratch: as it is; with ai_media_enabled on; then forced South Sudan, flag on and off. The copy is ours: changed last.
+    vn_cs() { docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$sub" -e DN_VAULT_FILE="$sub/vault.json" -e TMPDIR="$sub" "$CONTAINER" php -d log_errors=0 -d opcache.enable_cli=0 "$sub/code/tools/cron_status.php" --all 2>&1 </dev/null | qf_safe | awk '$2 == "ai_media" { f = 1; print (index($0, "OFF (switch)") ? "off" : "listed") } END { if (!f) print "absent" }' | head -1; }
+    u0="$(vn_cs)"
+    o="$(vn_php store "$sub" ai_media_enabled=1)"; u1="$(vn_cs)"
+    v="$(vn_php store "$sub" tenant_profile=south-sudan)"; s1="$(vn_cs)"
+    v="$v $(vn_php store "$sub" ai_media_enabled=)"; s0="$(vn_cs)"
+    if [ "$(qf_kv "$o" row)" != "1" ] || [ "$(printf '%s' "$v" | grep -o 'row=1' | wc -l)" != "2" ]; then bad "VN-CA2 the copy's settings row could not be set for the scratch runs ($o / $v) — not judged"
+    elif [ "$u1|$s1|$s0" = "listed|absent|absent" ] && { [ "$u0" = "off" ] || { [ "$MODE" = "after" ] && [ "$u0" = "listed" ]; }; }; then
+      ok "VN-CA2 through the installed cron_status on a copy: on Uganda ai_media is listed $( [ "$u0" = "off" ] && echo "OFF (switch) while ai_media_enabled is off" || echo "as a job (its switch is on: an --after-only run)"), and as a job with the flag on in the copy's settings row; forced South Sudan it is never listed, flag on or off — Part F's MS8 guard (ruling R1)"
+    else bad "VN-CA2 the installed cron_status does not list ai_media as reviewed (Uganda as copied: $u0; flag on: $u1; South Sudan flag on: $s1, off: $s0)"; fi
+  fi
+  # VN-CA3 — event_processor's two lists, as text in the installed file
+  n="$(grep -cxF -- "$VN_EP_LINE" "$DEST/cron/event_processor.php" 2>/dev/null)"; v="$(grep -cE '^[[:space:]]*\$_epWorkerOwned[[:space:]]*=' "$DEST/cron/event_processor.php" 2>/dev/null)"
+  [ "$n|$v" = "1|1" ] && ok "VN-CA3 the installed cron/event_processor.php: Uganda's worker-owned list names ai.media and ai.voice_ack, South Sudan's stays ['ai.reply'] — one assignment, the pin's line" \
+    || bad "VN-CA3 the installed cron/event_processor.php's lists are not the pin's ($n exact line(s), $v assignment(s))"
+  # VN-CA4 — no switch changed by the run, and nothing of Part V written by the dark build during the deploy (ruling R18)
+  if [ -n "$sub" ]; then
+    k="$(qf_kv "$st" vswset)"
+    case "$o4" in "rows="*) ;; *) bad "VN-CA4 the copy could not be read (${o4:-not read}) — not judged"; o4="" ;; esac
+    if [ -z "$o4" ]; then :
+    elif [ "$MODE" = "deploy" ] && [ "$k" != "0" ]; then
+      bad "VN-CA4 ${k:-?} of Part V's switch and record keys read set on the copy after the deploy ($(qf_kv "$st" vswsetnames)) — the run changes no switch (QF-G4 found every key unset before the copy)"
+    elif [ "$MODE" = "deploy" ]; then
+      if [ "$QF_G1" = "first" ]; then
+        [ "$(qf_kv "$o4" rows)|$(qf_kv "$o4" events)" = "0,0,0|0,0" ] \
+          && ok "VN-CA4 a first deploy: no Part V key set; wa_media, wa_voice_calls and wa_voice_acks hold no row and no ai.media or ai.voice_ack event exists after the copy — the dark build wrote nothing of Part V" \
+          || bad "VN-CA4 a first deploy, and Part V's tables or events hold rows after the copy (rows $(qf_kv "$o4" rows); events $(qf_kv "$o4" events)) — something wrote with every key unset"
+      elif [ -z "$VN_BASE" ]; then bad "VN-CA4 a redeploy with no baseline (VN-G6) — not judged"
+      elif [ "$(qf_kv "$o4" ack_claims_late)|$(qf_kv "$o4" acks_late)|$(qf_kv "$o4" calls_late)" = "0|0|0" ]; then
+        ok "VN-CA4 a redeploy, against VN-G6's baseline at QF-G1's one moment ($QF_COPY_AT UTC): no voice_ack claim, no sent or uncertain decision by its ledger row, and no OpenAI call made in a later second than the copy's start; counted and printed, never FAIL (ruling R18): added since the baseline — rows $(qf_kv "$o4" added) (wa_media, wa_voice_calls, wa_voice_acks), events $(qf_kv "$o4" ev_added) (ai.media, ai.voice_ack); claims in the copy's start second $(qf_kv "$o4" ack_claims_same), before it $(qf_kv "$o4" ack_claims_before); decisions $(qf_kv "$o4" decisions) (sent or uncertain in that second $(qf_kv "$o4" acks_same), before it $(qf_kv "$o4" acks_before), with no ledger row $(qf_kv "$o4" acks_no_ledger)); calls in that second $(qf_kv "$o4" calls_same), before it $(qf_kv "$o4" calls_before); now rows $(qf_kv "$o4" rows), events $(qf_kv "$o4" events) — the earlier deployment's are history (VN-RB5)"
+      else bad "VN-CA4 a redeploy: Part V wrote after the copy's start with every key unset ($QF_COPY_AT UTC) — voice_ack claims $(qf_kv "$o4" ack_claims_late), sent or uncertain decisions $(qf_kv "$o4" acks_late), OpenAI calls $(qf_kv "$o4" calls_late) in a later second (${o4%% ack_claims_same=*})"; fi
+    else note "VN-CA4 judges what the deploy did, in the deploy run; here, now: Part V's keys set $(qf_kv "$st" vswset), rows $(qf_kv "$o4" rows) (wa_media, wa_voice_calls, wa_voice_acks), events $(qf_kv "$o4" events) (ai.media, ai.voice_ack)"; fi
+    cih_drop "$sub"
+  fi
+  # VN-K1 — the stored OpenAI key, read in memory and never printed, in none of the plugin's log files
+  o="$(vn_php k1 "$inst" "$IN_CONTAINER" "$PDD_IN")"
+  case "$o" in
+    "key=unset"*) note "VN-K1 no OpenAI key is stored here — nothing to look for in the plugin's $(qf_kv "$o" files) log file(s)" ;;
+    "key=set "*) if [ "$(qf_kv "$o" hits)" = "0" ] && [ "$(qf_kv "$o" read)" != "0" ]; then ok "VN-K1 the stored OpenAI key, read in memory through the installed PluginConfig and never printed, is in none of the plugin's log files ($(qf_kv "$o" read) read of $(qf_kv "$o" files); $(qf_kv "$o" unreadable) unreadable)"
+      else bad "VN-K1 the stored OpenAI key is in $(qf_kv "$o" hits) of the plugin's log files ($(qf_kv "$o" read) read of $(qf_kv "$o" files)) — ROTATE it on OpenAI's own pages and save the new one; the files are on the server"; fi ;;
+    *) bad "VN-K1 the plugin's log files could not be searched (${o:-not read})" ;;
+  esac
+  # VN-K2 — the installed settings tab's Uganda branch: the OpenAI key's value empty (text; the suite renders it)
+  o="$(vn_tab < "$DEST/tabs/engage/whatsapp.php" 2>/dev/null)"
+  [ "$o" = "inputs=1 empty=1 assign=1" ] && ok "VN-K2 the installed tabs/engage/whatsapp.php renders the OpenAI key's input with value=\"\" on Uganda (its one input; one Uganda flag)" \
+    || bad "VN-K2 the installed tabs/engage/whatsapp.php does not render the OpenAI key's value empty on Uganda ($o)"
+}
+
+# vn_on SUB — --after-only (read-only, on qf_on's copy, through the INSTALLED tool's --check): VA-ON1 (step 2's own part,
+# beside Part F's L-ON, which QF-ON0 judges as the step's one status) and VN-ON1–VN-ON4 (steps 5, 7, 8, 9). A step that is
+# off prints "OFF — not judged" and judges nothing (§H.3.25).
+vn_on_one() {   # vn_on_one SUB CODE STEP — the part CODE of STEP's --check: PASS ok, FAIL bad, NOT_YET a note
+  local o rc st ps cn
+  o="$(qf_tool "$1" --check "$3")"; rc=$?
+  st="$(printf '%s\n' "$o" | grep -m1 "^$3: " | sed "s/^$3: //")"
+  if [ "$st" = "OFF — not judged" ]; then note "$2 OFF — not judged ($3 is off)"; return; fi
+  ps="$(printf '%s\n' "$o" | grep -m1 "^  $2: " | sed "s/^  $2: //")"
+  cn="$(printf '%s\n' "$o" | awk -v id="  $2: " 'index($0, id) == 1 { f = 1; next } f && /^  [^ ]/ { exit } f && /^    counts: / { sub(/^    counts: /, ""); print; exit }' | cut -c1-400)"
+  case "$ps" in
+    PASS) ok "$2 $3: PASS${cn:+ (counts: $cn)}"
+          printf '%s\n' "$o" | awk -v id="  $2: " 'index($0, id) == 1 { f = 1; next } f && /^  [^ ]/ { exit } f && /^    note: / { print }' | head -8 | cut -c1-200 | sed 's/^ */  tool    | /' ;;
+    "NOT_YET "*) note "$2 $3: $ps${cn:+ (counts: $cn)}" ;;
+    "FAIL "*) qf_show_tool "$o" 40; bad "$2 $3: $ps (exit $rc; the tool's lines above)" ;;
+    *) qf_show_tool "$o" 20; bad "$2 $3: the installed tool's --check gave no $2 status (exit $rc)" ;;
+  esac
+}
+vn_on() {
+  local p
+  for p in $VN_STEPS; do vn_on_one "$1" "${p##*:}" "${p%%:*}"; done
+}
+
+# vn_rb1 — VN-RB1–VN-RB4, Part V's reads of QF-RB1's result, after the installed tool's off all --rollback exited 0 and
+# before the put-back: the tool's own lines (QF_RB1_OUT) and a copy of the book taken now. VN-RB3's R3 bodies are a FAIL
+# that does not stop the rollback: 5.18.103 reads them either way, and putting 5.18.104 back would not unlabel them.
+vn_rb1() {
+  local o="$QF_RB1_OUT" seq h5 h2 sw won d r ids
+  seq="$(printf '%s\n' "$o" | grep -xE 'OFF (voice-reply|voice-staff|voice-dry-run|voice-measure|ack)' | sed 's/^OFF //' | paste -sd' ' -)"
+  sw="$(vn_php vkeys "${P3B_PIN:-$IN_CONTAINER}" 2>/dev/null)"; sw="$(qf_kv "$sw" vswitchnames | tr ',' '\n')"
+  won="$(printf '%s\n' "$o" | sed -n 's/^was on: //p' | grep -cxF -f <(printf '%s\n' "$sw" | grep .) 2>/dev/null)"
+  if [ "$seq" = "voice-reply voice-staff voice-dry-run voice-measure ack" ]; then
+    ok "VN-RB1 the one sequence cleared Part V's rows in their order — 9, 8, 7, 5, then 2 with P5's keys before the ledger (rulings R7, R11) — and QF-RB1 read every key back unset; ${won:-0} of Part V's keys were on, by name on the sheet with QF-RB1's"
+  else bad "VN-RB1 the tool's lines do not show Part V's rows cleared in the one sequence (${seq:-none})"; fi
+  h5="$(printf '%s\n' "$o" | sed -n 's/^  hook voice-measure: //p' | head -1)"; h2="$(printf '%s\n' "$o" | sed -n 's/^  hook ack: //p' | head -1)"
+  if [ -n "$h5" ]; then ok "VN-RB1b step 5's hook, after Part V's media keys cleared: $(qf_kv "$h5" settled) pending audio row(s) settled skipped/switched_off, nothing in flight touched (ruling R14)"
+  else bad "VN-RB1b step 5's hook printed no counts — it did not run as reviewed"; fi
+  d="$(vn_book_copy rb)" || d=""
+  r=""; [ -n "$d" ] && r="$(vn_php rb "$d/plugin.sqlite3" "$d/ids.txt")"
+  case "$r" in "pending_audio="*) ids="$(dxo cat "$d/ids.txt" 2>/dev/null)" ;; *) ids="" ;; esac
+  [ -n "$d" ] && cih_drop "$d"
+  qf_sheet "VN-RB2/VN-RB4 what Part V's drains left, by event id (never paste)" "${ids:-not read}"
+  if [ -n "$h5" ] && [ -n "$h2" ]; then
+    note "VN-RB2 the drain, by step, each bounded: step 5's hook waited $(qf_kv "$h5" waited_s) s for the voice turns ($(qf_kv "$h5" voice_turns_left) left); step 2's hook, after P5's keys and before the ledger, waited $(qf_kv "$h2" waited_s) s for the acknowledgement events ($(qf_kv "$h2" ack_events_at_start) at its start, $(qf_kv "$h2" ack_events_left) left, $(qf_kv "$h2" ack_events_left_processing) of them in a worker's hands); now: $(qf_kv "$r" voice_turns) voice turn(s) and $(qf_kv "$r" ack_events) acknowledgement event(s) (their ids on the sheet) — $BASELINE_VERSION would answer any voice turn left as text, from the labelled transcript"
+  else bad "VN-RB2 the drains printed no counts (step 5: ${h5:-none}; step 2: ${h2:-none})"; fi
+  case "$r" in
+    "pending_audio="*)
+      note "VN-RB3 $(qf_kv "$r" r4_bodies) message body(ies) carry R4's transcript label — $BASELINE_VERSION reads them as labelled customer text"
+      [ "$(qf_kv "$r" r3_bodies)" = "0" ] && ok "VN-RB3 no body below R4 carries the transcript label (R3 leaves the body [AUDIO], F10)" \
+        || bad "VN-RB3 $(qf_kv "$r" r3_bodies) body(ies) below R4 carry the transcript label — R3 must leave the body [AUDIO] (F10); $BASELINE_VERSION will show them as customer text"
+      note "VN-RB4 events left pending: ai.media $(qf_kv "$r" ai_media), ai.voice_ack $(qf_kv "$r" ack_events) (ids on the sheet) — $BASELINE_VERSION's Uganda event_processor acknowledges them as unknown, which is harmless; pending audio rows $(qf_kv "$r" pending_audio) (QF-RB1's floor)" ;;
+    *) bad "VN-RB3 and VN-RB4 could not be read on a copy of the book (${r:-no copy})" ;;
+  esac
+}
+
+# vn_rb_after QF_RB3_CALLS — after the put-back (RB): VN-RB5 (090's tables and its row stay, read by nothing in 5.18.103)
+# and VN-RB6 (S2-24), an instruction to the owner — not a note — whenever any wa_voice_calls row exists; the first call's
+# date on the sheet. Read on a copy; QF-RB3's own live count stands in when the copy cannot be made. Only a read that gave
+# 0 skips the instruction: a count that could not be read is never taken for none (ruling R7: the instruction prints
+# whenever any row exists, and an unread count cannot say there is none), so it is a FAIL and the instruction prints,
+# worded for a count nobody read.
+vn_rb_after() {
+  local d o="" n="${1:-}" first="" why
+  d="$(vn_book_copy rb5)" || d=""
+  if [ -n "$d" ]; then o="$(vn_php rb5 "$d/plugin.sqlite3" "$d/first.txt")"; first="$(dxo cat "$d/first.txt" 2>/dev/null)"; cih_drop "$d"; fi
+  case "$o" in "tables="*)
+      n="$(qf_kv "$o" calls)"
+      [ "$(qf_kv "$o" tables)|$(qf_kv "$o" sc)" = "3/3|present" ] \
+        && note "VN-RB5 090's three tables and its _schema_checks row stay; nothing in $BASELINE_VERSION reads them" \
+        || bad "VN-RB5 090's tables or its _schema_checks row are not as the rollback must leave them (${o%% calls=*}) — a rollback removes nothing" ;;
+    *) note "VN-RB5 could not be read on a copy (${o:-no copy}); QF-RB3's own read counts ${n:-?} wa_voice_calls row(s)" ;;
+  esac
+  case "$n" in
+    0) return 0 ;;
+    ''|*[!0-9]*)
+      bad "VN-RB6 the wa_voice_calls count could not be read (on a copy: ${o:-no copy}; QF-RB3's live read: ${n:-not read}) — never taken for none: the instruction to the owner below prints all the same (ruling R7)"
+      n=""; first="first call: not read"
+      why="the wa_voice_calls count could not be read: if OpenAI was ever called from here, audio went to OpenAI with the stored key" ;;
+    *) why="OpenAI was called from here: $n wa_voice_calls row(s), so audio went to OpenAI with the stored key" ;;
+  esac
+  qf_sheet "VN-RB6 the first call to OpenAI from here (the earliest wa_voice_calls row)" "${first:-not read}"
+  printf '\n  INSTRUCTION TO THE OWNER (VN-RB6) — %s.\n' "$why"
+  printf '    1. %s'"'"'s settings page prints the stored OpenAI key into its page source.\n' "$BASELINE_VERSION"
+  printf '    2. Rotate the key at OpenAI, on OpenAI'"'"'s own pages, and save the new one in the settings page%s.\n' "$( [ -n "$n" ] || echo " — if OpenAI was ever called from here; the count could not be read, so do it unless you know it never was")"
+  printf '    3. The first call'"'"'s date is on the sheet (%s)%s.\n\n' "$(sheet_say)" "$( [ -n "$n" ] || echo ": it says \"first call: not read\"")"
+}
