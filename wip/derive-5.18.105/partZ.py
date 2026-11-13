@@ -132,3 +132,30 @@ def apply(doc, ctx):
             raise SystemExit(f"Z: {code} is named by no line of code (a check's text or its code variable)")
     doc.mustnot("bash $QF_WRAPPER off all")
     doc.mustnot("5.18.104's own checks first")
+
+    # ── the script's own rule on pipelines (its header, under `set -uo pipefail`), asserted over the whole result ──
+    # A status the script judges never comes from a writer piped into a reader that stops early: bash writes a printf
+    # of several lines one write per line, a quiet grep exits at its first match, and under pipefail the writer's
+    # SIGPIPE turns "matched" into 141, "no match". Four carried lines of 5.18.104's still judged such a pipeline — the
+    # report's headline (QF-N3), the doctor's two readings (QF-G2) and 090's verdict (VN-G7): each could turn a pass
+    # into a refusal at stage A, nothing changed, about once in thousands of runs. (The same hazard, in 5.18.95's older
+    # script, cut the first record run of this script's rehearsal on 13 Nov.) Each reads its variable as a here-string
+    # now — the same bytes as printf '%s\n' "$v", and no writer to lose.
+    doc.sub("""  if printf '%s\\n' "$o" | grep -q '^== sales follow-up report (READ-ONLY)'; then""",
+            """  if grep -q '^== sales follow-up report (READ-ONLY)' <<<"$o"; then""", why="pipe rule: QF-N3 headline")
+    doc.sub("""  for v in $QF_SC_EXPECT; do printf '%s\\n' "$o" | grep -qx "PASS ${v%%:*}" || bad="$bad doctor:${v%%:*}"; done""",
+            """  for v in $QF_SC_EXPECT; do grep -qx "PASS ${v%%:*}" <<<"$o" || bad="$bad doctor:${v%%:*}"; done""",
+            why="pipe rule: QF-G2 doctor PASS lines")
+    doc.sub("""  printf '%s\\n' "$o" | grep -qE '^089 names: 38 of 38 present$' || bad="$bad doctor:089-names\"""",
+            """  grep -qE '^089 names: 38 of 38 present$' <<<"$o" || bad="$bad doctor:089-names\"""",
+            why="pipe rule: QF-G2 doctor 089 names")
+    doc.sub("""  if printf '%s\\n' "$v" | grep -qx "090_wa_voice.sql=$VN_090_SC/$VN_090_SC/$VN_090_SC" \\""",
+            """  if grep -qx "090_wa_voice.sql=$VN_090_SC/$VN_090_SC/$VN_090_SC" <<<"$v" \\""",
+            why="pipe rule: VN-G7 090 verdict")
+    quiet = re.compile(r"(?<!\|)\|\s*grep\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*q")
+    left = [n for n, l in code_lines(doc.t) if quiet.search(l)]
+    if left:
+        raise SystemExit(f"Z: a quiet grep still reads from a pipe (not through drained, not a here-string), line(s) {left[:8]}")
+    if len([1 for _, l in code_lines(doc.t) if re.search(r"\|\s*drained\s+grep\s+-[A-Za-z]*q", l)]) < 1 \
+            or len([1 for _, l in code_lines(doc.t) if re.search(r"grep\s+-[A-Za-z]*q[^|]*<<<", l)]) < 28:
+        raise SystemExit("Z: the control of the pipe rule does not hold: the quiet greps it allows (drained, here-string) are not found")

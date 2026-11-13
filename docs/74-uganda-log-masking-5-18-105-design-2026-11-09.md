@@ -1625,8 +1625,8 @@ are recorded here and in root `docs/07` when they end.
 
 ### S.4 The deploy script and its rehearsal
 
-- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `004976617296ba04…`), pinned to `f764699`: derived from
-  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 296 edits, derived twice byte for byte.
+- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `c028cde545e042ba…`), pinned to `f764699`: derived from
+  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 300 edits, derived twice byte for byte.
   It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
   copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It
   refuses `--clear-switches`. `scripts/sales-followup-report.sh` is re-pinned beside it.
@@ -1667,8 +1667,27 @@ are recorded here and in root `docs/07` when they end.
     `--after-only`. Every FAIL line the script printed was a weakened copy's or the planted sign-in fault's.
   - After it, two comments of the script that named the wrong rollback target were corrected (comments only: the
     script's 296th edit and its 295th), and one line of the rehearsal's header.
-  - The record run (the whole chain, unrestored, on the committed files) is still to come; its result is recorded
-    here and in root `docs/07`.
+  - **The record run's first start** (13 Nov, 21:45 UTC, on `0214b50`) was stopped by hand at 22:05 UTC, in the
+    5.18.95 stage, at 380 ok and 1 failed. The failure was not this release's. It was check 3s' of 5.18.95's
+    rehearsal: 5.18.95's own script gave a refusal it should not have given.
+    - **The cause is a hazard the older scripts are known for;** this script's header describes it. Under
+      `pipefail`, a list printed into a quiet `grep` can read "no match" although the line is there. The shell
+      writes the list one line at a time, the `grep` stops at its first match, and a writer cut off mid-list fails
+      the whole pipeline. It takes an unlucky moment, likelier on a busy machine: two review readers were working
+      beside the run.
+    - **Shown directly:** with the writer slowed, the pipeline reads 141 where it should read 0; the same check
+      read from a here-string reads 0. Tried 8,000 times afterwards, idle and with the machine loaded, it did not
+      happen again. It is rare.
+    - A run with a fourth failure cannot be the record, so it was cut. Its log is kept.
+  - **Four lines of this script still had that form,** carried from 5.18.104's: the report's headline (QF-N3), the
+    doctor's two readings (QF-G2) and 090's verdict (VN-G7). The last three could turn a pass into a refusal at
+    stage A, with nothing changed; the first could only print "could not be read" in a note. None could turn a
+    fault into a pass. They now read their variable as a here-string, which delivers the same bytes: 18 inputs
+    tried, the old form and the new agree on each. The derivation's last part now refuses a script in which a quiet
+    `grep` reads from a pipe; with one of the four edits taken out it refuses and names the line. These are the
+    script's edits 297 to 300.
+  - The record run (the whole chain, unrestored, on the committed files) is started again with nothing beside it;
+    its result is recorded here and in root `docs/07`.
 
 ### S.5 Next
 

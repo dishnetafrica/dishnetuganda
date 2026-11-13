@@ -7507,7 +7507,7 @@ qf_stage() {
   else note "QF-N1, QF-N2, QF-N4, QF-N7 could not be read on the copy — NOT ESTABLISHED"; fi
   # QF-N3 — the pin's report on the same copy: the baseline headline (owners on the sheet, never the log)
   o="$(docker exec -u "$DB_OWNER" -e DN_VAULT_FILE="$sub/vault.json" -e TMPDIR="$sub" "$CONTAINER" php -d log_errors=0 -d opcache.enable_cli=0 "$sub/code/$QF_REPORT" "--db=$sub/plugin.sqlite3" "--data=$sub" "--sheet=$sub/report-owners.txt" 2>&1 </dev/null | qf_safe)"; n=$?
-  if printf '%s\n' "$o" | grep -q '^== sales follow-up report (READ-ONLY)'; then
+  if grep -q '^== sales follow-up report (READ-ONLY)' <<<"$o"; then
     note "QF-N3 the pin's report on the copy — the baseline (its own lines, counts only; owners as owner 1…n, their staff ids on the sheet):"
     printf '%s\n' "$o" | head -60 | cut -c1-200 | sed 's/^/  report  | /'
     qf_sheet "QF-N3 the report's owners (owner n = staff id): never paste" "$(dxo cat "$sub/report-owners.txt" 2>/dev/null || echo '(none written)')"
@@ -7553,8 +7553,8 @@ qf_stage() {
   o="$(qf_tool "$sub" doctor)"; n=$?
   qf_show_tool "$o" 12
   [ "$n" = "0" ] || bad="$bad doctor-rc-$n"
-  for v in $QF_SC_EXPECT; do printf '%s\n' "$o" | grep -qx "PASS ${v%%:*}" || bad="$bad doctor:${v%%:*}"; done
-  printf '%s\n' "$o" | grep -qE '^089 names: 38 of 38 present$' || bad="$bad doctor:089-names"
+  for v in $QF_SC_EXPECT; do grep -qx "PASS ${v%%:*}" <<<"$o" || bad="$bad doctor:${v%%:*}"; done
+  grep -qE '^089 names: 38 of 38 present$' <<<"$o" || bad="$bad doctor:089-names"
   of_g2_post "$sub"   # 5.18.104 Part O: OF-G2 again on this copy after its trial, and OF-N1 and OF-N3 on it (091 applied here alone)
   cih_drop "$sub"
   sub="$(qf_copy g2n "$P3B_PIN")" || stop "NO-GO (QF-G2): a third copy of the book (the negative control) could not be made — ${sub:-?}. Nothing was changed. Send the log file"
@@ -8486,7 +8486,7 @@ vn_g7() {
   n89="$(printf '%s\n' "$v" | grep '^089_quote_followups.sql=')"; n91="$(printf '%s\n' "$v" | grep '^091_wa_offers.sql=')"
   # 5.18.105: 5.18.104 is live, so 090 is in the copy's ledger already — MigrationRunner passes over it and logs nothing,
   # and QF-G2 takes the verdict from the row (root docs/74 §H.4.4)
-  if printf '%s\n' "$v" | grep -qx "090_wa_voice.sql=$VN_090_SC/$VN_090_SC/$VN_090_SC" \
+  if grep -qx "090_wa_voice.sql=$VN_090_SC/$VN_090_SC/$VN_090_SC" <<<"$v" \
      && [ -n "$n89" ] && [ -n "$n91" ] && case "$QF_G2_NEG" in *"cols=24 status=partial partial=1 check=1 row=0"*) true ;; *) false ;; esac; then
     ok "VN-G7 Part V's share of QF-G2's one trial: 090 already applied on this live $BASELINE_VERSION book (none pending; no log line of the trial's), and its _schema_checks row present ($VN_090_SC of $VN_090_SC), beside 089's (${n89#*=}) and 091's (${n91#*=}); Part V's negative control on a further copy (an 085-shaped wa_media) read 090 PARTIAL naming CHECK constraint failed, with no 090 row"
   else stop "NO-GO (VN-G7): QF-G2's trial does not read for 090 as Part V reviewed it (${QF_G2_TRIAL:-no trial line}; ${QF_G2_NEG:-no control line}). Nothing was changed. Send the log file"; fi
