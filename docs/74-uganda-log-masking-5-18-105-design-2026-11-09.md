@@ -1686,8 +1686,17 @@ are recorded here and in root `docs/07` when they end.
     tried, the old form and the new agree on each. The derivation's last part now refuses a script in which a quiet
     `grep` reads from a pipe; with one of the four edits taken out it refuses and names the line. These are the
     script's edits 297 to 300.
-  - The record run (the whole chain, unrestored, on the committed files) is started again with nothing beside it;
-    its result is recorded here and in root `docs/07`.
+  - **A short trial of the corrected script** (13 Nov, 22:14–22:21 UTC, on `be8930c`, stopped by hand after 105-c):
+    33 ok, 0 failed. `--check` read GO over both ladder states, with QF-G2 and VN-G7 ok and QF-N3's report printed.
+  - **The record run's second start** (22:22 UTC, on `be8930c`, nothing beside it) was cut after 8 minutes by a
+    restart of the container, at 148 ok and 0 failed. **Its third start** (22:34 UTC) was cut after 71 minutes by
+    another restart, in the 5.18.98 stage, at 1,020 ok and 1 failed, that one being the first inherited check
+    (98-0); the 5.18.95 stage passed whole. Nothing of the runs' caused the restarts, as far as can be seen. A cut
+    run does not count.
+  - **Next:** the whole chain takes about nine hours in one piece, which this container did not give on the night
+    of 13 Nov. So a full trial of the final script from the chain's saved state comes first (about 75 minutes), then
+    the suite's passes, and the whole-chain record run is tried again after them. The results are recorded here
+    and in root `docs/07`.
 
 ### S.5 Next
 
