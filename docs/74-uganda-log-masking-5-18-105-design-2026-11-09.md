@@ -1,6 +1,6 @@
 # 74 — Uganda: 5.18.105, no phone number in any log line (design, 9 Nov 2026)
 
-Status: **designed, not built.** It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
+Status: **built — `release/5.18.105` = `f764699`, local, not pushed; the suite's two passes and the rehearsal still to finish; NOT deployed (§S, 13 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
 
 - 5.18.105 masks **every** log line that can carry a phone number on Uganda (option B), not only the four lines of 5.18.104's known limit 13.
 - The chase (step 6) does not wait for 5.18.105. Offers-live (step 12) does.
@@ -1539,3 +1539,100 @@ The plan is sized for option B (gap 6). A step waits only for what it reads.
   - names, ids and amounts stay in masked lines (the default, since the ruling is numbers only). If they go too, E's list and §H.1's edits widen;
   - `post_kyc.php:269` and `post_cashbook.php:612` join B (the default, under ruling B);
   - South Sudan's copies of the same lines are masked too (the default: log text only, D7).
+
+## S. Status, 13 Nov 2026 — built; the suite and the rehearsal still to finish; NOT deployed
+
+This section records what was built. The design above stands as written on 9 Nov and is not rewritten. Where this
+section and §H disagree, this section records what was built. §S.3 and §S.4 are completed when the suite's two passes
+and the rehearsal's record run end.
+
+### S.1 The release
+
+- **Built:** `release/5.18.105` = **`f764699`**, one commit on 5.18.104 (`994d660`): 88 files, 43 added, 45 changed;
+  4,131 insertions, 71 deletions. No migration and no setting. **Not pushed:** the branch is local, and is pushed only
+  on the owner's word. The development branch keeps it as a patch (`wip/release-5.18.105.patch`, compared on 13 Nov:
+  byte for byte `git diff 994d660..f764699`), so a container restart cannot lose it.
+- **How it was built:** in three stages, each built, then reviewed by someone who had not built it, then fixed and
+  rechecked: C1 the code, C2 the tests, C3 the re-pointed boundaries. Five working commits, kept locally under
+  `refs/keep/wip/5.18.105` (`add6118`), were squashed into the release; the release's tree is `add6118`'s.
+- **Outside the tests it changes 23 files:** the 19 log files of §H.1 (35 edits covering 37 log statements,
+  LN-01…LN-35); `lib/PluginLog.php` (`tail()`); `tools/sales_followup_report.php` (the BY NUMBER table pads by
+  characters, not bytes); `SAFETY.md`; and `manifest.json` (the version line).
+- **The tests are 65 files.** New: `tests/test_log_mask.php` with `tests/log_mask/` (sections A–F: each of
+  LN-01…LN-35 driven through its real path in 21 groups; 73 weakened copies, each caught) and
+  `tests/fixtures/r105_revert.php`, the layer through which every older boundary still judges `994d660`'s tree. The
+  rest are re-points and version pins.
+- **Nothing is switched on or off.** No message, send, screen or stored record changes. The deploy and the rollback
+  leave every sales follow-up switch as they find it (§H.4, the LK checks).
+
+### S.2 Where the build differs from this design
+
+Each was found by a stage, by a review, or by a test's own drive, and decided by the coordinator; none changes what the
+owner ruled.
+
+1. **LN-35 is reached only by a hand-made request.** §H.1.19 says "Uganda: yes", when an accountant records a refund.
+   The line is in the handler for the posted field `action=cashbook_add_entry`
+   (`includes/post/post_cashbook.php:382`). The panel's cashbook form posts `cb_action=add_entry`, which another block
+   handles (`:717`); the retailer app sends `cashbook_add_entry` to the API (`includes/api/api_cashbook.php:387`); and no
+   form or script in the repository posts the field this handler reads. So no screen reaches LN-35's line. It is masked
+   all the same, and its drive (G21) posts the form by hand.
+2. **QN8b, and one more reading of the layer's window.** §H.3.4 asks every weakened copy that plants an edit 5.18.105
+   did not make to stand at least 31 lines from every 5.18.105 marker in its file. QN8 was moved to
+   `test_quote_company`'s I3 to meet that. QN8b puts 5.18.104's own QN8 back beside it (`CD_I_KEPT` edited), nine lines
+   above the I0 re-point's marker, so that N04's `CD_I_KEPT` half is proved to bite again. For that one copy
+   `r105_planted_outside()` counts only a marker inside the planted hunk or above it, which is the layer's own rule: a
+   marker below a hunk cannot mark it. `SAFETY.md`'s list of these copies does not name QN8b; the test's own comment
+   does (`tests/quote_followup/mutants_N.php`).
+3. **Older faults the drives met — recorded, not changed.** Each reads the same on `994d660`'s own files, measured in
+   the drive's harness. 5.18.105 changes none of them; each is the owner's to decide, as a later release.
+   - **Renewal reminders are never sent.** `renewal_remind_log` is not in `lib/SqliteStore.php`'s `$FLAT_TABLES`, so its
+     stamp is never read back and every run is a first-run dry run (G09).
+   - **The queued quotation PDFs are dropped.** `quote_wa_state` is not in that list either: `pdf_pending` is never
+     found, and is saved back empty (G10).
+   - **The `cashbook_add_entry` handler answers 500** after it has done its work: `TransactionIntegrityGuard` is not
+     loaded on its path (G21). Item 1 applies: no screen posts to it.
+   - **`cron/cashbook_reconcile.php` stops before its send on a book fresh from the migrations** (G06): it needs three
+     tables the store makes on first use and a column the cashbook adds when it is first opened. A live book has them.
+   - **`cron_wa_sync.php` run alone stops at every row:** it uses `WaInbound` before the file that loads it (G16).
+     Under `cron/master.php` an earlier job of the same process has loaded it.
+4. **The rehearsal (§H.6), found by its reviews before any run.**
+   - **105-1a'.** §H.6.3 says the weakened copy, "with BASELINE left at `221c9dc`, reads GO and is caught". Such a
+     copy never reaches the live-commit clause: the script's own guard (the pin's parent must be the baseline — "is
+     not cut on") stops it first, and no copy can read GO while 5.18.103 serves. The copy now built weakens the clause
+     itself, and must be seen to go on to the next clause, which refuses on the installed manifest (5.18.103, not
+     5.18.104).
+   - **105-1d.** The part-applied book is 091's first table gone **and** 091's `_schema_checks` row gone. QF-G1 reads
+     that row, never the table.
+   - **pre-d1.** A report that reached its end prints "READ-ONLY — nothing was changed" twice, the report's own last
+     line and the wrapper's. Each is required once.
+   - **LN-02.** The scratch book is made SSP-bookable in `kyc_config.json`, the file the release merges last.
+   - **105-6b.** The tool's `show` is compared by its step lines and the ledger's line, as LK-RB1 compares it. The
+     wrapper's own lines carry the time, the installed commit and its log's name.
+
+### S.3 The release suite
+
+Not complete. The plan is §H.7 step 5: two full passes on `f764699`, in a frozen, clean worktree, one after the other,
+with nothing beside them. Pass A2 began on 13 Nov at 05:29:32 UTC. Its result, and pass B's, are recorded here and in
+root `docs/07` when they end.
+
+### S.4 The deploy script and its rehearsal
+
+- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `ebab2a59073fc347…`), pinned to `f764699`: derived from
+  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 277 edits, derived twice byte for byte.
+  It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
+  copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It
+  refuses `--clear-switches`. `scripts/sales-followup-report.sh` is re-pinned beside it.
+- **The rehearsal** is `scripts/harness/deploy-5.18.105/` (`rehearse.sh`, `rh105q.py`, `rh105-ref.php`), chained on
+  5.18.104's rehearsal up to just before its 104-10. It was reviewed three times before any run: 13, 8 and 9 confirmed
+  defects, each checked against the code, fixed and rechecked (item 4 above lists the ones that amend §H.6).
+  **It has not been run.** The development trials and the record run come after the suite; their results are recorded
+  here and in root `docs/07`.
+
+### S.5 Next
+
+- The suite's two passes, then the rehearsal's trials and its record run, then root `docs/07`'s 5.18.105 entry with the
+  deploy command and, in its own block, the rollback.
+- **The owner's, then:** the word to push `release/5.18.105`; the deploy; its `--after-only`. Step 12, `offers-live`,
+  waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
+- **The owner's, separately:** the older faults of §S.2 item 3. The first two are in jobs that run on Uganda (LN-10's
+  and LN-14's).
