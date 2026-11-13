@@ -14,8 +14,8 @@
 #            5.18.104's, byte for byte (its tool, its two classes, master, the event processor, NotificationService and
 #            089–091 held by their sha256), and THIS SCRIPT KEEPS EVERY ONE OF ITS KEYS AS FOUND: it never runs the switch
 #            tool's on, off, skip, set or erase, nor scripts/sales-followup.sh, before, during or after the copy, or in
-#            the rollback — the steps that are on (1 report and 2 ack since 9 Nov; 3–5 planned for 10 Nov; 6 chase from
-#            about 13 Nov) keep running through the deploy, and are judged, never required off. Step 12 (offers-live)
+#            the rollback — the steps that are on when it runs (on 13 Nov: 1 report, 2 ack and 3 tracking; 4–6 follow
+#            in the ladder's order) keep running through the deploy, and are judged, never required off. Step 12 (offers-live)
 #            waits until 5.18.105 serves and its --after-only has passed. South Sudan: the lines it shares with Uganda
 #            lose their numbers too, nothing else changes. Files, against 994d660: 45 changed, 43 added — 88
 #            (the added ones are its tests).
@@ -125,8 +125,8 @@
 #            the rows as before), the open quote follow-ups and running offers counted, LM-RB1.
 #
 #   5.18.104'S CHECKS, CARRIED AND MADE LIVE-AWARE (root docs/74 §H.4.4). The paragraphs below are 5.18.104's, and
-#            stand as amended here: QF-G1 accepts only 5.18.104's tables as it left them (088 last is "deploy
-#            5.18.104 first"); QF-G2, VN-G7 and OF-G2 only "none pending"; QF-G4 is retired (LK-G1), with
+#            stand as amended here: QF-G1 accepts only 5.18.104's tables as it left them (088 last is "open the
+#            plugin once"); QF-G2, VN-G7 and OF-G2 only "none pending"; QF-G4 is retired (LK-G1), with
 #            --clear-switches, which is refused; QF-CA2's and QF-CA3's dark-build judgements are LK-CA2's; QF-CA3 lists
 #            each job OFF (switch) exactly when its flag is unset; QF-CA5, VN-CA1 and OF-CA1 equal stage A's readings
 #            through the pin's code; VN-CA2's ai_media as its flag says; VN-CA4's keys are LK-CA1's, its rows a note;
@@ -7490,7 +7490,7 @@ qf_stage() {
     "last="*" mig=111 sc=111 tables=111 kind=1 control=1") QF_G1=live
       ok "QF-G1 the copy carries 089, 090 and 091, each in the migration ledger with its _schema_checks row at its count, and quote_tracker, wa_auto_sends, wa_seen_marks and followups.kind ($g1) — $BASELINE_VERSION's tables as it left them; wa_messages read (the positive control)" ;;
     "last=${MIG88#migrations/} mig=000 sc=000 tables=000 kind=0 control=1")
-      cih_drop "$sub"; stop "NO-GO (QF-G1): the book's last migration is ${MIG88#migrations/}, with none of 089, 090 and 091 ($g1) — $BASELINE_VERSION is not live: deploy $BASELINE_VERSION first (scripts/deploy-$BASELINE_VERSION.sh). Nothing was changed. Send the log file" ;;
+      cih_drop "$sub"; stop "NO-GO (QF-G1): the book's last migration is ${MIG88#migrations/}, with none of 089, 090 and 091 ($g1), although $BASELINE_VERSION is live by its record, its manifest and its files (BR1): its code has not opened this book yet, and its runner applies the three the first time it does. Open the plugin in uCRM once, then run this again. Nothing was changed. Send the log file" ;;
     *) cih_drop "$sub"; stop "NO-GO (QF-G1): the book does not carry 089, 090 and 091 as $BASELINE_VERSION left them ($g1; mig, sc and tables per migration and per table): a part-applied book — a migration's _schema_checks row is the verdict, and one is missing. Nothing was changed. Send the log file" ;;
   esac
   lk_g1                # LK-G1 — the ladder's keys as found (root docs/74 §H.4.3): a refusal stops here, nothing changed
@@ -7502,7 +7502,7 @@ qf_stage() {
     note "QF-N1 the stored values (as the copy's settings read them): ${o%% | tz=*}"
     v="${o#* | tz=}"; note "QF-N1 dn_tz() ${v%% | n2=*}"
     v="${o#* | n2=}"; note "QF-N2 enquiry follow-ups on the copy: ${v%% | n4=*} (approved drafts by age — what S2-01 would have sent with followup_enabled on)"
-    v="${o#* | n4=}"; note "QF-N4 the Message Log's Evolution sends over 30 days, per handset (by role) and per Kampala day, by the pin's kind map, placed by this 088-shaped copy's configuration as it reads now — a baseline print, never a status: per handset its days, its peak day (p= reminders, win-back and briefs, what they take of the daily cap; t= the transactional total that day), the days at or over the cap and at or over half of it, the 30 days' reminders, win-back and briefs, its largest transactional day: ${v%% | n7=*}"
+    v="${o#* | n4=}"; note "QF-N4 the Message Log's Evolution sends over 30 days, per handset (by role) and per Kampala day, by the pin's kind map, placed by this copy's configuration as it reads now — a baseline print, never a status: per handset its days, its peak day (p= reminders, win-back and briefs, what they take of the daily cap; t= the transactional total that day), the days at or over the cap and at or over half of it, the 30 days' reminders, win-back and briefs, its largest transactional day: ${v%% | n7=*}"
     note "QF-N7 active accounts with a phone, by role (the daily list's size, R104-10): ${o##* | n7=}"
   else note "QF-N1, QF-N2, QF-N4, QF-N7 could not be read on the copy — NOT ESTABLISHED"; fi
   # QF-N3 — the pin's report on the same copy: the baseline headline (owners on the sheet, never the log)
@@ -7681,7 +7681,7 @@ qf_after() {
   note "QF-CA7 the live vault's sha256 and time are judged by Z1 at the end of this run, against its start ($(vt_say "$VT_START"))"
   # QF-CA8 — positive and negative controls on a copy, with wa_send_ledger=on in the copy's config only
   o="$(qf_php ca8 "$sub/code" "$sub")"
-  case "$o" in "in=1 out=1 reminder=1/1 other=1/1 staff_reply=0") ok "QF-CA8 on a copy, through the installed code, with wa_send_ledger=on in the copy's configuration alone: a wrapped inbound gives one in mark and a fromMe audio one out mark; the reminder hook files one reminder row and the invoice one other row; an Inbox reply (wa_staff_reply) gives no row" ;;
+  case "$o" in "in=1 out=1 reminder=1/1 other=1/1 staff_reply=0") ok "QF-CA8 on a copy, through the installed code, with wa_send_ledger=on in this reading's own configuration of the copy (set in memory, whatever the key reads there): a wrapped inbound gives one in mark and a fromMe audio one out mark; the reminder hook files one reminder row and the invoice one other row; an Inbox reply (wa_staff_reply) gives no row" ;;
     *) bad "QF-CA8 the marks and the record-only hooks do not record as reviewed on a copy ($o)" ;; esac
   cih_drop "$sub"
   lk_ca1             # LK-CA1 — the ladder's keys after the copy equal LK-B1's (the deploy run; root docs/74 §H.4.3)
@@ -8523,7 +8523,7 @@ vn_after() {
     o="$(vn_php objects "$sub/plugin.sqlite3" "${P3B_PIN:-$inst}")"
     if [ "$(qf_kv "$o" tables)|$(qf_kv "$o" objects)|$(qf_kv "$o" exact)|$(qf_kv "$o" extra)|$(qf_kv "$o" ledger)|$(qf_kv "$o" sc)|$(qf_kv "$o" control)" = "3/3|$VN_OBJ_N/$VN_OBJ_N|$VN_OBJ_N/$VN_OBJ_N|0|$VN_090_MD5|$VN_090_SC/$VN_090_SC|yes" ]; then
       ok "VN-M1 090 on the book after the copy: its ledger row's md5 the pin's file's (${VN_090_MD5:0:12}…), the 090 _schema_checks row present ($VN_090_SC of $VN_090_SC), its $VN_OBJ_N objects exact as the pin's 090 makes them and none other; wa_messages read (the positive control)"
-    else bad "VN-M1 090 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+    else bad "VN-M1 090 is not on the book as the pin makes it after the copy ($o) — $BASELINE_VERSION's first boot applied it and the deploy's stage A read it applied (QF-G1, VN-G2); $EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 090 changed since then, or this reading failed. Send the log file"; fi
     v="$(docker exec "$CONTAINER" sh -c 'l="$(grep -F 090_wa_voice.sql "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) echo PARTIAL ;; *OK:*) echo OK ;; "") echo none ;; *) echo other ;; esac' _ "$PDD_IN" 2>/dev/null </dev/null)"
     note "VN-M2 migration.log's line for 090 reads ${v:-not read} — informational: the _schema_checks row in VN-M1 is the evidence"
     o4="$(vn_php ca4 "$sub/plugin.sqlite3" "$(qf_kv "${QF_BASE:-}" max)" "$(qf_kv "${VN_BASE:-}" max)" "$(qf_kv "${VN_BASE:-}" evmax)" "${QF_COPY_UNIX:-0}")"
@@ -9181,7 +9181,7 @@ of_stage() {
   # OF-N1 — the baseline audience on the same copy, through the pin's store-free OfferAudience::build() (counts only)
   o="$OF_N1"
   case "$o" in "eligible="*)
-      note "OF-N1 the baseline audience, size all, through the pin's store-free OfferAudience::build() on QF-G2's trial copy (091 applied on that copy alone; read-only, total_changes() $(qf_kv "$o" changes)): $(qf_kv "$o" eligible) eligible, by handset $(qf_kv "$o" by_handset); $(qf_kv "$o" left) left out, by reason $(qf_kv "$o" left_out); waiting $(qf_kv "$o" waiting); compared loosely (last nine digits, exclusion only) $(qf_kv "$o" loose); the warm window $(qf_kv "$o" warm) days — how many customers wrote in that window, per number, counts only$( [ "$(qf_kv "$o" not_measured)" = "-" ] || echo ". A first deploy: $(qf_kv "$o" not_measured | tr ',' ' ') read \"not measured before 089\" (their sources are new in 089–091 and empty on this copy), and $(qf_kv "$o" partly | tr ',' ' ') are counted on their pre-existing sources alone (marked (part)) — so the eligible count is an upper bound")" ;;
+      note "OF-N1 the baseline audience, size all, through the pin's store-free OfferAudience::build() on QF-G2's trial copy (a copy of this live $BASELINE_VERSION book, 091 on it as $BASELINE_VERSION left it; read-only, total_changes() $(qf_kv "$o" changes)): $(qf_kv "$o" eligible) eligible, by handset $(qf_kv "$o" by_handset); $(qf_kv "$o" left) left out, by reason $(qf_kv "$o" left_out); waiting $(qf_kv "$o" waiting); compared loosely (last nine digits, exclusion only) $(qf_kv "$o" loose); the warm window $(qf_kv "$o" warm) days — how many customers wrote in that window, per number, counts only$( [ "$(qf_kv "$o" not_measured)" = "-" ] || echo ". A first deploy: $(qf_kv "$o" not_measured | tr ',' ' ') read \"not measured before 089\" (their sources are new in 089–091 and empty on this copy), and $(qf_kv "$o" partly | tr ',' ' ') are counted on their pre-existing sources alone (marked (part)) — so the eligible count is an upper bound")" ;;
     *) note "OF-N1 the baseline audience could not be read on the trial copy (${o:-not read}) — NOT ESTABLISHED" ;;
   esac
   # OF-N2 — R-01 before 089: the PHP log's lines for a disappearing or view-once message, over 30 days
@@ -9225,14 +9225,14 @@ of_after() {
     o="$(of_php m1 "$sub/code" "$sub/plugin.sqlite3")"
     if [ "$(qf_kv "$o" ledger)|$(qf_kv "$o" sc)|$(qf_kv "$o" schema)|$(qf_kv "$o" control)" = "$OF_091_MD5|$OF_091_SC/$OF_091_SC|sound|yes" ]; then
       ok "OF-M1 091 on the book after the copy: its ledger row's md5 the pin's file's (${OF_091_MD5:0:12}…), the 091 _schema_checks row $OF_091_SC of $OF_091_SC, and OfferSchema::check() empty through the installed OfferSchema; wa_messages read (the positive control)"
-    else bad "OF-M1 091 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+    else bad "OF-M1 091 is not on the book as the pin makes it after the copy ($o) — $BASELINE_VERSION's first boot applied it and the deploy's stage A read it applied (QF-G1, OF-G2); $EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 091 changed since then, or this reading failed. Send the log file"; fi
   fi
   # OF-M2 — migration.log's line for 091 (the row in OF-M1 is the verdict; the log may have been trimmed)
   v="$(docker exec "$CONTAINER" sh -c 'l="$(grep -F 091_wa_offers.sql "$1/migration.log" 2>/dev/null | tail -1)"; case "$l" in *PARTIAL*) echo PARTIAL ;; *OK:*) echo OK ;; "") echo none ;; *) echo other ;; esac' _ "$PDD_IN" 2>/dev/null </dev/null)"
   case "$v" in
     OK) ok "OF-M2 migration.log's last line for 091 reads OK:, never PARTIAL:" ;;
     PARTIAL) bad "OF-M2 migration.log's last line for 091 reads PARTIAL: — a statement of 091 failed (its _schema_checks row, OF-M1, says which half holds)" ;;
-    *) note "OF-M2 migration.log holds ${v:-no readable} line for 091 (none: trimmed, or the first boot has not run) — OF-M1's _schema_checks row is the verdict" ;;
+    *) note "OF-M2 migration.log holds ${v:-no readable} line for 091 (none: trimmed since $BASELINE_VERSION's first boot applied 091 — the runner halves the log past 256 KiB and logs nothing for a migration already in its ledger; $EXPECTED_VERSION adds none) — OF-M1's _schema_checks row is the verdict" ;;
   esac
   # OF-CA1 — the installed menu entry as text: the offers block once, its link inside OfferSwitch::screen(, as the pin's
   o="$(of_nav_counts <"$DEST/includes/navigation.php" 2>/dev/null)"; v="$(of_nav_block <"$DEST/includes/navigation.php" 2>/dev/null | sha256sum | cut -c1-64)"
@@ -9317,8 +9317,7 @@ of_rb_after() {
   if [ -n "$d" ]; then o="$(of_php rb2 "$d/plugin.sqlite3")"; cih_drop "$d"; fi
   case "$o" in
     "tables=4/4 "*) note "OF-RB2 the four offer tables and 091's _schema_checks row ($(qf_kv "$o" sc)) stay, and continue under $BASELINE_VERSION as Part O's switches say: offers by state $(qf_kv "$o" offers) — $(qf_kv "$o" running) running, $(qf_kv "$o" paused) paused (a paused one resumes only by an admin's Resume)" ;;
-    "tables=0/4 "*) note "OF-RB2 the book holds no offer tables (091 never applied): nothing of Part O stays" ;;
-    "tables="*) bad "OF-RB2 the offer tables are not as the rollback must leave them (${o%% offers=*}) — a rollback removes nothing" ;;
+    "tables="*) bad "OF-RB2 the offer tables are not as the rollback must leave them (${o%% offers=*}) — a rollback removes nothing, and $BASELINE_VERSION reads all four as Part O's switches say" ;;
     *) note "OF-RB2 could not be read on a copy of the book (${o:-no copy}) — the four offer tables stay as they were, under $BASELINE_VERSION as its switches say" ;;
   esac
 }

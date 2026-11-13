@@ -504,6 +504,40 @@ check "$(rw105 "")|$(rw105 _FULL)|$( [ "$(sv105 "$RW105" REPORT_SHA256)" = "$(gi
   "105-0e the report wrapper pinned to $V105's pin, short and full; REPORT_SHA256 and QSE_SHA256 the pin's files' from Git"
 
 echo; echo "== 105-pre. a live $BV105, as production has it: $BV105 deployed again, the ladder walked through the real tool =="
+# pre-a0: 5.18.104's rehearsal planted offer claims raw on a handset of its own (its plant104 "offer": i:rh104-plant, refs
+# offer:rh104-<tag>:1, not_sent, detail rh104_planted — its window cases) and its chain ends with them on the book. No writer
+# makes such a row and production has none. The release's offers-live check counts every offer ledger row that maps to no
+# recipient as a fault (OfferSwitch C-O2-4, ledger_unmapped), so with them step 12's check can only FAIL: development trial
+# 2 (13 Nov) read exactly that at 105-5c. They are removed here, raw, as they were planted — by the ledger's own rule,
+# which lets a row older than 400 days go (089's was_never_deleted): the DELETE runs under a clock of its own, 500 days
+# past the book's (the book's clock is not moved, no trigger is touched), names the rows by handset, kind, ref, outcome
+# and detail, and refuses unless they are exactly the offer rows that map to no recipient. 5.18.104's other plants stay.
+unplant105() {
+  local cf="$H105/v/unplant.clock"
+  printf '%s\n' "$(( $(cat "$CLKF104") + 500 * 86400 ))" > "$cf"; chown 1000:1000 "$cf"
+  ( cd "$H105/v" && setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$cf" python3 -I -c 'import re, sqlite3, sys
+c = sqlite3.connect(sys.argv[1], timeout=15); c.execute("PRAGMA busy_timeout = 15000")
+W = "handset = ? AND kind = ? AND ref LIKE ? AND outcome = ? AND detail = ?"; A = ("i:rh104-plant", "offer", "offer:rh104-%", "not_sent", "rh104_planted")
+one = lambda q, a=(): c.execute(q, a).fetchone()[0]
+def unmapped():
+    rec = set((r[0], r[1]) for r in c.execute("SELECT offer_id, id FROM wa_offer_recipients")); n = 0
+    for (ref,) in c.execute("SELECT ref FROM wa_auto_sends WHERE kind = ?", ("offer",)):
+        m = re.match(r"^offer:(\d+):(\d+)$", ref or "")
+        if not m or (int(m.group(1)), int(m.group(2))) not in rec: n += 1
+    return n
+cnt = lambda: (one("SELECT COUNT(*) FROM wa_auto_sends WHERE " + W, A), unmapped(), one("SELECT COUNT(*) FROM wa_auto_sends WHERE handset = ?", (A[0],)), one("SELECT COUNT(*) FROM wa_auto_sends"))
+n0, u0, p0, t0 = cnt()
+old = one("SELECT COUNT(*) FROM wa_auto_sends WHERE " + W + " AND claimed_at <= datetime(?, ?)", A + ("now", "-400 days")); d = 0
+if n0 > 0 and old == n0 and u0 == n0:
+    d = c.execute("DELETE FROM wa_auto_sends WHERE " + W, A).rowcount; c.commit()
+n1, u1, p1, t1 = cnt(); c.close()
+ok = n0 >= 1 and old == n0 and u0 == n0 and d == n0 and n1 == 0 and u1 == 0 and p1 == p0 - d and t1 == t0 - d
+print("ok=%d planted=%d old=%d deleted=%d left=%d unmapped=%d>%d plants=%d>%d rows=%d>%d" % (ok, n0, old, d, n1, u0, u1, p0, p1, t0, t1))' "$DATA/plugin.sqlite3" ) 2>>"$R105/logs/plant105.err"
+  rm -f "$cf"
+}
+UP105="$(unplant105)"
+check "$(kv105 "$UP105" ok)|$(kv105 "$UP105" left)|$(kv105 "$UP105" unmapped | cut -d'>' -f2)" "1|0|0" \
+  "pre-a0 5.18.104's rehearsal's own planted offer claims removed at the cut, by the ledger's 400-day rule under a clock of this step's own: ${UP105:-not read} — each on the planted handset and older than 400 days by that clock, all of them deleted, no offer ledger row left that maps to no recipient, its other plants and every other row kept"
 # pre-a: the cut's state, read by this rehearsal's own readers
 LKA105="$(lk105)"; CNA105="$(counts105)"
 check "$(live)|$(inst_ver)|$(kv105 "$LKA105" setnames)|$(kv105 "$LKA105" on)|$(kv105 "$LKA105" held)|$(kv105 "$LKA105" unread)|$(left104)|$( [ "$(kv105 "$CNA105" wa_offers)" -ge 0 ] 2>/dev/null && echo tables)" \
@@ -736,7 +770,8 @@ g4run105() {   # g4run105 LABEL [--script FILE] OPTION… — gap 4 (root docs/7
                # with a pause before its sweep's DELETE, inside BEGIN IMMEDIATE) held there from before the deploy; the baseline
                # read (base.1) and LK-CA2's rows printed with it; then the sweep let go — after the copy's start, before stage R
   local lab="$1" root a st op; shift
-  clk_to104 "$(kday_next104 11:05)"; G4DAY105="$(kday104 "$(fnow104)")"; plantll105 "$G4DAY105"
+  clk_to104 "$(kday_next104 11:05)"; G4DAY105="$(kday104 "$(fnow104)")"
+  G4LLP_105="$(kv105 "$(q105 listlast "$DATA/plugin.sqlite3" "$G4DAY105")" n)"; plantll105 "$G4DAY105"   # the day's rows before the plant: the walk's own list run may have left one
   G4LL0_105="$(kv105 "$(q105 listlast "$DATA/plugin.sqlite3" "$G4DAY105")" n)"; G4C0_105="$(counts105)"; G4M0_105="$(lkmap105 "g4-$lab-pre")"
   root="$(pinroot104 "g4$lab")"; pause104 "$root/lib/QuoteDailyList.php" "$DLA105"
   a="$ACT104/g4$lab.p"; rm -f "$a".*
@@ -777,9 +812,9 @@ RBN105="$(grep -nxF "      $EXP_ROLLBACK105" <<<"$OUT" | cut -d: -f1)"; VDN105="
 printf '%s\n' "$OUT" > "$R105/logs/deploy4a.txt"
 check "$(grep -c . <<<"$RBN105")|$( [ "$(n103 "$RBN105")" -gt "$(n103 "$VDN105")" ] && echo after)|$(kv105 "$(q105 blocks "$R105/logs/deploy4a.txt" "$V105")" mixed)" "1|after|0" \
   "105-4e the rollback printed once, after the verdict, a block of its own (no copyable block mixes it with another command)"
-check "$G4READY105|$(n103 "$G4LL0_105")|$G4LL1_105|$(swept105)|$(cat "$R105/logs/g4a.order" 2>/dev/null)|$( [ "$(n103 "$(cat "$ACT104/g4a.p.letgo" 2>/dev/null)")" -ge "$(n103 "$G4U105")" ] 2>/dev/null && echo aftercopy)" \
+check "$G4READY105|$(( $(n103 "$G4LL0_105") - $(n103 "$G4LLP_105") ))|$G4LL1_105|$(swept105)|$(cat "$R105/logs/g4a.order" 2>/dev/null)|$( [ "$(n103 "$(cat "$ACT104/g4a.p.letgo" 2>/dev/null)")" -ge "$(n103 "$G4U105")" ] 2>/dev/null && echo aftercopy)" \
       "ready|2|0|$G4DAY105|before|aftercopy" \
-  "105-4f gap 4: the daily-list sweep held before its DELETE (inside its BEGIN IMMEDIATE) from before the deploy, let go after the copy's start (the baseline's own second) and ended before stage R read — its two list_last:$G4DAY105 rows gone, list_swept the day"
+  "105-4f gap 4: the daily-list sweep held before its DELETE (inside its BEGIN IMMEDIATE) from before the deploy, let go after the copy's start (the baseline's own second) and ended before stage R read — the two list_last:$G4DAY105 rows planted for it (the day held $G4LLP_105 before the plant, $G4LL0_105 after) and every other row of the day gone, list_swept the day"
 LKC2_105="$(sed -n "s/^  note  LK-CA2 quote_followup_state, whole: \([0-9-]*\) → \([0-9-]*\) .*/\1 \2/p" <<<"$OUT" | head -1)"
 check "$(okline "$OUT" LK-CA2 "no table's rows fell across the copy")|$(set -- $LKC2_105; [ "$#" = 2 ] && [ "$2" -lt "$1" ] 2>/dev/null && echo lower)" "yes|lower" \
   "105-4g LK-CA2 PASS across the copy (quote_followup_state over its rows NOT LIKE 'list_last:%'); its whole count lower in a note ($LKC2_105) — the sweep deleted inside its own transaction, after the baseline"

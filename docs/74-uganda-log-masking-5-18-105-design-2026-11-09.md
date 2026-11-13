@@ -1595,7 +1595,7 @@ owner ruled.
      tables the store makes on first use and a column the cashbook adds when it is first opened. A live book has them.
    - **`cron_wa_sync.php` run alone stops at every row:** it uses `WaInbound` before the file that loads it (G16).
      Under `cron/master.php` an earlier job of the same process has loaded it.
-4. **The rehearsal (§H.6), found by its reviews before any run.**
+4. **The rehearsal (§H.6), found by its reviews before any run, and one by its second trial.**
    - **105-1a'.** §H.6.3 says the weakened copy, "with BASELINE left at `221c9dc`, reads GO and is caught". Such a
      copy never reaches the live-commit clause: the script's own guard (the pin's parent must be the baseline — "is
      not cut on") stops it first, and no copy can read GO while 5.18.103 serves. The copy now built weakens the clause
@@ -1608,6 +1608,12 @@ owner ruled.
    - **LN-02.** The scratch book is made SSP-bookable in `kyc_config.json`, the file the release merges last.
    - **105-6b.** The tool's `show` is compared by its step lines and the ledger's line, as LK-RB1 compares it. The
      wrapper's own lines carry the time, the installed commit and its log's name.
+   - **pre-a0, new.** The cut's book carries four offer claims that 5.18.104's rehearsal planted. They are removed
+     before anything else is read (§S.4, T2-b). §H.6.3 begins at pre-a.
+5. **QF-G1's refusal for a book that ends at 088.** §H.4.4 gives its words as "5.18.104 is not live — deploy 5.18.104
+   first". By the time QF-G1 reads, the record, the manifest and every file are already known to be 5.18.104's (step 0,
+   BR1), and `deploy-5.18.104.sh` run on such a server skips its deploy. What such a book lacks is 5.18.104's first
+   boot, whose runner applies 089–091. The refusal now says so: open the plugin in uCRM once, then run again.
 
 ### S.3 The release suite
 
@@ -1619,8 +1625,8 @@ are recorded here and in root `docs/07` when they end.
 
 ### S.4 The deploy script and its rehearsal
 
-- **`scripts/deploy-5.18.105.sh`** (14,745 lines, sha256 `4de922f33d71ec09…`), pinned to `f764699`: derived from
-  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 284 edits, derived twice byte for byte.
+- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `fd678ec9933c4950…`), pinned to `f764699`: derived from
+  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 294 edits, derived twice byte for byte.
   It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
   copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It
   refuses `--clear-switches`. `scripts/sales-followup-report.sh` is re-pinned beside it.
@@ -1637,8 +1643,26 @@ are recorded here and in root `docs/07` when they end.
       worker-owned list, where a rollback of 5.18.105 leaves 5.18.104's, which is the pin's.
 
     Nothing else failed: each weakened copy was caught, and the drives of LN-01…LN-04 passed.
-  - A trial without that shortcut (the ladder walked through the real tool) and the record run are still to come;
-    their results are recorded here and in root `docs/07`.
+  - **Sweep 1** (13 Nov, beside trial 2): since both defects were carried lines that still took the baseline for
+    5.18.103, two readers went through the script for more of that kind, in the branches a trial does not take, and a
+    third checked each finding. Seven were confirmed and fixed in the derivation. One was a false pass: after a
+    rollback, a book with none of the four offer tables was a note ("091 never applied"), and is now a FAIL. One was a
+    wrong instruction (item 5 of §S.2). Five were false words in notes, an ok line and two failure hints, which spoke
+    of 089–091 as this deploy's own. The header's dates for the ladder's steps, written on 9 Nov as a plan, were
+    corrected with them.
+  - **Development trial 2** (13 Nov, 19:09–20:26 UTC, the ladder walked through the real tool, the script with T1-a
+    and T1-b): **2,707 ok, 5 failed** — the three inherited checks and two expectations of the rehearsal, both fixed
+    in the rehearsal. No check of the script failed but where a weakened copy or a planted fault made it, and the walk
+    (pre-d, pre-e: 19 checks) passed whole on its first run.
+    - **T2-a:** 105-4f counted the day's `list_last` rows as its own two. Once the ladder is walked the day already
+      holds the row of the walk's own list run. The two planted rows are now counted as a difference.
+    - **T2-b:** step 12's check failed in `--after-only` (`ledger_unmapped`). 5.18.104's rehearsal ends with four
+      offer claims it planted raw on the book, and the release's check rightly counts an offer ledger row that maps to
+      no recipient as a fault. Production has none. They are now removed at the cut (pre-a0), by the ledger's own
+      400-day rule under a clock of that step's own; without that clock the ledger refuses the removal, which is the
+      step's control.
+  - A third trial with those fixes, and then the record run, are still to come; their results are recorded here and
+    in root `docs/07`.
 
 ### S.5 Next
 

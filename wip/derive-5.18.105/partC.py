@@ -319,3 +319,53 @@ def apply(doc, ctx):
         for s in wrong:
             if s in l:
                 raise SystemExit(f"C: line {n}: a printed line still says {s!r}")
+    # ── Sweep 1 (13 Nov, after development trial 1's two defects of the same kind; two readers, each finding checked by a
+    #    third): carried lines that still spoke as if 089–091 came with THIS deploy — true when the baseline was 5.18.103,
+    #    false now that it is 5.18.104 — in notes every run prints and in branches the trials do not take. Printed words
+    #    only, but for OF-RB2's arm, which was a false pass on a damaged book.
+    # OF-RB2: "no offer tables" was a harmless end when the rollback removed the release that brought 091. Under 5.18.104,
+    # put back, the four tables are its own: any reading but 4/4 is a FAIL.
+    doc.sub('''    "tables=0/4 "*) note "OF-RB2 the book holds no offer tables (091 never applied): nothing of Part O stays" ;;
+    "tables="*) bad "OF-RB2 the offer tables are not as the rollback must leave them (${o%% offers=*}) — a rollback removes nothing" ;;
+''',
+            '''    "tables="*) bad "OF-RB2 the offer tables are not as the rollback must leave them (${o%% offers=*}) — a rollback removes nothing, and $BASELINE_VERSION reads all four as Part O's switches say" ;;
+''', why="sweep 1: OF-RB2 0/4")
+    doc.mustnot("091 never applied")
+    # QF-G1's 088 arm: the record, the manifest and every file are 5.18.104's by then (step 0, BR1), so "deploy 5.18.104
+    # first" would send the operator to a script that skips its deploy. What is missing is 5.18.104's first boot on this book.
+    doc.sub('''with none of 089, 090 and 091 ($g1) — $BASELINE_VERSION is not live: deploy $BASELINE_VERSION first (scripts/deploy-$BASELINE_VERSION.sh). Nothing was changed. Send the log file" ;;''',
+            '''with none of 089, 090 and 091 ($g1), although $BASELINE_VERSION is live by its record, its manifest and its files (BR1): its code has not opened this book yet, and its runner applies the three the first time it does. Open the plugin in uCRM once, then run this again. Nothing was changed. Send the log file" ;;''',
+            why="sweep 1: QF-G1 088 arm")
+    doc.sub('''QF-G1 accepts only 5.18.104's tables as it left them (088 last is "deploy
+#            5.18.104 first"); QF-G2,''',
+            '''QF-G1 accepts only 5.18.104's tables as it left them (088 last is "open the
+#            plugin once"); QF-G2,''', why="sweep 1: header, QF-G1")
+    # OF-N1, QF-N4, QF-CA8: notes and an ok line every run prints
+    doc.sub("on QF-G2's trial copy (091 applied on that copy alone; read-only, total_changes() ",
+            "on QF-G2's trial copy (a copy of this live $BASELINE_VERSION book, 091 on it as $BASELINE_VERSION left it; read-only, total_changes() ",
+            why="sweep 1: OF-N1")
+    doc.sub("placed by this 088-shaped copy's configuration as it reads now", "placed by this copy's configuration as it reads now", why="sweep 1: QF-N4")
+    doc.sub("with wa_send_ledger=on in the copy's configuration alone:",
+            "with wa_send_ledger=on in this reading's own configuration of the copy (set in memory, whatever the key reads there):",
+            why="sweep 1: QF-CA8")
+    # VN-M1, OF-M1, OF-M2: no boot of 5.18.105 applies 090 or 091, and waiting changes nothing
+    doc.sub('''    else bad "VN-M1 090 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+''',
+            '''    else bad "VN-M1 090 is not on the book as the pin makes it after the copy ($o) — $BASELINE_VERSION's first boot applied it and the deploy's stage A read it applied (QF-G1, VN-G2); $EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 090 changed since then, or this reading failed. Send the log file"; fi
+''', why="sweep 1: VN-M1")
+    doc.sub('''    else bad "OF-M1 091 is not on the book as the pin makes it after the copy ($o) — the plugin's runner applies it at its first boot; waited up to 60 s for the ledger row; --after-only judges it again"; fi
+''',
+            '''    else bad "OF-M1 091 is not on the book as the pin makes it after the copy ($o) — $BASELINE_VERSION's first boot applied it and the deploy's stage A read it applied (QF-G1, OF-G2); $EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 091 changed since then, or this reading failed. Send the log file"; fi
+''', why="sweep 1: OF-M1")
+    doc.sub("line for 091 (none: trimmed, or the first boot has not run) — OF-M1's _schema_checks row is the verdict",
+            "line for 091 (none: trimmed since $BASELINE_VERSION's first boot applied 091 — the runner halves the log past 256 KiB and logs nothing for a migration already in its ledger; $EXPECTED_VERSION adds none) — OF-M1's _schema_checks row is the verdict",
+            why="sweep 1: OF-M2")
+    for s in ("the plugin's runner applies it at its first boot", "or the first boot has not run", "088-shaped", "applied on that copy alone", "is not live: deploy"):
+        for n, l in enumerate(doc.t.split("\n"), 1):
+            if not l.lstrip().startswith("#") and printed.search(l) and s in l:
+                raise SystemExit(f"C: line {n}: a printed line still says {s!r} (sweep 1)")
+    # the header's ladder dates (written on 9 Nov as a plan): what is on is read by LK-G1 at each run, never assumed
+    doc.sub('''the steps that are on (1 report and 2 ack since 9 Nov; 3–5 planned for 10 Nov; 6 chase from
+#            about 13 Nov) keep running through the deploy,''',
+            '''the steps that are on when it runs (on 13 Nov: 1 report, 2 ack and 3 tracking; 4–6 follow
+#            in the ladder's order) keep running through the deploy,''', why="header: the ladder's dates")
