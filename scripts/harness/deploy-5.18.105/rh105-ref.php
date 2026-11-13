@@ -20,7 +20,7 @@
 //        — LN-03 (root docs/74 §H.1.3): <code root>'s QuotationService on the SCRATCH copy, its NotificationService
 //          replaced by reflection (the release's tests' way) with one whose sendVia throws an exception carrying spec
 //          "phone" in its four written forms; the private sendWA(phone, text, 'quote_manual') invoked by reflection;
-//          PHP's error log set to spec "log" just before: {"ret":true|false,"threw":1}
+//          PHP's error log set to spec "log" just before: {"ret":true|false,"threw":<the times the replaced sendVia was entered and threw>}
 //   php rh105-ref.php ln04 <code root> <scratch> <spec JSON>
 //        — LN-04 (root docs/74 §H.1.4): <code root>'s WaAutoReplyService on the SCRATCH copy, its private
 //          createCrmJobForBidal(phone, name, issue, 'support') invoked by reflection, with a configuration of the drive's
@@ -120,11 +120,11 @@ try {
         // the parent's own signature (994d660's NotificationService, which 5.18.105 keeps byte for byte), its constructor
         // left out: nothing is loaded, nothing can be sent
         $thrower = new class extends NotificationService {
-            public string $rh105 = '';
+            public string $rh105 = ''; public int $rh105n = 0;
             public function __construct() {}
             public function sendVia(string $sender, string $toPhone, string $message, string $event = '', array $vars = [], string $class = ContactOptOut::CLASS_TRANSACTIONAL): void
             {
-                throw new RuntimeException($this->rh105);
+                $this->rh105n++; throw new RuntimeException($this->rh105);
             }
         };
         $thrower->rh105 = $why;
@@ -135,7 +135,7 @@ try {
         $m->setAccessible(true);
         $logTo((string)($spec['log'] ?? ''));
         $ret = $m->invoke($qs, $ph, (string)$spec['text'], 'quote_manual');
-        $out(['ret' => (bool)$ret, 'threw' => 1]);
+        $out(['ret' => (bool)$ret, 'threw' => $thrower->rh105n]);
         exit(0);
     }
     if ($mode === 'ln04') {

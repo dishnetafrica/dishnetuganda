@@ -361,9 +361,9 @@ PY
   echo "$dst"
 }
 OWN105="$(owner104)"
-B104_104="$(sv105 "$DEPLOY104" BASELINE_COMMIT)"; B104F_104="$(sv105 "$DEPLOY104" BASELINE_COMMIT_FULL)"
-anc105 base103 "BASELINE_COMMIT=\"$B105\"" "BASELINE_COMMIT=\"$B104_104\""
-anc105 base103f "BASELINE_COMMIT_FULL=\"$B105F\"" "BASELINE_COMMIT_FULL=\"$B104F_104\""
+# base103: the live-commit clause never true. (A copy with BASELINE_COMMIT set back to 5.18.104's own baseline never reaches
+# that clause: the script's own "is not cut on" guard, far above it, stops such a copy — root docs/74 §S.2.)
+anc105 base103 '    elif [ "$LIVE_BEFORE" != "$BASELINE_COMMIT" ]; then' '    elif false; then'
 anc105 held '  [ "$(qf_kv "$o" held)" = "0" ] || stop "NO-GO (LK-G1): ' '  true || stop "NO-GO (LK-G1): '
 anc105 heldset "            if (isset(\$h['p']) || isset(\$h['d'])) { if (\$isAll) \$held[] = \$k; else \$heldS++; }" "            if (isset(\$h['p']) || isset(\$h['d'])) { \$held[] = \$k; }"
 anc105 part '    *) cih_drop "$sub"; stop "NO-GO (QF-G1): the book does not carry 089, 090 and 091 as $BASELINE_VERSION left them' \
@@ -509,13 +509,13 @@ LKA105="$(lk105)"; CNA105="$(counts105)"
 check "$(live)|$(inst_ver)|$(kv105 "$LKA105" setnames)|$(kv105 "$LKA105" on)|$(kv105 "$LKA105" held)|$(kv105 "$LKA105" unread)|$(left104)|$( [ "$(kv105 "$CNA105" wa_offers)" -ge 0 ] 2>/dev/null && echo tables)" \
       "$P103|$V103|-|-|0|-|$NA104|tables" \
   "pre-a the state at the cut, by this rehearsal's own reading: $P103 ($V103) serving, no ladder key in any of the four places, nothing on, nothing held, everything readable; 5.18.104's $NA104 added files on disk; 089–091's tables there"
-# 105-1a, here because 5.18.103 serves: 5.18.105's --check refuses — deploy 5.18.104 first; its weakened copy, BASELINE left
-# at 5.18.104's own baseline, does not say so (caught).
+# 105-1a, here because 5.18.103 serves: 5.18.105's --check refuses — deploy 5.18.104 first; its weakened copy, the
+# live-commit clause never true, does not say so and goes on to the next clause, the installed manifest's (caught).
 D0_105="$(data94)"; fresh105; OUT="$(run105c --check)"
 nogo105 "105-1a --check while $V103 serves: NO-GO — $V105 was built against $B105 ($BV105): deploy $BV105 first, nothing changed" "deploy $BV105 first (scripts/deploy-$BV105.sh)" "$OUT" "$D0_105" "$P103"
-M105="$(weak105 base103 base103 base103f)"; fresh105; OUT="$(R105_MUTANT_OUT=1 run105c --script "$M105" --check)"; rm -f "$M105"
-check "$(has "$OUT" "deploy $BV105 first")|$(live)|$(backups105)|$(keyf105)" "no|$P103|0|nokey" \
-  "105-1a' …its weakened copy, BASELINE left at $B104_104: the live-commit refusal is gone (caught by 105-1a's text) — nothing deployed, backed up or written"
+M105="$(weak105 base103 base103)"; fresh105; OUT="$(R105_MUTANT_OUT=1 run105c --script "$M105" --check)"; rm -f "$M105"
+check "$(has "$OUT" "deploy $BV105 first")$(has "$OUT" "the container's record says $B105, but the installed manifest says $V103, not $BV105")|$(live)|$(backups105)|$(keyf105)" "noyes|$P103|0|nokey" \
+  "105-1a' …its weakened copy, the live-commit clause never true: the refusal is gone and the run goes on to the next clause, which refuses on the installed manifest ($V103, not $BV105) (caught by 105-1a's text) — nothing deployed, backed up or written"
 # pre-b: 5.18.104 deployed again through the real deploy-5.18.104.sh — the runbook's form for a book it has run on
 fresh104; OUT="$(run104c --answer DEPLOY --redeploy)"; PREB105="$OUT"
 check "$(fails "$OUT")$(has "$OUT" "  $V104 (deploy): PASSED.")|$(live)|$(inst_ver)|$(grep -cx 'QF_G1=redeploy' "$STATE104")|$(grep -cE '^  (ok|note)  +QF-G4 ' <<<"$OUT" | awk '{print ($1 > 0) ? "g4" : "none"}')|$(kv105 "$(lk105)" setnames)" \
@@ -546,9 +546,10 @@ else
   RDAY105="$(kday104 "$(fnow104)")"
   OUT="$(sf104c on report --ran "$RDAY105")"; R1R105="$(sfrc104)"
   OUT2="$(sf104c --check report)"; R1C105="$(sfrc104)"
-  check "$RPR105|$(grep -c 'READ-ONLY — nothing was changed' <<<"$RPO105")|$R1R105|$(has "$OUT" 'ON report: sf_report_ran_at')|$R1C105|$(grep -cE '^ *report: PASS$' <<<"$OUT2" | awk '{print ($1 > 0) ? "pass" : "no"}')" \
-        "0|1|0|yes|0|pass" \
-    "pre-d1 the report wrapper (read-only), then on report --ran $RDAY105 through the installed tool (sf_report_ran_at), then --check report: PASS"
+  check "$RPR105|$(grep -cxF '  READ-ONLY — nothing was changed.' <<<"$RPO105"),$(grep -cxF '  READ-ONLY — nothing was changed' <<<"$RPO105")|$R1R105|$(has "$OUT" 'ON report: sf_report_ran_at')|$R1C105|$(grep -cE '^ *report: PASS$' <<<"$OUT2" | awk '{print ($1 > 0) ? "pass" : "no"}')" \
+        "0|1,1|0|yes|0|pass" \
+    "pre-d1 the report wrapper (read-only: the report's own last line once and the wrapper's closing line once — a run that reached the report's end, not 'not this install'), then on report --ran $RDAY105 through the installed tool (sf_report_ran_at), then --check report: PASS"
+  aftx104 "pre-d1'"
   OUT="$(sf104c on ack)"; check "$(sfrc104)" "0" "pre-d2 on ack: ON (P5's keys and the ledger's)"
   aftx104 "pre-d2'" "ack=judged" "ledger=pass|empty"
   clk_to104 $(( $(fnow104) + 25 * 3600 ))
@@ -557,6 +558,7 @@ else
   aftx104 "pre-d3''" "ack=judged" "ledger=pass|empty" "tracking=judged"
   clk_to104 $(( $(fnow104) + 73 * 3600 ))
   OUT="$(sf104c on list --accept-not-yet "no quotation yet in the rehearsal")"; check "$(sfrc104)|$(grep -c '^ON list: ' <<<"$OUT")" "0|1" "pre-d4 the clock 73 h on: on list --accept-not-yet — ON"
+  aftx104 "pre-d4'" "ack=judged" "ledger=pass|empty" "tracking=judged" "list=judged"
   OUT="$(sf104c on voice-measure)"; check "$(sfrc104)|$(grep -c '^ON voice-measure: ai_media_enabled, ai_media_since$' <<<"$OUT")" "0|1" "pre-d5 on voice-measure: ON"
   aftx104 "pre-d5'" "ack=judged" "ledger=pass|empty" "tracking=judged" "list=judged" "voice-measure=judged"
   dsnap105 L1
@@ -577,12 +579,12 @@ else
     "pre-e3 a quotation to a fixture customer through the installed ConversationService ($QD105 08:20, after tracking came on); cycle A at 08:25: quote_chase tracks it (open)"
   RMS105="$(kat104 "$QD1_105 09:02")"; RMD105="$(kat104 "$QD1_105 09:09")"
   clk_to104 "$(kat104 "$QD1_105 08:25")"; MB105="$(master104 105B quote_chase followup_send quote_daily_list)"
-  clk_to104 "$(kat104 "$QD1_105 09:11")"; EVE0_105="$(grep -c '/message/sendText/' "$SB/evo/requests.log" 2>/dev/null)"
+  clk_to104 "$(kat104 "$QD1_105 09:11")"; EVE0_105="$(grep -c '/message/sendText/' "$SB/evo/requests.log" 2>/dev/null)"; LE0_105="$(ledger104)"
   ME105="$(master104 105E --set "{\"customer_reminders\":{\"last_run\":$RMS105,\"duration_ms\":$(( (RMD105 - RMS105) * 1000 ))}}" followup_send quote_daily_list)"
   LE105="$(ledger104)"
-  check "$MB105|$ME105|$(kv104 "$LE105" quote | cut -d/ -f1 | awk '{print ($1 >= 1) ? "claimed" : $1}')|$(( $(grep -c '/message/sendText/' "$SB/evo/requests.log" 2>/dev/null) - $(n103 "$EVE0_105") ))" \
-        "0|0|claimed|1" \
-    "pre-e4 day 1 ($QD1_105): cycle B drafts the chase; cycle E (09:11), the day's reminder run recorded finished: the chase claimed in the ledger and sent — one sendText at the stand-in Evolution"
+  check "$MB105|$ME105|$(kv104 "$LE0_105" quote | grep -cE '^[0-9]+/[0-9]+$')$(kv104 "$LE105" quote | grep -cE '^[0-9]+/[0-9]+$')|$(( $(n103 "$(kv104 "$LE105" quote | cut -d/ -f1)") - $(n103 "$(kv104 "$LE0_105" quote | cut -d/ -f1)") ))|$(( $(grep -c '/message/sendText/' "$SB/evo/requests.log" 2>/dev/null) - $(n103 "$EVE0_105") ))" \
+        "0|0|11|1|1" \
+    "pre-e4 day 1 ($QD1_105): cycle B drafts the chase; cycle E (09:11), the day's reminder run recorded finished: the ledger read just before the cycle and after it (both read), one more quote claim settled sent ($(kv104 "$LE0_105" quote) → $(kv104 "$LE105" quote)) — the chase claimed in the ledger — and one sendText at the stand-in Evolution"
   # pre-e5: a STOP from the fixture's number through the real webhook under 5.18.104 — one old-form opt-out line
   WHPP105="$(free_port)"; WHUP105="http://127.0.0.1:$WHPP105/evo_webhook.php"
   setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$CLKF104" "$PHPBIN" -d disable_functions=exec -S "127.0.0.1:$WHPP105" -t "$PD" >"$R105/pre/webhook-104.log" 2>&1 & WHPIDP105=$!; PIDS+=("$WHPIDP105")
@@ -664,11 +666,14 @@ check "$(checkgo105 "$OUT")|$(noteline "$OUT" LK-G1 "a setting held by a config.
 M105="$(weak105 heldset heldset)"; fresh105; OUT="$(R105_MUTANT_OUT=1 run105c --script "$M105" --check)"; rm -f "$M105"
 check "$(has "$OUT" 'NO-GO (LK-G1)')|$(went105 "$OUT")|$(live)" "yes|nono|$P104" "105-1c' …gap 11's control: a copy whose lk reading counts settings as held refuses here (caught by 105-1c's GO)"
 check "$(drest105 L2)" "same|same|same" "105-1c'' …the book back at L2"
-# 1d: a part-applied book — one of 091's tables gone (raw: the shape a part-applied 091 would leave)
+# 1d: a part-applied book — one of 091's tables gone and, with it, 091's _schema_checks row (raw: the shape a part-applied
+# 091 leaves — its own INSERT into _schema_checks is refused by CHECK (found = expected) when a name is missing; QF-G1 reads that row)
 T091_105="$(git -C "$REPO" show "$B105F:$P/migrations/$(sv105 "" MIG104_LAST)" 2>/dev/null | grep -oE 'CREATE TABLE (IF NOT EXISTS )?[a-z_]+' | awk '{print $NF}' | head -1)"
-sqx "DROP TABLE IF EXISTS [$T091_105]" >/dev/null; D1_105="$(data94)"
+SC0_105="$(kv105 "$(counts105)" sc_rows)"; sqx "DROP TABLE IF EXISTS [$T091_105]" >/dev/null; sqx "DELETE FROM _schema_checks WHERE migration = '$(sv105 "" MIG104_LAST)'" >/dev/null
+CN1D105="$(counts105)"; D1_105="$(data94)"
+check "$T091_105|$(( $(n103 "$SC0_105") - $(n103 "$(kv105 "$CN1D105" sc_rows)") ))|$(kv105 "$CN1D105" wa_offers)" "wa_offers|1|-1" "105-1d control: the plant, read back by this rehearsal's own count — 091's first table ($T091_105) gone, and one _schema_checks row fewer (091's, the row QF-G1 reads)"
 fresh105; OUT="$(run105c --check)"
-nogo105 "105-1d QF-G1 refuses a part-applied book (091's $T091_105 gone) — nothing changed" "NO-GO (QF-G1): the book does not carry 089, 090 and 091 as $BV105 left them" "$OUT" "$D1_105" "$P104"
+nogo105 "105-1d QF-G1 refuses a part-applied book (091's $T091_105 and its _schema_checks row gone) — nothing changed" "NO-GO (QF-G1): the book does not carry 089, 090 and 091 as $BV105 left them" "$OUT" "$D1_105" "$P104"
 M105="$(weak105 part part)"; fresh105; OUT="$(R105_MUTANT_OUT=1 run105c --script "$M105" --check)"; rm -f "$M105"
 check "$(has "$OUT" 'NO-GO (QF-G1): the book does not carry')|$(went105 "$OUT")|$(live)" "no|nono|$P104" "105-1d' …QF-G1's part-applied refusal weakened: its words gone (caught)"
 check "$(drest105 L2)" "same|same|same" "105-1d'' …the book back at L2"
@@ -763,8 +768,8 @@ check "$(fails "$OUT")$(has "$OUT" "  $V105 (deploy): PASSED.")|$(live)|$(instal
   "105-4a the deploy over L2 (DEPLOY typed, a first deploy): PASSED — $P105 serving, every file the pin's, $V105"
 check "$(okline "$OUT" LK-CA1 "after the copy every ladder key, switch, record key and setting alike, reads in the four places exactly as at LK-B1")|$(kv105 "$(q105 lkdiff "$G4M0_105" "$G4M1_105")" n)|$(wason104 "$OUT")" "yes|0|0" \
   "105-4b LK-CA1 ok, and this rehearsal's own reading finds the four places' ladder subsets byte-identical before and after (lkdiff n=0); no tool line 'was on:'"
-check "$(kv105 "$(q105 fell "$G4C0_105" "$G4C1_105")" fell)|$(kv105 "$G4C0_105" sc)" "-|$(kv105 "$G4C1_105" sc)" \
-  "105-4c the 089–091 and P7 tables, and the quote follow-ups, never fell by this rehearsal's own count (quote_followup_state over its rows NOT LIKE 'list_last:%'); every _schema_checks row unchanged"
+check "$(q105 fell "$G4C0_105" "$G4C1_105")|$(kv105 "$G4C0_105" sc)" "fell=- unread=-|$(kv105 "$G4C1_105" sc)" \
+  "105-4c the 089–091 and P7 tables, and the quote follow-ups, never fell by this rehearsal's own count (quote_followup_state over its rows NOT LIKE 'list_last:%'); every _schema_checks row unchanged; every count read in both readings (unread=-)"
 check "$(grep -cE '^  (ok|note) +LK-ON ' <<<"$OUT" | awk '{print ($1 > 0) ? "read" : "none"}')|$(grep -c '^  FAIL  LK-ON ' <<<"$OUT")|$(okline "$OUT" LM-CA1 "the installed files hold each of the")|$(grep -cE '^  (ok|note) +LM-CA2 ' <<<"$OUT" | awk '{print ($1 > 0) ? "read" : "none"}')|$(grep -cE '^  FAIL  LM-' <<<"$OUT")" \
       "read|0|yes|read|0" \
   "105-4d LK-ON read for each step on (none FAIL); LM-CA1 ok — the installed files hold each entry's new block once and its old block nowhere; LM-CA2's counts printed"
@@ -866,7 +871,7 @@ check "$(qj "$WS1_105" http 2>/dev/null)|$(grep -cE "$LN01RX105" "$DRV105/wh105-
 # no DN_DATA_DIR (getDataDir(): ucrm.json's pluginDataDir, else the plugins root's sibling — the LIVE book), so it runs from
 # a code root of its own, a copy of the drives' root whose ucrm.json names the scratch (pinroot104's way); the schedule
 # planted through that same root on that scratch, and master never run unless that root's getDataDir() answers the scratch
-S2_105="$(scratch105 ln02)"; jset105 "$S2_105/config.json" cashbook_currencies '"UGX,USD,SSP"'
+S2_105="$(scratch105 ln02)"; jset105 "$S2_105/kyc_config.json" cashbook_currencies '"UGX,USD,SSP"'
 SP2_105="$(ref105 sspin "$INST105" "$S2_105" '{"name":"*","ssp":5000}')"
 MR2_105="$H105/inst-ln02"; rm -rf "${MR2_105:?}"; mkdir -p "$MR2_105"; cp -a "$INST105/." "$MR2_105/"
 printf '{"pluginDataDir":"%s"}\n' "$S2_105" > "$MR2_105/ucrm.json"; chown -R 1000:1000 "$MR2_105"
@@ -889,8 +894,8 @@ S3_105="$(scratch105 ln03)"; EL3_105="$(evo_calls)"
 : > "$DRV105/ln03.log"; chown 1000:1000 "$DRV105/ln03.log"; chmod 600 "$DRV105/ln03.log"   # PHP opens its error log as the store's user; the folder is root's
 L3_105="$(ref105 ln03 "$INST105" "$S3_105" "{\"phone\":\"$PLN03_105\",\"text\":\"RH104SECRET-the quotation text of the drive\",\"log\":\"$DRV105/ln03.log\"}")"
 EL3_105="$(( $(evo_calls) - EL3_105 ))"
-check "$(qj "$L3_105" threw 2>/dev/null)|$(grep -c '\[QuotationService\] WA send failed (' "$DRV105/ln03.log" 2>/dev/null)|$(grep -cF -f "$FORMS105" "$DRV105/ln03.log" 2>/dev/null)|$EL3_105" "1|1|0|0" \
-  "105-5h LN-03 QuotationService's WhatsApp send through a sender that throws with the number in its four forms: the line once, its message masked — no form of the number; Evolution not called"
+check "$(qj "$L3_105" threw 2>/dev/null),$(qj "$L3_105" ret 2>/dev/null)|$(grep -c '\[QuotationService\] WA send failed (' "$DRV105/ln03.log" 2>/dev/null)|$(grep -cF -f "$FORMS105" "$DRV105/ln03.log" 2>/dev/null)|$EL3_105" "1,False|1|0|0" \
+  "105-5h LN-03 QuotationService's WhatsApp send through a sender that throws with the number in its four forms (entered and thrown once, by its own count; sendWA returns its failure): the line once, its message masked — no form of the number; Evolution not called"
 # LN-04: the support leader's CRM job, against the rehearsal's own fake CRM on 127.0.0.1 (method and path logged, nothing else)
 mkdir -p "$H105/crm"; cat > "$H105/crm/router.php" <<'CRM'
 <?php
@@ -915,7 +920,8 @@ check "$(grep -c '\[WaAutoReply\] CRM Job #[0-9]* created and assigned to Bidal 
 EVODRV105=$(( EL1_105 + EL2_105 + EL3_105 + EL4_105 ))
 
 echo; echo "== 105-6. the rollback, ROLLBACK typed, with steps 1–6, 11 and 12 on and 7–9 recorded skipped =="
-LK6_105="$(lk105)"; C60_105="$(counts105)"; K60_105="$(lkmap105 rb6-pre)"; SH60_105="$(sf104c show)"
+shl105() { grep -E '^  (1b agent-cc|[0-9]+ [a-z-]+)[^:]*: (on|off|skipped)|^  the ledger: ' <<<"$1"; }   # the tool's show: its step lines and the ledger's line — never the wrapper's own lines (the time, the installed commit, its log's name)
+LK6_105="$(lk105)"; C60_105="$(counts105)"; K60_105="$(lkmap105 rb6-pre)"; SH60_105="$(shl105 "$(sf104c show)")"
 check "$(srt105 "$(kv105 "$LK6_105" on)" | tr ',' '\n' | grep -cxE 'report|ack|tracking|list|voice-measure|chase|offers-test|offers-live')|$(for s in $(tr ',' ' ' <<<"$VDR105"); do tr ',' '\n' <<<"$(kv105 "$LK6_105" skipped)" | grep -qx "$s" && printf 'k'; done)" \
       "8|$(for s in $(tr ',' ' ' <<<"$VDR105"); do printf 'k'; done)" \
   "105-6 control: before the rollback, steps 1–6, 11 and 12 on and 7–9 recorded skipped, by this rehearsal's own reading"
@@ -924,9 +930,9 @@ cron104_up; fresh105; OUT="$(run_line105c ROLLBACK "$RBL105")"; cron104_down; OU
 C61_105="$(counts105)"; K61_105="$(lkmap105 rb6-post)"
 check "$RBL105|$(fails "$OUT")$(has "$OUT" "  $V105 (rollback): PASSED.")|$(live)|$(installed105 "$B105F")|$(wason104 "$OUT")" "$EXP_ROLLBACK105|0yes|$B105|0|0" \
   "105-6a the rollback as 105-4's summary printed it, ROLLBACK typed: PASSED — $B105 back by sha, every file $V105 changes $BV105's; no tool ran (no 'was on:')"
-check "$(q105 same "$C60_105" "$C61_105" followups_quote_closed,wa_offers_paused,wa_offer_recipients_settled)|$(kv105 "$(q105 lkdiff "$K60_105" "$K61_105")" n)|$( [ "$(sf104c show)" = "$SH60_105" ] && echo show)" \
+check "$(q105 same "$C60_105" "$C61_105" followups_quote_closed,wa_offers_paused,wa_offer_recipients_settled)|$(kv105 "$(q105 lkdiff "$K60_105" "$K61_105")" n)|$( [ "$(grep -c . <<<"$SH60_105")" -ge 13 ] && [ "$(shl105 "$(sf104c show)")" = "$SH60_105" ] && echo show)" \
       "same=yes|0|show" \
-  "105-6b no tool ran: the closed quote follow-ups, the paused offers and the settled recipients unchanged by this rehearsal's count; every ladder key in every place byte-identical; the tool's show the same"
+  "105-6b no tool ran: the closed quote follow-ups, the paused offers and the settled recipients unchanged by this rehearsal's count; every ladder key in every place byte-identical; the tool's show the same, step line for step line and the ledger's line (13 lines or more read before)"
 check "$(okline "$OUT" LK-RB1 "every ladder key, in every place, reads after the rollback exactly as before it")$(okline "$OUT" LK-RB1 "shows on a copy, line for line")|$(grep -c '^  FAIL  LK-RB1 ' <<<"$OUT")" "yesyes|0" \
   "105-6c LK-RB1: every ladder key as before the rollback, and $BV105's tool shows the same on a copy, line for line"
 S12N105="$(grep -n "STEP 12 (OFFERS-LIVE) IS ON. $B105 WRITES PHONE NUMBERS AGAIN" <<<"$OUT" | head -1 | cut -d: -f1)"
