@@ -29,6 +29,14 @@ W = [
   "      sent++; unsure = true;\n", "      sent++;\n"),
  ('W13-busy-flag-on-the-console-window', 'C4 STOP, already running',
   "    if (win.__dnSalesNumberBusy) {", "    if (window.__dnSalesNumberBusy) {"),
+ ('W14-no-phone-warning-read-as-another-phone', 'C9 then Evolution reports its owner with no phone number',
+  "    if (row.status !== 'active' && row.noPhone) {", "    if (false) {"),
+ ('W15-the-plugins-not-sent-words-withheld', 'C17 a connection error',
+  "'Not sent — no connection to Evolution', ", ""),
+ ('W16-lost-webhook-answer-sent-to-look', 'C16 Register webhook with no answer',
+  "and the card does not show that. Wait a minute, then paste again", "To look, open the page again"),
+ ('W17-claims-nothing-is-sent', 'C11 on, with the card',
+  "Until it is put right the assistant may still be answering on the phone that is paired now.", "nothing automated is sent on this number until it is put right."),
 ]
 for name, must, old, new in W:
     assert src.count(old) == 1, (name, src.count(old))

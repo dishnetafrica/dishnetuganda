@@ -75,6 +75,7 @@ for ($n = 1; $n < 500; $n++) {
             foreach ($INST as $r) {
                 if (in_array($r['name'], (array)($c['drop'] ?? []), true)) continue;
                 if (isset($c['owner'][$r['name']])) $r['ownerJid'] = $c['owner'][$r['name']] . '@s.whatsapp.net';
+                if (isset($c['jid'][$r['name']])) $r['ownerJid'] = (string)$c['jid'][$r['name']];   // an owner with no phone number: …@lid
                 $rows[] = $r;
             }
             $instances($rows); break;

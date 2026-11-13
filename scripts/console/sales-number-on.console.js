@@ -9,6 +9,8 @@
 // Prints: the plugin's own answers, with the number's name, its instance name and its owner's name taken out and every
 //         run of digits cut to its last two; an answer Evolution itself wrote is cut to the plugin's fixed words and the
 //         HTTP status. Safe to copy back.
+// Why:    on this release the card's own buttons carry their action in the button, and the page's double-click guard
+//         disables the button before the browser reads it — so pressed by hand they reach the plugin with no action.
 // Not while a deploy, an --after-only or a rollback is running.
 (async () => {
   const CHANNEL   = '';        // '' = the only number that is not switched on yet; or its id as the card shows it, e.g. 'sales-003' — never a name or a phone number
@@ -16,6 +18,7 @@
 
   const say  = (...a) => console.log('%c[sales number]', 'font-weight:bold;color:#0a7', ...a);
   const LOOK = 'open WhatsApp AI again from the plugin\'s menu (not Reload: if Chrome asks to submit a form again, press Cancel)';
+  const PAIR = 'this script does not pair a phone, and on this release the card\'s Show QR code may do nothing when pressed by hand (press it ONCE; if no QR code appears at the top of the plugin\'s page, stop — copy this line back and ask for the pairing script)';
   let held = null, sent = 0, unsure = false;   // unsure: a request went out and its outcome is not known
   try {
     // The plugin's page: this document, or the frame uCRM shows it in.
@@ -40,6 +43,7 @@
       const bits  = line.split('·').map(s => s.trim());
       const pills = [...(head ? head.querySelectorAll('.wa-pill') : [])].map(p => p.textContent.replace(/\s+/g, ' ').trim());
       const ai    = pills.find(p => /^assistant (on|off)$/.test(p)) || '';
+      const notes = [...el.querySelectorAll(':scope > .wa-note')].map(n => n.textContent.replace(/\s+/g, ' ').trim()).filter(t => /^Evolution now reports/.test(t));   // the card's own warning
       return {
         id,
         name: ((spans[0] || {}).textContent || '').trim(),
@@ -47,7 +51,7 @@
         ownerOff: /\(not active\)$/.test(line),
         ending: ((bits[2] || '').match(/••••\d\d/) || [''])[0],   // the card's own masked number; '' = none on record
         verified: /\(verified /.test(line),
-        warn: [...el.querySelectorAll(':scope > .wa-note')].some(n => /^\s*Evolution now reports/.test(n.textContent)),   // the card's own warning
+        warn: notes.length > 0, noPhone: notes.some(t => /with no phone number/.test(t)),   // another number reported / an owner with no phone number (an @lid)
         status: pills[0] || '', assistant: ai.replace('assistant ', ''), link: pills[2] || '',
         fVerify: formOf('button[name="wa_action"][value="sn_verify"]'),
         fHook:   formOf('button[name="wa_action"][value="sn_webhook"]'),
@@ -65,12 +69,12 @@
     };
     const told = t => {   // an answer Evolution (or the connection to it) wrote: the plugin's fixed words and the HTTP status only
       if (!/^Evolution refused:/.test(t)) return clean(t);
-      const known = ['Evolution API is not configured', 'Connection failed', 'Got an HTML page, not the API', 'May have been sent'];
+      const known = ['Evolution API is not configured', 'Not sent — no connection to Evolution', 'May have been sent — no answer from Evolution', 'Connection failed', 'Got an HTML page, not the API'];
       const k = known.find(p => t.includes(p)), h = t.match(/\[HTTP (\d{3}) on /);
       return 'Evolution refused' + (k ? ': ' + k : '') + (h ? ' [HTTP ' + h[1] + ']' : '') + (k || h ? '' : ' (its own words are not printed here)');
     };
     const state = r => `${r.id}: ${r.status || '?'} · assistant ${r.assistant || '?'} · ${r.link || '?'} · number `
-      + (r.warn ? 'NO LONGER CONFIRMED (the card says: verify it again)' : r.verified ? 'verified' + (r.ending ? ', ending ' + r.ending : '') : 'NOT verified');
+      + (r.warn ? 'NO LONGER CONFIRMED (the card says: ' + (r.noPhone ? 'pair the phone again, then verify' : 'verify it again') + ')' : r.verified ? 'verified' + (r.ending ? ', ending ' + r.ending : '') : 'NOT verified');
 
     // The card as it is NOW, read again (nothing is changed by reading): a page left open cannot mislead.
     const first = await ask(), now = first.doc;
@@ -101,7 +105,8 @@
     }
     hide = [[row.name, '[this number]'], [row.instance, '[its instance]'], [row.owner, '[its owner]']].sort((a, b) => b[0].length - a[0].length);
     say('number: ' + state(row));
-    if (row.status === 'active' && row.warn) { say('STOP — it is switched on, but its row on the card says Evolution now reports another number, or no phone number, for it: nothing automated is sent on this number until that is put right on the card (Verify number; pair the phone again with Show QR code first if the card says so). Nothing was sent.'); return; }
+    if (row.status === 'active' && row.warn) { say('STOP — it is switched on, but its row on the card says Evolution now reports another number, or no phone number, for it. Its number has to be verified again (the phone paired again first, if the card says so), and this script does not do that for a number that is on; the card\'s own buttons may do nothing when pressed by hand. Copy this line back and ask for the script for it. Until it is put right the assistant may still be answering on the phone that is paired now. Nothing was sent.'); return; }
+    if (row.status !== 'active' && row.noPhone) { say(`STOP — its row on the card says Evolution now reports no phone number for it (a WhatsApp @lid), so the number cannot be verified until the phone is paired again: ${PAIR}. Once it is paired, paste again. Nothing was sent.`); return; }
     if (row.status !== 'active' && row.ownerOff) { say('STOP — the card shows this number\'s owner is not an active staff member, and the plugin does not switch such a number on. Give the number to a new owner on the card first, then paste again. Nothing was sent.'); return; }
     const todo = row.status !== 'active'
       ? 'Switch ON this salesperson number?\n\n' + row.name + '  (' + row.id + ')\n\nNumber on record: ' + (row.ending || 'none yet')
@@ -134,16 +139,16 @@
       const was = row.ending, flagged = row.warn;
       row = await press(row.fVerify, { wa_action: 'sn_verify' }, '1 Verify number');
       if (!row) { say(unsure ? `STOP after ${sent} request(s). It is NOT KNOWN whether the number was verified; it is NOT switched on. To look, ${LOOK}.`
-                             : `STOP after ${sent} request(s). The number is NOT switched on. If it says "not connected": press Show QR code on the card, scroll to the top of the plugin's page, pair the phone, then paste again.`); return; }
+                             : `STOP after ${sent} request(s). The number is NOT switched on. If it says "not connected" or "pair the phone": ${PAIR}. Once the phone is paired, paste again.`); return; }
       if (!row.verified || row.warn || !row.ending) { say(`STOP after ${sent} request(s) — the plugin said OK, but the card does not show the number as verified. It is NOT switched on. To look, ${LOOK}.`); return; }
       if (flagged || row.ending !== was) {
         if (!win.confirm('Verify read the phone that is paired now: the number ending ' + row.ending + '.\n\nIs that this salesperson\'s number?\n\nOK = register its webhook and switch it on.\nCancel = stop here: verified, NOT switched on.')) {
-          say(`STOP after ${sent} request(s) — you pressed Cancel at the number ending ${row.ending}. It is verified but NOT switched on. If the wrong phone was paired: unlink that device in WhatsApp (Linked devices), pair the right one with Show QR code, then paste again.`);
+          say(`STOP after ${sent} request(s) — you pressed Cancel at the number ending ${row.ending}. It is verified but NOT switched on. If the wrong phone was paired: unlink that device in WhatsApp (Linked devices); to pair the right one, ${PAIR}. Then paste again.`);
           return;
         }
       }
       row = await press(row.fHook, { wa_action: 'sn_webhook' }, '2 Register webhook');
-      if (!row) { say(`STOP after ${sent} request(s). The number is verified but NOT switched on.` + (unsure ? ` It is NOT KNOWN whether its webhook was registered. To look, ${LOOK}.` : '')); return; }
+      if (!row) { say(`STOP after ${sent} request(s). The number is verified but NOT switched on.` + (unsure ? ' It is NOT KNOWN whether its webhook was registered, and the card does not show that. Wait a minute, then paste again: Verify number and Register webhook are sent again, which is safe, and Switch on follows only if both answer OK.' : '')); return; }
       if (!row.fOn) { say(`STOP after ${sent} request(s) — the card offers no "Switch on" for this number. To look, ${LOOK}.`); return; }
       row = await press(row.fOn, { status: 'active' }, '3 Switch on');
       if (!row) { say(unsure ? `STOP after ${sent} request(s). It is NOT KNOWN whether the number was switched on. Before trying again, ${LOOK} and look at the card.`

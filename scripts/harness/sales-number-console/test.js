@@ -136,6 +136,11 @@ const scriptFor = (channel, assistant) => {
   const s9 = await cmd({ do: 'state' });
   check('C9 the book: verified, still switched off; no webhook registered for it', s9.channels['sales-003'].status === 'disabled' && !!s9.channels['sales-003'].verified_at && Object.keys(s9.webhooks).join() === 'sn-new', [s9.channels['sales-003'].status, Object.keys(s9.webhooks)]);
 
+  await cmd({ do: 'instances', jid: { 'sn-three': '123456789012345@lid' } });
+  out = await run('sales-003', 'leave');
+  check('C9 then Evolution reports its owner with no phone number: STOP before any question — the card\'s own words, not "another phone"; nothing sent', /Evolution now reports no phone number for it \(a WhatsApp @lid\)/.test(out) && /pair the phone again, then verify/.test(out) && !/ANOTHER/.test(out) && posts.length === 0 && dialogs.length === 0 && noLeak(out.replace('ending ••••02', '')), out);
+  await cmd({ do: 'instances' });
+
   console.log('C10 pasted again on the same, stale page');
   out = await run('sales-001', 'leave');
   check('C10 nothing to do, nothing sent, no question', /Nothing to do: it is already switched on and its assistant is on/.test(out) && posts.length === 0 && dialogs.length === 0, out);
@@ -143,7 +148,7 @@ const scriptFor = (channel, assistant) => {
   console.log('C11 a phone paired again: Evolution reports another number for a number that is on, then for one that is off');
   await cmd({ do: 'instances', owner: { 'sn-new': '256700000711' } });
   out = await run('sales-001', 'leave');
-  check('C11 on, with the card\'s warning: STOP, nothing sent, and it is not called verified', /it is switched on, but its row on the card says Evolution now reports another number/.test(out) && /NO LONGER CONFIRMED/.test(out) && !/number verified/.test(out) && posts.length === 0 && dialogs.length === 0, out);
+  check('C11 on, with the card\'s warning: STOP, nothing sent, and it is not called verified', /it is switched on, but its row on the card says Evolution now reports another number/.test(out) && /NO LONGER CONFIRMED/.test(out) && !/number verified/.test(out) && !/nothing automated is sent/.test(out) && /may still be answering/.test(out) && posts.length === 0 && dialogs.length === 0, out);
   await cmd({ do: 'form', fields: { wa_action: 'sn_status', channel_id: 'sales-001', status: 'disabled' } });
   out = await run('sales-001', 'leave', [true, false]);
   check('C11 off, with the warning: the first question says so and names the number on record; Cancel at the new phone\'s digits', dialogs.length === 2 && /Number on record: ••••01 — the card says Evolution now reports ANOTHER phone/.test(dialogs[0]) && /the number ending ••••11/.test(dialogs[1]) && acts().join() === 'sn_verify' && /NOT switched on/.test(out), [dialogs, out]);
@@ -194,12 +199,24 @@ const scriptFor = (channel, assistant) => {
     out = await run('sales-003', 'leave');
     check('C16 OK but the card not in the answer: STOP, NOT KNOWN', /the plugin said OK, but the number is not on the card it answered with/.test(out) && /It is NOT KNOWN whether the number was switched on/.test(out) && !/DONE/.test(out), out);
 
+    await offAgain();
+    plant = { when: isAct('sn_webhook'), answer: async route => { await route.fetch(); route.fulfill({ status: 504, contentType: 'text/html', body: '<html><body>gateway time-out</body></html>' }); } };
+    out = await run('sales-003', 'leave');
+    st = await chan('sales-003');
+    check('C16 Register webhook with no answer: NOT KNOWN, "paste again" (the card cannot show it), nothing more sent; still off', acts().join() === 'sn_verify,sn_webhook' && /NOT KNOWN whether its webhook was registered, and the card does not show that/.test(out) && /paste again/.test(out) && !/To look/.test(out) && st.status === 'disabled', [out, st.status]);
+    plant = null;
+    out = await run('sales-003', 'leave');
+    check('C16 pasted again: three requests and DONE', acts().join() === 'sn_verify,sn_webhook,sn_status:active' && /DONE, 3 request/.test(out), out);
+
     console.log('C17 an answer Evolution wrote: only the plugin\'s fixed words and the HTTP status are printed');
     await offAgain();
     const refuse = text => ({ when: isAct('sn_webhook'), answer: route => route.fulfill({ contentType: 'text/html', body: `<html><body><div class="wa-msg wa-bad">${text}</div></body></html>` }) });
-    plant = refuse('Evolution refused: Connection failed: Could not resolve host: evo.internal.example [HTTP 0 on POST /webhook/set/sn-three]');
+    plant = refuse('Evolution refused: Not sent — no connection to Evolution: Could not resolve host: evo.internal.example');
     out = await run('sales-003', 'leave');
-    check('C17 a connection error: no host, no instance, no path in the output; verified, not switched on', acts().join() === 'sn_verify,sn_webhook' && /2 Register webhook: NOT OK — Evolution refused: Connection failed$/m.test(out) && !/evo\.internal|resolve|webhook\/set/.test(out) && noLeak(out) && /verified but NOT switched on/.test(out), out);
+    check('C17 a connection error: no host, no instance, no path in the output; verified, not switched on', acts().join() === 'sn_verify,sn_webhook' && /2 Register webhook: NOT OK — Evolution refused: Not sent — no connection to Evolution$/m.test(out) && !/evo\.internal|resolve|webhook\/set/.test(out) && noLeak(out) && /verified but NOT switched on/.test(out), out);
+    plant = refuse('Evolution refused: May have been sent — no answer from Evolution: Operation timed out after 20001 milliseconds');
+    out = await run('sales-003', 'leave');
+    check('C17 no answer from Evolution: the plugin\'s fixed words alone, not curl\'s', /2 Register webhook: NOT OK — Evolution refused: May have been sent — no answer from Evolution$/m.test(out) && !/timed out|milliseconds/.test(out) && noLeak(out), out);
     plant = refuse('Evolution refused: Instance sn-three not found on evo.internal.example [HTTP 404 on POST /webhook/set/sn-three]');
     out = await run('sales-003', 'leave');
     st = await chan('sales-003');
@@ -216,6 +233,14 @@ const scriptFor = (channel, assistant) => {
   await p2.goto(cardUrl); await p2.evaluate(scriptFor('sales-003', 'leave')); await sleep(150);
   st = await chan('sales-003');
   check('C18 STOP, nothing sent, the number still off', /STOP/.test(logs2.join('\n')) && posts2.length === 0 && st.status === 'disabled', logs2);
+
+  console.log('C19 why the script exists: the card\'s own Verify number, pressed by hand, reaches the plugin with no action');
+  await openTop();
+  const b19 = await cmd({ do: 'state' }); posts = [];
+  const row19 = page.locator('#sales-numbers .wa-row', { has: page.locator('input[name="channel_id"][value="sales-003"]') });
+  await Promise.all([page.waitForNavigation(), row19.locator('button[name="wa_action"][value="sn_verify"]').evaluate(b => b.click())]);   // the button's own click (the sandbox page has no styles, so it is not laid out as shown)
+  const a19 = await cmd({ do: 'state' });
+  check('C19 the hand press sends the form without its action; the plugin shows no answer and changes nothing', posts.length === 1 && fields(posts[0]).channel_id === 'sales-003' && !('wa_action' in fields(posts[0])) && await page.locator('.wa-msg').count() === 0 && JSON.stringify(a19) === JSON.stringify(b19), posts.map(fields));
 
   await cmd({ do: 'quit' });
   await browser.close();
