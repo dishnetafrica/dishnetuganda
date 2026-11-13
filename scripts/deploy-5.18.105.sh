@@ -12605,7 +12605,7 @@ if [ -n "$PLUGIN_BASE" ]; then
     http GET "$PLUGIN_BASE?page=customer_login"
     if [ "$HTTP_CODE" = "200" ] && [ "$(count '+211')" = "0" ] && [ "$(count 'dishnetafrica.com')" = "0" ]; then ok "V2 the sign-in page answers 200 and carries no South Sudan contact"
     else bad "V2 sign-in page → $HTTP_CODE; '+211' ×$(count '+211') · dishnetafrica.com ×$(count 'dishnetafrica.com')"; fi
-    # V6 — 5.18.73/5.18.74: the sign-in page allows pinch-zoom; 5.18.96 keeps it (and so does the rollback target, 5.18.103).
+    # V6 — 5.18.73/5.18.74: the sign-in page allows pinch-zoom; 5.18.96 keeps it (and so does the rollback target, 5.18.104).
     if [ "$HTTP_CODE" = "200" ] && [ "$(count 'user-scalable=no')" = "0" ] && [ "$(count 'maximum-scale=')" = "0" ]; then ok "V6 the sign-in page allows pinch-zoom (no user-scalable=no, no maximum-scale) — as on 5.18.74"
     else bad "V6 the sign-in page blocks zoom: user-scalable=no ×$(count 'user-scalable=no') · maximum-scale= ×$(count 'maximum-scale=') (HTTP $HTTP_CODE)"; fi
     # V5 — the photo surfaces of 5.18.66 still refuse an anonymous caller. Both reads change nothing; neither ever answers 200 to nobody.
@@ -14388,7 +14388,7 @@ else
 fi
 vt_same "$VT_B" || bad "RB the live vault (${VAULT_IN:-its path not known}) could not be shown unchanged while the copy was read ($(vt_say "$VT_B") → $(vt_say "$(vt_now)")) — a run on a copy must never write it; a settings save at that moment is the other cause"
 # RB — 088 after the rollback: 5.18.104 added 089–091 (none a bank table) and wrote none of 088's tables, and the
-# rollback restores code only — its only writes are QF-RB1's, before the put-back, none in 088's tables — so 088 stays
+# rollback restores code only — 5.18.105's rollback writes nothing to the book (QF-RB1 is retired) — so 088 stays
 # exactly as stage A read it before the rollback (every row compared under this run's key, never
 # printed) — read by 5.18.98's ECO Bank (5.18.97's, unchanged) as before. ECO Bank's switch stays as the operator left it: no step of this
 # rollback clears it.

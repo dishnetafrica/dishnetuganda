@@ -1625,8 +1625,8 @@ are recorded here and in root `docs/07` when they end.
 
 ### S.4 The deploy script and its rehearsal
 
-- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `fd678ec9933c4950…`), pinned to `f764699`: derived from
-  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 294 edits, derived twice byte for byte.
+- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `004976617296ba04…`), pinned to `f764699`: derived from
+  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 296 edits, derived twice byte for byte.
   It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
   copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It
   refuses `--clear-switches`. `scripts/sales-followup-report.sh` is re-pinned beside it.
@@ -1661,8 +1661,14 @@ are recorded here and in root `docs/07` when they end.
       no recipient as a fault. Production has none. They are now removed at the cut (pre-a0), by the ledger's own
       400-day rule under a clock of that step's own; without that clock the ledger refuses the removal, which is the
       step's control.
-  - A third trial with those fixes, and then the record run, are still to come; their results are recorded here and
-    in root `docs/07`.
+  - **Development trial 3** (13 Nov, 20:28–21:43 UTC, the ladder walked, every fix above): **2,710 ok, 3 failed** —
+    the three inherited checks alone. Nothing of 5.18.105's own sections failed: pre-a0 removed the four planted
+    claims, 105-4f read the day's rows as one before the plant and three after, and step 12's check read PASS in
+    `--after-only`. Every FAIL line the script printed was a weakened copy's or the planted sign-in fault's.
+  - After it, two comments of the script that named the wrong rollback target were corrected (comments only: the
+    script's 296th edit and its 295th), and one line of the rehearsal's header.
+  - The record run (the whole chain, unrestored, on the committed files) is still to come; its result is recorded
+    here and in root `docs/07`.
 
 ### S.5 Next
 

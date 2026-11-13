@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Rehearse scripts/deploy-5.18.105.sh — on Uganda the phone numbers taken out of the plugin's log lines (root docs/74):
-# 35 log lines masked in 21 runtime files, deployed over a LIVE sales follow-up ladder that 5.18.105 never writes — every
+# 35 log lines masked (21 runtime files changed), deployed over a LIVE sales follow-up ladder that 5.18.105 never writes — every
 # ladder key, switch, record key and setting alike, kept exactly as found in its four places (LK), the masked lines read as
 # blocks before and after the copy (LM), the rollback keeping every switch (RB105). The script under rehearsal is derived
 # from 5.18.104's by asserted edits (wip/derive-5.18.105/), pinned to the release commit; every pin is read from it here and

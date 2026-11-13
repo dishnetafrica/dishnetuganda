@@ -369,3 +369,11 @@ def apply(doc, ctx):
 #            about 13 Nov) keep running through the deploy,''',
             '''the steps that are on when it runs (on 13 Nov: 1 report, 2 ack and 3 tracking; 4–6 follow
 #            in the ladder's order) keep running through the deploy,''', why="header: the ladder's dates")
+    # ── two carried comments (found by the change-control entry's checker, 13 Nov): never printed, but they name the
+    #    wrong rollback target and a rollback write that 5.18.105 does not make ──
+    doc.sub("# V6 — 5.18.73/5.18.74: the sign-in page allows pinch-zoom; 5.18.96 keeps it (and so does the rollback target, 5.18.103).",
+            "# V6 — 5.18.73/5.18.74: the sign-in page allows pinch-zoom; 5.18.96 keeps it (and so does the rollback target, 5.18.104).",
+            why="comment: V6's rollback target")
+    doc.sub("# rollback restores code only — its only writes are QF-RB1's, before the put-back, none in 088's tables — so 088 stays\n",
+            "# rollback restores code only — 5.18.105's rollback writes nothing to the book (QF-RB1 is retired) — so 088 stays\n",
+            why="comment: RB's 088 words")
