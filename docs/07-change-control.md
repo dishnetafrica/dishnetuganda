@@ -16736,9 +16736,18 @@ reminder set for 04:30 UTC on 10 Nov reached it on 13 Nov, so the commands for s
 - **VA-ON1 PASS:** 50 voice notes since the switch-on, each with a decision and **none acknowledged**
   (`wa_media_ack_rows=0`): 32 `persona_unconfirmed` — on salespeople's numbers, held because Q1 (the assistant's wording
   there, root `docs/73` §Q) is still unanswered — 15 `quiet_hours`, 2 `human_active`, 1 `person_active`.
-- **Next, one command at a time:** `on tracking` (given on 13 Nov) and its check; `on list` (the salespeople told first)
-  and its check; `on voice-measure` and its check. The chase (step 6) comes on once tracking has run 72 hours, so its
-  date moves with the day tracking goes on.
+- **Step 3, `tracking`: on at 05:27:38 UTC on 13 Nov** (from the terminal pasted; the log is
+  `/root/dnb-sales/followup-20261113T052738Z.log`): *"the ledger: L-ON PASS"*, then `ON tracking:
+  quote_tracking_enabled, quote_tracking_since`, exit 0. Every Uganda quotation is tracked from now; nothing is sent.
+- **What comes when** (read from `lib/SalesFollowupLadder.php` and `lib/SalesFollowupChecks.php` at `994d660`; the
+  earlier plan to turn steps 3–5 on in one day could not have worked):
+  - `on list` (step 4) is refused until tracking's check Q1-ON reads PASS, and Q1-ON reads `NOT_YET no_traffic` until
+    tracking has been on 24 hours **and** a quotation has been sent since. So from 05:28 UTC on 14 Nov, a Saturday, at
+    the earliest; the salespeople are told first.
+  - `on voice-measure` (step 5) needs only the ledger, but the order rule wants step 4 on or recorded skipped before
+    it, so it follows `on list`.
+  - `on chase` (step 6) needs tracking on for 72 hours and Q1-ON at PASS, and steps 4 and 5 on or skipped: from 05:28
+    UTC on 16 Nov, a Monday.
 
 **A console script to switch a salesperson number on.** Asked for by the owner on 13 Nov (*"i need chrom script to
 enable sales number"*): `scripts/console/sales-number-on.console.js` (`9a4a77d`, sha256 `9624e44b89be7d86…`), pasted
