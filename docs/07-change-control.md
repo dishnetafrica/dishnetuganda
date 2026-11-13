@@ -16722,3 +16722,58 @@ as root on the server, after 5.18.104's entry above.
     each step in the ladder's order, each after its check. Step 12 (`offers-live`) waits for 5.18.105; step 6
     (`chase`) comes on once tracking has run 72 hours (the owner's rulings, 8 and 9 Nov, known limit 13); step 7
     (`voice-dry-run`) waits for the Privacy Policy page to be published and its date recorded.
+
+## 13 Nov — step 2's check PASS; a console script to switch a salesperson number on; why the card's buttons do nothing by hand
+
+**The gap.** This session did not run from about 17:20 UTC on 9 Nov until 03:39 UTC on 13 Nov (container restarts). The
+reminder set for 04:30 UTC on 10 Nov reached it on 13 Nov, so the commands for steps 3–5 were not given on 10 Nov, and
+5.18.105's first suite pass was cut (below). Nothing on the server changed in between by this session's hand.
+
+**Step 2's check, 13 Nov 05:23:24 UTC** (from the terminal pasted; the log is
+`/root/dnb-sales/followup-20261113T052324Z.log` on the server): **`ack: PASS`**, on the installed `994d660`.
+- **L-ON PASS:** `rows=388`, `hook_write_lost=0`, `wasender=0`, `noinstance=0`, no orphans, `log_rows_matched=317`;
+  `wa_send_ledger_since` 2026-11-09 04:26:06; one note, `hook_write_lost 2026-11-11 other lines=1`.
+- **VA-ON1 PASS:** 50 voice notes since the switch-on, each with a decision and **none acknowledged**
+  (`wa_media_ack_rows=0`): 32 `persona_unconfirmed` — on salespeople's numbers, held because Q1 (the assistant's wording
+  there, root `docs/73` §Q) is still unanswered — 15 `quiet_hours`, 2 `human_active`, 1 `person_active`.
+- **Next, one command at a time:** `on tracking` (given on 13 Nov) and its check; `on list` (the salespeople told first)
+  and its check; `on voice-measure` and its check. The chase (step 6) comes on once tracking has run 72 hours, so its
+  date moves with the day tracking goes on.
+
+**A console script to switch a salesperson number on.** Asked for by the owner on 13 Nov (*"i need chrom script to
+enable sales number"*): `scripts/console/sales-number-on.console.js` (`9a4a77d`, sha256 `9624e44b89be7d86…`), pasted
+into Chrome's console on the plugin's WhatsApp AI page by a signed-in administrator. **Not yet run by the owner.**
+- **What it does:** for one number it sends what the Salesperson numbers card's own buttons send, in the card's order,
+  each once — Verify number, Register webhook, Switch on — and, only when asked, *Let the assistant answer on this
+  number*. It reads the card again from the plugin first, asks the person to confirm the number, and asks again with the
+  last two digits of the phone found when they are new or the card had flagged the row (root `docs/66` §1 step 3: the two
+  digits are a STOP point). It stops at the first answer that is not OK. It never adds, pairs, pauses, retires or
+  re-owns a number.
+- **What it prints:** the plugin's answers with the number's name, its instance name and its owner's name taken out,
+  every run of digits cut to the last two, and an answer Evolution itself wrote cut to the plugin's fixed words and the
+  HTTP status.
+- **Tests** (`scripts/harness/sales-number-console/`): headless Chromium against a sandbox of `994d660` (the real plugin
+  under `php -S`, a fake Evolution): **51 checks without the plugin's service worker, 43 with it, 0 failed**; seventeen
+  weakened copies, **each caught** by the check that names its fault.
+- **Review:** two rounds by reviewers who had not written it, each finding checked by a skeptic. Round 1: 12 raised, 11
+  confirmed, all fixed and rechecked resolved. Round 2: 5 raised, 5 confirmed, all fixed. None was in what the script
+  sends; the largest was that the first version asked about the number but not about the phone.
+
+**Why the card's buttons "seemed to do nothing"** (10 and 23 Oct above: *"the cause is not established"*) — now
+established, and measured on `994d660`'s own page (the rig's C19):
+- `public.php`'s global double-submit guard disables every submit button of a POST form in a capture-phase `submit`
+  listener. The browser builds the form's data after that event and leaves a disabled button's name and value out.
+- A form whose action rides on its button therefore reaches the plugin without it (measured for Verify number; the
+  other eight read from the page's markup). On the WhatsApp AI page that is nine buttons: Show QR code, Verify number and Register webhook on a salesperson's row (`wa_action` on the button: no action
+  runs and no answer is shown); Switch on, **Pause and Switch off** (`status` on the button: *"Unknown status."*); and
+  Log out, Show QR code and Register webhook on the Connect & webhooks card.
+- **What still works by hand** (the action is a hidden field): Add a number, *Stop the assistant on this number* and
+  *Let the assistant answer*, Give the number to them, Retire, and a department row's Verify number.
+- **So a salesperson's number cannot be paused or switched off by hand today**; the assistant on it can be stopped by
+  hand. The plugin is not changed here. Proposed to the owner: a fix in the release after 5.18.105.
+
+**5.18.105, where it stands:** `release/5.18.105` = `f764699`, one commit on `994d660`, local only (its patch is
+`wip/release-5.18.105.patch`); `scripts/deploy-5.18.105.sh` derived and pinned to it (`2db0431`); the rehearsal written
+and reviewed twice (21 defects fixed; a third review did not run), not yet run. Suite pass A was cut by the restart in file 189 — to that
+point 11,788 passed and 4 failed, the three files of known limit 11 it had reached — and does not count; both passes and
+the rehearsal are still to run.
