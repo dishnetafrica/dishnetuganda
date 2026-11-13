@@ -9574,7 +9574,7 @@ try {
         break;
 
     case 'ca2':      // ca2 CODE BASE DIR DRIVE — AC-CA2 (§H.5.14; P7S-02): positive and negative controls on a copy of the book (qf_copy's,
-                     // in DIR), through CODE's (the INSTALLED) code and BASE's (5.18.103's, from Git — the tree the deploy keeps for its
+                     // in DIR), through CODE's (the INSTALLED) code and BASE's (the baseline's, from Git — the tree the deploy keeps for its
                      // rollback), with uCRM the pin's recording fake (DRIVE, the pin's tests/quote_agent_copy/drive.php) and the pin's
                      // fake relay. Before anything runs: the copy's settings copies and vault are removed, a FRESH email_settings.json is
                      // written (plugin SMTP on the loopback relay, use_ucrm_email and sent_copy_enabled off), every ucrm.json MailService
@@ -9589,8 +9589,9 @@ try {
         if (!is_file($drive) || hash_file('sha256', $drive) !== '2d860d02d740b433aed446750c7e25c6eeb8a8cdb1543f3786a80a50a4b31815') $fin('refused=drive_sha');
         if (!is_file($relay) || hash_file('sha256', $relay) !== '93480f93a01c7d32f4cf4652e7e62cca51a69b67abcb8061ac4cbeeea41b973b') $fin('refused=relay_sha');
         foreach ([$code, $base] as $t) if (!is_file($t . '/lib/QuotationService.php') || !is_file($t . '/webhook.php') || !is_file($t . '/lib/MailService.php')) $fin('refused=tree');
-        if (!is_file($code . '/lib/QuoteAgentCopy.php') || is_file($base . '/lib/QuoteAgentCopy.php')) $fin('refused=tree_p7');
-        // 1. the two sandboxes: U for the installed code, B for 5.18.103's — the data folder two levels inside this reading's folder
+        // 5.18.105 (root docs/74 §H.4.4): the baseline is 5.18.104, which carries P7 as the pin does — both trees must hold it
+        if (!is_file($code . '/lib/QuoteAgentCopy.php') || !is_file($base . '/lib/QuoteAgentCopy.php')) $fin('refused=tree_p7');
+        // 1. the two sandboxes: U for the installed code, B for the baseline's — the data folder two levels inside this reading's folder
         $U = $dir . '/ac/u'; $B = $dir . '/ac/b';
         foreach ([$dir . '/ac', $U, $U . '/data', $B, $B . '/data'] as $d) if (!is_dir($d) && !@mkdir($d, 0700)) $fin('refused=layout');
         if (!@rename($dir . '/plugin.sqlite3', $U . '/data/plugin.sqlite3')) $fin('refused=book');
@@ -9649,7 +9650,7 @@ try {
         $pw = null;
         clearstatcache();
         if (is_file($U . '/data/plugin.sqlite3-wal') && filesize($U . '/data/plugin.sqlite3-wal') > 0) $fin('refused=book_wal');
-        // 3. 5.18.103's sandbox: a byte copy of the same book, fixtures included, so both codes start from the same rows
+        // 3. the baseline's sandbox: a byte copy of the same book, fixtures included, so both codes start from the same rows
         $sz = filesize($U . '/data/plugin.sqlite3');
         if ($sz === false || (float)@disk_free_space($B) < $sz + 67108864) $fin('refused=space');
         if (!@copy($U . '/data/plugin.sqlite3', $B . '/data/plugin.sqlite3')) $fin('refused=book_copy');
@@ -9822,7 +9823,7 @@ try {
         $t6 = $tables($U);
         foreach (['c5a', 'c5b'] as $tag) { $res['u'][$tag] = $drive1($U, $code, $tag, $cfgOf('uganda', false)); $res['b'][$tag] = $drive1($B, $base, $tag, $cfgOf('uganda', false)); }
         foreach (['c1', 'c2', 'c3', 'c4'] as $tag) $res['u'][$tag] = $drive1($U, $code, $tag, $cfgOf('uganda', true));
-        // the verdicts: 6 and 5 equal to 5.18.103's, transcript (Date, Message-ID and boundaries masked), uCRM requests and answer
+        // the verdicts: 6 and 5 equal to the baseline's, transcript (Date, Message-ID and boundaries masked), uCRM requests and answer
         foreach (['c6a', 'c6b', 'c5a', 'c5b'] as $tag) {
             $bu = $basic($res['u'][$tag]); $bb = $basic($res['b'][$tag]);
             if ($bu !== [] || $bb !== []) {
@@ -9904,7 +9905,7 @@ try {
         break;
 
     case 'rb2':      // rb2 DB — AC-RB2 on a copy after the put-back: Part P's two collections, their presence and rows, and the hand-off
-                     // rows still "making" (inert: 5.18.103 reads neither collection)
+                     // rows still "making" (5.18.104, which this rollback leaves, reads both collections as its switch says)
         $p = $ro($a[0]);
         $out = []; $mk = 0;
         foreach (['quote_agent_makers' => 'makers', 'quote_agent_copies' => 'copies'] as $t => $nm) $out[] = $nm . '=' . ($has($p, $t) ? (string)(int)$one($p, 'SELECT COUNT(*) FROM [' . $t . ']') : 'absent');
@@ -14079,7 +14080,7 @@ grep -qF '    foreach ($_wg_watch as $_wg_chn => $_wg_inst) {' "$DEST/cron/wa_we
 N_SW="$(grep -cE "^    '($OL_KEY|$HC_KEY|$FH_KEY)' => \['bool',\$" "$DEST/tools/set_config.php" 2>/dev/null || true)"; [ "${N_SW:-0}" = "3" ] || RB_REF="$RB_REF batch2:switches×${N_SW:-0}"
 # …5.18.88's Batch 1, which the rollback keeps: the event processor's two lists, the webhook and the follow-ups through
 # forStore(), the AI worker's reply route, EventBus's exclusion, the lead's origin, the registry's switch, the CLI and 087…
-grep -qF "\$_epWorkerOwned = \$_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];" "$DEST/cron/event_processor.php" 2>/dev/null || RB_REF="$RB_REF batch1:event-processor"
+grep -qxF -- "$EP_PIN_LIST" "$DEST/cron/event_processor.php" 2>/dev/null || RB_REF="$RB_REF batch1:event-processor"   # 5.18.105: the rollback leaves 5.18.104's list, which is the pin's (EP_PIN_LIST)
 grep -qF '$evo     = EvolutionApiService::forStore($config, $pdo, $dataDir);' "$DEST/evo_webhook.php" 2>/dev/null || RB_REF="$RB_REF batch1:webhook"
 grep -qF 'replyRoleOrRefuse' "$DEST/workers/AiReplyWorker.php" 2>/dev/null || RB_REF="$RB_REF batch1:ai-worker"
 grep -qF 'array $excludeTypes = []' "$DEST/lib/EventBus.php" 2>/dev/null || RB_REF="$RB_REF batch1:eventbus"

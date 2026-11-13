@@ -1612,21 +1612,33 @@ owner ruled.
 ### S.3 The release suite
 
 Not complete. The plan is §H.7 step 5: two full passes on `f764699`, in a frozen, clean worktree, one after the other,
-with nothing beside them. Pass A2 began on 13 Nov at 05:29:32 UTC. Its result, and pass B's, are recorded here and in
-root `docs/07` when they end.
+with nothing beside them. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart of this container: its
+log ends at 10:19:34 UTC inside file 230 of 317 (15,127 checks passed up to there, and 4 failed, all in three of the four
+files that fail in this container only). A cut pass does not count. The two passes are run again, and their results
+are recorded here and in root `docs/07` when they end.
 
 ### S.4 The deploy script and its rehearsal
 
-- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `ebab2a59073fc347…`), pinned to `f764699`: derived from
-  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 277 edits, derived twice byte for byte.
+- **`scripts/deploy-5.18.105.sh`** (14,745 lines, sha256 `4de922f33d71ec09…`), pinned to `f764699`: derived from
+  5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 284 edits, derived twice byte for byte.
   It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
   copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It
   refuses `--clear-switches`. `scripts/sales-followup-report.sh` is re-pinned beside it.
 - **The rehearsal** is `scripts/harness/deploy-5.18.105/` (`rehearse.sh`, `rh105q.py`, `rh105-ref.php`), chained on
   5.18.104's rehearsal up to just before its 104-10. It was reviewed three times before any run: 13, 8 and 9 confirmed
   defects, each checked against the code, fixed and rechecked (item 4 above lists the ones that amend §H.6).
-  **It has not been run.** The development trials and the record run come after the suite; their results are recorded
-  here and in root `docs/07`.
+  - **Development trial 1** (13 Nov, 17:59–19:07 UTC, from the chain's saved state, with pre-d and pre-e taken from
+    5.18.104's own snapshots): **2,680 ok, 20 failed** — the three inherited checks, and 17 that were two defects of
+    the script, each fixed in the derivation:
+    - **T1-a:** AC-CA2 refused in every deploy and `--after-only` (`refused=tree_p7`). Its harness refused a baseline
+      that holds `lib/QuoteAgentCopy.php`. That was right while the baseline was 5.18.103; 5.18.104 carries P7 as the
+      pin does, so both trees must hold it.
+    - **T1-b:** every rollback failed its reference check (`batch1:event-processor`). It still expected 5.18.103's
+      worker-owned list, where a rollback of 5.18.105 leaves 5.18.104's, which is the pin's.
+
+    Nothing else failed: each weakened copy was caught, and the drives of LN-01…LN-04 passed.
+  - A trial without that shortcut (the ladder walked through the real tool) and the record run are still to come;
+    their results are recorded here and in root `docs/07`.
 
 ### S.5 Next
 

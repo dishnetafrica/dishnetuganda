@@ -4,7 +4,7 @@
 #   mode cfgkey) — the control and the South Sudan halves kept; P7's collections a note (the first branch deleted);
 #   AC-CA2 compares with BASELINE, now 994d660 (P3B_BASE and its webhook.php from Git: its folder named for no release).
 import re
-from d105lib import sha_at
+from d105lib import sha_at, git
 
 
 def apply(doc, ctx):
@@ -58,3 +58,25 @@ def apply(doc, ctx):
     doc.sub('sh -c \'cat > "$1"\' _ "$sub/b103/webhook.php" 2>/dev/null \\\n', 'sh -c \'cat > "$1"\' _ "$sub/bbase/webhook.php" 2>/dev/null \\\n', why="AC-CA2 folder 2")
     doc.sub('    o="$(ac_php_ca2 "$sub/code" "$sub/b103" "$sub" "$sub/drive.php")"\n', '    o="$(ac_php_ca2 "$sub/code" "$sub/bbase" "$sub" "$sub/drive.php")"\n', why="AC-CA2 folder 3")
     doc.mustnot('"$sub/b103')
+    # T1-a (trial 1, 13 Nov: every deploy and --after-only FAILed "AC-CA2 REFUSED … tree_p7"): the harness refused a
+    # baseline that holds lib/QuoteAgentCopy.php, which was right while the baseline was 5.18.103. 5.18.104 carries P7 as
+    # the pin does: both trees must hold it, and cases 5 and 6 still compare the installed code with the baseline's.
+    if git(repo, "cat-file", "-t", f"{ctx['base_full']}:{plugin}/lib/QuoteAgentCopy.php").decode().strip() != "blob":
+        raise SystemExit("PART P: the baseline does not hold lib/QuoteAgentCopy.php")
+    doc.sub("        if (!is_file($code . '/lib/QuoteAgentCopy.php') || is_file($base . '/lib/QuoteAgentCopy.php')) $fin('refused=tree_p7');\n",
+            "        // 5.18.105 (root docs/74 §H.4.4): the baseline is 5.18.104, which carries P7 as the pin does — both trees must hold it\n"
+            "        if (!is_file($code . '/lib/QuoteAgentCopy.php') || !is_file($base . '/lib/QuoteAgentCopy.php')) $fin('refused=tree_p7');\n",
+            why="AC-CA2 tree_p7")
+    doc.subs([
+        ("in DIR), through CODE's (the INSTALLED) code and BASE's (5.18.103's, from Git — the tree the deploy keeps for its\n",
+         "in DIR), through CODE's (the INSTALLED) code and BASE's (the baseline's, from Git — the tree the deploy keeps for its\n"),
+        ("        // 1. the two sandboxes: U for the installed code, B for 5.18.103's — the data folder two levels inside this reading's folder\n",
+         "        // 1. the two sandboxes: U for the installed code, B for the baseline's — the data folder two levels inside this reading's folder\n"),
+        ("        // 3. 5.18.103's sandbox: a byte copy of the same book, fixtures included, so both codes start from the same rows\n",
+         "        // 3. the baseline's sandbox: a byte copy of the same book, fixtures included, so both codes start from the same rows\n"),
+        ("        // the verdicts: 6 and 5 equal to 5.18.103's, transcript (Date, Message-ID and boundaries masked), uCRM requests and answer\n",
+         "        // the verdicts: 6 and 5 equal to the baseline's, transcript (Date, Message-ID and boundaries masked), uCRM requests and answer\n"),
+        ("                     // rows still \"making\" (inert: 5.18.103 reads neither collection)\n",
+         "                     // rows still \"making\" (5.18.104, which this rollback leaves, reads both collections as its switch says)\n"),
+    ], why="AC-CA2 and AC-RB2 comments: the baseline")
+    doc.mustnot("|| is_file($base . '/lib/QuoteAgentCopy.php')")

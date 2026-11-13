@@ -106,6 +106,16 @@ def apply(doc, ctx):
     ep = git(repo, "show", f"{pin}:{plugin}/cron/event_processor.php").decode()
     if ep.split("\n").count("$_epWorkerOwned = $_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];") != 1:
         raise SystemExit("PART B: the pin's worker-owned list is not EP_PIN_LIST")
+    # T1-b (trial 1, 13 Nov: every rollback FAILed "RB … batch1:event-processor"): 5.18.104's script expected 5.18.103's
+    # list after its rollback. A rollback of 5.18.105 leaves 5.18.104's file, which is the pin's — EP_PIN_LIST, read
+    # here in the baseline from Git as well.
+    epb = git(repo, "show", f"{base}:{plugin}/cron/event_processor.php").decode()
+    if epb.split("\n").count("$_epWorkerOwned = $_epUg ? ['ai.reply', 'ai.media', 'ai.voice_ack', 'crm.lead.sync'] : ['ai.reply'];") != 1:
+        raise SystemExit("PART B: the baseline's worker-owned list is not EP_PIN_LIST")
+    doc.sub("grep -qF \"\\$_epWorkerOwned = \\$_epUg ? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];\" \"$DEST/cron/event_processor.php\" 2>/dev/null || RB_REF=\"$RB_REF batch1:event-processor\"\n",
+            "grep -qxF -- \"$EP_PIN_LIST\" \"$DEST/cron/event_processor.php\" 2>/dev/null || RB_REF=\"$RB_REF batch1:event-processor\"   # 5.18.105: the rollback leaves 5.18.104's list, which is the pin's (EP_PIN_LIST)\n",
+            why="RB_REF event processor")
+    doc.mustnot("? ['ai.reply', 'crm.lead.sync'] : ['ai.reply'];")
     doc.sub("# lib/NotificationService.php, both of which 5.18.104 changes and the rollback puts back, so it must read 5.18.103's\n"
             "# signatures again: UG_SIGNATURE and SS_SIGNATURE are 5.18.103's values, carried (docs/73 §H.2.15.4).",
             "# lib/NotificationService.php, both of which 5.18.105 keeps byte for byte, so after the rollback it reads 5.18.104's\n"
