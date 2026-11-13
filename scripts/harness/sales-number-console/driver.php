@@ -25,14 +25,16 @@ $s->staff('admin', ['name' => 'Sandbox Admin', 'email' => 'admin@example.test', 
 $A = $s->staff('alpha', ['name' => 'Alpha Seller', 'email' => 'alpha@example.test', 'role' => 'sales', 'phone' => '0700000201']);
 $B = $s->staff('bravo', ['name' => 'Bravo Seller', 'email' => 'bravo@example.test', 'role' => 'sales']);
 $s->login('admin', 'admin@example.test', 'sj-password-1');
-$s->http('POST', "{$s->evo}/__test/instances", [
+$instances = function (array $rows) use ($s): void { $s->http('POST', "{$s->evo}/__test/instances", $rows, ['Content-Type: application/json']); };
+$INST = [
     ['name' => 'sj-sales', 'connectionStatus' => 'open', 'ownerJid' => '256700000901@s.whatsapp.net', 'profileName' => 'SN'],
     ['name' => 'sj-support', 'connectionStatus' => 'open', 'ownerJid' => '256700000903@s.whatsapp.net', 'profileName' => 'SN'],
     ['name' => 'sj-account', 'connectionStatus' => 'open', 'ownerJid' => '256700000904@s.whatsapp.net', 'profileName' => 'SN'],
     ['name' => 'sn-new', 'connectionStatus' => 'open', 'ownerJid' => '256700000701@s.whatsapp.net', 'profileName' => 'SN'],
-    ['name' => 'sn-off', 'connectionStatus' => 'close', 'ownerJid' => '', 'profileName' => 'SN'],
+    ['name' => 'kla-bravo-off', 'connectionStatus' => 'close', 'ownerJid' => '', 'profileName' => 'SN'],
     ['name' => 'sn-three', 'connectionStatus' => 'open', 'ownerJid' => '256700000702@s.whatsapp.net', 'profileName' => 'SN'],
-], ['Content-Type: application/json']);
+];
+$instances($INST);
 $qs = 'page=dashboard&tab=wa_ai_setup';
 $post = function (array $fields) use ($s, $qs): string {
     $r = $s->form('admin', $fields, $qs, $qs);
@@ -41,7 +43,7 @@ $post = function (array $fields) use ($s, $qs): string {
 };
 $setup = [];
 $setup[] = $post(['wa_action' => 'sn_add', 'instance' => 'sn-new', 'owner_staff_id' => $A, 'display_name' => 'Sales — Alpha Two']);
-$setup[] = $post(['wa_action' => 'sn_add', 'instance' => 'sn-off', 'owner_staff_id' => $B, 'display_name' => 'Sales — Bravo Off']);
+$setup[] = $post(['wa_action' => 'sn_add', 'instance' => 'kla-bravo-off', 'owner_staff_id' => $B, 'display_name' => 'bravo-off']);
 $setup[] = $post(['wa_action' => 'sn_add', 'instance' => 'sn-three', 'owner_staff_id' => $B, 'display_name' => 'Sales — Bravo Three']);
 foreach (['sales', 'support', 'account'] as $d) $setup[] = $post(['wa_action' => 'sn_verify_department', 'channel_id' => $d]);
 $setCfg([ChannelRegistry::FLAG => '1']);
@@ -67,6 +69,15 @@ for ($n = 1; $n < 500; $n++) {
         case 'state': $res = $state(); break;
         case 'form':  $res = ['answer' => $post((array)$c['fields'])]; break;
         case 'flag':  $setCfg([ChannelRegistry::FLAG => !empty($c['on']) ? '1' : null]); break;
+        case 'staff': $s->update((int)$s->ids[(string)$c['who']], ['is_active' => !empty($c['active'])]); break;
+        case 'instances':   // the fake Evolution's list, with one instance's owner changed or one instance left out
+            $rows = [];
+            foreach ($INST as $r) {
+                if (in_array($r['name'], (array)($c['drop'] ?? []), true)) continue;
+                if (isset($c['owner'][$r['name']])) $r['ownerJid'] = $c['owner'][$r['name']] . '@s.whatsapp.net';
+                $rows[] = $r;
+            }
+            $instances($rows); break;
         case 'quit':  file_put_contents("$ctl/res-$n.json", json_encode($res)); break 2;
         default:      $res = ['ok' => false, 'error' => 'unknown command'];
     }
