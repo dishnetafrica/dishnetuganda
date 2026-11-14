@@ -102,11 +102,11 @@ cut is kept as `refs/keep/5.18.105-cut1`, and the fix, as its own commit, as `re
 
 ### Tests
 
-**The release's own test is one new file, `tests/test_log_mask.php`. Its 73 weakened copies are each caught. The
-suite's two passes on `7835906`, B1 and B2, have not finished.**
+**The release's own test is one new file, `tests/test_log_mask.php`. Its 73 weakened copies are each caught.
+Pass B1 on `7835906` failed only the seven checks that fail in this container; pass B2 is still to run.**
 
-- **`tests/test_log_mask.php`** (sections under `tests/log_mask/`): ⟦PENDING: its passed and failed counts in each
-  pass, and whether they are the same⟧. Every person and number in it is fictitious.
+- **`tests/test_log_mask.php`** (sections under `tests/log_mask/`): 384 passed, 0 failed in pass B1; ⟦PENDING: in
+  pass B2, and whether the same⟧. Every person and number in it is fictitious.
   - **A — each masked line, driven through its real path:** a served page, a sandboxed job run, or a direct call with
     fakes, in 21 groups (G01–G21). There is one drive per line; LN-24's covers its three statements. For each line: it
     is written, found by its fixed words (the positive control); no form of the test number is in it; and no run of
@@ -166,7 +166,8 @@ suite's two passes on `7835906`, B1 and B2, have not finished.**
   - ⟦PENDING: each re-pointed file's count in both passes, beside its count on `994d660`⟧
 - **The release: the full suite twice on `7835906`** — 317 files, 5.18.104's 316 and `test_log_mask.php` — each to run
   on the days and hours that known limit 16 allows.
-  - **Pass B1** (began 14 Nov, 11:48:16 UTC): ⟦PENDING: ended (UTC); files, passed, failed, EXIT⟧.
+  - **Pass B1** (14 Nov, 11:48:16–18:12:07 UTC): 317 files, 22,979 passed, 7 failed, `EXIT=1`. The seven are the
+    four container-only files' (below).
   - **Pass B2** (planned from Monday 16 Nov, 00:00 UTC): ⟦PENDING: begun and ended (UTC); files, passed, failed,
     EXIT; whether every file's count equals B1's⟧.
   - **Known to fail in this container only** (5.18.104's known limit 11): seven checks in four files —
@@ -328,7 +329,8 @@ run's first start was stopped by hand after 20 minutes, because of a fault of an
 four lines of this script that shared the fault's form were corrected. Its second and third starts were cut by
 restarts of the container, after 8 and 71 minutes. A full trial of the corrected script from the chain's saved state
 (trial 5) was then clean but for the three inherited checks; it ran the script derived on `f764699`. The re-derived
-script's own trial is still to come. The record run: ⟦PENDING: the record run, in one sentence⟧
+script's own trial (trial 6) was clean too, once a first start, stopped by the size of the sandbox's clone, was put
+right. The record run: ⟦PENDING: the record run, in one sentence⟧
 
 It is `scripts/harness/deploy-5.18.105/rehearse.sh` (1,175 lines, sha256 `abfc59935858fbb1…`, as committed in
 `0214b50`) with two helpers: `rh105q.py`, the rehearsal's own reader, and `rh105-ref.php`, the release's own code as
@@ -428,8 +430,16 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
   script, as committed in `be8930c` and pinned to `f764699`): **2,710 ok, 3 failed** — the three inherited checks
   alone. 5.18.105's own sections read 153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six
   weakened copies and of the planted sign-in fault, the same seven as in trial 3.
-- **A trial of the script derived again on `7835906`** (sha256 `c70820cd69af899b…`):
-  ⟦PENDING: its times, its ok and failed counts, and which checks failed⟧
+- **Trial 6, of the script derived again on `7835906`** (14 Nov; sha256 `c70820cd69af899b…`, as committed in
+  `2a41c9d`, the trial on `7bb7a3e`; from the chain's saved state, the ladder walked):
+  - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Every deploy script since 5.18.94
+    refused at A0: *this checkout writes commits in a short form of 8 characters*. The sandbox's clone held 16,421
+    packed objects, and from 16,384 Git writes its short commit ids with 8 characters. The check did its job. Two
+    temporary branches were deleted here (kept under `refs/keep/`), and the trial's own runner, never committed, now
+    sets `core.abbrev 7` on the clone if it writes 8 characters: the remedy the refusal prints. It did not have to in
+    the second start (16,381 objects).
+  - **Its second start** (18:17–19:47 UTC): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own
+    sections read 153 ok, 0 failed, as in trial 5.
 - **The record run**, the whole chain unrestored:
   ⟦PENDING: the record run — its times, its ok and failed counts, which checks failed; or that it could not be run⟧
 
@@ -463,7 +473,10 @@ its customer.
    switched. It writes only its own 0600 cash sheet and row digest. LK-G1's note names the steps that are on, and
    LM-G1 and LM-G2 read ok. It ends GO or NO-GO. A GO prints `5.18.105 (check): GO — stage A holds.` and then the deploy
    command, with a flag only where a check needed one (each flag is your explicit choice); with none, it is step 3's.
-   A NO-GO changed nothing: send the log file and stop. Its own command:
+   A NO-GO changed nothing: send the log file and stop. One NO-GO has a remedy of its own: if it says *this checkout
+   writes commits in a short form of 8 characters*, run the command it prints,
+   `git -C /opt/dishnet config core.abbrev 7`, then `--check` again. From 16,384 objects in a checkout Git writes its
+   short commit ids with 8 characters; a rehearsal's clone crossed that count on 14 Nov. Its own command:
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.105 && mkdir -p /root/dnb-5.18.105 && bash scripts/deploy-5.18.105.sh --check 2>&1 | ( umask 077; exec tee /root/dnb-5.18.105/check-$(date -u +%Y%m%dT%H%M%SZ).log )
 

@@ -1796,14 +1796,27 @@ with 5.18.104's pass B, every difference is a count 5.18.105's own tests and re-
     corrected script, on `d433d90`, whose script and rehearsal are `be8930c`'s): **2,710 ok, 3 failed** — the three
     inherited checks alone. 5.18.105's own sections read 153 ok, 0 failed. The script's outputs that hold a FAIL
     line are those of six weakened copies and of the planted sign-in fault, the same seven as in trial 3.
-  - **Next:** the whole chain takes about nine hours in one piece, which this container did not give on the night
-    of 13 Nov. The suite's passes come first; the whole-chain record run is tried again after them. The results
-    are recorded here and in root `docs/07`.
+  - **Development trial 6, of the script derived again on `7835906`** (14 Nov; sha256 `c70820cd69af899b…`, as
+    committed in `2a41c9d`, the trial on `7bb7a3e`; from the chain's saved state, the ladder walked):
+    - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Every deploy script since
+      5.18.94 refused at A0: *"this checkout writes commits in a short form of 8 characters"*. The sandbox's clone,
+      brought forward from the saved state, held 16,421 packed objects, and from 16,384 Git writes its short commit
+      ids with 8 characters. The check did its job; nothing of 5.18.105's was at fault. Two temporary branches of
+      this repository were deleted (kept under `refs/keep/`), and the trial's runner, which is never committed, now
+      sets `core.abbrev 7` on the clone if it writes 8 characters: the remedy the refusal prints. It did not have to
+      in the second start (16,381 objects).
+    - **Its second start** (18:17–19:47 UTC): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's
+      own sections read 153 ok, 0 failed, as in trial 5. Its sandbox was gone at the end.
+  - **For the server:** production's checkout may cross the same count as the repository grows. If `--check` stops
+    with that sentence, run the command it prints (`git -C /opt/dishnet config core.abbrev 7`), then `--check`
+    again. It stops before anything is changed. Root `docs/07`'s runbook says so.
+  - **Next:** the whole-chain record run, in one piece, overnight 14–15 Nov, nothing beside it. The result is
+    recorded here and in root `docs/07`.
 
 ### S.5 Next
 
-- The suite's two passes, then the rehearsal's trials and its record run, then root `docs/07`'s 5.18.105 entry with the
-  deploy command and, in its own block, the rollback.
+- The rehearsal's record run (overnight 14–15 Nov) and the suite's pass B2 (from Monday 16 Nov, 00:00 UTC), then root
+  `docs/07`'s 5.18.105 entry with the deploy command and, in its own block, the rollback.
 - **The owner's, then:** the word to push `release/5.18.105`; the deploy; its `--after-only`. Step 12, `offers-live`,
   waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
 - **The owner's, separately:** the older faults of §S.2 item 3. The first two are in jobs that run on Uganda (LN-10's
