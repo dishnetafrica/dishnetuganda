@@ -284,7 +284,8 @@ tool, as production has it. Three development trials ran on 13 Nov. The first tw
 script and two in the rehearsal itself, all fixed; the third was clean but for the three inherited checks. The record
 run's first start was cut after 20 minutes, by a fault of an older script that the chain replays; four lines of this
 script that shared the fault's form were corrected. Its second and third starts were cut by restarts of the
-container, after 8 and 71 minutes. The record run: ⟦PENDING: the record run, in one sentence⟧
+container, after 8 and 71 minutes. A full trial of the final script from the chain's saved state (trial 5) was then
+clean but for the three inherited checks. The record run: ⟦PENDING: the record run, in one sentence⟧
 
 It is `scripts/harness/deploy-5.18.105/rehearse.sh` (1,175 lines, sha256 `abfc59935858fbb1…`, as committed in
 `0214b50`) with two helpers: `rh105q.py`, the rehearsal's own reader, and `rh105-ref.php`, the release's own code as
@@ -375,6 +376,10 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
 - **The record run's third start** (13 Nov, 22:34–23:45 UTC, on `be8930c`, nothing beside it) was cut by a second
   restart of the container, in the 5.18.98 stage, at 1,020 ok and 1 failed: the first of the three inherited checks
   (98-0). The 5.18.95 stage, where the first start had failed, passed whole.
+- **Trial 5** (13 Nov, 23:48 – 14 Nov, 01:12 UTC; from the chain's saved state, the ladder walked; the final script,
+  as committed in `be8930c`): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own sections read
+  153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six weakened copies and of the planted
+  sign-in fault, the same seven as in trial 3.
 - **The record run**, the whole chain unrestored:
   ⟦PENDING: the record run — its times, its ok and failed counts, which checks failed; or that it could not be run⟧
 

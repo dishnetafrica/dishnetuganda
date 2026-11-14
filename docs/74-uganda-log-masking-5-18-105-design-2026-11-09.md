@@ -1621,7 +1621,7 @@ Not complete. The plan is §H.7 step 5: two full passes on `f764699`, in a froze
 with nothing beside them. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart of this container: its
 log ends at 10:19:34 UTC inside file 230 of 317 (15,127 checks passed up to there, and 4 failed, all in three of the four
 files that fail in this container only). A cut pass does not count. The two passes are run again, and their results
-are recorded here and in root `docs/07` when they end.
+are recorded here and in root `docs/07` when they end. Pass A3 began on 14 Nov at 01:13:12 UTC.
 
 ### S.4 The deploy script and its rehearsal
 
@@ -1693,10 +1693,13 @@ are recorded here and in root `docs/07` when they end.
     another restart, in the 5.18.98 stage, at 1,020 ok and 1 failed, that one being the first inherited check
     (98-0); the 5.18.95 stage passed whole. Nothing of the runs' caused the restarts, as far as can be seen. A cut
     run does not count.
+  - **Development trial 5** (13 Nov, 23:48 – 14 Nov, 01:12 UTC; from the chain's saved state, the ladder walked; the
+    final script, on `d433d90`, whose script and rehearsal are `be8930c`'s): **2,710 ok, 3 failed** — the three
+    inherited checks alone. 5.18.105's own sections read 153 ok, 0 failed. The script's outputs that hold a FAIL
+    line are those of six weakened copies and of the planted sign-in fault, the same seven as in trial 3.
   - **Next:** the whole chain takes about nine hours in one piece, which this container did not give on the night
-    of 13 Nov. So a full trial of the final script from the chain's saved state comes first (about 75 minutes), then
-    the suite's passes, and the whole-chain record run is tried again after them. The results are recorded here
-    and in root `docs/07`.
+    of 13 Nov. The suite's passes come first; the whole-chain record run is tried again after them. The results
+    are recorded here and in root `docs/07`.
 
 ### S.5 Next
 
