@@ -1,11 +1,10 @@
-<!-- 14 Nov: the release was re-cut as 7835906 (f764699 kept as refs/keep/5.18.105-cut1; root docs/74 §S.1, §S.2 items 6-7,
-     §S.3). Every f764699, every 88/45/387 count and every test count below is to be revisited in the next round. -->
 <!-- DRAFT of the root docs/07 entry for 5.18.105, kept in the repository so that a container restart cannot lose it.
-     The marks ⟦PENDING: …⟧ stand for results still to come: the rehearsal's record, the suite's two passes and the
-     owner's word to push the release. It moves into docs/07-change-control.md when they are in. Until then root
-     docs/74 §S is the record, and nothing here says the release is pushed or deployed: it is neither. -->
+     The marks ⟦PENDING: …⟧ stand for results still to come: the rehearsal's record and a trial of the re-derived
+     script, the suite's two passes and the owner's word to push the release. It moves into docs/07-change-control.md
+     when they are in. Until then root docs/74 §S is the record, and nothing here says the release is pushed or
+     deployed: it is neither. -->
 
-## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `f764699`, one commit on 5.18.104 (`994d660`), built; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: ⟦PENDING: both passes on `f764699` — files, passed, failed, and whether only the seven known container checks fail⟧; the rehearsal's record: ⟦PENDING: the record run — ok, failed, and which checks failed⟧; NOT deployed
+## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: ⟦PENDING: passes B1 and B2 on `7835906` — files, passed, failed, and whether only the seven known container checks fail⟧; the rehearsal's record: ⟦PENDING: the record run — ok, failed, and which checks failed⟧; NOT deployed
 
 **Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above). On 8 Nov: 5.18.104 deploys as
 built, and 5.18.105 masks the four older log lines that carry a phone number, ready before step 12 (`offers-live`) is
@@ -19,7 +18,8 @@ the earliest. None of them waits for this release. Only step 12 waits.
 
 **What the owner does next, in order.** Each command is in this entry's runbook, in a block of its own; the rollback has
 a section of its own.
-1. **Nothing yet.** Two results are still missing above: the suite's two passes and the rehearsal's record run.
+1. **Nothing yet.** Three results are still missing: the suite's two passes, B1 and B2, and the rehearsal's record
+   run (both above), and a trial of the re-derived deploy script (The rehearsal, below).
 2. **Give the word to push `release/5.18.105`.** The branch is local only. The deploy fetches it from the remote, so it
    cannot run before the push.
 3. **Run the deploy on the server.** A `--check` first is wise: it reads, refuses or passes, and changes nothing. Then
@@ -72,7 +72,7 @@ a section of its own.
   SSP report's line (LN-02), which the owner named; test section B holds that job's sends and stored rows equal to
   `994d660`'s.
 
-**Files** (against `994d660`): 88 — 43 added, 45 changed; 4,131 insertions, 71 deletions; no migration.
+**Files** (against `994d660`): 89 — 43 added, 46 changed; 4,175 insertions, 76 deletions; no migration.
 
 - **Outside the tests, 23 files, all changed, none added:**
   - the 19 log files, each named in the release's `SAFETY.md`: the two webhooks, twelve job scripts, two classes under
@@ -80,23 +80,30 @@ a section of its own.
     five;
   - `lib/PluginLog.php`, which gains `tail()`;
   - `tools/sales_followup_report.php`, the column fix;
-  - `SAFETY.md`, a new 5.18.105 section: 67 lines added, none removed;
+  - `SAFETY.md`, a new 5.18.105 section: 74 lines added, none removed;
   - `manifest.json`, the version line only.
-- **Tests, 65 files:**
+- **Tests, 66 files:**
   - 43 added: `tests/test_log_mask.php`, the 41 files of `tests/log_mask/`, and `tests/fixtures/r105_revert.php`;
-  - 22 changed: the older boundary tests re-pointed, their weakened-copy files, and the version pins (below).
+  - 23 changed: the older boundary tests re-pointed, their weakened-copy files, the version pins, and the re-cut's
+    two fixes (below).
 
-**Ancestry.** `f764699` (5.18.105, release) ← `994d660` (5.18.104, release; DEPLOYED 9 Nov, copy 03:50:25 UTC). The
-release is one commit, squashed from five working commits (`d3e9b7d` … `add6118`, kept locally under
-`refs/keep/wip/5.18.105`); its tree is identical to `add6118`'s. It was built in three stages — C1 the code, C2 the
-tests, C3 the re-pointed boundaries — each reviewed by someone who had not built it, then fixed and rechecked. The
-development branch keeps the release as a patch (`wip/release-5.18.105.patch`; compared on 13 Nov, byte for byte the
-difference between the two commits), so a container restart cannot lose it.
+**Ancestry.** `7835906` (5.18.105, release) ← `994d660` (5.18.104, release; DEPLOYED 9 Nov, copy 03:50:25 UTC). The
+release is one commit. It was built in three stages — C1 the code, C2 the tests, C3 the re-pointed boundaries — each
+reviewed by someone who had not built it, then fixed and rechecked. The first cut, `f764699` (9 Nov), was squashed
+from five working commits (`d3e9b7d` … `add6118`, kept locally under `refs/keep/wip/5.18.105`); its tree is
+`add6118`'s. The development branch keeps the release as a patch (`wip/release-5.18.105.patch`, byte for byte
+the difference between `994d660` and `7835906`), so a container restart cannot lose it.
+
+**The re-cut, 14 Nov.** The first cut's suite pass, A3, failed two checks of the release's own suite (Tests, below).
+Both are fixed in three test files and `SAFETY.md`, and in nothing else. A fix laid on top of the first cut would not
+do: the pin must be one commit on `994d660` (root `docs/74` §H.4.1), and the script's own stage A refuses any other.
+So the release was cut again, as one commit on `994d660`. Every runtime file is `f764699`'s, byte for byte. The first
+cut is kept as `refs/keep/5.18.105-cut1`, and the fix, as its own commit, as `refs/keep/5.18.105-fix-d623fc1`.
 
 ### Tests
 
 **The release's own test is one new file, `tests/test_log_mask.php`. Its 73 weakened copies are each caught. The
-suite's two passes on `f764699` have not finished.**
+suite's two passes on `7835906`, B1 and B2, have not finished.**
 
 - **`tests/test_log_mask.php`** (sections under `tests/log_mask/`): ⟦PENDING: its passed and failed counts in each
   pass, and whether they are the same⟧. Every person and number in it is fictitious.
@@ -123,8 +130,8 @@ suite's two passes on `f764699` have not finished.**
   tests compare the plugin with older releases; to them each 5.18.105 edit is an undeclared change. The layer takes
   5.18.105 out first, against `994d660` read from Git, and each older test then judges what is left, unchanged.
   - **Through the layer** (`r105_less()`, the tree with every marked 5.18.105 edit put back): `quote_followup` N and M01,
-    `quote_agent_copy` J, `catalogue_direct` I, `quote_from_ucrm` I, the switch tool's TL14 (its main scan), and
-    `test_quote_company` I4.
+    `quote_agent_copy` J, `catalogue_direct` I, `quote_from_ucrm` I, the switch tool's TL14 (its main scan),
+    `test_quote_company` I4, and, since the re-cut, `test_quote_summary` M (`webhook.php`, through `r105_file()`).
   - **By exact text** (`r105_revert()`), for the one file two tests hold as text, `includes/post/post_cashbook.php`:
     `test_bank_boundaries` (A and F) and `test_cashbook_physical_list` M. `test_bank_boundaries` A also checks that the
     revert gives back `994d660`'s bytes exactly.
@@ -132,30 +139,58 @@ suite's two passes on `f764699` have not finished.**
     test must still fail on it: QN8, QN8b and QN11 (N), MI7 (`catalogue_direct` I), MI5 and MI7 (`quote_from_ucrm` I),
     W-r105a (`test_quote_company` I4), BM-r105 (`test_bank_boundaries` A) and W-r105 (`test_cashbook_physical_list` M).
     Each first asserts that its edit stands where the layer leaves it in place, or it counts as a failure. `SAFETY.md`'s
-    list of these copies does not name QN8b; the test's own comment does.
+    list of these copies does not name QN8b; the test's own comment does. Since the re-cut the list also names
+    `test_quote_summary` M's own control, which works the same way inside the test (below).
   - **The control on the controls, N09:** N's own checks, run with 5.18.105 left in, must fail on 5.18.105's files and
     edits. So the layer is what makes N pass.
   - **The version pin, 5.18.104 → 5.18.105,** moves in eight test files: the five `test_distributor_*`,
     `test_bank_boundaries`, `test_cashbook_physical_list` and `test_quote_company` (I5).
+  - **Two fixes, made in the re-cut** (the first cut's pass A3 found both; below):
+    - **`test_quote_summary` M, a hold the design missed.** It holds `webhook.php` byte for byte against 5.18.101's
+      release, once 5.18.104's own two edits are taken out. The design's list of re-points (root `docs/74` §H.1.24)
+      did not name it, so it still read the raw file, and 5.18.105's own edits to `webhook.php` made it fail
+      (57 passed, 1 failed). Its one-character control still passed, proving nothing. It now reads the file through
+      the layer, as the other boundaries do. Its control is planted away from every 5.18.105 edit, and a new control
+      checks that the raw file, read without the layer, fails. A read of every test against the 23 files 5.18.105
+      changes outside the tests found no other hold left unpointed.
+    - **5.18.104's TL40 control, broken by the date.** It builds its control book from today's clock, but its test
+      chase is fixed on 2 Nov. From 12 Nov the chase fell before the steps were switched on, two of the answers it
+      compares became the same, and the control failed on every run (396 passed, 1 failed). While it failed, TL40's
+      six weakened copies counted as caught whatever they did. It is now judged at one fixed moment, 7 Nov 2026 12:00
+      Kampala, the day of 5.18.104's two passes. Nothing else in the file changes.
+    - **Run alone on the fixed tree** (14 Nov, 10:41–11:47 UTC, one at a time; the re-cut's tree, byte for byte):
+      `test_quote_summary` 59 passed, 0 failed; TL40 11/0; `test_log_mask` 384/0; `test_sales_followup_tool` 397/0;
+      `quote_followup` N and M 291/0; `quote_agent_copy` J 116/0; `catalogue_direct` I 107/0; `quote_from_ucrm` I
+      with its MI copies 46/0. The weakened copies of both fixes are each caught, among them a fault the broken TL40
+      control had hidden.
   - ⟦PENDING: each re-pointed file's count in both passes, beside its count on `994d660`⟧
-- **The release: the full suite twice on `f764699`** — 317 files, 5.18.104's 316 and `test_log_mask.php`.
-  - **Pass ⟦PENDING: its name⟧:** ⟦PENDING: begun and ended (UTC); files, passed, failed, EXIT⟧.
-  - **Pass ⟦PENDING: its name⟧:** ⟦PENDING: begun and ended (UTC); files, passed, failed, EXIT; whether every file's
-    count equals the first pass's⟧.
+- **The release: the full suite twice on `7835906`** — 317 files, 5.18.104's 316 and `test_log_mask.php` — each to run
+  on the days and hours that known limit 16 allows.
+  - **Pass B1** (began 14 Nov, 11:48:16 UTC): ⟦PENDING: ended (UTC); files, passed, failed, EXIT⟧.
+  - **Pass B2** (planned from Monday 16 Nov, 00:00 UTC): ⟦PENDING: begun and ended (UTC); files, passed, failed,
+    EXIT; whether every file's count equals B1's⟧.
   - **Known to fail in this container only** (5.18.104's known limit 11): seven checks in four files —
     `test_install_authorisation` 379/2, `test_mail_quote` 91/1, `test_migration_integrity` 27/1 and `test_secure_file`
-    22/3. They read so on `994d660` in 5.18.104's passes A3 and B. ⟦PENDING: whether both passes fail exactly these
-    seven, word for word, and nothing else⟧
-  - **Two cut passes do not count.** Pass A was cut by a container restart in file 189; to that point 11,788 passed
-    and 4 failed. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart; its log ends at 10:19:34 UTC inside
-    file 230 of 317, with 15,127 passed and 4 failed. In each, the 4 were in the three of those four files the pass had
-    reached.
+    22/3. They read so on `994d660` in 5.18.104's passes A3 and B, and on `f764699` in the first cut's pass A3.
+    ⟦PENDING: whether both passes fail exactly these seven, word for word, and nothing else⟧
+  - **Passes A and A2, on the first cut, do not count.** Pass A was cut by a container restart in file 189; to that point
+    11,788 passed and 4 failed. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart; its log ends at
+    10:19:34 UTC inside file 230 of 317, with 15,127 passed and 4 failed. In each, the 4 were in the three of those four
+    files the pass had reached.
+  - **Pass A3, on `f764699`, ran to its end.** It began on 14 Nov at 01:13:12 UTC. Two container restarts cut it, at
+    05:20:21 and 06:37:03 UTC, and each time it was resumed from the start of the file that was cut (05:32:10 and
+    06:53:40 UTC). It ended at 10:36:43 UTC: 317 files, 22,975 passed, 10 failed. Seven are in the four container-only
+    files (above). One is L05 of `test_quote_followup` (767/1), a check of 5.18.104's that compares two printouts and
+    fails if a second ticks over between them. It is rare: it read 768/0 in pass A2 and in both of 5.18.104's passes.
+    The last two are the two fixes above: `test_quote_summary` M (57/1) and TL40's control (`test_sales_followup_tool`
+    396/1). They made the first cut wrong, so the release was re-cut, and A3 counts for neither pass. Beside 5.18.104's
+    pass B, file by file, every other difference is a count that 5.18.105's own tests and re-points add.
   - ⟦PENDING: the comparison with 5.18.104's pass B (316 files, 22,578 passed, 7 failed), file by file⟧
 - **T1 and T4, the deploy script's signatures, are carried unchanged:** `548 passed, 0 failed rc=0` and
   `20 passed, 0 failed, 0 skipped rc=0`. The design infers that the release adds no test to the set the server runs;
   both passes measure T1 again. ⟦PENDING: `test_cash_in_hand_p3b`'s count in both passes⟧
 
-### `scripts/deploy-5.18.105.sh` — 14,744 lines, sha256 `c028cde545e042ba…`
+### `scripts/deploy-5.18.105.sh` — 14,745 lines, sha256 `c70820cd69af899b…`
 
 **What is new.** It deploys over a sales follow-up that is switched on, and it changes no switch. It never runs the
 switch tool's `on`, `off`, `skip`, `set` or `erase`, nor `scripts/sales-followup.sh`, in any mode. The steps that are on
@@ -167,7 +202,7 @@ one moved. The release adds no migration and no setting.
 stated number of times, it is replaced that many times, and the result holds the new text. Any failure exits non-zero
 and writes nothing. The release commit is a parameter. The derivation refuses one that is not cut on `994d660` in a
 straight line, or whose manifest does not say 5.18.105; a build commit further along that line is derived only with a
-warning, and the script's own stage A then refuses it. It ran on `f764699`, whose parent is `994d660`. Every pin, file
+warning, and the script's own stage A then refuses it. It ran on `7835906`, whose parent is `994d660`. Every pin, file
 list, count and sha256 is read off Git, never typed. Eleven parts, in the order they run, 300 edits:
 
 - **A** identity: the pin, the baseline (`994d660`, live), the earlier releases' state files, the three sha256 lists;
@@ -187,11 +222,16 @@ carried, must refuse three more. The derivation was run twice, byte for byte the
 it. The first build had 277 edits (`2db0431`); trial 1's fixes made 284 (`cbbc985`); sweep 1's made 294 (`863c870`);
 two comments corrected after trial 3 made 296 (`0214b50`); four carried pipelines made 300 (`be8930c`).
 
+**Derived again for the re-cut** (14 Nov, committed in `2a41c9d`): the same eleven parts and 300 edits, run on
+`7835906`. Only the pin, the counts (89 files, 46 changed, and the 386 files of 5.18.104 it must not touch) and the
+sha256 values of the four files the re-cut changed are new; the script is one line longer. On `f764699` it was
+14,744 lines, sha256 `c028cde545e042ba…`: the script that trial 5 ran (below).
+
 **The two wrappers.** `scripts/sales-followup.sh` is unchanged (89 lines, sha256 `bbde2d04…`).
-`scripts/sales-followup-report.sh` is written again by the derivation (158 lines, sha256 `85b93f0b36493cf3…`), because
-the report's column fix is in the release. It is pinned to `f764699`. The five installed files it reads are the same in
-5.18.104 and 5.18.105, so it runs before the deploy and after a rollback too. It fetches the release branch itself, and
-stops, having changed nothing, where the checkout holds no `f764699`.
+`scripts/sales-followup-report.sh` is written again by the derivation (158 lines, sha256 `7b78faf6751e51b0…`), because
+the report's column fix is in the release. It is pinned to `7835906` (until the re-cut, `f764699`). The five installed
+files it reads are the same in 5.18.104 and 5.18.105, so it runs before the deploy and after a rollback too. It
+fetches the release branch itself, and stops, having changed nothing, where the checkout holds no `7835906`.
 
 **New — the ladder kept as found (LK).** The ladder is the sales follow-up's steps and their switches. A switch is a
 key, and a key can live in four places: `<data>/kyc_config.json`, its row in the book, `<plugin>/data/config.json` and
@@ -287,7 +327,8 @@ script and two in the rehearsal itself, all fixed; the third was clean but for t
 run's first start was stopped by hand after 20 minutes, because of a fault of an older script that the chain replays;
 four lines of this script that shared the fault's form were corrected. Its second and third starts were cut by
 restarts of the container, after 8 and 71 minutes. A full trial of the corrected script from the chain's saved state
-(trial 5) was then clean but for the three inherited checks. The record run: ⟦PENDING: the record run, in one sentence⟧
+(trial 5) was then clean but for the three inherited checks; it ran the script derived on `f764699`. The re-derived
+script's own trial is still to come. The record run: ⟦PENDING: the record run, in one sentence⟧
 
 It is `scripts/harness/deploy-5.18.105/rehearse.sh` (1,175 lines, sha256 `abfc59935858fbb1…`, as committed in
 `0214b50`) with two helpers: `rh105q.py`, the rehearsal's own reader, and `rh105-ref.php`, the release's own code as
@@ -384,9 +425,11 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
   restart of the container, in the 5.18.98 stage, at 1,020 ok and 1 failed: the first of the three inherited checks
   (98-0). The 5.18.95 stage, where the first start had failed, passed whole.
 - **Trial 5** (13 Nov, 23:48 – 14 Nov, 01:12 UTC; from the chain's saved state, the ladder walked; the corrected
-  script, as committed in `be8930c`): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own
-  sections read 153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six weakened copies and of
-  the planted sign-in fault, the same seven as in trial 3.
+  script, as committed in `be8930c` and pinned to `f764699`): **2,710 ok, 3 failed** — the three inherited checks
+  alone. 5.18.105's own sections read 153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six
+  weakened copies and of the planted sign-in fault, the same seven as in trial 3.
+- **A trial of the script derived again on `7835906`** (sha256 `c70820cd69af899b…`):
+  ⟦PENDING: its times, its ok and failed counts, and which checks failed⟧
 - **The record run**, the whole chain unrestored:
   ⟦PENDING: the record run — its times, its ok and failed counts, which checks failed; or that it could not be run⟧
 
@@ -403,12 +446,12 @@ its customer.
 
 0. **What must be true first.**
    - **5.18.104 is live.** It is, since 9 Nov (copy 03:50:25 UTC). The script refuses any other live version.
-   - **`release/5.18.105` (`f764699`) must be on GitHub, and it is not there yet.** Today it is local only, and it is
+   - **`release/5.18.105` (`7835906`) must be on GitHub, and it is not there yet.** Today it is local only, and it is
      pushed only on the owner's word: ⟦PENDING: the owner's word, and the date of the push⟧. The `--check` and deploy
      commands below fetch it, and their `&&` stops them if that fails. Until the push nothing can be deployed, and the
-     report's wrapper stops too, having changed nothing: it is pinned to `f764699`.
+     report's wrapper stops too, having changed nothing: it is pinned to `7835906`.
    - **The development branch carries the script and both wrappers.** The `--check` and deploy commands below pull
-     it. Since `be8930c` (13 Nov) it holds `scripts/deploy-5.18.105.sh` at sha256 `c028cde545e042ba…`.
+     it. Since `2a41c9d` (14 Nov) it holds `scripts/deploy-5.18.105.sh` at sha256 `c70820cd69af899b…`.
      ⟦PENDING: the commit the record run ran on, and whether anything changed the script after it⟧
    - **The quarantine's `--check` has PASSED since 5.18.104's copy.** It has: 9 Nov, begun 04:39:36 UTC. Stage A reads
      that record (A14). Run it again only if A14 asks for it, which it does after any later copy or rollback; it then
@@ -536,7 +579,7 @@ no switch tool. Send the log file before doing anything by hand.
 **Send back** the rollback's log file, `rollback-…` under `/root/dnb-5.18.105/`, and the quarantine check's. Never a
 copy of the terminal, and never the cash sheet.
 
-### Known limits (recorded — the release's `SAFETY.md`, `docs/74` §H.2 and §S.2)
+### Known limits (recorded — the release's `SAFETY.md`, `docs/74` §H.2, §S.2 and §S.3)
 
 1. **The masking holds only from the moment 5.18.105 serves.** Lines already written stay; the release changes code
    and rewrites no data. The capped logs drop old entries as new ones arrive (`webhook_log.json` keeps 300 entries,
@@ -612,3 +655,16 @@ copy of the terminal, and never the cash sheet.
     - **Its limit 12** (one wrong sentence in `SAFETY.md`, Operator action, step 3 of 5.18.103's section) is still not
       corrected. This release only adds its own section to that file.
     - **Its limit 13** (phone numbers in four older log lines) is what this release answers, once it serves.
+16. **Some of 5.18.104's tests depend on the day they run** (root `docs/74` §S.3). A read of every test for the real
+    clock (14 Nov) found these, besides TL40, which is fixed in the re-cut (Tests). None is 5.18.105's, and none is
+    changed here; each is recorded for a later release.
+    - CK12 and HK11 fail on a Kampala Sunday, when the send window is closed. CK12 also fails on every run from 20 Nov,
+      21:00 UTC, when its test quotation, valid until 20 Nov, has expired.
+    - On a Sunday from about 06:00 to 19:00 UTC, `test_pilot_safety` fails, and `test_notify_evo_retry`,
+      `test_sales_pilot` and `test_multi_number_routing` skip their follow-up cases.
+    - wa_offers K07 has passed since 9 Nov without testing what it is for, the recent-offer exemption.
+    - voice_ack K02 will fail from 31 Dec 2026.
+    - `test_tick_auto_pull_log` can fail by chance in the last ten seconds of an hour (UTC), and L05 at any second (as
+      in pass A3).
+    - **So the two passes on `7835906` run** on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and
+      before 20 Nov, 21:00 UTC. Files 35–36 (`test_cashbook_physical_list`) never run between 21:00 and 24:00 UTC.

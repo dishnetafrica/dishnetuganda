@@ -1559,7 +1559,8 @@ and the rehearsal's record run end.
   kept under `refs/keep/5.18.105-cut1`, and the fix as its own commit under `refs/keep/5.18.105-fix-d623fc1`.
 - **How it was built:** in three stages, each built, then reviewed by someone who had not built it, then fixed and
   rechecked: C1 the code, C2 the tests, C3 the re-pointed boundaries. Five working commits, kept locally under
-  `refs/keep/wip/5.18.105` (`add6118`), were squashed into the release; the release's tree is `add6118`'s.
+  `refs/keep/wip/5.18.105` (`add6118`), were squashed into the first cut, whose tree is `add6118`'s; the re-cut's tree is
+  the fix commit's (`d623fc1`).
 - **Outside the tests it changes 23 files:** the 19 log files of §H.1 (35 edits covering 37 log statements,
   LN-01…LN-35); `lib/PluginLog.php` (`tail()`); `tools/sales_followup_report.php` (the BY NUMBER table pads by
   characters, not bytes); `SAFETY.md`; and `manifest.json` (the version line).
@@ -1695,7 +1696,8 @@ run on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and before 2
 **The fixed tests, run on their own on the fixed tree before the re-cut** (14 Nov, 10:41–11:47 UTC, one at a time):
 `test_quote_summary` 59/0; TL40 11/0; `test_log_mask` 384/0; `test_sales_followup_tool` 397/0; quote_followup N
 and M 291/0; quote_agent_copy J 116/0; catalogue_direct I 107/0; quote_from_ucrm I with its MI copies 46/0. The
-two passes on `7835906` are recorded here when they end; pass B1 began on 14 Nov at 11:48:16 UTC.
+two passes on `7835906` are recorded here when they end; pass B1 began on 14 Nov at 11:48:16 UTC. The second, B2, is
+planned from Monday 16 Nov, 00:00 UTC, the first moment after B1 that the run-date rules above allow.
 
 ### S.4 The deploy script and its rehearsal
 
