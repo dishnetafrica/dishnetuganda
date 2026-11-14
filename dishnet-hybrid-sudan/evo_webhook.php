@@ -378,7 +378,8 @@ foreach ($messages as $msg) {
                     'crm_client_id' => (int)(($convId ? ($convSvc->getConversation((int)$convId) ?? []) : [])['crm_client_id'] ?? 0),
                 ]);
                 if (!empty($res['created'])) {
-                    error_log('[evo_webhook] opt-out recorded for ' . $phone
+                    // 5.18.105 (root docs/74 §H.1.1, LN-01): the opt-out is logged by its conversation, never by the customer's number.
+                    error_log('[evo_webhook] opt-out recorded for conversation ' . ($convId ? '#' . (int)$convId : '(not stored)')
                               . ' (matched "' . $stop['matched'] . '")');
                 }
             } catch (\Throwable $e) {

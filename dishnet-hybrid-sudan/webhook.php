@@ -127,6 +127,8 @@ PdfLinkToken::ensureSecret($store, $config);   // 5.18.37: the receipt/delivery 
 require_once __DIR__ . '/lib/CustomerContact.php';
 require_once __DIR__ . '/lib/CustomerEmailDispatcher.php';
 require_once __DIR__ . '/lib/currency.php';
+// 5.18.105 (root docs/74 §H.1.11): PluginLog::tail() for the three phone fields of the webhook log below (LN-17, LN-18, LN-19).
+require_once __DIR__ . '/lib/PluginLog.php';
 
 // ── Response helpers ───────────────────────────────────────────────────────
 function whResp(int $code, string $msg, array $data = []): void {
@@ -949,7 +951,8 @@ switch ($changeType) {
                     'crm_id'        => (string)$clientId,
                     '_raw_message'  => $welcome,
                 ]);
-                whLog($changeType, "Welcome sent to {$name} ({$phone})"
+                // 5.18.105 (root docs/74 §H.1.11, LN-16): the client id is in the entry's data; the number is not logged.
+                whLog($changeType, "Welcome sent to {$name}"
                     . ($kycLikeCrm ? ' — KYC customer, kyc_messages_like_crm' : ''), ['crm_id' => $clientId]);
             } else {
                 whLog($changeType, "KYC-registered client — welcome already sent by plugin"
@@ -1099,7 +1102,8 @@ switch ($changeType) {
             'invoice_num'  => $invoNum,
             'client_id'    => $clientId,
             'customer'     => $name,
-            'phone'        => $phone ?: '(EMPTY)',
+            // 5.18.105 (root docs/74 §H.1.11, LN-17): '••••' and the last two digits, or 'none' (PluginLog::tail).
+            'phone'        => PluginLog::tail((string)$phone),
             'amount'       => $amount,
             'amount_paid'  => $creditData['amount_paid'],
             'remaining'    => $creditData['remaining'],
@@ -1149,7 +1153,8 @@ switch ($changeType) {
             } catch (\Throwable $e) { /* silent */ }
         } else {
             whLog($changeType, "Skipped — no phone or zero amount", [
-                'client_id' => $clientId, 'phone' => $phone ?: '(none)', 'amount' => $amount,
+                // 5.18.105 (root docs/74 §H.1.11, LN-18): '••••' and the last two digits, or 'none' (PluginLog::tail).
+                'client_id' => $clientId, 'phone' => PluginLog::tail((string)$phone), 'amount' => $amount,
             ]);
         }
 
@@ -1703,7 +1708,8 @@ switch ($changeType) {
                 fcm_push_service_activated($store->getPdo(), $config, (int)$clientId, $svcName);
             } catch (\Throwable $e) { /* silent — push is best-effort */ }
         } else {
-            whLog($changeType, "Service.add logged (no notification - status={$status}, phone=" . ($phone ?: 'none') . ")");
+            // 5.18.105 (root docs/74 §H.1.11, LN-19): '••••' and the last two digits, or 'none' (PluginLog::tail).
+            whLog($changeType, "Service.add logged (no notification - status={$status}, phone=" . PluginLog::tail((string)$phone) . ")");
         }
 
         // -- v4.11.3: Fiber install flow - fire immediately via webhook ----
@@ -3089,7 +3095,8 @@ switch ($changeType) {
                 }
             };
 
-            whLog($changeType, "Quote #{$quoteNum} → preparing PDF+caption for {$name} ({$phone})", ['amount' => $amountFmt]);
+            // 5.18.105 (root docs/74 §H.1.11, LN-20): the quote and the name, without the number.
+            whLog($changeType, "Quote #{$quoteNum} → preparing PDF+caption for {$name}", ['amount' => $amountFmt]);
 
             // NOTE: Do NOT mark sent_ids here — only mark AFTER successful send.
             // If webhook fails, cron_quote_wa picks it up as a retry.
@@ -3342,7 +3349,8 @@ switch ($changeType) {
                 $notify->sendVia('accounts', $phone, $msg, 'ops_credit_note', [
                     'customer_name' => $name, 'cn_num' => $cnNum, 'amount' => $amount,
                 ]);
-                whLog($changeType, "Credit note notification SENT: #{$cnNum} → {$name} ({$phone})");
+                // 5.18.105 (root docs/74 §H.1.11, LN-21): the credit note and the name, without the number.
+                whLog($changeType, "Credit note notification SENT: #{$cnNum} → {$name}");
             }
         }
 
@@ -3385,7 +3393,8 @@ switch ($changeType) {
             $notify->sendVia('support', $phone, $msg, 'ops_client_message', [
                 'customer_name' => $name, 'client_id' => $clientId,
             ]);
-            whLog($changeType, "Client message forwarded to WA: {$name} ({$phone})");
+            // 5.18.105 (root docs/74 §H.1.11, LN-22): the name, without the number.
+            whLog($changeType, "Client message forwarded to WA: {$name}");
         }
 
         whResp(200, 'client.message processed.');
@@ -3698,7 +3707,8 @@ switch ($changeType) {
                 }
                 if ($acctPhone) {
                     $notify->sendVia('support', $acctPhone, $alertMsg, 'ops_payment_deleted');
-                    whLog($changeType, "Alert sent to accountant: {$acctPhone}");
+                    // 5.18.105 (root docs/74 §H.1.11, LN-23): the recipient is fixed (the first accountant or admin with a phone); its number is not logged.
+                    whLog($changeType, "Alert sent to accountant");
                 }
             }
         } catch (\Throwable $waErr) {

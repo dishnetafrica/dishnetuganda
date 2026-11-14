@@ -20,7 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'notif
         flash('Phone, name and date are required.', 'danger');
     } else {
         $notify->installationConfirmed($phone, $name, $svcType, $date, $time, $tech);
-        logActivity($dataDir, 'notify_install', "Install confirmation sent to {$name}", "Phone:{$phone} Date:{$date}");
+        // 5.18.105 (root docs/74 §H.1.17, LN-33): the name and the date, without the number.
+        logActivity($dataDir, 'notify_install', "Install confirmation sent to {$name}", "Date:{$date}");
         flash("✅ Installation confirmation sent to {$name} ({$phone})");
     }
     redirect('?page=dashboard&tab=notify');

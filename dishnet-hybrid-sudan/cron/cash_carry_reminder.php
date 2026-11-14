@@ -87,7 +87,8 @@ foreach ($allRetailers as $r) {
             $notify->sendRaw($phone, $msg, 'cash_carry_reminder');
             $state['reminded'][] = $agentId;
             $reminded++;
-            _cclog("Reminded {$name} ({$phone}): \${$exposure} exposure");
+            // 5.18.105 (root docs/74 §H.1.7, LN-07): the agent's name, without the number.
+            _cclog("Reminded {$name}: \${$exposure} exposure");
         } catch (\Throwable $e) {
             _cclog("Failed to remind {$name}: " . $e->getMessage());
         }

@@ -542,6 +542,80 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.105 (root docs/74 §H.3.1; built 2026-11-09, not deployed) — Uganda: no phone number in any log line — 35 edits covering 37 log statements in 19 files, PluginLog::tail(), the report's BY NUMBER columns padded by characters; messages, sends, screens and stored records unchanged; no new setting; no migration
+
+### Why
+The owner's rulings of 8 and 9 Nov 2026 (root docs/07, 5.18.104's known limit 13). On 8 Nov: 5.18.104 deploys as built,
+and 5.18.105 masks the four log lines that carried a customer's number, ready before step 12 (`offers-live`) is
+switched on. Later on 9 Nov, after the design found about 25 more such lines on Uganda every day: 5.18.105 masks
+**every** log line that can carry a phone number on Uganda (option B); the chase (step 6) does not wait for it, and
+`offers-live` still does. The design is root docs/74; where it and an earlier spec differ, docs/74 is right.
+
+### What (log text only; the same lines change on South Sudan, and nothing else does there)
+- **LN-01 … LN-35** in the 19 log files: `evo_webhook.php`, `cron/staff_ssp_report.php`, `lib/QuotationService.php`,
+  `lib/WaAutoReplyService.php`, `cron/bidal_summary.php`, `cron/cashbook_reconcile.php`, `cron/cash_carry_reminder.php`,
+  `cron/wa_watchdog.php`, `cron_invoice_notify.php`, `cron_quote_wa.php`, `webhook.php`, `cron_evo_sync.php`,
+  `cron_wa_sync.php`, `cron_overdue_email.php`, `cron_leads.php`, `cron_lead_alerts.php`, `includes/notify_actions.php`,
+  `includes/post/post_kyc.php`, `includes/post/post_cashbook.php`. Where a line named its record already, the number is
+  simply dropped; where it named nothing else, a record id takes its place (conversation #, client #, lead #, the
+  invoice number); the webhook log's three phone fields show `••••` and the last two digits. `evoLog` masks every line
+  centrally (`PluginLog::mask()`), so its three call sites are unchanged.
+- **`lib/PluginLog.php`** gains `tail()`: `••••` and a number's last two digits, or `none` without a digit — the form the
+  Sales numbers admin already shows.
+- **`tools/sales_followup_report.php`**: the BY NUMBER row pads each cell by characters, not bytes, so `••••57` and a
+  four-digit count print as two fields again.
+- **`manifest.json`**: the version line, 5.18.104 → 5.18.105. Nothing else in it changes.
+- The deploy never runs the switch tool, and a rollback goes back to 5.18.104 with every step as it was — which brings
+  the numbers back in all 37 statements.
+
+### Rules for whoever edits next
+1. **On Uganda no log line carries a phone number.** A new or changed log line names an id, a count or a code. A
+   number goes through `PluginLog::tail()`, or is not logged.
+2. **5.18.104's rule 1, "a redeploy starts dark", governs a redeploy of 5.18.104 only.** 5.18.105's deploy and rollback
+   keep every ladder key as found and never run the switch tool.
+3. **The 5.18.105 boundary is `tests/log_mask/declared.php`** (section D of `tests/test_log_mask.php`). It loads the one
+   list and marker, `R105_DECLARED` and `R105_MARK`, from `tests/fixtures/r105_revert.php` — the layer through which
+   every older boundary reads 5.18.105 out — so there is one list, never two. Every hunk in an existing file carries a
+   `5.18.105 (root docs/74 §H…)` marker in its own lines or in the 30 above it, and none carries 5.18.104's. Edit the
+   list and the marker together, never one without the other.
+4. **Names, e-mail addresses and amounts are not ruled on.** The ruling covers phone numbers only.
+
+### Tests
+`tests/test_log_mask.php` (sections under `tests/log_mask/`): each masked line driven through its real path with a
+weakened copy that puts 994d660's line back, `tail()`, South Sudan, the chase's precondition, the boundary against
+994d660 from Git, the logging rule on 5.18.105's lines and on the rest of the plugin, and the report's columns.
+
+The older boundaries are re-pointed on purpose, never weakened, in one of two ways (`tests/fixtures/r105_revert.php`):
+- **Through the layer**, `r105_less()`: the judged tree with 5.18.105 taken out against 994d660, read from Git. Read
+  this way: quote_followup N and M01, quote_agent_copy J, catalogue_direct I (5.18.103's boundary) and quote_from_ucrm
+  I (5.18.102's) from their I0, TL14's main scan and its set of files from Git, test_quote_company I4 for the files
+  outside `QC_I4_102`, and test_quote_summary M (`webhook.php` through `r105_file()`, its two P7 hunks then taken out
+  by their markers and the rest held to f2055baf; missed by the build, found by the suite).
+- **By exact text**, `r105_revert()`: `includes/post/post_cashbook.php` with LN-35's marker line and logged line put
+  back, each found exactly once — fixed text for that one file, not Git; every other file comes back as given. Read
+  this way: test_bank_boundaries' `src102()` (section A, and the menu-link blocks F reads) and
+  test_cashbook_physical_list M. A checks the result against 994d660's bytes from Git.
+
+The weakened copies that plant an edit 5.18.105 did not make each assert, from the planted file, that the edit stands
+outside every 5.18.105 marker's window and at least 31 lines from each; otherwise the copy is not made, a failure:
+- through the layer: QN11 (N03) and QN8 (N04) in `tests/quote_followup/mutants_N.php` — QN8 moved from `CD_I_KEPT`,
+  12 lines above catalogue_direct I0's marker, to test_quote_company's I3; MI7 (I2) in
+  `tests/catalogue_direct/mutants_I.php`; MI5 (I3) and MI7 (I5), re-anchored to `logQuote()`, in
+  `tests/quote_from_ucrm/mutants_I.php`; W-r105a (I4) in `tests/test_quote_company_mutants.php`;
+- through `r105_revert()`: BM-r105 (A) in `tests/test_bank_boundaries.php` and W-r105 (M) in
+  `tests/test_cashbook_physical_list_mutants.php`;
+- in the test itself: M's control in `tests/test_quote_summary.php`, one character planted in the raw `webhook.php`
+  and read through the layer's own `r105_revert_file()`, which must leave it (one unmarked hunk).
+
+The other boundaries have no such copy of 5.18.105's. M01's and J's copies are 5.18.104's own; two of them, QM-M11 and
+PW-J2, plant into 5.18.105 files (`tools/sales_followup_report.php`, `webhook.php`) and do not assert where they stand.
+TL14's plant controls read their own copy, never the layer (gap 8). test_bank_boundaries F has none: the files it reads
+through `src102()`, `includes/navigation.php` and `tabs/admin/ceo_dashboard.php`, are not ones `r105_revert()` changes.
+
+5.18.104's TL40 control (`tests/sales_followup_tool/TL_tool.php`) is judged at one fixed moment, 7 Nov 2026 12:00
+Kampala, not at `time()`: from 12 Nov its fixture chase fell before the steps' switch-on stamps, Q3-ON then answered as
+Q5-ON, and the control failed on every run (root docs/74 §S.3).
+
 ## 5.18.104 (root docs/73 §H.2.3; built 2026-11-06, not deployed) — Uganda: the sales follow-up — a read-only report, quotations tracked and chased, a morning list per salesperson, voice notes heard through OpenAI with an instant reply meanwhile, offers on the Evolution numbers, the agent's copy of the quotation e-mail; one send ledger; everything OFF; South Sudan unchanged; migrations 089, 090, 091
 
 ### Why

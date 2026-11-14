@@ -19,8 +19,20 @@ $M = array_merge($M, [
      'old' => '"url": "https://dishnetafrica.com",', 'new' => '"url": "https://example.test",', 'sections' => 'N', 'pattern' => '/N06 /'],
     ['label' => 'QN7 PHP 8 syntax in a new runtime file (lib/JobBudget.php)', 'file' => 'lib/JobBudget.php',
      'old' => "final class JobBudget\n{\n", 'new' => "final class JobBudget\n{\n    public static function qn7(\$o) { return \$o?->x; }\n", 'sections' => 'N', 'pattern' => '/N07 /'],
-    ['label' => 'QN8 CD_I_KEPT edited (webhook.php taken off it)', 'file' => 'tests/catalogue_direct/I_boundary.php',
-     'old' => "    'webhook.php', 'cron_quote_wa.php', 'api/index.php',", 'new' => "    'cron_quote_wa.php', 'api/index.php',", 'sections' => 'N', 'pattern' => '/N04 /'],
+    // 5.18.105 (root docs/74 §H.1.0, §H.3.4): QN8 moved, the same check (N04, C1). 5.18.104 planted it in CD_I_KEPT
+    // (tests/catalogue_direct/I_boundary.php:51), 12 lines above that file's 5.18.105 marker, which stands where the I0
+    // re-point must (:63), so no edit of CD_I_KEPT can stand 31 lines from it. It now plants in N04's other held text,
+    // test_quote_company's I3: the refused values at :1826, 82 lines above that file's first 5.18.105 marker (:1908),
+    // where no marker's window reaches — asserted from the planted file. N04 still compares CD_I_KEPT's text; no copy of
+    // N's plants there any more.
+    ['label' => 'QN8 test_quote_company\'s I3 edited (a refused value, \'1O\', taken off it)', 'file' => 'tests/test_quote_company.php',
+     'old' => "foreach (['disabled', 'n', '1O', '#1', '-1'] as \$v) {", 'new' => "foreach (['disabled', 'n', '#1', '-1'] as \$v) {", 'sections' => 'N', 'pattern' => '/N04 /',
+     'r105_outside' => 'tests/test_quote_company.php'],
+    // 5.18.105 (root docs/74 §H.1.0): QN8b, 5.18.104's own QN8 put back beside the moved one, so N04's CD_I_KEPT half is
+    // proved to bite again; the I0 re-point's marker stands below it, which cannot mark it (r105_outside_layer)
+    ['label' => 'QN8b CD_I_KEPT edited (webhook.php taken off it)', 'file' => 'tests/catalogue_direct/I_boundary.php',
+     'old' => "    'webhook.php', 'cron_quote_wa.php', 'api/index.php',", 'new' => "    'cron_quote_wa.php', 'api/index.php',", 'sections' => 'N', 'pattern' => '/N04 /',
+     'r105_outside_layer' => 'tests/catalogue_direct/I_boundary.php'],
     ['label' => 'QN9 tools/set_config.php changed', 'file' => 'tools/set_config.php',
      'old' => "<?php\ndeclare(strict_types=1);\n", 'new' => "<?php\ndeclare(strict_types=1);\n// changed\n", 'sections' => 'N', 'pattern' => '/N0[134] /'],
     ['label' => 'QN10 a declared change missing (tests/test_plan_fence.php put back to 221c9dc)', 'file' => 'tests/test_plan_fence.php',
@@ -41,4 +53,11 @@ $M = array_merge($M, [
     // the plan fence does not apply.
     \'EvolutionOfferGateway.php\' => \'fixed\',
 ', 'new' => '', 'sections' => 'N', 'pattern' => '/N01 /'],
+    // 5.18.105 (root docs/74 §H.3.4 "through the layer", §B.1 G-2): an edit 5.18.105 did not make, in cron_quote_wa.php's
+    // three-minute wait (:114, 98 lines above the file's first 5.18.105 marker, outside every marker's window — asserted
+    // from the planted file), stays in the tree N reads through tests/fixtures/r105_revert.php: N03 holds the file byte for
+    // byte (QF_HELD F and P), as test_quote_company I4 and catalogue_direct I2 do beside it
+    ['label' => 'QN11 a held file changed outside 5.18.105\'s hunks (cron_quote_wa.php\'s three-minute wait shortened)', 'file' => 'cron_quote_wa.php',
+     'old' => '(time() - strtotime($deferredAt)) < 180) {', 'new' => '(time() - strtotime($deferredAt)) < 120) {', 'sections' => 'N', 'pattern' => '/N03 /',
+     'r105_outside' => 'cron_quote_wa.php'],
 ]);

@@ -1931,8 +1931,8 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
     }
     t('every file 5.18.98 added or changed, besides documents, is ' . PL_REL . "'s, byte for byte, in this tree (" . count($held) . ' files)',
         [$since, count($held)], [[], 6]);
-    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.104",', $mr, $mtn);   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
-    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.104",
+    $mt = str_replace('    "version": "5.18.98",', '    "version": "5.18.105",', $mr, $mtn);   // 5.18.105 (root docs/74 §H.3.3; was 5.18.104)
+    t('manifest.json in this tree is ' . PL_REL . "'s with one line changed, its version, 5.18.98 → 5.18.105",
         [$mtn, hash('sha256', $mt) === hash('sha256', (string)@file_get_contents($root . '/manifest.json'))], [1, true]);
     foreach (['lib/BankGate.php', 'lib/BankStatementStore.php', 'lib/EcobankDetailsCsv.php', 'tabs/accounts/bank.php', 'includes/post/post_bank.php',
               'includes/navigation.php', 'tabs/admin/ceo_dashboard.php', 'tabs/sales/more_menu.php', 'includes/styles.php', 'includes/post/post_cashbook.php'] as $rel) {
@@ -1942,7 +1942,13 @@ if (count($BASEB) < 300 || $gitShow('manifest.json') === null || count($RELB) < 
         // 5.18.104 (root docs/73 §H.2.14; coordinator items 8, 10a): and without 5.18.104's two declared blocks first
         // (tests/fixtures/r104_revert.php; the lines themselves held by tests/test_quote_followup.php N)
         require_once __DIR__ . '/fixtures/r104_revert.php';
-        $r103 = function (string $f) use ($blob, $root, $rel) { if ($rel !== 'includes/navigation.php' || !is_file($f)) return $blob($f);
+        // 5.18.105 (root docs/74 §H.1.24; gap 1, found here), re-pointed on purpose, never weakened: post_cashbook.php read
+        // without LN-35's two lines — its marker and its logged line put back by exact text (tests/fixtures/r105_revert.php,
+        // each found exactly once, or no match); every other byte still held to the base, wherever an edit stands
+        require_once __DIR__ . '/fixtures/r105_revert.php';
+        $r103 = function (string $f) use ($blob, $root, $rel) {
+            if ($rel === 'includes/post/post_cashbook.php' && is_file($f)) { $s5 = r105_revert($rel, (string)file_get_contents($f)); return $s5 === null ? null : sha1('blob ' . strlen($s5) . "\0" . $s5); }
+            if ($rel !== 'includes/navigation.php' || !is_file($f)) return $blob($f);
             $s4 = r104_revert($rel, (string)file_get_contents($f));   // 5.18.104 (root docs/73 §H.2.14)
             $s = $s4 === null ? null : r103_revert($rel, $s4); return $s === null ? null : sha1('blob ' . strlen($s) . "\0" . $s); };
         t("{$rel} is byte-identical to " . PL_BASE, [isset($BASEB[$rel]), $r103($root . '/' . $rel) === ($BASEB[$rel] ?? 'absent')], [true, true]);

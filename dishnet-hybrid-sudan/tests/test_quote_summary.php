@@ -489,13 +489,37 @@ if ($gdM === null || $wbM === null || $mbM === null || $wrM === null || $mrM ===
         }
         return $src;
     };
-    $thisM = (string)@file_get_contents($root . '/webhook.php');
+    // 5.18.105 (root docs/74 §H.1.24, §H.3.2), re-pointed on purpose, never weakened: 5.18.105 changes webhook.php in nine
+    // marked hunks (§H.1.11: the PluginLog loader after :129, and LN-16 … LN-23), so this tree's webhook.php is read in the
+    // judged tree with 5.18.105 taken out against 994d660 (tests/fixtures/r105_revert.php, r105_file, built only from
+    // $root); the two P7 hunks are then taken out as before, and every other byte is still held to f2055baf. The control
+    // plants its one character in the raw file, outside every 5.18.105 marker's window (r105_planted_outside), and reads it
+    // through the same layer (r105_revert_file, what r105_less applies to each declared file), which must leave it in place.
+    // 5.18.105's own hunks are judged by tests/test_log_mask.php D.
+    require_once __DIR__ . '/fixtures/r105_revert.php';
+    $L105M = null; $why105M = '';
+    try { $L105M = r105_file($root, $tmp . '/r105', 'webhook.php'); } catch (\RuntimeException $e105M) { $why105M = $e105M->getMessage(); }
+    $rawM  = (string)@file_get_contents($root . '/webhook.php');
+    $thisM = $L105M === null ? '' : (string)@file_get_contents($L105M);
+    is_($L105M !== null && strpos($thisM, 'PluginLog') === false && substr_count($rawM, "require_once __DIR__ . '/lib/PluginLog.php';") === 1
+        && $p7OutM($rawM) !== null && $p7OutM($rawM) !== $wrM,
+        'M control: this tree\'s webhook.php with 5.18.105 taken out against ' . R105_BASE . ' (from Git) holds no PluginLog line; the raw file holds the loader once and, read without the layer, fails the check below', $why105M);
     is_($p7OutM($thisM) === $wrM,
         'M this tree\'s webhook.php, its two 5.18.104 P7 hunks (root docs/73 §H.5.8.2) taken out by their markers, is ' . QS_M_REL . '\'s, byte for byte (a later release must not change it unless it re-points this)');
-    $offM = strpos($thisM, '"Quotation email sent to {$r[\'to\']}');
-    $weakM = $offM === false ? null : substr_replace($thisM, 'q', $offM + 1, 1);
-    is_($weakM !== null && $p7OutM($weakM) !== null && $p7OutM($weakM) !== $wrM,
-        'M control: the same comparison on a copy with one character changed outside the hunks fails');
+    $offM = strpos($rawM, '"Quotation email sent to {$r[\'to\']}');
+    $weakM = $offM === false ? null : substr_replace($rawM, 'q', $offM + 1, 1);
+    $outM = 'not planted: the anchor is not in the raw file'; $layM = null; $leftM = -1;
+    if ($weakM !== null) {
+        $ctlM = $tmp . '/r105-ctl-M';
+        @mkdir($ctlM, 0700, true);
+        file_put_contents($ctlM . '/webhook.php', $weakM);
+        $outM = r105_planted_outside($ctlM, 'webhook.php');
+        [$baseM, $whyBaseM] = r105_base();
+        if ($outM === '' && $baseM !== null) [$layM, $leftM] = r105_revert_file($baseM . '/webhook.php', $ctlM . '/webhook.php');
+        elseif ($outM === '') $outM = $whyBaseM;
+    }
+    is_($outM === '' && $leftM === 1 && $layM !== null && $p7OutM($layM) !== null && $p7OutM($layM) !== $wrM,
+        'M control: the same comparison on a copy with one character changed outside the hunks fails — planted in the raw file, outside every 5.18.105 marker\'s window, and read through the layer, which leaves it (one unmarked hunk)', $outM);
     $lintM = [];
     $binsM = ['php ' . PHP_VERSION => PHP_BINARY];
     $w74M = trim((string)shell_exec('command -v php7.4 2>/dev/null'));

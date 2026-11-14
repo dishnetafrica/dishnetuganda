@@ -212,7 +212,8 @@ foreach ($rows as $row) {
 
         if ($res['duplicate']) { $skipped++; continue; }
         $stored++;
-        wsLog("  {$inbound['modality']} from {$phone} on {$channel}: {$res['action']}"
+        // 5.18.105 (root docs/74 §H.1.13, LN-25): the conversation id, not the number.
+        wsLog("  {$inbound['modality']} from conv #" . (int)($conv['id'] ?? 0) . " on {$channel}: {$res['action']}"
             . ($silent ? ' (not answered)' : ''));
         // 8b. Auto-link to CRM
         if ($isNew && empty($conv['crm_client_id'])) {

@@ -94,7 +94,8 @@ $notify->bidalMorningSummary($leader, [
     'completed_week'  => $completedWeek,
 ]);
 
-log_msg_bidal_summary("Morning summary sent to {$leader['name']} ({$leader['phone']}) — pending:{$pending} testing:{$testing} done_today:{$completedToday}");
+// 5.18.105 (root docs/74 §H.1.5, LN-05): the leader's name, without the number.
+log_msg_bidal_summary("Morning summary sent to {$leader['name']} — pending:{$pending} testing:{$testing} done_today:{$completedToday}");
 // Renamed from log_msg(). master.php includes every scheduled script into one
 // process, so two scripts declaring the same function name is a redeclare
 // fatal — E_COMPILE_ERROR, which no try/catch can catch. crm_sync declared

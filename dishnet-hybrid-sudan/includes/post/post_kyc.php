@@ -264,9 +264,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='kyc_admin_e
         $crmUpdated = !empty($res);
     }
 
+    // 5.18.105 (root docs/74 §H.1.18, LN-34): mobile and note log 'changed', without their values; the application's own audit record keeps both.
     logActivity($dataDir, 'kyc_edit',
         "KYC #{$appId} edited by ".($admin['name']??'admin'),
-        implode(', ', array_map(fn($f,$v) => "{$f}: '{$v['from']}' → '{$v['to']}'", array_keys($changes), $changes))
+        implode(', ', array_map(fn($f,$v) => in_array($f, ['mobile', 'note'], true) ? "{$f}: changed" : "{$f}: '{$v['from']}' → '{$v['to']}'", array_keys($changes), $changes))
     );
 
     $msg = '✅ Application #'.$appId.' updated ('.count($changes).' field'.( count($changes)>1?'s':'' ).' changed).';

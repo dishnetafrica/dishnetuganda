@@ -209,7 +209,8 @@ foreach ($apps as $app) {
     try {
         $notify->sendVia(NotificationService::SUPPORT, $phone, $msg, 'ops_quote_wa');
         $waSent = true;
-        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
+        // 5.18.105 (root docs/74 §H.1.10, LN-11): the application and the quote name the send; the number is not logged.
+        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef}");
     } catch (\Throwable $e) {
         qwa_log("TEXT FAILED KYC app #{$appId} quote #{$quoteId}: " . $e->getMessage());
         $failed++;
@@ -226,7 +227,8 @@ foreach ($apps as $app) {
                 "Quote #{$quoteRef} — {$_qwaMoneytotal}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
-            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef} → {$phone}");
+            // 5.18.105 (root docs/74 §H.1.10, LN-12): the application and the quote name the send; the number is not logged.
+            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " KYC app #{$appId} quote #{$quoteId} {$quoteRef}");
         } catch (\Throwable $e) {
             qwa_log("PDF FAILED KYC app #{$appId} quote #{$quoteId}: " . $e->getMessage());
         }
@@ -344,7 +346,8 @@ foreach ($quotes as $q) {
     try {
         $notify->sendVia(NotificationService::SUPPORT, $phone, $msg, 'ops_quote_wa');
         $waSent = true;
-        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " UCRM quote #{$qId} {$qNumber} → {$phone} ({$clientName})");
+        // 5.18.105 (root docs/74 §H.1.10, LN-13): the quote and the client's name, without the number.
+        qwa_log(qwa_said($notify, 'TEXT', $_qwaSaid) . " UCRM quote #{$qId} {$qNumber} → {$clientName}");
     } catch (\Throwable $e) {
         qwa_log("TEXT FAILED UCRM quote #{$qId}: " . $e->getMessage());
         $failed++;
@@ -430,7 +433,8 @@ if (!empty($pdfPending)) {
                 "Quote #{$pqNum} — {$_qwaMoneypqAmt}\n— DishNet Africa",
                 'ops_quote_pdf'
             );
-            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " from pending queue: #{$pqNum} → {$pqName} ({$pqPhone})");
+            // 5.18.105 (root docs/74 §H.1.10, LN-14): the quote and the name, without the number.
+            qwa_log(qwa_said($notify, 'PDF', $_qwaSaid) . " from pending queue: #{$pqNum} → {$pqName}");
             $pdfDone[] = $idx;
             // Also add to sentIds so we don't double-process
             if (!in_array($pqId, $sentIds, true)) {
@@ -667,7 +671,8 @@ foreach ($receiptQueue as $idx => &$rq) {
         $receiptDirty  = true;
         $_receiptSentIds[$rPayId] = true; // v4.11.3: mark for dedup
         $sent++;
-        qwa_log("Receipt PDF SENT: PAY-{$rPayId} → {$rName} ({$rPhone}) — " . round(strlen(base64_decode($pdfRaw))/1024) . " KB");
+        // 5.18.105 (root docs/74 §H.1.10, LN-15): the payment and the name, without the number.
+        qwa_log("Receipt PDF SENT: PAY-{$rPayId} → {$rName} — " . round(strlen(base64_decode($pdfRaw))/1024) . " KB");
     } catch (\Throwable $e) {
         qwa_log("Receipt PDF WA FAILED PAY-{$rPayId}: " . $e->getMessage());
         $rq['retry_count'] = ($rq['retry_count'] ?? 0) + 1;

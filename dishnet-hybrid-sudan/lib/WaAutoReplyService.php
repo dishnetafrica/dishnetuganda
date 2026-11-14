@@ -1573,7 +1573,8 @@ class WaAutoReplyService
                 $this->notify->sendVia('support', $bidalPhone, $msg, 'wa_job_assigned_bidal', []);
             }
 
-            error_log("[WaAutoReply] CRM Job #{$newJobId} created and assigned to Bidal (uid:{$bidalUcrmId}) for {$phone}");
+            // 5.18.105 (root docs/74 §H.1.4, LN-04): the job id names the case; the customer's number is no longer logged.
+            error_log("[WaAutoReply] CRM Job #{$newJobId} created and assigned to Bidal (uid:{$bidalUcrmId})");
             return true;
 
         } catch (\Throwable $e) {

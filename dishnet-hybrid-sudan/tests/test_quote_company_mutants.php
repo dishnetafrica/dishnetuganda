@@ -479,6 +479,13 @@ $MUTANTS = [
     ['ML62: lib/UcrmQuoteLinks.php require()s a sibling file (QuoteOrganization.php)',
         [['lib/UcrmQuoteLinks.php', "final class UcrmQuoteLinks\n{\n", "require_once __DIR__ . '/QuoteOrganization.php';\n\nfinal class UcrmQuoteLinks\n{\n"]],
         [['I', '/^I7 … and lib\/UcrmQuoteLinks\.php names QuoteOrganization, holds no require/']]],
+    // 5.18.105 (root docs/74 §H.3.4 "through the layer", §B.1 G-2): an edit 5.18.105 did not make, in cron_quote_wa.php's
+    // three-minute wait (:114, 98 lines above the file's first 5.18.105 marker, outside every marker's window — asserted
+    // from the planted file, the fourth field), stays in the tree I4 reads through tests/fixtures/r105_revert.php, so I4
+    // still holds every other byte of the file to ca05ada5 (quote_followup N03 and catalogue_direct I2 beside it)
+    ['W-r105a: cron_quote_wa.php changed outside 5.18.105\'s hunks (the three-minute wait shortened)',
+        [['cron_quote_wa.php', "(time() - strtotime(\$deferredAt)) < 180) {", "(time() - strtotime(\$deferredAt)) < 120) {"]],
+        [['I', '/^I4 this tree holds every file 5\.18\.99 changed or added/']], 'cron_quote_wa.php'],
 ];
 $TABLE = count($MUTANTS);
 if (isset($opt['mutants'])) {                                               // a part of the table only: the control still runs
@@ -491,7 +498,8 @@ if (isset($opt['mutants'])) {                                               // a
 // ═══════════════════════════════════════════════════════════════════════════
 echo "1. The control: the test passes on this checkout and on an unchanged copy, every section\n";
 // 5.18.102 D14 (rewritten on purpose, docs/71 §R.9.3): three copies added, ML18a, ML18b and ML62
-is_($TABLE === 66, 'the table holds W1–W60, W36b, W61, (5.18.102) W11b and (D14) ML18a, ML18b and ML62, sixty-six weakened copies', (string)$TABLE);
+// 5.18.105 (root docs/74 §H.3.4): and one through the layer, W-r105a
+is_($TABLE === 67, 'the table holds W1–W60, W36b, W61, (5.18.102) W11b, (D14) ML18a, ML18b and ML62, and (5.18.105) W-r105a, sixty-seven weakened copies', (string)$TABLE);
 $labels = array_map(function ($m) { return explode(':', $m[0])[0]; }, $MUTANTS);
 is_(count(array_unique($labels)) === count($labels), 'no weakened copy is listed twice');
 $baseTree = null; $whyBase = '';
@@ -539,9 +547,16 @@ if ($fail > 0) { echo "\n  The control failed: no weakened copy is judged agains
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\n2. The weakened copies: each must fail every part the table names for it\n";
 $caught = 0;
-foreach ($MUTANTS as [$label, $edits, $expect]) {
+require_once __DIR__ . '/fixtures/r105_revert.php';   // 5.18.105 (root docs/74 §H.1.0): r105_planted_outside(), for a row's fourth field
+foreach ($MUTANTS as $qcmK => [$label, $edits, $expect]) {
     $id = explode(':', $label)[0];
     [$tmp, $why] = qcm_copy($lib, $edits);
+    // 5.18.105 (root docs/74 §H.1.0): a copy planted for the layer to leave in place stands outside every 5.18.105 marker's
+    // window, at least 31 lines from each, asserted from the planted file — or it is not planted (a failure, never a skip)
+    if ($why === '' && isset($MUTANTS[$qcmK][3])) {
+        $p105 = r105_planted_outside($tmp, (string)$MUTANTS[$qcmK][3]);
+        if ($p105 !== '') $why = 'not planted outside every 5.18.105 marker\'s window: ' . $p105;
+    }
     if ($why !== '') {
         is_(false, "{$id}: the copy is made — each anchor occurs once, is replaced once, the copy holds the change and lints", $why);
         exec('rm -rf ' . escapeshellarg($tmp));

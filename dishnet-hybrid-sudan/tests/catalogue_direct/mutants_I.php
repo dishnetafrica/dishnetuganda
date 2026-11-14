@@ -32,4 +32,11 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
      'new' => 'require_once __DIR__ . \'/QuoteOrganization.php\';
 final class UcrmCatalogue
 {', 'sections' => 'I', 'pattern' => '/I5 /'],
+    // 5.18.105 (root docs/74 §H.3.4 "through the layer", §B.1 G-2): an edit 5.18.105 did not make, in cron_quote_wa.php's
+    // three-minute wait (:114, 98 lines above the file's first 5.18.105 marker, outside every marker's window — asserted
+    // from the planted file), stays in the tree I reads through tests/fixtures/r105_revert.php: I2 keeps the file byte for
+    // byte (CD_I_KEPT), as quote_followup N03 and test_quote_company I4 do beside it
+    ['label' => 'MI7 cron_quote_wa.php changed outside 5.18.105\'s hunks (§G.12 keeps it byte for byte)', 'file' => 'cron_quote_wa.php',
+     'old' => '(time() - strtotime($deferredAt)) < 180) {',
+     'new' => '(time() - strtotime($deferredAt)) < 120) {', 'sections' => 'I', 'pattern' => '/I2 the \d+ files §G\.12 keeps/', 'r105_outside' => 'cron_quote_wa.php'],
 ]);

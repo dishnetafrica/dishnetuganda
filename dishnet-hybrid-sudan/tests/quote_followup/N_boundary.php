@@ -15,9 +15,21 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/declared.php';
 require_once dirname(__DIR__) . '/quote_from_ucrm/I_boundary.php';   // QFU_I_RULES (its section is not run from here)
+require_once dirname(__DIR__) . '/fixtures/r105_revert.php';          // 5.18.105 (root docs/74 §H.3.2): the layer, r105_less()
 
 $QF_SECTIONS['N'] = ['title' => 'The boundary: the one merged declared list against 221c9dc, from Git (§H.2.14 N; ruling R10)', 'run' => function (QfCtx $ctx) {
-    $T = $ctx->root;
+    // 5.18.105 (root docs/74 §H.3.2), re-pointed on purpose, never weakened: N judges the judged tree with 5.18.105 taken out
+    // against 994d660 (tests/fixtures/r105_revert.php, r105_less, built only from the judged root), so 5.18.104's boundary
+    // reads 994d660's tree exactly as before; 5.18.105's own boundary is tests/test_log_mask.php D. N09 is the control on
+    // the controls: the same checks on the judged tree itself must fail on 5.18.105.
+    try { $T = r105_less($ctx->root, $ctx->tmp); $why105 = ''; } catch (\RuntimeException $e) { $T = ''; $why105 = $e->getMessage(); }
+    $ctx->t($T !== '', 'N00 control: Git supplies ' . R105_BASE . ' (5.18.104), the tree 5.18.105 is taken out against — without it nothing below is measured: a failure, never a skip', $why105);
+    if ($T === '') return;
+    $w105 = (string)@file_get_contents($T . '/evo_webhook.php');
+    $ctx->t(strpos($w105, "error_log('[evo_webhook] opt-out recorded for ' . \$phone") !== false && strpos($w105, 'opt-out recorded for conversation') === false
+            && !is_file($T . '/tests/test_log_mask.php') && !is_dir($T . '/tests/log_mask'),
+            'N00 … and the tree judged was built: its evo_webhook.php opt-out line reads ' . R105_BASE . '\'s form, and tests/test_log_mask.php is absent ('
+            . r105_less_left($ctx->root, $ctx->tmp) . ' unmarked 5.18.105 hunk(s) left, for tests/test_log_mask.php D)');
     [$B, $why] = qf_n_base($ctx->tmp . '/base221');
     $ctx->t($B !== null, 'N00 control: Git supplies ' . QF_N_BASE . ', the 5.18.103 release — without it nothing below is measured: a failure, never a skip', $why);
     if ($B === null) return;
@@ -157,5 +169,34 @@ $QF_SECTIONS['N'] = ['title' => 'The boundary: the one merged declared list agai
         $ctx->t(min($n) > 3 && array_sum($n) >= count(QF_DECLARED), 'N08 F ' . $n['F'] . ', V ' . $n['V'] . ', O ' . $n['O'] . ', P ' . $n['P'] . ' entries');
         $ctx->eq([isset(qf_declared('O')['public.php'], qf_declared('F')['public.php'], qf_declared('O')['includes/navigation.php'], qf_declared('P')['webhook.php']), isset(qf_declared('F')['webhook.php'])],
                  [true, false], 'N08 public.php and includes/navigation.php in both F\'s and O\'s slices (one entry, both markers); webhook.php declared once, as Part P\'s');
+    });
+
+    // 5.18.105 (root docs/74 §H.3.4, the control on the controls): N's own checks read on the judged tree itself, 5.18.105
+    // left in (r105_less replaced by the root), must fail on 5.18.105's files and hunks — so the layer is what makes N pass,
+    // and N still sees what it should.
+    $ctx->run('N09 control on the controls: on the judged tree itself, 5.18.105 left in, N01, N03, N05 and N06 each fail on 5.18.105', function () use ($ctx, $B, $base) {
+        $R = $ctx->root;
+        $held = [];
+        foreach (QF_HELD as $list) foreach ($list as $rel) $held[$rel] = true;
+        $fourteen = array_values(array_filter(array_keys(R105_DECLARED), function ($r) use ($held) {
+            return R105_DECLARED[$r][0] === 'changed' && substr($r, -4) === '.php' && strpos($r, 'tests/') !== 0 && qf_declared_entry($r) === null && !isset($held[$r]);
+        }));
+        $undeclared = []; $heldMoved = []; $unmarked = [];
+        foreach (qf_n_walk($R) as $rel => $p) {
+            if (isset($base[$rel]) && hash_file('sha256', $p) === hash_file('sha256', $base[$rel])) continue;
+            if (isset($held[$rel])) $heldMoved[] = $rel;
+            if (qf_declared_entry($rel) === null) { $undeclared[] = $rel; continue; }
+            if ($rel === 'manifest.json' || !isset($base[$rel])) continue;
+            foreach (qf_n_hunks($B . '/' . $rel, $p) as $h) if (!$h[6]) $unmarked[$rel] = ($unmarked[$rel] ?? 0) + 1;
+        }
+        $ctx->eq([count($fourteen), array_values(array_diff($fourteen, $undeclared)), array_values(array_filter($undeclared, function ($r) { return r105_declared_entry($r) === null; }))],
+                 [14, [], []], 'N09 N01 on it: the 14 runtime files 5.18.104 neither declares nor holds are undeclared, and every undeclared file is 5.18.105\'s');
+        sort($heldMoved);
+        $ctx->eq($heldMoved, ['cron_evo_sync.php', 'cron_quote_wa.php', 'includes/post/post_kyc.php'], 'N09 N03 on it: the three held files 5.18.105 changes are not ' . QF_N_BASE . '\'s');
+        $ctx->eq([isset($unmarked['webhook.php'], $unmarked['evo_webhook.php'], $unmarked['lib/QuotationService.php']),
+                  array_values(array_filter(array_keys($unmarked), function ($r) { return r105_declared_entry($r) === null; }))],
+                 [true, []], 'N09 N05 on it: 5.18.105\'s hunks read as unmarked (webhook.php\'s, evo_webhook.php\'s and lib/QuotationService.php\'s among them), and only in its own files');
+        $mb = str_replace('    "version": "5.18.103",', '    "version": "5.18.104",', (string)file_get_contents($B . '/manifest.json'));
+        $ctx->t($mb !== (string)@file_get_contents($R . '/manifest.json'), 'N09 N06 on it: the manifest is not ' . QF_N_BASE . '\'s with 5.18.104\'s version line');
     });
 }];

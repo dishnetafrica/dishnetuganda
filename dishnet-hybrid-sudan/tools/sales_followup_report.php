@@ -661,6 +661,8 @@ ksort($sfrOwnerIds);
 $sfrOwnerN = []; $sfrI = 0;
 foreach (array_keys($sfrOwnerIds) as $sfrId) $sfrOwnerN[$sfrId] = ++$sfrI;
 $sfrOwnerLabel = function (?int $id) use ($sfrOwnerN): string { return $id === null ? 'unattributed' : 'owner ' . $sfrOwnerN[$id]; };
+// 5.18.105 (root docs/74 §H.1.23): pad by characters, not bytes: '••••57' and '—' are wider in bytes than on the screen.
+$sfrPad = function (string $s, int $w): string { return $s . str_repeat(' ', max(1, $w - mb_strlen($s, 'UTF-8'))); };
 
 $sfrBlank = function (): array { return array_fill_keys(SalesFollowupReport::COLS, 0); };
 $sfrAdd = function (array &$row, array $j): void {
@@ -704,7 +706,8 @@ foreach (SalesFollowupReport::WINDOWS as $sfrD) {
         $sfrOwn = $sfrOt === 'staff' ? $sfrOwnerLabel((int)$sfrCh['owner_staff_id']) : ($sfrOt === 'partner' ? 'partner' : ($sfrOt === 'department' ? 'dept' : '—'));
         $sfrLine = '—';
         if ($sfrCh !== null && trim((string)($sfrCh['business_number'] ?? '')) !== '') $sfrLine = '••••' . substr((string)preg_replace('/\D+/', '', (string)$sfrCh['business_number']), -2);   // ChannelRegistry::mask's form
-        $sfrSay('  ' . str_pad($sfrN, 46) . str_pad($sfrRole, 9) . str_pad($sfrOwn, 13) . str_pad($sfrLine, 7)
+        // 5.18.105 (root docs/74 §H.1.23): each cell padded by characters, so a four-digit conv never runs into the line column.
+        $sfrSay('  ' . $sfrPad((string)$sfrN, 46) . $sfrPad($sfrRole, 9) . $sfrPad($sfrOwn, 13) . $sfrPad($sfrLine, 7)
               . sprintf('%4d %4d %3d %6d %3d %4d %6d (%d/%d) %7d %3d %4d %6d', $sfrR['conv'], $sfrR['cust'], $sfrR['new'], $sfrR['quotes'],
                         $sfrR['kyc'], $sfrR['answ'], $sfrR['chased'], $sfrR['eng'], $sfrR['per'], $sfrR['neither'], $sfrR['reg'], $sfrR['paid'], $sfrR['optout']));
         $sfrJson['by_number'][$sfrD][$sfrN] = $sfrR + ['role' => $sfrRole, 'owner' => $sfrOwn, 'line' => $sfrLine];

@@ -269,6 +269,13 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
         $ctx->eq($threw, [], 'TL40 no check id answers FAIL check_threw or FAIL unknown_check (its dispatch runs)');
         // Each id against the callable ruling R13 names, called directly with the same arguments, on a book where the ids'
         // answers are pairwise different (the control): a dispatch to another holder or with its arguments swapped differs.
+        // 5.18.105 (root docs/74 §S.3), corrected on purpose, never weakened: the control book, its thirteen direct calls
+        // and their thirteen dispatches are judged at one fixed moment, Saturday 7 November 2026 12:00 Kampala (the day of
+        // 5.18.104's two passes), never at time(). sft_on_upto() stamps every step ten days before it, so the chase claimed
+        // on QF_MONDAY at 10:00 stays inside quote_chase_not_before's window on any run date; with time(), from 12 November
+        // 07:00 UTC Q3-ON no longer saw it and answered exactly as Q5-ON. $b, $ro and every call above keep time(); below
+        // this line only the control reads $now.
+        $now = qf_t('2026-11-07 12:00:00');
         $kb = sft_book($ctx, sft_on_upto('offers-live', $now, 864000, ['cold', 'agent-cc']));
         sft_reminders_done($kb, qf_t(QF_MONDAY . ' 09:00:00'));
         sft_chase($kb, '256772504001', 'Q-TL40', qf_t(QF_MONDAY . ' 10:00:00'));   // a chase after the customer spoke: Q3-ON judges it, Q5-ON (cold) does not
@@ -613,7 +620,13 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
         $ctx->t($base !== '' && is_file($base . '/lib/MailService.php') && !is_file($base . '/lib/SalesFollowupLadder.php'), 'TL14 control: Git supplies 221c9dc');
         if ($base === '') return;
         $declared = array_merge(SalesFollowupLadder::allKeys(), SalesFollowupLadder::settingKeys(), SalesFollowupLadder::preexistingKeys());
-        $reads = sft_key_reads($ctx->tree(), $base);
+        // 5.18.105 (root docs/74 §H.3.2; gap 8), re-pointed on purpose, never weakened: the main scan and Git's set below read
+        // the judged tree with 5.18.105 taken out against 994d660 (tests/fixtures/r105_revert.php, r105_less, built only from
+        // the judged root, rebuilt whenever a declared file of it changes); the plant controls further down keep reading
+        // $ctx->tree(), the copy they plant into, so no tree cached before a plant is read for one.
+        require_once dirname(__DIR__) . '/fixtures/r105_revert.php';
+        $L105 = r105_less($ctx->root, $ctx->tmp);
+        $reads = sft_key_reads($L105, $base);
         $files = array_values(array_unique(array_column($reads, 0)));
         $ctx->t(count($reads) > 50 && in_array('lib/OfferSwitch.php', $files, true) && in_array('lib/QuoteAgentCopy.php', $files, true), 'TL14 control: the scan reads the parts\' files (' . count($reads) . ' reads)');
         // 5.18.104 (root docs/73 §H.2.14 N), stage B10: the files scanned are the merged declared list's, and that list's PHP
@@ -621,7 +634,7 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
         $listed = [];
         foreach (array_keys(QF_DECLARED) as $p) if (substr($p, -4) === '.php' && strpos($p, 'tests/') !== 0 && is_file($ctx->root . '/' . $p)) $listed[] = $p;
         sort($listed);
-        $ctx->eq(sft_git_php($ctx->root, $base), $listed, 'TL14 control: the merged declared list\'s ' . count($listed) . ' PHP runtime files are the ones Git sees new or changed');
+        $ctx->eq(sft_git_php($L105, $base), $listed, 'TL14 control: the merged declared list\'s ' . count($listed) . ' PHP runtime files are the ones Git sees new or changed');
         $bad = [];
         foreach ($reads as [$f, $k]) if (!in_array($k, $declared, true)) $bad[] = $f . ': ' . $k;
         $ctx->eq(array_values(array_unique($bad)), [], 'TL14 every key read is in allKeys(), settingKeys() or preexistingKeys()');

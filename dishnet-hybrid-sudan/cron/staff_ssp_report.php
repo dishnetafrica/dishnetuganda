@@ -120,7 +120,8 @@ foreach ($retailers as $r) {
     try {
         $notify->sendVia('support', $phone, $msg, 'staff_daily_report');
         $sent++;
-        error_log("[staff_ssp_report] Sent to {$staffName} ({$phone})  SSP={$sspBal}  USD={$usdExposure}");
+        // 5.18.105 (root docs/74 §H.1.2, LN-02): the staff member's name and the balances, without the number.
+        error_log("[staff_ssp_report] Sent to {$staffName}  SSP={$sspBal}  USD={$usdExposure}");
     } catch (\Throwable $e) {
         error_log("[staff_ssp_report] Failed for {$staffName}: " . $e->getMessage());
         $skipped++;

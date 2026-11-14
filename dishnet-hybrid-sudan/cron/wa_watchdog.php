@@ -91,7 +91,8 @@ if ($_wd_alerts->target() === '') {
                 0   // the key embeds the message time, so it is naturally once-per-message
             );
             if (!empty($r['sent'])) {
-                echo "wa_watchdog: alerted for conv {$c['id']} ({$who}, {$mins} min)\n";
+                // 5.18.105 (root docs/74 §H.1.8, LN-08): the conversation id only; the name, or the number when there is none, stays in the alert, not the log.
+                echo "wa_watchdog: alerted for conv {$c['id']} ({$mins} min)\n";
                 $_wd_seen[(int)$c['id']] = (string)$c['last_customer_at'];
             } else {
                 echo "wa_watchdog: alert for conv {$c['id']} not sent — {$r['reason']}\n";

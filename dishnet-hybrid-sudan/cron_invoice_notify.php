@@ -172,7 +172,8 @@ foreach ($recentInvoices as $inv) {
     }
 
     $notify->invoiceCreated($phone, $fullName, $invoiceNum, $total, $dueDate ?: 'See invoice', $svcName);
-    ilog("SENT: #{$invoiceNum} " . dn_code($config) . " {$total} → {$fullName} ({$phone})");
+    // 5.18.105 (root docs/74 §H.1.9, LN-09): the client id, never the number.
+    ilog("SENT: #{$invoiceNum} " . dn_code($config) . " {$total} → {$fullName} (client #{$clientId})");
 
     // ── Send invoice PDF ─────────────────────────────────────────────────
     try {
@@ -353,7 +354,8 @@ if ($renewalEnabled && $lastRenewalRun !== $today) {
                           ?: ($client['companyName'] ?? 'Customer');
 
                 $notify->renewalReminder($custPhone, $custName, $c['svcName'], $c['price'], $c['nextBilling']);
-                ilog("RENEWAL REMIND: {$c['svcName']} \${$c['price']} -> {$custName} ({$custPhone}) renews {$c['nextBilling']}");
+                // 5.18.105 (root docs/74 §H.1.9, LN-10): the client id, never the number.
+                ilog("RENEWAL REMIND: {$c['svcName']} \${$c['price']} -> {$custName} (client #{$c['clientId']}) renews {$c['nextBilling']}");
 
                 $renewalLog[$c['rKey']] = date('Y-m-d H:i:s');
                 $renewSent++;

@@ -1582,7 +1582,9 @@ class QuotationService
             $this->ns->sendVia(NotificationService::SUPPORT, $phone, $message, $event);
             return true;
         } catch (\Throwable $e) {
-            error_log("[QuotationService] WA send failed to {$phone}: " . $e->getMessage());
+            // 5.18.105 (root docs/74 §H.1.3, LN-03): the event, not the number; the exception's text goes through PluginLog::mask().
+            if (!class_exists('PluginLog')) require_once __DIR__ . '/PluginLog.php';
+            error_log('[QuotationService] WA send failed (' . $event . '): ' . PluginLog::mask($e->getMessage()));
             return false;
         }
     }

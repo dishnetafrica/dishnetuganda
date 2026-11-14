@@ -838,7 +838,8 @@ foreach ($recipients as $rec) {
     if (!$phone) continue;
     try {
         $notify->sendRaw($phone, $message, 'finance_audit_nightly');
-        rclog('Sent to ' . $rec['name'] . ' (' . $phone . ')');
+        // 5.18.105 (root docs/74 §H.1.6, LN-06): the recipient's name, without the number.
+        rclog('Sent to ' . $rec['name']);
     } catch (\Throwable $e) {
         rclog('WA send failed to ' . $rec['name'] . ': ' . $e->getMessage());
     }

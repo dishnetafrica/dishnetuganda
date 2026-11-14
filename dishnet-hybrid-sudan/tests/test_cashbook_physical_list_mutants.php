@@ -287,6 +287,12 @@ $MUTANTS = [
                . "            \$kinds = implode(',', array_map([\$this->pdo(), 'quote'], self::CASH_IN_HAND_KINDS));\n"
                . "            \$loc .= \" OR account_id IN (SELECT id FROM cb_accounts WHERE kind IN ({\$kinds}))\";\n"]],
         [['P3b', '/its anchor occurs once|each anchor occurs once/']]],
+    // 5.18.105 (root docs/74 §H.1.24, §H.3.4 "through the layer"): an edit 5.18.105 did not make, at post_cashbook.php:541,
+    // 70 lines above LN-35's marker and outside every marker's window (asserted from the planted file, the fourth field),
+    // is left in place by tests/fixtures/r105_revert.php, which puts back LN-35's two lines by exact text — so M still sees it
+    ['W-r105: post_cashbook.php changed outside LN-35 (the refund categories narrowed), held to ec0accd4 by M',
+        [['includes/post/post_cashbook.php', "    \$crmRefundCats = ['Customer Refund', 'Customer Commission'];", "    \$crmRefundCats = ['Customer Refund'];"]],
+        [['M', '/^includes\/post\/post_cashbook\.php is byte-identical to /']], 'includes/post/post_cashbook.php'],
 ];
 $TABLE = count($MUTANTS);
 if (isset($opt['mutants'])) {                                               // a part of the table only: the control still runs
@@ -338,9 +344,16 @@ if ($fail > 0) { echo "\n  The control failed: no weakened copy is judged agains
 // ═══════════════════════════════════════════════════════════════════════════
 echo "\n2. The weakened copies: each must fail every part the table names for it\n";
 $caught = 0;
-foreach ($MUTANTS as [$label, $edits, $expect]) {
+require_once __DIR__ . '/fixtures/r105_revert.php';   // 5.18.105 (root docs/74 §H.1.0): r105_planted_outside(), for a row's fourth field
+foreach ($MUTANTS as $plmK => [$label, $edits, $expect]) {
     $id = explode(':', $label)[0];
     [$tmp, $why] = plm_copy($lib, $edits);
+    // 5.18.105 (root docs/74 §H.1.0): a copy planted for the layer to leave in place stands outside every 5.18.105 marker's
+    // window, at least 31 lines from each, asserted from the planted file — or it is not planted (a failure, never a skip)
+    if ($why === '' && isset($MUTANTS[$plmK][3])) {
+        $p105 = r105_planted_outside($tmp, (string)$MUTANTS[$plmK][3]);
+        if ($p105 !== '') $why = 'not planted outside every 5.18.105 marker\'s window: ' . $p105;
+    }
     if ($why !== '') {
         is_(false, "{$id}: the copy is made — each anchor occurs once, is replaced once, the copy holds the change and lints", $why);
         exec('rm -rf ' . escapeshellarg($tmp));

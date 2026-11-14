@@ -22,18 +22,24 @@ $QFU_MUTANTS = array_merge($QFU_MUTANTS, [
     ['label' => 'MI4 an undeclared runtime file changed', 'file' => 'lib/currency.php',
      'old' => "    function dn_cur(?array \$config = null): string", 'new' => "    // edited\n    function dn_cur(?array \$config = null): string",
      'sections' => 'I', 'pattern' => '/I1 against/'],
+    // 5.18.105 (root docs/74 §H.1.0, §H.3.2): MI5 and MI7 re-anchored, the same fault each, from itemsTotal() to logQuote().
+    // itemsTotal() now stands 7 lines below LN-03's marker (lib/QuotationService.php sendWA()), inside its window, so the
+    // layer this section reads through would take either edit for 5.18.105's own and put it back without a word;
+    // the line planted at the top of logQuote() stands 33 lines below that marker, outside every window — asserted from the
+    // planted file ('r105_outside') — and its 30 lines above hold no 5.18.102, 5.18.103 or 5.18.104 marker at 221c9dc or
+    // at 994d660.
     ['label' => 'MI5 a runtime hunk with no 5.18.102 marker', 'file' => 'lib/QuotationService.php',
-     'old' => "    private function itemsTotal(array \$items): float\n    {\n        return round(",
-     'new' => "    private function itemsTotal(array \$items): float\n    {\n        \$items = array_values(\$items);\n        return round(",
-     'sections' => 'I', 'pattern' => '/I3/'],
+     'old' => "    private function logQuote(array \$data): void\n    {\n        \$all = \$this->store->load(self::LOG_FILE) ?? [];",
+     'new' => "    private function logQuote(array \$data): void\n    {\n        \$data = array_values(\$data);\n        \$all = \$this->store->load(self::LOG_FILE) ?? [];",
+     'sections' => 'I', 'pattern' => '/I3/', 'r105_outside' => 'lib/QuotationService.php'],
     ['label' => 'MI6 PHP 8 syntax on an added line', 'file' => 'lib/UcrmQuoteLines.php',
      'old' => "    public static function total(array \$lines): float\n    {\n        \$t = 0.0;",
      'new' => "    public static function total(array \$lines): float\n    {\n        \$t = str_contains('', '') ? 0.0 : 0.0;",
      'sections' => 'I', 'pattern' => '/I4 no added/'],
     ['label' => 'MI7 a new quote-create site', 'file' => 'lib/QuotationService.php',
-     'old' => "    private function itemsTotal(array \$items): float\n    {\n",
-     'new' => "    private function itemsTotal(array \$items): float\n    {\n        if (\$items === [0]) \$this->crm->post(\"clients/{\$items}/quotes\", []);   // 5.18.102\n",
-     'sections' => 'I', 'pattern' => '/I5 the quote creates/'],
+     'old' => "    private function logQuote(array \$data): void\n    {\n",
+     'new' => "    private function logQuote(array \$data): void\n    {\n        if (\$data === [0]) \$this->crm->post(\"clients/{\$data}/quotes\", []);   // 5.18.102\n",
+     'sections' => 'I', 'pattern' => '/I5 the quote creates/', 'r105_outside' => 'lib/QuotationService.php'],   // 5.18.105 (root docs/74 §H.1.0): re-anchored, as MI5
     // re-anchored by D14: on Uganda retry_quote quotes through the shared implementation, in the block guarded by the gate
     ['label' => 'MI8 retry_quote posting without the resolver\'s verdict (its gated block skipped, 5.18.101\'s POST reached on Uganda)', 'file' => 'includes/api/api_cron_debug.php',
      'old' => "        if (\$_qoRetry['on']) {\n            // The account re-read fresh by id",

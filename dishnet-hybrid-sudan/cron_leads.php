@@ -255,7 +255,8 @@ foreach ($leads as &$l) {
         $agentLoad[$aid] = max(0, ($agentLoad[$aid] ?? 0) - 1);
         $staleReassigned[$newAid][] = $l;
 
-        clog_leads("  ⟲ Lead #{$l['id']} ({$l['customer_name']}) reassigned from {$oldAgName} → {$newAg['name']} ({$hoursIdle}h idle)");
+        // 5.18.105 (root docs/74 §H.1.15, LN-28): the lead id; an AI lead with no name carries its number as its name.
+        clog_leads("  ⟲ Lead #{$l['id']} reassigned from {$oldAgName} → {$newAg['name']} ({$hoursIdle}h idle)");
 
     } elseif ($hoursIdle >= $flagHours && empty($l['stale_flagged'])) {
         // Just flag — don't reassign yet
@@ -267,7 +268,8 @@ foreach ($leads as &$l) {
             'note'   => "⚠ No update in " . round($hoursIdle) . "h — will reassign if no action",
         ];
         $staleFlagged[$aid][] = $l;
-        clog_leads("  ⚠ Lead #{$l['id']} ({$l['customer_name']}) flagged stale ({$hoursIdle}h idle)");
+        // 5.18.105 (root docs/74 §H.1.15, LN-29): the lead id; an AI lead with no name carries its number as its name.
+        clog_leads("  ⚠ Lead #{$l['id']} flagged stale ({$hoursIdle}h idle)");
     }
 }
 unset($l);

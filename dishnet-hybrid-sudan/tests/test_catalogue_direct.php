@@ -77,6 +77,14 @@ if ($withMutants && !isset($opt['root'])) {
                 if ($lrc !== 0) $bad = "the copy's {$rel} does not lint";
             }
         }
+        // 5.18.105 (root docs/74 §H.1.0): a copy planted for the 5.18.105 layer to leave in place ('r105_outside' names its
+        // file) stands outside every 5.18.105 marker's window, at least 31 lines from each, asserted from the planted file —
+        // or it is not planted, and that is a failure of this test, never a skip
+        if ($bad === '' && isset($m['r105_outside'])) {
+            require_once __DIR__ . '/fixtures/r105_revert.php';
+            $p105 = r105_planted_outside($copy, (string)$m['r105_outside']);
+            if ($p105 !== '') $bad = 'not planted outside every 5.18.105 marker\'s window: ' . $p105;
+        }
         if ($bad !== '') { $ctx->t(false, "{$m['label']}: the copy was made", $bad); exec('rm -rf ' . escapeshellarg($copy)); continue; }
         $out = [];
         exec('php ' . escapeshellarg(__FILE__) . ' --no-mutants --root=' . escapeshellarg($copy)

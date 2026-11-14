@@ -114,7 +114,11 @@ $QF_SECTIONS['M'] = ['title' => 'Logging: counts and fixed codes only (§H.2.14 
                   'names $custPhone (the word phone)', 'names $staffJobs (the word staff)', '', '', '', ''],
                  'M01 control: a person\'s data by the words of a name (an id of a person, a compound name, a phone), not an offer\'s or a sheet row\'s id');
         $bad = []; $files = 0; $stmts = 0; $sheets = [];
-        foreach (qf_n_walk($ctx->root) as $rel => $abs) {
+        // 5.18.105 (root docs/74 §H.3.2), re-pointed on purpose, never weakened: the walk reads the judged tree with 5.18.105
+        // taken out against 994d660 (tests/fixtures/r105_revert.php, r105_less), so M01 judges 5.18.104's own lines exactly as
+        // before, its rules unrelaxed; 5.18.105's lines are judged by tests/test_log_mask.php E.
+        require_once dirname(__DIR__) . '/fixtures/r105_revert.php';
+        foreach (qf_n_walk(r105_less($ctx->root, $ctx->tmp)) as $rel => $abs) {
             if (substr($rel, -4) !== '.php' || strpos($rel, 'tests/') === 0 || qf_declared_entry($rel) === null) continue;
             $files++;
             $new = !is_file($B . '/' . $rel);

@@ -414,7 +414,8 @@ foreach ($allInvoices as $inv) {
                     'invoice_url'   => $invoiceUrl,
                     '_raw_message'  => $waMsg,
                 ]);
-                olog("WHATSAPP stage {$matchedStage['id']} ({$matchedStage['label']}) → {$fullName} {$phone} — {$invNum} {$amtFmt}");
+                // 5.18.105 (root docs/74 §H.1.14, LN-26): the name and the invoice, without the number.
+                olog("WHATSAPP stage {$matchedStage['id']} ({$matchedStage['label']}) → {$fullName} — {$invNum} {$amtFmt}");
                 $ok = true; $sent++;
                 // Track for end-of-run summary. If this invoice already has
                 // an entry from the email branch above (stage type='both'),
@@ -439,7 +440,8 @@ foreach ($allInvoices as $inv) {
                     ];
                 }
             } catch (\Throwable $e) {
-                olog("WHATSAPP ERROR stage {$matchedStage['id']} → {$phone}: " . $e->getMessage());
+                // 5.18.105 (root docs/74 §H.1.14, LN-27): the invoice number, not the customer's number.
+                olog("WHATSAPP ERROR stage {$matchedStage['id']} → {$invNum}: " . $e->getMessage());
                 $errors++;
             }
         } else {

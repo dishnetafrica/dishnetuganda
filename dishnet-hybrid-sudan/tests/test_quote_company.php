@@ -1905,10 +1905,20 @@ $hunks99 = function (string $rel) use ($baseFiles, $relTree): array {
     if ($cur !== null && $cur !== []) $out[] = implode("\n", $cur);
     return $out;
 };
+// 5.18.105 (root docs/74 §H.3.2, §B.1 G-2), re-pointed on purpose, never weakened: cron_quote_wa.php and
+// includes/post/post_kyc.php carry 5.18.105's log lines, so the files outside QC_I4_102 are hashed in the judged tree with
+// 5.18.105 taken out against 994d660 (tests/fixtures/r105_revert.php, r105_less, built only from $ROOT), and every other
+// byte of them is still held to ca05ada5; an edit 5.18.105 did not mark stays in that tree and is seen here.
+require_once __DIR__ . '/fixtures/r105_revert.php';
+$L105 = null; $why105 = '';
+try { $L105 = r105_less($ROOT, $TMP . '/r105'); } catch (\RuntimeException $e105) { $why105 = $e105->getMessage(); }
+is_($L105 !== null && strpos((string)@file_get_contents($L105 . '/cron_quote_wa.php'), '5.18.105') === false && is_file($L105 . '/includes/post/post_kyc.php'),
+    'I4 control: the judged tree with 5.18.105 taken out against ' . R105_BASE . ' (from Git) was built, and its cron_quote_wa.php holds no 5.18.105 line', $why105);
 $held = []; $lost = []; $found = 0; $ctlMissing = []; $amendUsed = [];
 foreach ($DECLARED as $rel) {
     if ($rel === 'manifest.json') continue;
-    $same = $RBASE !== null && is_file($T . '/' . $rel) && is_file($RBASE . '/' . $rel) && hash_file('sha256', $T . '/' . $rel) === hash_file('sha256', $RBASE . '/' . $rel);
+    $J = in_array($rel, QC_I4_102, true) ? $T : $L105;   // 5.18.105 (root docs/74 §H.3.2; G-2): outside QC_I4_102, read through the layer
+    $same = $RBASE !== null && $J !== null && is_file($J . '/' . $rel) && is_file($RBASE . '/' . $rel) && hash_file('sha256', $J . '/' . $rel) === hash_file('sha256', $RBASE . '/' . $rel);
     if (!in_array($rel, QC_I4_102, true)) { if (!$same) $held[] = $rel; continue; }
     if ($same) { $held[] = $rel . ' (declared as changed by 5.18.102, but it is not)'; continue; }
     $tf = (string)@file_get_contents($T . '/' . $rel);
@@ -1985,8 +1995,8 @@ is_($RBASE !== null && array_intersect_key($mig104, (array)$mig($RBASE)) === $mi
 $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
 t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
     [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
-$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.104",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
-t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.104 (a later release moves this pin on; was 5.18.103, 5.18.102, 5.18.101)',
+$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.105",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.105 (root docs/74 §H.3.3; was 5.18.104)
+t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.105 (a later release moves this pin on; was 5.18.104, 5.18.103, 5.18.102, 5.18.101)',
     [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
 
 // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's

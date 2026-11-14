@@ -608,8 +608,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='cashbook_ad
                                 $notify->sendVia('accounts', $refundPhone, $refundWaMsg,
                                     'customer_refund', ['customer' => $refundName, 'amount' => $_refAmt]);
                                 $crmRefundMsg .= ' · WA sent to customer';
+                                // 5.18.105 (root docs/74 §H.1.19, LN-35): the name and the amount, without the number.
                                 logActivity($dataDir, 'crm_refund_wa_sent',
-                                    "Refund WA sent to {$refundName} ({$refundPhone}): \${$_refAmt}", '');
+                                    "Refund WA sent to {$refundName}: \${$_refAmt}", '');
                             }
                         } catch (\Throwable $_waRefErr) {
                             // Non-fatal — refund already posted to CRM

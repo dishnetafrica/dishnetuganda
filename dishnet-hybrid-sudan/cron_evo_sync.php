@@ -258,7 +258,9 @@ function evoLog(string $msg): void
 {
     global $dataDir;
     $logFile = $dataDir . '/evo_sync.log';
-    $line = '[' . date('Y-m-d H:i:s') . '] ' . $msg . PHP_EOL;
+    // 5.18.105 (root docs/74 §H.1.12, LN-24): every line masked here, so a chat's number and JID never reach evo_sync.log.
+    if (!class_exists('PluginLog')) require_once __DIR__ . '/lib/PluginLog.php';
+    $line = '[' . date('Y-m-d H:i:s') . '] ' . PluginLog::mask($msg) . PHP_EOL;
     file_put_contents($logFile, $line, FILE_APPEND);
     // Trim to 500 lines
     if (file_exists($logFile)) {

@@ -125,7 +125,8 @@ foreach ($leads as &$lead) {
             $lead['wa_assigned_notified'] = 1;
             $needsSave = true;
             $taskA++;
-            echo "[" . date('H:i:s') . "] TASK A: Notified {$agent['name']} → {$leadName}\n";
+            // 5.18.105 (root docs/74 §H.1.16, LN-30): the lead id; a lead with no name carries its number as its name.
+            echo "[" . date('H:i:s') . "] TASK A: Notified {$agent['name']} → lead #{$leadId}\n";
         } catch (\Throwable $e) {
             echo "[" . date('H:i:s') . "] TASK A ERROR: " . $e->getMessage() . "\n";
         }
@@ -152,7 +153,8 @@ foreach ($leads as &$lead) {
             $lead['wa_45min_sent'] = 1;
             $needsSave = true;
             $taskB++;
-            echo "[" . date('H:i:s') . "] TASK B: 45-min warning to {$agent['name']} → {$leadName}\n";
+            // 5.18.105 (root docs/74 §H.1.16, LN-31): the lead id; a lead with no name carries its number as its name.
+            echo "[" . date('H:i:s') . "] TASK B: 45-min warning to {$agent['name']} → lead #{$leadId}\n";
         } catch (\Throwable $e) {
             echo "[" . date('H:i:s') . "] TASK B ERROR: " . $e->getMessage() . "\n";
         }
@@ -180,7 +182,8 @@ foreach ($leads as &$lead) {
             $lead['wa_60min_sent'] = 1;
             $needsSave = true;
             $taskC++;
-            echo "[" . date('H:i:s') . "] TASK C: Escalated {$leadName} ({$agent['name']}) to supervisor\n";
+            // 5.18.105 (root docs/74 §H.1.16, LN-32): the lead id; a lead with no name carries its number as its name.
+            echo "[" . date('H:i:s') . "] TASK C: Escalated lead #{$leadId} ({$agent['name']}) to supervisor\n";
         } catch (\Throwable $e) {
             echo "[" . date('H:i:s') . "] TASK C ERROR: " . $e->getMessage() . "\n";
         }

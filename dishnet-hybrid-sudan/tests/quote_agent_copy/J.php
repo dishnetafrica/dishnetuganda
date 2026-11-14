@@ -67,7 +67,11 @@ function qac_j_php74(string $code, bool $noPolyfills): array
 }
 
 $QAC_SECTIONS['J'] = ['title' => 'The boundary: P7\'s slice against 221c9dc (§H.5.6; ruling R10)', 'run' => function (QfCtx $ctx) {
-    $root = $ctx->root;
+    // 5.18.105 (root docs/74 §H.3.2), re-pointed on purpose, never weakened: P7's slice is judged on the judged tree with
+    // 5.18.105 taken out against 994d660 (tests/fixtures/r105_revert.php, r105_less, built only from the judged root): J1
+    // holds cron_quote_wa.php byte for byte and J3 counts exactly twelve hunks, as before.
+    require_once dirname(__DIR__) . '/fixtures/r105_revert.php';
+    $root = r105_less($ctx->root, $ctx->tmp);
     // 5.18.104 (root docs/73 §H.5.17 IP-8), stage B10: P7's slice of the one merged declared list, never a list of J's own
     $mine = array_filter(qf_declared('P'), function ($row) { return explode(',', $row[0])[0] === 'P'; });
     $changedAll = array_keys(array_filter($mine, function ($row) { return $row[1] === 'changed'; }));

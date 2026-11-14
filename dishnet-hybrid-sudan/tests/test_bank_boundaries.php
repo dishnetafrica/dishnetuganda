@@ -139,7 +139,13 @@ require_once __DIR__ . '/fixtures/r103_revert.php';
 // (tests/fixtures/r104_revert.php, each found exactly once), then 5.18.103's; every other byte is still held to the base.
 // The 5.18.104 lines themselves are held by tests/test_quote_followup.php N.
 require_once __DIR__ . '/fixtures/r104_revert.php';
-function src102(string $rel): string { $s = r103_revert($rel, (string)r104_revert($rel, src($rel))); return ($s === null || r104_revert($rel, src($rel)) === null) ? "\0 5.18.104's or 5.18.103's declared lines not found" : $s; }
+// 5.18.105 (root docs/74 §H.1.24, §H.3.2; gap 1), re-pointed on purpose, never weakened: LN-35's two lines in
+// includes/post/post_cashbook.php — its marker and its logged line — are put back first, by exact text
+// (tests/fixtures/r105_revert.php, each found exactly once), then the later releases' lines as before:
+// r103_revert(r104_revert(r105_revert(…))). Every other byte is still held to the base, wherever an edit stands. LN-35
+// itself is held by tests/test_log_mask.php.
+require_once __DIR__ . '/fixtures/r105_revert.php';
+function src102(string $rel): string { $s5 = r105_revert($rel, src($rel)); $s4 = r104_revert($rel, $s5); $s = $s4 === null ? null : r103_revert($rel, $s4); return ($s === null || $s4 === null || $s5 === null) ? "\0 5.18.105's, 5.18.104's or 5.18.103's declared lines not found" : $s; }
 /** A file as BK_BASE (or $rev) holds it, from this checkout's Git; null when Git cannot supply it. */
 function base_of(string $rel, string $rev = BK_BASE): ?string
 {
@@ -239,13 +245,18 @@ if (!$gitOk) {
         $b = base_of($rel);
         is_($b !== null && hash('sha256', $b) === hash('sha256', src102($rel)), "{$rel} is byte-identical to " . BK_BASE);   // 5.18.103: src102
     }
+    // 5.18.105 (root docs/74 §H.1.24): tests/fixtures/r105_revert.php checked against Git — this tree's
+    // includes/post/post_cashbook.php with LN-35's two lines put back is 994d660's, byte for byte (the control on the revert)
+    $pc994 = base_of('includes/post/post_cashbook.php', R105_BASE_FULL);
+    is_($pc994 !== null && r105_revert('includes/post/post_cashbook.php', src('includes/post/post_cashbook.php')) === $pc994,
+        'includes/post/post_cashbook.php through tests/fixtures/r105_revert.php is ' . R105_BASE . '\'s (5.18.104), byte for byte, from Git');
     // manifest.json: the release's version and nothing else — ec0accd4's bytes with the one version line moved to the
     // release's (5.18.102: the version pin moves with the release; was 5.18.101, 5.18.100, 5.18.99 and 5.18.98 before it).
     $mb = (string)base_of('manifest.json');
-    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.104",', $mb, $mn);   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
-    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.104',
+    $mw = str_replace('    "version": "5.18.97",', '    "version": "5.18.105",', $mb, $mn);   // 5.18.105 (root docs/74 §H.3.3; was 5.18.104)
+    t('manifest.json is ' . BK_BASE . '\'s with one line changed, its version, 5.18.97 → 5.18.105',
         [$mn, hash('sha256', $mw) === hash('sha256', src('manifest.json')), (string)(json_decode(src('manifest.json'), true)['information']['version'] ?? '')],
-        [1, true, '5.18.104']);
+        [1, true, '5.18.105']);
     // includes/routes.php: the base with 5.18.98's changed lines put in their place; then every line of it is still there, in
     // order, and the extra lines are 5.18.98's, in blocks that each name it, and only these.
     $rb = (string)base_of('includes/routes.php'); $chg = [];
@@ -543,8 +554,14 @@ if ($withMutants) {
         ['the neutraliser without @', [$RT, "strpos(\"=+-@\\t\\r\", \$s[0])", "strpos(\"=+-\\t\\r\", \$s[0])"]],
         ['a changed line in public.php beside the hunks', ['public.php', "    'distributors' => '*admin',", "    'distributors' => null,"]],
         ['the forbidden hunk missing', ['public.php', "            'bank_account_profiles', 'bank_checks', 'bank_statements', 'bank_statement_lines', 'bank_line_events',\n", '']],
-        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.104",', '    "version": "5.18.97",']],   // 5.18.104 (root docs/73 §H.2.14; was 5.18.103)
+        ['manifest.json left at 5.18.97', ['manifest.json', '    "version": "5.18.105",', '    "version": "5.18.97",']],   // 5.18.105 (root docs/74 §H.3.3; was 5.18.104)
         ['manifest.json changed beside its version', ['manifest.json', '    "url": "https://dishnetafrica.com",', '    "url": "https://example.test",']],
+        // 5.18.105 (root docs/74 §H.1.24, §H.3.4 "through the layer"): an edit 5.18.105 did not make, at :541, 70 lines above
+        // LN-35's marker and outside every marker's window (asserted from the planted file, the fourth field), is left in
+        // place by tests/fixtures/r105_revert.php — which puts back LN-35's two lines by exact text — so A still sees it
+        ['BM-r105 post_cashbook.php changed outside LN-35 (the refund categories narrowed)',
+            ['includes/post/post_cashbook.php', "    \$crmRefundCats = ['Customer Refund', 'Customer Commission'];", "    \$crmRefundCats = ['Customer Refund'];"],
+            ['includes/post/post_cashbook.php is byte-identical to ' . BK_BASE], 'includes/post/post_cashbook.php'],
     ];
     $mainPass = $pass;                                                      // the child runs sections A–H, exactly what this run passed
     [$tmp, $n] = sj_weakened_copy($lib, $TAB, '$_bkPer   = 50;', '$_bkPer   = 50;');
@@ -565,6 +582,14 @@ if ($withMutants) {
         if ($applied && substr($rel, -4) === '.php') { $lint = []; exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($tmp . '/' . $rel) . ' 2>&1', $lint, $lrc); $applied = $lrc === 0; }
         if (!$applied) {
             is_(false, "weakened copy \"{$label}\": its anchor occurs once, the change is in the copy, and it lints", "found {$n} times");
+            exec('rm -rf ' . escapeshellarg($tmp));
+            continue;
+        }
+        // 5.18.105 (root docs/74 §H.1.0): a copy planted for the layer to leave in place stands outside every 5.18.105
+        // marker's window, at least 31 lines from each, asserted from the planted file — or it is not planted (a failure)
+        $why105 = isset($mu[3]) ? r105_planted_outside($tmp, (string)$mu[3]) : '';
+        if ($why105 !== '') {
+            is_(false, "weakened copy \"{$label}\": planted outside every 5.18.105 marker's window", $why105);
             exec('rm -rf ' . escapeshellarg($tmp));
             continue;
         }

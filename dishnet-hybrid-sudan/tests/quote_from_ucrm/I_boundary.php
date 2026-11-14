@@ -98,7 +98,17 @@ $QFU_SECTIONS['I'] = ['title' => 'The boundary: the declared files against f2055
     $c->t($B221 !== null, 'I0 the control: Git supplies ' . QF_N_BASE . ' (5.18.103), the tree 5.18.104\'s declared files and hunks are taken out against — a failure, never a skip', $why221);
     if ($B221 === null) return;
     $T = $c->dir('judged-less-5.18.104');
-    $left104 = qf_n_revert_tree($c->root, $B221, $T);
+    // 5.18.105 (root docs/74 §H.3.2), re-pointed on purpose, never weakened: 5.18.105 is taken out first, against 994d660
+    // (tests/fixtures/r105_revert.php, r105_less, built only from the judged root), then 5.18.104 — so every check below
+    // reads 221c9dc's tree exactly as before, against f2055baf. 5.18.105's own boundary is tests/test_log_mask.php D.
+    require_once dirname(__DIR__) . '/fixtures/r105_revert.php';
+    try { $L105 = r105_less($c->root, $c->dir('r105')); } catch (\RuntimeException $e) {
+        $c->t(false, 'I0 the control: Git supplies ' . R105_BASE . ' (5.18.104), the tree 5.18.105 is taken out against — a failure, never a skip', $e->getMessage());
+        return;
+    }
+    $c->t(strpos((string)@file_get_contents($L105 . '/evo_webhook.php'), 'opt-out recorded for conversation') === false && !is_file($L105 . '/tests/test_log_mask.php'),
+        'I0 … and 5.18.105 is taken out first: its evo_webhook.php opt-out line reads ' . R105_BASE . '\'s form, and tests/test_log_mask.php is absent');
+    $left104 = qf_n_revert_tree($L105, $B221, $T);
     $c->t(!is_file($T . '/lib/WaSendBudget.php') && is_file($c->root . '/lib/WaSendBudget.php') && strpos((string)file_get_contents($T . '/cron/master.php'), "'offers_send'") === false,
         'I0 … and the judged tree, 5.18.104 taken out, holds none of its files or lines (' . $left104 . ' unmarked 5.18.104 hunk(s) left, for quote_followup N)');
     // f2055baf's plugin tree, from Git, into the run's own folder

@@ -54,6 +54,13 @@ final class PluginLog
         return mb_strlen($s, 'UTF-8') > 400 ? mb_substr($s, 0, 400, 'UTF-8') . '…' : $s;
     }
 
+    /** 5.18.105 (root docs/74 §H.1.22): a phone number as a log line may show it — '••••' and its last two digits; 'none' without a digit. */
+    public static function tail(?string $number): string
+    {
+        $d = (string)preg_replace('/\D+/', '', (string)$number);
+        return $d === '' ? 'none' : '••••' . substr($d, -2);
+    }
+
     /** The plugin's clock, as the master cron writes its own lines; UTC, said so, when the zone cannot be read. */
     private static function now(): string
     {
