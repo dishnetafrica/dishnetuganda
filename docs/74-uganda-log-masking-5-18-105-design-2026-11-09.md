@@ -1699,6 +1699,13 @@ and M 291/0; quote_agent_copy J 116/0; catalogue_direct I 107/0; quote_from_ucrm
 two passes on `7835906` are recorded here when they end; pass B1 began on 14 Nov at 11:48:16 UTC. The second, B2, is
 planned from Monday 16 Nov, 00:00 UTC, the first moment after B1 that the run-date rules above allow.
 
+**Pass B1 on `7835906`: 14 Nov, 11:48:16–18:12:07 UTC, one piece, no restart: 317 files, 22,979 checks passed, 7
+failed (EXIT=1).** The seven are the four container-only files, exactly as in 5.18.104's passes:
+`test_install_authorisation` 379/2, `test_mail_quote` 91/1, `test_migration_integrity` 27/1, `test_secure_file` 22/3.
+Nothing else failed: L05 read 768/0, `test_quote_summary` 59/0, `test_sales_followup_tool` 397/0. Compared file by file
+with 5.18.104's pass B, every difference is a count 5.18.105's own tests and re-points add (`test_log_mask` 384/0, and
++1 to +8 in nine re-pointed files). It ran on a Kampala Saturday, CK12 and HK11 among them, before 21:00 UTC.
+
 ### S.4 The deploy script and its rehearsal
 
 - **`scripts/deploy-5.18.105.sh`** (14,745 lines, sha256 `c70820cd69af899b…`), pinned to `7835906`. Re-derived on
