@@ -1,8 +1,8 @@
 diff --git a/dishnet-hybrid-sudan/SAFETY.md b/dishnet-hybrid-sudan/SAFETY.md
-index b3630e2..7840e39 100644
+index b3630e2..f965c97 100644
 --- a/dishnet-hybrid-sudan/SAFETY.md
 +++ b/dishnet-hybrid-sudan/SAFETY.md
-@@ -542,6 +542,73 @@ the same field names.
+@@ -542,6 +542,80 @@ the same field names.
  
  # 🔖 VERSION LOG (append after every session)
  
@@ -52,8 +52,9 @@ index b3630e2..7840e39 100644
 +The older boundaries are re-pointed on purpose, never weakened, in one of two ways (`tests/fixtures/r105_revert.php`):
 +- **Through the layer**, `r105_less()`: the judged tree with 5.18.105 taken out against 994d660, read from Git. Read
 +  this way: quote_followup N and M01, quote_agent_copy J, catalogue_direct I (5.18.103's boundary) and quote_from_ucrm
-+  I (5.18.102's) from their I0, TL14's main scan and its set of files from Git, and test_quote_company I4 for the files
-+  outside `QC_I4_102`.
++  I (5.18.102's) from their I0, TL14's main scan and its set of files from Git, test_quote_company I4 for the files
++  outside `QC_I4_102`, and test_quote_summary M (`webhook.php` through `r105_file()`, its two P7 hunks then taken out
++  by their markers and the rest held to f2055baf; missed by the build, found by the suite).
 +- **By exact text**, `r105_revert()`: `includes/post/post_cashbook.php` with LN-35's marker line and logged line put
 +  back, each found exactly once — fixed text for that one file, not Git; every other file comes back as given. Read
 +  this way: test_bank_boundaries' `src102()` (section A, and the menu-link blocks F reads) and
@@ -66,12 +67,18 @@ index b3630e2..7840e39 100644
 +  `tests/catalogue_direct/mutants_I.php`; MI5 (I3) and MI7 (I5), re-anchored to `logQuote()`, in
 +  `tests/quote_from_ucrm/mutants_I.php`; W-r105a (I4) in `tests/test_quote_company_mutants.php`;
 +- through `r105_revert()`: BM-r105 (A) in `tests/test_bank_boundaries.php` and W-r105 (M) in
-+  `tests/test_cashbook_physical_list_mutants.php`.
++  `tests/test_cashbook_physical_list_mutants.php`;
++- in the test itself: M's control in `tests/test_quote_summary.php`, one character planted in the raw `webhook.php`
++  and read through the layer's own `r105_revert_file()`, which must leave it (one unmarked hunk).
 +
 +The other boundaries have no such copy of 5.18.105's. M01's and J's copies are 5.18.104's own; two of them, QM-M11 and
 +PW-J2, plant into 5.18.105 files (`tools/sales_followup_report.php`, `webhook.php`) and do not assert where they stand.
 +TL14's plant controls read their own copy, never the layer (gap 8). test_bank_boundaries F has none: the files it reads
 +through `src102()`, `includes/navigation.php` and `tabs/admin/ceo_dashboard.php`, are not ones `r105_revert()` changes.
++
++5.18.104's TL40 control (`tests/sales_followup_tool/TL_tool.php`) is judged at one fixed moment, 7 Nov 2026 12:00
++Kampala, not at `time()`: from 12 Nov its fixture chase fell before the steps' switch-on stamps, Q3-ON then answered as
++Q5-ON, and the control failed on every run (root docs/74 §S.3).
 +
  ## 5.18.104 (root docs/73 §H.2.3; built 2026-11-06, not deployed) — Uganda: the sales follow-up — a read-only report, quotations tracked and chased, a morning list per salesperson, voice notes heard through OpenAI with an instant reply meanwhile, offers on the Evolution numbers, the agent's copy of the quotation e-mail; one send ledger; everything OFF; South Sudan unchanged; migrations 089, 090, 091
  
@@ -495,10 +502,10 @@ index c242980..9594948 100644
  ]);
 diff --git a/dishnet-hybrid-sudan/tests/fixtures/r105_revert.php b/dishnet-hybrid-sudan/tests/fixtures/r105_revert.php
 new file mode 100644
-index 0000000..8c04014
+index 0000000..a23a30d
 --- /dev/null
 +++ b/dishnet-hybrid-sudan/tests/fixtures/r105_revert.php
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,367 @@
 +<?php
 +declare(strict_types=1);
 +/**
@@ -593,9 +600,10 @@ index 0000000..8c04014
 +    'tests/quote_from_ucrm/I_boundary.php'  => ['changed', '§H.3.2 quote_from_ucrm I0 (r105_less, then qf_n_revert_tree)'],
 +    'tests/quote_from_ucrm/mutants_I.php'   => ['changed', '§H.1.0 MI5 and MI7 re-anchored outside LN-03\'s marker window (the same fault each)'],
 +    'tests/test_quote_from_ucrm.php'        => ['changed', '§H.1.0 a weakened copy planted for the layer is asserted outside every marker\'s window'],
-+    'tests/sales_followup_tool/TL_tool.php' => ['changed', '§H.3.2 TL14: the main scan and Git\'s set read r105_less; the plant controls keep the copy (gap 8)'],
++    'tests/sales_followup_tool/TL_tool.php' => ['changed', '§H.3.2 TL14: the main scan and Git\'s set read r105_less; the plant controls keep the copy (gap 8); §S.3 TL40: the control judged at a fixed moment, not time()'],
 +    'tests/test_quote_company.php'          => ['changed', '§H.3.2 I4 (the files outside QC_I4_102 read in r105_less, gap 2), §H.3.3 I5\'s version pin'],
 +    'tests/test_quote_company_mutants.php'  => ['changed', '§H.3.4 through the layer: an unmarked edit to cron_quote_wa.php fails I4'],
++    'tests/test_quote_summary.php'          => ['changed', '§H.1.24 M: webhook.php read through r105_file; its control planted raw, outside every marker\'s window, and read through r105_revert_file (found by the suite, §S.3)'],
 +    'tests/test_bank_boundaries.php'        => ['changed', '§H.1.24 A and F through r105_revert (gap 1), §H.3.3 the version pin and its weakened copy'],
 +    'tests/test_cashbook_physical_list.php' => ['changed', '§H.1.24 M reads post_cashbook.php through r105_revert, §H.3.3 the version pin'],
 +    'tests/test_cashbook_physical_list_mutants.php' => ['changed', '§H.3.4 through the layer: an unmarked edit to post_cashbook.php fails M'],
@@ -4643,10 +4651,24 @@ index d5a1a60..4432fa0 100644
      ['label' => 'MI8 retry_quote posting without the resolver\'s verdict (its gated block skipped, 5.18.101\'s POST reached on Uganda)', 'file' => 'includes/api/api_cron_debug.php',
       'old' => "        if (\$_qoRetry['on']) {\n            // The account re-read fresh by id",
 diff --git a/dishnet-hybrid-sudan/tests/sales_followup_tool/TL_tool.php b/dishnet-hybrid-sudan/tests/sales_followup_tool/TL_tool.php
-index 3ee36ed..44d6051 100644
+index 3ee36ed..1b848a7 100644
 --- a/dishnet-hybrid-sudan/tests/sales_followup_tool/TL_tool.php
 +++ b/dishnet-hybrid-sudan/tests/sales_followup_tool/TL_tool.php
-@@ -613,7 +613,13 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
+@@ -269,6 +269,13 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
+         $ctx->eq($threw, [], 'TL40 no check id answers FAIL check_threw or FAIL unknown_check (its dispatch runs)');
+         // Each id against the callable ruling R13 names, called directly with the same arguments, on a book where the ids'
+         // answers are pairwise different (the control): a dispatch to another holder or with its arguments swapped differs.
++        // 5.18.105 (root docs/74 §S.3), corrected on purpose, never weakened: the control book, its thirteen direct calls
++        // and their thirteen dispatches are judged at one fixed moment, Saturday 7 November 2026 12:00 Kampala (the day of
++        // 5.18.104's two passes), never at time(). sft_on_upto() stamps every step ten days before it, so the chase claimed
++        // on QF_MONDAY at 10:00 stays inside quote_chase_not_before's window on any run date; with time(), from 12 November
++        // 07:00 UTC Q3-ON no longer saw it and answered exactly as Q5-ON. $b, $ro and every call above keep time(); below
++        // this line only the control reads $now.
++        $now = qf_t('2026-11-07 12:00:00');
+         $kb = sft_book($ctx, sft_on_upto('offers-live', $now, 864000, ['cold', 'agent-cc']));
+         sft_reminders_done($kb, qf_t(QF_MONDAY . ' 09:00:00'));
+         sft_chase($kb, '256772504001', 'Q-TL40', qf_t(QF_MONDAY . ' 10:00:00'));   // a chase after the customer spoke: Q3-ON judges it, Q5-ON (cold) does not
+@@ -613,7 +620,13 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
          $ctx->t($base !== '' && is_file($base . '/lib/MailService.php') && !is_file($base . '/lib/SalesFollowupLadder.php'), 'TL14 control: Git supplies 221c9dc');
          if ($base === '') return;
          $declared = array_merge(SalesFollowupLadder::allKeys(), SalesFollowupLadder::settingKeys(), SalesFollowupLadder::preexistingKeys());
@@ -4661,7 +4683,7 @@ index 3ee36ed..44d6051 100644
          $files = array_values(array_unique(array_column($reads, 0)));
          $ctx->t(count($reads) > 50 && in_array('lib/OfferSwitch.php', $files, true) && in_array('lib/QuoteAgentCopy.php', $files, true), 'TL14 control: the scan reads the parts\' files (' . count($reads) . ' reads)');
          // 5.18.104 (root docs/73 §H.2.14 N), stage B10: the files scanned are the merged declared list's, and that list's PHP
-@@ -621,7 +627,7 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
+@@ -621,7 +634,7 @@ $SECTIONS['TL'] = ['title' => 'The tool and the one ladder (§H.2.12; rulings R5
          $listed = [];
          foreach (array_keys(QF_DECLARED) as $p) if (substr($p, -4) === '.php' && strpos($p, 'tests/') !== 0 && is_file($ctx->root . '/' . $p)) $listed[] = $p;
          sort($listed);
@@ -5057,6 +5079,53 @@ index 01dfb87..9662098 100644
          if ($bad !== '') { $ctx->t(false, "{$m['label']}: the copy was made", $bad); exec('rm -rf ' . escapeshellarg($copy)); continue; }
          $out = [];
          exec('php ' . escapeshellarg(__FILE__) . ' --no-mutants --root=' . escapeshellarg($copy)
+diff --git a/dishnet-hybrid-sudan/tests/test_quote_summary.php b/dishnet-hybrid-sudan/tests/test_quote_summary.php
+index 54d62b1..56cba58 100644
+--- a/dishnet-hybrid-sudan/tests/test_quote_summary.php
++++ b/dishnet-hybrid-sudan/tests/test_quote_summary.php
+@@ -489,13 +489,37 @@ if ($gdM === null || $wbM === null || $mbM === null || $wrM === null || $mrM ===
+         }
+         return $src;
+     };
+-    $thisM = (string)@file_get_contents($root . '/webhook.php');
++    // 5.18.105 (root docs/74 §H.1.24, §H.3.2), re-pointed on purpose, never weakened: 5.18.105 changes webhook.php in nine
++    // marked hunks (§H.1.11: the PluginLog loader after :129, and LN-16 … LN-23), so this tree's webhook.php is read in the
++    // judged tree with 5.18.105 taken out against 994d660 (tests/fixtures/r105_revert.php, r105_file, built only from
++    // $root); the two P7 hunks are then taken out as before, and every other byte is still held to f2055baf. The control
++    // plants its one character in the raw file, outside every 5.18.105 marker's window (r105_planted_outside), and reads it
++    // through the same layer (r105_revert_file, what r105_less applies to each declared file), which must leave it in place.
++    // 5.18.105's own hunks are judged by tests/test_log_mask.php D.
++    require_once __DIR__ . '/fixtures/r105_revert.php';
++    $L105M = null; $why105M = '';
++    try { $L105M = r105_file($root, $tmp . '/r105', 'webhook.php'); } catch (\RuntimeException $e105M) { $why105M = $e105M->getMessage(); }
++    $rawM  = (string)@file_get_contents($root . '/webhook.php');
++    $thisM = $L105M === null ? '' : (string)@file_get_contents($L105M);
++    is_($L105M !== null && strpos($thisM, 'PluginLog') === false && substr_count($rawM, "require_once __DIR__ . '/lib/PluginLog.php';") === 1
++        && $p7OutM($rawM) !== null && $p7OutM($rawM) !== $wrM,
++        'M control: this tree\'s webhook.php with 5.18.105 taken out against ' . R105_BASE . ' (from Git) holds no PluginLog line; the raw file holds the loader once and, read without the layer, fails the check below', $why105M);
+     is_($p7OutM($thisM) === $wrM,
+         'M this tree\'s webhook.php, its two 5.18.104 P7 hunks (root docs/73 §H.5.8.2) taken out by their markers, is ' . QS_M_REL . '\'s, byte for byte (a later release must not change it unless it re-points this)');
+-    $offM = strpos($thisM, '"Quotation email sent to {$r[\'to\']}');
+-    $weakM = $offM === false ? null : substr_replace($thisM, 'q', $offM + 1, 1);
+-    is_($weakM !== null && $p7OutM($weakM) !== null && $p7OutM($weakM) !== $wrM,
+-        'M control: the same comparison on a copy with one character changed outside the hunks fails');
++    $offM = strpos($rawM, '"Quotation email sent to {$r[\'to\']}');
++    $weakM = $offM === false ? null : substr_replace($rawM, 'q', $offM + 1, 1);
++    $outM = 'not planted: the anchor is not in the raw file'; $layM = null; $leftM = -1;
++    if ($weakM !== null) {
++        $ctlM = $tmp . '/r105-ctl-M';
++        @mkdir($ctlM, 0700, true);
++        file_put_contents($ctlM . '/webhook.php', $weakM);
++        $outM = r105_planted_outside($ctlM, 'webhook.php');
++        [$baseM, $whyBaseM] = r105_base();
++        if ($outM === '' && $baseM !== null) [$layM, $leftM] = r105_revert_file($baseM . '/webhook.php', $ctlM . '/webhook.php');
++        elseif ($outM === '') $outM = $whyBaseM;
++    }
++    is_($outM === '' && $leftM === 1 && $layM !== null && $p7OutM($layM) !== null && $p7OutM($layM) !== $wrM,
++        'M control: the same comparison on a copy with one character changed outside the hunks fails — planted in the raw file, outside every 5.18.105 marker\'s window, and read through the layer, which leaves it (one unmarked hunk)', $outM);
+     $lintM = [];
+     $binsM = ['php ' . PHP_VERSION => PHP_BINARY];
+     $w74M = trim((string)shell_exec('command -v php7.4 2>/dev/null'));
 diff --git a/dishnet-hybrid-sudan/tools/sales_followup_report.php b/dishnet-hybrid-sudan/tools/sales_followup_report.php
 index 998e00b..f2dab05 100644
 --- a/dishnet-hybrid-sudan/tools/sales_followup_report.php

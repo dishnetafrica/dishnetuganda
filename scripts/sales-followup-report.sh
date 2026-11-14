@@ -9,7 +9,7 @@
 #      and refuses a root-owned book;
 #   2. it takes the report, tools/sales_followup_report.php, and the code it reads — lib/QuoteSendEvidence.php,
 #      lib/HumanTakeover.php and the rest of the release's lib/ beside them (WaSendBudget and its readers, on a book that
-#      already holds 089's ledger) and profiles/ — from Git at the reviewed 5.18.105 commit (f764699), the report's and
+#      already holds 089's ledger) and profiles/ — from Git at the reviewed 5.18.105 commit (7835906), the report's and
 #      QuoteSendEvidence's sha256 checked; and it asserts that the INSTALLED PhoneNumber, TenantProfile, PluginConfig,
 #      ConfigVault and ContactOptOut equal that commit's bytes (they are 5.18.104's too, so the report runs on 5.18.104,
 #      before the deploy and after a rollback, as well);
@@ -37,7 +37,7 @@ CONTAINER="${UCRM_CONTAINER:-ucrm}"
 IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/$PLUGIN}"
 PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_COMMIT="f764699"; RELEASE_COMMIT_FULL="f764699efb608deb05141818dc61305230f7ee18"; RELEASE_BRANCH="release/5.18.105"
+RELEASE_COMMIT="7835906"; RELEASE_COMMIT_FULL="7835906a0e4af49557f7c0eb994cb9129637ca00"; RELEASE_BRANCH="release/5.18.105"
 REPORT="tools/sales_followup_report.php"
 REPORT_SHA256="691ef613ba20c584a840d9070fe9217f188b8a7d3002b1e3b306ad7aede6e479"
 QSE_SHA256="852a12ceb55a3dcb77c5f9a94b232ad17c922fb0ad903e3947b1223b1d04c540"   # lib/QuoteSendEvidence.php at the release commit

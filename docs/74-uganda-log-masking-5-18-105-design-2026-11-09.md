@@ -1,6 +1,6 @@
 # 74 — Uganda: 5.18.105, no phone number in any log line (design, 9 Nov 2026)
 
-Status: **built — `release/5.18.105` = `f764699`, local, not pushed; the suite's two passes and the rehearsal still to finish; NOT deployed (§S, 13 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
+Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), local, not pushed; the suite's two passes and the rehearsal still to finish; NOT deployed (§S, 14 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
 
 - 5.18.105 masks **every** log line that can carry a phone number on Uganda (option B), not only the four lines of 5.18.104's known limit 13.
 - The chase (step 6) does not wait for 5.18.105. Offers-live (step 12) does.
@@ -1540,7 +1540,7 @@ The plan is sized for option B (gap 6). A step waits only for what it reads.
   - `post_kyc.php:269` and `post_cashbook.php:612` join B (the default, under ruling B);
   - South Sudan's copies of the same lines are masked too (the default: log text only, D7).
 
-## S. Status, 13 Nov 2026 — built; the suite and the rehearsal still to finish; NOT deployed
+## S. Status, 14 Nov 2026 — built and re-cut; the suite and the rehearsal still to finish; NOT deployed
 
 This section records what was built. The design above stands as written on 9 Nov and is not rewritten. Where this
 section and §H disagree, this section records what was built. §S.3 and §S.4 are completed when the suite's two passes
@@ -1548,18 +1548,23 @@ and the rehearsal's record run end.
 
 ### S.1 The release
 
-- **Built:** `release/5.18.105` = **`f764699`**, one commit on 5.18.104 (`994d660`): 88 files, 43 added, 45 changed;
-  4,131 insertions, 71 deletions. No migration and no setting. **Not pushed:** the branch is local, and is pushed only
-  on the owner's word. The development branch keeps it as a patch (`wip/release-5.18.105.patch`, compared on 13 Nov:
-  byte for byte `git diff 994d660..f764699`), so a container restart cannot lose it.
+- **Built:** `release/5.18.105` = **`7835906`**, one commit on 5.18.104 (`994d660`): 89 files, 43 added, 46 changed;
+  4,175 insertions, 76 deletions. No migration and no setting. **Not pushed:** the branch is local, and is pushed only
+  on the owner's word. The development branch keeps it as a patch (`wip/release-5.18.105.patch`, byte for byte
+  `git diff 994d660..7835906`), so a container restart cannot lose it.
+- **Re-cut on 14 Nov.** The first cut, `f764699` (88 files; 4,131 insertions, 71 deletions), failed two checks of its
+  own suite in pass A3 (§S.3): a boundary §H.1.24 missed (§S.2 item 6) and a control of 5.18.104's that the date had
+  broken (§S.2 item 7). Both are fixed in four files, tests and `SAFETY.md` only, and the release is cut again as one
+  commit on `994d660`, as §H.4.1 requires of the pin. Every runtime file is `f764699`'s, byte for byte. `f764699` is
+  kept under `refs/keep/5.18.105-cut1`, and the fix as its own commit under `refs/keep/5.18.105-fix-d623fc1`.
 - **How it was built:** in three stages, each built, then reviewed by someone who had not built it, then fixed and
   rechecked: C1 the code, C2 the tests, C3 the re-pointed boundaries. Five working commits, kept locally under
   `refs/keep/wip/5.18.105` (`add6118`), were squashed into the release; the release's tree is `add6118`'s.
 - **Outside the tests it changes 23 files:** the 19 log files of §H.1 (35 edits covering 37 log statements,
   LN-01…LN-35); `lib/PluginLog.php` (`tail()`); `tools/sales_followup_report.php` (the BY NUMBER table pads by
   characters, not bytes); `SAFETY.md`; and `manifest.json` (the version line).
-- **The tests are 65 files.** New: `tests/test_log_mask.php` with `tests/log_mask/` (sections A–F: each of
-  LN-01…LN-35 driven through its real path in 21 groups; 73 weakened copies, each caught) and
+- **The tests are 66 files** (43 added, 23 changed). New: `tests/test_log_mask.php` with `tests/log_mask/`
+  (sections A–F: each of LN-01…LN-35 driven through its real path in 21 groups; 73 weakened copies, each caught) and
   `tests/fixtures/r105_revert.php`, the layer through which every older boundary still judges `994d660`'s tree. The
   rest are re-points and version pins.
 - **Nothing is switched on or off.** No message, send, screen or stored record changes. The deploy and the rollback
@@ -1614,10 +1619,34 @@ owner ruled.
    first". By the time QF-G1 reads, the record, the manifest and every file are already known to be 5.18.104's (step 0,
    BR1), and `deploy-5.18.104.sh` run on such a server skips its deploy. What such a book lacks is 5.18.104's first
    boot, whose runner applies 089–091. The refusal now says so: open the plugin in uCRM once, then run again.
+6. **A boundary §H.1.24 missed: `tests/test_quote_summary.php` M** (found by the suite, pass A3, 14 Nov). It holds
+   `webhook.php` byte for byte against `f2055baf`, 5.18.101's release, once 5.18.104's two P7 hunks are taken out by
+   their markers. §H.1.24's `webhook.php` row names N05, J3 and CD/QFU I, not this check. So the build left it
+   reading the raw file, and 5.18.105's nine `webhook.php` hunks (the `PluginLog` loader and LN-16 … LN-23) made it
+   fail: 57 passed, 1 failed. Its one-character control still passed, proving nothing. It now reads `webhook.php`
+   through `r105_file()`, as the other boundaries read their files (§H.3.2). A new control asserts that the layered
+   file holds no `PluginLog` line and that the raw file, read without the layer, fails. The one-character control is
+   planted in the raw file, asserted outside every 5.18.105 marker's window (`r105_planted_outside()`), and read
+   through `r105_revert_file()`, which must leave it. `tests/fixtures/r105_revert.php` declares the file. On the
+   fixed tree: 59 passed, 0 failed. Three weakened copies of the test each fail it: the raw file read again, the plant
+   moved inside LN-20's hunk, and the layer replaced by `994d660`'s whole file. A read of every test against the 23
+   files 5.18.105 changes outside the tests (14 Nov, read-only) found no other hold left unpointed.
+7. **5.18.104's TL40 control broke with the date** (`tests/sales_followup_tool/TL_tool.php`; pass A3, 396 passed, 1
+   failed). TL40 builds its control book with every step switched on ten days before `time()`, and a fixture chase
+   fixed on 2 Nov at 10:00 Kampala. From 12 Nov 07:00 UTC the chase fell before `quote_chase_not_before`, Q3-ON
+   stopped seeing it and answered exactly as Q5-ON, and the control ("the thirteen callables answer pairwise
+   differently") failed on every run. While it failed, the six TL40 weakened copies counted as caught whatever they
+   did. The control book and its calls are now judged at one fixed moment, 7 Nov 2026 12:00 Kampala, the day of
+   5.18.104's two passes; nothing else in the file changes. On the fixed tree: TL40 11 passed, 0 failed; the whole
+   file 397 passed, 0 failed. Weakened copies: with the chase removed, or the moment one second past the edge, the
+   control fails; at the edge exactly it passes; with Q3-ON dispatched as Q5-ON, TL40's dispatch check fails, a fault
+   the broken control had hidden. The fault is 5.18.104's, but the failing check is in 5.18.105's suite, so it is
+   fixed in the re-cut.
 
 ### S.3 The release suite
 
-Not complete. The plan is §H.7 step 5: two full passes on `f764699`, in a frozen, clean worktree, one after the other,
+Not complete. The plan is §H.7 step 5: two full passes on the release commit (now `7835906`; until 14 Nov `f764699`),
+in a frozen, clean worktree, one after the other,
 with nothing beside them. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart of this container: its
 log ends at 10:19:34 UTC inside file 230 of 317 (15,127 checks passed up to there, and 4 failed, all in three of the four
 files that fail in this container only). A cut pass does not count. The two passes are run again, and their results
@@ -1637,9 +1666,43 @@ Both cuts came 22 and 25 minutes after the last activity of the session that run
 be reclaimed when that session is idle. That is inferred from the times, not measured. From 06:53 UTC the session is
 kept active every nine minutes until the pass ends.
 
+**Pass A3 ended at 10:36:43 UTC: 317 files, 22,975 checks passed, 10 failed.** Seven failures are in the four files
+that fail in this container only (`test_install_authorisation` 379/2, `test_mail_quote` 91/1,
+`test_migration_integrity` 27/1, `test_secure_file` 22/3), as in 5.18.104's passes. The other three:
+- `test_quote_followup` L05 (767/1): through `test_master_104.php` D03, a check of 5.18.104's that compares the
+  status tool's output with `221c9dc`'s and masks only the header's "ago" figure. The row's own last-run column
+  prints its seconds unmasked, so a second ticking between the two runs flips it. It is rare: it read 768/0 in pass
+  A2 and in both of 5.18.104's passes.
+- `test_quote_summary` M (57/1, §S.2 item 6) and TL40's control (396/1, §S.2 item 7). These two make the first cut
+  wrong, so the release was re-cut (§S.1), and A3 counts for neither of the two passes.
+Compared file by file with 5.18.104's pass B, every other difference is a count that 5.18.105's own tests and
+re-points add.
+
+**Some of 5.18.104's checks depend on the run date.** A read of every test for the real clock against fixed dates
+(14 Nov, read-only) found, besides TL40:
+- CK12 (`tests/sales_followup_tool/CK_checks.php`) and HK11 (`tests/test_wa_send_budget.php`) claim a send on
+  today's Kampala date, and fail on a Kampala Sunday, when the send window is closed. CK12 also fails on every run
+  from 20 Nov 21:00 UTC, when its quotation, valid until 20 Nov, has expired.
+- On a Sunday from about 06:00 to 19:00 UTC, `test_pilot_safety` fails, and `test_notify_evo_retry`,
+  `test_sales_pilot` and `test_multi_number_routing` skip their follow-up cases.
+- wa_offers K07 has passed without exercising its recent-offer exemption since 9 Nov.
+- voice_ack K02 will fail from 31 Dec 2026.
+- `test_tick_auto_pull_log` can flake at hh:59:5x UTC, and L05 at any second.
+None is 5.18.105's, and none is changed here; each is recorded for a later release. So the two passes on `7835906`
+run on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and before 20 Nov 21:00 UTC. As before, files
+35–36 (`test_cashbook_physical_list`) never run inside 21:00–24:00 UTC.
+
+**The fixed tests, run on their own on the fixed tree before the re-cut** (14 Nov, 10:41–11:47 UTC, one at a time):
+`test_quote_summary` 59/0; TL40 11/0; `test_log_mask` 384/0; `test_sales_followup_tool` 397/0; quote_followup N
+and M 291/0; quote_agent_copy J 116/0; catalogue_direct I 107/0; quote_from_ucrm I with its MI copies 46/0. The
+two passes on `7835906` are recorded here when they end; pass B1 began on 14 Nov at 11:48:16 UTC.
+
 ### S.4 The deploy script and its rehearsal
 
-- **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `c028cde545e042ba…`), pinned to `f764699`: derived from
+- **`scripts/deploy-5.18.105.sh`** (14,745 lines, sha256 `c70820cd69af899b…`), pinned to `7835906`. Re-derived on
+  14 Nov for the re-cut, from the same eleven parts and 300 edits: only the pin, the counts (89 files, 46 changed,
+  386 kept) and the four changed files' sha256 values moved. On `f764699` it was 14,744 lines, sha256
+  `c028cde545e042ba…`, the script of trial 5 below. Derived from
   5.18.104's (sha256 `1aafc15bd1cdb1d7…`) by asserted edits in eleven parts, 300 edits, derived twice byte for byte.
   It adds the ladder's rule — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0 and LK-RB1: every ladder key reads after the
   copy, and after a rollback, exactly as before — and the masking checks LM-G1, LM-G2, LM-CA1, LM-CA2 and LM-RB1. It

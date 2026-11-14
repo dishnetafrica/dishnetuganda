@@ -17,7 +17,7 @@
 #            the rollback — the steps that are on when it runs (on 13 Nov: 1 report, 2 ack and 3 tracking; 4–6 follow
 #            in the ladder's order) keep running through the deploy, and are judged, never required off. Step 12 (offers-live)
 #            waits until 5.18.105 serves and its --after-only has passed. South Sudan: the lines it shares with Uganda
-#            lose their numbers too, nothing else changes. Files, against 994d660: 45 changed, 43 added — 88
+#            lose their numbers too, nothing else changes. Files, against 994d660: 46 changed, 43 added — 89
 #            (the added ones are its tests).
 #
 #   THE FIGURES GO TO A CASH SHEET, NEVER TO THE TERMINAL OR THE LOG. Each run writes its own sheet,
@@ -305,8 +305,8 @@
 #            reader that could not tell the two apart would pass anything. Whether this server sees the new line is
 #            Q-G2's question — the tenant is Uganda through the installed code on a copy — the gate's own rule
 #            (TenantProfile::current()->id()). By the sha256 pinned here, Q-CA1 reads every file 5.18.105 changes or adds
-#            (its 88, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it changes
-#            (45), as 5.18.104 has them; all three read the 387 files of 5.18.104 it must not touch —
+#            (its 89, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it changes
+#            (46), as 5.18.104 has them; all three read the 386 files of 5.18.104 it must not touch —
 #            lib/QuoteOrganization.php, lib/QuoteTaxLine.php, lib/TenantProfile.php, lib/PublicPriceFeed.php,
 #            lib/UcrmQuoteLinks.php, lib/UcrmQuoteLines.php, lib/UcrmCatalogue.php with its screen and the sales follow-up's
 #            ladder among them (not webhook.php, cron_quote_wa.php or post_kyc.php, whose log lines 5.18.105 masks). The
@@ -333,8 +333,8 @@
 #            numbers a technician owns counted — they keep their owner and work under 5.18.104 as before.
 #
 #   5.18.99'S CHECKS, CARRIED, AGAINST 5.18.104'S CODE. Its quoting checks keep their ids (SPEC-quote-company §6): Q-G1 the
-#            live plugin is 5.18.104 — the version, every file 5.18.105 changes (45) by 994d660's sha256 (pinned here),
-#            and the 5.18.104 files 5.18.105 must not touch (387) by theirs, the quoting files it keeps (QuoteOrganization,
+#            live plugin is 5.18.104 — the version, every file 5.18.105 changes (46) by 994d660's sha256 (pinned here),
+#            and the 5.18.104 files 5.18.105 must not touch (386) by theirs, the quoting files it keeps (QuoteOrganization,
 #            QuotePdfSource, UcrmLeadSync, the Uganda profile, tools/set_config.php) and 5.18.100's owner
 #            rule among them; Q-G2 the tenant is Uganda through the INSTALLED code on a copy (TenantProfile::current()->id()
 #            and QuoteTaxLine::applies()); Q-G3 the effective quoting organization through the PIN's
@@ -442,7 +442,7 @@
 #            to its customer.
 #
 #   THE COMMIT IT INSTALLS IS A RELEASE COMMIT, NOT THE BRANCH TIP. The pin below, on release/5.18.105, is cut on 994d660
-#            (5.18.104, live): 88 files — 45 changed, 43 added (its tests) — each file's sha256 pinned here. Stage
+#            (5.18.104, live): 89 files — 46 changed, 43 added (its tests) — each file's sha256 pinned here. Stage
 #            A refuses a pin whose parent is not 5.18.104, whose short hash names another commit, whose delta is not exactly
 #            these files by these hashes, which carries a migration (089–091 held at the pin by their sha256 and md5), and
 #            a checkout holding a file git does not track under the plugin folder outside data/. Its master.php and main.php
@@ -634,7 +634,7 @@
 #            offer through the installed offered(), GET-only, compared with stage A's item by item (QC-CA1), and, in an
 #            --after-only run, the switch, the installation product, the standard quotations and G-7 (QC-ON1–QC-ON4)
 #          RB after a rollback (LK-RB0 before it; RB105 after it — master, LK-RB1, the rows, LM-RB1): 5.18.104's files by
-#            sha256 where 5.18.105 changed them (Q-G1's set of 45), every ladder key as before, the 43 files 5.18.105
+#            sha256 where 5.18.105 changed them (Q-G1's set of 46), every ladder key as before, the 43 files 5.18.105
 #            adds on disk, reached by nothing
 #            (QC-RB1, re-pointed), the uCRM catalogue's table counted, 5.18.103's own screen's and read by 5.18.104 again
 #            (a note), the web-direct applications with no quotation counted again, ids on the sheet (QC-RB2, a record —
@@ -671,8 +671,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="f764699"   # 5.18.105 (release) — on Uganda, no phone number in any log line (root docs/74): 21 runtime files, the log statements that could carry a number masked, PluginLog::tail() and the report's column fix; no migration, no new setting; the deploy and its rollback keep every switch of the sales follow-up exactly as found
-EXPECTED_PLUGIN_COMMIT_FULL="f764699efb608deb05141818dc61305230f7ee18"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="7835906"   # 5.18.105 (release) — on Uganda, no phone number in any log line (root docs/74): 21 runtime files, the log statements that could carry a number masked, PluginLog::tail() and the report's column fix; no migration, no new setting; the deploy and its rollback keep every switch of the sales follow-up exactly as found
+EXPECTED_PLUGIN_COMMIT_FULL="7835906a0e4af49557f7c0eb994cb9129637ca00"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.105"
 BASELINE_COMMIT="994d660"          # 5.18.104 (release, the sales follow-up; the live plugin since the copy of 9 Nov 03:50:25 UTC, its steps 1 (report) and 2 (ack) on from 04:26:06 UTC — root docs/07) — what the server runs first, and the rollback (every switch kept); G3 and V3j require ECO Bank's switch ON and a statement kept on it, as 5.18.104's did
 BASELINE_COMMIT_FULL="994d660628cc5b1b42bee648b44b58e389f44bf2"
@@ -758,7 +758,7 @@ BK_CEO_BLOCK_SHA256="b6cbebe06664579fbf68a9b39f6a76a7ba314290d3b3c8c836e5b1b7f71
 # release/5.18.104 (994d660) gives it, pinned here so that no other 5.18.104 can pass for it (root docs/74 §H.4.2):
 # the 149 of 5.18.104's own kept list that 5.18.105 does not change — all but the 9 it does
 # (includes/post/post_cashbook.php, lib/PluginLog.php, cron_quote_wa.php, includes/post/post_kyc.php, tests/quote_from_ucrm/mutants_I.php, tests/test_quote_company_mutants.php, tests/test_quote_from_ucrm.php, tests/catalogue_direct/mutants_I.php, tests/test_catalogue_direct.php) —
-# then the 238 of 5.18.104's own release files that 5.18.105 does not change: the ladder trio
+# then the 237 of 5.18.104's own release files that 5.18.105 does not change: the ladder trio
 # (tools/sales_followup.php, lib/SalesFollowupLadder.php, lib/SalesFollowupChecks.php), cron/master.php,
 # cron/event_processor.php, lib/NotificationService.php, migrations 089–091 and lib/QuoteDailyList.php among them, so
 # that what 5.18.104 put live is held by its sha256 and not only by the delta's. A0 finds them in both release
@@ -937,7 +937,6 @@ c5b88e1b1ece61ae5464ca70a986f25d3cbb2766798efe0af5b29101e6207520  tests/fixtures
 37eabe5a78c6023562eae190646bf39f595534744df0e05f5a8efde455aec466  tests/test_cron_keepalive_order.php
 965ef5d1091b9077ca5a42cea376b82325ea5103f485c3f091d4c9b74ebf0030  tests/test_event_processor_protected.php
 77b253de0514fd8338284160fc9266da8e473b2d79185a1e5f32ed3be6c6f4c8  tests/test_plan_fence.php
-3d9089e505f8c91c998262426872b2c1374116eba3cee85af1623681fba7d71e  tests/test_quote_summary.php
 679e51a03fc17c8016d92910239626eca70a2ac859bd1dd9532446787aea82de  tests/test_staff_jobs_gate.php
 d19bf5cb9905710f79b0e7c681aeda2016e454108edb261ba4bc011e8f87c5f0  tools/cron_status.php
 d1f3d3de3077661b91d166f74e22b2e3b97ee379570173d06f0917ddcb5f840d  tools/wa_prune_history.php
@@ -1153,7 +1152,7 @@ c5b2994d28a15472b1a8dfc3235f0953acc0ede1ac145eb81b9e2970601afb82  tests/wa_offer
 bbf192fc4bbe011dfb5b8ad45837a5bf8c35f191e29081972e2d11a8fe79e32d  workers/MediaWorker.php
 SUMS
 )"
-PREV_KEPT_N=387
+PREV_KEPT_N=386
 # 5.18.105 (Q-G1, RB) — every file 5.18.105 changes, with the sha256 release/5.18.104 (994d660) gives it: what the live
 # plugin must hold before anything changes (Q-G1: live 5.18.104), and what a rollback must put back (RB). A0 finds them in
 # 5.18.104's release commit from Git; the 43 files 5.18.105 adds (tests only) have no 5.18.104 form (A0 refuses one
@@ -1202,15 +1201,16 @@ b7b702980111ce81cefc45721337e9eb25646831095d79e7d55d13183703d513  tests/test_dis
 e836a617dd47502afdb2617e3a55f1325f94b5254329dab05609a95fb58e43c2  tests/test_quote_company.php
 f7a8bb91149a9f0f80fd615efc332877aa5f4b6ddfddafc3cdac9f03dfdb4fa6  tests/test_quote_company_mutants.php
 7a10c49a294fdaa5b8f9885f4d2b4c9bfc1a21d9467cf59c532b29fe3830d250  tests/test_quote_from_ucrm.php
+3d9089e505f8c91c998262426872b2c1374116eba3cee85af1623681fba7d71e  tests/test_quote_summary.php
 577e301ec053a2cbc7d6fbb8a50d0ff5719f56384f9457fb8b9b836a3175213d  tools/sales_followup_report.php
 a82be490e2777126361e1f23a453a9df5b884dc80a0ce7db5ba795dc1ad693db  webhook.php
 SUMS
 )"
-PREV_CHANGED_N=45
-# 5.18.105 — the release's own files, each with the sha256 the release commit (f764699) gives it: the delta,
+PREV_CHANGED_N=46
+# 5.18.105 — the release's own files, each with the sha256 the release commit (7835906) gives it: the delta,
 # exactly, its 43 added files (tests only) among them — A0 reads them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
-099f56dd32d056b6e0f408f1561556cd9cb3811de4460f3c97d69b9c265eb571  SAFETY.md
+4e812ab613667d96775309c5f3b127b523cb900713756e273ceef4edacb87bb9  SAFETY.md
 8b970c28f6d94dcb08ef2e35bcc65a3ffeeaaa2c238f9f133684a80139f41118  cron/bidal_summary.php
 1eea99a22ad09778caec0372183f9851ebfabb07a91544cf2609959a27f0e814  cron/cash_carry_reminder.php
 89fd2222a76a3bbdff50546e80651d8a6371838326e5e0dacc03a88ed76299bc  cron/cashbook_reconcile.php
@@ -1240,7 +1240,7 @@ b977567542bace5f4e76a8925b43bdeee7d910aa4882ee266290a03dfcdc176e  tests/quote_fo
 a3197eb54bb529454e6546c8f14e49c1b4ebd149cbb8073d555135973ec9976b  tests/quote_followup/mutants_N.php
 9824c60a1f17c8a925a88b09cf5c4dfcbdbc3de95cc7007a9979d3c0a4a56b8c  tests/quote_from_ucrm/I_boundary.php
 c3f2ff69ef3da9467438a8749fcccd4779ff4fe16309c34d14f40d03ad5c9915  tests/quote_from_ucrm/mutants_I.php
-6c3f3b80d2695eeb222dd693e5185942f72f148f79a5dff7c3fc28155e10a63e  tests/sales_followup_tool/TL_tool.php
+a3e9fba6b5c4ac10b83117686e9b1b07724c13b071c20580f18b7632a8cced19  tests/sales_followup_tool/TL_tool.php
 f03de50f9d42e1b5addcce290983c62481f588f8345d9e18a00179ba83aa60a3  tests/test_bank_boundaries.php
 a7eeebe5b5bf8266f498e46f43034426ca1381fa3249fa76bd9e375e4434e72e  tests/test_cashbook_physical_list.php
 36454de5bff5d11396c528e0e9fa42f6ef275f2a7365dab0e570a9c0c15d1ddd  tests/test_cashbook_physical_list_mutants.php
@@ -1253,9 +1253,10 @@ a7eeebe5b5bf8266f498e46f43034426ca1381fa3249fa76bd9e375e4434e72e  tests/test_cas
 891fd762236f666788fc52e119b5c3effee5a3a7d5fac0d527dbb67eb47baf5d  tests/test_quote_company.php
 8036a7aeceee04ad0e6572267e77c8872c5afa0453cd8689b87e44a673550771  tests/test_quote_company_mutants.php
 7251eb29bc4942758be808b033e2fc0a5915c12515b1812e2a5b6cb45dddff26  tests/test_quote_from_ucrm.php
+a61b5d962b0efb5beff03db0a91f6a2dc086af1dc3183c3c55f813acee2b72fa  tests/test_quote_summary.php
 691ef613ba20c584a840d9070fe9217f188b8a7d3002b1e3b306ad7aede6e479  tools/sales_followup_report.php
 2202391d061e9a39ada54344b22566255c838ed44451382779b9a1a7d325631c  webhook.php
-85cf4a942fb8ea935e4038b118d070a4758c884b63d8e2e5861aa7374319c8a5  tests/fixtures/r105_revert.php
+85e1d5583a97fd0e5630cd10556426cfed246f9d55f4658b69e734e92281e54e  tests/fixtures/r105_revert.php
 f6dded81cf2384809fc7878e74fec2cd8e6ed01d0ce32da47824b1187bc01c9f  tests/log_mask/A_drives.php
 0f483e8ba1d05f1638fa7f4a3ac275dd15d4d27e6014da218f1a50d93b616a94  tests/log_mask/B_south_sudan.php
 bd9582d87de44e4164fb28728017217dfc061ff47c9749517a049caf530f47cc  tests/log_mask/C_chase.php
@@ -1300,7 +1301,7 @@ a30535a1775271268e985125bfb540ac809ec578f5e851d865c2633f4d582a83  tests/log_mask
 717c19abd64a00f2cf90ca0ddbcb2489aa311802b9b6fed33e2e5e97c57faa5a  tests/test_log_mask.php
 SUMS
 )"
-PIN_SHA_N=88
+PIN_SHA_N=89
 DOMAIN_B="dishnet-mikrotik-control-plane docs"    # Domain B and the plugin's documents, under the plugin directory: never touched (A7, R14)
 # The event processor run once on a throwaway database with five events (A6, R13, RB): type=status/attempts, and +unknown
 # when it was logged as an unknown type. South Sudan's loop — 5.18.87's, kept by 5.18.88 — and Uganda's since 5.18.88, which
@@ -1345,11 +1346,11 @@ P90_SIGNATURE="uganda+on: gaps=sales,support seller=internal_numbers_incomplete;
 # registry off it reads "policy=off/off refusal=-/- sql=-/- evo=off,-/off,- gaps=-/- channels=0:0/0:0 internal=<n>:0/<n>:0
 # statements=0 registry-reads=0 writes=0", then "|" and an HMAC under this run's key — inert; on, it reads the registry and
 # refuses what it finds unsafe. writes= is 0 in every reading.
-# The release's own files, and nothing else: 43 added, 45 changed — 88, each by its sha256
+# The release's own files, and nothing else: 43 added, 46 changed — 89, each by its sha256
 # (PIN_SHA256S). Anything outside this list in the pin is another build. A0 word-splits both lists: no path in them
 # holds a space or a glob character.
 EXPECTED_ADDED="tests/fixtures/r105_revert.php tests/log_mask/A_drives.php tests/log_mask/B_south_sudan.php tests/log_mask/C_chase.php tests/log_mask/D_boundary.php tests/log_mask/E_logging.php tests/log_mask/F_report.php tests/log_mask/_lib.php tests/log_mask/declared.php tests/log_mask/e2_allow.php tests/log_mask/fake_evo_chats.php tests/log_mask/fake_whatsml_feed.php tests/log_mask/g01_evo_webhook.php tests/log_mask/g02_staff_ssp_report.php tests/log_mask/g03_quotation_service.php tests/log_mask/g04_wa_auto_reply.php tests/log_mask/g05_bidal_summary.php tests/log_mask/g06_cashbook_reconcile.php tests/log_mask/g07_cash_carry_reminder.php tests/log_mask/g08_wa_watchdog.php tests/log_mask/g09_invoice_notify.php tests/log_mask/g10_quote_wa.php tests/log_mask/g11_quote_wa_receipt.php tests/log_mask/g12_webhook_events.php tests/log_mask/g13_webhook_quote.php tests/log_mask/g14_webhook_payment_delete.php tests/log_mask/g15_evo_sync.php tests/log_mask/g16_wa_sync.php tests/log_mask/g17_overdue_email.php tests/log_mask/g18_leads.php tests/log_mask/g19_lead_alerts.php tests/log_mask/g20_admin_forms.php tests/log_mask/g21_post_cashbook.php tests/log_mask/lines.php tests/log_mask/mutants_A.php tests/log_mask/mutants_B.php tests/log_mask/mutants_C.php tests/log_mask/mutants_D.php tests/log_mask/mutants_E.php tests/log_mask/mutants_F.php tests/log_mask/reader.php tests/log_mask/side_direct.php tests/test_log_mask.php"
-EXPECTED_CHANGED="SAFETY.md cron/bidal_summary.php cron/cash_carry_reminder.php cron/cashbook_reconcile.php cron/staff_ssp_report.php cron/wa_watchdog.php cron_evo_sync.php cron_invoice_notify.php cron_lead_alerts.php cron_leads.php cron_overdue_email.php cron_quote_wa.php cron_wa_sync.php evo_webhook.php includes/notify_actions.php includes/post/post_cashbook.php includes/post/post_kyc.php lib/PluginLog.php lib/QuotationService.php lib/WaAutoReplyService.php manifest.json tests/catalogue_direct/I_boundary.php tests/catalogue_direct/mutants_I.php tests/quote_agent_copy/J.php tests/quote_followup/M_logging.php tests/quote_followup/N_boundary.php tests/quote_followup/_lib.php tests/quote_followup/mutants_N.php tests/quote_from_ucrm/I_boundary.php tests/quote_from_ucrm/mutants_I.php tests/sales_followup_tool/TL_tool.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_cashbook_physical_list_mutants.php tests/test_catalogue_direct.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_quote_company.php tests/test_quote_company_mutants.php tests/test_quote_from_ucrm.php tools/sales_followup_report.php webhook.php"
+EXPECTED_CHANGED="SAFETY.md cron/bidal_summary.php cron/cash_carry_reminder.php cron/cashbook_reconcile.php cron/staff_ssp_report.php cron/wa_watchdog.php cron_evo_sync.php cron_invoice_notify.php cron_lead_alerts.php cron_leads.php cron_overdue_email.php cron_quote_wa.php cron_wa_sync.php evo_webhook.php includes/notify_actions.php includes/post/post_cashbook.php includes/post/post_kyc.php lib/PluginLog.php lib/QuotationService.php lib/WaAutoReplyService.php manifest.json tests/catalogue_direct/I_boundary.php tests/catalogue_direct/mutants_I.php tests/quote_agent_copy/J.php tests/quote_followup/M_logging.php tests/quote_followup/N_boundary.php tests/quote_followup/_lib.php tests/quote_followup/mutants_N.php tests/quote_from_ucrm/I_boundary.php tests/quote_from_ucrm/mutants_I.php tests/sales_followup_tool/TL_tool.php tests/test_bank_boundaries.php tests/test_cashbook_physical_list.php tests/test_cashbook_physical_list_mutants.php tests/test_catalogue_direct.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_quote_company.php tests/test_quote_company_mutants.php tests/test_quote_from_ucrm.php tests/test_quote_summary.php tools/sales_followup_report.php webhook.php"
 # 5.18.96 — the two of its tests the server runs under its own PHP, kept by 5.18.97 through 5.18.105 (which change
 # neither). The page tests (T2, T3) serve the plugin over HTTP and run only in the suites; the weakened copies (the
 # mutant driver) only there too; ECO Bank's tests, 5.18.98's (tests/test_cashbook_physical_list.php and its weakened
@@ -10908,9 +10909,9 @@ done
 M87_SHA="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$MIG87" 2>/dev/null | sha256sum | cut -c1-64)"
 [ "$M87_SHA" = "$MIG87_SHA256" ] || stop "the pin's $MIG87 is not the reviewed one production applied on 7 Oct (sha256 ${M87_SHA:0:16}…, reviewed ${MIG87_SHA256:0:16}…) — this script is for another build"
 # 5.18.98: every file of the delta by the sha256 pinned in this script (PIN_SHA256S) — the list is the delta exactly, its
-# 88 files and no other, the 43 it adds among them — and the 387 files of 5.18.104 this release must leave
+# 89 files and no other, the 43 it adds among them — and the 386 files of 5.18.104 this release must leave
 # as they are (PREV_KEPT_SHA256S) by theirs, in both release commits: what Q-G1 reads installed before anything changes,
-# Q-CA1 after the copy and RB after a rollback. 5.18.99: and every file it changes (45) by the sha256 5.18.104's
+# Q-CA1 after the copy and RB after a rollback. 5.18.99: and every file it changes (46) by the sha256 5.18.104's
 # release commit (994d660) gives it (PREV_CHANGED_SHA256S; an added file has no such form, and is refused there) —
 # what Q-G1 requires installed before anything changes, and RB after a rollback.
 PS_BAD=""; PS_N=0
@@ -11143,8 +11144,8 @@ if [ "$MODE" = "deploy" ]; then
 fi
 # Q-G1 — 5.18.99 (SPEC-quote-company §6; 5.18.98's G1, carried): the live plugin is 5.18.104 — the container's record and
 # the manifest say so above, and (a deploy) BR1 has read every file 994d660 tracks — and, by the sha256 THIS SCRIPT pins
-# for each (not only Git's), every file 5.18.105 changes (45: webhook.php and evo_webhook.php among them) is 5.18.104's
-# as installed (PREV_CHANGED_SHA256S), and every file 5.18.104 has that 5.18.105 must not touch (387, PREV_KEPT_SHA256S):
+# for each (not only Git's), every file 5.18.105 changes (46: webhook.php and evo_webhook.php among them) is 5.18.104's
+# as installed (PREV_CHANGED_SHA256S), and every file 5.18.104 has that 5.18.105 must not touch (386, PREV_KEPT_SHA256S):
 # ECO Bank's module, its link on the CEO page (BK3 reads the one in navigation.php),
 # the More menu, the styles, the Cashbook's list split, the cash-in-hand tool, the files the quoting
 # code reads and 5.18.99's quoting files that 5.18.105 keeps (QuoteTaxLine and TenantProfile;
@@ -14033,7 +14034,7 @@ hdr "RB. $BASELINE_VERSION, back in place (read-only)"
 IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
 [ "$IV" = "$BASELINE_VERSION" ] && ok "RB the installed manifest says $IV" || bad "RB the installed manifest says ${IV:-?}, expected $BASELINE_VERSION"
 RB_REF=""
-# 5.18.105's change is gone (below: 5.18.104's files by sha256 where 5.18.105 changed them (45) and the 387 it keeps
+# 5.18.105's change is gone (below: 5.18.104's files by sha256 where 5.18.105 changed them (46) and the 386 it keeps
 # by theirs; the 43 files it adds left on disk and reached by nothing, QC-RB1; every ladder key as before, RB105;
 # the uCRM catalogue's table, 5.18.103's own, counted and read by it again, QC-RB1; the web-direct applications with no
 # quotation counted again, QC-RB2, their ids on the sheet, a record; 5.18.101's sign-off, unchanged, 5.18.100's owner
@@ -14214,7 +14215,7 @@ else
 fi
 note "RB run the quarantine's --check next, its own command (printed at the end, with its own log): it is the authority on the kept file, and it measures what this script does not — whether a process holds it"
 # 5.18.105's files are 5.18.104's again, each byte for byte — by Git's sha256 and by the one THIS SCRIPT pins for each
-# (PREV_CHANGED_SHA256S, Q-G1's set read again: 45) — and the 43 files it added stay on disk
+# (PREV_CHANGED_SHA256S, Q-G1's set read again: 46) — and the 43 files it added stay on disk
 # (deploy-hybrid.sh never deletes, nor can the by-hand put-back). Git's loop below passes over them, since 5.18.104 has
 # none of them; QC-RB1 (below) proves nothing in 5.18.104 reaches them. The files 5.18.105 adds, as they are on disk now —
 # counted here, before any line says how many: N_ADDED is Git's count of them, never the disk's; RB below, QC-RB1, RB's

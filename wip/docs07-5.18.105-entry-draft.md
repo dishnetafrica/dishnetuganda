@@ -1,3 +1,5 @@
+<!-- 14 Nov: the release was re-cut as 7835906 (f764699 kept as refs/keep/5.18.105-cut1; root docs/74 §S.1, §S.2 items 6-7,
+     §S.3). Every f764699, every 88/45/387 count and every test count below is to be revisited in the next round. -->
 <!-- DRAFT of the root docs/07 entry for 5.18.105, kept in the repository so that a container restart cannot lose it.
      The marks ⟦PENDING: …⟧ stand for results still to come: the rehearsal's record, the suite's two passes and the
      owner's word to push the release. It moves into docs/07-change-control.md when they are in. Until then root
