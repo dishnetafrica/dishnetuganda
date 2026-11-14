@@ -1623,6 +1623,14 @@ log ends at 10:19:34 UTC inside file 230 of 317 (15,127 checks passed up to ther
 files that fail in this container only). A cut pass does not count. The two passes are run again, and their results
 are recorded here and in root `docs/07` when they end. Pass A3 began on 14 Nov at 01:13:12 UTC.
 
+A restart cut pass A3 as well: its log stops at 05:20:21 UTC inside the same file, 230 of 317
+(`test_quote_from_ucrm.php`), with 229 files done: 15,126 checks passed and 5 failed. Four of the five are in three
+of the four files that fail in this container only. The fifth is one check of `test_quote_followup.php` (767 passed,
+1 failed), which read 768 and 0 in pass A2; it is described here when it has been measured. The pass was resumed at
+05:32:10 UTC from the start of the file that was cut, by `tests/run.sh`'s own loop begun at that file: the same
+directory, the same order, one vault per file, the same frozen worktree. Its log carries a `RESUME` line. It is
+recorded as one pass in two pieces, not as an uninterrupted pass.
+
 ### S.4 The deploy script and its rehearsal
 
 - **`scripts/deploy-5.18.105.sh`** (14,744 lines, sha256 `c028cde545e042ba…`), pinned to `f764699`: derived from
