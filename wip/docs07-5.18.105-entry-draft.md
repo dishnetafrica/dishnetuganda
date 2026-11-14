@@ -3,7 +3,7 @@
      owner's word to push the release. It moves into docs/07-change-control.md when they are in. Until then root
      docs/74 §S is the record, and nothing here says the release is pushed or deployed: it is neither. -->
 
-## 8–13 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `f764699`, one commit on 5.18.104 (`994d660`), built; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: ⟦PENDING: both passes on `f764699` — files, passed, failed, and whether only the seven known container checks fail⟧; the rehearsal's record: ⟦PENDING: the record run — ok, failed, and which checks failed⟧; NOT deployed
+## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `f764699`, one commit on 5.18.104 (`994d660`), built; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: ⟦PENDING: both passes on `f764699` — files, passed, failed, and whether only the seven known container checks fail⟧; the rehearsal's record: ⟦PENDING: the record run — ok, failed, and which checks failed⟧; NOT deployed
 
 **Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above). On 8 Nov: 5.18.104 deploys as
 built, and 5.18.105 masks the four older log lines that carry a phone number, ready before step 12 (`offers-live`) is
@@ -266,15 +266,15 @@ below.
   The header's dates for the ladder's steps, written on 9 Nov as a plan, were corrected with them.
 - **After trial 3:** two carried comments, never printed, still described the old world: the rollback's target as
   5.18.103, and QF-RB1's writes. Both were corrected in the derivation (`0214b50`). Nothing that runs changed.
-- **After the record run's first start** (below): four checks carried from 5.18.104's script still read a list through
+- **After the record run's first start** (below): four lines carried from 5.18.104's script still read a list through
   a pipe into a quiet `grep`: the report's headline (QF-N3), the doctor's two readings (QF-G2) and 090's verdict
   (VN-G7). Under `pipefail` such a pipeline can read "no match" although the line is there; the script's own header
   describes the hazard and forbids the form.
   - **What it could do:** the last three could turn a pass into a refusal at stage A, with nothing changed. The first
     could only print "could not be read" in a note. None could turn a fault into a pass.
   - **The fix** (`be8930c`): each now reads its variable as a here-string, which delivers the same bytes. The old form
-    and the new agree on 18 inputs. The derivation now refuses a script in which a quiet `grep` reads from a pipe;
-    with one of the four edits taken out it refuses and names the line.
+    and the new agree on 18 inputs. The derivation now refuses a script in which a quiet `grep` reads straight from a
+    pipe; with one of the four edits taken out it refuses and names the line.
 - ⟦PENDING: what the record run finds in the script, if anything⟧
 
 ### The rehearsal
@@ -282,10 +282,10 @@ below.
 **In short.** The rehearsal runs the real script in a sandbox, over a sales follow-up switched on through the real
 tool, as production has it. Three development trials ran on 13 Nov. The first two found two defects in the deploy
 script and two in the rehearsal itself, all fixed; the third was clean but for the three inherited checks. The record
-run's first start was cut after 20 minutes, by a fault of an older script that the chain replays; four lines of this
-script that shared the fault's form were corrected. Its second and third starts were cut by restarts of the
-container, after 8 and 71 minutes. A full trial of the final script from the chain's saved state (trial 5) was then
-clean but for the three inherited checks. The record run: ⟦PENDING: the record run, in one sentence⟧
+run's first start was stopped by hand after 20 minutes, because of a fault of an older script that the chain replays;
+four lines of this script that shared the fault's form were corrected. Its second and third starts were cut by
+restarts of the container, after 8 and 71 minutes. A full trial of the corrected script from the chain's saved state
+(trial 5) was then clean but for the three inherited checks. The record run: ⟦PENDING: the record run, in one sentence⟧
 
 It is `scripts/harness/deploy-5.18.105/rehearse.sh` (1,175 lines, sha256 `abfc59935858fbb1…`, as committed in
 `0214b50`) with two helpers: `rh105q.py`, the rehearsal's own reader, and `rh105-ref.php`, the release's own code as
@@ -359,27 +359,32 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
 - **Trial 3** (13 Nov, 20:28–21:43 UTC; the ladder walked; T2-a and T2-b fixed): **2,710 ok, 3 failed** — the three
   inherited checks alone. Every FAIL line in the script's own outputs was a weakened copy's or the planted sign-in
   fault's.
-- **The record run's first start** (13 Nov, 21:45–22:05 UTC, on `0214b50`) was stopped by hand in the 5.18.95 stage, at
-  380 ok and 1 failed. A run with a fourth failure cannot be the record. Its log is kept.
-  - **The failure was not this release's.** It was check 3s' of 5.18.95's rehearsal: 5.18.95's own script refused a
-    pin it had read correctly seconds before.
+- **The record run's first start** (13 Nov, 21:45–22:05 UTC, on `0214b50`) was stopped by hand at 380 ok and 1 failed,
+  early in the 5.18.96 stage. The failure was in the 5.18.95 stage, four minutes earlier. A run with a fourth failure
+  cannot be the record. Its log is kept.
+  - **The failure was not this release's.** It was check 3s' of 5.18.95's rehearsal, which runs a weakened copy of
+    5.18.95's script. On a line the copy keeps unchanged from the script, it refused a pin that the copy run before it
+    had read correctly two seconds earlier.
   - **The cause is the pipe hazard** (the script section, above), in the older script, which the chain runs as it
     was deployed. The shell writes a list one line at a time, the quiet `grep` stops at its first match, and a writer
-    cut off mid-list fails the whole pipeline. It takes an unlucky moment, likelier on a busy machine: two review
-    readers were working beside the run.
-  - **Shown directly:** with the writer slowed, the pipeline reads 141 where it should read 0. Tried 8,000 times
-    afterwards, idle and with the machine loaded, it did not happen again. It is rare.
-- **A short trial of the corrected script** (13 Nov, 22:14–22:21 UTC, on `be8930c`; stopped by hand after 105-c):
-  33 ok, 0 failed. `--check` read GO over both ladder states, with QF-G2 and VN-G7 ok and QF-N3's report printed.
+    cut off mid-list fails the whole pipeline. It takes an unlucky moment. Two review readers were working beside
+    the run; a busy machine may make such a moment likelier, but that was not measured.
+  - **Shown directly:** with the writer slowed, the pipeline reports a failure (status 141: the writer was cut off)
+    although the `grep` had found its line (status 0). Tried 8,000 times afterwards, idle and with the machine loaded,
+    it did not happen again. It is rare.
+- **Trial 4, a short trial of the corrected script** (13 Nov, 22:14–22:21 UTC, on `be8930c`; from the chain's saved
+  state, the ladder not walked, its two states taken from 5.18.104's own snapshots; stopped by hand after 105-c):
+  33 ok, 0 failed in 5.18.105's own sections. `--check` read GO over both ladder states, with QF-G2 and VN-G7 ok and
+  QF-N3's report printed.
 - **The record run's second start** (13 Nov, 22:22–22:30 UTC, on `be8930c`) was cut by a restart of the container, at
   148 ok and 0 failed. Nothing of the run's caused it, as far as can be seen. A cut run does not count.
 - **The record run's third start** (13 Nov, 22:34–23:45 UTC, on `be8930c`, nothing beside it) was cut by a second
   restart of the container, in the 5.18.98 stage, at 1,020 ok and 1 failed: the first of the three inherited checks
   (98-0). The 5.18.95 stage, where the first start had failed, passed whole.
-- **Trial 5** (13 Nov, 23:48 – 14 Nov, 01:12 UTC; from the chain's saved state, the ladder walked; the final script,
-  as committed in `be8930c`): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own sections read
-  153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six weakened copies and of the planted
-  sign-in fault, the same seven as in trial 3.
+- **Trial 5** (13 Nov, 23:48 – 14 Nov, 01:12 UTC; from the chain's saved state, the ladder walked; the corrected
+  script, as committed in `be8930c`): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own
+  sections read 153 ok, 0 failed. The script's outputs that hold a FAIL line are those of six weakened copies and of
+  the planted sign-in fault, the same seven as in trial 3.
 - **The record run**, the whole chain unrestored:
   ⟦PENDING: the record run — its times, its ok and failed counts, which checks failed; or that it could not be run⟧
 
@@ -446,11 +451,10 @@ its customer.
        cd /opt/dishnet && bash scripts/deploy-5.18.105.sh --after-only 2>&1 | ( umask 077; exec tee /root/dnb-5.18.105/after-$(date -u +%Y%m%dT%H%M%SZ).log )
 
    Expected: the verdict line `5.18.105 (after): PASSED.`; the rollback's block is printed after it, and is not to be
-   run. LM-ON reads the masked lines installed. LK-AO names the keys
-   changed since the deploy: none, unless you turned a step on in between. Each step that is on is judged by its own
-   check; a step that is off reads `OFF — not judged`. Then, on its own, the quarantine's `--check`, with the command in
-   step 0. Run `--after-only` again the next day after 15:00 UTC, once the evening WhatsApp has run on the new code,
-   and after each step of the ladder you turn on.
+   run. LM-ON reads the masked lines installed. LK-AO names the keys changed since the deploy: none, unless you turned
+   a step on in between. Each step that is on is judged by its own check; a step that is off reads `OFF — not judged`.
+   Then, on its own, the quarantine's `--check`, with the command in step 0. Run `--after-only` again the next day
+   after 15:00 UTC, once the evening WhatsApp has run on the new code, and after each step of the ladder you turn on.
 5. **Send back** the log file of each run, from the folder its command names: `check-…`, `deploy-…` and `after-…`
    under `/root/dnb-5.18.105/`, and the quarantine's under `/root/dnb-stray-quarantine/`. Never a copy of the terminal,
    and never the cash sheet.
@@ -505,8 +509,7 @@ A chase that is on gets a plain note: its STOPs write the number again, as they 
 **What it does.** It puts `994d660` back by the documented deploy, and nothing else: no switch tool, no off-hook, no
 put-back of rows or keys by hand. Then it checks the result (RB105): master is 5.18.104's, with the four jobs last;
 every ladder key in every place and the tool's `show` are as before, and no table's rows fell (LK-RB1); the open quote
-follow-ups
-and the running offers are counted, a note; the old lines are back (LM-RB1). The last line reads
+follow-ups and the running offers are counted, a note; the old lines are back (LM-RB1). The last line reads
 `5.18.105 (rollback): PASSED.`
 
 **What it leaves:**
