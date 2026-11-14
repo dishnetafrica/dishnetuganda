@@ -1629,7 +1629,13 @@ of the four files that fail in this container only. The fifth is one check of `t
 1 failed), which read 768 and 0 in pass A2; it is described here when it has been measured. The pass was resumed at
 05:32:10 UTC from the start of the file that was cut, by `tests/run.sh`'s own loop begun at that file: the same
 directory, the same order, one vault per file, the same frozen worktree. Its log carries a `RESUME` line. It is
-recorded as one pass in two pieces, not as an uninterrupted pass.
+recorded as one pass in pieces, not as an uninterrupted pass.
+
+A second restart cut the resumed piece: its log stops at 06:37:03 UTC, again inside `test_quote_from_ucrm.php`, which
+had then run 65 minutes without a failure. It was resumed in the same way at 06:53:40 UTC (a second `RESUME` line).
+Both cuts came 22 and 25 minutes after the last activity of the session that runs the suite; the container appears to
+be reclaimed when that session is idle. That is inferred from the times, not measured. From 06:53 UTC the session is
+kept active every nine minutes until the pass ends.
 
 ### S.4 The deploy script and its rehearsal
 
