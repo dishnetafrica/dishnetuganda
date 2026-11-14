@@ -1696,6 +1696,15 @@ recorded as one pass in two pieces, not as an uninterrupted pass.
     tried, the old form and the new agree on each. The derivation's last part now refuses a script in which a quiet
     `grep` reads straight from a pipe; with one of the four edits taken out it refuses and names the line. These
     are the script's edits 297 to 300.
+  - **The whole script was then read for the same hazard, with every kind of reader that can stop early** (14 Nov;
+    two readers working apart, one starting from the readers, the other from the places where a status is judged;
+    nothing was run). Both count 686 pipes in 474 pipelines. Where the script judges a pipeline's status (40
+    pipelines by one count, 42 by the other), the reader reads its input to the end: `sed` without `q`, `tr`, a
+    `grep` that counts or inverts, `xargs`, `tar`, `docker exec -i … cat`, an `awk` whose only `exit` is in `END`,
+    or `drained grep -q` (7 uses). The pipelines whose reader can stop early (58 `head` stages, 7 `grep -m1`, the
+    `awk`s that exit, 13 functions used as readers) give only text: nothing judges their status. No further line
+    of this kind was found, and the script is unchanged. That `tar` reads an archive from Git to its end (8 judged
+    pipelines) is known of `tar`, not measured here.
   - **Development trial 4, a short one, of the corrected script** (13 Nov, 22:14–22:21 UTC, on `be8930c`; from the
     chain's saved state, the ladder not walked, its two states taken from 5.18.104's own snapshots; stopped by hand
     after 105-c): 33 ok, 0 failed in 5.18.105's own sections. `--check` read GO over both ladder states, with QF-G2
