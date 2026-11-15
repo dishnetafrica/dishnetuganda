@@ -1550,8 +1550,8 @@ completed when the suite's second pass ends.
 
 - **Built:** `release/5.18.105` = **`7835906`**, one commit on 5.18.104 (`994d660`): 89 files, 43 added, 46 changed;
   4,175 insertions, 76 deletions. No migration and no setting. **Pushed on 15 Nov, 10:15 UTC, on the owner's word**
-  (*"Push now, deploy after B2"*). The development branch also keeps it as a patch (`wip/release-5.18.105.patch`, byte for byte
-  `git diff 994d660..7835906`), so a container restart cannot lose it.
+  (*"Push now, deploy after B2"*). The development branch also keeps it as a patch (`wip/release-5.18.105.patch`,
+  byte for byte `git diff 994d660..7835906`), so a container restart cannot lose it.
 - **Re-cut on 14 Nov.** The first cut, `f764699` (88 files; 4,131 insertions, 71 deletions), failed two checks of its
   own suite in pass A3 (§S.3): a boundary §H.1.24 missed (§S.2 item 6) and a control of 5.18.104's that the date had
   broken (§S.2 item 7). Both are fixed in four files, tests and `SAFETY.md` only, and the release is cut again as one
