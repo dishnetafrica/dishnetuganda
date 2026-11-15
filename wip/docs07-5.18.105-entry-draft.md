@@ -21,8 +21,8 @@ a section of its own.
    00:00 UTC.
 2. **The word to push `release/5.18.105`: given on 15 Nov** (*"Push now, deploy after B2"*). It was pushed at
    10:15 UTC. The `--check` may run now; the deploy waits for pass B2.
-3. **Run the deploy on the server.** A `--check` first is wise: it reads, refuses or passes, and changes nothing. Then
-   the deploy. Send back the log file, never a copy of the terminal.
+3. **Run the deploy on the server, after pass B2.** The `--check` has run: 15 Nov, 10:23:30 UTC, GO — 78 ok, 0 failed,
+   62 notes, nothing changed. Then the deploy. Send back the log file, never a copy of the terminal.
 4. **Run `--after-only`** at least 20 minutes after the copy, then the quarantine's own `--check`. Run `--after-only`
    once more the next day after 15:00 UTC.
 5. **Step 12 (`offers-live`) may follow once 5.18.105 serves and its `--after-only` has passed**, when its turn comes

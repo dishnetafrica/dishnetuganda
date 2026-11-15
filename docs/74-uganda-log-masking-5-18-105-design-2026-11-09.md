@@ -1841,6 +1841,9 @@ every one on the same line, `D03 --all: byte for byte 221c9dc's output`. Nothing
 
 - The suite's pass B2 (from Monday 16 Nov, 00:00 UTC), then root `docs/07`'s 5.18.105 entry with the deploy command
   and, in its own block, the rollback.
+- **The server's `--check` read GO** (15 Nov, 10:23:30 UTC, the checkout at `7e9a746`, the script's bytes unchanged
+  since `2a41c9d`): 78 ok, 0 failed, 62 notes; nothing was changed. LK-G1 found steps 1–3 on (report, ack, tracking)
+  and LK-ON read each PASS through the pin's tool on a copy; LM-G1 and LM-G2 ok; Z1 the live vault untouched.
 - **The owner's, then:** the deploy, after pass B2 (the word to push was given on 15 Nov, with the deploy to follow
   B2); its `--after-only`. Step 12, `offers-live`,
   waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
