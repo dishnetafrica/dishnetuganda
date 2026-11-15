@@ -280,3 +280,27 @@ weekday decide it.
 **Run on the final code, Sunday 15 November** (one PHP tree at a time; exit status 0 for each): section U 85 passed, 0
 failed; its 67 weakened copies all caught (152 passed, 0 failed); all of `test_quote_followup.php` 605 passed, 0 failed;
 section N's weakened copies 37 passed, 0 failed.
+
+**The affected files, rerun on the final code (r3, Sunday 15 November 22:17–23:22 UTC)**, one at a time, each with its
+own vault: 24 of 27 exit 0 (HK11 passed: Kampala was already Monday). Three exit 1, none of them 5.18.106's:
+
+- `tests/test_cashbook_physical_list.php` (5.18.98's): one control in section I, *the readers were run, and both the
+  maintenance and the daily-report reads hold cash and not-cash rows*, got `[true,["cash","noncash"],[],true]`. Its reader
+  (`PL_READER`) asks `date()` for *yesterday* inside the sandbox while the book's rows are dated in Kampala time, and
+  between 21:00 and 24:00 UTC Kampala's date is UTC's plus one, so the daily report reads a day the book holds no rows
+  for. **Shown, not inferred:** the same file on an unchanged checkout of 7835906 at 23:24 UTC failed the same control
+  with the same values (495 passed, 1 failed). On 5.18.106's tree it passed at 19:42 and 20:19 UTC (r1, r2), and in B1
+  it ran between 12:09 and 13:07 UTC (its 35th file) and passed. 5.18.106 changes only its version line. Recorded, not
+  changed here.
+- `tests/test_cashbook_physical_list_mutants.php`: its control runs the file above first and fails with it, so no copy
+  was judged. It is rerun in the suite passes.
+- `tests/test_migration_integrity.php`, *while the run that trimmed it is still recorded*: one of B1's seven
+  container-only failures on 7835906, unchanged.
+
+The reading rule for 5.18.105's B2 and for 5.18.106's suite passes: a failure of that control in a file that ran between
+21:00 and 24:00 UTC is the clock, not the release. B2 starts at 00:00 UTC, and B1 reached the file within 1 h 20 min of
+its start.
+
+**Committed** as `release/5.18.106` = `bf29cbd` (one commit on 7835906, 23 files, local only; not pushed without the
+operator's word). §J's order holds from here: the release suite twice after B2, then `deploy-5.18.106.sh`, its
+rehearsal, and the docs/07 entry.
