@@ -566,6 +566,97 @@ $niFail = (int)$q1("SELECT COUNT(*) FROM followups f WHERE f.closed_at IS NOT NU
                      AND EXISTS (SELECT 1 FROM followup_drafts d WHERE d.followup_id = f.id AND d.verdict = 'DO_NOT_SEND' AND $aiFail)", [$now]);
 $say("  of those closed not_interested, after an AI failure (the assistant unreachable, silent or unreadable): $niFail — those customers were not declined by anyone");
 
+// ── J. why the sender's front fails ─────────────────────────────────────────────────────────────────────────────
+// followup_send.php takes the 10 oldest approved drafts (ORDER BY decided_at); FollowUpService::recordFailure leaves a failed
+// one approved, so it is first again on the next pass. What a failure records is EvolutionApiService's error — "<message>
+// [HTTP <code> on POST /message/sendText/<instance>]" — or a phrase of the sender's own. Only the code and a fixed list of
+// message kinds are read: the text itself, which can name the instance (or a number, in a message Evolution wrote), is never
+// printed; anything outside the list is "other".
+$say('');
+$say('== J. Why the sender\'s front fails (its 10 places: the oldest approved drafts, tried first on every pass'
+    . ($ledgerMode === 'claim' ? ' — while the ledger claims, only the oldest per number is tried' : '') . ') ==');
+$failKind = function ($d): string {
+    $d = (string)$d;
+    $code = preg_match('/\[HTTP (\d{3}) on [A-Z]+ /', $d, $m) ? 'HTTP ' . $m[1] . ' ' : '';
+    $cut = strpos($d, ' [HTTP ');
+    $msg = $cut !== false ? substr($d, 0, $cut) : $d;
+    foreach ([
+        '/^Array$/'                                                   => 'a list from Evolution (its contents not kept)',
+        '/connection closed|not connected|disconnected/i'             => 'the number not connected, as Evolution said',
+        '/does not exist|^not found$/i'                               => 'not found, as Evolution said',
+        '/^bad request$/i'                                            => 'Bad Request',
+        '/^(unauthorized|forbidden)$/i'                               => 'not authorised',
+        '/^internal server error$/i'                                  => 'Internal Server Error',
+        '/^too many requests$|rate.?limit/i'                          => 'too many requests',
+        '/^Got an HTML page/'                                         => 'an HTML page, not the API',
+        '/^Evolution API is not configured$/'                         => 'Evolution not configured',
+        '/^(Not sent — no connection to Evolution|Connection failed)/' => 'no connection to Evolution',
+        '/^May have been sent — /'                                    => 'no answer from Evolution',
+        '/^the approved draft has no message$/'                       => 'the draft has no message',
+        '/^the send failed$/'                                         => 'no reason given',
+        '/^HTTP \d{3}$/'                                              => 'no message from Evolution',
+    ] as $re => $w) if (preg_match($re, $msg)) return $code . $w;
+    return $code . 'other';
+};
+// a number's shape, never the number: what sendText was given (followups.phone: FollowUpService::open stores it as
+// ContactOptOut::normalise leaves it, digits only — a hidden @lid id or a web chat's id among them, as digits)
+$shape = function ($p): string {
+    $p = (string)$p;
+    if ($p === '') return 'empty';
+    if (!preg_match('/^[0-9]+$/', $p)) return 'not only digits';
+    if (preg_match('/^256[0-9]{9}$/', $p)) return 'Ugandan (256 and nine digits)';
+    if ($p[0] === '0') return 'starting with 0 (no country code, or not a phone number)';
+    $n = strlen($p);
+    return $n < 10 ? 'fewer than ten digits' : ($n > 15 ? 'more than fifteen digits' : '10-15 digits, not 256 (another country, or not a phone number)');
+};
+$tally = function (array $m): string {   // most first, then by name: the same order on every run
+    uksort($m, function ($a, $b) use ($m) { return [$m[$b], (string)$a] <=> [$m[$a], (string)$b]; });
+    $p = []; foreach ($m as $k => $n) $p[] = "$k $n"; return $p === [] ? 'none' : implode(' · ', $p);
+};
+$lastMsg = $has('wa_conversations') && in_array('last_customer_at', $cols('wa_conversations'), true)
+    ? "COALESCE((SELECT c.last_customer_at FROM wa_conversations c WHERE c.id = f.conversation_id), f.last_customer_at)" : 'f.last_customer_at';
+$front10 = $qa("SELECT d.id, d.decided_at, f.id AS fid, f.phone, $lastMsg AS lm FROM followup_drafts d JOIN followups f ON f.id = d.followup_id
+                 WHERE d.status = 'approved' AND f.closed_at IS NULL$ENQ$notPaused ORDER BY d.decided_at LIMIT 10");
+$jFails = []; $jLatest = []; $jShape = []; $jFirst = null; $jLast = null; $jTotal = 0;
+$jAge = ['<3d' => 0, '3-7d' => 0, '7-30d' => 0, '>30d' => 0];
+foreach ($front10 as $x) {
+    $f = $qa("SELECT COUNT(*) n, MIN(created_at) a, MAX(created_at) b FROM followup_events
+               WHERE followup_id = ? AND event = 'failed' AND created_at >= ?", [(int)$x['fid'], (string)$x['decided_at']])[0];
+    $n = (int)$f['n']; $jFails[] = $n; $jTotal += $n;
+    if ($n > 0) {
+        if ($jFirst === null || (string)$f['a'] < $jFirst) $jFirst = (string)$f['a'];
+        if ($jLast === null || (string)$f['b'] > $jLast) $jLast = (string)$f['b'];
+        $k = $failKind($q1("SELECT detail FROM followup_events WHERE followup_id = ? AND event = 'failed' AND created_at >= ? ORDER BY id DESC LIMIT 1",
+                            [(int)$x['fid'], (string)$x['decided_at']]));
+    } else $k = 'never failed';
+    $jLatest[$k] = ($jLatest[$k] ?? 0) + 1;
+    $sh = $shape($x['phone']); $jShape[$sh] = ($jShape[$sh] ?? 0) + 1;
+    $age = ($x['lm'] !== null && ($t = strtotime((string)$x['lm'] . ' UTC')) !== false) ? ($nowTs - $t) / 86400 : null;
+    if ($age !== null) $jAge[$age < 3 ? '<3d' : ($age < 7 ? '3-7d' : ($age < 30 ? '7-30d' : '>30d'))]++;
+}
+if ($front10 === []) {
+    $say('  the sender\'s 10 places: none — no approved draft waits');
+} else {
+    $say('  the sender\'s 10 places: ' . count($front10) . " taken · failed since approval, each: fewest " . min($jFails) . ', most ' . max($jFails)
+        . " · in all $jTotal · the first failure " . $ago($jFirst) . ', the latest ' . $ago($jLast));
+    $say('  their latest failure, by kind: ' . $tally($jLatest));
+    $say('  their numbers, by shape: ' . $tally($jShape));
+    $say('  their customers\' last message: ' . implode(' ', array_map(function ($k, $n) { return "$k:$n"; }, array_keys($jAge), $jAge)));
+}
+$k7 = []; foreach ($qa("SELECT e.detail FROM followup_events e JOIN followups f ON f.id = e.followup_id
+                         WHERE e.event = 'failed' AND e.created_at >= datetime(?, '-7 days') AND e.created_at <= ?$ENQ ORDER BY e.id", [$now, $now]) as $x) {
+    $k = $failKind($x['detail']); $k7[$k] = ($k7[$k] ?? 0) + 1;
+}
+$say('  failed sends, 7 days, by kind (every enquiry draft): ' . $tally($k7));
+$qShape = []; foreach ($qa("SELECT f.phone FROM followup_drafts d JOIN followups f ON f.id = d.followup_id WHERE d.status = 'approved' AND f.closed_at IS NULL$ENQ") as $x) {
+    $sh = $shape($x['phone']); $qShape[$sh] = ($qShape[$sh] ?? 0) + 1;
+}
+$r = $qa("SELECT " . $bucket($lastMsg, ['<3d' => 72, '3-7d' => 168, '7-14d' => 336, '14-30d' => 720, '>30d' => null])
+       . " FROM followup_drafts d JOIN followups f ON f.id = d.followup_id WHERE d.status = 'approved' AND f.closed_at IS NULL$ENQ")[0];
+$say("  the real queue ($apOpen), by the customer's last message: " . $fmt($r) . ' · by number shape: ' . $tally($qShape));
+$say('  (a failure keeps only Evolution\'s short message and its code: a 400 Bad Request is, among other cases, its answer for a number not on WhatsApp)');
+$jTop = $jLatest; unset($jTop['never failed']); uksort($jTop, function ($a, $b) use ($jTop) { return [$jTop[$b], (string)$a] <=> [$jTop[$a], (string)$b]; });
+
 // ── the summary first ───────────────────────────────────────────────────────────────────────────────────────────
 $sum = [];
 $sum[] = '== Summary ==';
@@ -579,6 +670,9 @@ $sum[] = "  reopened by the scan for the same quiet spell, 7 days: $reopen7 of $
 $sum[] = "  open $open, due now $dueNow · the run's front: $jam";
 $sum[] = "  the Follow-ups screen: $scrClosed of its " . count($screen) . ' cards are on a closed follow-up · the front\'s waiting drafts not on the screen: ' . $hidden;
 $sum[] = "  approved and waiting to send: $apOpen (failed at least once: $apFailed) · " . ($inWindow ? 'inside' : 'OUTSIDE') . ' the sending window now';
+$sum[] = '  the sender\'s 10 places: ' . ($front10 === [] ? 'none' : count($front10) . " oldest approved drafts, failed $jTotal times since approval"
+       . ($jTop === [] ? ', none of them failed' : ' · their latest failure, most often: '
+          . implode(' and ', array_map(function ($k) use ($jTop) { return "$k ({$jTop[$k]})"; }, array_keys($jTop, reset($jTop), true)))));
 $sum[] = '  the last enquiry follow-up sent: ' . $ago(is_string($last) ? $last : null) . " · last 7 days: $s7";
 $sum[] = '  the assistant, 7 days: SEND ' . $v['SEND'] . ' · DO_NOT_SEND ' . $v['DO_NOT_SEND'] . ", of which AI failures $aiFail7 · closed not_interested after an AI failure in 14 days: $niFail";
 $sum[] = "  limits: followup_daily_cap $cap " . ($cap > 0 ? "(after $cap sends on a number today, UTC, the run judges none of its follow-ups)" : '(no cap)')

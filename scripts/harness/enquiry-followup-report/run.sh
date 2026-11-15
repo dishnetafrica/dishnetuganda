@@ -3,8 +3,8 @@
 # run.sh — the whole harness for scripts/enquiry-followup-report.{php,sh}, as root, from any folder:
 #
 #   1. the book (build.php, from 994d660's tree by git archive, at a fixed NOW so every count is exact);
-#   2. test.php — every line the report prints, in seventeen runs (R2, R1, R3-R17), privacy, read-only (with its
-#      control); then weaken.php — the 70 weakened copies of the report in copies.php, each caught for its named reason;
+#   2. test.php — every line the report prints, in eighteen runs (R2, R1, R3-R18), privacy, read-only (with its
+#      control); then weaken.php — the 82 weakened copies of the report in copies.php, each caught for its named reason;
 #   3. test-wrapper.sh — the wrapper end to end against a fake docker, ten scenarios; then weaken-wrapper.sh — 24
 #      weakened copies of the wrapper, each caught for its named reason.
 #

@@ -178,7 +178,9 @@ $ev->execute([$f6, 'evaluated', 'PLANT NAME 256771234567 — odd', 'system', $at
 $ev->execute([$f6, 'PLANT EVENT 256771234567', 'x', 'system', $at(-0.10)]);
 $ev->execute([$q10, 'evaluated', 'proceed — a quote row', 'system', $at(-0.09)]);       // a quote row's: never counted
 $ev->execute([$f0, 'evaluated', 'proceed — too old', 'system', $at(-8 * 24)]);           // older than 7 days: never counted
-$ev->execute([$f3, 'failed', 'PLANT evolution said no 256771234567', 'sender', $at(-0.95)]);   // S3's approved draft failed once
+$ev->execute([$f3, 'failed', 'PLANT evolution said no 256771234567', 'sender', $at(-0.95)]);   // S3's approved draft failed, three times:
+$ev->execute([$f3, 'failed', 'Connection Closed [HTTP 500 on POST /message/sendText/PLANTINSTSUP]', 'sender', $at(-0.9)]);    // the forms
+$ev->execute([$f3, 'failed', 'Bad Request [HTTP 400 on POST /message/sendText/PLANTINSTSUP]', 'sender', $at(-0.85)]);        // Evolution writes
 $ev->execute([$kb, 'evaluated', 'proceed — reopened', 'system', $at(-3 * 24 + 0.5)]);     // C-k's reopens, judged again
 $ev->execute([$kc, 'evaluated', 'close at escalation — reopened', 'system', $at(-2 * 24 + 0.5)]);
 

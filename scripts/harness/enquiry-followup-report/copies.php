@@ -280,4 +280,52 @@ A, "            );"]], 'R15 prints: followup_run: last start 24 h ago'],
     'W70 the admin page\'s time not read' => [[[<<<'A'
 if (is_file($pigFile) && is_readable($pigFile)) {
 A, 'if (false) {']], 'R15 does not print "THE RUN JUDGED NOTHING"'],
+    'W71 a failure printed as it was written' => [[[<<<'A'
+    ] as $re => $w) if (preg_match($re, $msg)) return $code . $w;
+    return $code . 'other';
+A, <<<'A'
+    ] as $re => $w) if (preg_match($re, $msg)) return $d;
+    return $d;
+A]], 'R2: no PLANT string'],
+    'W72 a failure\'s HTTP code not read' => [[[<<<'A'
+    $code = preg_match('/\[HTTP (\d{3}) on [A-Z]+ /', $d, $m) ? 'HTTP ' . $m[1] . ' ' : '';
+A, "    \$code = '';"]], 'R2 prints: their latest failure, by kind'],
+    'W73 a failure\'s message not cut before its HTTP part' => [[[<<<'A'
+    $msg = $cut !== false ? substr($d, 0, $cut) : $d;
+A, '    $msg = $d;']], 'R2 prints: failed sends, 7 days, by kind'],
+    'W74 a number printed instead of its shape' => [[[<<<'A'
+    return $n < 10 ? 'fewer than ten digits' : ($n > 15 ? 'more than fifteen digits' : '10-15 digits, not 256 (another country, or not a phone number)');
+A, '    return $p;']], 'R18: nothing needed the last mask'],
+    'W75 a failure before the draft\'s approval counted' => [[[<<<'A'
+               WHERE followup_id = ? AND event = 'failed' AND created_at >= ?", [(int)$x['fid'], (string)$x['decided_at']])[0];
+A, <<<'A'
+               WHERE followup_id = ? AND event = 'failed' AND ? <> ''", [(int)$x['fid'], (string)$x['decided_at']])[0];
+A]], 'R18 prints: the sender\'s 10 places: 2 taken'],
+    'W76 a paused number\'s draft taken as one of the sender\'s places' => [[[<<<'A'
+                 WHERE d.status = 'approved' AND f.closed_at IS NULL$ENQ$notPaused ORDER BY d.decided_at LIMIT 10");
+$jFails = [];
+A, <<<'A'
+                 WHERE d.status = 'approved' AND f.closed_at IS NULL$ENQ ORDER BY d.decided_at LIMIT 10");
+$jFails = [];
+A]], 'R2 prints: the sender\'s 10 places: 2 taken'],
+    'W77 the customer\'s last message read from the follow-up (as at its opening), not the conversation' => [[[<<<'A'
+    ? "COALESCE((SELECT c.last_customer_at FROM wa_conversations c WHERE c.id = f.conversation_id), f.last_customer_at)" : 'f.last_customer_at';
+A, "    ? 'f.last_customer_at' : 'f.last_customer_at';"]], 'R2 prints: the real queue (3), by the customer'],
+    'W78 the summary silent about the sender\'s places' => [[[<<<'A'
+$sum[] = '  the sender\'s 10 places: '
+A, "\$sum[] = '  (the sender) ' . ''; \$unused = '  the sender\\'s 10 places: '"]], 'R2 prints: the sender\'s 10 places: 2 oldest approved drafts'],
+    'W79 the latest failure taken as the first' => [[[<<<'A'
+        $k = $failKind($q1("SELECT detail FROM followup_events WHERE followup_id = ? AND event = 'failed' AND created_at >= ? ORDER BY id DESC LIMIT 1",
+A, <<<'A'
+        $k = $failKind($q1("SELECT detail FROM followup_events WHERE followup_id = ? AND event = 'failed' AND created_at >= ? ORDER BY id LIMIT 1",
+A]], 'R2 prints: their latest failure, by kind'],
+    'W80 a list from Evolution not told apart' => [[[<<<'A'
+        '/^Array$/'                                                   => 'a list from Evolution (its contents not kept)',
+A, '']], 'R18 prints: their latest failure, by kind'],
+    'W81 the claim-mode note missing from J\'s heading' => [[[<<<'A'
+    . ($ledgerMode === 'claim' ? ' — while the ledger claims, only the oldest per number is tried' : '') . ') ==');
+A, "    . ') ==');"]], 'R1 prints: == J. Why the sender'],
+    'W82 a tie reported as one kind "most often"' => [[[<<<'A'
+array_keys($jTop, reset($jTop), true)
+A, 'array_slice(array_keys($jTop), 0, 1)']], 'R18 prints: the sender\'s 10 places: 2 oldest approved drafts'],
 ];

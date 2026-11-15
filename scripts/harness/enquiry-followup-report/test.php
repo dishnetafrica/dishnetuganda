@@ -4,7 +4,7 @@ declare(strict_types=1);
  * test.php REPORT BUILD NOW — runs the report on copies of build.php's book and checks every line it prints.
  *
  * Exact lines, derived by hand from build.php's rows (S0-S11, B1-B49, X1-X7, C-a…C-i, the ledger rows, the book's
- * settings row, the opt-outs, the reopened C-k); every date in them is derived from NOW. Seventeen runs on the same book:
+ * settings row, the opt-outs, the reopened C-k); every date in them is derived from NOW. Eighteen runs on the same book:
  *   R2  root2 + data    the run limit 2, the cap 3, salesperson numbers followed up, the ledger recording
  *   R1  root1 + data1   the run limit 1, the cap 1, salesperson numbers HELD, a floor 4 days back, the ledger claiming,
  *                       its daily and hourly caps 2
@@ -24,6 +24,8 @@ declare(strict_types=1);
  *                       start 10 minutes back (R14)
  *   R15-R17 R6 with public.php's last admin-page run of master 5 s before the run's last start (that cycle stamped it, and
  *                       the job does nothing there: NOT ESTABLISHED, R15), an hour before it (R16), a minute after it (R17)
+ *   R18 R2 on a copy where the sender's two places hold other numbers' shapes (no country code; 15 digits not 256) and S4
+ *                       failed three ways since its approval, and once before it (section J)
  * Then: no PLANT, no phone number, no name and no secret in any output, and nothing that needed the last digit mask (the
  * report's own filters must hold first); the copy unchanged; a copy only another user can read (root's, 0444) reads
  * exactly as R2, with a control that that user's write is refused; and "changes on the copy: 0". Exit 0 only when all pass.
@@ -166,7 +168,7 @@ $expect($r2, 'R2', [
     '  the ledger, enquiry rows in 7 days: claim sent 4 · record sent 1',
     '  the ledger today (Kampala day ' . $klaDay . '), proactive automated messages per number against wa_send_daily_cap: a department number (or a moved one) #1 2/60 · sales-001 (seller) 2/60 · at the daily cap: 0 · at the hourly cap now: 0',
     '== H. What the jobs did, 7 days ==',
-    '  events: created 9 · drafted 9 · evaluated 7 · approved 6 · sent 2 · other 1 · closed 1 · failed 1',
+    '  events: created 9 · drafted 9 · evaluated 7 · approved 6 · failed 3 · sent 2 · other 1 · closed 1',
     '  the gate\'s answers ("evaluated"): defer at daily_cap 2 · proceed 2 · close at human_active 1 · other 1 · close at escalation 1',
     '  the assistant\'s verdicts (drafts written; a WAIT writes none): SEND 6 · DO_NOT_SEND 5 (ai_unreachable:1 ai_no_answer:1 ai_bad_answer:1 identity_uncertain:1 declined:1) · ESCALATE_TO_HUMAN 1 · WAIT 1 · other 1 — an AI failure closes the follow-up as not_interested',
     '  per UTC day, opened/judged/drafted/sent: ' . $md(-72 + 0.5) . ':0/1/0/0 ' . $md(-48 + 0.5) . ':0/1/0/0 ' . $md(-1) . ':9/5/9/2',
@@ -175,6 +177,17 @@ $expect($r2, 'R2', [
     '  opened per UTC day: ' . $md(-8 * 24) . ':1 ' . $md(-5 * 24) . ':1 ' . $md(-4 * 24) . ':1 ' . $md(-72) . ':11 ' . $md(-48) . ':10',
     '  closed, by reason: not_interested 8 · escalated 2 · other 3 · exhausted 1 · human_closed 1 · replied 1 · vetoed 1',
     '  of those closed not_interested, after an AI failure (the assistant unreachable, silent or unreadable): 3 — those customers were not declined by anyone',
+    // J: the 10 oldest approved (a paused number's left out): S3, failed three times since its approval 12 days back (the
+    // latest a Bad Request), and S4 on sales-001, never; S11 on the paused sales-002 is in the queue, not in the places
+    '== J. Why the sender\'s front fails (its 10 places: the oldest approved drafts, tried first on every pass) ==',
+    '  the sender\'s 10 places: 2 taken · failed since approval, each: fewest 0, most 3 · in all 3 · the first failure 57 min ago, the latest 51 min ago',
+    '  their latest failure, by kind: HTTP 400 Bad Request 1 · never failed 1',
+    '  their numbers, by shape: Ugandan (256 and nine digits) 2',
+    '  their customers\' last message: <3d:1 3-7d:0 7-30d:1 >30d:0',
+    '  failed sends, 7 days, by kind (every enquiry draft): HTTP 400 Bad Request 1 · HTTP 500 the number not connected, as Evolution said 1 · other 1',
+    '  the real queue (3), by the customer\'s last message: <3d:2 3-7d:0 7-14d:1 14-30d:0 >30d:0 · by number shape: Ugandan (256 and nine digits) 3',
+    '  (a failure keeps only Evolution\'s short message and its code: a 400 Bad Request is, among other cases, its answer for a number not on WhatsApp)',
+    '  the sender\'s 10 places: 2 oldest approved drafts, failed 3 times since approval · their latest failure, most often: HTTP 400 Bad Request (1)',
     '  changes on the copy: 0',
 ]);
 $ok($r2['same'], 'R2: the copy is byte for byte unchanged');
@@ -185,6 +198,8 @@ echo "-- R1: followup_run_limit 1, followup_daily_cap 1, salesperson numbers HEL
 $r1 = $run('root1', 'r1', false, 'data1');
 $ok($r1['rc'] === 0, 'R1 exits 0', "rc={$r1['rc']}\n{$r1['out']}");
 $expect($r1, 'R1', [
+    // the ledger claims (quote_chase_enabled on): the sender tries only the oldest per number, and J says so
+    '== J. Why the sender\'s front fails (its 10 places: the oldest approved drafts, tried first on every pass — while the ledger claims, only the oldest per number is tried) ==',
     '  the follow-up jobs run · automatic approval on · salesperson numbers HELD (never followed up automatically)',
     '  quiet conversations with no open follow-up (1-30 days): 14 — never followed up this quiet spell 2 · opened AGAIN by every scan 2 · on a held salesperson number 1 · before followup_not_before 3 · older than followup_max_age_hours 1',
     '  open 9, due now 5 · the run\'s front: JAMMED — every place the run takes holds a draft waiting for a person, so it judges no other follow-up; a place frees only when its follow-up is sent (that moves it on) or closed — Reject alone leaves it at the front, and the scan opens a closed one again unless the customer opted out (Not interested records one)',
@@ -361,6 +376,28 @@ $ok($r17['rc'] === 0, 'R17 exits 0', "rc={$r17['rc']}\n{$r17['out']}");
 $expect($r17, 'R17', [$r6line]);
 $absent($r17, 'R17', 'an admin page', 'that cycle came after the stamp');
 
+echo "-- R18: R2, the sender's places on other number shapes, S4 failing three ways since its approval and once before it\n";
+$s4 = "(SELECT id FROM followups WHERE closed_at IS NULL AND channel = 'sales-001' AND due_at = '" . $ts(0.75) . "')";
+// digits only, as FollowUpService::open stores a phone (ContactOptOut::normalise); never printed — the privacy checks below
+$r18 = $run('root2', 'r18', false, 'data', null, function (PDO $p) use ($one, $s3, $s4, $ts) {
+    $one($p, "UPDATE followups SET phone = '0700000103' WHERE id = $s3");           // no country code
+    $one($p, "UPDATE followups SET phone = '120363000000017' WHERE id = $s4");      // fifteen digits, not 256 (a hidden id's shape)
+    $ins = "INSERT INTO followup_events (followup_id, conversation_id, event, detail, actor, created_at) VALUES ($s4, NULL, 'failed', ?, 'sender', ?)";
+    $one($p, $ins, ['the approved draft has no message', $ts(-3 / 24)]);                                           // before S4's approval (2 h back)
+    $one($p, $ins, ['May have been sent — no answer from Evolution: timed out', $ts(-1.5 / 24)]);
+    $one($p, $ins, ['HTTP 503 [HTTP 503 on POST /message/sendText/PLANTINSTZQX]', $ts(-1.4 / 24)]);
+    $one($p, $ins, ['Array [HTTP 400 on POST /message/sendText/PLANTINSTZQX]', $ts(-1.3 / 24)]);   // a list Evolution sent, as requestUg keeps it
+});
+$ok($r18['rc'] === 0, 'R18 exits 0', "rc={$r18['rc']}\n{$r18['out']}");
+$expect($r18, 'R18', [
+    '  the sender\'s 10 places: 2 taken · failed since approval, each: fewest 3, most 3 · in all 6 · the first failure 1.5 h ago, the latest 51 min ago',
+    '  their latest failure, by kind: HTTP 400 Bad Request 1 · HTTP 400 a list from Evolution (its contents not kept) 1',
+    '  their numbers, by shape: 10-15 digits, not 256 (another country, or not a phone number) 1 · starting with 0 (no country code, or not a phone number) 1',
+    '  failed sends, 7 days, by kind (every enquiry draft): HTTP 400 Bad Request 1 · HTTP 400 a list from Evolution (its contents not kept) 1 · HTTP 500 the number not connected, as Evolution said 1 · HTTP 503 no message from Evolution 1 · no answer from Evolution 1 · other 1 · the draft has no message 1',
+    '  the real queue (3), by the customer\'s last message: <3d:2 3-7d:0 7-14d:1 14-30d:0 >30d:0 · by number shape: 10-15 digits, not 256 (another country, or not a phone number) 1 · Ugandan (256 and nine digits) 1 · starting with 0 (no country code, or not a phone number) 1',
+    '  the sender\'s 10 places: 2 oldest approved drafts, failed 6 times since approval · their latest failure, most often: HTTP 400 Bad Request (1) and HTTP 400 a list from Evolution (its contents not kept) (1)',
+]);
+
 // ── RO: read by another user, who cannot write the copy ────────────────────────────────────────────────────────
 echo "-- RO: the same copy, 0444 and root's, read by another user (uid 65534 when this runs as root)\n";
 $ro = $run('root2', 'ro', true);
@@ -379,7 +416,7 @@ if ($asRoot) chown($cdir, 0);
 
 // ── privacy, over every output ─────────────────────────────────────────────────────────────────────────────────
 echo "-- privacy\n";
-foreach (['R2' => $r2, 'R1' => $r1, 'R3' => $r3, 'R4' => $r4, 'R5' => $r5, 'R6' => $r6, 'R7' => $r7, 'R8' => $r8, 'R9' => $r9, 'R10' => $r10, 'R11' => $r11, 'R12' => $r12, 'R13' => $r13, 'R14' => $r14, 'R15' => $r15, 'R16' => $r16, 'R17' => $r17] as $tag => $r) {
+foreach (['R2' => $r2, 'R1' => $r1, 'R3' => $r3, 'R4' => $r4, 'R5' => $r5, 'R6' => $r6, 'R7' => $r7, 'R8' => $r8, 'R9' => $r9, 'R10' => $r10, 'R11' => $r11, 'R12' => $r12, 'R13' => $r13, 'R14' => $r14, 'R15' => $r15, 'R16' => $r16, 'R17' => $r17, 'R18' => $r18] as $tag => $r) {
     $text = $r['out'];
     $ok(stripos($text, 'PLANT') === false, "$tag: no PLANT string (names, instances, handsets, staff, messages, reasons, secrets, odd channel, event and reason)");
     $ok(preg_match('/[0-9]{9,}/', $text) !== 1, "$tag: no run of nine or more digits");
