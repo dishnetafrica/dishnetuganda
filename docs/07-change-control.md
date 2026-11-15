@@ -16749,6 +16749,13 @@ reminder set for 04:30 UTC on 10 Nov reached it on 13 Nov, so the commands for s
   - `on chase` (step 6) needs tracking on for 72 hours and Q1-ON at PASS, and steps 4 and 5 on or skipped: from 05:28
     UTC on 16 Nov, a Monday.
 
+**Step 3's check, 15 Nov 10:28:30 UTC** (from the terminal pasted; the log is
+`/root/dnb-sales/followup-20261115T102830Z.log` on the server): **`tracking: PASS`**, Q1-ON PASS, on the installed
+`994d660`: confirming 17, tracked 17, awaiting a run 0, evidence gone 0, ref conflicts 0, no phone 0, pending 0; owner
+sources channel 54, conversation lead 1, KYC salesperson 13, none 132; out-marks 17 on 13 Nov, 18 on 14 Nov and 2 on
+15 Nov by then. So step 4 (`on list`) may follow once the salespeople are told, then step 5, and step 6 from 05:28 UTC
+on 16 Nov.
+
 **A console script to switch a salesperson number on.** Asked for by the owner on 13 Nov (*"i need chrom script to
 enable sales number"*): `scripts/console/sales-number-on.console.js` (`9a4a77d`, sha256 `9624e44b89be7d86…`), pasted
 into Chrome's console on the plugin's WhatsApp AI page by a signed-in administrator. **Not yet run by the owner.**

@@ -526,9 +526,9 @@ were on are still on, and behave as under 5.18.104. Only their log lines carry n
 are 5.18.104's runbook, above, unchanged: the tool is 5.18.104's, byte for byte. Never run it while the deploy script
 runs.
 
-- **Where it stands on 13 Nov:** steps 1 (`report`) and 2 (`ack`) on since 9 Nov; step 3 (`tracking`) on since 13 Nov,
-  05:27:38 UTC; steps 4 and 5 from 14 Nov at the earliest; step 6 (`chase`) from 16 Nov at the earliest. Steps 1–6 do
-  not wait for 5.18.105. Where the ladder stands, read-only:
+- **Where it stands on 15 Nov:** steps 1 (`report`) and 2 (`ack`) on since 9 Nov; step 3 (`tracking`) on since 13 Nov,
+  05:27:38 UTC, its check PASS on 15 Nov at 10:28:30 UTC; steps 4 and 5 from 14 Nov at the earliest; step 6 (`chase`)
+  from 16 Nov at the earliest. Steps 1–6 do not wait for 5.18.105. Where the ladder stands, read-only:
 
       cd /opt/dishnet && bash scripts/sales-followup.sh show
 
