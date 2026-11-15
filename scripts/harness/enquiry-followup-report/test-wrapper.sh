@@ -11,6 +11,7 @@
 #   S3 a root-owned book                             S7 a book that is not a database (the trap still cleans up)
 #   S4 a report that is not the reviewed one         S8 the run's folder cannot be removed (it must be reported)
 #   S9 the book idle, with no WAL files (the empty ones a read leaves are reported)
+#   S10 whether the run's folder is gone cannot be checked (it must be reported, though the folder is gone)
 # and two static checks: the wrapper pins the report's sha256, and no key it copies is one of ConfigVault::VAULT_KEYS
 # at 994d660 — so the vault, which it never reads, could hold nothing the report needs. Exit 0 only when all pass.
 # WRAP_UNDER_TEST=<file> runs the scenarios on that copy of the wrapper instead (weaken-wrapper.sh uses it).
@@ -67,7 +68,7 @@ cmd="\$1"; shift
 case "\$cmd" in
   inspect) [ "\$1" = ucrm ] || { echo "Error: No such object: \$1" >&2; exit 1; }; printf '%s\n' "\$SB/mnt" ;;
   cp) [ "\${2%%:*}" = ucrm ] || { echo "Error: No such container" >&2; exit 1; }; d="\$(map "\${2#*:}")"
-      printf 'owner-at-cp %s\n' "\$(stat -c %u "\$(dirname "\$d")")" >> "\$SB/docker.log"; cp -r "\$1" "\$d" ;;
+      printf 'owner-at-cp %s\n' "\$(stat -c '%u %a' "\$(dirname "\$d")")" >> "\$SB/docker.log"; cp -r "\$1" "\$d" ;;
   exec)
     user=""; envs=()
     while :; do case "\$1" in -u) user="\$2"; shift 2 ;; -e) envs+=("\$(map "\$2")"); shift 2 ;; -i) shift ;; *) break ;; esac; done
@@ -75,9 +76,11 @@ case "\$cmd" in
     args=(); for a in "\$@"; do args+=("\$(map "\$a")"); done
     # what the report is given, kept for the test to read after the run's folder is gone
     for a in "\${args[@]}"; do case "\$a" in --data=*) d="\${a#--data=}"; mkdir -p "\$SB/seen"
-      for f in kyc_config.json config.json vault.json r/data/config.json; do [ -f "\$d/\$f" ] && cp "\$d/\$f" "\$SB/seen/\${f//\//_}"; done ;; esac; done
+      for f in kyc_config.json config.json vault.json r/data/config.json piggyback_last_run.txt; do [ -f "\$d/\$f" ] && cp "\$d/\$f" "\$SB/seen/\${f//\//_}"; done ;; esac; done
     # S8: the run's folder cannot be removed
     if [ "\${args[0]}" = rm ] && [ "\${FAKE_RM_FAIL:-}" = 1 ]; then exit 0; fi
+    # S10: a check whether the run's folder exists cannot run (docker exec fails, as with the container gone)
+    if [ "\${args[0]}" = test ] && [ "\${args[1]}" != -f ] && [ "\${FAKE_TEST_FAIL:-}" = 1 ]; then exit 1; fi
     pre=(); [ -n "\$user" ] && pre=(setpriv --reuid="\${user%%:*}" --regid="\${user##*:}" --clear-groups)
     cd "\$SB/ctmp" || exit 1
     exec "\${pre[@]}" env "\${envs[@]}" "\${args[@]}" ;;
@@ -127,11 +130,15 @@ common() {  # $1 the scenario's name
 for S in S1 S2; do
   echo "-- $S: the run ($([ $S = S1 ] && echo 'ucrm.json names the data folder' || echo 'no ucrm.json: the sibling folder'))"
   setup "$([ $S = S1 ] && echo ucrm || echo none)"
+  # the time public.php last ran master from an admin page: S1 a number (copied), S2 not one (never copied)
+  if [ $S = S1 ]; then echo 1700000000 > "$PDD/piggyback_last_run.txt"; else echo 'PLANT-PIGGY 2567712' > "$PDD/piggyback_last_run.txt"; fi
+  chown 1000:1000 "$PDD/piggyback_last_run.txt"; chmod 600 "$PDD/piggyback_last_run.txt"
   run
   check "$RC" 0 "$S: exits 0"
   has "$OUT" "== enquiry follow-up report — read-only — " "$S: the header"
   has "$OUT" "  installed       commit $COMMIT · the book owned by 1000:1000" "$S: the installed commit and the book's owner"
   has "$OUT" "the installed 2 the same bytes" "$S: both settings readers checked against Git and the installed bytes"
+  has "$OUT" "  code            scripts/enquiry-followup-report.php (sha256 $(sha256sum "$REP" | cut -c1-8)…);" "$S: the report's sha256 shown as 8 characters (never a run of nine digits, whatever the hash)"
   has "$OUT" "  copy            the book's consistent copy (VACUUM INTO, read-only), integrity_check ok" "$S: the copy"
   hasnt "$OUT" "no plugin process had it open" "$S: (its WAL was in use) no WAL note"
   has "$OUT" "  open 9, due now 5 · the run's front: partly blocked" "$S: the report's summary"
@@ -139,6 +146,7 @@ for S in S1 S2; do
       "$S: the settings, in PluginConfig's order through the cut copies (kyc_config.json's 3 over config.json's 9)"
   has "$OUT" "  the book's own settings row (master and the Follow-ups screen read it): master_budget_seconds 240" "$S: the book's settings row travels in the copy"
   has "$OUT" "  changes on the copy: 0" "$S: no change on the copy"
+  hasnt "$OUT" "WARNING" "$S: no warning (the run's folder was confirmed gone)"
   has "$OUT" "  exit 0 (0 done;" "$S: the report's exit"
   common "$S"
   check "$([ "$WALN" -gt 0 ] && echo frames)" "frames" "$S: the live book had frames in its WAL before the run (the control)"
@@ -152,7 +160,7 @@ for S in S1 S2; do
               /^exec ucrm sh -c chmod -R go-rwx "\$2" && chown -R "\$1" "\$2" _ 1000:1000 \/tmp\/dnb-enquiry-/{c=NR}
               /^exec -u 1000:1000 ucrm php -d display_errors=stderr -r/{d=NR} END{print (a && a<b && b<c && c<d) ? "in order" : a" "b" "c" "d}' "$SB/docker.log")" \
         "in order" "$S: root made and filled the folder, then handed it over, before the owner's first act in it"
-  check "$(grep -c '^owner-at-cp ' "$SB/docker.log") $(grep -c '^owner-at-cp 0$' "$SB/docker.log")" "2 2" "$S: the folder was still root's at each of root's copies into it"
+  check "$(grep -c '^owner-at-cp ' "$SB/docker.log") $(grep -c '^owner-at-cp 0 700$' "$SB/docker.log")" "2 2" "$S: the folder was still root's, mode 700, at each of root's copies into it"
   check "$(grep -cE 'dishnet-sudan\.vault|config_vault' "$SB/docker.log")" 0 "$S: the live vault is never named to the container"
   check "$(grep -c '^exec ucrm rm -rf /tmp/dnb-enquiry-' "$SB/docker.log")" 1 "$S: the folder removed once (the trap does not run again)"
   check "$(php -r 'echo implode(",", array_keys((array)json_decode((string)file_get_contents($argv[1]), true)));' "$SB/seen/kyc_config.json")" \
@@ -160,6 +168,8 @@ for S in S1 S2; do
         "$S: the copied kyc_config.json holds the follow-up keys only"
   check "$(cat "$SB/seen/r_data_config.json")" '{"followup_daily_cap":"9","followup_run_limit":"2"}' "$S: the copied code-root config.json, cut"
   check "$(cat "$SB/seen/vault.json")" '{"config":{}}' "$S: the copy's vault is empty"
+  if [ $S = S1 ]; then check "$(cat "$SB/seen/piggyback_last_run.txt" 2>/dev/null)" "1700000000" "S1: the admin page's time is copied, as the number it is"
+  else check "$([ -e "$SB/seen/piggyback_last_run.txt" ] && echo copied || echo absent)" "absent" "S2: an admin page's time that is not a number is not copied"; fi
   check "$(cat "$SB/seen/"* | grep -c -e PLANT -e api_key)" 0 "$S: no secret and no key name reached the run's folder"
 done
 
@@ -212,6 +222,13 @@ has "$OUT" "  the book        no plugin process had it open, so reading it left 
 check "$(stat -c '%s %u:%g' "$PDD/plugin.sqlite3-wal" 2>/dev/null)" "0 1000:1000" "S9: the WAL file left is empty and the plugin user's"
 check "$(sha256sum "$PDD/plugin.sqlite3" | cut -c1-64)" "$MAIN0" "S9: the book is byte for byte unchanged"
 common S9
+
+echo "-- S10: whether the run's folder is gone cannot be checked (docker exec fails)"
+setup ucrm; export FAKE_TEST_FAIL=1; run; unset FAKE_TEST_FAIL
+check "$RC" 0 "S10: the report itself ran (exit 0)"
+check "$(ls -A "$SB/ctmp" | grep -c '^dnb-enquiry-')" 0 "S10: (the control) the folder really is gone"
+has "$OUT" "  WARNING: the run's folder /tmp/dnb-enquiry-" "S10: the folder that could not be checked is reported"
+common S10
 
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

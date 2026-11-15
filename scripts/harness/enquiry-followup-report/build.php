@@ -69,6 +69,7 @@ $f0 = $open($conv('256700000100', 'sales', 16 * 24 + 24), -16 * 24, -17 * 24); $
 $f1 = $open($conv('256700000101', 'sales', 122), -98, -48); $draft($f1, 'SEND', -97);
 // S2 sales — due 52 h ago, a WAIT draft: nothing to approve
 $f2 = $open($conv('256700000102', 'sales', 76), -52, -48); $draft($f2, 'WAIT', -51);
+$pdo->prepare("UPDATE wa_conversations SET category = ? WHERE id = (SELECT conversation_id FROM followups WHERE id = ?)")->execute(["staff\n\x0B", $f2]);   // a colleague's, filed later (PHP's trim reads it as staff)
 // S3 support — due 13 days ago; approved by the assistant 12 days ago; the customer wrote again 11 days ago
 $c3 = $conv('256700000103', 'support', 14 * 24 + 2); $f3 = $open($c3, -13 * 24, -15 * 24); $d3 = $draft($f3, 'SEND', -12 * 24 - 1); $approve($d3, 'auto', -12 * 24);
 $pdo->prepare("UPDATE wa_conversations SET last_customer_at = ?, state = 'human_active' WHERE id = ?")->execute([$at(-11 * 24), (int)$c3['id']]);
@@ -136,13 +137,19 @@ $closedFu((int)$cg['id'], 'sales', -3.5 * 24, -3 * 24, -2 * 24, 'exhausted');
 $ch = $conv('256700000208', 'support', 2 * 24);                                // C-h followed up only before the last message
 $closedFu((int)$ch['id'], 'support', -6 * 24, -5 * 24, -4 * 24, 'replied');
 $ci = $conv('256700000209', 'sales', 2 * 24);                                  // C-i a colleague's conversation
-$pdo->prepare("UPDATE wa_conversations SET category = 'staff' WHERE id = ?")->execute([(int)$ci['id']]);
-$cj = $conv('256700000210', 'sales', 3 * 24);                                  // C-j closed this spell, then opted out: never reopened
-$closedFu((int)$cj['id'], 'sales', -3 * 24, -2 * 24, -2 * 24 + 1, 'not_interested', '256771555555');
-$pdo->exec("INSERT INTO contact_optouts (phone, channel, scope, reason, source, evidence, created_by) VALUES ('256771555555', '*', 'proactive', 'not_interested', 'admin', 'PLANT', 'staff:PLANT')");
+$pdo->prepare("UPDATE wa_conversations SET category = ? WHERE id = ?")->execute([" Staff\t\r\n", (int)$ci['id']]);   // PHP's trim and strtolower read it as staff
+$cj = $conv('256700000210', 'sales', 3 * 24);                                  // C-j closed this spell, then 'Not interested' (an opt-out)
+$closedFu((int)$cj['id'], 'sales', -3 * 24, -2 * 24, -2 * 24 + 1, 'not_interested', '256700000210');
+$optout = $pdo->prepare("INSERT INTO contact_optouts (phone, channel, scope, reason, source, evidence, created_by) VALUES (?, '*', 'proactive', ?, ?, 'PLANT', 'staff:PLANT')");
+$optout->execute(['256700000210', 'not_interested', 'admin']);
+$conv('256700000212', 'sales', 2 * 24);                                        // C-l typed STOP: an opt-out and no follow-up since
+$optout->execute(['256700000212', 'customer_request', 'keyword']);
+$conv('256771222222', 'sales', 2 * 24);                                        // C-m its phone's quotation is being chased (S10)
+$cn = $conv('256700000214', 'support', 2.5 * 24);                              // C-n closed this spell with an odd reason
+$closedFu((int)$cn['id'], 'support', -2.5 * 24, -2 * 24, -2 * 24 + 1, 'PLANT odd 256771234567', '256700000214');
 $ck = $conv('256700000211', 'sales', 5 * 24);                                  // C-k opened three times for one quiet spell
 $ka = $closedFu((int)$ck['id'], 'sales', -5 * 24, -4 * 24, -4 * 24 + 1, 'not_interested', '256771666666');
-$kb = $closedFu((int)$ck['id'], 'sales', -5 * 24, -3 * 24, -3 * 24 + 1, 'not_interested', '256771666666');
+$kb = $closedFu((int)$ck['id'], 'sales', -5 * 24, -3 * 24, -3 * 24 + 1, 'PLANT 256771234567 vetoed', '256771666666');   // an odd reason
 $kc = $closedFu((int)$ck['id'], 'sales', -5 * 24, -2 * 24, -2 * 24 + 1, 'escalated', '256771666666');
 
 // the send ledger: a seller's handset (matched through wa_channels) and a department's (no instance recorded: never named)
@@ -159,16 +166,17 @@ $led->execute(['i:plantdeptinst', 'enquiry', 'fu:PLANT6', 'record', $kla3, $at(-
 // the book's own settings row, as the store keeps it: master's budget, the screen's switch (off: it differs), a secret
 $store->save('kyc_config.json', ['master_budget_seconds' => 240, 'followup_enabled' => '0', 'evo_api_key' => 'PLANT-STORE-SECRET-256771234567']);
 
-// every event the service logged, an hour ago; and the gate's answers, as followup_run.php writes them
+// every event the service logged, an hour ago; and the gate's answers, as followup_run.php writes them — in the run's
+// last pass, which master stamped 10 minutes ago (master_schedule below)
 $pdo->prepare('UPDATE followup_events SET created_at = ?')->execute([$at(-1)]);
 $ev = $pdo->prepare('INSERT INTO followup_events (followup_id, conversation_id, event, detail, actor, created_at) VALUES (?, NULL, ?, ?, ?, ?)');
-$ev->execute([$f1, 'evaluated', 'defer at daily_cap — 3 of 3 sent on this channel today', 'system', $at(-0.9)]);
-$ev->execute([$f2, 'evaluated', 'defer at daily_cap — 3 of 3 sent on this channel today', 'system', $at(-0.8)]);
-$ev->execute([$f3, 'evaluated', 'proceed — ok', 'system', $at(-0.7)]);
-$ev->execute([$f4, 'evaluated', 'close at human_active — PLANT Nakato 256771234567', 'system', $at(-0.6)]);
-$ev->execute([$f6, 'evaluated', 'PLANT NAME 256771234567 — odd', 'system', $at(-0.5)]);
-$ev->execute([$f6, 'PLANT EVENT 256771234567', 'x', 'system', $at(-0.4)]);
-$ev->execute([$q10, 'evaluated', 'proceed — a quote row', 'system', $at(-0.3)]);       // a quote row's: never counted
+$ev->execute([$f1, 'evaluated', 'defer at daily_cap — 3 of 3 sent on this channel today', 'system', $at(-0.15)]);
+$ev->execute([$f2, 'evaluated', 'defer at daily_cap — 3 of 3 sent on this channel today', 'system', $at(-0.14)]);
+$ev->execute([$f3, 'evaluated', 'proceed — ok', 'system', $at(-0.13)]);
+$ev->execute([$f4, 'evaluated', 'close at human_active — PLANT Nakato 256771234567', 'system', $at(-0.12)]);
+$ev->execute([$f6, 'evaluated', 'PLANT NAME 256771234567 — odd', 'system', $at(-0.11)]);
+$ev->execute([$f6, 'PLANT EVENT 256771234567', 'x', 'system', $at(-0.10)]);
+$ev->execute([$q10, 'evaluated', 'proceed — a quote row', 'system', $at(-0.09)]);       // a quote row's: never counted
 $ev->execute([$f0, 'evaluated', 'proceed — too old', 'system', $at(-8 * 24)]);           // older than 7 days: never counted
 $ev->execute([$f3, 'failed', 'PLANT evolution said no 256771234567', 'sender', $at(-0.95)]);   // S3's approved draft failed once
 $ev->execute([$kb, 'evaluated', 'proceed — reopened', 'system', $at(-3 * 24 + 0.5)]);     // C-k's reopens, judged again
@@ -195,12 +203,21 @@ $kyc = [
 file_put_contents($out . '/data/kyc_config.json', json_encode($kyc));
 @mkdir($out . '/data1', 0700, true);
 file_put_contents($out . '/data1/kyc_config.json', json_encode(['followup_daily_cap' => '1', 'wa_followups_on_owned_numbers' => '0',
-    'followup_not_before' => $at(-4 * 24), 'quote_chase_enabled' => 'on', 'wa_send_daily_cap' => '2', 'wa_send_hourly_cap' => '2'] + $kyc));
+    'followup_not_before' => $at(-4 * 24), 'quote_chase_enabled' => 'on', 'wa_send_daily_cap' => '2', 'wa_send_hourly_cap' => '2',
+    'wa_send_hour_from' => '9', 'wa_send_hour_to' => '18'] + $kyc));
 @mkdir($out . '/data3', 0700, true);
 file_put_contents($out . '/data3/kyc_config.json', json_encode(['followup_enabled' => 'off', 'followup_daily_cap' => '0',
     'followup_not_before' => 'PLANT 256771234567', 'followup_auto_send' => 'no', 'followup_run_limit' => '-1'] + $kyc));
 @mkdir($out . '/data4', 0700, true);   // R5: the run limit 0, an empty scan limit, a ledger switch that is not exactly 'on'
-file_put_contents($out . '/data4/kyc_config.json', json_encode(['followup_run_limit' => '0', 'followup_scan_limit' => '', 'wa_send_ledger' => 'yes'] + $kyc));
+file_put_contents($out . '/data4/kyc_config.json', json_encode(['followup_run_limit' => '0', 'followup_scan_limit' => '', 'wa_send_ledger' => 'yes',
+    'followup_not_before' => '2026-01-0112'] + $kyc));   // not a written date (a digit run after the day): never printed as stored
+// R15-R17: data's settings, and the time public.php last ran master from an admin page (piggyback_last_run.txt), against
+// the run's last start the test sets a day after NOW: 5 s before it (that cycle's stamp), an hour before it, a minute after
+foreach (['data5' => -5, 'data6' => -3600, 'data7' => 60] as $dir => $off) {
+    @mkdir($out . "/$dir", 0700, true);
+    file_put_contents($out . "/$dir/kyc_config.json", json_encode($kyc));
+    file_put_contents($out . "/$dir/piggyback_last_run.txt", (string)($NOW + 86400 + $off));
+}
 foreach (['root2' => ['followup_run_limit' => '2', 'followup_daily_cap' => '9'], 'root1' => ['followup_run_limit' => '1']] as $dir => $cfg) {
     @mkdir($out . "/$dir/lib", 0700, true); @mkdir($out . "/$dir/data", 0700, true);
     copy($root . '/lib/PluginConfig.php', $out . "/$dir/lib/PluginConfig.php");

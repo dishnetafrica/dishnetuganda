@@ -73,7 +73,7 @@ A], [<<<'A'
 $changes = (int)$db->query('SELECT total_changes()')->fetchColumn();
 A, '$changes = 0;']], 'RO: a copy the reader cannot write reads exactly as R2'],
     'W14 followup_not_before printed as stored' => [[[<<<'A'
-($floorIsDate ? $notBefore : ($notBefore === '' ? 'unset' : 'set (unreadable)'))
+($floorIsDate ? $notBefore : ($notBefore === '' ? 'unset' : 'set, not a plain date (the scan compares it as text)'))
 A, '$notBefore']], 'R3: no PLANT string'],
     'W15 the gate\'s answer printed as stored' => [[[<<<'A'
     $head = preg_match('/^[a-z_]+( at [a-z0-9_]+)?$/', $head) ? $head : 'other';
@@ -119,7 +119,7 @@ A]], 'R2 prints: master: the newest job start'],
 AND NOT EXISTS (SELECT 1 FROM followups f WHERE f.conversation_id = c.id AND f.closed_at IS NULL)";
 A, <<<'A'
 AND NOT EXISTS (SELECT 1 FROM followups f WHERE f.conversation_id = c.id AND (f.closed_at IS NULL OR f.opened_at >= c.last_customer_at))";
-A]], 'R2 prints: 11 in all'],
+A]], 'R2 prints: 14 in all'],
     'W26 the ledger\'s handset printed' => [[[<<<'A'
 $l = isset($handsetChan[$h]) ? implode('+', array_map($label, $handsetChan[$h])) : 'a department number (or a moved one) #' . (++$k);
 A, '$l = $h;']], 'R2: no PLANT string'],
@@ -156,7 +156,7 @@ A, "\$ledgerOn = \$bool('wa_send_ledger');"]], 'R5 prints: the send ledger: off'
 $floorEff = ($notBefore !== '' && $notBefore > $ageFloor) ? $notBefore : null;
 A, <<<'A'
 $floorEff = (preg_match('/^\d{4}-/', $notBefore) && $notBefore > $ageFloor) ? $notBefore : null;
-A]], 'R3 prints: 11 in all'],
+A]], 'R3 prints: 14 in all'],
     'W36 the sender\'s closes counted twice (not in its order)' => [[[<<<'A'
 WHEN c.id IS NOT NULL AND NOT ($ha) AND c.last_customer_at
 A, 'WHEN c.id IS NOT NULL AND c.last_customer_at']], 'R2 prints: in the real queue, the sender will CLOSE'],
@@ -172,18 +172,112 @@ A, 'AND p.id < f.id AND 0']], 'R2 prints: reopened by the scan for the same quie
     'W40 a conversation closed this quiet spell counted as never followed up' => [[[<<<'A'
                  WHEN $prev IS NOT NULL THEN 'reopened_each_scan'
 
-A, '']], 'R2 prints: 11 in all'],
+A, '']], 'R2 prints: 14 in all'],
     'W41 an opt-out not looked for' => [[[<<<'A'
-                 WHEN $prev IS NOT NULL AND $optSql THEN 'opted_out'
+                 WHEN $optSql THEN 'opted_out'
 
-A, '']], 'R2 prints: 11 in all'],
+A, '']], 'R2 prints: 14 in all'],
     'W42 rows the run closes first counted as blocking' => [[[<<<'A'
-    if ((int)$x['conv_ok'] === 0 || ($heldOwned && ($chanOwner[(string)$x['channel']] ?? '') === 'staff')) { $frontClosing++; continue; }
+    if ((int)$x['conv_ok'] !== 1 || ($heldOwned && ($chanOwner[(string)$x['channel']] ?? '') === 'staff')) { $frontClosing++; continue; }
 A, '']], 'R3 prints: the first 5 due'],
     'W43 a run that judged nothing not reported' => [[[<<<'A'
-if ($jobsRun && $dueNow > 0 && $ev24 === 0) {
-A, 'if (false) {']], 'R4 prints: THE RUN JUDGED NOTHING'],
+if ($jobsRun && $runLimit !== 0 && $stale > 0 && $evRun === 0) {
+A, 'if (false) {']], 'R6 prints: THE RUN JUDGED NOTHING'],
     'W44 a negative run limit read as a limit' => [[[<<<'A'
 $unlimited = $runLimit < 0;
 A, '$unlimited = false;']], 'R3 prints: followup_daily_cap 0 — no cap · followup_run_limit -1'],
+    'W45 a quotation being chased not looked for' => [[[<<<'A'
+                 WHEN $quoteSql THEN 'quotation_chased'
+
+A, '']], 'R2 prints: 14 in all'],
+    'W46 the opt-out looked for on the earlier follow-up only (not the conversation)' => [[[<<<'A'
+                 WHEN $optSql THEN 'opted_out'
+A, "                 WHEN \$prev IS NOT NULL AND \$optSql THEN 'opted_out'"]], 'R2 prints: 14 in all'],
+    'W47 the evidence window not bounded by the run\'s last start (any answer ever counts)' => [[[<<<'A'
+                        AND e.created_at >= ? AND e.created_at <= ?", [$runAt, $now]);
+A, <<<'A'
+                        AND ? <> '' AND e.created_at <= ?", [$runAt, $now]);
+A]], 'R14 prints: THE RUN JUDGED NOTHING'],
+    'W48 a jam reported as a silent run' => [[[<<<'A'
+if ($jobsRun && $runLimit !== 0 && $stale > 0 && $evRun === 0) {
+A, 'if ($jobsRun && $dueNow > 0 && $evRun === 0) {']], 'R4 does not print "THE RUN JUDGED NOTHING"'],
+    'W49 the ledger\'s own window not read' => [[[<<<'A'
+$ledgerFrom = $lset('wa_send_hour_from', 8);
+$ledgerTo = $lset('wa_send_hour_to', 20);
+A, "\$ledgerFrom = 8;\n\$ledgerTo = 20;"]], 'R7 prints: now Mon 18:00 Kampala'],
+    'W50 the ledger\'s own window not applied' => [[[<<<'A'
+if ($ledgerMode === 'claim') $inWindow = $inWindow && $inLedgerWindow;
+A, '']], 'R7 prints: now Mon 18:00 Kampala'],
+    'W51 the reopened ones\' close reasons printed as stored' => [[[<<<'A'
+    $m = []; foreach ($r as $x) { $w = $word($x['cr']); $m[$w] = ($m[$w] ?? 0) + (int)$x['n']; }
+    $say('  followed up and closed during this quiet spell
+A, <<<'A'
+    $m = []; foreach ($r as $x) { $w = (string)$x['cr']; $m[$w] = ($m[$w] ?? 0) + (int)$x['n']; }
+    $say('  followed up and closed during this quiet spell
+A]], 'R2: no PLANT string'],
+    'W52 the earlier close reasons of reopens printed as stored' => [[[<<<'A'
+$m = []; $reopen7 = 0; foreach ($r as $x) { $w = $word($x['cr']);
+A, '$m = []; $reopen7 = 0; foreach ($r as $x) { $w = (string)$x[\'cr\'];']], 'R2: no PLANT string'],
+    'W53 a colleague\'s row at the front counted as blocking' => [[[<<<'A'
+    if ((int)$x['conv_ok'] !== 1 ||
+A, "    if ((int)\$x['conv_ok'] === 0 ||"]], 'R3 prints: the first 5 due'],
+    'W54 a floor in the past (or not a date) said to block everything' => [[[<<<'A'
+$floorBlocksAll = $floorEff !== null && $floorEff > gmdate('Y-m-d H:i:s', $nowTs - 86400);
+A, '$floorBlocksAll = $floorEff !== null || ($notBefore !== \'\' && !$floorIsDate);']], 'R1 prints: followup_scan_limit 25 (default)'],
+    'W55 a person\'s decision after the run\'s last start not looked at' => [[[<<<'A'
+            && ($x['dec_at'] === null || (string)$x['dec_at'] < $runAt)) $stalePos[] = $i + 1;
+A, '            ) $stalePos[] = $i + 1;']], 'R8 does not print "THE RUN JUDGED NOTHING"'],
+    'W56 a row that fell due after the run\'s last start counted' => [[[<<<'A'
+    elseif ($runAt !== null && (string)$x['due_at'] < $runAt && (string)$x['opened_at'] < $runAt
+A, "    elseif (\$runAt !== null && (string)\$x['opened_at'] < \$runAt"]], 'R9 does not print "THE RUN JUDGED NOTHING"'],
+    'W57 a row opened after the run\'s last start counted' => [[[<<<'A'
+    elseif ($runAt !== null && (string)$x['due_at'] < $runAt && (string)$x['opened_at'] < $runAt
+A, "    elseif (\$runAt !== null && (string)\$x['due_at'] < \$runAt"]], 'R10 does not print "THE RUN JUDGED NOTHING"'],
+    'W58 a policy refusal not counted as the run having taken a row' => [[[<<<'A'
+WHERE (e.event = 'evaluated' OR e.actor = 'policy')
+A, "WHERE e.event = 'evaluated'"]], 'R11 does not print "THE RUN JUDGED NOTHING"'],
+    'W59 a floor with digits run on after the day printed as stored' => [[[<<<'A'
+$floorIsDate = (bool)preg_match('/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/', $notBefore);
+A, <<<'A'
+$floorIsDate = (bool)preg_match('/^\d{4}-\d{2}-\d{2}[ T]?\d{0,2}:?\d{0,2}:?\d{0,2}$/', $notBefore);
+A]], 'R5 prints: followup_scan_limit 0 (set but empty: the job reads 0)'],
+    'W60 the scan\'s colleague test (C) trims spaces only' => [[[<<<'A'
+"LOWER(TRIM(COALESCE(c.category, ''), char(32, 9, 10, 13, 11)))" : "''";
+A, <<<'A'
+"LOWER(TRIM(COALESCE(c.category, '')))" : "''";
+A]], 'R2 prints: 14 in all'],
+    'W61 the run\'s colleague test (E) trims spaces only' => [[[<<<'A'
+"LOWER(TRIM(COALESCE(c.category, ''), char(32, 9, 10, 13, 11))) = 'staff'"
+A, <<<'A'
+"LOWER(TRIM(COALESCE(c.category, ''))) = 'staff'"
+A]], 'R3 prints: the first 5 due'],
+    'W62 the run\'s last start not read (every due row counted)' => [[[<<<'A'
+$runAt = $runLr > 1 ? gmdate('Y-m-d H:i:s', $runLr) : null;
+A, "\$runAt = '9999-12-31 23:59:59';"]], 'R8 does not print "THE RUN JUDGED NOTHING"'],
+    'W63 a place freed ahead since the run\'s last start not taken from its reach' => [[[<<<'A'
+$reach = $unlimited ? PHP_INT_MAX : $runLimit - $leftFront;
+A, '$reach = $unlimited ? PHP_INT_MAX : $runLimit;']], 'R12 does not print "THE RUN JUDGED NOTHING"'],
+    'W64 the evidence read from the last 24 h, not since the run\'s last start' => [[[<<<'A'
+                        AND e.created_at >= ? AND e.created_at <= ?", [$runAt, $now]);
+A, <<<'A'
+                        AND e.created_at > datetime(?, '-1 day') AND e.created_at <= ?", [$now, $now]);
+A]], 'R13 does not print "THE RUN JUDGED NOTHING"'],
+    'W65 a follow-up sent since the run\'s last start not counted as freeing a place' => [[[<<<'A'
+WHERE e.event IN ('closed', 'opted_out', 'sent', 'skipped')
+A, "WHERE e.event IN ('closed', 'opted_out', 'skipped')"]], 'R12 does not print "THE RUN JUDGED NOTHING"'],
+    'W66 an admin page\'s stamp taken as a real pass by the detector' => [[[<<<'A'
+if ($jobsRun && $runLimit !== 0 && $stale > 0 && $evRun === 0 && $byPage($runLr)) {
+A, 'if (false) {']], 'R15 does not print "THE RUN JUDGED NOTHING"'],
+    'W67 any stamp within two hours of an admin page\'s run taken as that cycle\'s' => [[[<<<'A'
+$lr <= $pigTs + 120;
+A, '$lr <= $pigTs + 7200;']], 'R16 prints: THE RUN JUDGED NOTHING'],
+    'W68 a stamp before an admin page\'s run taken as that cycle\'s' => [[[<<<'A'
+$lr > 1 && $lr >= $pigTs && $lr <= $pigTs + 120;
+A, '$lr > 1 && $lr <= $pigTs + 120;']], 'R17 prints: THE RUN JUDGED NOTHING'],
+    'W69 section B silent about an admin page\'s stamp' => [[[<<<'A'
+            . ($byPage($lr) ? ' — an admin page\'s cycle (public.php), where the job does nothing: its last real pass is not recorded' : ''));
+A, "            );"]], 'R15 prints: followup_run: last start 24 h ago'],
+    'W70 the admin page\'s time not read' => [[[<<<'A'
+if (is_file($pigFile) && is_readable($pigFile)) {
+A, 'if (false) {']], 'R15 does not print "THE RUN JUDGED NOTHING"'],
 ];

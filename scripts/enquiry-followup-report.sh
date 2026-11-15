@@ -39,7 +39,7 @@ PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 REPORT="$HERE/enquiry-followup-report.php"
-REPORT_SHA256="380f5b5bb27acbcbf09c0ce428150ea2ac7c829c753c122bfa37bdf7e3b91a09"
+REPORT_SHA256="643201e64097833738c57a13256c48edf0385cb5d23e685a03012b4721b2b462"
 CODE_COMMIT_FULL="994d660628cc5b1b42bee648b44b58e389f44bf2"; CODE_BRANCH="release/5.18.104"
 CODE_SUMS="$(cat <<'SUMS'
 500d5643bec2b143b190b9d9c49ddd374a35554a652a9827870fe6991630a635  lib/PluginConfig.php
@@ -96,7 +96,7 @@ while read -r s f; do
 done <<< "$CODE_SUMS"
 [ -z "$BAD" ] || stop "these files are not the reviewed bytes the report was built against:$BAD"
 cp "$REPORT" "$HOSTW/report.php" && chmod -R a+rX "$HOSTW/r" "$HOSTW/report.php" || stop "the report could not be staged"
-echo "  code            scripts/enquiry-followup-report.php (sha256 ${REPORT_SHA256:0:16}…); lib/PluginConfig.php and lib/ConfigVault.php from Git at ${CODE_COMMIT_FULL:0:7}, the installed $N the same bytes"
+echo "  code            scripts/enquiry-followup-report.php (sha256 ${REPORT_SHA256:0:8}…); lib/PluginConfig.php and lib/ConfigVault.php from Git at ${CODE_COMMIT_FULL:0:7}, the installed $N the same bytes"
 
 # 3. the folder, the copy, the settings copies — as the book's owner
 docker exec "$CONTAINER" mkdir -m 700 "$W" </dev/null || stop "the run's folder could not be made in the container's /tmp"
@@ -128,6 +128,13 @@ COPY="$(docker exec -u "$OWNER" "$CONTAINER" php -d display_errors=stderr -r '
     foreach ([[$live . "/data/config.json", $w . "/r/data/config.json"], [$pdd . "/config.json", $w . "/config.json"], [$pdd . "/kyc_config.json", $w . "/kyc_config.json"]] as [$f, $t]) {
       if (!is_file($f) || !is_readable($f)) continue;
       file_put_contents($t, json_encode($cut(json_decode((string)file_get_contents($f), true)), JSON_FORCE_OBJECT)); @chmod($t, 0600);
+    }
+    // the time public.php last ran master from an admin page (one integer, nothing else is copied): the report tells
+    // that cycle, in which the follow-up jobs do nothing, from a real pass
+    $pg = $pdd . "/piggyback_last_run.txt";
+    if (is_file($pg) && is_readable($pg)) {
+      $v = trim((string)file_get_contents($pg, false, null, 0, 32));
+      if (preg_match("/^[0-9]{1,12}\$/", $v)) { file_put_contents($w . "/piggyback_last_run.txt", $v); @chmod($w . "/piggyback_last_run.txt", 0600); }
     }
     // the live vault is never read: none of the keys above is one of ConfigVault::VAULT_KEYS at 994d660 (the harness
     // asserts it), so the vault of the copy is empty and the vault, which holds credentials, is never opened

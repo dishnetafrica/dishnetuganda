@@ -192,7 +192,8 @@ $windowSay = 'now ' . $kla->format('D H:i') . ' Kampala: ' . ($inWindow ? 'INSID
 // every time stamp, so the scan then opens nothing at all
 $ageFloor = gmdate('Y-m-d H:i:s', $nowTs - (int)round($maxAge * 3600));
 $floorEff = ($notBefore !== '' && $notBefore > $ageFloor) ? $notBefore : null;
-$floorIsDate = (bool)preg_match('/^\d{4}-\d{2}-\d{2}[ T]?\d{0,2}:?\d{0,2}:?\d{0,2}$/', $notBefore);
+$floorIsDate = (bool)preg_match('/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/', $notBefore);   // only these forms print as stored
+$floorBlocksAll = $floorEff !== null && $floorEff > gmdate('Y-m-d H:i:s', $nowTs - 86400);   // later than any quiet conversation
 
 $say('== A. The settings, as each follow-up job reads them ==');
 $say('  followup_enabled: the four follow-up jobs ' . ($jobsRun ? 'RUN' : 'DO NOT RUN')
@@ -206,8 +207,8 @@ $say("  followup_daily_cap $cap" . $mark('followup_daily_cap') . ' — ' . ($cap
     . " · followup_run_limit $runLimit" . $mark('followup_run_limit') . ' — ' . ($unlimited ? 'below 0: the run takes EVERY due follow-up each pass (every 10 min)' : ($runLimit === 0 ? 'the run takes NO follow-up' : 'follow-ups judged per run (every 10 min)')));
 $say("  followup_scan_limit $scanLimit" . $mark('followup_scan_limit') . ' — opened per scan (every 10 min) · followup_max_age_hours ' . (0 + $maxAge) . $mark('followup_max_age_hours')
     . ' — older quiet conversations are never opened · followup_not_before '
-    . ($floorIsDate ? $notBefore : ($notBefore === '' ? 'unset' : 'set (unreadable)'))
-    . ($floorEff !== null && !$floorIsDate ? ' — the scan compares it as text, so it opens NO conversation at all' : ''));
+    . ($floorIsDate ? $notBefore : ($notBefore === '' ? 'unset' : 'set, not a plain date (the scan compares it as text)'))
+    . ($floorBlocksAll ? ' — later than any quiet conversation can be, so the scan opens NO conversation at all' : ''));
 $say('  the send ledger: ' . ($ledgerMode === 'off' ? 'off — enquiry sends are neither recorded nor paced'
     : ($ledgerMode === 'record' ? 'on, RECORD — each enquiry send is written after it goes; not paced'
     : "on, CLAIM — each enquiry send asks first: per number at most $ledgerDayCap proactive automated messages a Kampala day (quotes and staff lists reserve their share first) and $ledgerHourCap an hour, spaced, one per customer a day, inside " . sprintf('%02d:00-%02d:00', $ledgerFrom, $ledgerTo))));
@@ -224,6 +225,14 @@ if ($has('master_schedule')) {
     $raw = $q1('SELECT data FROM master_schedule WHERE id = 0');
     if (is_string($raw)) { $d = json_decode($raw, true); if (is_array($d)) $sched = $d; }
 }
+// public.php runs master on an admin page load ("piggyback cron", at most every 5 minutes, after writing the time to
+// piggyback_last_run.txt in the data directory); master stamps each due job's last_run before including it, and the four
+// follow-up jobs return at once outside the command line (PHP_SAPI !== 'cli'). A stamp up to 120 s after that time is
+// such a cycle's: the job did nothing then.
+$pigTs = null;
+$pigFile = $opt['data'] . '/piggyback_last_run.txt';
+if (is_file($pigFile) && is_readable($pigFile)) { $v = trim((string)file_get_contents($pigFile, false, null, 0, 32)); if (preg_match('/^\d{1,12}$/', $v)) $pigTs = (int)$v; }
+$byPage = function (int $lr) use ($pigTs): bool { return $pigTs !== null && $lr > 1 && $lr >= $pigTs && $lr <= $pigTs + 120; };
 if ($sched === null) {
     $say('  master_schedule could not be read on the copy — NOT ESTABLISHED');
 } else {
@@ -238,7 +247,8 @@ if ($sched === null) {
         $r = is_array($sched[$job] ?? null) ? $sched[$job] : null;
         if ($r === null) { $say("  $job: no row — never run"); continue; }
         $lr = (int)($r['last_run'] ?? 0); $dur = (int)($r['duration_ms'] ?? 0);
-        $say("  $job: last start " . ($lr > 0 ? $ago(gmdate('Y-m-d H:i:s', $lr)) : 'never') . ' · ' . ($dur === -1 ? 'DID NOT FINISH' : "took {$dur} ms"));
+        $say("  $job: last start " . ($lr > 0 ? $ago(gmdate('Y-m-d H:i:s', $lr)) : 'never') . ' · ' . ($dur === -1 ? 'DID NOT FINISH' : "took {$dur} ms")
+            . ($byPage($lr) ? ' — an admin page\'s cycle (public.php), where the job does nothing: its last real pass is not recorded' : ''));
     }
 }
 
@@ -250,7 +260,8 @@ if (!$has('wa_conversations')) {
     $say('  the copy has no wa_conversations table — NOT ESTABLISHED');
 } else {
     $cc = $cols('wa_conversations');
-    $cat = in_array('category', $cc, true) ? "LOWER(TRIM(COALESCE(c.category, '')))" : "''";
+    // PHP's trim, as FollowUpPolicy and ColleagueNumbers (all but NUL: SQLite's TRIM stops reading its set at a NUL)
+    $cat = in_array('category', $cc, true) ? "LOWER(TRIM(COALESCE(c.category, ''), char(32, 9, 10, 13, 11)))" : "''";
     $stt = in_array('state', $cc, true) ? "COALESCE(c.state, '')" : "''";
     $sts = in_array('status', $cc, true) ? "COALESCE(c.status, 'active')" : "'active'";
     $floorSql = $floorEff !== null ? $db->quote($floorEff) : 'NULL';
@@ -259,8 +270,10 @@ if (!$has('wa_conversations')) {
     // the latest ENQUIRY follow-up closed during this quiet spell (opened after the customer's last message): the scan
     // does not look at it and opens a new one — unless the customer opted out (checked on that follow-up's own phone)
     $prev = "(SELECT f.id FROM followups f WHERE f.conversation_id = c.id AND f.closed_at IS NOT NULL AND f.opened_at >= c.last_customer_at$ENQ ORDER BY f.id DESC LIMIT 1)";
+    // ContactOptOut::blocks on the conversation's own phone, digits only (normalise()), as followup_scan.php asks it
+    $digits = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.phone, ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')";
     $optSql = $has('contact_optouts')
-        ? "EXISTS (SELECT 1 FROM contact_optouts o JOIN followups pf ON pf.id = $prev WHERE o.active = 1 AND o.phone = pf.phone AND (o.channel = '*' OR o.channel = c.channel))" : '0';
+        ? "EXISTS (SELECT 1 FROM contact_optouts o WHERE o.active = 1 AND o.phone = $digits AND (o.channel = '*' OR o.channel = c.channel))" : '0';
     $quoteSql = $kindCol ? "EXISTS (SELECT 1 FROM followups q WHERE q.kind = 'quote' AND q.phone = c.phone AND (q.closed_at IS NULL OR q.closed_at > c.last_customer_at))" : '0';
     $why = "CASE WHEN $cat = 'staff' THEN 'colleague'
                  WHEN $sts <> 'active' THEN 'not_active'
@@ -269,7 +282,7 @@ if (!$has('wa_conversations')) {
                  WHEN c.last_customer_at < " . $db->quote($ageFloor) . " THEN 'older_than_max_age'
                  WHEN $floorSql IS NOT NULL AND c.last_customer_at < $floorSql THEN 'before_not_before'
                  WHEN $quoteSql THEN 'quotation_chased'
-                 WHEN $prev IS NOT NULL AND $optSql THEN 'opted_out'
+                 WHEN $optSql THEN 'opted_out'
                  WHEN $prev IS NOT NULL THEN 'reopened_each_scan'
                  ELSE 'eligible_not_opened' END";
     // followup_scan.php's own rule: every conversation with no OPEN follow-up is a candidate
@@ -292,7 +305,7 @@ if (!$has('wa_conversations')) {
     if ($heldOwned) {
         $say('  held on a salesperson\'s own number, by number: ' . $byLabel($qa("SELECT c.channel, COUNT(*) n $base AND ($why) = 'salesperson_number_held' GROUP BY c.channel", [$now, $now])));
     }
-    $say('  (by these rules; the scan also leaves out an opted-out customer never followed up before, a colleague\'s or DishNet\'s own number, a number that may send nothing automated, and several customers on one number)');
+    $say('  (by these rules; the scan also leaves out a colleague\'s or DishNet\'s own number, a number that may send nothing automated, and several customers on one number)');
 }
 
 // ── D. the open enquiry follow-ups ──────────────────────────────────────────────────────────────────────────────
@@ -318,16 +331,26 @@ $say("  open with a draft waiting for a person: $wPend · open with an approved 
 // ── E. the run's front, and the Follow-ups screen ───────────────────────────────────────────────────────────────
 $say('');
 $say('== E. The run\'s front (what followup_run.php takes each run) and the Follow-ups screen ==');
-$convOk = $has('wa_conversations') ? "EXISTS (SELECT 1 FROM wa_conversations c WHERE c.id = f.conversation_id)" : '1';
-$front = $qa("SELECT f.id, f.channel, $convOk AS conv_ok,
+$hasCat = $has('wa_conversations') && in_array('category', $cols('wa_conversations'), true);
+$convOk = $has('wa_conversations')
+    ? "(SELECT CASE WHEN " . ($hasCat ? "LOWER(TRIM(COALESCE(c.category, ''), char(32, 9, 10, 13, 11))) = 'staff'" : '0') . " THEN 2 ELSE 1 END FROM wa_conversations c WHERE c.id = f.conversation_id)" : '1';
+$front = $qa("SELECT f.id, f.channel, f.due_at, f.opened_at, $convOk AS conv_ok,
+                     (SELECT MAX(d.decided_at) FROM followup_drafts d WHERE d.followup_id = f.id) AS dec_at,
                      (SELECT MIN(d.created_at) FROM followup_drafts d WHERE d.followup_id = f.id AND d.status = 'pending') AS pend_at,
                      (SELECT COUNT(*) FROM followup_drafts d WHERE d.followup_id = f.id AND d.status = 'approved') AS appr
                 FROM followups f WHERE f.closed_at IS NULL AND f.due_at IS NOT NULL AND f.due_at <= ?$ENQ ORDER BY f.due_at LIMIT ?", [$now, $runLimit]);
-$frontN = count($front); $frontPend = 0; $frontAppr = 0; $frontClosing = 0; $pendAts = [];
-foreach ($front as $x) {
+$frontN = count($front); $frontPend = 0; $frontAppr = 0; $frontClosing = 0; $stalePos = []; $pendAts = [];
+// master stamps a job's last_run at the start of its cycle; a row due, opened and last decided before then, awaiting no
+// person, was there for that pass to judge (a row put off by a paused number has its due_at moved past it; one a person
+// decided since waits for the next pass). Its place in today's front is kept: section H checks it was within that pass's reach.
+$runLr = ($sched !== null && is_array($sched['followup_run'] ?? null)) ? (int)($sched['followup_run']['last_run'] ?? 0) : 0;
+$runAt = $runLr > 1 ? gmdate('Y-m-d H:i:s', $runLr) : null;
+foreach ($front as $i => $x) {
     // followup_run.php closes these before it looks for a waiting draft: the conversation gone, a held salesperson number
-    if ((int)$x['conv_ok'] === 0 || ($heldOwned && ($chanOwner[(string)$x['channel']] ?? '') === 'staff')) { $frontClosing++; continue; }
+    if ((int)$x['conv_ok'] !== 1 || ($heldOwned && ($chanOwner[(string)$x['channel']] ?? '') === 'staff')) { $frontClosing++; continue; }
     if ($x['pend_at'] !== null) { $frontPend++; $pendAts[] = (string)$x['pend_at']; }
+    elseif ($runAt !== null && (string)$x['due_at'] < $runAt && (string)$x['opened_at'] < $runAt
+            && ($x['dec_at'] === null || (string)$x['dec_at'] < $runAt)) $stalePos[] = $i + 1;
     if ((int)$x['appr'] > 0) $frontAppr++;
 }
 $wide = $qa("SELECT (SELECT COUNT(*) FROM followup_drafts d WHERE d.followup_id = f.id AND d.status = 'pending') AS pend
@@ -335,12 +358,12 @@ $wide = $qa("SELECT (SELECT COUNT(*) FROM followup_drafts d WHERE d.followup_id 
 $widePend = 0; foreach ($wide as $x) if ((int)$x['pend'] > 0) $widePend++;
 if ($runLimit === 0) $jam = 'NOTHING JUDGED — followup_run_limit is 0, so the run takes no follow-up';
 elseif ($frontN === 0) $jam = 'nothing due';
-elseif ($frontPend === $frontN && !$unlimited && $frontN >= $runLimit) $jam = 'JAMMED — every place the run takes holds a draft waiting for a person, so it judges no other follow-up until each is moved on: Approve (the sender sends it) or Not interested (an opt-out); Reject alone leaves it at the front, and a closed one is opened again by the scan';
+elseif ($frontPend === $frontN && !$unlimited && $frontN >= $runLimit) $jam = 'JAMMED — every place the run takes holds a draft waiting for a person, so it judges no other follow-up; a place frees only when its follow-up is sent (that moves it on) or closed — Reject alone leaves it at the front, and the scan opens a closed one again unless the customer opted out (Not interested records one)';
 elseif ($frontPend === $frontN) $jam = 'not jammed — every due one waits for a person, but the run takes more than are due, so a newly due one is still judged';
 elseif ($frontPend > 0) $jam = 'partly blocked';
 else $jam = 'clear';
 $say("  the first $frontN due (followup_run_limit $runLimit" . ($unlimited ? ': every due one' : '') . "): $frontPend wait for a person · $frontAppr hold an approved, unsent draft"
-    . ($frontClosing > 0 ? " · $frontClosing the run closes first (the conversation gone, or a held salesperson number)" : '') . " — $jam");
+    . ($frontClosing > 0 ? " · $frontClosing the run closes first (the conversation gone, a colleague's, or a held salesperson number)" : '') . " — $jam");
 $say("  the first " . count($wide) . " due: $widePend wait for a person");
 $kindExpr = $kindCol ? "COALESCE(f.kind,'enquiry')" : "'enquiry'";
 $pendAll = (int)$q1("SELECT COUNT(*) FROM followup_drafts d JOIN followups f ON f.id = d.followup_id WHERE d.status = 'pending'");
@@ -511,9 +534,24 @@ $evAll = (int)$q1("SELECT COUNT(*) FROM followup_events e LEFT JOIN followups f 
                     AND e.created_at >= datetime(?, '-7 days')$evKind", [$now]);
 $say("  opened in 7 days: $opened7, of which REOPENED for the same quiet spell after an earlier one closed: $reopen7 — by how the earlier one closed: " . $joinMap($m)
     . " · opened 3 or more times for one quiet spell: $spells3 · the gate's answers spent on reopened ones: $evReopen of $evAll");
-$ev24 = (int)$q1("SELECT COUNT(*) FROM followup_events e WHERE e.event = 'evaluated' AND e.created_at > datetime(?, '-1 day') AND e.created_at <= ?", [$now, $now]);
-if ($jobsRun && $dueNow > 0 && $ev24 === 0) {
-    $say("  THE RUN JUDGED NOTHING in the last 24 h while $dueNow are due — its log says why (a missing AI key ends it before any judging)");
+// Did the run's last pass judge anything? What followup_run.php's loop writes for a row it may judge, since that pass
+// began: 'evaluated' (the gate asked), or a policy refusal (actor 'policy': 'skipped' when a paused number puts it off an
+// hour, 'closed' when final). A front row counts only if it was within that pass's reach: each enquiry follow-up sent
+// (moved on), closed, opted out or put off since may have held a place ahead of it, so it takes one place from the limit.
+// (A followup_run_limit raised since then is not visible here.)
+$evRun = 0; $leftFront = 0;
+if ($runAt !== null) {
+    $evRun = (int)$q1("SELECT COUNT(*) FROM followup_events e WHERE (e.event = 'evaluated' OR e.actor = 'policy')
+                        AND e.created_at >= ? AND e.created_at <= ?", [$runAt, $now]);
+    $leftFront = (int)$q1("SELECT COUNT(DISTINCT e.followup_id) FROM followup_events e JOIN followups f ON f.id = e.followup_id
+                            WHERE e.event IN ('closed', 'opted_out', 'sent', 'skipped') AND e.created_at >= ? AND e.created_at <= ?$ENQ", [$runAt, $now]);
+}
+$reach = $unlimited ? PHP_INT_MAX : $runLimit - $leftFront;
+$stale = 0; foreach ($stalePos as $pos) if ($pos <= $reach) $stale++;
+if ($jobsRun && $runLimit !== 0 && $stale > 0 && $evRun === 0 && $byPage($runLr)) {
+    $say("  whether the run's last pass judged anything is NOT ESTABLISHED: its last recorded start was an admin page's cycle, where it does nothing — run this again after its next pass");
+} elseif ($jobsRun && $runLimit !== 0 && $stale > 0 && $evRun === 0) {
+    $say("  THE RUN JUDGED NOTHING at its last start (" . $ago($runAt) . "), though $stale of the follow-ups it takes were then due, in its reach and awaiting no person — its log says why (a missing AI key ends it before any judging)");
 }
 
 // ── I. opened and closed, 14 days ───────────────────────────────────────────────────────────────────────────────
