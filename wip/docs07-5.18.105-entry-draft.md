@@ -1,10 +1,10 @@
 <!-- DRAFT of the root docs/07 entry for 5.18.105, kept in the repository so that a container restart cannot lose it.
-     The marks ⟦PENDING: …⟧ stand for results still to come: the rehearsal's record and a trial of the re-derived
-     script, the suite's two passes and the owner's word to push the release. It moves into docs/07-change-control.md
+     The marks ⟦PENDING: …⟧ stand for results still to come: the suite's pass B2 and the owner's word to push the
+     release. It moves into docs/07-change-control.md
      when they are in. Until then root docs/74 §S is the record, and nothing here says the release is pushed or
      deployed: it is neither. -->
 
-## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: ⟦PENDING: passes B1 and B2 on `7835906` — files, passed, failed, and whether only the seven known container checks fail⟧; the rehearsal's record: ⟦PENDING: the record run — ok, failed, and which checks failed⟧; NOT deployed
+## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: pass B1 317 files, 22,979 passed, 7 failed — the seven known container checks alone; ⟦PENDING: pass B2 — files, passed, failed, and whether only the same seven fail⟧; the rehearsal's record: 2,710 ok, 3 failed — the three inherited checks (98-0, 99-0, 100-0) alone; NOT deployed
 
 **Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above). On 8 Nov: 5.18.104 deploys as
 built, and 5.18.105 masks the four older log lines that carry a phone number, ready before step 12 (`offers-live`) is
@@ -18,8 +18,8 @@ the earliest. None of them waits for this release. Only step 12 waits.
 
 **What the owner does next, in order.** Each command is in this entry's runbook, in a block of its own; the rollback has
 a section of its own.
-1. **Nothing yet.** Three results are still missing: the suite's two passes, B1 and B2, and the rehearsal's record
-   run (both above), and a trial of the re-derived deploy script (The rehearsal, below).
+1. **Nothing yet.** One result is still missing: the suite's pass B2 (Tests, below), planned from Monday 16 Nov,
+   00:00 UTC.
 2. **Give the word to push `release/5.18.105`.** The branch is local only. The deploy fetches it from the remote, so it
    cannot run before the push.
 3. **Run the deploy on the server.** A `--check` first is wise: it reads, refuses or passes, and changes nothing. Then
@@ -318,7 +318,7 @@ below.
   - **The fix** (`be8930c`): each now reads its variable as a here-string, which delivers the same bytes. The old form
     and the new agree on 18 inputs. The derivation now refuses a script in which a quiet `grep` reads straight from a
     pipe; with one of the four edits taken out it refuses and names the line.
-- ⟦PENDING: what the record run finds in the script, if anything⟧
+- **The record run found nothing more in the script** (15 Nov): 5.18.105's own sections read 153 ok, 0 failed.
 
 ### The rehearsal
 
@@ -330,11 +330,11 @@ four lines of this script that shared the fault's form were corrected. Its secon
 restarts of the container, after 8 and 71 minutes. A full trial of the corrected script from the chain's saved state
 (trial 5) was then clean but for the three inherited checks; it ran the script derived on `f764699`. The re-derived
 script's own trial (trial 6) was clean too, once a first start, stopped by the size of the sandbox's clone, was put
-right. The record run: ⟦PENDING: the record run, in one sentence⟧
+right. The record run, the whole chain in one piece on 14–15 Nov, was clean but for the same three.
 
 It is `scripts/harness/deploy-5.18.105/rehearse.sh` (1,175 lines, sha256 `abfc59935858fbb1…`, as committed in
 `0214b50`) with two helpers: `rh105q.py`, the rehearsal's own reader, and `rh105-ref.php`, the release's own code as
-a reference. ⟦PENDING: whether the record run ran on these bytes⟧
+a reference. The record run ran on these bytes.
 
 **What it is chained on.** 5.18.104's rehearsal, read up to just before its last section, 104-10. The cut is asserted.
 That rehearsal builds every earlier sandbox the same way. At the cut, 5.18.103 is serving, 5.18.104's added files are on
@@ -432,16 +432,20 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
   weakened copies and of the planted sign-in fault, the same seven as in trial 3.
 - **Trial 6, of the script derived again on `7835906`** (14 Nov; sha256 `c70820cd69af899b…`, as committed in
   `2a41c9d`, the trial on `7bb7a3e`; from the chain's saved state, the ladder walked):
-  - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Every deploy script since 5.18.94
-    refused at A0: *this checkout writes commits in a short form of 8 characters*. The sandbox's clone held 16,421
+  - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Both deploy scripts it ran,
+    5.18.104's and 5.18.105's, refused at A0, each with 5.18.94's check: *this checkout writes commits in a short form
+    of 8 characters*. The sandbox's clone held 16,421
     packed objects, and from 16,384 Git writes its short commit ids with 8 characters. The check did its job. Two
     temporary branches were deleted here (kept under `refs/keep/`), and the trial's own runner, never committed, now
     sets `core.abbrev 7` on the clone if it writes 8 characters: the remedy the refusal prints. It did not have to in
     the second start (16,381 objects).
   - **Its second start** (18:17–19:47 UTC): **2,710 ok, 3 failed** — the three inherited checks alone. 5.18.105's own
     sections read 153 ok, 0 failed, as in trial 5.
-- **The record run**, the whole chain unrestored:
-  ⟦PENDING: the record run — its times, its ok and failed counts, which checks failed; or that it could not be run⟧
+- **The record run** (14 Nov, 19:53:46 – 15 Nov, 05:41:41 UTC, on `a7b52e7`, nothing beside it): the whole chain in
+  one piece, from 5.18.93's rehearsal to 5.18.105's, unrestored. **2,710 ok, 3 failed** — the three inherited checks
+  alone, 98-0, 99-0 and 100-0. The chain before 5.18.105's own sections read 2,557 ok and those three; 5.18.105's own
+  read 153 ok, 0 failed, as in trials 5 and 6. Its clone wrote the 7-character short form. No restart cut it, and its
+  last check found this checkout as the run had found it.
 
 ### Runbook
 
@@ -462,7 +466,7 @@ its customer.
      report's wrapper stops too, having changed nothing: it is pinned to `7835906`.
    - **The development branch carries the script and both wrappers.** The `--check` and deploy commands below pull
      it. Since `2a41c9d` (14 Nov) it holds `scripts/deploy-5.18.105.sh` at sha256 `c70820cd69af899b…`.
-     ⟦PENDING: the commit the record run ran on, and whether anything changed the script after it⟧
+     The record run ran on `a7b52e7`, with that script; nothing has changed it since.
    - **The quarantine's `--check` has PASSED since 5.18.104's copy.** It has: 9 Nov, begun 04:39:36 UTC. Stage A reads
      that record (A14). Run it again only if A14 asks for it, which it does after any later copy or rollback; it then
      prints this command. Never run it while a deploy, an `--after-only` or a rollback is running. Its own command:
@@ -473,10 +477,11 @@ its customer.
    switched. It writes only its own 0600 cash sheet and row digest. LK-G1's note names the steps that are on, and
    LM-G1 and LM-G2 read ok. It ends GO or NO-GO. A GO prints `5.18.105 (check): GO — stage A holds.` and then the deploy
    command, with a flag only where a check needed one (each flag is your explicit choice); with none, it is step 3's.
-   A NO-GO changed nothing: send the log file and stop. One NO-GO has a remedy of its own: if it says *this checkout
-   writes commits in a short form of 8 characters*, run the command it prints,
-   `git -C /opt/dishnet config core.abbrev 7`, then `--check` again. From 16,384 objects in a checkout Git writes its
-   short commit ids with 8 characters; a rehearsal's clone crossed that count on 14 Nov. Its own command:
+   A NO-GO changed nothing: send the log file and stop. One refusal has a remedy of its own: if it stops with *this
+   checkout writes commits in a short form of 8 characters*, run the command it prints,
+   `git -C /opt/dishnet config core.abbrev 7`, then `--check` again. From 16,384 packed objects in a checkout Git
+   writes its short commit ids with 8 characters; a rehearsal's clone crossed that count on 14 Nov. The `--check`
+   command:
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.105 && mkdir -p /root/dnb-5.18.105 && bash scripts/deploy-5.18.105.sh --check 2>&1 | ( umask 077; exec tee /root/dnb-5.18.105/check-$(date -u +%Y%m%dT%H%M%SZ).log )
 

@@ -1,6 +1,6 @@
 # 74 — Uganda: 5.18.105, no phone number in any log line (design, 9 Nov 2026)
 
-Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), local, not pushed; the suite's two passes and the rehearsal still to finish; NOT deployed (§S, 14 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
+Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), local, not pushed; rehearsed in full (§S.4); the suite's second pass still to run; NOT deployed (§S, 15 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
 
 - 5.18.105 masks **every** log line that can carry a phone number on Uganda (option B), not only the four lines of 5.18.104's known limit 13.
 - The chase (step 6) does not wait for 5.18.105. Offers-live (step 12) does.
@@ -1540,11 +1540,11 @@ The plan is sized for option B (gap 6). A step waits only for what it reads.
   - `post_kyc.php:269` and `post_cashbook.php:612` join B (the default, under ruling B);
   - South Sudan's copies of the same lines are masked too (the default: log text only, D7).
 
-## S. Status, 14 Nov 2026 — built and re-cut; the suite and the rehearsal still to finish; NOT deployed
+## S. Status, 15 Nov 2026 — built, re-cut and rehearsed; the suite's second pass still to run; NOT deployed
 
 This section records what was built. The design above stands as written on 9 Nov and is not rewritten. Where this
-section and §H disagree, this section records what was built. §S.3 and §S.4 are completed when the suite's two passes
-and the rehearsal's record run end.
+section and §H disagree, this section records what was built. §S.4 is complete since 15 Nov; §S.3 is
+completed when the suite's second pass ends.
 
 ### S.1 The release
 
@@ -1798,8 +1798,9 @@ with 5.18.104's pass B, every difference is a count 5.18.105's own tests and re-
     line are those of six weakened copies and of the planted sign-in fault, the same seven as in trial 3.
   - **Development trial 6, of the script derived again on `7835906`** (14 Nov; sha256 `c70820cd69af899b…`, as
     committed in `2a41c9d`, the trial on `7bb7a3e`; from the chain's saved state, the ladder walked):
-    - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Every deploy script since
-      5.18.94 refused at A0: *"this checkout writes commits in a short form of 8 characters"*. The sandbox's clone,
+    - **Its first start** (18:13–18:15 UTC) was stopped by hand at 30 ok and 25 failed. Both deploy scripts it ran,
+      5.18.104's and 5.18.105's, refused at A0, each with 5.18.94's check: *"this checkout writes commits in a short
+      form of 8 characters"*. The sandbox's clone,
       brought forward from the saved state, held 16,421 packed objects, and from 16,384 Git writes its short commit
       ids with 8 characters. The check did its job; nothing of 5.18.105's was at fault. Two temporary branches of
       this repository were deleted (kept under `refs/keep/`), and the trial's runner, which is never committed, now
@@ -1809,14 +1810,19 @@ with 5.18.104's pass B, every difference is a count 5.18.105's own tests and re-
       own sections read 153 ok, 0 failed, as in trial 5. Its sandbox was gone at the end.
   - **For the server:** production's checkout may cross the same count as the repository grows. If `--check` stops
     with that sentence, run the command it prints (`git -C /opt/dishnet config core.abbrev 7`), then `--check`
-    again. It stops before anything is changed. Root `docs/07`'s runbook says so.
-  - **Next:** the whole-chain record run, in one piece, overnight 14–15 Nov, nothing beside it. The result is
-    recorded here and in root `docs/07`.
+    again. It stops before anything is changed. The runbook of root `docs/07`'s 5.18.105 entry says so (its draft,
+    `wip/docs07-5.18.105-entry-draft.md`, step 1).
+  - **The record run** (14 Nov, 19:53:46 – 15 Nov, 05:41:41 UTC, on `a7b52e7`, nothing beside it): the whole chain
+    in one piece, from 5.18.93's rehearsal to 5.18.105's, unrestored; the script as committed in `2a41c9d` and the
+    rehearsal as committed in `0214b50`. **2,710 ok, 3 failed** — the three inherited checks alone, 98-0, 99-0 and
+    100-0. The chain before 5.18.105's own sections read 2,557 ok and those three; 5.18.105's own read 153 ok, 0
+    failed, as in trials 5 and 6. Its clone wrote the 7-character short form. No restart cut it, and its last check
+    found this checkout as the run had found it. **This is the rehearsal's record.**
 
 ### S.5 Next
 
-- The rehearsal's record run (overnight 14–15 Nov) and the suite's pass B2 (from Monday 16 Nov, 00:00 UTC), then root
-  `docs/07`'s 5.18.105 entry with the deploy command and, in its own block, the rollback.
+- The suite's pass B2 (from Monday 16 Nov, 00:00 UTC), then root `docs/07`'s 5.18.105 entry with the deploy command
+  and, in its own block, the rollback.
 - **The owner's, then:** the word to push `release/5.18.105`; the deploy; its `--after-only`. Step 12, `offers-live`,
   waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
 - **The owner's, separately:** the older faults of §S.2 item 3. The first two are in jobs that run on Uganda (LN-10's
