@@ -217,3 +217,51 @@ D/E), re-pointing H03 and H05 (wall-clock fixtures now older than 336 h) and G04
 QM26b still means something), new cases for F1–F5 with weakened copies, the suite twice, `deploy-5.18.106.sh` derived
 from 5.18.105's, a rehearsal chained on 5.18.105's, and the docs/07 entry. The read-only report is updated to mirror
 F3/F5's `due()` after the deploy.
+
+## K. The build (15 Nov 2026, before B2): what was measured, and where it departs from this design
+
+Built on `/home/user/b106` from 7835906, not yet committed (§J's order holds: the release suite and the deploy script
+come after B2). Every change below is in the release's `SAFETY.md` 5.18.106 section.
+
+**Measured — the scan (G8).** One scan query on synthetic books (conversations / quiet 1–14 days / follow-ups):
+
+| book | 5.18.105 | + F4 | + F4 + index |
+|---|---|---|---|
+| 8,000 / 800 / 6,000 | 0.37 s | 0.67 s | 0.48 s |
+| 15,000 / 1,500 / 10,000 | 0.97 s | 2.1 s | 0.86 s |
+| 30,000 / 3,000 / 20,000 | 3.6 s | 7.5 s | 3.8 s |
+
+F4 roughly doubles the scan; with `followups(conversation_id, last_customer_at)` it costs nothing. Not added: the scan
+runs once in ten minutes inside master's 300-second cycle, so at production's size F4 adds about a second to one read.
+5.18.104's quote clause already scans `followups` per candidate (by phone) — the pre-existing cost. Recorded as a known
+limit; the index is one migration if the scan is ever slow.
+
+**Departures, each from a review of the build (two read-only reviewers) or a failing test, each with its case:**
+
+1. **F1 counts a refusal only when the number delivered between it and the refusal before** (for the first, since the
+   approval) — not "a delivery after the first of them" (§C F1). As designed, an outage of three passes or more, then the
+   number's recovery, would have closed every follow-up the outage passes tried, untried while the number was up (review
+   R106-RT-1). `refusals()` and `channelDeliveredSince()` became one walk, `refusedWhileDelivering()`, which reads both
+   lists in time order and stops at three. U04b is the outage; U10 (a) the outage through the real sender.
+2. **F5's `due()` keeps a follow-up holding a pending draft** (G9 also named pending). `tests/test_staff_whatsapp.php`
+   (5.18.50's M1) failed: the run's colleague, gone and owned-number closes come before its own pending skip, and leaving
+   the row out of `due()` took them away. The run never drafts again behind a pending draft (it skips it), so only the
+   run's places were at stake; that stays as before, recorded as a limit. Approved and the current attempt's uncertain
+   drafts are still left out — the re-drafting this design found.
+3. **The sender never sends a draft whose attempt is taken** — a send recorded for it, or a sibling sent or settled
+   uncertain — and expires it (`enquiry_attempt_taken`). The after-send expiry alone left two gaps (review R106-RT-3): an
+   expiry that fails silently, and the may-have-been-sent path, which expires no sibling (5.18.54's case, G9's aim).
+4. **Close texts as §C wrote them**: F2 "the customer last wrote more than N hours ago"; F3 "the customer last wrote at
+   <time>, older than followup_max_age_hours N h"; N as configured, never truncated (review R106-RT-5).
+5. **Recorded, not changed:** a number that is down still holds the sender's ten places outside claim mode until F2/F3
+   expire its customers (review R106-RT-2; as before 5.18.106). F5 stays on under a misread limit (review R106-RT-4; G5
+   names F2 and F3 only).
+
+**Tests.** Section U of `tests/test_quote_followup.php` (`tests/quote_followup/U_unjam.php`): F1–F5 through the real crons,
+South Sudan beside each, the 5.18.106 boundary against 7835906 from Git (U20–U23: the declared list, every hunk marked,
+the held files, and the layer rebuilding 7835906 file for file), and the added runtime lines under the PHP 7.4 rules
+with no new setting (U24). `tests/quote_followup/mutants_U.php`: 59 weakened copies. `tests/fixtures/r106_revert.php` takes
+5.18.106 out before the 5.18.105 layer, so every older boundary still judges 7835906's tree. Found while running the
+affected files: `tests/test_wa_send_budget.php` HK11 fails on any Kampala Sunday, on 5.18.105 too — its claim moment is
+today at 10:00 and the ledger's window is closed on Sundays (`WaSendBudget::inWindow`); B1 ran on a Saturday and B2 runs
+on a Monday, so neither meets it. 5.18.104's test, recorded, not changed here.
