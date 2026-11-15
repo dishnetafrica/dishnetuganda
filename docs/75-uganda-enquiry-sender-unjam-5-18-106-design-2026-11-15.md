@@ -256,12 +256,27 @@ limit; the index is one migration if the scan is ever slow.
 5. **Recorded, not changed:** a number that is down still holds the sender's ten places outside claim mode until F2/F3
    expire its customers (review R106-RT-2; as before 5.18.106). F5 stays on under a misread limit (review R106-RT-4; G5
    names F2 and F3 only).
+6. **From the second review (of these fixes):** F1 places a delivery by `created_at` (when `storeMessage` stored it, UTC;
+   the only writer of `wa_messages`), never `sent_at` — the Inbox's media sends write `sent_at` in Kampala time
+   (`HumanTakeover::LOCAL_EVENTS`) and an import carries WhatsApp's own time, and either would put a delivery inside an
+   outage; `sent_at` only bounds the read to its index, a day early. Refusals stream in id order and deliveries are read
+   only when there is a refusal. The attempt check also reads `followup_sends` (`recordSend` writes it first, so a send
+   whose later bookkeeping failed still counts). Recorded, not changed: a number that flaps — down at each of three
+   passes, up between them — can still close a follow-up never tried while up; it needs an outage timed to every pass,
+   and F4 gives one second chance. Each with its case (U04c, U05b, U06c–e, U12b iv–v) and its weakened copy.
 
 **Tests.** Section U of `tests/test_quote_followup.php` (`tests/quote_followup/U_unjam.php`): F1–F5 through the real crons,
 South Sudan beside each, the 5.18.106 boundary against 7835906 from Git (U20–U23: the declared list, every hunk marked,
 the held files, and the layer rebuilding 7835906 file for file), and the added runtime lines under the PHP 7.4 rules
-with no new setting (U24). `tests/quote_followup/mutants_U.php`: 59 weakened copies. `tests/fixtures/r106_revert.php` takes
+with no new setting (U24). `tests/quote_followup/mutants_U.php`: 67 weakened copies. `tests/fixtures/r106_revert.php` takes
 5.18.106 out before the 5.18.105 layer, so every older boundary still judges 7835906's tree. Found while running the
 affected files: `tests/test_wa_send_budget.php` HK11 fails on any Kampala Sunday, on 5.18.105 too — its claim moment is
 today at 10:00 and the ledger's window is closed on Sundays (`WaSendBudget::inWindow`); B1 ran on a Saturday and B2 runs
-on a Monday, so neither meets it. 5.18.104's test, recorded, not changed here.
+on a Monday, so neither meets it. 5.18.104's test, recorded, not changed here. `tests/test_sales_followup_tool.php` CK12 failed the same way on Sunday 15 November at 20:28 UTC (*the fixture's claim was
+not ok: window*, its claim taken through the ledger on the real clock), on 5.18.106's tree; it passed in B1 on the Saturday.
+Not run on 5.18.105 on a Sunday, so its pre-existence is inferred from the refusal reason, not shown; the suite passes on a
+weekday decide it.
+
+**Run on the final code, Sunday 15 November** (one PHP tree at a time; exit status 0 for each): section U 85 passed, 0
+failed; its 67 weakened copies all caught (152 passed, 0 failed); all of `test_quote_followup.php` 605 passed, 0 failed;
+section N's weakened copies 37 passed, 0 failed.
