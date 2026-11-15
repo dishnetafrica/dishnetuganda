@@ -1672,8 +1672,8 @@ that fail in this container only (`test_install_authorisation` 379/2, `test_mail
 `test_migration_integrity` 27/1, `test_secure_file` 22/3), as in 5.18.104's passes. The other three:
 - `test_quote_followup` L05 (767/1): through `test_master_104.php` D03, a check of 5.18.104's that compares the
   status tool's output with `221c9dc`'s and masks only the header's "ago" figure. The row's own last-run column
-  prints its seconds unmasked, so a second ticking between the two runs flips it. It is rare: it read 768/0 in pass
-  A2 and in both of 5.18.104's passes.
+  prints its seconds unmasked, so a second ticking between the two runs flips it. It read 768/0 in pass A2 and in
+  both of 5.18.104's passes; measured alone on 15 Nov, it fails in about 4 to 7% of runs (below).
 - `test_quote_summary` M (57/1, §S.2 item 6) and TL40's control (396/1, §S.2 item 7). These two make the first cut
   wrong, so the release was re-cut (§S.1), and A3 counts for neither of the two passes.
 Compared file by file with 5.18.104's pass B, every other difference is a count that 5.18.105's own tests and
@@ -1688,7 +1688,8 @@ re-points add.
   `test_sales_pilot` and `test_multi_number_routing` skip their follow-up cases.
 - wa_offers K07 has passed without exercising its recent-offer exemption since 9 Nov.
 - voice_ack K02 will fail from 31 Dec 2026.
-- `test_tick_auto_pull_log` can flake at hh:59:5x UTC, and L05 at any second.
+- `test_tick_auto_pull_log` can flake at hh:59:5x UTC, and D03 `--all` (which L05 runs too) at any second, measured
+  below.
 None is 5.18.105's, and none is changed here; each is recorded for a later release. So the two passes on `7835906`
 run on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and before 20 Nov 21:00 UTC. As before, files
 35–36 (`test_cashbook_physical_list`) never run inside 21:00–24:00 UTC.
@@ -1705,6 +1706,23 @@ failed (EXIT=1).** The seven are the four container-only files, exactly as in 5.
 Nothing else failed: L05 read 768/0, `test_quote_summary` 59/0, `test_sales_followup_tool` 397/0. Compared file by file
 with 5.18.104's pass B, every difference is a count 5.18.105's own tests and re-points add (`test_log_mask` 384/0, and
 +1 to +8 in nine re-pointed files). It ran on a Kampala Saturday, CK12 and HK11 among them, before 21:00 UTC.
+
+**D03 `--all`, measured** (15 Nov, 05:52–06:44 UTC, on `7835906`, nothing beside it). `test_master_104.php`'s
+section D was run 530 times on the frozen release tree, each run with a vault of its own: **38 runs failed (7.2%)**,
+every one on the same line, `D03 --all: byte for byte 221c9dc's output`. Nothing was written into the tree.
+- **The cause, shown, not inferred.** In a scratch worktree at `7835906`, removed afterwards and never committed, a
+  copy of D03 logged what the original mask leaves different and judged with the last-run column masked as well.
+  Under the original mask 11 of 300 runs differed, each in `--all` alone and on one line: job 1's last-run column
+  (`60s` in the tree's printout, `61s` in `221c9dc`'s). With that column masked too, 0 of 300 failed.
+- `tools/cron_status.php` prints each job's elapsed seconds in that column; D03 masks only the header's
+  `(Ns ago,` figure. The plain listing does not show a job that is not late, so only `--all` can fail.
+- **A suite pass runs D03 twice**, in `test_master_104.php` itself and through `test_quote_followup` L05, so a pass
+  meets this failure roughly one time in ten (7 to 14%, from 3.7% and 7.2% a run).
+- It is 5.18.104's test. No deploy script runs it on the server: they run T1 and T4 only. It is not changed here,
+  since a change makes a new release commit, and with it a new script, rehearsal and passes. It is recorded for a
+  later release, with its fix: mask that column too.
+- **Read before pass B2:** if B2 fails `D03 --all`, there or through L05, and nothing else beyond the seven
+  container-only checks, that failure is this limit.
 
 ### S.4 The deploy script and its rehearsal
 

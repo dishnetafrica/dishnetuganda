@@ -182,7 +182,8 @@ Pass B1 on `7835906` failed only the seven checks that fail in this container; p
     05:20:21 and 06:37:03 UTC, and each time it was resumed from the start of the file that was cut (05:32:10 and
     06:53:40 UTC). It ended at 10:36:43 UTC: 317 files, 22,975 passed, 10 failed. Seven are in the four container-only
     files (above). One is L05 of `test_quote_followup` (767/1), a check of 5.18.104's that compares two printouts and
-    fails if a second ticks over between them. It is rare: it read 768/0 in pass A2 and in both of 5.18.104's passes.
+    fails if a second ticks over between them. It read 768/0 in pass A2 and in both of 5.18.104's passes, but
+    measured alone it fails in about 4 to 7% of runs (known limit 16).
     The last two are the two fixes above: `test_quote_summary` M (57/1) and TL40's control (`test_sales_followup_tool`
     396/1). They made the first cut wrong, so the release was re-cut, and A3 counts for neither pass. Beside 5.18.104's
     pass B, file by file, every other difference is a count that 5.18.105's own tests and re-points add.
@@ -682,7 +683,12 @@ copy of the terminal, and never the cash sheet.
       `test_sales_pilot` and `test_multi_number_routing` skip their follow-up cases.
     - wa_offers K07 has passed since 9 Nov without testing what it is for, the recent-offer exemption.
     - voice_ack K02 will fail from 31 Dec 2026.
-    - `test_tick_auto_pull_log` can fail by chance in the last ten seconds of an hour (UTC), and L05 at any second (as
-      in pass A3).
+    - `test_tick_auto_pull_log` can fail by chance in the last ten seconds of an hour (UTC).
+    - **`test_master_104` D03 `--all` fails by chance in about 4 to 7% of runs** (measured on 15 Nov on `7835906`: 38
+      of 530 runs, and 11 of 300 in a separate experiment). The status tool prints job 1's elapsed seconds in its
+      last-run column, and D03 masks only the header's figure, so a second ticking over between its two printouts
+      fails it; with that column masked too, 0 of 300 runs failed. A suite pass runs D03 twice, there and through
+      `test_quote_followup` L05 (as in pass A3). The deploy never runs it on the server. If pass B2 fails it, and
+      nothing else beyond the seven container-only checks, that failure is this limit.
     - **So the two passes on `7835906` run** on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and
       before 20 Nov, 21:00 UTC. Files 35–36 (`test_cashbook_physical_list`) never run between 21:00 and 24:00 UTC.
