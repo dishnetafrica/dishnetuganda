@@ -1,6 +1,6 @@
 # 74 — Uganda: 5.18.105, no phone number in any log line (design, 9 Nov 2026)
 
-Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), local, not pushed; rehearsed in full (§S.4); the suite's second pass still to run; NOT deployed (§S, 15 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
+Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), pushed on 15 Nov on the owner's word; rehearsed in full (§S.4); the suite's second pass still to run; NOT deployed (§S, 15 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
 
 - 5.18.105 masks **every** log line that can carry a phone number on Uganda (option B), not only the four lines of 5.18.104's known limit 13.
 - The chase (step 6) does not wait for 5.18.105. Offers-live (step 12) does.
@@ -1549,8 +1549,8 @@ completed when the suite's second pass ends.
 ### S.1 The release
 
 - **Built:** `release/5.18.105` = **`7835906`**, one commit on 5.18.104 (`994d660`): 89 files, 43 added, 46 changed;
-  4,175 insertions, 76 deletions. No migration and no setting. **Not pushed:** the branch is local, and is pushed only
-  on the owner's word. The development branch keeps it as a patch (`wip/release-5.18.105.patch`, byte for byte
+  4,175 insertions, 76 deletions. No migration and no setting. **Pushed on 15 Nov, 10:15 UTC, on the owner's word**
+  (*"Push now, deploy after B2"*). The development branch also keeps it as a patch (`wip/release-5.18.105.patch`, byte for byte
   `git diff 994d660..7835906`), so a container restart cannot lose it.
 - **Re-cut on 14 Nov.** The first cut, `f764699` (88 files; 4,131 insertions, 71 deletions), failed two checks of its
   own suite in pass A3 (§S.3): a boundary §H.1.24 missed (§S.2 item 6) and a control of 5.18.104's that the date had
@@ -1841,7 +1841,8 @@ every one on the same line, `D03 --all: byte for byte 221c9dc's output`. Nothing
 
 - The suite's pass B2 (from Monday 16 Nov, 00:00 UTC), then root `docs/07`'s 5.18.105 entry with the deploy command
   and, in its own block, the rollback.
-- **The owner's, then:** the word to push `release/5.18.105`; the deploy; its `--after-only`. Step 12, `offers-live`,
+- **The owner's, then:** the deploy, after pass B2 (the word to push was given on 15 Nov, with the deploy to follow
+  B2); its `--after-only`. Step 12, `offers-live`,
   waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
 - **The owner's, separately:** the older faults of §S.2 item 3. The first two are in jobs that run on Uganda (LN-10's
   and LN-14's).

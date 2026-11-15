@@ -1,10 +1,9 @@
 <!-- DRAFT of the root docs/07 entry for 5.18.105, kept in the repository so that a container restart cannot lose it.
-     The marks ⟦PENDING: …⟧ stand for results still to come: the suite's pass B2 and the owner's word to push the
-     release. It moves into docs/07-change-control.md
-     when they are in. Until then root docs/74 §S is the record, and nothing here says the release is pushed or
-     deployed: it is neither. -->
+     The marks ⟦PENDING: …⟧ stand for results still to come: the suite's pass B2. It moves into
+     docs/07-change-control.md when they are in. Until then root docs/74 §S is the record. The release was pushed on
+     15 Nov on the owner's word; nothing here says it is deployed: it is not. -->
 
-## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; LOCAL ONLY, not pushed — it is pushed only on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: pass B1 317 files, 22,979 passed, 7 failed — the seven known container checks alone; ⟦PENDING: pass B2 — files, passed, failed, and whether only the same seven fail⟧; the rehearsal's record: 2,710 ok, 3 failed — the three inherited checks (98-0, 99-0, 100-0) alone; NOT deployed
+## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; pushed on 15 Nov on the owner's word, to deploy after pass B2; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: pass B1 317 files, 22,979 passed, 7 failed — the seven known container checks alone; ⟦PENDING: pass B2 — files, passed, failed, and whether only the same seven fail⟧; the rehearsal's record: 2,710 ok, 3 failed — the three inherited checks (98-0, 99-0, 100-0) alone; NOT deployed
 
 **Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above). On 8 Nov: 5.18.104 deploys as
 built, and 5.18.105 masks the four older log lines that carry a phone number, ready before step 12 (`offers-live`) is
@@ -20,8 +19,8 @@ the earliest. None of them waits for this release. Only step 12 waits.
 a section of its own.
 1. **Nothing yet.** One result is still missing: the suite's pass B2 (Tests, below), planned from Monday 16 Nov,
    00:00 UTC.
-2. **Give the word to push `release/5.18.105`.** The branch is local only. The deploy fetches it from the remote, so it
-   cannot run before the push.
+2. **The word to push `release/5.18.105`: given on 15 Nov** (*"Push now, deploy after B2"*). It was pushed at
+   10:15 UTC. The `--check` may run now; the deploy waits for pass B2.
 3. **Run the deploy on the server.** A `--check` first is wise: it reads, refuses or passes, and changes nothing. Then
    the deploy. Send back the log file, never a copy of the terminal.
 4. **Run `--after-only`** at least 20 minutes after the copy, then the quarantine's own `--check`. Run `--after-only`
@@ -461,10 +460,9 @@ its customer.
 
 0. **What must be true first.**
    - **5.18.104 is live.** It is, since 9 Nov (copy 03:50:25 UTC). The script refuses any other live version.
-   - **`release/5.18.105` (`7835906`) must be on GitHub, and it is not there yet.** Today it is local only, and it is
-     pushed only on the owner's word: ⟦PENDING: the owner's word, and the date of the push⟧. The `--check` and deploy
-     commands below fetch it, and their `&&` stops them if that fails. Until the push nothing can be deployed, and the
-     report's wrapper stops too, having changed nothing: it is pinned to `7835906`.
+   - **`release/5.18.105` (`7835906`) must be on GitHub. It is, since 15 Nov, 10:15 UTC**, pushed on the owner's word
+     (*"Push now, deploy after B2"*). The `--check` and deploy commands below fetch it, and their `&&` stops them if
+     that fails. The report's wrapper is pinned to `7835906` too.
    - **The development branch carries the script and both wrappers.** The `--check` and deploy commands below pull
      it. Since `2a41c9d` (14 Nov) it holds `scripts/deploy-5.18.105.sh` at sha256 `c70820cd69af899b…`.
      The record run ran on `a7b52e7`, with that script; nothing has changed it since.
