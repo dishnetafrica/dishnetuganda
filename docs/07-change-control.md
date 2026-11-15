@@ -16756,6 +16756,12 @@ sources channel 54, conversation lead 1, KYC salesperson 13, none 132; out-marks
 15 Nov by then. So step 4 (`on list`) may follow once the salespeople are told, then step 5, and step 6 from 05:28 UTC
 on 16 Nov.
 
+**Step 4, `list`: on at 10:50:40 UTC on 15 Nov** (from the terminal pasted; the log is
+`/root/dnb-sales/followup-20261115T105040Z.log`): *"step 3 (tracking): Q1-ON PASS"*, then `ON list:
+quote_daily_list_enabled, quote_daily_list_since`, exit 0. The first lists go on Monday 16 Nov, between 08:00 and 11:00
+Kampala. Its check, Q2-ON, reads `NOT_YET too_soon` until a list day's 11:00 Kampala has passed and been swept (read
+from `lib/SalesFollowupChecks.php` at `994d660`), so it is run on Monday after 08:00 UTC. Step 5 may follow now.
+
 **A console script to switch a salesperson number on.** Asked for by the owner on 13 Nov (*"i need chrom script to
 enable sales number"*): `scripts/console/sales-number-on.console.js` (`9a4a77d`, sha256 `9624e44b89be7d86…`), pasted
 into Chrome's console on the plugin's WhatsApp AI page by a signed-in administrator. **Not yet run by the owner.**
