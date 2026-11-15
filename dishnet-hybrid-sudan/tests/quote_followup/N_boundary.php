@@ -175,7 +175,8 @@ $QF_SECTIONS['N'] = ['title' => 'The boundary: the one merged declared list agai
     // left in (r105_less replaced by the root), must fail on 5.18.105's files and hunks — so the layer is what makes N pass,
     // and N still sees what it should.
     $ctx->run('N09 control on the controls: on the judged tree itself, 5.18.105 left in, N01, N03, N05 and N06 each fail on 5.18.105', function () use ($ctx, $B, $base) {
-        $R = $ctx->root;
+        // 5.18.106 (root docs/75 §J): the judged tree with 5.18.106 taken out (r106_less), so 5.18.105 is all that is left in
+        $R = r106_less($ctx->root, $ctx->tmp);
         $held = [];
         foreach (QF_HELD as $list) foreach ($list as $rel) $held[$rel] = true;
         $fourteen = array_values(array_filter(array_keys(R105_DECLARED), function ($r) use ($held) {

@@ -190,6 +190,9 @@ $QF_SECTIONS['G'] = ['title' => 'The sender: cron/followup_send.php\'s two passe
         $f = (new FollowUpService($p))->get($c['fid']);
         $ctx->eq([count(qf_texts($evo)), $f['close_reason'], count($rows = qf_rows($p, 'SELECT id FROM wa_auto_sends'))], [0, 'send_failed', 3],
                  'G04 the fourth: tries_exhausted, closed send_failed, nothing sent, no fourth row', $o4);
+        // 5.18.106 (root docs/75 §J; G3): claim mode's own close is counted ledger_tries_exhausted (QM26b's line stays its own;
+        // 5.18.106's F1 counts enquiry_tries_exhausted, and section U pins that it leaves claim mode alone)
+        $ctx->t(strpos($o4, 'ledger_tries_exhausted=1') !== false, 'G04 the fourth: counted ledger_tries_exhausted', $o4);
     });
 
     $ctx->run('G05 already_sent: the step is counted as taken, the next armed, nothing sent (§H.2.5.8)', function () use ($ctx, $evo, $send) {

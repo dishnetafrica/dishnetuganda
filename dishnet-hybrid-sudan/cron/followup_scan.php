@@ -67,6 +67,19 @@ $quoteSql = $svc->hasKind()
     ? " AND NOT EXISTS (SELECT 1 FROM followups q WHERE q.kind='quote' AND q.phone=c.phone AND (q.closed_at IS NULL OR q.closed_at > c.last_customer_at))"
     : '';
 $holdSql .= $quoteSql;   // it takes no argument, so $holdArgs is unchanged
+
+// 5.18.106 (root docs/75 §C F4; G1, G7): on Uganda, one follow-up per quiet spell — a conversation that already had one
+// for its customer's last message (the row's copy of it is not earlier), open or closed, is not opened again; a new
+// message starts a new spell. One second chance when the spell's only follow-up closed send_failed (claim mode counts an
+// outage as a try). It takes no argument either. Elsewhere nothing is added.
+require_once $pluginRoot . '/lib/StaffJobsGate.php';
+if (StaffJobsGate::applies($config, $dataDir)) {
+    $scPk  = $svc->hasKind() ? " AND COALESCE(p.kind,'enquiry')='enquiry'" : '';
+    $scPk2 = $svc->hasKind() ? " AND COALESCE(p2.kind,'enquiry')='enquiry'" : '';
+    $holdSql .= " AND NOT EXISTS (SELECT 1 FROM followups p WHERE p.conversation_id = c.id AND p.last_customer_at >= c.last_customer_at"
+              . " AND COALESCE(p.close_reason, '') <> 'send_failed'" . $scPk . ")"
+              . " AND (SELECT COUNT(*) FROM followups p2 WHERE p2.conversation_id = c.id AND p2.last_customer_at >= c.last_customer_at" . $scPk2 . ") < 2";
+}
 $perScan = (int)($config['followup_scan_limit'] ?? 25);
 
 // Candidates: the customer spoke last, long enough ago, and no follow-up is

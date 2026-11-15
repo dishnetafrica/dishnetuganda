@@ -81,7 +81,14 @@ $cap      = (int)($config['followup_daily_cap'] ?? 30);
 $perRun   = (int)($config['followup_run_limit'] ?? 5);   // model calls cost money
 $drafted  = 0; $closed = 0; $deferred = 0; $skipped = 0; $autoSent = 0;
 
-foreach ($svc->due($now, $perRun) as $fu) {
+// 5.18.106 (root docs/75 §C F3, F5; G1, G4, G5): on Uganda the run's places go only to follow-ups worth judging — not one
+// whose customer has been quiet longer than followup_max_age_hours (followup_close expires those), and not one holding
+// a draft that waits for a person or for the sender, or that may already have reached the customer for this attempt.
+// Elsewhere due() is exactly as it was.
+require_once $pluginRoot . '/lib/StaffJobsGate.php';
+$ugRun = StaffJobsGate::applies($config, $dataDir);
+
+foreach ($svc->due($now, $perRun, $ugRun ? FollowUpService::staleBefore($config, strtotime($now . ' UTC')) : null, $ugRun) as $fu) {
     $conv = $convSvc->getConversation((int)$fu['conversation_id']);
     if ($conv === null) {
         $svc->close((int)$fu['id'], 'cancelled', 'the conversation no longer exists');

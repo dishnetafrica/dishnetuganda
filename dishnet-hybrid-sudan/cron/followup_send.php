@@ -83,6 +83,11 @@ $fsUg     = StaffJobsGate::applies($config, $dataDir);
 $fsUntil  = $fsClock() + JobBudget::seconds(45, isset($_m_deadline) ? (int)$_m_deadline : null, $fsClock());
 $fsCounts = [];
 $fsCount  = function (string $k) use (&$fsCounts): void { $fsCounts[$k] = ($fsCounts[$k] ?? 0) + 1; };
+// 5.18.106 (root docs/75 §C F2, F5; G1, G4, G5): on Uganda, the moment before which a customer's last message is too
+// old to follow up (the scan's own limit, on this run's clock; null on a misread: nothing expires), and the follow-ups
+// this pass has handled — one draft of each a pass. Elsewhere both stay idle and nothing here changes.
+$fsStale = $fsUg ? FollowUpService::staleBefore($config, $fsClock()) : null;
+$fsSeen  = [];
 
 // 5.18.90 (docs/65 §AD): a draft held on a number that may not send now (paused, not verified, the department numbers not
 // recorded, moved) stays approved and takes none of this run's places, so every other approved follow-up still goes.
@@ -125,6 +130,16 @@ foreach (array_merge($quoteDrafts, $enqDrafts) as $d) {
     $fuId  = (int)$d['followup_id'];
     $phone = (string)$d['phone'];
     $chan  = (string)$d['channel'];
+    if ($fsUg && $dKind === 'enquiry') {   // 5.18.106 (root docs/75 §C F5): the follow-up's oldest draft only, this pass
+        if (isset($fsSeen[$fuId])) { $held++; $fsCount('enquiry_second_draft'); continue; }
+        $fsSeen[$fuId] = true;
+        // and never a draft whose attempt is taken: a send recorded for it, or a sibling sent or perhaps sent (G9)
+        if ($svc->attemptTaken($fuId, (int)$d['id'], (int)($d['attempt'] ?? 0))) {
+            $svc->expireTakenDraft($fuId, (int)$d['id'], 'sender');
+            $held++; $fsCount('enquiry_attempt_taken');
+            continue;
+        }
+    }
     $body  = trim((string)($d['edited_body'] ?? '')) !== ''
            ? (string)$d['edited_body'] : (string)$d['body'];
 
@@ -169,6 +184,13 @@ foreach (array_merge($quoteDrafts, $enqDrafts) as $d) {
     if ($dKind === 'enquiry' && (string)($conv['last_customer_at'] ?? '') > (string)($d['decided_at'] ?? '')) {
         $svc->close($fuId, 'replied', 'the customer wrote back after this was approved', 'sender');
         $held++;
+        continue;
+    }
+    // 5.18.106 (root docs/75 §C F2): never sent to a customer quiet longer than followup_max_age_hours — before the
+    // window, so a stale draft clears outside sending hours too, and before any fence, policy, budget or claim.
+    if ($fsStale !== null && $dKind === 'enquiry' && (string)($conv['last_customer_at'] ?? '') < $fsStale) {
+        $svc->close($fuId, 'expired', 'the customer last wrote more than ' . FollowUpService::staleHours($config) . ' hours ago', 'sender');
+        $held++; $fsCount('enquiry_expired');
         continue;
     }
     $win = FollowUpPolicy::withinSendingWindow($now);
@@ -274,6 +296,18 @@ foreach (array_merge($quoteDrafts, $enqDrafts) as $d) {
         }
     }
 
+    // 5.18.106 (root docs/75 §C F1; G2, G3): on Uganda, outside claim mode (claim mode's tries_exhausted is its own), a
+    // draft Evolution has refused three times since its approval — a 400 to the send itself — is not sent a fourth time,
+    // provided its number delivered another message between each of those refusals and the one before: then the refusal is
+    // this message's, not the number's. A continuous outage's refusals never count. Nothing is sent or recorded here.
+    if ($fsUg && $dKind === 'enquiry' && $fsMode !== 'claim') {
+        if ($svc->refusedWhileDelivering($fuId, $chan, (string)($d['decided_at'] ?? ''), 3) >= 3) {
+            $svc->close($fuId, 'send_failed', 'Evolution refused it three times (HTTP 400) while the number delivered other messages', 'sender');
+            $held++; $fsCount('enquiry_tries_exhausted');
+            continue;
+        }
+    }
+
     $res = $evo->sendText($chan, $phone, $body, ContactOptOut::CLASS_PROACTIVE);
     if (EvolutionApiService::policyRefused($res)) {   // refused at the send itself: nothing left
         // 5.18.104 (root docs/73 §H.2.10.6 items 6 and 12): a claim is settled failed (not sent). An enquiry the ledger only
@@ -352,6 +386,7 @@ foreach (array_merge($quoteDrafts, $enqDrafts) as $d) {
     $svc->recordSend($fuId, (int)$d['id'], $body, $waId,
                      (string)($d['decided_by'] ?? 'staff'),
                      $dKind === 'quote' ? ['window' => WaSendBudget::window($fc), 'at' => $fsClock()] : null);   // 5.18.104 (root docs/73 §H.2.10.6 item 11)
+    if ($fsUg && $dKind === 'enquiry') $svc->expireOtherApproved($fuId, (int)$d['id'], 'sender');   // 5.18.106 (root docs/75 §C F5)
     $sent++;
 }
 } finally {

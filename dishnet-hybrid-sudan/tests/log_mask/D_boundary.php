@@ -87,7 +87,7 @@ $LM_SECTIONS['D'] = ['title' => 'The boundary against 994d660, from Git (§H.3.4
     [$B, $why] = r105_base($ctx->dir('r105-base'));
     $ctx->t($B !== null, 'D00 control: Git supplies ' . R105_BASE . ' (5.18.104) — without it nothing below is measured: a failure, never a skip', (string)$why);
     if ($B === null) return;
-    $T = $ctx->root;
+    $T = r106_less($ctx->root, $ctx->dir('r106'));   // 5.18.106 (root docs/75 §J): the judged root with 5.18.106 taken out against 7835906
     $base = r105_walk($B);
     $tree = r105_walk($T);
     $ctx->t(count($base) > 1000 && isset($tree['lib/KycService.php'], $base['webhook.php']), 'D00 control: both walks see the plugin (' . count($base) . ' and ' . count($tree) . ' files)');

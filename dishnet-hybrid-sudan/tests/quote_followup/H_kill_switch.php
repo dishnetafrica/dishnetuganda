@@ -47,13 +47,18 @@ $QF_SECTIONS['H'] = ['title' => 'STOP, the kill switch and the enquiry engine (�
                              'claude_api_key' => 'qf-dummy-key-never-used', 'evo_api_url' => 'http://127.0.0.1:9'], 'h'); $p = $b['pdo'];
             $svc = new FollowUpService($p);
             // two follow-ups whose conversations are gone: followup_run closes such a row 'cancelled' before any model call
-            $e = $svc->open(['id' => 990001, 'channel' => 'support', 'phone' => '256772502521', 'last_customer_at' => '2026-10-30 09:00:00']);
+            // 5.18.106 (root docs/75 §J): quiet two days before the run's real clock — the run on Uganda leaves a row whose customer
+            // has been quiet longer than followup_max_age_hours out of due() (§C F3), as a fixed date would become
+            $e = $svc->open(['id' => 990001, 'channel' => 'support', 'phone' => '256772502521', 'last_customer_at' => gmdate('Y-m-d H:i:s', time() - 2 * 86400)]);
             $q = 0;
             if ($svc->hasKind()) {
-                $p->exec("INSERT INTO quote_tracker (quote_key, quote_ref, phone, evidence_msg_id, evidence_event, made_by, sent_at, sent_conv_id, sent_channel, valid_until)
-                          VALUES ('ref:Q-9521', 'Q-9521', '256772502522', 1, 'quote_manual', 'manual', '2026-10-30 07:00:00', 990002, 'support', '2099-12-31')");
+                // 5.18.106 (root docs/75 §J): the quotation two days before the real clock too, so only the kind filter keeps its row
+                // out of the run on Uganda (F3's stale limit would do it for a fixed date)
+                $qSent = gmdate('Y-m-d H:i:s', time() - 2 * 86400);
+                $p->prepare("INSERT INTO quote_tracker (quote_key, quote_ref, phone, evidence_msg_id, evidence_event, made_by, sent_at, sent_conv_id, sent_channel, valid_until)
+                             VALUES ('ref:Q-9521', 'Q-9521', '256772502522', 1, 'quote_manual', 'manual', ?, 990002, 'support', '2099-12-31')")->execute([$qSent]);
                 $q = $svc->openQuote(['id' => 990002, 'channel' => 'support', 'phone' => '256772502522'],
-                                     ['quote_key' => 'ref:Q-9521', 'ref' => 'Q-9521', 'valid_until' => '2099-12-31', 'sent_at' => '2026-10-30 07:00:00', 'due_at' => '2026-10-31 07:00:00']);
+                                     ['quote_key' => 'ref:Q-9521', 'ref' => 'Q-9521', 'valid_until' => '2099-12-31', 'sent_at' => $qSent, 'due_at' => '2026-10-31 07:00:00']);
             }
             $p->exec("UPDATE followups SET due_at = '2026-10-31 07:00:00'");
             [$rc, $out] = qf_cron($ctx, $b, 'cron/followup_run.php');

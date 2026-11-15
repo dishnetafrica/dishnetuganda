@@ -159,17 +159,184 @@ final class FollowUpService
         return $st->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 
-    /** Open follow-ups whose due_at has arrived. @return array<int,array<string,mixed>> */
-    public function due(string $nowUtc, int $limit = 25): array
+    /**
+     * Open follow-ups whose due_at has arrived. @return array<int,array<string,mixed>>
+     *
+     * 5.18.106 (root docs/75 §C F3, F5): the run on Uganda passes $staleBeforeUtc and $waitingOut; every other caller
+     * (the doctor, South Sudan's run, the tests of 5.18.104) keeps the query exactly as it was. $staleBeforeUtc leaves out
+     * a row whose customer last wrote before it (the row's own copy: the conversation's is never earlier). $waitingOut
+     * leaves out a row that holds a draft waiting for the sender (approved), or one that may already have reached the
+     * customer for this attempt (uncertain) — so neither is drafted again, and neither takes one of the run's places. A
+     * row holding a pending draft stays in: the run skips it itself, after its colleague, gone and owned-number closes
+     * (5.18.50's M1 reaches a colleague's row holding a pending draft; a build deviation from docs/75 G9).
+     */
+    public function due(string $nowUtc, int $limit = 25, ?string $staleBeforeUtc = null, bool $waitingOut = false): array
     {
         // 5.18.104 (root docs/73 §H.2.3 (b), R-11, F1): enquiry rows only, never a quote's — unaliased, as the query is.
         $kind = $this->hasKind() ? " AND COALESCE(kind,'enquiry')='enquiry'" : '';
+        $args = [$nowUtc];
+        $more = '';   // 5.18.106 (root docs/75 §C F3, F5): nothing unless the caller asks
+        if ($staleBeforeUtc !== null) { $more .= ' AND last_customer_at >= ?'; $args[] = $staleBeforeUtc; }
+        if ($waitingOut) {
+            $more .= " AND NOT EXISTS (SELECT 1 FROM followup_drafts wd WHERE wd.followup_id = followups.id
+                         AND (wd.status = 'approved' OR (wd.status = 'uncertain' AND wd.attempt = followups.attempts + 1)))";
+        }
+        $args[] = $limit;
         $st = $this->db->prepare(
             "SELECT * FROM followups
-              WHERE closed_at IS NULL AND due_at IS NOT NULL AND due_at <= ?" . $kind . "
+              WHERE closed_at IS NULL AND due_at IS NOT NULL AND due_at <= ?" . $kind . $more . "
               ORDER BY due_at LIMIT ?");
-        $st->execute([$nowUtc, $limit]);
+        $st->execute($args);
         return $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F2, F3; G4, G5): the moment before which a customer's last message is too old to follow
+     * up — the scan's own followup_max_age_hours, read as followup_scan.php reads it, on the caller's clock. null when
+     * the setting is not a positive number: nothing is expired on a misread.
+     */
+    public static function staleBefore(array $config, int $nowTs): ?string
+    {
+        $hours = (float)($config['followup_max_age_hours'] ?? 336);
+        if (!($hours > 0)) return null;
+        return gmdate('Y-m-d H:i:s', $nowTs - (int)($hours * 3600));
+    }
+
+    /** 5.18.106 (root docs/75 §C F2, F3): the same limit as a number for a close's detail (336, 48, 0.5 — never truncated). */
+    public static function staleHours(array $config): string
+    {
+        $h = (float)($config['followup_max_age_hours'] ?? 336);
+        return $h == floor($h) ? (string)(int)$h : (string)$h;
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F3): close up to $limit open enquiry follow-ups whose customer last wrote before
+     * $staleBeforeUtc — by the row's copy AND the conversation's, so a customer who wrote since is never expired (close's
+     * CASE C closes that row 'replied'). A row whose conversation is gone closes 'cancelled', as everywhere else. Oldest
+     * first; one event per close. @return int closed
+     */
+    public function expireStale(string $staleBeforeUtc, int $limit, string $hours, string $by): int
+    {
+        $kind = $this->hasKind() ? " AND COALESCE(f.kind,'enquiry')='enquiry'" : '';
+        try {
+            $st = $this->db->prepare(
+                "SELECT f.id, f.last_customer_at, c.id AS cid FROM followups f LEFT JOIN wa_conversations c ON c.id = f.conversation_id
+                  WHERE f.closed_at IS NULL" . $kind . " AND f.last_customer_at < ?
+                    AND (c.id IS NULL OR c.last_customer_at IS NULL OR c.last_customer_at < ?)
+                  ORDER BY f.last_customer_at, f.id LIMIT ?");
+            $st->execute([$staleBeforeUtc, $staleBeforeUtc, $limit]);
+            $rows = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) { return 0; }
+        $n = 0;
+        foreach ($rows as $r) {
+            $ok = $r['cid'] === null
+                ? $this->close((int)$r['id'], 'cancelled', 'the conversation no longer exists', $by)
+                : $this->close((int)$r['id'], 'expired', 'the customer last wrote at ' . (string)$r['last_customer_at']
+                               . ', older than followup_max_age_hours ' . $hours . ' h', $by);
+            if ($ok) $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F1; G2): how many of Evolution's refusals of this follow-up's message since $sinceUtc came
+     * while its channel was shown to be delivering — each counted only when the channel delivered another outbound message
+     * (a stored row with WhatsApp's id, on a conversation of $channel) after the refusal before it (for the first, after
+     * $sinceUtc) and not after it. A refusal is a failed event whose detail is Evolution's answer to the send itself,
+     * "... [HTTP 400 on POST /message/sendText/...]", never an HTML page (requestUg writes that in the same form). So the
+     * refusals of one continuous outage never count, however many and whatever the number delivers once it is back.
+     *
+     * A delivery is placed by created_at, when it was stored (storeMessage writes it, UTC, for every row), never by
+     * sent_at: the Inbox's media sends write sent_at in Kampala time (HumanTakeover::LOCAL_EVENTS) and an import carries
+     * WhatsApp's original time, either of which would put a delivery inside an outage. sent_at only bounds the read to
+     * the index, a day of slack before $sinceUtc. Refusals stream in id order (followup_events' index; datetime('now')
+     * rises with the id); deliveries are read only once there is a refusal. Counts up to $enough and stops; 0 on any
+     * error, so an error never closes a follow-up.
+     */
+    public function refusedWhileDelivering(int $followupId, string $channel, string $sinceUtc, int $enough = 3): int
+    {
+        try {
+            $rf = $this->db->prepare(
+                "SELECT created_at FROM followup_events
+                  WHERE followup_id = ? AND event = 'failed' AND created_at >= ?
+                    AND detail LIKE '% [HTTP 400 on POST /message/sendText/%' AND detail NOT LIKE 'Got an HTML page%'
+                  ORDER BY id");
+            $rf->execute([$followupId, $sinceUtc]);
+            $dl = null;
+            $d = false;
+            $prev = $sinceUtc;
+            $n = 0;
+            while (($r = $rf->fetchColumn()) !== false) {
+                $r = (string)$r;
+                if ($dl === null) {
+                    $dl = $this->db->prepare(
+                        "SELECT m.created_at FROM wa_messages m JOIN wa_conversations c ON c.id = m.conversation_id
+                          WHERE m.direction = 'out' AND m.sent_at > datetime(?, '-1 day') AND m.created_at > ?
+                            AND m.wa_message_id IS NOT NULL AND m.wa_message_id <> ''
+                            AND c.channel = ?
+                          ORDER BY m.created_at, m.id");
+                    $dl->execute([$sinceUtc, $sinceUtc, $channel]);
+                    $d = $dl->fetchColumn();
+                }
+                while ($d !== false && (string)$d <= $prev) $d = $dl->fetchColumn();   // deliveries before this interval
+                if ($d !== false && (string)$d <= $r && ++$n >= $enough) break;          // one in (previous refusal, this one]
+                $prev = $r;
+            }
+            $rf->closeCursor();
+            if ($dl !== null) $dl->closeCursor();
+            return $n;
+        } catch (\Throwable $e) { return 0; }
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F5; G9): has this draft's attempt already been taken — a send recorded for it (the
+     * follow-up's attempts reached it, or a followup_sends row names this draft or this attempt or a later one: recordSend
+     * writes that row first, so a send whose later bookkeeping failed still counts), or another draft of the same attempt
+     * sent or settled uncertain (it may have reached the customer)? Then the draft must never be sent. False on any error
+     * (the sender's other guards stand).
+     */
+    public function attemptTaken(int $followupId, int $draftId, int $attempt): bool
+    {
+        try {
+            $st = $this->db->prepare(
+                "SELECT (SELECT COUNT(*) FROM followups WHERE id = ? AND attempts >= ?)
+                      + (SELECT COUNT(*) FROM followup_drafts WHERE followup_id = ? AND id <> ? AND attempt = ?
+                                AND status IN ('sent', 'uncertain'))
+                      + (SELECT COUNT(*) FROM followup_sends WHERE followup_id = ? AND (draft_id = ? OR attempt >= ?))");
+            $st->execute([$followupId, $attempt, $followupId, $draftId, $attempt, $followupId, $draftId, $attempt]);
+            return (int)$st->fetchColumn() > 0;
+        } catch (\Throwable $e) { return false; }
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F5): an approved draft whose attempt is taken, set 'expired' (the status migration 070
+     * documents), with one event naming why. True when this call expired it.
+     */
+    public function expireTakenDraft(int $followupId, int $draftId, string $by): bool
+    {
+        try {
+            $st = $this->db->prepare("UPDATE followup_drafts SET status = 'expired' WHERE id = ? AND followup_id = ? AND status = 'approved'");
+            $st->execute([$draftId, $followupId]);
+            if ($st->rowCount() !== 1) return false;
+            $this->log($followupId, null, 'skipped', 'draft expired: a message of this attempt was sent, or may have been', $by);
+            return true;
+        } catch (\Throwable $e) { return false; }
+    }
+
+    /**
+     * 5.18.106 (root docs/75 §C F5): after a send, the follow-up's other approved drafts — written while the first waited —
+     * become 'expired' (the status migration 070 documents), with one event. @return int expired
+     */
+    public function expireOtherApproved(int $followupId, int $sentDraftId, string $by): int
+    {
+        try {
+            $st = $this->db->prepare(
+                "UPDATE followup_drafts SET status = 'expired' WHERE followup_id = ? AND status = 'approved' AND id <> ?");
+            $st->execute([$followupId, $sentDraftId]);
+            $n = $st->rowCount();
+            if ($n > 0) $this->log($followupId, null, 'skipped', 'other approved drafts expired: ' . $n, $by);
+            return $n;
+        } catch (\Throwable $e) { return 0; }
     }
 
     /**
@@ -629,7 +796,8 @@ final class FollowUpService
     {
         $this->log($followupId, null, 'failed', $why, $by);
         // The draft stays approved so the sender retries it; a transport
-        // failure is not a decision to abandon the message.
+        // failure is not a decision to abandon the message. 5.18.106 (root docs/75 §C F1): on Uganda the sender closes the
+        // follow-up once Evolution has refused it three times while its number delivered other messages.
     }
 
     /**

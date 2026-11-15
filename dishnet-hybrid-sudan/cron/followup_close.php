@@ -81,4 +81,15 @@ foreach ($svc->allOpen(200, 'enquiry') as $fu) {
     }
 }
 
-if ($closed) echo date('Y-m-d H:i:s') . " [followup_close] closed={$closed}\n";
+// 5.18.106 (root docs/75 §C F3; G1, G4, G5): on Uganda, after the cases above (a reply closes 'replied' first), up to 200
+// open enquiry follow-ups whose customer — by the row and by the conversation — has been quiet longer than
+// followup_max_age_hours close 'expired', oldest first, with no model call; their waiting drafts leave every list with
+// them. Its own clock: this file sets no $now. Elsewhere nothing here runs.
+require_once $pluginRoot . '/lib/StaffJobsGate.php';
+$fcExpired = 0;
+if (StaffJobsGate::applies($config, $dataDir)) {
+    $fcStale = FollowUpService::staleBefore($config, time());
+    if ($fcStale !== null) $fcExpired = $svc->expireStale($fcStale, 200, FollowUpService::staleHours($config), 'closer');
+}
+
+if ($closed || $fcExpired) echo date('Y-m-d H:i:s') . " [followup_close] closed={$closed}" . ($fcExpired ? " expired={$fcExpired}" : '') . "\n";

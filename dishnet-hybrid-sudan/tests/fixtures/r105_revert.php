@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+// 5.18.106 (root docs/75 §J): the 5.18.106 layer, which r105_less_build() applies first
+require_once __DIR__ . '/r106_revert.php';
 /**
  * TEST ONLY — 5.18.105 (root docs/74 §H.3.2, §H.1.24): the 5.18.105 layer, one mechanism for every older boundary.
  *
@@ -303,7 +305,9 @@ function r105_less_key(string $real): string
 function r105_less_build(string $root, string $tmp): array
 {
     static $cache = [];
-    $real = realpath($root);
+    // 5.18.106 (root docs/75 §J): 5.18.106 taken out first, against 7835906, so this layer meets 5.18.105's tree exactly as
+    // before (r106_less throws, as this does, when Git cannot supply its base or the root holds no plugin)
+    $real = realpath(r106_less($root, $tmp));
     if ($real === false || !is_file($real . '/manifest.json')) throw new \RuntimeException('r105_less: ' . $root . ' holds no plugin');
     $key = r105_less_key($real);
     if (isset($cache[$key]) && is_dir($cache[$key][0])) return $cache[$key];

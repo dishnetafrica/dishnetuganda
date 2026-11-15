@@ -542,6 +542,90 @@ the same field names.
 
 # 🔖 VERSION LOG (append after every session)
 
+## 5.18.106 (root docs/75 §C, §J; built 2026-11-15, not deployed) — Uganda: the enquiry follow-up sender unjammed — a draft Evolution keeps refusing is closed, a stale one is never sent, stale follow-ups expire, one follow-up per quiet spell, one approved draft per follow-up; no new setting; no migration
+
+### Why
+The read-only report of 15 Nov 2026 (`scripts/enquiry-followup-report.php`, root docs/75 §A) measured the enquiry sender
+stopped behind ten drafts that Evolution refused with HTTP 400 on every pass: a failed draft stayed approved with no
+limit, and `approvedDrafts(10)` returned the same ten every five minutes. Behind them the run kept drafting follow-ups
+whose draft was already waiting (40 follow-ups held 1,979 drafts), which unjammed would have sent the same customer two
+messages, and it spent its places on follow-ups whose customer had been quiet for weeks. The design is root docs/75;
+where it and an earlier spec differ, docs/75 is right.
+
+### What (Uganda only: every change is behind `StaffJobsGate::applies`, and South Sudan runs exactly as before)
+- **F1, `cron/followup_send.php` + `FollowUpService::refusedWhileDelivering()`**: outside claim mode, a draft Evolution
+  refused three times since its approval — a `400` to `sendText`, never an HTML page — closes `send_failed` ("Evolution
+  refused it three times (HTTP 400) while the number delivered other messages"), counted `enquiry_tries_exhausted`. A
+  refusal counts only when the same number delivered another outbound message between it and the refusal before it (for
+  the first, since the approval), so a continuous outage's refusals never count, whatever the number delivers once it
+  is back (review R106-RT-1; docs/75 §C F1 said "after the first of them"). A delivery is placed by when it was stored
+  (`created_at`), never by `sent_at`, which the Inbox's media sends write in Kampala time and an import back-dates.
+  Claim mode keeps its own `tries_exhausted`.
+- **F2, the sender**: a draft whose customer last wrote longer ago than `followup_max_age_hours` (the scan's own limit,
+  default 336) is closed `expired` ("the customer last wrote more than N hours ago") on the run's clock, before the
+  sending window and before any claim; counted `enquiry_expired`. A misread limit (not a positive number) expires
+  nothing.
+- **F3, `cron/followup_close.php` + `FollowUpService::expireStale()`, and `cron/followup_run.php`**: after its own cases,
+  the close job expires up to 200 open enquiry follow-ups a pass whose customer is quiet past the limit by the row AND
+  by the conversation (a gone conversation closes `cancelled`), oldest first ("the customer last wrote at <time>, older
+  than followup_max_age_hours N h"), and prints `expired=N` beside `closed=N`. The run's `due()` leaves such rows
+  out.
+- **F4, `cron/followup_scan.php`**: one follow-up per quiet spell — a conversation that already had one for its
+  customer's last message, open or closed, is not opened again, with one second chance when that one closed
+  `send_failed`; a new message starts a new spell.
+- **F5, the run and the sender**: the run's `due()` leaves out a follow-up holding an approved draft, or an uncertain
+  draft of its current attempt. A follow-up holding a pending draft stays in, as before: the run skips it itself, after
+  its colleague, gone and owned-number closes (5.18.50's M1; docs/75 G9 also named pending, a build deviation). The
+  sender handles one draft of a follow-up a pass (`enquiry_second_draft`); never sends a draft whose attempt is taken — a
+  send recorded for it (the follow-up's attempts, or a `followup_sends` row for it), or a sibling sent or settled
+  uncertain — but expires it (`enquiry_attempt_taken`, review R106-RT-3); and, after a send, marks the follow-up's other approved drafts `expired`, with one event. A pending draft
+  is left for a person.
+- **`manifest.json`**: the version line, 5.18.105 → 5.18.106. Nothing else in it changes.
+
+### Rules for whoever edits next
+1. **A refusal closes nothing unless the number is shown to be working.** F1 needs three `400`s to `sendText` since the
+   draft's approval, each after an outbound delivery on the same channel since the refusal before it. Never loosen
+   either half alone.
+2. **"Too old" has one definition**: `followup_max_age_hours`, read as the scan reads it. A misread disables F2 and F3;
+   it never falls back to a number.
+3. **`due()` without its two new arguments is exactly 5.18.105's query.** Only the run on Uganda passes them.
+4. **The 5.18.106 boundary is `tests/fixtures/r106_revert.php`** (`R106_DECLARED`, `R106_HELD`, `R106_MARK`), judged by
+   `tests/quote_followup/U_unjam.php` U20–U24. Every hunk in an existing file carries a `5.18.106 (root docs/75 §…)`
+   marker in its own lines or in the 30 above it. Edit the list and the marker together.
+
+### Tests
+`tests/quote_followup/U_unjam.php` (section U of `tests/test_quote_followup.php`): each of F1–F5 through the real crons
+(the sender at a fixed Kampala moment; the run, the scan and the close job on the real clock), South Sudan unchanged
+beside each, the 5.18.106 boundary against 7835906 from Git, and 5.18.106's added runtime lines under the PHP 7.4 rules
+with no setting 7835906 does not already read (U24). `tests/quote_followup/mutants_U.php`: one weakened copy per fix,
+per bound and per review finding, each caught. On the unfixed 5.18.105 tree, every case of a fix fails.
+
+The older boundaries are re-pointed on purpose, never weakened: `r105_less_build()` takes 5.18.106 out first
+(`r106_less()`, against 7835906 from Git), so every boundary that reads through the 5.18.105 layer meets 7835906's tree
+as before, and `tests/log_mask` D judges `r106_less()` of the root. H03 places its enquiry row two days before the real
+clock (F3 leaves a stale row out of the run's `due()`); G04 asserts claim mode's close is counted
+`ledger_tries_exhausted`, never F1's count; the version pins move to 5.18.106.
+
+### Known limits
+- `followup_close` still reads only the 200 earliest-due rows for a reply (CASE C).
+- Record mode's ledger keeps one row per ref, so a draft that fails and then succeeds loses its send from the ledger
+  (5.18.104, §H.2.5.5). F1 makes it rarer.
+- The Follow-ups screen still lists a pending draft of a closed follow-up until Reject.
+- **A number that is down still holds the sender's ten places** outside claim mode: its refused drafts are neither
+  closed by F1 (it delivers nothing) nor taken per handset, so while ten or more of them are the oldest approved drafts,
+  every other number's enquiry drafts wait until F2/F3 expire the down number's customers (at most
+  `followup_max_age_hours`). As before 5.18.106 (review R106-RT-2); claim mode takes one draft per handset.
+- A follow-up holding a pending draft takes one of the run's places each pass until a person decides (as before).
+- **A number that flaps** — down at each of three sender passes, up long enough between them to deliver something
+  else — has its refused drafts closed `send_failed` although none was tried while it was up. It takes an outage timed
+  to every pass; F4 gives the spell one second chance.
+- **F4's two reads scan `followups` once per candidate conversation** (its only index on `conversation_id` is partial,
+  open rows; so does 5.18.104's quote clause, by phone). Measured on synthetic books, one scan query: 8,000 conversations
+  (800 quiet 1–14 days) and 6,000 follow-ups — 0.37 s before, 0.67 s with F4; 15,000/1,500/10,000 — 0.97 s, 2.1 s;
+  30,000/3,000/20,000 — 3.6 s, 7.5 s. With `CREATE INDEX … ON followups(conversation_id, last_customer_at)` F4 costs
+  nothing (0.48 s, 0.86 s, 3.8 s). Not added (docs/75 §G8): the scan runs once in ten minutes inside master's 300-second
+  cycle. If it ever is slow, that index is one migration.
+
 ## 5.18.105 (root docs/74 §H.3.1; built 2026-11-09, not deployed) — Uganda: no phone number in any log line — 35 edits covering 37 log statements in 19 files, PluginLog::tail(), the report's BY NUMBER columns padded by characters; messages, sends, screens and stored records unchanged; no new setting; no migration
 
 ### Why

@@ -1995,8 +1995,8 @@ is_($RBASE !== null && array_intersect_key($mig104, (array)$mig($RBASE)) === $mi
 $mb = $BASE !== null ? str_replace('    "version": "5.18.98",', '    "version": "5.18.99",', (string)file_get_contents($BASE . '/manifest.json'), $mn) : '';
 t('I5 ' . QC_DELTA_REL . '\'s manifest.json is ' . QC_BASE_COMMIT . '\'s with its version line moved to 5.18.99',
     [$mn ?? 0, $RBASE !== null && hash('sha256', $mb) === hash_file('sha256', $RBASE . '/manifest.json')], [1, true]);
-$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.105",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.105 (root docs/74 §H.3.3; was 5.18.104)
-t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.105 (a later release moves this pin on; was 5.18.104, 5.18.103, 5.18.102, 5.18.101)',
+$mr = $RBASE !== null ? str_replace('    "version": "5.18.99",', '    "version": "5.18.106",', (string)file_get_contents($RBASE . '/manifest.json'), $mrn) : '';   // 5.18.106 (root docs/75 §J; was 5.18.105, 5.18.104)
+t('I5 this tree\'s manifest.json is ' . QC_DELTA_REL . '\'s with its version line moved to 5.18.106 (a later release moves this pin on; was 5.18.105, 5.18.104, 5.18.103, 5.18.102, 5.18.101)',
     [$mrn ?? 0, hash('sha256', $mr) === hash_file('sha256', $T . '/manifest.json')], [1, true]);
 
 // I6 — PHP 7.4 syntax on every added line, and php -l on every new or changed PHP file. php -l runs under this machine's
