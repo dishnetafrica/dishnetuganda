@@ -305,11 +305,12 @@ its start.
 operator's word). §J's order holds from here: the release suite twice after B2, then `deploy-5.18.106.sh`, its
 rehearsal, and the docs/07 entry.
 
-## L. `scripts/deploy-5.18.106.sh` — the design (16 Nov, before any derivation; reviewed twice)
+## L. `scripts/deploy-5.18.106.sh` — the design (16 Nov, before any derivation; reviewed three times)
 
 Written while 5.18.105's pass B2 runs (no PHP beside it), from two read-only maps of `scripts/deploy-5.18.105.sh` against
 the 5.18.106 delta. Reviewed by two read-only reviewers (43 findings, one blocker), revised, then rechecked by two more
-(every finding applied or answered; 10 further major and 25 minor points); every point is applied below. Nothing here is
+(every finding applied or answered; 10 further major and 25 minor points), then a third time (7 major, 18 minor, all
+precision in the text the second revision added); every point is applied below. Nothing here is
 derived, run or deployed. `S105:n` is a line of 5.18.105's script as committed in `2a41c9d`. The owner may overrule any
 decision in §L.9.
 
@@ -328,14 +329,21 @@ decision in §L.9.
   put-back; the switch tool only `show`, `--check` or `doctor`; `$QF_WRAPPER` only on echo lines — CS-G1's remedies are
   printed as literal text on echo lines); K2 (`lk_ca1` defined with both verdicts, called once, from `qf_after`); K4 (the
   never-fell count without `list_last:%`); K3 carried, its weakened copy re-anchored on V1's new line.
-- **K5, the one write (§L.7).** Its detector, outside echo and `printf` text: a call of `saveOverrides` or `writeKycFile`,
+- **K5, the one write (§L.7).** Its detector, over code (not display text): a call of `saveOverrides` or `writeKycFile`,
   a `->save(` naming `kyc_config.json`, a run of `set_config.php`, or the switch tool's `on`, `off`, `skip`, `set` or
-  `erase`. It must find exactly one: `as_rb1`'s `saveOverrides`, called from the typed rollback and from V1 and nowhere
-  else, one key, one value, as `-u "$DB_OWNER"`, with the installed tree as its code root, before `do_rollback`. The one
-  known other `->save` (SLR_PHP's throwaway store, S105:2186) is named as the exception, its path under the run's `/tmp`
-  asserted. K5 also asserts the new wording of every text §L.7 rewords. Its weakened copies: a second call site; a second
-  key; the write without `-u "$DB_OWNER"`; the code loaded from elsewhere; the write after `do_rollback`; a second
-  `saveOverrides` hidden in a non-echo `printf`; a `->save` on the live data folder.
+  `erase`. **Display text** is exactly: the arguments of `echo`, `ok`, `bad`, `note`, `stop` and `hdr`; a `printf` whose
+  output goes to the terminal or the log, never piped or redirected into a command; and the right-hand side of one named
+  variable, `OWNER_AUTOSEND_CMD` (the owner's command, §L.7), which K5 shows is expanded only inside display text, never
+  as a command word, in `eval` or in `sh -c`, and which holds `--key followup_auto_send --value [01]` and the output cut.
+  Everything else is code, a `printf` piped into `php` or `docker exec` included. K5 must find exactly one writer:
+  `as_rb1`'s `saveOverrides`, called from the typed rollback and from V1 and nowhere else, one key, one value, as `-u
+  "$DB_OWNER"`, with the installed tree as its code root, before `do_rollback`. **Two known exceptions**, each asserted:
+  SLR_PHP's `->save` on a throwaway store (S105:2186), its path under the run's `/tmp`; and Q-CA6's run of
+  `set_config.php` (S105:5391-5393), its `DN_DATA_DIR` and `DN_VAULT_FILE` under the run's `/tmp`, its key
+  `ucrm_quote_organization_id`, its value `disabled`. K5 also asserts the new wording of every text §L.7 rewords. Its
+  weakened copies: a second call site; a second key; the write without `-u "$DB_OWNER"`; the code loaded from elsewhere;
+  the write after `do_rollback`; a `saveOverrides` in a `printf` piped into `docker exec … php`; a `->save` on the live
+  data folder; Q-CA6 pointed at `$PDD_IN`.
 
 ### L.2 Identity, lists and carried constants
 
@@ -358,8 +366,8 @@ decision in §L.9.
   `tests/fixtures/r106_revert.php`, its line count read off Git by the derivation and pinned. Its ok line becomes *no file
   `7835906` tracks names one*, with a note: `7835906`'s `tests/test_quote_followup.php` loads `U_unjam.php` and
   `mutants_U.php` by glob — tests only; no runtime file and no server-run test (T1, T4) reaches them. **Every *reached by
-  nothing* and *read by nothing* text follows** (S105:494, 555, 638, 14038, 14236, 14458, 14570, 14732), and partZ asserts
-  that neither phrase survives.
+  nothing* and *read by nothing* text follows** (S105:494, 555, 638, 14038, 14236, 14327, 14458, 14570, 14732), and partZ
+  asserts that neither phrase survives.
 - **The two reports** (DL7): `scripts/sales-followup-report.sh` (P1) stays pinned to `7835906` — the report,
   `lib/QuoteSendEvidence.php` and its five installed files are unchanged at `bf29cbd`, each asserted from Git, and the
   summary's sentence that it is pinned to the deploying release is reworded. `scripts/enquiry-followup-report.php` still
@@ -446,7 +454,12 @@ copied from the pin.
 - **UJ-CA (notes)**: U1–U3 again, beside stage A's.
 - **UJ-ON (judged, `--after-only` only).**
   - **Its gate**: at stage A and now, `followup_enabled` on, `StaffJobsGate::applies()` reading Uganda, the age limit a
-    positive number and the same at both. Otherwise a note naming which condition held, which does not hold back PASSED.
+    positive number and the same at both. A condition measured false at stage A or now: a note naming the condition that
+    did not hold, which does not hold back PASSED. A condition that could not be read is never the gate's note: this run's
+    reading failing is a FAIL; `UJ_A` absent or unread in the state file judges on this run's values alone and says so.
+  - **The age cutoff is the pin's own `FollowUpService::staleBefore($config, …)`** (the gate's *positive number* is its
+    non-null result), with `$config` read as `followup_close` reads it (`PluginConfig::load` over the copy's settings and
+    vault), never re-implemented; the derivation asserts the call.
   - **Its positive control**: `followup_close`'s schedule entry (`master_schedule.json`) with `last_run` later than the
     copy (both UTC epochs; `last_run` is the start of the cycle that ran it) and `duration_ms` at least 0 (ended). Call
     that `last_run` T. Never `last_run_at`, which is local time and overwritten with the job's end.
@@ -454,14 +467,20 @@ copied from the pin.
     by the actor `closer`, its `closed` event's detail beginning `expired — the customer last wrote at `. Quote follow-ups
     have closed `expired` since 5.18.104 through `QuoteTracker::STATUS_TO_CLOSE`, with other actors; kind, actor and
     detail together single out F3. **PASS too, said as *nothing stale for F3 to close*,** when the positive control holds
-    and `expireStale`'s SELECT at T (its age limit taken at T, `c.id IS NOT NULL`, `LIMIT 1`) selects no row — the normal
+    and `expireStale`'s SELECT at T (`staleBefore($config, T)`, `c.id IS NOT NULL`, `LIMIT 1`) selects no row — the normal
     state after a `--redeploy`, or on a book that never had a backlog.
   - **FAIL** when the positive control holds, none closed `expired` by `closer` since the copy, fewer than 200 closed
-    `cancelled` by `closer` since the copy (so the cap does not explain it), and that SELECT at T selects a row.
-  - **NOT YET** without the positive control, with the counts (closes by `closer` since the copy by reason —
-    `cancelled`, `human_closed`, `opted_out`, `exhausted` — and closed `replied` since stage A).
+    `cancelled` by `closer` at or after T (so the last run's cap does not explain it; counted from T, so earlier passes'
+    cancels cannot mask a broken F3), and that SELECT at T selects a row.
+  - **NOT YET in every other case**: without the positive control; or with it, when none closed `expired` and 200 or
+    more closed `cancelled` by `closer` at or after T — said as *the close passes' places went to gone conversations*.
+    With the counts (closes by `closer` since the copy by reason — `cancelled`, `human_closed`, `opted_out`, `exhausted`
+    — and closed `replied` since stage A).
+  - **UJ-ON is always exactly one of PASS, FAIL and NOT YET**; any other outcome is a FAIL, never PASSED.
 - **NOT YET is a summary state of its own.** A NOT YET counter, and a third summary branch beside PASSED and FAILED, FAIL
-  taking precedence: *5.18.106 (after-only): NOT YET — <counts>; run it again after <UTC time>*, with the `--after-only`
+  taking precedence: *5.18.106 (after-only): NOT YET — <counts>; run it again after <UTC time>* — the later of the copy
+  plus 20 minutes and `followup_close`'s `last_run` plus 900 s (its 600 s interval and one 5-minute master cycle; the copy
+  plus 900 s when it has not run since) — with the `--after-only`
   command alone on its line with its log, the owner's §F steps not printed, and exit status 3 (0 PASSED, 1 FAILED).
 - **The other 5.18.106 readings are notes**: F2's closes (enquiry, actor `sender`, detail beginning `expired — the
   customer last wrote more than `) and F5's attempt-taken expiries come at any hour, but only for drafts in the sender's
@@ -482,8 +501,9 @@ copied from the pin.
   an absence assertion over `/numbers( in)? again/i` and *WRITES PHONE*. LM-G2, LM-CA1, LM-CA2 and LM-ON are carried.
 - **The whole LK family** is carried: the ladder is kept as found.
 - **QF, VN, VA, OF, AC, QC** are carried. Where a text uses `$BASELINE_VERSION` for 089–091's origin it becomes the literal
-  5.18.104 — exactly S105:7492, 7495, 7625, 7626, 8527, 9185 (its second use), 9229, 9236 and 14638. Where it means the live
-  release (S105:7567, 8472, 8492, 9163, 9164, 9181, 9185's first use) it stays. QF-G3's counts and HK7's send-site
+  5.18.104 — exactly S105:7492, 7495, 7625, 7626, 8527, 9185 (its second use), 9229, 9236, 10902 (its second use), 10903 and
+  14638. Where it means the live release (S105:7567, 8472, 8492, 9163, 9164, 9181, 9185's first use, 10902's first use) it
+  stays. QF-G3's counts and HK7's send-site
   inventory are re-read at `7835906` and the pin (the delta adds no `sendText` call). QF-CA4's `due()` call is unchanged in
   meaning: the new parameters default to 5.18.105's query.
 - **R7, V3g, BR1, A6, A14–A16, A22, T1/T4** carried. A14's dates in the header are worded by rule (the quarantine's
@@ -498,7 +518,8 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
 - **The writer.** The only writer is the plugin's own, `PluginConfig::saveOverrides($dataDir, ['followup_auto_send' =>
   '0'])`. It reads `<data>/kyc_config.json` (`readExistingForSave`), writes it back pretty-printed, and then mirrors **the
   whole file** into the store row (`kyc_config`, id 0; `array_merge($row, $file)`). Keys held only in the row (screens and
-  jobs write it directly; `clearEvolutionKey` removes a key from the file alone) are kept by the merge and do not matter.
+  jobs write it directly; `clearEvolutionKey` removes a key from the file alone) are kept by the merge — as they are, when
+  condition 4b holds.
   A key the file holds that the row lacks or holds differently would be overwritten in the row — and two writers put keys
   in the file alone (`saveEvolutionCredentials`, `saveAiSettings`), secrets among them.
 - **The precondition, computed by one reader** (U5 at stage A, `rb_pre106` before the question, and `as_rb1` itself,
@@ -508,22 +529,24 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
      file, losing every override in it).
   2. The row is read as `SqliteStore::load` returns it (one JSON text, `json_decode(…, true)`), the book opened
      `SQLITE_OPEN_READONLY` as LK's `lk` mode opens it; only `as_rb1` later opens it through the writer.
-  3. For every key k of the file other than `followup_auto_send`: k is present in the row, and
-     `json_encode(row[k], JSON_UNESCAPED_UNICODE) === json_encode(file[k], JSON_UNESCAPED_UNICODE)` — the writer's own
-     flags, so equal means the mirror leaves that value as it is ('3' and 3 differ). Compared by LK's keyed hash, values
-     only in memory, key names out.
-  4. `json_decode(json_encode(file, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES), true) === file`, so the rewrite changes no
-     value's type.
+  3. For every key k of the file other than `followup_auto_send`: k is present in the row, and the decoded values are
+     identical, `row[k] === file[k]` (so `'3'` and `3` differ, and so do `1.0` and `1`). Values only in memory, key names
+     out.
+  4. The rewrite changes no value's type: `json_decode(json_encode(file, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES), true)
+     === file`; and (4b) the mirror re-serializes the whole merged row, so the row too must survive its own encoding:
+     `json_decode(json_encode(row, JSON_UNESCAPED_UNICODE), true) === row`. Only with 4b do keys held only in the row stay
+     as they are.
   5. `DB_OWNER` is known, and every file the write and the read-back load — `PluginConfig`, `ConfigVault`,
-     `StoreInterface`, `JsonStore`, `SqliteStore`, `MigrationRunner`, `SecureFile` — is at `7835906`'s sha256 in the
-     installed tree; the installed `migrations/` is `7835906`'s set (A0's and R7's reading) and `<plugin>/seed` is absent.
+     `StoreInterface`, `JsonStore`, `SqliteStore`, `MigrationRunner` — is at `7835906`'s sha256 in the installed tree; the
+     installed `migrations/` is `7835906`'s set (A0's and R7's reading) and `<plugin>/seed` is absent.
   Each failing condition has its own fixed reason text. A mismatch needs a screen's or a file-only write since the
   owner's last tool command (every `on` and `off` mirrors the whole file), so whether production meets it is not known.
 - **Before `ROLLBACK` is typed** (`rb_pre106`, read-only): LK-RB0 as before; `followup_auto_send` in each of the four
   places and its effective value; the precondition's result; F5's count, and when it is above 0, in capitals, that
   5.18.105's sender will send each of those follow-ups' approved drafts in one pass; that 5.18.105's scan will open new
   follow-ups for recently quiet conversations whose follow-up 5.18.106 closed.
-  - **For each claim switch that is on**, in capitals, with rb_pre105's framing: *UNDER 5.18.105 THIS MEANS CLAIM MODE.
+  - **For each claim switch present in the file or the store row** (LK's map, as CS-G1 reads it), in capitals, with
+    rb_pre105's framing: *UNDER 5.18.105 THIS MEANS CLAIM MODE.
     CHANGE NO SWITCH WHILE THIS SCRIPT WAITS. To end claim mode: answer anything but ROLLBACK — nothing has been changed
     — run the command below, alone, then run the rollback again*, and the `off` command alone on its line.
   - **If `followup_auto_send` reads effectively on and the precondition fails**, in capitals before the question: *THE
@@ -531,16 +554,28 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
     AUTOMATICALLY. To avoid that, answer anything but ROLLBACK — nothing has been changed — run your own command below,
     alone, then run the rollback again*, then the command (below). If it already reads off, a plain note that nothing
     will be written, whatever the precondition.
-- **The owner's own command**, wherever the script prints it, full and runnable, alone, its output cut to the result line
-  so that its log carries no setting's value (set_config prints every setting it manages after saving, the company phone
-  among them):
+- **The owner's own command** (`OWNER_AUTOSEND_CMD`, built after `DB_OWNER` is read, never inside an assignment made
+  before it), wherever the script prints it, full and runnable, alone, with its own log, **its output cut where
+  set_config's settings listing begins** (`… 2>&1 | sed '/^  AI SETTINGS$/,$d'`): set_config prints every setting it
+  manages after saving, the company phone among them, and nothing it prints before that listing carries a setting's
+  value — so `docker exec` errors, PHP errors and the result line all reach the log:
   `docker exec -u $DB_OWNER -e DN_DATA_DIR=$PDD_IN $CONTAINER php $IN_CONTAINER/tools/set_config.php --key
-  followup_auto_send --value 0 2>&1 | grep -E '^  (followup_auto_send = |Could not save: |Nothing was changed)'` with its
-  own log. Before it, for the disagreement cause only: that it also copies `kyc_config.json` into the store row, so
-  <names> take the file's values there, and that it refreshes the vault (a later run's Z1 reads that) — the owner's
-  decision. When `DB_OWNER` is unknown, the notice is printed without a command and says why. **The mirror is accepted
-  for the owner's own commands and refused only for the script's own write**: every `on` and `off` the owner runs already
-  mirrors the whole file; what the script must not do is change state the owner has not seen named.
+  followup_auto_send --value 0 2>&1 | sed '/^  AI SETTINGS$/,$d'`. Printed with it: the one line that means success
+  (`followup_auto_send = 0`; `= 1` for the turn-back-on form), and that any other line, or none, means nothing was saved.
+  **Per cause, never one sentence for all**:
+  - *the file and the row disagree*: that it also copies `kyc_config.json` into the store row, so <names> take the file's
+    values there, and that it refreshes the vault (a later run's Z1 reads that) — the owner's decision;
+  - *a value's type would change* (condition 4): that it rewrites the file the same way, naming the keys whose type
+    changes;
+  - *the row cannot be read*: the command, and that its mirror into the row may fail quietly (the file alone decides);
+  - *`kyc_config.json` does not decode*: **no command** — in capitals, that the plugin ignores that file today, so its
+    values are not in effect; that set_config, or any settings save, would replace it with a one-key file; that it must
+    be repaired by hand first, then the rollback run again;
+  - *a loaded file is not `7835906`'s* (condition 5): no command, and why;
+  - *`DB_OWNER` unknown*: the notice without a command, and why.
+  **The mirror is accepted for the owner's own commands and refused only for the script's own write**: every `on` and
+  `off` the owner runs already mirrors the whole file; what the script must not do is change state the owner has not seen
+  named.
 - **AS-RB1, after `ROLLBACK` is typed and before `do_rollback`**, and in V1's automatic rollback before its `do_rollback`:
   - Run through the script's own owner-run PHP (`docker exec -u "$DB_OWNER"`, as `dxo`/`qf_php` do; `DB_OWNER` is read in
     every mode), loading the code from the installed tree. **Never as root**: as root SQLite could leave a root-owned
@@ -552,16 +587,19 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
   - **Read back**: the file decodes, its key set is the set before plus `followup_auto_send`, it reads `'0'`, it is owned
     by `DB_OWNER` with mode 0600, and the key is effectively off through the installed `PluginConfig::read()` (`load()`'s
     files in `load()`'s order, without `ConfigVault::apply`) and `FILTER_VALIDATE_BOOLEAN` as `FollowUpPolicy::mayAutoSend`
-    reads it — FAIL otherwise. Every other key of the file and of the row has the hash it had just before the write, each
+    reads it — FAIL otherwise. Every other key of the file and of the row has the hash it had just before the write (over `serialize()`, so a change
+    of type counts), each
     place compared whole; `<plugin>/data/config.json` and `<data>/config.json` unchanged; the LK map and V3g's keys
     unchanged. The row's `'0'` is a note: the writer mirrors best effort, and no reader of `followup_auto_send` reads the
     row.
   - **No write** when the precondition fails, when the key already reads off, or when the rollback has nothing to roll
     back (`RB_NOTHING`). Under `RB_NOTHING`, if AS-RB2's reading finds it on, a capitals notice with the owner's command
     (no write).
-  - **A failed or skipped write never blocks the rollback** (5.18.105's rule, docs/74 §H.5.3): a FAIL in capitals, and
-    the owner's command printed after the verdict, alone; in V1, in V1's own stop message, in its own paragraph before
-    `PUTBACK_SHOW`'s.
+  - **A write that failed, or that was not made because the precondition failed or `DB_OWNER` is empty while the key
+    reads effectively on, never blocks the rollback** (5.18.105's rule, docs/74 §H.5.3): a FAIL in capitals, and the
+    owner's command (where its cause allows one) after the verdict, alone; in V1, in V1's own stop message, in its own
+    paragraph before `PUTBACK_SHOW`'s. A key that already reads off: a plain note, no FAIL. Under `RB_NOTHING`: a note,
+    or with the key on, the capitals notice (a note).
   - **No wait**: a `followup_run` pass that began before the write is 5.18.106's own, whose `due()` leaves out every
     follow-up holding an approved draft; a pass of 5.18.105's run can begin only after `do_rollback` and reads its
     configuration then.
@@ -575,13 +613,17 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
   the VN-RB5, OF-RB2 and AC-RB2 notes reworded to `7835906`).
 - **The put-back by hand** (`PUTBACK_CMD`, printed in the summary, in the deploy-did-not-verify stop and in stage A's
   mixed-tree refusals) writes nothing: **it does not switch `followup_auto_send` off**. `PUTBACK_HAZARD` and the summary's
-  by-hand paragraph say so, and print the owner's own command in a separate paragraph, alone.
+  by-hand paragraph say so, and print the owner's own command in a separate paragraph, alone — built at print time, after
+  `DB_OWNER` is read (`PUTBACK_HAZARD` is assigned at S105:11023, before it). In the stops after a rollback that did not
+  verify (S105:12567, 12602) the sentence and the command appear only when AS-RB1 did not write, and once.
 - **What stays**: every close the release made — nothing reopens them; the drafts it set `expired`; the ladder as found;
   `followup_auto_send` off. **What comes back**: 5.18.105's sender and run, with automatic approval off.
 - **The texts that said the script never writes a key or opens the live book read-write** are reworded to name this one
-  write, once: S105:102-103, 427-436, 487-491, 550-566, 570-573, 585-588, 611-613, 7757-7764, 12561 (the `ROLLBACK`
-  prompt says whether it will write), 12566, 12589-12591, 14385 and 14407 (*changes no setting but `followup_auto_send`
-  (AS-RB1)*), 14458, 14570 and 14726-14730. K5 asserts their new wording.
+  write, once: S105:102-103, 427-436, 487-491, 550-566, 570-573, 585-588, 611-613, 7757-7764, 7778 (`rb_pre106`'s header
+  now announces the write), 10757 (R7's header: *this run writes nothing*), 12561 (the `ROLLBACK` prompt says whether it
+  will write), 12566, 12589-12591, 12596 (V1's *every switch kept*, now *followup_auto_send set off, AS-RB1*), 14385 and
+  14407 (*changes no setting but `followup_auto_send` (AS-RB1)*), 14392 (*writes nothing to the book*), 14458, 14570 and
+  14726-14730. K5 asserts their new wording; 5.18.105's rehearsal anchors 12596's text, so 5.18.106's re-anchors it.
 
 ### L.8 The header's rules for the operator
 
@@ -593,9 +635,11 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
 - **After a PASSED `--after-only`, the owner's own steps (§F), each its own command, never run by the script**: raise
   `followup_daily_cap`; then step 6 (`on chase`); later, consider `followup_run_limit`. The summary prints them, one per
   line.
-- **After a rollback, `followup_auto_send` stays off.** A later PASSED `--after-only` of a `--redeploy`, finding it off
-  and `AS_RB1=written` on record, says so and prints the owner's own command to turn it on (`--value 1`, the form above),
-  alone, as the owner's choice.
+- **After a rollback, `followup_auto_send` stays off.** A later PASSED `--after-only` of a `--redeploy`, finding it off,
+  reads the latest rollback record — the newest `RB_COPY_AT` among `rollback-state-*.env` and the kept
+  `state-*.env.prev-*` files, read as A14 reads `COPY_AT` and `RB_COPY_AT` (S105:11878-11889) — and only when that record
+  carries `AS_RB1=written` says so and prints the owner's own command to turn it on (`--value 1`, the form above), alone,
+  as the owner's choice.
 - `--after-only` at least 20 minutes after the copy, again after a close pass has run (UJ-ON needs one), and the next day
   inside the send window.
 
@@ -631,16 +675,20 @@ then turn step 6 off through the real tool — steps 1–5 on, production's stat
   straddling error stamped in local time on both sides of the boundary, a straddling cycle with no `Cycle complete`, a copy
   no cycle straddled, and its NOT ESTABLISHED (a note) without the lines;
 - **`--after-only`** before and after a close pass (NOT YET with exit status 3, then UJ-ON PASS); its weakened copy (F3
-  removed from the installed close job) FAIL; and a book with nothing stale reading PASS (*nothing stale for F3 to
-  close*);
+  removed from the installed close job), asserting UJ-ON's own FAIL line with its stale count and no UJ-ON PASS or NOT YET
+  line, R1's failure expected beside it; a book with nothing stale reading PASS (*nothing stale for F3 to close*); a book
+  whose 200 oldest stale rows are gone conversations with one present row stale (NOT YET, then PASS on the next pass);
+  `UJ_A` absent (judged on this run's values, said so); this run's reading failing (FAIL);
 - **the rollback**: with the store row holding keys the file lacks (production's normal state; AS-RB1 must write, AS-RB2
   off, LM-RB1 masked); with the file holding a key the store lacks, and with the same key typed differently (`'3'`
   against `3`) (no write; the capitals notice before `ROLLBACK`; the command printed alone, its log holding no planted
-  phone or e-mail); with a `kyc_config.json` that does not decode (no write, its own reason); with `followup_auto_send`
+  phone or e-mail, and, with a wrong container name, the `docker exec` error reaching the log); with a `kyc_config.json`
+  that does not decode (no write; cause 1's notice, no command); with `followup_auto_send`
   already off (no write, the plain note); with step 6 on at the rollback (the claim-mode notice); V1's automatic rollback,
   with the precondition holding and failing (the command in V1's stop message); K5's seven weakened copies;
 - **`--redeploy`** refused while a claim switch is on, then PASSED, its `--after-only` printing the owner's command to
-  turn `followup_auto_send` back on.
+  turn `followup_auto_send` back on — after a typed rollback and, separately, after V1's; a PASSED deploy's summary
+  printing the full command in its by-hand paragraph.
 
 Everything seeded is fictitious, from the rehearsal's own number range.
 
