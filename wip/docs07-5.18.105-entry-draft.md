@@ -3,32 +3,46 @@
      docs/07-change-control.md when they are in. Until then root docs/74 §S is the record. The release was pushed on
      15 Nov on the owner's word; nothing here says it is deployed: it is not. -->
 
-## 8–14 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; pushed on 15 Nov on the owner's word, to deploy after pass B2; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: pass B1 317 files, 22,979 passed, 7 failed — the seven known container checks alone; ⟦PENDING: pass B2 — files, passed, failed, and whether only the same seven fail⟧; the rehearsal's record: 2,710 ok, 3 failed — the three inherited checks (98-0, 99-0, 100-0) alone; NOT deployed
+## 8–16 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; nothing else changes — no message, send, stored record, setting or migration — and every sales follow-up switch stays as found. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), built, and re-cut on 14 Nov for two test fixes that change no runtime file; pushed on 15 Nov on the owner's word, to deploy after pass B2; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it: pass B1 317 files, 22,979 passed, 7 failed — the seven known container checks alone; ⟦PENDING: pass B2 — files, passed, failed, and whether only the same seven fail⟧; passes A and A2 (each cut by a container restart) and A3 (after which the release was re-cut), all on the first cut `f764699`, do not count; the rehearsal's record: 2,710 ok, 3 failed — the three inherited checks (98-0, 99-0, 100-0) alone; NOT deployed
 
 **Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above). On 8 Nov: 5.18.104 deploys as
 built, and 5.18.105 masks the four older log lines that carry a phone number, ready before step 12 (`offers-live`) is
-switched on. Later on 9 Nov, after the design (root `docs/74`) found about 25 more such lines on Uganda every day:
-5.18.105 masks **every** log line that can carry a phone number on Uganda, not only those four; the chase (step 6) does
-not wait for it; `offers-live` still does. The report's column fault, seen in the live report on 9 Nov, is in scope too.
+switched on. On 9 Nov: step 6 (`chase`) waits for 5.18.105 too. Later on 9 Nov, after the design (root `docs/74`)
+found about 25 more such lines on Uganda every day, the owner replaced that ruling: 5.18.105 masks **every** log line
+that can carry a phone number on Uganda, not only those four; the chase (step 6) does not wait for it, and comes on
+once tracking has run 72 hours; `offers-live` still does. (Since 15 Nov root `docs/75` §F holds step 6 and both offers
+steps for another reason, until 5.18.106 is deployed: Where the server stands, below.) The report's column fault, seen in the live report on 9 Nov, is in scope too.
 
-**Where the server stands, 13 Nov.** 5.18.104 is live since 9 Nov. Steps 1 (`report`) and 2 (`ack`) are on since 9 Nov,
-step 3 (`tracking`) since 13 Nov, 05:27:38 UTC. Steps 4 and 5 can come on from 14 Nov, step 6 (`chase`) from 16 Nov at
-the earliest. None of them waits for this release. Only step 12 waits.
+**Where the server stands, 15 Nov.** 5.18.104 is live since 9 Nov (copy 03:50:25 UTC). Steps 1 (`report`) and 2
+(`ack`) are on since 9 Nov, step 3 (`tracking`) since 13 Nov, 05:27:38 UTC, its check PASS on 15 Nov at 10:28:30 UTC.
+Step 4 (`list`) came on at 10:50:40 UTC and step 5 (`voice-measure`) at 10:58:46 UTC, both on 15 Nov. None of them
+waits for this release, and the deploy keeps each as it finds it. `release/5.18.105` was pushed at 10:15 UTC on 15 Nov,
+and the server's `--check` read GO at 10:23:30 UTC, before steps 4 and 5 came on.
+- **Step 6 (`chase`).** By the owner's ruling of 9 Nov it may come on from 05:28 UTC on 16 Nov, once tracking has run
+  72 hours, without waiting for this release. **But root `docs/75` §F (15 Nov) holds it, and the owner was advised to
+  hold it:** until 5.18.106 is deployed, none of the three switches that put enquiry sends into the ledger's claim
+  mode may come on — `quote_chase_enabled` (step 6), `offers_test_enabled` (step 11) and `offers_live_enabled`
+  (step 12). With any of them on, claim mode would start sending the stale backlog from the sales number: month-old
+  drafts, up to two per customer. 5.18.106 is cut from 5.18.105 and can be deployed only after it.
+- **Step 12 (`offers-live`)** also waits for this release: 5.18.105 serving and its `--after-only` passed (the owner's
+  rulings, 8 and 9 Nov).
 
 **What the owner does next, in order.** Each command is in this entry's runbook, in a block of its own; the rollback has
 a section of its own.
-1. **Nothing yet.** One result is still missing: the suite's pass B2 (Tests, below), planned from Monday 16 Nov,
-   00:00 UTC.
+1. **Nothing yet.** One result is still missing: the suite's pass B2 (Tests, below), begun on Monday 16 Nov at
+   00:00 UTC and still running.
 2. **The word to push `release/5.18.105`: given on 15 Nov** (*"Push now, deploy after B2"*). It was pushed at
-   10:15 UTC. The `--check` may run now; the deploy waits for pass B2.
+   10:15 UTC. The `--check` has run since (step 3); the deploy waits for pass B2.
 3. **Run the deploy on the server, after pass B2.** The `--check` has run: 15 Nov, 10:23:30 UTC, GO — 78 ok, 0 failed,
    62 notes, nothing changed. Then the deploy. Send back the log file, never a copy of the terminal.
 4. **Run `--after-only`** at least 20 minutes after the copy, then the quarantine's own `--check`. Run `--after-only`
    once more the next day after 15:00 UTC.
 5. **Step 12 (`offers-live`) may follow once 5.18.105 serves and its `--after-only` has passed**, when its turn comes
-   in the ladder's order. Steps 1–6 go on meanwhile as planned.
+   in the ladder's order (the owner's rulings, 8 and 9 Nov). **Root `docs/75` §F holds it longer:** steps 6 (`chase`),
+   11 (`offers-test`) and 12 stay off until 5.18.106 is deployed, which can only follow 5.18.105. Steps 1–5 are on and
+   stay on. The owner was advised to hold step 6, which their 9 Nov ruling allows from 05:28 UTC on 16 Nov.
 
-### Release notes (log text only; root `docs/74`, the release's `SAFETY.md`)
+### Release notes (log text and the report's columns only; root `docs/74`, the release's `SAFETY.md`)
 
 - **On Uganda, the log lines the plugin itself put a phone number into no longer get one.** 35 edits (LN-01…LN-35) in
   19 files cover 37 log statements: one edit, in the Evolution sync's log writer, covers three. They are the four lines
@@ -102,7 +116,7 @@ cut is kept as `refs/keep/5.18.105-cut1`, and the fix, as its own commit, as `re
 ### Tests
 
 **The release's own test is one new file, `tests/test_log_mask.php`. Its 73 weakened copies are each caught.
-Pass B1 on `7835906` failed only the seven checks that fail in this container; pass B2 is still to run.**
+Pass B1 on `7835906` failed only the seven checks that fail in this container; pass B2 began on Monday 16 Nov at 00:00 UTC and is still running.**
 
 - **`tests/test_log_mask.php`** (sections under `tests/log_mask/`): 384 passed, 0 failed in pass B1; ⟦PENDING: in
   pass B2, and whether the same⟧. Every person and number in it is fictitious.
@@ -126,7 +140,7 @@ Pass B1 on `7835906` failed only the seven checks that fail in this container; p
     fail. 35 put `994d660`'s line back, one per LN. 19 put a whole log file back to `994d660`'s. 2 stub `tail()` and
     `mask()`. Then B 2, C 2, D 8, E 4 and F 1. A copy whose anchor is not found exactly once is a failure, never a skip.
 - **The layer, `tests/fixtures/r105_revert.php`, lets every older boundary test still judge 5.18.104's tree.** Those
-  tests compare the plugin with older releases; to them each 5.18.105 edit is an undeclared change. The layer takes
+  tests compare the plugin with older releases; to them a 5.18.105 edit is an unmarked change, and a 5.18.105 file is undeclared. The layer takes
   5.18.105 out first, against `994d660` read from Git, and each older test then judges what is left, unchanged.
   - **Through the layer** (`r105_less()`, the tree with every marked 5.18.105 edit put back): `quote_followup` N and M01,
     `quote_agent_copy` J, `catalogue_direct` I, `quote_from_ucrm` I, the switch tool's TL14 (its main scan),
@@ -165,9 +179,13 @@ Pass B1 on `7835906` failed only the seven checks that fail in this container; p
   - ⟦PENDING: each re-pointed file's count in both passes, beside its count on `994d660`⟧
 - **The release: the full suite twice on `7835906`** — 317 files, 5.18.104's 316 and `test_log_mask.php` — each to run
   on the days and hours that known limit 16 allows.
-  - **Pass B1** (14 Nov, 11:48:16–18:12:07 UTC): 317 files, 22,979 passed, 7 failed, `EXIT=1`. The seven are the
-    four container-only files' (below).
-  - **Pass B2** (planned from Monday 16 Nov, 00:00 UTC): ⟦PENDING: begun and ended (UTC); files, passed, failed,
+  - **Pass B1** (14 Nov, 11:48:16–18:12:07 UTC, in one piece, no restart): 317 files, 22,979 passed, 7 failed,
+    `EXIT=1`. The seven are the four container-only files' (below). Nothing else failed: `test_quote_followup` (L05)
+    768/0, `test_quote_summary` 59/0, `test_sales_followup_tool` 397/0. Beside 5.18.104's pass B, file by file, every
+    difference is a count 5.18.105's own tests and re-points add: `test_log_mask` 384/0, and 1 to 8 more checks in each
+    of nine re-pointed files, 17 between them (22,979 − 22,578 − 384). It ran on a Kampala Saturday, CK12 and HK11
+    among its files, before 21:00 UTC.
+  - **Pass B2** (begun on Monday 16 Nov at 00:00 UTC, still running): ⟦PENDING: begun and ended (UTC); files, passed, failed,
     EXIT; whether every file's count equals B1's⟧.
   - **Known to fail in this container only** (5.18.104's known limit 11): seven checks in four files —
     `test_install_authorisation` 379/2, `test_mail_quote` 91/1, `test_migration_integrity` 27/1 and `test_secure_file`
@@ -177,12 +195,14 @@ Pass B1 on `7835906` failed only the seven checks that fail in this container; p
     11,788 passed and 4 failed. Pass A2 began on 13 Nov at 05:29:32 UTC and was cut by a restart; its log ends at
     10:19:34 UTC inside file 230 of 317, with 15,127 passed and 4 failed. In each, the 4 were in the three of those four
     files the pass had reached.
-  - **Pass A3, on `f764699`, ran to its end.** It began on 14 Nov at 01:13:12 UTC. Two container restarts cut it, at
-    05:20:21 and 06:37:03 UTC, and each time it was resumed from the start of the file that was cut (05:32:10 and
-    06:53:40 UTC). It ended at 10:36:43 UTC: 317 files, 22,975 passed, 10 failed. Seven are in the four container-only
+  - **Pass A3, on `f764699`, ran to its end, in pieces.** It began on 14 Nov at 01:13:12 UTC. Two container restarts
+    cut it: its log stops at 05:20:21 UTC and again at 06:37:03 UTC, each time inside file 230
+    (`test_quote_from_ucrm.php`). Each time it was resumed from the start of that file (05:32:10 and 06:53:40 UTC), in
+    the same frozen worktree and order, with a `RESUME` line in its log. It ended at 10:36:43 UTC: 317 files, 22,975 passed, 10 failed. Seven are in the four container-only
     files (above). One is L05 of `test_quote_followup` (767/1), a check of 5.18.104's that compares two printouts and
-    fails if a second ticks over between them. It read 768/0 in pass A2 and in both of 5.18.104's passes, but
-    measured alone it fails in about 4 to 7% of runs (known limit 16).
+    fails if a second ticks over between them. The file read 768/0 in pass A2; in both of 5.18.104's passes it read
+    760/0, L05 passing, before 5.18.105's re-points. Measured alone, D03 `--all`, which L05 runs, fails in about 4 to 7%
+    of runs (known limit 16).
     The last two are the two fixes above: `test_quote_summary` M (57/1) and TL40's control (`test_sales_followup_tool`
     396/1). They made the first cut wrong, so the release was re-cut, and A3 counts for neither pass. Beside 5.18.104's
     pass B, file by file, every other difference is a count that 5.18.105's own tests and re-points add.
@@ -232,7 +252,8 @@ sha256 values of the four files the re-cut changed are new; the script is one li
 `scripts/sales-followup-report.sh` is written again by the derivation (158 lines, sha256 `7b78faf6751e51b0…`), because
 the report's column fix is in the release. It is pinned to `7835906` (until the re-cut, `f764699`). The five installed
 files it reads are the same in 5.18.104 and 5.18.105, so it runs before the deploy and after a rollback too. It
-fetches the release branch itself, and stops, having changed nothing, where the checkout holds no `7835906`.
+fetches the release branch itself when the checkout lacks `7835906`, and stops, having changed nothing, if it still
+lacks it.
 
 **New — the ladder kept as found (LK).** The ladder is the sales follow-up's steps and their switches. A switch is a
 key, and a key can live in four places: `<data>/kyc_config.json`, its row in the book, `<plugin>/data/config.json` and
@@ -291,7 +312,20 @@ OF-RB1 and AC-RB1. V3g has no exception left: any change of an AI or WhatsApp se
 deploy alone: no switch tool, no off-hook, no put-back of rows or keys by hand. Every switch is kept. Its section is
 below.
 
-**Found by the trials and a sweep, fixed in the derivation** (root `docs/74` §S.4):
+**Reviewed before its first commit** (`2db0431`, 9 Nov): six findings, D1–D6, each fixed in the derivation
+(`wip/derive-5.18.105/partR.py`, `partZ.py`, `partC.py` and `partL.py`):
+
+- **D1:** a `--rollback` that finds 5.18.104 already serving rolls nothing back, so it judges no LK-RB1: there is no
+  before to compare. It says so in a note.
+- **D2, D3:** the step-12 notice and LM-RB1 count the masked log lines alike, 35, never all 39 blocks.
+- **D4:** the kept-file lists that A0, Q-G1 and Q-CA1 print named, as kept, two files 5.18.105 changes,
+  `includes/post/post_cashbook.php` and `cron_quote_wa.php`. They now say those two are not among them.
+- **D5:** stage-A texts carried from 5.18.104 that called 5.18.103 the live release, or 5.18.104 the release, now name
+  the run's own releases.
+- **D6:** LM-G2's two strings are read at run time from the pin's `lib/SalesFollowupChecks.php`, never carried in the
+  script.
+
+**Found by the trials, a sweep and the record run's first start, fixed in the derivation** (root `docs/74` §S.4):
 
 - **T1-a** (trial 1): AC-CA2 refused in every deploy and `--after-only` (`refused=tree_p7`). Its harness refused a
   baseline that holds `lib/QuoteAgentCopy.php`. That was right while the baseline was 5.18.103. 5.18.104 carries the
@@ -318,12 +352,18 @@ below.
   - **The fix** (`be8930c`): each now reads its variable as a here-string, which delivers the same bytes. The old form
     and the new agree on 18 inputs. The derivation now refuses a script in which a quiet `grep` reads straight from a
     pipe; with one of the four edits taken out it refuses and names the line.
+- **The whole script was then read for the same hazard** (14 Nov; two readers working apart, one from the readers, the
+  other from the places where a status is judged; nothing was run). Both count 686 pipes in 474 pipelines. Where the
+  script judges a pipeline's status (40 pipelines by one count, 42 by the other), the reader reads its input to the end.
+  The pipelines whose reader can stop early (58 `head` stages, 7 `grep -m1`, the `awk`s that exit, 13 functions used as
+  readers) give only text: nothing judges their status. No further line of this kind was found, and the script is
+  unchanged. That `tar` reads an archive from Git to its end (8 judged pipelines) is known of `tar`, not measured here.
 - **The record run found nothing more in the script** (15 Nov): 5.18.105's own sections read 153 ok, 0 failed.
 
 ### The rehearsal
 
 **In short.** The rehearsal runs the real script in a sandbox, over a sales follow-up switched on through the real
-tool, as production has it. Three development trials ran on 13 Nov. The first two found two defects in the deploy
+tool, as production has it. Three development trials ran first, on 13 Nov. The first two found two defects in the deploy
 script and two in the rehearsal itself, all fixed; the third was clean but for the three inherited checks. The record
 run's first start was stopped by hand after 20 minutes, because of a fault of an older script that the chain replays;
 four lines of this script that shared the fault's form were corrected. Its second and third starts were cut by
@@ -352,7 +392,8 @@ Everything seeded is fictitious. It refuses to run where the server could be.
 - **105-pre** — it makes production's state. Four offer rows that 5.18.104's rehearsal had planted are removed first.
   `--check` refuses while 5.18.103 serves: "deploy 5.18.104 first". Then 5.18.104 is deployed again through its real
   script, and the ladder is walked through the real tool: steps 1–5 on (L1); then steps 1–6 on, one chase sent and one
-  STOP, which writes one old-form line (L2); then step 11 on with steps 7–9 skipped (L3), and step 12 on (L4).
+  STOP, which writes one old-form line (L2); then steps 1b (`agent-cc`) and 11 on, with steps 7–9 skipped (L3), and
+  step 12 on (L4).
 - **105-c** — `--check` over L2 and over L1 reads GO. LK-G1 names exactly the steps the rehearsal's own reader finds on.
   Nothing changes: no backup, no state file, no key file.
 - **105-1** — each refusal comes before anything changes, and its weakened copy is caught: a switch key held by a
@@ -363,7 +404,7 @@ Everything seeded is fictitious. It refuses to run where the server could be.
   says. The rollback is printed once, after the verdict, in a block of its own. Inside the same deploy the daily list's
   clean-up is held across the copy: LK-CA2 still passes, and a copy without its filter fails. Then the same deploy over
   L4, where step 12 is already on: LK-G1's note in capitals, and the key unchanged.
-- **105-5** — `--after-only` reads PASSED, and LK-AO names no key. Then the owner's next steps go through the installed
+- **105-5** — `--after-only` reads PASSED, and LK-AO names no key. Then the ladder's next steps go through the installed
   tool (`skip voice-dry-run`, `on offers-test`, `on offers-live`), and LK-AO names exactly the keys those commands
   wrote. With the key file moved aside it says "cannot be compared". Then four masked lines, LN-01 to LN-04, are driven
   through 5.18.105's code as installed — LN-01 through the installed webhook, the other three from a copy of the
@@ -450,9 +491,9 @@ rechecked. Those that change the design are root `docs/74` §S.2 item 4.
 ### Runbook
 
 As root on the server. Each command is its own paste. After each run send back its **log file**, never a copy of the
-terminal and never the cash sheet. Each log is 0600. The deploy script's runs go under `/root/dnb-5.18.105/`, the
-quarantine's `--check` under `/root/dnb-stray-quarantine/`, and the switch tool's wrapper writes its own under
-`/root/dnb-sales/`.
+terminal, never the cash sheet and never the report's sheet. Each log is 0600. The deploy script's runs go under `/root/dnb-5.18.105/`, the
+quarantine's `--check` under `/root/dnb-stray-quarantine/`, the report's under `/root/dnb-report/` (its command is
+printed by the deploy's summary), and the switch tool's wrapper writes its own under `/root/dnb-sales/`.
 
 **The script changes no switch.** The steps that are on stay on, and keep running through the deploy. It turns no step
 on and no step off. Make no KYC registration and no quote to try the release: the plugin WhatsApps every new quote to
@@ -463,6 +504,9 @@ its customer.
    - **`release/5.18.105` (`7835906`) must be on GitHub. It is, since 15 Nov, 10:15 UTC**, pushed on the owner's word
      (*"Push now, deploy after B2"*). The `--check` and deploy commands below fetch it, and their `&&` stops them if
      that fails. The report's wrapper is pinned to `7835906` too.
+   - **Pass B2 must have ended.** It began on 16 Nov at 00:00:05 UTC, and the owner's word is to deploy after it. Known
+     limit 16 names the two failures in it, beside the seven container-only checks, that would not be the release's:
+     `D03 --all`, and the physical-list control in a file run between 21:00 and 24:00 UTC.
    - **The development branch carries the script and both wrappers.** The `--check` and deploy commands below pull
      it. Since `2a41c9d` (14 Nov) it holds `scripts/deploy-5.18.105.sh` at sha256 `c70820cd69af899b…`.
      The record run ran on `a7b52e7`, with that script; nothing has changed it since.
@@ -472,7 +516,10 @@ its customer.
 
          ( umask 077 && cd /opt/dishnet && bash scripts/quarantine-stray-store.sh --check 2>&1 | tee /root/dnb-stray-quarantine/check-$(date -u +%Y%m%dT%H%M%SZ).log )
 
-1. **`--check`, read-only. Wise before the deploy.** It runs stage A alone: nothing is backed up, copied, deployed or
+1. **`--check`, read-only. Wise before the deploy.** It ran on the server on 15 Nov (10:23:30 UTC, the checkout at
+   `7e9a746`, the script's bytes unchanged since `2a41c9d`): GO, 78 ok, 0 failed, 62 notes; nothing was changed.
+   LK-G1 found steps 1–3 on, and LK-ON read each PASS. Steps 4 and 5 came on after it. Another before the deploy is
+   still wise; the deploy runs stage A again in any case. A `--check` runs stage A alone: nothing is backed up, copied, deployed or
    switched. It writes only its own 0600 cash sheet and row digest. LK-G1's note names the steps that are on, and
    LM-G1 and LM-G2 read ok. It ends GO or NO-GO. A GO prints `5.18.105 (check): GO — stage A holds.` and then the deploy
    command, with a flag only where a check needed one (each flag is your explicit choice); with none, it is step 3's.
@@ -492,9 +539,10 @@ its customer.
    Settings. A switch changed then fails the checks that compare before and after (LK-B1, LK-CA1). From the moment the
    deploy starts until its last line, no admin touches the uCRM catalogue screen, makes or removes a uCRM link, saves a
    plan or a kit, or changes uCRM's Products, Service Plans or client attributes.
-3. **Deploy**, at a quiet hour: not between 14:55 and 15:10 UTC (the evening WhatsApp, 18:00 Kampala), and not while
-   the morning list is being sent (step 4: Monday to Saturday, 08:00–11:00 Kampala; this second rule is inferred, not
-   measured). It runs stage A again, then asks you to type `DEPLOY`. Its own command:
+3. **Deploy, after pass B2**, at a quiet hour: not between 14:55 and 15:10 UTC (the evening WhatsApp, 18:00 Kampala),
+   and not while the morning list is being sent (step 4, on since 15 Nov: Monday to Saturday, 08:00–11:00 Kampala,
+   which is 05:00–08:00 UTC; this second rule is inferred, not measured). It runs stage A again, then asks you to type
+   `DEPLOY`. Its own command:
 
        cd /opt/dishnet && git pull origin claude/study-this-jhe2eg && git fetch origin release/5.18.105 && mkdir -p /root/dnb-5.18.105 && bash scripts/deploy-5.18.105.sh 2>&1 | ( umask 077; exec tee /root/dnb-5.18.105/deploy-$(date -u +%Y%m%dT%H%M%SZ).log )
 
@@ -527,15 +575,22 @@ are 5.18.104's runbook, above, unchanged: the tool is 5.18.104's, byte for byte.
 runs.
 
 - **Where it stands on 15 Nov:** steps 1 (`report`) and 2 (`ack`) on since 9 Nov; step 3 (`tracking`) on since 13 Nov,
-  05:27:38 UTC, its check PASS on 15 Nov at 10:28:30 UTC; steps 4 and 5 from 14 Nov at the earliest; step 6 (`chase`)
-  from 16 Nov at the earliest. Steps 1–6 do not wait for 5.18.105. Where the ladder stands, read-only:
+  05:27:38 UTC, its check PASS on 15 Nov at 10:28:30 UTC; step 4 (`list`) on since 15 Nov, 10:50:40 UTC, its check to
+  be run on Monday 16 Nov after 08:00 UTC; step 5 (`voice-measure`) on since 15 Nov, 10:58:46 UTC, its check to be run
+  from 17 Nov. Step 6 (`chase`) may come on from 05:28 UTC on 16 Nov by the ladder's rules, and by the owner's ruling
+  of 9 Nov it does not wait for 5.18.105. But root `docs/75` §F (15 Nov) holds it until 5.18.106 is deployed, and the
+  owner was advised to hold it: its switch, `quote_chase_enabled`, also puts enquiry sends into the send ledger's claim
+  mode, which today would close the ten refused drafts after three tries each and then send the stale backlog from the
+  sales number. The same rule holds `offers-test` and `offers-live`, whose switches do the same. 5.18.106 is cut from
+  5.18.105 and can be deployed only after it. Where the ladder stands, read-only:
 
       cd /opt/dishnet && bash scripts/sales-followup.sh show
 
 - **Step 12, `offers-live` — only after 5.18.105's `--after-only` has PASSED.** The owner ruled on 9 Nov that step 12
   waits for 5.18.105. The design (root `docs/74` §A) makes that exact: 5.18.105 serves, and its `--after-only` has
   passed. The tool does not check which release serves: that PASSED is the check. Step 12 also needs every step before
-  it on, skipped or optional, and `offers-test` on with its check at PASS, as before. Then:
+  it on, skipped or optional, and `offers-test` on with its check at PASS, as before. And neither `offers-test` nor
+  `offers-live` may come on until 5.18.106 is deployed (root `docs/75` §F, above). Then:
 
       cd /opt/dishnet && bash scripts/sales-followup.sh on offers-live
 
@@ -596,7 +651,7 @@ no switch tool. Send the log file before doing anything by hand.
 **Send back** the rollback's log file, `rollback-…` under `/root/dnb-5.18.105/`, and the quarantine check's. Never a
 copy of the terminal, and never the cash sheet.
 
-### Known limits (recorded — the release's `SAFETY.md`, `docs/74` §H.2, §S.2 and §S.3)
+### Known limits (recorded — the release's `SAFETY.md`, `docs/74` §H.2, §S.2, §S.3 and §S.4; `docs/75` §F and §K)
 
 1. **The masking holds only from the moment 5.18.105 serves.** Lines already written stay; the release changes code
    and rewrites no data. The capped logs drop old entries as new ones arrive (`webhook_log.json` keeps 300 entries,
@@ -631,7 +686,9 @@ copy of the terminal, and never the cash sheet.
 6. **What `PluginLog::mask()` catches, and what it does not** (LN-03, LN-24). It replaces runs of seven or more
    characters of digits, spaces, brackets and hyphens that start and end with a digit. A number written with dots or
    slashes, or in words, passes. It also replaces e-mail-like text (limit 3), and dates and long references, which
-   the design calls acceptable in `evo_sync.log` and in an error text.
+   the design calls acceptable in `evo_sync.log` and in an error text. It also puts the text on one line and cuts it at
+   400 characters (`lib/PluginLog.php`), so those lines change in that way too. The design names that effect only as
+   the reason it leaves K-13 as it is, not for these two lines.
 7. **What the search for such lines may still have missed:** a whole record handed to a log (K-17), and a value that
    reaches a log under a name that does not say phone, beyond the cases found. From now on test E2 fails on any new
    log statement that names a phone variable.
@@ -661,12 +718,17 @@ copy of the terminal, and never the cash sheet.
 12. **The `071_dpo_payments.sql` checksum mismatch is untouched** (the 9 Nov deploy's record, above).
 13. **The switch tool does not check for 5.18.105.** The tool and its two classes are 5.18.104's, byte for byte. So
     nothing in the plugin refuses step 12 before this release serves, or after a rollback. The order is the operator's
-    to keep: step 12 only once 5.18.105 is deployed and its `--after-only` has passed.
+    to keep: step 12 only once 5.18.105 is deployed and its `--after-only` has passed. Root `docs/75` §F (15 Nov) adds a
+    second rule, also the operator's to keep, which nothing in the plugin enforces either: steps 6 (`chase`), 11 (`offers-test`) and 12 only once 5.18.106 is
+    deployed.
 14. **The design's eight questions (`docs/74` §Q) ship with their defaults.** `docs/74` records no answer to any of
     them. Limits 1 to 4, and in the release notes what stands in the number's place and the search change, are those
     defaults.
-15. **5.18.104's known limits are not re-stated here.** This release changes log text, the report's padding,
-    `SAFETY.md`, the version line and tests. Three of those limits are touched:
+15. **5.18.104's known limits are not re-stated here.** Its limit 1 (every part OFF after the deploy) no longer
+    describes the server: steps 1 and 2 are on since 9 Nov, step 3 since 13 Nov, and steps 4 and 5 since 15 Nov, and
+    this release keeps them as found. This release changes log statements, adds `PluginLog::tail()` and the loaders
+    that `webhook.php`, `lib/QuotationService.php` and `cron_evo_sync.php` need for `PluginLog`, and changes the
+    report's padding, `SAFETY.md`, the version line and tests. Three of those limits bear on it:
     - **Its limit 11** (four test files fail in this container and nowhere else on record) is read again by the two
       passes: ⟦PENDING: the same seven FAIL lines, or not⟧.
     - **Its limit 12** (one wrong sentence in `SAFETY.md`, Operator action, step 3 of 5.18.103's section) is still not
@@ -689,4 +751,12 @@ copy of the terminal, and never the cash sheet.
       `test_quote_followup` L05 (as in pass A3). The deploy never runs it on the server. If pass B2 fails it, and
       nothing else beyond the seven container-only checks, that failure is this limit.
     - **So the two passes on `7835906` run** on Monday-to-Saturday Kampala days, outside Sunday daytime UTC, and
-      before 20 Nov, 21:00 UTC. Files 35–36 (`test_cashbook_physical_list`) never run between 21:00 and 24:00 UTC.
+      before 20 Nov, 21:00 UTC. Files 35–36 (`test_cashbook_physical_list`) never run between 21:00 and 24:00 UTC:
+      one control of that file asks for *yesterday* by the sandbox's clock while the book's rows are dated in Kampala
+      time, so it fails in those hours, and its weakened copies' file fails with it (5.18.102's known limit 12). Shown
+      again on 15 Nov at 23:24 UTC on an unchanged checkout of `7835906`: 495 passed, 1 failed (root `docs/75` §K). A
+      failure of that control in a file that ran inside those hours is the clock, not the release.
+17. **Git's short form** (root `docs/74` §S.4). From 16,384 packed objects a checkout writes 8-character short commit
+    ids, and the script's check (5.18.94's) refuses at A0 before anything is changed. A rehearsal's clone crossed that
+    count on 14 Nov (16,421 objects). If the server's `--check` or deploy stops with that sentence, the runbook's step 1
+    gives the command to run first.
