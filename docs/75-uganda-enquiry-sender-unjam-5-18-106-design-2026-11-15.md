@@ -494,8 +494,9 @@ copied from the pin.
 
 ### L.6 Carried, re-pointed
 
-- **LM becomes "5.18.105's masking still holds"**: none of 5.18.106's 23 files holds a masked block, and all 21 files
-  of `LM_HUNKS` (and `lib/SalesFollowupChecks.php`) are byte for byte the same at `7835906` and the pin. `LM_HUNKS` is kept
+- **LM becomes "5.18.105's masking still holds"**: no runtime file of 5.18.106's 23 holds a masked block (one test fixture,
+  `tests/fixtures/r105_revert.php`, holds LN-35's old and new blocks exactly as at `7835906` — found by the derivation's
+  partL, which asserts this form), and all 21 files of `LM_HUNKS` (and `lib/SalesFollowupChecks.php`) are byte for byte the same at `7835906` and the pin. `LM_HUNKS` is kept
   byte for byte and asserted equal to Git's `994d660`→`7835906` diff. LM-G1's control is fixed to `994d660`, not
   `$BASELINE_COMMIT` (at `7835906` the masked lines are already in place, so the carried control would refuse); the masked
   form is required at the pin, at the baseline and as installed. **LM-RB1 is inverted**: after a rollback to `7835906` the
