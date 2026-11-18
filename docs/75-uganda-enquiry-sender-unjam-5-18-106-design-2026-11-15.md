@@ -407,7 +407,10 @@ docs/75 §F: until 5.18.106 serves, none of `quote_chase_enabled` (step 6), `off
 A new `QF_PHP` mode, on the copy of the book QF already makes (`VACUUM INTO`, opened read-only), through the pin's code,
 printing counts, UTC times and generic channel labels (`sales`, `support`, `account`, `retailer`, `-N` suffixes, else
 `other`) — never a phone, a message, an instance name or an event's detail. **In the deploy run its values go to the state
-file (`UJ_A`)** for `--after-only` to compare; **`--check` prints them and writes nothing**. None refuses. It never calls
+file (`UJ_A`)** for `--after-only` to compare; **`--check` prints them and writes nothing**. None refuses but one, **FE-G1 (DL11, added 18 Nov)**: when U4 reads
+`followup_enabled` off as the jobs read it (a whole reading), stage A — and so `--check` — stops with NO-GO and
+changes nothing, printing the owner's `set_config --key followup_enabled --value 1` command alone on its line, never
+run; a U4 that could not be read refuses nothing. It never calls
 `expireStale()` or `close()` (on the read-only copy a close fails quietly and the method returns 0); it runs their SELECTs,
 copied from the pin.
 
@@ -426,7 +429,10 @@ copied from the pin.
 - **U4, the settings as the jobs read them**: `followup_enabled`, `followup_auto_send` (and its presence per place),
   `followup_daily_cap`, `followup_run_limit`, `followup_scan_limit`, `followup_max_age_hours` (and whether F2 and F3 are
   active: a limit that is not a positive number disables them), the ledger's mode, and `StaffJobsGate::applies()` (if
-  false, F1–F5 are inert, said in capitals).
+  false, F1–F5 are inert, said in capitals). *(18 Nov, review 2)* Where stage A's reading keeps UJ-ON from judging F3
+  for the life of the deploy — `StaffJobsGate::applies()` false, or the age limit not a positive number — U4 says so
+  in capitals before `DEPLOY` is asked, with the way out (do not deploy on this reading; put it right and run it
+  again): a note, never a refusal (DL2). `followup_enabled` off is FE-G1's.
 - **U5, whether a rollback could write `followup_auto_send`**: §L.7's precondition, computed by §L.7's one reader on the
   **live** `<data>/kyc_config.json` and the **live** store row (read-only, as `DB_OWNER`, values only in memory, key names
   and causes out) — never on the copy, whose settings are cut to the keep list without the secrets the precondition must
@@ -457,7 +463,17 @@ copied from the pin.
 - **UJ-ON (judged, `--after-only` only).**
   - **Its gate**: at stage A and now, `followup_enabled` on, `StaffJobsGate::applies()` reading Uganda, the age limit a
     positive number and the same at both. A condition measured false at stage A or now: a note naming the condition that
-    did not hold, which does not hold back PASSED. A condition that could not be read is never the gate's note: this run's
+    did not hold, which does not hold back PASSED. *(18 Nov, reviews 1 and 2)* Three notes, by where it failed:
+    **false now** — F3 has nothing to do, or another limit to do it by; once it holds again, the next `--after-only`
+    run after a close pass has run under it judges F3 (a run before that pass judges by passes made while it did not
+    hold, and can read FAIL) — unless stage A's gate failed too, when this deploy is not judged (next); **false at
+    stage A** — F3 may run now, but
+    stage A's reading is fixed in the state file for the life of the deploy, so UJ-ON cannot judge F3 for it, and a
+    judged UJ-ON needs a rollback and then a `--redeploy`; **stage A's gate held and only the age limit differs now** —
+    not judged on this run: with the limit set back to stage A's and a close pass run after that, the next
+    `--after-only` judges F3 (a run before that pass can read FAIL; or a rollback and a `--redeploy`, to keep the new
+    limit). The summary's *check it*
+    follows the note this run gave. A condition that could not be read is never the gate's note: this run's
     reading failing is a FAIL; `UJ_A` absent or unread in the state file judges on this run's values alone and says so.
   - **The age cutoff is the pin's own `FollowUpService::staleBefore($config, …)`** (the gate's *positive number* is its
     non-null result), with `$config` read as `followup_close` reads it (`PluginConfig::load` over the copy's settings and
@@ -642,17 +658,28 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
 
 - **5.18.105 must be live, its `--after-only` PASSED**, and the quarantine's `--check` begun after its copy.
 - **The three claim switches off** (CS-G1 refuses otherwise).
+- **`followup_enabled` on** (FE-G1 refuses otherwise; DL11, 18 Nov). Under the interim of 18 Nov it is off and step 6
+  on: before the deploy, **step 6 off first** (and steps 11 and 12 if on), **THEN `followup_enabled` on** — each its
+  own command, alone, never the reverse: under 5.18.105, `followup_enabled` on while a claim switch is on is §F's hazard
+  (claim mode closes the refused drafts after three tries each, then sends the stale backlog). A rollback's summary
+  says the same before *deploy again*.
 - Carried: not between 14:55 and 15:10 UTC; not while the morning list is being sent (05:00–08:00 UTC, Monday to
   Saturday); no `scripts/sales-followup.sh` while the deploy, its `--after-only` or its rollback runs; the deploy and its
   rollback never in one copyable block; every printed later command carries its own log on its line.
 - **After a PASSED `--after-only`, the owner's own steps (§F), each its own command, never run by the script**: raise
   `followup_daily_cap`; then step 6 (`on chase`); later, consider `followup_run_limit`. The summary prints them, one per
   line.
-- **After a rollback, `followup_auto_send` stays off.** A later PASSED `--after-only` of a `--redeploy`, finding it off,
-  reads the latest rollback record — the newest `RB_COPY_AT` among `rollback-state-*.env` and the kept
-  `state-*.env.prev-*` files, read as A14 reads `COPY_AT` and `RB_COPY_AT` (S105:11878-11889) — and only when that record
+- **After a rollback, `followup_auto_send` stays off.** The PASSED `--after-only` of a deploy that followed the latest
+  rollback — this state file's `COPY_AT` later than that rollback's `RB_COPY_AT`, `--redeploy` typed or not *(18 Nov,
+  review 1: L8-4)* — finding it off, reads the latest rollback record — the newest `RB_COPY_AT` among
+  `rollback-state-*.env` and the kept `state-*.env.prev-*` files, read as A14 reads `COPY_AT` and `RB_COPY_AT`
+  (S105:11878-11889) — and only when that record
   carries `AS_RB1=written` says so and prints the owner's own command to turn it on (`--value 1`, the form above), alone,
-  as the owner's choice.
+  as the owner's choice. *(18 Nov, review 2 and its re-checks)* A V1 rollback of this deploy that wrote
+  `followup_auto_send`, may have, or read it on (any `AS_RB1` in this deploy's state file but `off`,
+  `not-written:owner-unknown` or `not-written:unread`, its copy made or not) offers nothing: its own stop said what
+  it left, and a key it read on was not the earlier rollback's doing. One that read it off, or could not read it,
+  set nothing off, so the latest earlier rollback's record decides.
 - `--after-only` at least 20 minutes after the copy, again after a close pass has run (UJ-ON needs one), and the next day
   inside the send window.
 
@@ -661,7 +688,7 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
 | | decision | why |
 |---|---|---|
 | DL1 | CS-G1 refuses on any value present, not only a true one | the readers disagree on truth; absent is the one state they agree on; no writer leaves a claim key present but off |
-| DL2 | the readings of §L.4 are notes, never a refusal | §I calls them a report; they are the record of the state before the permanent closes |
+| DL2 | the readings of §L.4 are notes, never a refusal — except FE-G1 (DL11) | §I calls them a report; they are the record of the state before the permanent closes |
 | DL3 | UJ-ON is judged in `--after-only` (PASS, including *nothing stale*; FAIL; NOT YET as §L.5 defines them), and NOT YET is its own summary state that withholds PASSED and the §F steps | an F3 that does nothing on a book with stale rows is the failure that matters most; the owner's claim steps wait for proof |
 | DL4 | the rollback writes `followup_auto_send` `'0'` in both the typed rollback and V1's automatic one | the hazard of §I does not depend on how the rollback started |
 | DL5 | the write only when §L.7's five conditions hold; otherwise the owner is told before `ROLLBACK` (or, in V1, in its stop message), with their own command and what it overwrites where the cause allows one, and none for an undecodable file or code that is not `7835906`'s | the plugin's writer mirrors the whole file; file-only keys, secrets among them, would be copied silently, and an undecodable file would be wiped |
@@ -670,6 +697,11 @@ whose draft is waiting and its sender sends both. With automatic approval off, a
 | DL8 | a `--redeploy` of 5.18.106 after a rollback is refused by CS-G1 while a claim switch is on | §F, strictly. The trade: 5.18.105 then serves in claim mode until the owner turns the step off — `rb_pre106` already printed that command — and `off` ends claim mode at once |
 | DL9 | LM keeps its codes; the rollback functions are renamed `rb_pre106`, `rb106` | the codes name checks the owner has read; the functions name the release they roll back |
 | DL10 | ME-CA1's NOT ESTABLISHED is a note in every mode | where master's output goes depends on the host; a check that can never be established must not block |
+| DL11 | *(18 Nov)* FE-G1: stage A refuses — NO-GO, nothing changed — when U4 reads `followup_enabled` off as the jobs read it; it prints the owner's `--value 1` command, alone, never run; a U4 that could not be read refuses nothing. Before the deploy, step 6 off first, THEN `followup_enabled` on | UJ-ON judges F3 by stage A's reading for the life of the deploy (`UJ_A`), so a deploy taken with it off could never prove F3; the interim of 18 Nov turns it off while step 6 runs, and the reverse order is §F's hazard under 5.18.105 |
+
+Left to the owner (18 Nov, review 2), and not built: whether FE-G1 should also refuse when `StaffJobsGate::applies()`
+is false or the age limit is not a positive number (today U4's capitals note says so before `DEPLOY`); and whether §F's
+steps should be withheld after a UJ-ON gate note (today a gate note never holds back PASSED, §L.5).
 
 ### L.10 The rehearsal
 
@@ -706,7 +738,15 @@ then turn step 6 off through the real tool — steps 1–5 on, production's stat
 - **`--redeploy`** refused while a claim switch is on, then PASSED, its `--after-only` printing the owner's command to
   turn `followup_auto_send` back on — after a typed rollback and, separately, after V1's; a PASSED deploy's summary
   printing the full command in its by-hand paragraph; and a run whose age limit at stage A differs from the one now
-  (UJ-ON's gate note, then PASSED).
+  (UJ-ON's limit-only note, then PASSED; judged once the limit is set back and a close pass has run);
+- *(18 Nov)* **FE-G1 (DL11)**: `followup_enabled` off at stage A — NO-GO, nothing changed, its command alone on its
+  line; run as printed, then GO; U4 unreadable — no refusal. **A plain deploy after a rollback** (no `--redeploy`),
+  whose PASSED `--after-only` prints the turn-back-on command; **a V1 that wrote, or read it on, and whose put-back
+  failed**, its `--after-only` offering nothing; **a V1 that found it already off after a typed rollback**, its `--after-only`
+  offering the typed rollback's command. **U4's capitals note** on a book whose age limit is not a positive number,
+  before `DEPLOY`, and in `--check` without the DEPLOY clause. **UJ-ON's notes and the summary's *check it***: the
+  limit alone differing, then set back (judged after a close pass, and a run before that pass); a gate condition
+  false now, then holding again (the same); each with *check it* saying the same.
 
 Everything seeded is fictitious, from the rehearsal's own number range.
 
