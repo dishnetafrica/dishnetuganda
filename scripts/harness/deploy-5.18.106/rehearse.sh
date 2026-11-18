@@ -2040,10 +2040,12 @@ dpre106 "106-6b3" "$P106" on - "on:$LIM106" "written:offer-if-off"
 RR6B4_106="$(rsl106)"; MAC3_106="$(weak106 ac3 ac3)"
 fresh106; OAC3_106="$(R106_MUTANT_OUT=1 run106c --answer ROLLBACK --script "$MAC3_106" --rollback)"; RCAC3_106="$(rc106)"; rm -f "$MAC3_106"
 RAC3_106="$(newrec106 "$RR6B4_106")"; KAC3_106="$(q106 kycplaces "$PD" "$DATA" followup_auto_send,evo_api_url)"
-# deploy-5.18.106.sh:8927 (the five conditions read holding), :9034 (AS-RB1's read-back FAIL), :1683
+# deploy-5.18.106.sh:8927 (the five conditions read holding), :9034 (AS-RB1's read-back FAIL), :1683; three FAIL lines in
+# all (review r3): AS-RB1's read-back (:9034), AS-RB1's own V3g compare across the write (:9057: store.evo_api_url, the row
+# mirrored from the file), and V3g S6 at the end of the run (:14147, against AIS_A read at stage A, :12895)
 check "$(has "$OAC3_106" 'THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (condition 3')|$(grep -cxF "$AS0OK106" <<<"$OAC3_106")|$(grep -cxF "  FAIL  AS-RB1 FOLLOWUP_AUTO_SEND WAS WRITTEN, BUT ITS READ-BACK DID NOT HOLD (row-others) — the rollback goes on (it is never blocked by this); AS-RB2 reads it again under $BV106" <<<"$OAC3_106")|$(fails "$OAC3_106")|$RCAC3_106|$(sget106 "$RAC3_106" AS_RB1)|$(kv106 "$KAC3_106" asplaces)|$(kv106 "$KAC3_106" pre13)|$(live)|$( [ -e "$MAC3_106" ] && echo left || echo removed)" \
-      "no|1|1|1|1|written-check:row-others|k:off,s:off,p:-,d:-|ok|$B106|removed" \
-  "106-6b4 AC3, the copy without §L.7's condition 3 (S:8608), ROLLBACK typed over a key the file holds and the row lacks: no capitals notice, AS-RB0 reads the five conditions holding (S:8927), and its AS-RB1 writes followup_auto_send '0' — the writer mirroring the whole file into the store row, so the row's evo_api_url is now the file's (they agree: the row was changed) — its own read-back FAILs, row-others (S:9034), record written-check:row-others: what condition 3 is there to prevent (caught by 106-6b9); $B106 serving; the copy removed"
+      "no|1|1|3|1|written-check:row-others|k:off,s:off,p:-,d:-|ok|$B106|removed" \
+  "106-6b4 AC3, the copy without §L.7's condition 3 (S:8608), ROLLBACK typed over a key the file holds and the row lacks: no capitals notice, AS-RB0 reads the five conditions holding (S:8927), and its AS-RB1 writes followup_auto_send '0' — the writer mirroring the whole file into the store row, so the row's evo_api_url is now the file's (they agree: the row was changed) — its own read-back FAILs, row-others (S:9034), and V3g FAILs twice on the row's evo_api_url (S:9057, S:14147) — three FAIL lines; record written-check:row-others: what condition 3 is there to prevent (caught by 106-6b9); $B106 serving; the copy removed"
 qcheck106 "106-6b4'"
 # The write undone (A9): kyc_config.json put back from the copy kept before the URL's plant (AC3's '0' and the URL both taken
 # back), then followup_auto_send 1 through set_config as the book's owner — the file as it is, mirrored whole into the store row
