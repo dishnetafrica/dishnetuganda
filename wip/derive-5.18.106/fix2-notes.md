@@ -87,3 +87,31 @@ introduced by round 2.
 - No offer with V1 `written`, `written-check` or `unknown`.
 - `UJ_ON_GATE` is `limit` and `now` for those notes, and empty for the stage-A note.
 - Check it prints each of its three texts.
+
+## Round 4 — the re-check of round 3 (`recheck3-findings.txt`, `fix4.py`)
+
+The re-check confirmed all of round 3. It found the docs/75 addendum contradicted by nothing in the script, and five
+more minor findings:
+
+| Finding | Part | Change |
+|---|---|---|
+| R3-NOW-CP, CHK-WAIT | UJ, H, Z | Once the gate holds again, or the limit is set back, the next `--after-only` must wait for a close pass made under it. A run before that judges F3 by passes made under the other setting, and can read FAIL: master stamps `followup_close`'s `last_run` even when the job returns at once. The 'now' note and both of check it's gate arms now say so. Check it no longer claims "until then it gives that note". |
+| R3-V1NW | R, Z | `as_back_on` also returns when this deploy's V1 read the key on (`not-written:*` but `owner-unknown` and `unread`). The key then was not the earlier rollback's doing. The guard is an allow-list: only no V1, `off`, `not-written:owner-unknown` and `not-written:unread` go on to the earlier rollback's record. |
+| R3-PIN-ARMS | Z, H | Z27 pins check it's three arms and its else text whole. partH asserts each. New copies: the 'now' arm removed; the limit arm promising NOT YET; the 'now' arm without its close pass; the else text saying it reads the closes. Z20 has a new copy: the 'now' note without its close pass. Z25 has a new copy: a V1 that read it on let through. |
+| CITE-LAO | H | Both "may be on once its --after-only has PASSED" lines cite `root docs/75 §L.3, §L.8, DL3` (with `§F` on the first). |
+
+Recorded, not built, because it matches §L.8 as written: a typed rollback that found the key already off is the
+latest record, and it hides an earlier typed rollback's `written`. In that case no offer is made.
+
+**Result:**
+- 277 edits.
+- 16,197 lines.
+- sha256 `8b2bafb2c2771225c13c2c286cb499c6370ba61064c9e63f8e7dc4c44423aa3d`.
+- Two runs, byte-identical.
+- `bash -n` is clean.
+
+**Stub runs:**
+- The offer is made for no V1, `off`, `owner-unknown` and `unread`.
+- No offer for `differ`, `refused`, `written`, `written-check` and `unknown`.
+- The 'now' note carries the wait.
+- Check it prints each arm.

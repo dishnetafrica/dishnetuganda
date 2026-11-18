@@ -1,0 +1,107 @@
+===== round3
+SUMMARY: I checked round 3's derived script, deploy106-fx3-run1.sh (16,196 lines, sha256 c2a3d13d…20bf9d, bash -n clean), against fx2. No file was written and no PHP was run. Stub runs piped extracted functions into bash on stdin, with `[` and `sed` shadowed over in-memory files. partZ was imported with python3 -I -B.
+
+All four findings hold in fx3, in their own scenarios and in the cases around them:
+- R2-V1OFF: the offer is back where V1 recorded `off`; fx2 printed nothing.
+- Z20-RET: every return and clause recheck2 named is now refused by partZ.
+- UJ2-G3-r: the limit case no longer promises NOT YET.
+- UJ-AO-CLOSES: the else branch now names what UJ-CA prints.
+
+The task's questions:
+- **UJ_ON_GATE.** It is initialised at 7911, at top level (outside any function), and assigned only in uj_on (8073 'now', 8079 'limit'). check it reads it, at 16016, and nothing else does. uj_on is reached only through uj_after, which is called at top level at 15363 (no subshell), and only when MODE=after (8038). So in a deploy run the flag stays empty. There, check it prints the default arm, the old "reads NOT YET (exit status 3)" text, when stage A is judgeable, and the else text when it is not. Stub-run in both cases.
+- **as_back_on under set -u.** The script runs with `set -uo pipefail`, no -e (755). STATE is always set (786), and the case word is a command substitution, so no variable can be unbound. A missing file reads as empty.
+- **Several AS_RB1 lines.** STATE cannot carry more than one:
+  - each deploy run truncates it (13750, `>`);
+  - only V1's as_rb1 appends AS_RB1 there (9062, with STATE_W=STATE), and both of V1's branches stop;
+  - a typed rollback writes to rollback-state-$TS.env (13731);
+  - --after-only never calls as_rb1.
+  If several did exist, `tail -n1` would read the newest, which would be the right one.
+- **partZ.** rules() returns nothing on fx3. All 60 CONTROLS are refused by their own rule alone (Z20 8, Z25 4, Z27 5; 53 + 7 new), and all 28 rules have one. The fx2 text is refused by Z20, Z25 and Z27.
+
+New defects, all minor:
+1. **The new `now)` arm of check it (16016).** It leaves out the "a close pass has run after that" clause that its limit sibling carries. Following it can give a false "UJ-ON FAIL — F3 did not expire".
+2. **The round-3 guard (8828) lets V1's `not-written:*` values through.** In those, V1 measured followup_auto_send on after this deploy's copy, yet the offer says the earlier rollback set it off.
+3. **UJ2-G3-r's partZ pin covers only the first words of the `limit)` arm.** Copies that drop the `now)` arm, or that put the NOT YET promise back into the limit arm, pass partZ, and partH asserts none of these texts.
+CHECKED: [["R2-V1OFF", true], ["Z20-RET", true], ["UJ2-G3-r", true], ["UJ-AO-CLOSES", true]]
+==== R3-NOW-CP minor | 16016 (check it, the new `now)` arm); 8073 (uj_on's 'now' note, which sets UJ_ON_GATE=now); 7144-7147 (the reader's control: last_run > COPY_AT and duration_ms >= 0); 7163-7171 (expireStale's SELECT at T); 8096 (the FAIL); bf29cbd cron/followup_close.php:33 and :90-92; bf29cbd cron/master.php:238 and :386-392
+S: 1. A deploy's stage A holds the gate (en=on, ug=1, 168 h), and the closer expires nothing after the copy because nothing is stale yet.
+2. Later followup_enabled is turned off, as the 18 Nov interim does. While it is off, open enquiry follow-ups age past 168 h.
+3. --after-only #1: UJ-ON prints its 'now' note and sets UJ_ON_GATE=now. The summary's new text says: 'again once a close pass has run since the copy — UJ-ON judges F3 on it only once its gate holds now (UJ-ON above names what did not)'.
+4. The owner turns followup_enabled back on and runs --after-only at once. Many close passes have run since the copy, so the text's condition is already met.
+5. UJ-ON's gate now holds, and its control holds with T = followup_close's last no-op pass:
+   - master stamps followup_close's last_run every 600 s whatever it does (master.php 238, 386-392);
+   - followup_close returns at line 33 while followup_enabled is off;
+   - expireStale runs only inside StaffJobsGate::applies (lines 90-92).
+6. The SELECT at T finds the aged rows. With none expired since the copy and fewer than 200 cancels, the result is 'UJ-ON FAIL — F3 did not expire' and the run reads FAILED, although F3 never ran at T.
+
+The same holds when StaffJobsGate, or a misread limit, was the 'now' cause. The limit arm carries '…and a close pass has run after that' for exactly this reason (the clause recheck2's Z20-RET called necessary against a false FAIL). The new now arm leaves it out.
+E: The FAIL path is uj_on's own: a stub run on stdin with en=on, control=held, t=1700, on_expired=0, on_cancelled_t=3, on_stale_t=1 prints 'FAIL  UJ-ON FAIL — F3 did not expire'.
+
+The reader's control (7147) is `$lr > $cu && $du !== null && $du >= 0`, with no condition on what the pass did. The SELECT (7168-7170) uses FollowUpService::staleBefore($c, $lr) at that T.
+
+At the pin (git show bf29cbd):
+- followup_close.php:33 is `if (empty($config['followup_enabled'])) return;`
+- master.php:238 lists followup_close with neither a 'uganda' nor a 'flag' key, and 389-392 write last_run before the job runs.
+FIX: partH.py, check it's `now)` arm: say '…UJ-ON judges F3 on it only once its gate holds now (UJ-ON above names what did not) and a close pass has run after that (followup_close runs every 10 minutes); until then it gives that note, no verdict, and the run reads PASSED without that proof'. Preferably also add the same instruction to uj_on's 'now' note (8073), and re-pin G_NOW. Pin the clause in partZ (Z27), with a weakened copy that drops it.
+
+==== R3-V1NW minor | 8828 (as_back_on's new case: returns only on written|written-check:*|unknown:*); 8980-8981 and 9036 (not-written:<causes>, set only on 'as=nowrite … eff=on'); 9000 and 9040 (not-written:refused, reachable only with eff on); 8755 and 13928 (V1's stop: 'AS-RB1 DID NOT SET followup_auto_send OFF' plus as_owner_text 0, the owner's off command); 8838 (the offer's text); drydoc §L.8: 'One that wrote nothing set nothing off, so the latest earlier rollback's record decides'
+S: 1. A typed rollback R1 writes followup_auto_send off (AS_RB1=written, RB_COPY_AT=T1).
+2. The owner turns it back on under 7835906.
+3. A --redeploy D2 makes its copy at C2 > T1. The public address redirects, so V1 runs as_rb1 v1. It reads the key ON, and a §L.7 condition fails (for example differ), so it writes nothing: AS_RB1=not-written:differ in STATE.
+4. do_rollback fails. The stop at 13928 prints the `*)` arm of as_para (8755) with the owner's own off command.
+5. The owner runs that command. The redirect clears, and the owner runs --after-only, which PASSES.
+6. 8828 does not match not-written, and as_rb_last (no longer reading STATE) returns R1's 'written 1000'. 8838 then prints: 'the latest rollback set it off (AS_RB1=written in its record; its copy at <T1>, before this deploy's at <C2>), and it stays off until you turn it on'.
+
+That is false. V1 measured the key on after C2, so R1's write had already been undone, and the off now in force is the owner's own command. fx2 suppressed this offer; round 1 printed it. Round 3's guard brings it back, and the addendum's sentence states the same premise.
+E: Stub run of fx3's as_rb_last/as_back_on with the R1 record written@1000 and STATE COPY_AT=2000. With AS_RB1=not-written:file, not-written:refused, not-written:owner-unknown or not-written:unread, each prints the offer naming R1, with or without RB_COPY_AT=2100 in STATE.
+
+In the as_rb1 PHP:
+- 'as=nowrite' with eff=on is the only source of not-written:<causes> (9036).
+- 'as=refused' (9000) follows only after the nowrite test at 8980 has passed, which needs causes empty and eff === 'on'.
+
+The offer's comment (8818-8824) excuses a V1 because 'its own stop said what it left'. V1's not-written stop did too: it printed the off command.
+FIX: partR.py, as_back_on: also return 0 when V1 read the key on, that is, every not-written value except not-written:owner-unknown and not-written:unread, whose reading was not made. For example: `case "$(sed -n 's/^AS_RB1=//p' "$STATE" 2>/dev/null | tail -n1)" in not-written:owner-unknown|not-written:unread) ;; written|written-check:*|unknown:*|not-written:*) return 0 ;; esac`. Say so in the comments (8818-8824, 8799-8804) and in the docs/75 §L.8 addendum. Re-pin BACK_V1 in Z25 and add a copy that lets not-written through.
+
+==== R3-PIN-ARMS minor | partZ.py 144-145 (GATE_SAY) and 478 (Z27's test); partH.py 789-795 (its must list); fx3 16016 (the three arms) and 16018 (the else text)
+S: A later edit of partH could:
+- delete the `now)` arm, so a 'now' note's summary again promises 'reads NOT YET (exit status 3)' where the run reads PASSED (UJ2-G3-r for the now note);
+- replace the limit arm's tail with that NOT YET promise again (UJ2-G3-r's original false text);
+- drop the limit arm's close-pass clause.
+Each derives cleanly. GATE_SAY pins only the start of the limit arm ('$( case "${UJ_ON_GATE:-}" in limit) echo "UJ-ON judges F3 on it only once followup_max_age_hours is back at stage A'). CHECK_IT pins 'UJ-ON judges F3 on it', which every arm carries. partH's must list pins only the `if uj_judgeable` line and the uj_gate_a sed. recheck2's fix asked to pin the new text in partH's assertions and in Z27. UJ-AO-CLOSES's new else text is unpinned as well.
+E: partZ.rules() on weakened copies of fx3, imported with python3 -I -B:
+- W1, the `now)` arm deleted: NOT CAUGHT
+- W2, the limit arm without 'and a close pass has run after that': NOT CAUGHT
+- W3, the limit arm's 'until then it gives that note, no verdict, and the run reads PASSED without that proof' replaced by 'until one has it reads NOT YET (exit status 3)': NOT CAUGHT
+- W8, the else text put back to 'to read the closes — but': NOT CAUGHT
+
+Controls on the same text:
+- the case switched from UJ_ON_GATE to UJ_A: Z27
+- `off` added to the V1 return: Z25
+- UJ_ON_GATE=limit put on the stage-A note: Z20
+FIX: partZ.py: extend GATE_SAY to the whole `$( case "${UJ_ON_GATE:-}" in … esac )` expression, all three arms. Add CONTROLS for Z27: the `now)` arm removed, and the limit arm promising NOT YET. Pin the else text's 'to read U1–U3 and the sender's closes and sends since the copy (UJ-CA)'. Add the arms to partH's must list.
+
+===== docs
+SUMMARY: I compared the dry-run docs/75 §L addendum (§L.4, §L.5, §L.8, §L.9, §L.10) and root §F with deploy106-fx3-run1.sh (16,196 lines, sha256 c2a3d13d…, confirmed). Method: I read the code, diffed it against the pre-round-1 derivation (deploy106-run1.sh) to isolate what rounds 1–3 added, and stub-ran the extracted functions on stdin.
+
+No sentence of the addendum is contradicted by the script. FE-G1, U4's capitals note, the three UJ-ON gate notes, the check-it branch choice, the followup_enabled order, the turn-back-on offer with its V1 rule, DL2/DL11, the two owner questions and every new §L.10 case all match the code.
+
+Two minor defects:
+1. CHK-WAIT. Round 3's check-it texts for the limit and now gate notes say a run "until then gives that note, no verdict". In fact uj_on judges as soon as the limit matches or the gate holds. Its positive control is met by close passes made under the other setting, including passes made while followup_enabled was off (master dispatches followup_close unflagged; the job returns at once). Stub runs gave a false "UJ-ON FAIL — F3 did not expire" in both cases. For the now case, neither the script nor §L.5 says to wait for a close pass after the gate holds again.
+2. CITE-LAO. The --after-only "what changed" line cites "root docs/75 §L.3, §F" for "steps 6, 11 and 12 may be on once its --after-only has PASSED". The PASSED condition is in §L.8 and DL3, not in §L.3 or §F.
+
+Observations, not reported as defects:
+- A typed rollback that wrote nothing (AS_RB1=off) is the latest record and so hides an earlier rollback's AS_RB1=written. A stub run confirmed no offer is made. That is exactly §L.8's rule, and that rollback's rb_pre106 says the key reads off. Still, the addendum's own reason for V1 ("one that wrote nothing set nothing off") would apply to it equally.
+- "AS-RB0" in the summary's names line is never named in docs/75; this predates rounds 1–3.
+
+Disclosure: for the as_back_on stub I created a throwaway directory under the scratchpad with three small fake state files, then deleted it. Nothing else was written, and no PHP was run.
+CHECKED: [["\u00a7L.4 FE-G1", true], ["\u00a7L.4 U4 capitals note", true], ["\u00a7L.5 UJ-ON's three gate notes", true], ["\u00a7L.5 check it follows the note", true], ["\u00a7L.8 followup_enabled on and its order", true], ["\u00a7L.8 turn-back-on offer and V1 rule", true], ["\u00a7L.9 DL2 exception and DL11", true], ["\u00a7L.9 two questions left to the owner", true], ["\u00a7L.10 new rehearsal cases", true], ["Printed 'docs/75 \u00a7L' citations", false], ["Root docs/75 \u00a7F hazard vs 'deploy again'", true]]
+==== CHK-WAIT minor | 16016 (check it: limit and now texts); 8073 (now note), 8079 (limit note); 8080-8103 (the verdict as soon as the gate holds); bf29cbd cron/master.php:238, 352-392 (followup_close unflagged, last_run and duration_ms stamped); cron/followup_close.php:33 (returns at once when followup_enabled is empty)
+S: (a) Limit case. Stage A read 168 h; the owner set 336 h. The --after-only gives the limit note, and check it says: 'UJ-ON judges F3 on it only once followup_max_age_hours is back at stage A's 168 h and a close pass has run after that; until then it gives that note, no verdict'. The owner sets it back and runs --after-only before the next close pass. lim is now empty, so uj_on gives no note and judges with T = the last pass, made under 336 h. If F3 expired nothing at 336 h and rows aged between 168 h and 336 h exist, it reads 'UJ-ON FAIL — F3 did not expire' and the run is FAILED. (b) Now case. followup_enabled was turned off after the deploy, as the 18 Nov interim did. Check it says UJ-ON judges F3 'only once its gate holds now'. The owner turns it back on and runs --after-only at once. Every close pass since the copy returned immediately, yet master stamped each one's last_run and duration_ms, so the positive control holds, nothing closed expired, cn=0 and the stale rows remain: a false FAIL. Neither the now note (8073), check it, nor §L.5's 'false now' note says a close pass must run after the gate holds again.
+E: I stub-ran kv (3019), the uj_* helpers (7922-7942) and uj_on (8060-8104) on stdin, with note, ok, bad and notyet stubbed. L1: UJ_A hours=168, now 336 → the limit note. L2: now 168, control=held, on_expired=0, on_cancelled_t=3, on_stale_t=1 → 'FAIL UJ-ON FAIL — F3 did not expire'. N1: en=off now → the now note. N2: en=on, on_expired=0, on_cancelled_t=0, on_stale_t=1 → the same FAIL. From the code: the control (8085-8098) checks only that last_run is after the copy and duration_ms is 0 or more. master.php dispatches followup_close with no flag, and followup_close.php:33 returns when followup_enabled is empty.
+FIX: partH, check it (16016): replace 'until then it gives that note, no verdict' in both texts. Say that a run made after the limit is set back, or after the gate holds again, but before a close pass has run under it, judges F3 by passes made under the other setting and can read FAIL; run --after-only only after such a pass. partUJ: add the same instruction to the now note (8073). docs/75 §L.5: add to the 'false now' note that once the gate holds again, the next --after-only after a close pass has run judges F3. Pin the new texts in partZ (Z20/Z27), with a weakened copy that drops the clause.
+
+==== CITE-LAO minor | 15980 (--after-only 'what changed')
+S: An --after-only summary prints 'under 5.18.106 steps 6, 11 and 12 may be on once its --after-only has PASSED (root docs/75 §L.3, §F)'. A reader checking the citation finds only that a step turned on after the copy is LK-AO's note 'by then 5.18.106 serves' (§L.3), and step 6 'after the deploy' (§F). Neither section says the claim steps wait for a PASSED --after-only.
+E: Dry-run docs/75: §L.3 has 'In --after-only a step the owner turned on after the copy is LK-AO's note, as before: by then 5.18.106 serves'; §F has 'The owner's settings after the deploy … Then turn on step 6'. The PASSED rule is §L.8 ('After a PASSED --after-only, the owner's own steps (§F)') and DL3 ('the owner's claim steps wait for proof'). The line was changed in rounds 1–3 (diff against deploy106-run1.sh, hunk 15849c15980).
+FIX: partH: cite '(root docs/75 §L.3, §L.8, DL3, §F)' on that line, and pin the new text in partZ.
+
