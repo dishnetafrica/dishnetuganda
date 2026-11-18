@@ -19,14 +19,17 @@
 #      before it, written only when all hold and the key reads on; the read-back; the LK map and V3g's keys; R7 right
 #      after; AS_RB1 in the rollback's state file; FAIL in capitals when not written while on, never blocking. Called on
 #      its own line in the typed rollback (after ROLLBACK is typed, before do_rollback) and on V1's line, before its
-#      do_rollback. AS-RB2 in rb106: off through 7835906's code, FAIL unless AS-RB1 recorded why it did not write; under
-#      RB_NOTHING a capitals note with the owner's command.
+#      do_rollback. AS-RB2 in rb106: off through 7835906's code, FAIL unless AS-RB1 recorded why it did not write,
+#      whether the key reads on or could not be read; AS_RB2_EFF what it read (partH's "what it means"); under
+#      RB_NOTHING a capitals note with the owner's command. The texts after AS-RB1 (as_para, as_after_verdict, the RB
+#      note) follow what it recorded: written, written with a read-back that did not hold, not known, or not written.
 #   R5 OWNER_AUTOSEND_CMD — one assignment, in as_owner_cmd, defined right after DB_OWNER is read: set_config as the
 #      book's owner on the live data folder, --value $v, its output cut at the settings listing, its own log; printed
 #      (as_owner_text) at every site §L.7 names, each running the reader first: rb_pre106, AS-RB1's FAIL after the
 #      verdict (as_after_verdict), V1's stops, the RB_NOTHING notice (AS-RB2), stage A's mixed-tree refusals, the
 #      deploy-did-not-verify stop, the typed rollback's not-verified stop, the summary's by-hand paragraph (as_para);
-#      the --after-only --value 1 form (as_back_on) is defined here and placed by partH.
+#      the --after-only --value 1 form (as_back_on: the --after-only of a deploy that followed the latest rollback —
+#      COPY_AT against that rollback's RB_COPY_AT, --redeploy typed or not) is defined here and placed by partH.
 #   R6 the texts: PUTBACK_HAZARD (5.18.105's files; writes no setting) and its seven print sites; the ROLLBACK prompt
 #      (whether it will write); the typed rollback's comment; V1's comment, line and stops; R7's header and db_judge's
 #      ok line; the RB section's "writes nothing", "changes no setting", "reached/read by nothing" and the RB note; the
@@ -295,7 +298,7 @@ def rb_block(sums, migs, lk_rb0, rb_body):
                 "installed migrations/ as 7835906's set — the count of its names and the sha256 of them sorted, one a line."))
     p.append("AS_SUMS=\"$(cat <<'SUMS'\n" + sums + "\nSUMS\n)\"\n")
     p.append(f'AS_MIGS="{migs}"\n')
-    p.append('AS_RB0=""; AS_RB0_SAY=""; AS_RB1=""; AS_RB1_SAY=""\n')
+    p.append('AS_RB0=""; AS_RB0_SAY=""; AS_RB1=""; AS_RB1_SAY=""; AS_RB2_EFF=""\n')
     p.append("AS_PHP=\"$(cat <<'PHP'\n" + AS_PHP + "\nPHP\n)\"\n")
     p.append(cw("as_read — the one reader: one line, \"as=read eff=… places=… pre=ok|<causes> file=… row=… code=… "
                 "differ=… type=… f5=…\", or \"as=noowner\" (DB_OWNER not known: nothing runs as root) or "
@@ -376,7 +379,9 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
                 "deploy that did not verify) and sum (the summary's by-hand paragraph): before any rollback ran, the put-back "
                 "writes no setting. rb (a rollback that did not verify): the sentence and the command only when AS-RB1 did "
                 "not write, and once; when it wrote, that 5.18.106 keeps serving with automatic approval off. v1 (V1's "
-                "verified stop): only when AS-RB1 did not write. Runs in $( … ): it reads nothing under the run's folder."))
+                "verified stop): only when AS-RB1 did not write. The headline goes by what AS-RB1 recorded: a write whose "
+                "read-back did not hold, or whose answer was lost, is said as such, never as not set off — the reading "
+                "below says how it reads now (review RB-3). Runs in $( … ): it reads nothing under the run's folder."))
     p.append(r'''as_para() {
   case "$1:${AS_RB1:-}" in
     rb:written) printf ' followup_auto_send was set off before the put-back was tried (AS-RB1): %s keeps serving with automatic approval off, and a put-back by hand leaves it off — a person approves each draft.' "$EXPECTED_VERSION"; return 0 ;;
@@ -384,6 +389,8 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
     v1:written|v1:off) return 0 ;;
     pb:*) printf '\n\n  The put-back by hand does not switch followup_auto_send off, as the scripted rollback does first (AS-RB1).' ;;
     sum:*) printf '\n  followup_auto_send before a put-back by hand, which writes no setting (the rollback above sets it off first, AS-RB1):' ;;
+    rb:written-check:*|v1:written-check:*) printf "\n\n  AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (%s)%s." "${AS_RB1#written-check:}" "$( [ "$1" = "rb" ] && echo ", and the put-back by hand writes no setting")" ;;
+    rb:unknown:*|v1:unknown:*) printf '\n\n  WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (%s)%s.' "${AS_RB1_SAY:-?}" "$( [ "$1" = "rb" ] && echo ", and the put-back by hand writes no setting")" ;;
     *) printf '\n\n  AS-RB1 DID NOT SET followup_auto_send OFF (%s)%s.' "${AS_RB1_SAY:-not run}" "$( [ "$1" = "rb" ] && echo ", and the put-back by hand does not either")" ;;
   esac
   as_owner_text 0 "$(as_read)"
@@ -409,19 +416,33 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
 }
 ''')
     p.append(cw("as_after_verdict — after a typed rollback's verdict, where AS-RB1 did not set followup_auto_send off "
-                "while it read on, or could not tell (DL6: never a reason to stop): the owner's own command, alone, as the "
-                "one reader allows it now, 7835906's code installed. Printed, never run; counts nothing."))
+                "while it read on, wrote it but its read-back did not hold, or could not tell (DL6: never a reason to stop): "
+                "the one reader, run once, 7835906's code installed — reading off now, a plain line, nothing to run; "
+                "otherwise a headline by what AS-RB1 recorded (a write whose read-back did not hold, or whose answer was "
+                "lost, is never said as not set off; review RB-3, L8-3) and the owner's own command, alone, as that reading "
+                "allows it. Printed, never run; counts nothing."))
     p.append(r'''as_after_verdict() {
+  local o
   { [ "$MODE" = "rollback" ] && [ -z "$RB_NOTHING" ]; } || return 0
   case "${AS_RB1:-}" in ''|written|off) return 0 ;; esac
+  o="$(as_read)"
   echo
-  echo "  AS-RB1 DID NOT SET followup_auto_send OFF (${AS_RB1_SAY:-?}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON:"
-  as_show "$(as_owner_text 0 "$(as_read)")"
+  if [ "$(kv "$o" eff)" = "off" ]; then
+    echo "  followup_auto_send reads off now, through $BASELINE_VERSION's code (AS-RB1: ${AS_RB1_SAY:-?}; $(as_places_say "$o")): nothing to run."
+    return 0
+  fi
+  case "${AS_RB1:-}" in
+    written-check:*) echo "  AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (${AS_RB1#written-check:}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON; as it reads now:" ;;
+    unknown:*) echo "  WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (${AS_RB1_SAY:-?}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON; as it reads now:" ;;
+    *) echo "  AS-RB1 DID NOT SET followup_auto_send OFF (${AS_RB1_SAY:-?}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON:" ;;
+  esac
+  as_show "$(as_owner_text 0 "$o")"
 }
 ''')
     p.append(cw("as_rb_last — the latest rollback record (root docs/75 §L.8): among this folder's kept state-*.env.prev-* "
                 "files and rollback-state-*.env, the one with the newest RB_COPY_AT (A14 reads them so); prints its AS_RB1 "
-                "(\"written\", a cause, or \"none\" when that record carries none), or nothing when no rollback is on record."))
+                "(\"written\", a cause, or \"none\" when that record carries none) and that RB_COPY_AT, a space between, or "
+                "nothing when no rollback is on record."))
     p.append(r'''as_rb_last() {
   local f v t="" w=""
   for f in "$STATE".prev-* "$OUT"/rollback-state-*.env; do
@@ -432,22 +453,29 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
   done
   [ -n "$w" ] || return 0
   v="$(sed -n 's/^AS_RB1=//p' "$w" 2>/dev/null | tail -n1)"
-  printf '%s' "${v:-none}"
+  printf '%s %s' "${v:-none}" "$t"
 }
 ''')
     p.append(cw("as_back_on — root docs/75 §L.8, for the summary of a PASSED --after-only (partH places the call): after a "
-                "rollback followup_auto_send stays off; a --after-only of a --redeploy (REDEPLOY=1 in the deploy's state "
-                "file) that finds it off reads the latest rollback record and, only when that record carries "
-                "AS_RB1=written, says so and prints the owner's own command to turn it back on (--value 1), alone, as the "
-                "owner's choice. Prints nothing otherwise; never runs it."))
+                "rollback followup_auto_send stays off; the --after-only of a deploy that followed the latest rollback — this "
+                "state file's COPY_AT later than that rollback's RB_COPY_AT, whether --redeploy was typed or not (review "
+                "L8-4) — that finds it off reads that rollback's record and, only when the record carries AS_RB1=written, "
+                "says so and prints the owner's own command to turn it back on (--value 1), alone, as the owner's choice. A "
+                "rollback whose copy came after this deploy's (one that left 5.18.106 serving) offers nothing here: its own "
+                "stop said what it left. Prints nothing otherwise; never runs it."))
     p.append(r'''as_back_on() {
-  local o
-  { [ "$MODE" = "after" ] && [ "$(sed -n 's/^REDEPLOY=//p' "$STATE" 2>/dev/null | tail -n1)" = "1" ]; } || return 0
+  local o c r t
+  [ "$MODE" = "after" ] || return 0
+  c="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"
+  r="$(as_rb_last)"; t="${r##* }"
+  case "$c" in ''|*[!0-9]*) return 0 ;; esac
+  case "$t" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$t" -lt "$c" ] || return 0
+  [ "${r%% *}" = "written" ] || return 0
   o="$(as_read)"
   [ "$(kv "$o" eff)" = "off" ] || return 0
-  [ "$(as_rb_last)" = "written" ] || return 0
   echo
-  echo "  followup_auto_send reads off: the latest rollback set it off (AS_RB1=written in its record), and it stays off until you turn it on. Turning it back on — automatic approval, as before that rollback — is your choice:"
+  echo "  followup_auto_send reads off: the latest rollback set it off (AS_RB1=written in its record; its copy at $(utc_of "$t"), before this deploy's at $(utc_of "$c")), and it stays off until you turn it on. Turning it back on — automatic approval, as before that rollback — is your choice:"
   as_show "$(as_owner_text 1 "$o")"
 }
 ''')
@@ -458,15 +486,18 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
                 "followup_auto_send per place and as the jobs read it, §L.7's five conditions, F5's count (in capitals "
                 "when above 0) and what 5.18.105's scan reopens; for each claim switch present in the file or the store "
                 "row (LK's map, as CS-G1 reads it), a notice in capitals with its off command alone on its line; and when "
-                "followup_auto_send reads on and the rollback cannot write it, a notice in capitals with the owner's own "
-                "command where the cause allows one — or, when it reads off, a plain note that nothing will be written. "
+                "followup_auto_send reads on and the rollback cannot write it — or DB_OWNER is not known, so AS-RB1 cannot "
+                "write as anyone — a notice in capitals with the owner's own command where the cause allows one; when it "
+                "could not be read as the jobs read it, the same notice saying the rollback may not write it; when the "
+                "reader itself could not run, no capitals (AS-RB1 reads it again in its own process) and no command; when "
+                "it reads off, a plain note that nothing will be written (review RB-1). "
                 "The operator is never told to change a switch while this script waits at the ROLLBACK prompt: LK-RB0 is "
                 "already read, a switch changed now would read as a FAIL in LK-RB1, and scripts/sales-followup.sh is "
                 "forbidden while the rollback runs. Every alternative is: answer anything but ROLLBACK (nothing has been "
                 "changed), run the command, alone, then run the rollback again — each command printed alone on its own "
                 "line, never run by this script and never in one block with the rollback command (root docs/44 §16.9). "
                 "AS_RB0_SAY carries what the rollback will write into the ROLLBACK prompt."))
-    p.append("rb_pre106() {\n  local o sub=\"\" a f\n"
+    p.append("rb_pre106() {\n  local o sub=\"\" a f c w\n"
              "  hdr \"B. Before ROLLBACK: the ladder and followup_auto_send as they stand (LK-RB0, AS-RB0; read-only — the rollback writes followup_auto_send '0' alone, when it reads on and §L.7's five conditions hold, and keeps every other switch; root docs/75 §L.7)\"\n"
              + lk_rb0)
     p.append(r'''  # AS-RB0 — followup_auto_send, per place and as the jobs read it, and §L.7's five conditions (the one reader)
@@ -480,6 +511,7 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
         [0-9]*/[0-9]*) note "AS-RB0 ${f%/*} OPEN ENQUIRY FOLLOW-UP(S) HOLD TWO OR MORE APPROVED DRAFTS (${f#*/} IN ALL): $BASELINE_VERSION'S SENDER WILL SEND EACH OF THOSE FOLLOW-UPS' APPROVED DRAFTS IN ONE PASS — $EXPECTED_VERSION SENDS ONE AND EXPIRES THE REST (F5). WITH followup_auto_send OFF NO NEW DRAFT IS APPROVED, BUT THESE ARE APPROVED ALREADY" ;;
         *) note "AS-RB0 F5's count could not be read (${f:-not read})" ;;
       esac ;;
+    as=noowner) note "AS-RB0 followup_auto_send and §L.7's five conditions could not be read: the owner of plugin.sqlite3 is not known (DB_OWNER), and this script never reads or writes the book as root" ;;
     *) note "AS-RB0 followup_auto_send and §L.7's five conditions could not be read (${a#as=}) — the rollback will not write it unless AS-RB1, reading them again in its own process, finds all five holding and the key on" ;;
   esac
   note "AS-RB0 under $BASELINE_VERSION the scan opens a new follow-up for a recently quiet conversation (1–14 days) whose follow-up $EXPECTED_VERSION closed — $EXPECTED_VERSION keeps one follow-up per quiet spell (F4), $BASELINE_VERSION's scan does not; the closes themselves stay (nothing reopens one)"
@@ -504,18 +536,33 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
     echo "      cd $REPO && bash $QF_WRAPPER off chase"   # step 6's own command: printed, never run (RB)
     echo
   fi
-  # followup_auto_send: what the rollback will write, said before the question
-  case "$(kv "$a" eff):$(kv "$a" pre)" in
-    off:*) AS_RB0_SAY="followup_auto_send already off, nothing written"
-      note "AS-RB0 followup_auto_send already reads off: the rollback writes nothing (AS-RB1 reads it again, and writes only a key that reads on), whatever §L.7's five conditions say" ;;
-    on:ok) AS_RB0_SAY="followup_auto_send set off first (AS-RB1)"
-      note "AS-RB0 followup_auto_send reads on and §L.7's five conditions hold: after ROLLBACK is typed, before the put-back, the rollback sets it off — '0' in <data>/kyc_config.json through the plugin's own writer, the five conditions recomputed in the same process just before; every other key of the file and of the store row kept (AS-RB1)" ;;
-    *) AS_RB0_SAY="followup_auto_send NOT set off — the rollback cannot write it (above)"
-      if as_cmd_ok "$a"; then
-        note "THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF ($(as_causes_say "$a")): $BASELINE_VERSION WILL THEN APPROVE AND SEND AUTOMATICALLY. TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — RUN YOUR OWN COMMAND BELOW, ALONE, THEN RUN THE ROLLBACK AGAIN:"
-      else
-        note "THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF ($( case "$a" in "as=read "*) as_causes_say "$a" ;; *) echo "${a#as=}" ;; esac )): $BASELINE_VERSION WILL THEN APPROVE AND SEND AUTOMATICALLY WHILE IT READS ON. TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — AND ACT ON WHAT FOLLOWS (NO COMMAND CAN BE PRINTED FOR THIS CAUSE), THEN RUN THE ROLLBACK AGAIN:"
-      fi
+  # followup_auto_send: what the rollback will write, said before the question, by what the one reader answered —
+  # DB_OWNER not known: AS-RB1 cannot write as anyone, capitals; a reading: by what it read — off, on with the five
+  # conditions holding, or not: the capitals with their causes, never empty; the reader did not run: no capitals,
+  # AS-RB1 reads it again in its own process (review RB-1)
+  case "$a" in
+    as=noowner) AS_RB0_SAY="followup_auto_send NOT set off — the rollback cannot write it (above)"
+      note "THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (noowner: the owner of plugin.sqlite3 is not known, and this script never writes as root): $BASELINE_VERSION WILL THEN APPROVE AND SEND AUTOMATICALLY WHILE IT READS ON. TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — AND ACT ON WHAT FOLLOWS (NO COMMAND CAN BE PRINTED FOR THIS CAUSE), THEN RUN THE ROLLBACK AGAIN:"
+      as_show "$(as_owner_text 0 "$a")" ;;
+    "as=read "*)
+      case "$(kv "$a" eff):$(kv "$a" pre)" in
+        off:*) AS_RB0_SAY="followup_auto_send already off, nothing written"
+          note "AS-RB0 followup_auto_send already reads off: the rollback writes nothing (AS-RB1 reads it again, and writes only a key that reads on), whatever §L.7's five conditions say" ;;
+        on:ok) AS_RB0_SAY="followup_auto_send set off first (AS-RB1)"
+          note "AS-RB0 followup_auto_send reads on and §L.7's five conditions hold: after ROLLBACK is typed, before the put-back, the rollback sets it off — '0' in <data>/kyc_config.json through the plugin's own writer, the five conditions recomputed in the same process just before; every other key of the file and of the store row kept (AS-RB1)" ;;
+        *) c="$(as_causes_say "$a")"; w="CANNOT"; AS_RB0_SAY="followup_auto_send NOT set off — the rollback cannot write it (above)"
+          if [ "$(kv "$a" eff)" != "on" ]; then
+            c="it could not be read as the jobs read it${c:+; $c}"
+            if [ "$(kv "$a" pre)" = "ok" ]; then w="MAY NOT"; AS_RB0_SAY="followup_auto_send not set off unless AS-RB1, reading it again, finds it on and the five conditions holding"; fi
+          fi
+          if as_cmd_ok "$a"; then
+            note "THE ROLLBACK $w SET followup_auto_send OFF ITSELF ($c): $BASELINE_VERSION WILL THEN APPROVE AND SEND AUTOMATICALLY$( [ "$(kv "$a" eff)" = "on" ] || echo " WHILE IT READS ON"). TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — RUN YOUR OWN COMMAND BELOW, ALONE, THEN RUN THE ROLLBACK AGAIN:"
+          else
+            note "THE ROLLBACK $w SET followup_auto_send OFF ITSELF ($c): $BASELINE_VERSION WILL THEN APPROVE AND SEND AUTOMATICALLY WHILE IT READS ON. TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — AND ACT ON WHAT FOLLOWS (NO COMMAND CAN BE PRINTED FOR THIS CAUSE), THEN RUN THE ROLLBACK AGAIN:"
+          fi
+          as_show "$(as_owner_text 0 "$a")" ;;
+      esac ;;
+    *) AS_RB0_SAY="followup_auto_send set off first only if AS-RB1, reading it again, finds it on and the five conditions holding"
       as_show "$(as_owner_text 0 "$a")" ;;
   esac
   return 0
@@ -621,10 +668,13 @@ PHP
     p.append(cw("as_rb2 — AS-RB2 (root docs/75 §L.7), after the put-back: followup_auto_send effectively off through "
                 "7835906's code, installed (the one reader: PluginConfig::read and FILTER_VALIDATE_BOOLEAN). A FAIL unless "
                 "AS-RB1 recorded why it did not write (its own FAIL then stands, and the owner's command follows the "
-                "verdict, or ends V1's stop message). Under RB_NOTHING nothing was written: with the key on, a notice in "
-                "capitals with the owner's own command — a note."))
+                "verdict, or ends V1's stop message) — whether the key then reads on or could not be read (review RB-4). "
+                "Under RB_NOTHING nothing was written: with the key on, a notice in capitals with the owner's own command "
+                "— a note. AS_RB2_EFF keeps what it read — on, off, or unread when it could not be read — for the "
+                "summary's \"what it means\" (partH; review L8-3)."))
     p.append(r'''as_rb2() {
   local o; o="$(as_read)"
+  AS_RB2_EFF="$(kv "$o" eff)"; [ -n "$AS_RB2_EFF" ] || AS_RB2_EFF="unread"
   case "$(kv "$o" eff)" in
     off) ok "AS-RB2 followup_auto_send reads off through $BASELINE_VERSION's code ($BASELINE_COMMIT, installed), as FollowUpPolicy::mayAutoSend reads it — a person approves each draft ($(as_places_say "$o"))$( [ "${AS_RB1:-}" = "written" ] && echo "; AS-RB1 set it before the put-back")" ;;
     on)
@@ -638,7 +688,10 @@ PHP
         esac
       fi ;;
     *) if [ -n "$RB_NOTHING" ]; then note "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code (${o#as=}) — this run rolled nothing back and wrote nothing"
-       else bad "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code after the rollback (${o#as=}) — whether it reads off is not shown"; fi ;;
+       else case "${AS_RB1:-}" in
+         not-written:*) note "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code after the rollback (${o#as=}) — AS-RB1 did not write it (${AS_RB1_SAY:-?}; its FAIL above stands)" ;;
+         *) bad "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code after the rollback (${o#as=}) — whether it reads off is not shown" ;;
+       esac; fi ;;
   esac
 }
 
@@ -737,7 +790,8 @@ def apply(doc, ctx):
     for s in ("as_read", "as_rb1", "as_rb2", "as_owner", "as_para", "as_u5", "AS_PHP", "AS_RB1", "OWNER_AUTOSEND_CMD", "rb_pre106", "rb106"):
         doc.mustnot(s, why="partR's names are new")
     for s in ("cs_found() {\n", "cs_has() {", "lk_read() {\n", "ai_state() {\n", "ai_changed() {", "db_state() {", "db_judge() {",
-              "lm_rb1() {\n", "lk_key_init() {\n", "LOGW() {", 'QF_WRAPPER="scripts/sales-followup.sh"', "  uj_stage \"$sub\""):
+              "lm_rb1() {\n", "lk_key_init() {\n", "LOGW() {", 'QF_WRAPPER="scripts/sales-followup.sh"', "  uj_stage \"$sub\"",
+              "  uj_fe_g1   # FE-G1"):
         need(doc.t, s, "the source partR reads")
     need(doc.t, "# ── SLOT U5 ── ", "partUJ's slot U5")
 
@@ -891,7 +945,7 @@ def apply(doc, ctx):
     for o, n in rb_texts:
         doc.sub(o, n, why="the RB section's texts")
     doc.line("note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved:",
-             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php — and nothing else moved but followup_auto_send: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7) — every other step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds (its tests) are on disk (deploy-hybrid.sh never deletes; counted above), named by nothing $BASELINE_COMMIT tracks (QC-RB1). ECO Bank, the uCRM catalogue, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
+             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php — and $( case \"${AS_RB1:-}\" in written|written-check:*) echo \"nothing else moved but followup_auto_send: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)\" ;; unknown:*) echo \"nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no migration; whether it wrote followup_auto_send '0' before the put-back is not known (AS-RB1: ${AS_RB1_SAY:-?}; AS-RB2 above reads it)\" ;; *) echo \"nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote no key (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7)\" ;; esac ) — every other step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds (its tests) are on disk (deploy-hybrid.sh never deletes; counted above), named by nothing $BASELINE_COMMIT tracks (QC-RB1). ECO Bank, the uCRM catalogue, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
              why="the RB note")
 
     # ── R5: AS-RB1's command after the verdict of a typed rollback ──
@@ -917,6 +971,34 @@ def apply(doc, ctx):
                  ("  cih_main || note \"LK-RB0 the run's folder", 1), ("\n    rb_pre106   # ", 1), ("then rb106   # RB106", 1), ("\nrb106\n", 1),
                  ("printf 'AS_RB1=%s\\n' \"$AS_RB1\" >> \"${STATE_W:-$STATE}\"", 1)):
         doc.must(s, n, why="partR as written")
+    # the review of 18 Nov: RB-1 rb_pre106's arms, RB-2 the RB note by AS_RB1, RB-3 and L8-3 the headlines by AS_RB1 and
+    # AS_RB2_EFF, RB-4 AS-RB2's could-not-read branch, L8-4 as_back_on by COPY_AT against the latest rollback's RB_COPY_AT
+    for s, n in (('AS_RB0=""; AS_RB0_SAY=""; AS_RB1=""; AS_RB1_SAY=""; AS_RB2_EFF=""\n', 1),
+                 ('  AS_RB2_EFF="$(kv "$o" eff)"; [ -n "$AS_RB2_EFF" ] || AS_RB2_EFF="unread"\n', 1),
+                 ('         not-written:*) note "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION\'s code after '
+                  'the rollback (${o#as=}) — AS-RB1 did not write it (${AS_RB1_SAY:-?}; its FAIL above stands)" ;;\n', 1),
+                 ('    as=noowner) AS_RB0_SAY="followup_auto_send NOT set off — the rollback cannot write it (above)"\n', 1),
+                 ("THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (noowner: ", 1),
+                 ("THE ROLLBACK $w SET followup_auto_send OFF ITSELF ($c): ", 2), ('w="MAY NOT"', 1),
+                 ('c="it could not be read as the jobs read it${c:+; $c}"', 1),
+                 ('    *) AS_RB0_SAY="followup_auto_send set off first only if AS-RB1, reading it again, finds it on and the five '
+                  'conditions holding"\n', 1),
+                 ("AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (", 2),
+                 ("WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (", 2), ("AS-RB1 DID NOT SET followup_auto_send OFF (", 2),
+                 ("followup_auto_send reads off now, through $BASELINE_VERSION's code (AS-RB1: ", 1),
+                 ("printf '%s %s' \"${v:-none}\" \"$t\"", 1), ('  [ "$t" -lt "$c" ] || return 0\n', 1),
+                 ('written|written-check:*) echo "nothing else moved but followup_auto_send: ', 1),
+                 ('unknown:*) echo "nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no '
+                  'migration; whether it wrote followup_auto_send \'0\' before the put-back is not known', 1),
+                 ('*) echo "nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, '
+                  'and wrote no key (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}', 1)):
+        doc.must(s, n, why="partR, the review of 18 Nov")
+    doc.mustnot("THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF ($(as_causes_say", why="RB-1: the cause is never empty")
+    bo = t[t.index("as_back_on() {\n"):]
+    bo = bo[:bo.index("\n}\n")]
+    if "REDEPLOY" in bo or "sed -n 's/^COPY_AT=//p' \"$STATE\"" not in bo \
+            or not bo.index('[ "$t" -lt "$c" ] || return 0') < bo.index('[ "${r%% *}" = "written" ] || return 0') < bo.index('o="$(as_read)"'):
+        raise SystemExit("PART R: as_back_on does not go by this deploy's COPY_AT against the latest rollback's RB_COPY_AT (L8-4)")
     asg = [l for l in t.split("\n") if re.match(r"\s*OWNER_AUTOSEND_CMD=", l)]
     if len(asg) != 1 or "--key followup_auto_send --value $v 2>&1 | sed '/^  AI SETTINGS\\$/,\\$d' $(LOGW" not in asg[0]:
         raise SystemExit("PART R: OWNER_AUTOSEND_CMD is not assigned once, as §L.7 writes it")
@@ -928,8 +1010,9 @@ def apply(doc, ctx):
     i = t.index("  as_rb1 typed\n")
     if not (t.index("[ \"$ANSWER\" = \"ROLLBACK\" ] || stop \"not confirmed\"") < i < t.index("    if do_rollback; then ok \"container serves $BASELINE_COMMIT ($BASELINE_VERSION)\"", i)):
         raise SystemExit("PART R: AS-RB1 is not after ROLLBACK is typed and before do_rollback")
-    if not (t.index("  uj_stage \"$sub\"") < t.index(U5_CALL) < t.index("# ── SLOT U5 ── ")) or "\n" + U5_CALL + "  # ── SLOT U5 ── " not in t:
-        raise SystemExit("PART R: U5 is not read in qf_stage right after the UJ reading, just above its slot")
+    if not (t.index("  uj_stage \"$sub\"") < t.index("  uj_fe_g1   # FE-G1") < t.index(U5_CALL) < t.index("# ── SLOT U5 ── ")) \
+            or "\n" + U5_CALL + "  # ── SLOT U5 ── " not in t:
+        raise SystemExit("PART R: U5 is not read in qf_stage right after the UJ reading and FE-G1, just above its slot")
     fm = re.search(r"(?ms)^as_rb1\(\) \{\n(.*?)^\}", t)
     if not fm or fm.group(1).count('docker exec -u "$DB_OWNER"') != 1 or fm.group(1).count('"$IN_CONTAINER"') != 1 \
             or fm.group(1).count("saveOverrides(") != 1 or "saveOverrides($dd, ['followup_auto_send' => '0'])" not in fm.group(1):

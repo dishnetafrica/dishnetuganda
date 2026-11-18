@@ -14,10 +14,29 @@
 # (RB106): followup_auto_send '0' first when §L.7's five conditions hold (AS-RB1), every other switch kept, AS-RB2 after;
 # the put-back by hand writes no setting and does not switch it off. Nothing here is a check; every line is printed text
 # or a comment, but the §F block's and the ECO Bank block's guards. Every fact a new text states is read off Git first.
+# 18 Nov (the review of rev106-findings, and DL11): check it says UJ-ON judges F3 only where stage A's reading lets it
+# (partUJ's uj_judgeable, review L8-1); "what changed", "what did not" and §F's step 2 go by the mode and LK-AO's
+# reading (LK_AO_ON, defined here: its global and its one assignment in lk_ao; review L8-2); "what it means" by what
+# AS-RB2 read (partR's AS_RB2_EFF, review L8-3); the header, §F's comment and BR1's note say "a deploy after a
+# rollback", not "--redeploy" (review L8-4); FE-G1 (DL11) in the header's checks, rules, options and stages, the
+# summary's names, and partT's stage-A heading and its two comments — with the interim's order: step 6 (and 11, 12)
+# off first, THEN followup_enabled on, never the reverse.
 import re, textwrap, os
 from d106lib import git, sha_at
 
 V105, V106 = "5.18.105", "5.18.106"
+# 18 Nov (review L8-2): LK_AO_ON — the global, and its one assignment, in lk_ao, right after a whole reading
+LKAO_DEF = ("# 5.18.106 (review L8-2): LK_AO_ON — the steps on as LK-AO reads them in --after-only (\"-\" for none), set by lk_ao\n"
+            "# alone; empty while LK-AO has not read the ladder's keys. The summary reads it: \"what changed\" and §F's step 2.\n"
+            "LK_AO_ON=\"\"\n")
+LK_OK_LINE = "  lk_ok \"$o\" || { note \"LK-AO the ladder's keys could not be read (${o%% map=*})\"; return; }\n"
+LKAO_SET = "  LK_AO_ON=\"$(qf_kv \"$o\" on)\"   # 5.18.106 (review L8-2): the steps on now, for the summary (LK_AO_ON above)\n"
+# 18 Nov (review L8-4): BR1's note — a deploy after a rollback is one, --redeploy typed or not
+BR1_NOTE = ('  [ "$BR1_LEFT" = "0" ] || [ -n "$REDEPLOY" ] || note "BR1 $BR1_LEFT of $EXPECTED_VERSION\'s own files are on disk although '
+            '--redeploy was not asked for: an earlier $EXPECTED_VERSION was deployed here and rolled back. This run is a deploy after '
+            'that rollback all the same: the copy replaces those files, and its PASSED --after-only reads the latest rollback\'s '
+            'record, offering your own command to turn followup_auto_send back on where that rollback set it off (root docs/75 '
+            '§L.8) — --redeploy changes only the run\'s name, its log\'s and the deploy command a --check prints"')
 CONT = "#            "
 
 
@@ -37,6 +56,7 @@ def apply(doc, ctx):
     n_rt = len(ctx["runtime_changed"])
     kept, d106 = set(ctx["kept"]), set(ctx["added"]) | set(ctx["changed"])
     show = lambda c, p: git(repo, "show", f"{c}:{plugin}/{p}").decode()
+    doc.mustnot("LK_AO_ON", why="a new name (review L8-2): partH defines it, below")
     # ── the facts the new texts state, from Git ──
     if sorted(ctx["runtime_changed"]) != ["cron/followup_close.php", "cron/followup_run.php", "cron/followup_scan.php",
                                           "cron/followup_send.php", "lib/FollowUpService.php"]:
@@ -126,17 +146,21 @@ def apply(doc, ctx):
              "present, with any value, in <data>/kyc_config.json or its store row — read on LK-G1's own map, key names and "
              "places only, never a value — with one off command per present switch, each alone on its line, highest step "
              "first (in a config.json LK-G1's held rule refuses first); CS-B1 the same after DEPLOY is typed and before the "
-             "copy. THE READINGS BEFORE THE DEPLOY (U1–U5: notes, never a refusal; on QF's copy of the book through the pin's "
+             "copy. THE READINGS BEFORE THE DEPLOY (U1–U5: notes — FE-G1, below, is their one refusal; on QF's copy of the book through the pin's "
              "code — counts, UTC times and generic channel labels, never a phone, a message, an instance name or an event's "
              "detail): U1 F1's positive control, the last outbound delivery per channel, and the sender's ten places as the "
              "sender would meet them; U2 the counts root docs/75 §A measured; U3 the forecasts — expireStale's count and its "
              "first pass, F5's follow-ups; U4 the settings as the jobs read them, and whether F1–F5 apply here; U5 whether a "
              "rollback could write followup_auto_send (the one reader, on the live settings file and store row, read-only). "
+             "FE-G1, stage A (and so --check; 18 Nov, DL11), right after CS-G1, is the readings' one refusal: NO-GO, "
+             "nothing changed, when U4 reads followup_enabled off as the jobs read it — UJ-ON reads stage A's value for the "
+             "life of the deploy, so F3 could never be judged and the claim steps 6, 11 and 12 would follow unproven — with "
+             "your own command to turn it on, printed alone on its line, never run; when U4 cannot read it, no refusal. "
              "A deploy keeps U1–U4 in the state file (UJ_A) for --after-only to compare; --check prints them and writes "
              "nothing. AFTER THE COPY: ME-CA1, master's errors of the four follow-up jobs in <plugin>/data/plugin.log after "
              "the cycle the copy straddled — counts only; one after that cycle a FAIL, one inside it a note; NOT ESTABLISHED "
              "without its positive control, a note in capitals that never holds back PASSED; UJ-CA, U1–U3 again beside stage "
-             "A's (notes); in --after-only, UJ-ON, F3 judged: PASS when an enquiry follow-up closed expired by the close job "
+             "A's (notes); in --after-only, UJ-ON, F3 judged once its gate holds — followup_enabled on, StaffJobsGate reading Uganda, the age limit a positive number and the same, at stage A and now; otherwise a note and no verdict, and a gate that failed only at stage A leaves F3 unjudged for that deploy: PASS when an enquiry follow-up closed expired by the close job "
              "since the copy, or when nothing is stale for F3 to close; FAIL when followup_close has run since the copy, "
              "fewer than 200 closed cancelled, and a stale row is still there; NOT YET otherwise — a summary state of its "
              "own, exit status 3 (0 PASSED, 1 FAILED), which withholds PASSED and the owner's steps of root docs/75 §F and "
@@ -288,9 +312,15 @@ def apply(doc, ctx):
                "quarantine's --check after any later copy or rollback. The three claim switches are off — "
                "quote_chase_enabled (step 6), offers_test_enabled (step 11) and offers_live_enabled (step 12) absent from "
                "<data>/kyc_config.json and its store row: CS-G1 refuses otherwise, and CS-B1 again after DEPLOY is typed. "
+               "followup_enabled is on, as the jobs read it: FE-G1 refuses otherwise (NO-GO, nothing changed; DL11). Under "
+               "the 18 Nov interim — followup_enabled 0, step 6 on — turn step 6 off first, and steps 11 and 12 if they are "
+               "on, THEN followup_enabled on: each its own command, alone, never the reverse — followup_enabled on while a "
+               "claim switch is on is root docs/75 §F's hazard under 5.18.105 (claim mode closes the refused drafts after "
+               "three tries each, then sends the stale backlog). CS-G1 prints the off commands and FE-G1 the one for "
+               "followup_enabled; this script runs neither. "
                "The ladder is otherwise kept exactly as found: the steps that are on keep running. Do not run "
                "scripts/sales-followup.sh while the deploy, its --after-only or its rollback runs — LK-B1, CS-B1, LK-CA1 and "
-               "AS-RB1 would read the change. A --check first is wise: CS-G1, LK-G1, LM-G1 and LM-G2 refuse or pass, "
+               "AS-RB1 would read the change. A --check first is wise: CS-G1, FE-G1, LK-G1, LM-G1 and LM-G2 refuse or pass, "
                "QF-N1–QF-N7 and U1–U5 note, nothing changed. Every command this script prints for later stands alone on its "
                "own line with its own log, and the deploy and its rollback are never in one copyable block (root docs/44 "
                "§16.9).", first="# ", cont="# ")
@@ -341,8 +371,9 @@ def apply(doc, ctx):
              "switch, the quoting organization, the uCRM catalogue, the channel registry and every number's owner stay "
              f"exactly as they are; the {n_a} files 5.18.106 adds (its tests) stay on disk, named by nothing 7835906 tracks "
              "(QC-RB1). followup_auto_send stays off after the rollback: a later deploy of 5.18.106 goes with --redeploy, "
-             "only with every claim switch off (CS-G1), and its PASSED --after-only, finding followup_auto_send off where "
-             "the latest rollback set it so, prints your own command to turn it back on — your choice. The put-back by hand "
+             "only with every claim switch off (CS-G1) and followup_enabled on (FE-G1); the PASSED --after-only of a deploy "
+             "after that rollback — --redeploy typed or not — finding followup_auto_send off where the latest rollback set "
+             "it so, prints your own command to turn it back on — your choice. The put-back by hand "
              "(PUTBACK_CMD) writes no setting: it does not switch followup_auto_send off.", first="# ", cont="# "),
         why="rollback paragraph")
 
@@ -365,9 +396,12 @@ def apply(doc, ctx):
         "#   --redeploy           deploy 5.18.106 again after its own rollback: the files it adds (its tests), which the rollback\n"
         "#                        leaves on disk, are expected there (BR1 counts them, and the copy replaces them); QF-G1 reads\n"
         "#                        5.18.104's tables as it left them, the ladder rule holds as on the first deploy (LK), and\n"
-        "#                        CS-G1 refuses while a claim switch is on (root docs/75 §L.9, DL8)", why="--redeploy")
+        "#                        CS-G1 refuses while a claim switch is on (root docs/75 §L.9, DL8), FE-G1 while\n"
+        "#                        followup_enabled reads off (DL11). Without it the deploy is the same — BR1 notes the files —\n"
+        "#                        and its PASSED --after-only reads that rollback's record all the same (root docs/75 §L.8)",
+        why="--redeploy")
     doc.sub("owner and sign-off readings — and stop before the backup:",
-            "owner and sign-off readings, CS-G1 and U1–U5 — and stop before the backup:", why="--check")
+            "owner and sign-off readings, CS-G1, U1–U5 and FE-G1 — and stop before the backup:", why="--check")
     doc.sub("operator's explicit choice (Q-G3) — 5.18.104 then quotes as 5.18.103 does with it off (no quoting",
             "operator's explicit choice (Q-G3) — 5.18.106 then quotes as 5.18.105 does with it off (no quoting", why="--quote-company-off")
     doc.lines_between("#   --clear-switches     REFUSED (root docs/74 §H.4.4)",
@@ -420,8 +454,9 @@ def apply(doc, ctx):
         ("#            commit and version, every file of it (BR1), every file 5.18.105 changes and the 5.18.104 files it keeps by",
          "#            commit and version, every file of it (BR1), every file 5.18.106 changes and the 5.18.105 files it keeps by"),
         ("#            and AC-N2; 5.18.105's LM-G1 and LM-G2; the backup, the event queue's\n",
-         "#            and AC-N2; 5.18.105's LM-G1 and LM-G2; 5.18.106's CS-G1 (a refusal) and U1–U5 (notes; a deploy keeps\n"
-         "#            U1–U4 in the state file, UJ_A); the backup, the event queue's\n"),
+         "#            and AC-N2; 5.18.105's LM-G1 and LM-G2; 5.18.106's CS-G1 (a refusal), U1–U5 (notes; a deploy keeps\n"
+         "#            U1–U4 in the state file, UJ_A) and FE-G1 (a refusal: U4 read followup_enabled off); the backup,\n"
+         "#            the event queue's\n"),
         ("#          B LK-B1 and the baselines, then the documented deploy (or, with --rollback, LK-RB0 and, once ROLLBACK is\n"
          "#            typed, the documented deploy of 5.18.104 — no switch tool); the copy's time on each file",
          "#          B CS-B1, LK-B1 and the baselines, then the documented deploy (or, with --rollback, rb_pre106 — LK-RB0 and\n"
@@ -450,10 +485,11 @@ def apply(doc, ctx):
         why="stage RB")
     doc.lines_between("#          F summary: which of the checks each name is (5.18.105's own first",
                       "#            --after-only has passed; the rollback last, after the verdict, its own block",
-        "#          F summary: which of the checks each name is (5.18.106's own first — CS-G1, CS-B1, U1–U5, UJ-CA, UJ-ON, ME-CA1,\n"
-        "#            AS-RB0, AS-RB1, AS-RB2, RB106; then 5.18.105's, carried — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-AO, LK-RB0,\n"
-        "#            LK-RB1, LM-G1, LM-G2, LM-CA1, LM-CA2, LM-ON, LM-RB1; then 5.18.104's, QF-G1–QF-G3, QF-N1–QF-N7,\n"
-        "#            QF-CA1–QF-CA8, QF-ON0–QF-ON5; VN and VA, Part V's; OF, Part O's; AC, Part P's — then 5.18.103's, carried,\n"
+        "#          F summary: which of the checks each name is (5.18.106's own first — CS-G1, CS-B1, U1–U5, FE-G1, UJ-CA, UJ-ON,\n"
+        "#            ME-CA1, AS-RB0, AS-RB1, AS-RB2, RB106; then 5.18.105's, carried — LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON,\n"
+        "#            LK-AO, LK-RB0, LK-RB1, LM-G1, LM-G2, LM-CA1, LM-CA2, LM-ON, LM-RB1; then 5.18.104's, QF-G1–QF-G3,\n"
+        "#            QF-N1–QF-N7, QF-CA1–QF-CA8, QF-ON0–QF-ON5; VN and VA, Part V's; OF, Part O's; AC, Part P's — then\n"
+        "#            5.18.103's, carried,\n"
         "#            QC-G1, QC-N1–QC-N7, QC-CA1–QC-CA3, QC-ON1–QC-ON4, QC-RB1, QC-RB2; 5.18.102's, QL-G1, QL-N1–QL-N7, QL-CA2,\n"
         "#            QL-CA3; QS-G1, QS-CA1; TN-G1–TN-G3, TN-N1, TN-N2, TN-CA1–TN-CA3; Q-G1–Q-G6, Q-N1–Q-N7, Q-CA1–Q-CA6); the cash\n"
         "#            sheet's path; three states, FAIL first — PASSED, NOT YET (UJ-ON's, --after-only only, exit status 3) and\n"
@@ -461,31 +497,32 @@ def apply(doc, ctx):
         "#            the quarantine's --check, each its own command with its own log; the screens (none changes but the Follow-ups\n"
         "#            screen's closes; every switch kept by the deploy) and the operator's steps — where the ladder stands; after a\n"
         "#            PASSED --after-only alone, the owner's steps of root docs/75 §F (followup_daily_cap, then step 6 and its\n"
-        "#            --check, later followup_run_limit), each its own command, and, after a --redeploy whose rollback set\n"
-        "#            followup_auto_send off, your own command to turn it back on; the rollback last, after the verdict, its own\n"
-        "#            block, and the put-back by hand, which does not switch followup_auto_send off", why="stage F")
+        "#            --check, later followup_run_limit), each its own command, and, after a deploy that followed a rollback\n"
+        "#            which set followup_auto_send off, your own command to turn it back on; the rollback last, after the\n"
+        "#            verdict, its own block, and the put-back by hand, which does not switch followup_auto_send off", why="stage F")
 
     # ════ the summary ════
     doc.lines_between('echo "  names             LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-AO, LK-RB0, LK-RB1, LM-G1, LM-G2, LM-CA1, LM-CA2, LM-ON,"',
                       'echo "                    QF-CA1–QF-CA8 and QF-ON0–QF-ON5 are 5.18.104\'s (QF, Part F\'s; root docs/73 §H.2.15), carried and"',
-        'echo "  names             CS-G1, CS-B1, U1–U5, UJ-CA, UJ-ON, ME-CA1, AS-RB0, AS-RB1, AS-RB2 and RB106 are $EXPECTED_VERSION\'s"\n'
-        'echo "                    own (root docs/75 §L.3–§L.7); LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-AO, LK-RB0, LK-RB1, LM-G1,"\n'
-        'echo "                    LM-G2, LM-CA1, LM-CA2, LM-ON and LM-RB1 are 5.18.105\'s (root docs/74 §H.4, §H.5), carried — LM-RB1"\n'
-        'echo "                    inverted, LK-G1\'s two notes gone (root docs/75 §L.3, §L.6); QF-G1–QF-G3, QF-N1–QF-N7,"\n'
+        'echo "  names             CS-G1, CS-B1, U1–U5, FE-G1, UJ-CA, UJ-ON, ME-CA1, AS-RB0, AS-RB1, AS-RB2 and RB106 are"\n'
+        'echo "                    $EXPECTED_VERSION\'s own (root docs/75 §L.3–§L.7, DL11); LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON,"\n'
+        'echo "                    LK-AO, LK-RB0, LK-RB1, LM-G1, LM-G2, LM-CA1, LM-CA2, LM-ON and LM-RB1 are 5.18.105\'s (root"\n'
+        'echo "                    docs/74 §H.4, §H.5), carried — LM-RB1 inverted, LK-G1\'s two notes gone (root docs/75 §L.3,"\n'
+        'echo "                    §L.6); QF-G1–QF-G3, QF-N1–QF-N7,"\n'
         'echo "                    QF-CA1–QF-CA8 and QF-ON0–QF-ON5 are 5.18.104\'s (QF, Part F\'s; root docs/73 §H.2.15), carried and"',
         why="summary names")
     doc.line('            echo "  what it means     on Uganda the uCRM catalogue is 5.18.103\'s own and the rollback leaves it exactly as it was',
-             '            echo "  what it means     the code is $BASELINE_VERSION\'s again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php (RB); followup_auto_send ${AS_RB1_SAY:-not written by this run} (AS-RB1; AS-RB2 above reads it under $BASELINE_VERSION) — with it off a person approves each draft, and it stays off until you turn it on; every other switch of the sales follow-up is as it was (LK-RB1): the steps that were on keep running; 5.18.105\'s masked lines stay masked (LM-RB1); every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. On Uganda the uCRM catalogue is 5.18.103\'s own and the rollback leaves it exactly as it was — its screen, its settings and its switch as an admin left them, the KYC form, Send Quotation and the lead quotes offering what they offered (RB); the web-direct applications stay on 5.18.103\'s direct rules, as under $EXPECTED_VERSION — ${QCRB_SAY:-not counted} (QC-RB2$( [ -n "$QC_RB" ] && echo "; $QC_RB_IDS")): retried by their uCRM ids, Make the quotation on an Orders card where it applies; the rollback adds none to quote by hand, and nothing is quoted at price 0. The files $EXPECTED_VERSION adds stay on disk, named by nothing $BASELINE_COMMIT tracks (QC-RB1). The Cashbook, ECO Bank, every number and the quoting organization stay as they are (RB)" ;;',
+             '            echo "  what it means     the code is $BASELINE_VERSION\'s again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php (RB); followup_auto_send ${AS_RB1_SAY:-not written by this run} (AS-RB1; AS-RB2 above reads it under $BASELINE_VERSION) $( case "${AS_RB2_EFF:-}" in off) echo "— it reads off now, so a person approves each draft, and it stays off until you turn it on" ;; on) echo "— IT READS ON NOW (AS-RB2): UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT DOES — $( if [ -n "$RB_NOTHING" ]; then echo "your own command, as the one reader allows it, is printed above (AS-RB2)"; elif [ "${AS_RB1:-}" = "written" ] || [ "${AS_RB1:-}" = "off" ]; then echo "AS-RB2\'s FAIL above says so"; else echo "your own command, where its cause allows one, is printed after the verdict"; fi)" ;; *) echo "— whether it reads off now is not shown (AS-RB2 above)" ;; esac ); every other switch of the sales follow-up is as it was (LK-RB1): the steps that were on keep running; 5.18.105\'s masked lines stay masked (LM-RB1); every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. On Uganda the uCRM catalogue is 5.18.103\'s own and the rollback leaves it exactly as it was — its screen, its settings and its switch as an admin left them, the KYC form, Send Quotation and the lead quotes offering what they offered (RB); the web-direct applications stay on 5.18.103\'s direct rules, as under $EXPECTED_VERSION — ${QCRB_SAY:-not counted} (QC-RB2$( [ -n "$QC_RB" ] && echo "; $QC_RB_IDS")): retried by their uCRM ids, Make the quotation on an Orders card where it applies; the rollback adds none to quote by hand, and nothing is quoted at price 0. The files $EXPECTED_VERSION adds stay on disk, named by nothing $BASELINE_COMMIT tracks (QC-RB1). The Cashbook, ECO Bank, every number and the quoting organization stay as they are (RB)" ;;',
              why="summary: what it means")
     doc.line('  echo "  what changed      on this Uganda server: $EXPECTED_VERSION\'s log lines',
              '  echo "  what changed      on this Uganda server: $EXPECTED_VERSION\'s enquiry follow-up sender — ' + str(n_rt)
-             + ' runtime files, the four follow-up jobs and lib/FollowUpService.php, F1–F5 (root docs/75 §C): a draft Evolution keeps refusing while its number delivers is closed send_failed (F1), a stale draft is closed expired and never sent (F2), the close job expires the stale follow-ups and the run\'s due() leaves them out (F3), one follow-up per quiet spell (F4), one approved draft per follow-up (F5); no message text, screen, setting or migration changes, and the closes it makes stay. The sales follow-up\'s ladder is $BASELINE_VERSION\'s and every key of it is as this run found it (LK-CA1), none of the three claim switches present (CS-B1): the steps that are on keep running ($(qf_kv "${LK_B1:-$LK_G1}" on | tr \',\' \' \'))"',
+             + ' runtime files, the four follow-up jobs and lib/FollowUpService.php, F1–F5 (root docs/75 §C): a draft Evolution keeps refusing while its number delivers is closed send_failed (F1), a stale draft is closed expired and never sent (F2), the close job expires the stale follow-ups and the run\'s due() leaves them out (F3), one follow-up per quiet spell (F4), one approved draft per follow-up (F5); no message text, screen, setting or migration changes, and the closes it makes stay. The sales follow-up\'s ladder is $BASELINE_VERSION\'s$( if [ "$MODE" = "after" ]; then echo "; its keys as LK-AO above reads them against the deploy\'s, the claim switches among them — under $EXPECTED_VERSION steps 6, 11 and 12 may be on once its --after-only has PASSED (root docs/75 §L.3, §F): the steps on now ($( [ -n "$LK_AO_ON" ] && printf \'%s\' "$LK_AO_ON" | tr \',\' \' \' || printf \'not read — LK-AO above\'))"; else echo " and every key of it is as this run found it (LK-CA1), none of the three claim switches present (CS-B1): the steps that are on keep running ($(qf_kv "${LK_B1:-$LK_G1}" on | tr \',\' \' \'))"; fi)"',
              why="summary: what changed")
     doc.subs([
         ("(QS-G1, QS-CA1; webhook.php changes only in LM's masked log lines); QuoteOrganization.php, QuoteTaxLine.php, TenantProfile.php, PublicPriceFeed.php, includes/api/api_retailer.php and retailer/index.html, $BASELINE_VERSION's byte for byte (Q-G1, Q-CA1) — cron_quote_wa.php and includes/post/post_kyc.php change only in LM's masked log lines$F_QD9;",
          "(QS-G1, QS-CA1; webhook.php $BASELINE_VERSION's byte for byte); QuoteOrganization.php, QuoteTaxLine.php, TenantProfile.php, PublicPriceFeed.php, includes/api/api_retailer.php, retailer/index.html, cron_quote_wa.php and includes/post/post_kyc.php, $BASELINE_VERSION's byte for byte (Q-G1, Q-CA1)$F_QD9;"),
         ("every key of the sales follow-up's ladder, in every place, as this run found it (LK-B1, LK-CA1);",
-         "every key of the sales follow-up's ladder, in every place, as this run found it (LK-B1, LK-CA1), none of the three claim switches present (CS-G1, CS-B1);"),
+         '$( if [ "$MODE" = "after" ]; then echo "the sales follow-up\'s ladder but for your own steps since the deploy — LK-AO above names every key changed since then (under $EXPECTED_VERSION the claim switches, steps 6, 11 and 12, may be on once its --after-only has PASSED; root docs/75 §L.3)"; else echo "every key of the sales follow-up\'s ladder, in every place, as this run found it (LK-B1, LK-CA1), none of the three claim switches present (CS-G1, CS-B1)"; fi);'),
         ("which 5.18.104 and 5.18.105 carry unchanged and add none to", "which 5.18.104 through 5.18.106 carry unchanged and add none to"),
         ("# 5.18.103 through 5.18.105: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks are LM's masked log lines only",
          "# 5.18.103 through 5.18.106: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks were LM's masked log lines only, and 5.18.106 changes neither"),
@@ -497,7 +534,11 @@ def apply(doc, ctx):
         '  echo "  check it          --after-only, three runs, each its own command, alone, with its own log and its own cash sheet:"\n'
         '  echo "                    at least 20 minutes after the copy ($( [ -n "${R19_COPY_T:-}" ] && utc_of $(( R19_COPY_T + 1200 )) || echo "the copy\'s time is not recorded")) — R19 then says whether the quarantine still holds, conclusively once master has run the retry job after the copy; ME-CA1 reads the cycle the copy straddled:"\n'
         '  echo "      $AFTER_CMD"\n'
+        '  if uj_judgeable; then   # 5.18.106 (review L8-1): stage A\'s reading (UJ_A) lets UJ-ON judge F3 for this deploy\n'
         '  echo "                    again once a close pass has run since the copy (followup_close runs every 10 minutes) — UJ-ON judges F3 on it, and until one has it reads NOT YET (exit status 3) and says when to run it again:"\n'
+        '  else\n'
+        '  echo "                    again once a close pass has run since the copy (followup_close runs every 10 minutes), to read the closes — but UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY: its gate did not hold at stage A ($(uj_gate_a "$UJ_A" | sed -e \'s/^ //\' -e \'s/;$//\')), and stage A\'s reading is fixed in the deploy\'s state file, so F3 stays unproven and the steps that wait for it (6, 11, 12) would follow without that proof; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate:"\n'
+        '  fi\n'
         '  echo "      $AFTER_CMD"\n'
         '  echo "                    and the next day, Monday to Saturday, after 15:00 UTC and before 17:00 UTC — inside the sender\'s window (08:00–20:00 Kampala), where F1\'s closes, the sends and the front moving show, and after the evening WhatsApp (18:00 Kampala) has run on the new code$( [ -n "$F_QORG" ] && echo " — the uCRM catalogue\'s switch is said as found (QC-ON1: ok while it is on, a note while it is off)"):"\n'
         '  echo "      $AFTER_CMD"\n'
@@ -546,9 +587,10 @@ def apply(doc, ctx):
         '  echo "                    A step behaves under $EXPECTED_VERSION as under $BASELINE_VERSION but for the enquiry follow-ups (F1–F5, root docs/75 §C)."',
         why="summary: your steps")
     doc.sub('  echo "  deploy again      only once the cause of the rollback is understood — with --redeploy, its own command, alone:"\n',
-            '  echo "  deploy again      only once the cause of the rollback is understood, and with every claim switch off (CS-G1 refuses"\n'
-            '  echo "                    otherwise) — with --redeploy, its own command, alone; where this rollback set followup_auto_send off"\n'
-            '  echo "                    it stays off, and that deploy\'s PASSED --after-only prints your own command to turn it back on:"\n',
+            '  echo "  deploy again      only once the cause of the rollback is understood, with every claim switch off (CS-G1 refuses"\n'
+            '  echo "                    otherwise) and followup_enabled on (FE-G1 refuses otherwise) — with --redeploy, its own command,"\n'
+            '  echo "                    alone; where this rollback set followup_auto_send off it stays off, and that deploy\'s PASSED"\n'
+            '  echo "                    --after-only prints your own command to turn it back on:"\n',
             why="summary: deploy again")
     doc.sub('  echo "  Send this LOG FILE back (not a copy of the terminal, and never the cash sheet). Then --after-only again, its own command, alone, with its own log:"\n',
             '  echo "  Send this LOG FILE back (not a copy of the terminal, and never the cash sheet). The owner\'s steps (root docs/75 §F) wait for a PASSED --after-only. Then --after-only again, its own command, alone, with its own log:"\n',
@@ -565,8 +607,9 @@ def apply(doc, ctx):
         "# set_config refuses a value that still holds <...> and saves nothing; never a number of this script's); then step 6\n"
         "# through the switch tool's wrapper (its own log in /root/dnb-sales; on chase asks for a typed yes, so a terminal) and\n"
         "# its check; later, followup_run_limit, the same form. A NOT YET or a FAILED run prints none of them (a NOT YET prints\n"
-        "# the one --after-only to run again). Then as_back_on: after a rollback that set followup_auto_send off, a --redeploy's\n"
-        "# PASSED --after-only offers the owner's own command to turn it back on — it prints nothing otherwise (partR's rules).\n"
+        "# the one --after-only to run again). Then as_back_on: the PASSED --after-only of a deploy that followed a rollback\n"
+        "# which set followup_auto_send off (--redeploy typed or not) offers the owner's own command to turn it back on — it\n"
+        "# prints nothing otherwise (partR's rules). Step 6 goes by LK-AO's reading above (LK_AO_ON, review L8-2).\n"
         "if [ \"$MODE\" = \"after\" ] && [ \"$FAIL\" = \"0\" ] && [ \"$NOT_YET\" = \"0\" ]; then\n"
         "  echo\n"
         "  echo \"  the owner's steps root docs/75 §F — $EXPECTED_VERSION serves and this --after-only PASSED, so the steps that\"\n"
@@ -580,11 +623,29 @@ def apply(doc, ctx):
         "  else\n"
         "  echo \"                    No command is printed: the owner of plugin.sqlite3 (DB_OWNER) or the data folder is not known — a settings write runs as that user, never as root; send the log file.\"\n"
         "  fi\n"
+        "  # step 6 by LK-AO's reading above (LK_AO_ON; review L8-2): already on — on chase is not printed (run again it\n"
+        "  # would stamp quote_chase_not_before anew); not read — where the ladder stands, first; otherwise the command\n"
+        "  case \",$LK_AO_ON,\" in\n"
+        "    *,chase,*)\n"
+        "  echo \"                    2. Step 6, chase, is already on: LK-AO above reads it on, so the enquiry sends are in the send\"\n"
+        "  echo \"                    ledger's claim mode (root docs/75 §F). Do not run on chase again — it would stamp\"\n"
+        "  echo \"                    quote_chase_not_before anew. Its check, its own command, alone:\" ;;\n"
+        "    *)\n"
         "  echo \"                    2. Then step 6, chase — it turns quote_chase_enabled on, which also puts the enquiry sends into\"\n"
         "  echo \"                    the send ledger's claim mode (root docs/75 §F); it asks you to type yes, so run it in a terminal;\"\n"
+        "  if [ -n \"$LK_AO_ON\" ]; then\n"
         "  echo \"                    the wrapper writes its own log in /root/dnb-sales:\"\n"
+        "  else\n"
+        "  echo \"                    the wrapper writes its own log in /root/dnb-sales. LK-AO above could not read the ladder's keys,\"\n"
+        "  echo \"                    so whether step 6 is on already is not shown — read where the ladder stands first, its own\"\n"
+        "  echo \"                    command, alone:\"\n"
+        "  echo \"      cd $REPO && bash $QF_WRAPPER show\"\n"
+        "  echo \"                    and run on chase only if show does not list chase among the steps on (run again, it would\"\n"
+        "  echo \"                    stamp quote_chase_not_before anew):\"\n"
+        "  fi\n"
         "  echo \"      cd $REPO && bash $QF_WRAPPER on chase\"\n"
-        "  echo \"                    then its check, its own command, alone:\"\n"
+        "  echo \"                    then its check, its own command, alone:\" ;;\n"
+        "  esac\n"
         "  echo \"      cd $REPO && bash $QF_WRAPPER --check chase\"\n"
         "  echo \"                    and --after-only again (check it, above): LK-AO and QF-ON0–QF-ON5 judge the step now on.\"\n"
         "  echo \"                    3. Later, once sends flow, consider raising followup_run_limit — the follow-ups judged a run; the\"\n"
@@ -641,6 +702,35 @@ def apply(doc, ctx):
              '  echo "      $PUTBACK_CMD"\n'
              '  as_show "$(as_para sum)"', 1, why="the put-back by hand, as partR wrote it")
 
+    # ── 18 Nov: FE-G1 (DL11) in partT's stage-A heading and comments; LK_AO_ON (review L8-2); BR1's note (L8-4) ──
+    for s in ("uj_fe_g1() {\n", "uj_judgeable() {", "uj_gate_a() {\n", "  uj_fe_g1   # FE-G1 — 5.18.106 (DL11)",
+              'AS_RB2_EFF="$(kv "$o" eff)"', "' on=', $on === [] ? '-' : implode(',', $on)", "as_back_on() {\n"):
+        doc.must(s, 1, why="partUJ's, partR's and the source's texts partH's new texts read")
+    lad = show(pin, "lib/SalesFollowupLadder.php")
+    if "'chase' => ['n' => '6'," not in lad \
+            or "'switch' => ['quote_chase_enabled' => '1'],\n            'stamp' => 'quote_chase_not_before'," not in lad:
+        raise SystemExit("PART H: step 6 (chase) at the pin does not switch quote_chase_enabled and stamp quote_chase_not_before")
+    sft = show(pin, "tools/sales_followup.php")
+    son = sft[sft.index("function sf_on("):]
+    son = son[:son.index("\nfunction ", 1)]
+    if "    if ($row['stamp'] !== null) $changes[$row['stamp']] = UtcClock::stamp($now);\n" not in son \
+            or "isOn($config, $step)" in son or "isOn($config, $step)" in lad[lad.index("public static function admit("):lad.index("public static function skipCascade(")]:
+        raise SystemExit("PART H: on chase at the pin does not stamp quote_chase_not_before again over a step already on")
+    doc.sub("5.18.106's CS-G1 and U1–U5; read-only, on copies through the pin's code)\"\n",
+            "5.18.106's CS-G1, U1–U5 and FE-G1; read-only, on copies through the pin's code)\"\n", why="stage A's heading: FE-G1")
+    doc.sub("# qf_stage — QF-G1–QF-G3, LK-G1, CS-G1, QF-N1–QF-N7 and U1–U5 (CS-G1 and U1–U5 since 5.18.106, root docs/75 §L.3,\n"
+            "# §L.4), stage A, before anything changes (a deploy and --check): on copies,\n",
+            "# qf_stage — QF-G1–QF-G3, LK-G1, CS-G1, QF-N1–QF-N7, U1–U5 and FE-G1 (CS-G1, U1–U5 and FE-G1 since 5.18.106, root\n"
+            "# docs/75 §L.3, §L.4, DL11), stage A, before anything changes (a deploy and --check): on copies,\n", why="qf_stage's comment: FE-G1")
+    doc.sub("  # §L.4): CS-G1, the three claim switches absent, a refusal; U1–U5, the readings before the deploy, notes. On copies,\n",
+            "  # §L.4, DL11): CS-G1, the three claim switches absent, a refusal; U1–U5, the readings before the deploy, notes;\n"
+            "  # FE-G1, their one refusal: U4 read followup_enabled off. On copies,\n", why="stage A's call: FE-G1")
+    doc.insert_after('LK_G1=""; LK_B1=""; LK_ON=""; LK_SKIP=""; LK_SET_NAMES=""; LK_AT=""; LK_ROWS_B=""; LK_SHOW_A=""; LK_ON_A=""; '
+                     'LK_RB0=""; LK_RB0_ROWS=""; LK_RB0_SHOW=""\n', LKAO_DEF, why="LK_AO_ON, the global (review L8-2)")
+    doc.insert_after(LK_OK_LINE, LKAO_SET, why="LK_AO_ON, its one assignment, in lk_ao (review L8-2)")
+    doc.line('  [ "$BR1_LEFT" = "0" ] || [ -n "$REDEPLOY" ] || note "BR1 $BR1_LEFT of $EXPECTED_VERSION\'s own files are on disk although --redeploy was not asked for:',
+             BR1_NOTE, why="BR1's note: a deploy after a rollback (review L8-4)")
+
     # ── the result ──
     t = doc.t
     hdr_end = t.index("\nset -uo pipefail\n")
@@ -685,3 +775,40 @@ def apply(doc, ctx):
         raise SystemExit("PART H: the owner's steps are not after the verdict and before ECO Bank's block")
     if t.count("$AFTER_CMD\"") < 5:
         raise SystemExit("PART H: --after-only is not printed three times in check it, beside the NOT YET branch and the runbook")
+    # 18 Nov (rev106-findings, DL11): the review's partH items and FE-G1, asserted on the result
+    for s, n in (("LK_AO_ON=\"\"\n", 1), (LK_OK_LINE + LKAO_SET, 1), (BR1_NOTE + "\n", 1),
+                 ("  if uj_judgeable; then   # 5.18.106 (review L8-1)", 1), ("$(uj_gate_a \"$UJ_A\" | sed -e 's/^ //' -e 's/;$//')", 1),
+                 ("$( case \"${AS_RB2_EFF:-}\" in off) echo \"— it reads off now, so a person approves each draft", 1),
+                 ("$( if [ \"$MODE\" = \"after\" ]; then echo \"; its keys as LK-AO above reads them against the deploy's", 1),
+                 ("$( if [ \"$MODE\" = \"after\" ]; then echo \"the sales follow-up's ladder but for your own steps since the deploy", 1),
+                 ("  case \",$LK_AO_ON,\" in\n    *,chase,*)\n", 1), ("5.18.106's CS-G1, U1–U5 and FE-G1; read-only", 1),
+                 ("# qf_stage — QF-G1–QF-G3, LK-G1, CS-G1, QF-N1–QF-N7, U1–U5 and FE-G1", 1)):
+        doc.must(s, n, why="partH, the review of 18 Nov and DL11")
+    for s in ("— with it off a person approves each draft", "a --redeploy's", "after a --redeploy whose rollback set",
+              "5.18.106's CS-G1 and U1–U5;", "U1–U5: notes, never a refusal"):
+        doc.mustnot(s, why="partH, the review of 18 Nov and DL11")
+    if len(re.findall(r"(?m)^\s*LK_AO_ON=", t)) != 2 or (LK_OK_LINE + LKAO_SET) not in re.search(r"(?ms)^lk_ao\(\) \{\n(.*?)^\}", t).group(1):
+        raise SystemExit("PART H: LK_AO_ON is not defined once and assigned once, in lk_ao, right after its whole reading")
+    for w in ("FE-G1, stage A (and so --check", "FE-G1 refuses otherwise", "THEN followup_enabled on", "never the reverse",
+              "CS-G1, FE-G1, LK-G1, LM-G1", "CS-G1, U1–U5 and FE-G1 — and stop", "and FE-G1 (a refusal: U4 read followup_enabled off)",
+              "U1–U5, FE-G1, UJ-CA", "after a deploy that followed a rollback", "--redeploy typed or not", "FE-G1 while"):
+        if w not in re.sub(r"\s*\n#\s+", " ", head):
+            raise SystemExit(f"PART H: the header does not say {w!r}")
+    ck = t[t.index('  echo "  check it          --after-only, three runs'):t.index('  echo "      $QCHECK_CMD"')]
+    if not (ck.index("  if uj_judgeable; then") < ck.index("UJ-ON judges F3 on it") < ck.index("\n  else\n")
+            < ck.index("UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY") < ck.index("\n  fi\n") < ck.rindex('  echo "      $AFTER_CMD"')):
+        raise SystemExit("PART H: check it does not say UJ-ON judges F3 only where stage A's reading lets it (uj_judgeable)")
+    st2 = blk[blk.index('  case ",$LK_AO_ON," in\n'):blk.index("bash $QF_WRAPPER --check chase\"")]
+    if not (st2.index("    *,chase,*)\n") < st2.index("Do not run on chase again") < st2.index("\n    *)\n")
+            < st2.index('  if [ -n "$LK_AO_ON" ]; then\n') < st2.index("bash $QF_WRAPPER show\"") < st2.index("\n  fi\n")
+            < st2.index("bash $QF_WRAPPER on chase\"") < st2.index("\n  esac\n")) or st2.count("bash $QF_WRAPPER on chase\"") != 1:
+        raise SystemExit("PART H: §F's step 2 does not go by LK-AO's reading: already on, not read, the command")
+    for p in ("#            U1–U4 in the state file, UJ_A) and FE-G1", "#          F summary: which of the checks", "#            ME-CA1, AS-RB0,",
+              "#            LK-AO, LK-RB0, LK-RB1,", "#            QF-N1–QF-N7, QF-CA1", "#            --check, later followup_run_limit), each its own command, and, after a deploy",
+              "#            which set followup_auto_send off,", "#            verdict, its own block,", "#                        CS-G1 refuses while a claim switch",
+              "#                        followup_enabled reads off (DL11)", "#                        and its PASSED --after-only reads that rollback",
+              "# qf_stage — QF-G1–QF-G3", "# docs/75 §L.3, §L.4, DL11), stage A", "  # §L.4, DL11): CS-G1", "  # FE-G1, their one refusal",
+              "# 5.18.106 (review L8-2): LK_AO_ON", "# alone; empty while LK-AO", "  # step 6 by LK-AO's reading", "  # would stamp quote_chase"):
+        ls = [l for l in t.split("\n") if l.startswith(p)]
+        if len(ls) != 1 or len(ls[0]) > 120:
+            raise SystemExit(f"PART H: a comment line it writes is not found once, or is longer than 120 characters: {p!r} {[len(x) for x in ls]}")

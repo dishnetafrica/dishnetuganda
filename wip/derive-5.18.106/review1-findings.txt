@@ -1,0 +1,301 @@
+14 findings
+==== rollback minor RB-1 REAL | lines 8781, 8811-8817 (rb_pre106's last case), 13750 (the ROLLBACK prompt)
+S: Typed --rollback with 5.18.106 live and followup_auto_send on. AS-RB0's one reader fails once: docker exec returns nothing, or PHP stops before printing, so as_read gives `as=unread(no_answer)`. Line 8781 says the rollback will still write if AS-RB1's own reading finds the key on and all five conditions holding. The `*)` branch then prints in capitals: THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (unread(no_answer)) ... 5.18.105 WILL THEN APPROVE AND SEND AUTOMATICALLY ... ANSWER ANYTHING BUT ROLLBACK ... AND ACT ON WHAT FOLLOWS. What follows is only 'send the log file'. The prompt then says `followup_auto_send NOT set off — the rollback cannot write it`. If ROLLBACK is typed anyway, as_rb1 recomputes the conditions in its own process and writes. So the prompt is false, and an emergency rollback is aborted for a cause that AS-RB1 handles itself. A second case: when eff reads `unread` with pre=ok (PluginConfig::read threw), the capitals say `CANNOT SET ... ()` with an empty cause, because as_causes_say prints nothing for `ok`.
+V: The finding holds, but it is minor. I traced the code and checked it with a stub, using the script's own kv (l.3003) and its helpers at ll.8604-8668.
+
+1. When `as_read` (l.8595) fails, it returns `as=unread(<why>)`, which has no `eff=` and no `pre=`. The case word at l.8806 is therefore `:` and falls to `*)` at l.8811. That branch sets AS_RB0_SAY to "followup_auto_send NOT set off — the rollback cannot write it (above)". `as_cmd_ok` fails because the line is not `as=read `, so l.8815 prints in capitals: "THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (unread(no_answer)) … ANSWER ANYTHING BUT ROLLBACK … AND ACT ON WHAT FOLLOWS … THEN RUN THE ROLLBACK AGAIN". What follows is `as_owner_text`'s unread text (l.8636), which ends "send the log file". The prompt at l.13750 then shows the same "cannot write it". Both contradict the plain note printed just before at l.8781: "the rollback will not write it unless AS-RB1 … finds all five holding and the key on".
+
+2. That note is what actually happens. After ROLLBACK is typed, `as_rb1 typed` (l.13757, function at l.8838) runs its own `docker exec`. It recomputes `$asPre()` and `$asEff()` in the same process and writes '0' whenever eff is on and there are no causes. Nothing in it looks at AS_RB0. So if the AS-RB0 failure was transient (a single `docker exec` that returned nothing, or a container that was restarting), the prompt's "cannot write it" is false. The capitals tell the operator to abandon an emergency rollback over somethi
+FIX: Make all of these changes in partR.py, in the rb_pre106 text at about partR.py:513-519. They are script lines 8811-8817; leave the `off:*` and `on:ok` arms as they are.
+
+(a) Add an arm `as=noowner)` before `*)`. Keep AS_RB0_SAY="followup_auto_send NOT set off — the rollback cannot write it (above)", the capitals notice from l.8815 with the cause "noowner", and `as_show "$(as_owner_text 0 "$a")"`. AS-RB1 really cannot write here.
+
+(b) Add an arm `as=unread*)` for when the reader did not run. Print no capitals and no "answer anything but ROLLBACK". The l.8781 note already says why, so at most add `as_show "$(as_owner_text 0 "$a")"` for the "no command is printed: the one reader could not run" line. Set AS_RB0_SAY="followup_auto_send set off first only if AS-RB1's own reading finds it on and the five conditions hold", worded as the l.13750 fallback already is.
+
+(c) In the remaining `as=read` arm, eff unread or pre failing, keep the as_cmd_ok split. When the cause list is empty (`pre=ok`, `eff=unread`), print a fixed cause in the brackets, for example "it could not be read as the jobs read it", so the brackets are never empty. For eff=unread, consider wording AS_RB0_SAY as "followup_auto_send not set off unless AS-RB1, reading it again, finds it on and the five conditions holding", since AS-RB1 recomputes.
+
+Re-run the derivation twice to confirm the output is byte-identical, then stub-check the four inputs: noowner, unread(no_answer), eff=unread with pre=ok, and eff=on with pre=differ.
+
+==== rollback minor RB-2 REAL | lines 15672 (the RB note after rb106)
+S: Two cases. (1) A typed --rollback where followup_auto_send already reads off (AS_RB1=off) or the conditions fail (AS_RB1=not-written:*). (2) --rollback re-run after a finished rollback (RB_NOTHING). In each case the RB section still prints 'nothing else moved but followup_auto_send: ... and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: already off, AS-RB1 wrote nothing ...)', or '(AS-RB1: this run put nothing back)'. The log states a settings write that never happened, beside AS-RB1's own line saying nothing was written.
+V: The finding is real. I could not refute it.
+
+Line 15672 is one unconditional `note` at the end of the RB section. The RB section is the `elif [ "$MODE" = "rollback" ]` branch that starts at line 15238. Nothing between lines 15238 and 15673 calls `stop` or `exit`, so the note prints on every `--rollback` run. That includes the RB_NOTHING path, which line 13760 sets when the container already served 7835906 at the start of the run. On that path no ROLLBACK is typed and `as_rb1` never runs, so AS_RB1 and AS_RB1_SAY stay empty, as initialised at line 8455.
+
+The note always says the rollback "wrote one key before the put-back, followup_auto_send '0'". Only the parenthesis changes. I printed the note with a stub function for each case:
+- `AS_RB1=off` (lines 8911-8912): "wrote one key before the put-back, followup_auto_send '0' (AS-RB1: already off, AS-RB1 wrote nothing; …)".
+- `AS_RB1=not-written:*` (lines 8842, 8913, 8915, 8917): "wrote one key … '0' (AS-RB1: not written: …)".
+- `unknown:no-answer` (line 8919): it claims a write whose outcome is unknown.
+- RB_NOTHING: "wrote one key … '0' (AS-RB1: this run put nothing back)".
+
+So in every case except a real write, the log states a settings write that never happened. The design §L.7 requires "No write when … the key already reads off, or when the rollback has nothing to roll back (RB_NOTHING)", and says a key that already reads off gets "a plain note". The note contradicts that.
+
+**When this happens on the server:**
+- **Already off
+FIX: Change the `new` text of `doc.line(...)` at partR.py:894. No other derivation part, harness or rehearsal file anchors the phrase "wrote one key"; I checked with grep. Make the followup_auto_send clause depend on AS_RB1:
+- **`written` or `written-check:*`**: keep "nothing else moved but followup_auto_send: … and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: $AS_RB1_SAY; root docs/75 §L.7)".
+- **`unknown:*`**: "… and whether it wrote followup_auto_send '0' is not known (AS-RB1: $AS_RB1_SAY; AS-RB2 above reads it)".
+- **Anything else** (`off`, `not-written:*`, or empty under RB_NOTHING): "and nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote no key (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7)".
+
+One way to build it is a `$( case "${AS_RB1:-}" in written|written-check:*) echo "…";; unknown:*) echo "…";; *) echo "…";; esac )` inside the note string.
+
+Leave the remaining sentences of the note as they are. Then re-run the derivation twice and check the two outputs are byte-identical.
+
+==== rollback minor RB-3 REAL | lines 8676 (as_para's `*)` branch), 8701-8706 (as_after_verdict), with 8909 and 8919 (the AS_RB1 values)
+S: AS-RB1 saves followup_auto_send '0', but one read-back check fails. Example: a screen saves the settings row between the precondition read and the read-back, so the result is `written-check:row-others`. Or the write's answer is lost (`unknown:no-answer`). After the verdict, as_after_verdict prints in capitals: 'AS-RB1 DID NOT SET followup_auto_send OFF (written, but its read-back did not hold (row-others)) — UNDER 5.18.105 IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON:'. The next line, from the fresh reading, says 'It already reads off ...: nothing to run.' The stops after a rollback that did not verify, and V1's verified stop, print the same 'DID NOT SET' line through as_para.
+V: The finding is real but minor. The printed instruction is correct; the capitals headline above it makes a false claim.
+
+The finding reads the code correctly. as_rb1 records AS_RB1 at lines 8907-8919. When the write lands and a read-back check fails, the value is `written-check:<codes>` and AS_RB1_SAY is "written, but its read-back did not hold (<codes>)" (line 8909). When the PHP answer is lost, the value is `unknown:no-answer` and the say is "not known whether written ..." (line 8919). Neither value is in as_after_verdict's early-return list `''|written|off` (line 8703), so both reach line 8705's headline "AS-RB1 DID NOT SET followup_auto_send OFF (…)". as_para's `*)` branch (line 8676) prints the same headline for the rb and v1 cases (V1's verified stop at 13797, and the not-verified stops at 13759 and 13798).
+
+A stub run of as_after_verdict with AS_RB1=written-check:row-others prints the "DID NOT SET … OFF (written, but its read-back did not hold (row-others))" headline. The next line, from the fresh reading, says "It already reads off …: nothing to run." So the log asserts in capitals that the key was not set off, three lines after as_rb1's own FAIL said it WAS WRITTEN (line 8910). V1's stop text also says "kept as it was but followup_auto_send (written, …)" and then "DID NOT SET".
+
+When this happens: owner and mode pass on a normal write. writeKycFile chmods the tmp file 0600, and it is written by the docker exec user, DB_OWNER. row-others cannot come from the mirror its
+FIX: In wip/derive-5.18.106/partR.py, branch on the AS_RB1 prefix in both texts and keep the fresh reading and command (as_owner_text 0 "$(as_read)") unchanged after them:
+
+(1) partR.py:418, as_after_verdict (script line 8705). Replace the single echo with a case on "$AS_RB1":
+- `written-check:*` → "AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (${AS_RB1#written-check:}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON; as it reads now:"
+- `unknown:*` → "WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (${AS_RB1_SAY:-?}) — UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON; as it reads now:"
+- `*` (not-written:*) → keep the existing "DID NOT SET … OFF" line.
+
+(2) partR.py:387, as_para's `*)` branch (script line 8676). Split it the same way:
+- `rb:written-check:*|v1:written-check:*` → "AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (…)", followed for rb by ", and the put-back by hand writes no setting".
+- `rb:unknown:*|v1:unknown:*` → "WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (…)".
+- Leave the remaining `*)` (not-written:* and the unset 'not run' case) with "DID NOT SET".
+
+Re-run the derivation's own assertions on both texts; no partZ or harness anchor names this headline (grep finds it only in partR.py).
+
+==== rollback minor RB-4 REAL | lines 9021-9022 (as_rb2's `*)` branch)
+S: A typed rollback where AS-RB1 recorded why it did not write. Example: DB_OWNER empty gives `AS_RB1=not-written:owner-unknown` and AS-RB1's FAIL. AS-RB2's reader then cannot run (`as=noowner`) and FAILs again: 'could not be read ... whether it reads off is not shown'. §L.7 makes AS-RB2 a FAIL 'unless AS-RB1 recorded why it did not write'. The `on` branch honours that; the could-not-read branch does not. The effect is a second FAIL for the same cause. The verdict is already FAILED through AS-RB1, so the outcome does not change.
+V: The finding holds. It is minor: the run's verdict does not change, but the script contradicts §L.7's literal rule and its own header comment for AS-RB2.
+
+1. **The scenario can happen on the server.** DB_OWNER is read at line 12196 with `|| true`. In deploy mode an empty DB_OWNER stops stage A (the readings at lines 12680 and 12687 stop the run), so V1 can never reach this. In `--rollback` mode nothing refuses: `rb_pre106` (lines 8750-8820) only writes notes and then asks for ROLLBACK. §L.7 itself plans for this case ("If DB_OWNER is empty, nothing is written: a FAIL…").
+
+2. **AS-RB1 records the cause, then AS-RB2 fails again for the same cause.**
+   - `as_rb1` (lines 8841-8843) sets `AS_RB1=not-written:owner-unknown` and calls `bad`.
+   - In `rb106`, `as_rb2` runs `as_read`. With no DB_OWNER it prints `as=noowner` (line 8597), so `kv eff` is empty and the `*)` branch runs.
+   - At lines 9021-9022 that branch calls `bad` without looking at AS_RB1.
+   - A stub run of lines 8595-8603 and 9007-9024, with DB_OWNER empty and AS_RB1 set to not-written:owner-unknown, printed `FAIL AS-RB2 … could not be read … (noowner) — whether it reads off is not shown` and FAIL=1.
+   - The same double FAIL happens with AS_RB1=not-written:unread or any recorded precondition cause whenever the reader also fails after the put-back.
+
+3. **This contradicts §L.7.** §L.7 says AS-RB2 is a "FAIL, unless AS-RB1 recorded why it did not write". The script's own comment at lines 9005-9006 says the same. The `o
+FIX: Change partR.py lines 640-641 (the as_rb2 body). In the `*)` branch's non-RB_NOTHING `else`, branch on AS_RB1 first:
+
+    else case "${AS_RB1:-}" in
+      not-written:*) note "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code after the rollback (${o#as=}) — AS-RB1 did not write it (${AS_RB1_SAY:-?}; its FAIL above stands)" ;;
+      *) bad "AS-RB2 followup_auto_send could not be read through $BASELINE_VERSION's code after the rollback (${o#as=}) — whether it reads off is not shown" ;;
+    esac; fi ;;
+
+Rules for the new note:
+- **No promised command.** The note must not say a command will be printed. For owner-unknown none can be, and the existing printer after the verdict already explains that through `as_owner_text`'s `as=noowner` text.
+- **Same cases as the `on` branch.** Only `not-written:*` becomes a note. `unknown:no-answer`, `written-check:*`, `written` and `off` keep the FAIL.
+
+After the edit, re-run derive106.py and confirm that partZ/K5 still find any anchor on the old FAIL text.
+
+==== readings minor UJ-1 REAL | lines 6156 (the 'uj' mode puts only DN_VAULT_FILE into the environment), 6972 and 6975 (the window= field)
+S: The script runs stage A, or UJ-CA after the copy, between 05:00 and 06:00 UTC (08:00–09:00 Kampala, when the sender's window is open). U1 then says 'the sending window closed now'. Between 17:00 and 18:00 UTC (20:00–21:00 Kampala, when the window is closed) it says 'open'. This happens unless the ucrm container's own environment sets DN_DATA_DIR or DN_PLUGIN_ROOT. The script assumes it does not: every settings command it prints passes -e DN_DATA_DIR. Only the note is affected. No verdict reads window=.
+V: Confirmed by tracing the code. The defect is minor: it touches one note and nothing that is judged.
+
+1. **How the 'uj' reading is run.** Line 7890 runs `qf_php uj "$1/code" "$1"`. `qf_php` (line 7192) calls `dxo` (line 3004), which is a plain `docker exec` with no `-e`. Line 6156 adds 'uj' only to the `DN_VAULT_FILE` list (partUJ.py:661-662). Nothing in QF_PHP sets `DN_DATA_DIR` for any mode.
+
+2. **What the window check reads at bf29cbd.**
+   - Line 6972 calls `FollowUpPolicy::withinSendingWindow($now)`. At FollowUpPolicy.php:189 that uses `dn_tz_obj()` with no config, so `dn_tz(null)` runs, which calls `dn_tz_fromDisk()`.
+   - With `DN_DATA_DIR` and `DN_PLUGIN_ROOT` unset, `dn_tz_fromDisk()` looks for `kyc_config.json` in a folder beside the code root. Here that is `$sub/.code-data/kyc_config.json`.
+   - That file never exists. `qf_root` copies the code to `$sub/code` and writes only `code/data/config.json`. `qf_copy_in` puts the cut settings at `$sub/kyc_config.json`.
+   - So the fallback runs `TenantProfile::current([])`, with no data dir and no vault. `resolveId([])` returns south-sudan, whose profile zone is Africa/Juba (UTC+2).
+
+3. **Nothing in the run fixes the zone first.** `dn_tz($config)` returns early without filling the cache. Each `qf_php` call is a fresh process. Every class uj loads is given `$dir` explicitly; uj builds `ContactOptOut($p)` directly.
+
+4. **What the live sender reads.** `cron/followup_send.php:196` calls the same `withinSendingWindow`, from the i
+FIX: Change partUJ.py, next to the edit at lines 661-663.
+
+1. After the `DN_VAULT_FILE` line, add `if ($mode === 'uj') putenv('DN_DATA_DIR=' . rtrim((string)($a[1] ?? ''), '/'));`. The VN/OF form, a block setting both variables for 'uj', works equally well. With it, `dn_tz_fromDisk()` reads the copy's own `$sub/kyc_config.json`, which conf fills from `$PDD_IN/kyc_config.json` and which keeps timezone, tenant_profile, currency_code and cashbook_base_currency. The copy then resolves the zone exactly as the live sender does from its own file.
+
+2. Add `doc.must` with count 1 for the new line, to the result list at partUJ.py:701.
+
+3. Optionally, have the uj mode also print `tz=` . dn_tz() beside `window=`, so the note shows which zone it was computed in.
+
+Nothing else in uj reads `DN_DATA_DIR`: every class it uses is given `$dir` or `$p` explicitly. So the change has no other effect.
+
+==== readings minor UJ-2 REAL | lines 7942 (stage A, U4's followup_enabled-off note), 7999 and 8005 (the UJ-ON gate's note), 7954-7974 (UJ
+S: The new fact applies here. The owner deploys while the interim followup_enabled=0 still holds, forgetting the runbook step. Stage A prints only a plain note, 'followup_enabled is off — … while it stays off'. U1 still lists the ten places 'as it would meet them' (for example 'F2 expires'), but with followup_enabled off the sender lists no enquiry draft at all (followup_send.php:122). The deploy stores UJ_A with en=off. After the copy, UJ-CA prints zeros and does not say why. The owner then turns followup_enabled on. From then on, every --after-only for this deploy reads the same UJ_A and prints 'UJ-ON not judged — its gate did not hold: followup_enabled was off at stage A. F3 then has nothing to do, or another limit to do it by'. That is false, because F3 runs now. The run then ends PASSED, exit 0, and prints §F's owner steps, step 6 'on chase' among them, although F3 was never judged. The deploy summary also promised that UJ-ON 'judges F3' after a close pass, and that never happens. Only a --redeploy gets a judged UJ-ON again. If followup_enabled is still off when --after-only runs, the note's 'nothing to do' is true.
+V: The finding is real but minor: the wording is wrong, the verdict is not. I could not refute it.
+
+The gate note is wrong in the stage-A-only case. I fed uj_on on stdin with ok, bad, note and notyet stubbed. Stage A was en=off, ug=1, hours=336. This run was en=on, control=held, on_expired=0, on_stale_t=1 (50 stale rows). It prints exactly: "UJ-ON not judged — its gate did not hold: followup_enabled was off at stage A. F3 then has nothing to do, or another limit to do it by; a note, which holds back nothing". It counts no NOT YET.
+
+"F3 then has nothing to do" is false here. cron/followup_close.php at bf29cbd returns early only while followup_enabled is empty (`if (empty($config['followup_enabled'])) return;`). Once the owner turns the setting on, F3 runs. The stage-A condition is there to bracket that F3 was enabled at T, so a pass made while it was off is never judged as a FAIL. Its reason is "F3's state at T is not known", not "nothing to do". When followup_enabled is off now (line 7995), the text is true.
+
+The 'check it' text at line 15884 (written by partH.py:500) prints in every non-rollback run. It promises "UJ-ON judges F3 on it, and until one has it reads NOT YET". For a deploy whose stage A read en=off, that never happens. Every --after-only reads the same UJ_A from $STATE (line 7960), and it ends PASSED and prints §F's owner steps, step 6 'on chase' among them (lines 15944 and 15960). That PASSED follows §L.5, which says a gate condition measured false at stage A or no
+FIX: 1. partUJ.py, uj_on, the gate note (partUJ.py:434, script line 8005). Collect the 'now' conditions (lines 7995–7997) and the stage-A or age-limit conditions (lines 7999–8002) separately.
+   - When a 'now' condition failed, keep "F3 then has nothing to do, or another limit to do it by".
+   - When only stage-A conditions failed, say: "F3 may be running now, but this deploy's stage A read it off, so whether F3 was on when followup_close last ran is not known and UJ-ON cannot judge F3 for this deploy. Only a rollback and then a --redeploy, taken with followup_enabled on, gives a judged UJ-ON; a note, which holds back nothing."
+   - Keep it a note (§L.5).
+   - The finding's "only a --redeploy's --after-only can" must also say a rollback comes first: a deploy run on 5.18.106 becomes MODE=after (line 12235) and reuses the old UJ_A.
+
+2. partUJ.py, uj_u4 (partUJ.py:368, script line 7942). When en=off, add a capitals note, still never a refusal (§L.4, DL2): "A DEPLOY NOW RECORDS followup_enabled OFF: NO LATER --after-only OF THIS DEPLOY CAN JUDGE F3 (UJ-ON), AND RE-RUNNING THE DEPLOY DOES NOT CHANGE THAT. Turn followup_enabled on and run --check again first."
+
+3. partH.py:500 (script line 15884). Make the "UJ-ON judges F3 on it…" sentence depend on stage A's reading. When UJ_A reads en=off (or ug=0, or hours=misread), print instead that UJ-ON will not be judged for this deploy, and why.
+
+Then re-run the derivation twice (byte-identical) and run bash -n on the result.
+
+==== readings minor UJ-3 REAL | lines 8023-8026 (the 'not' case sets UJ_NY_SAY without counts), 15946 (the summary's NOT YET line)
+S: A --after-only runs before followup_close has started and ended since the copy (control=not). The summary prints '5.18.106 (after-only): NOT YET — followup_close has not started and ended since the copy (its last start …, ended), and none closed expired yet; run it again after …'. It carries no counts. §L.5 defines the summary line as 'NOT YET — <counts>; run it again after <UTC time>', with the closes by closer since the copy by reason and the replied closes since stage A. Those counts appear only in the 'wait' line above, as $cnt.
+V: The finding holds, and it is minor. The scenario can happen and the evidence reads the code correctly; I could not refute it.
+
+1. In the 'not' branch, line 8025 sets UJ_NY_SAY to just "followup_close has not started and ended since the copy (its last start <fc_last>, <fc_state>), and none closed expired yet". The counts ($cnt, built at line 8008) are added only to the wait line, at line 8026.
+2. The summary at line 15946 prints `NOT YET — ${UJ_NY_SAY}; run it again after ${UJ_NY_AT}` and nothing else.
+3. I confirmed this by running kv, notyet, uj_ok, uj_gate_ok and uj_on from the script through bash on stdin with a control=not reading:
+   - the wait line ends "…closes by the closer since the copy: cancelled 3 human_closed 1 opted_out 0 exhausted 0; closed replied since stage A: 2; run it again after …";
+   - the summary line reads "5.18.106 (after-only): NOT YET — followup_close has not started and ended since the copy (…), and none closed expired yet; run it again after …", with no counts at all.
+4. The ≥200-cancelled branch (lines 8019–8021) is partly affected. Its summary carries $cn and $stn, but not the closes by reason (cancelled, human_closed, opted_out, exhausted) or the replied closes since stage A.
+
+The design spells out the summary form in §L.5: "5.18.106 (after-only): NOT YET — <counts>; run it again after <UTC time>". The bullet just above it defines those counts: "the closes by closer since the copy by reason … and closed replied since stage A". So the summary d
+FIX: partUJ.py, uj_on text (partUJ.py lines 449–455):
+1. Put the counts inside UJ_NY_SAY in both NOT YET branches:
+   - ≥200 branch: `UJ_NY_SAY="the close passes' places went to gone conversations — $cn closed cancelled … left at $t; $cnt"`
+   - 'not' branch: `UJ_NY_SAY="followup_close has not started and ended since the copy (…), and none closed expired yet; $cnt"`
+2. Change both notyet lines to `notyet "UJ-ON NOT YET — $UJ_NY_SAY$alone; run it again after $UJ_NY_AT"`, dropping the separate "; $cnt" so the wait line shows the counts once.
+3. Leave the PASS and FAIL lines as they are; they keep "$cnt$alone".
+
+No other assertion needs changing: partUJ's need("UJ-ON NOT YET — ", 2) and partZ's Z11 summary anchor are unaffected. Re-run the uj_on stub cases from wave2-notes to confirm that the wait line and the summary each carry the counts once.
+
+==== texts major L8-1 REAL | lines 7942 (uj_u4: followup_enabled off is a plain note), 7959-7962 (uj_after: --after-only reads UJ_A fro
+S: 18 Nov interim: the owner sets followup_enabled=0. Before the deploy the runbook turns chase off (CS-G1/CS-B1 enforce that) and followup_enabled back on (nothing enforces it). If followup_enabled still reads 0 at stage A, or is turned back on only after stage A (UJ_A is written before DEPLOY is asked), stage A prints one lower-case U4 note and the deploy PASSES. Its 'check it' tells the owner UJ-ON will judge F3 after a close pass. It never will. Every later --after-only reads stage A's en=off from the state file, so UJ-ON stays 'not judged' for this deploy even after followup_enabled is on: 'followup_enabled was off at stage A … F3 then has nothing to do'. That run reads PASSED and the §F block says '5.18.106 serves and this --after-only PASSED, so the steps that waited for it may follow', then prints 'on chase' (claim mode). The proof that F3 works, which DL3 makes the precondition of the claim steps, is never obtained, and nothing in the log says so. The same path opens if followup_enabled is turned off again after the deploy, or if StaffJobsGate does not read Uganda. In that last case F1–F5 are inert and 'on chase' recreates exactly the 5.18.105 claim-mode hazard §F forbids. Chase on at stage A: CS-G1 refuses correctly and prints 'off chase'. After DEPLOY: CS-B1 refuses and nothing is copied. In --after-only: LK-AO notes it only (see L8-2).
+V: I could not refute the core of it. The code reads as the finding says, and the scenario can happen under the 18 Nov interim (task #153: followup_enabled 0 now, turned back on only by a runbook step that nothing checks).
+
+Traced:
+- uj_stage (8175) sets UJ_A at stage A. Line 13645 writes it to the state file in the backup block, before the DEPLOY prompt at 13707. If followup_enabled is turned on after stage A, or only after the deploy, the state file still says en=off.
+- In --after-only, uj_after (7960) reloads that UJ_A every time. uj_on 7999 adds "followup_enabled was off at stage A" to the gate, and 8005 prints a note and returns. FAIL and NOT_YET are not touched.
+- Stub run, on stdin, of the extracted uj_on with stage A en=off and en=on now. The inputs would otherwise be a FAIL: control held, 0 expired, 0 cancelled, 40 stale at T. Output: "note UJ-ON not judged — its gate did not hold: followup_enabled was off at stage A. F3 then has nothing to do…", with FAIL=0 and NOT_YET=0.
+- So every --after-only for this deploy reads PASSED. The §F block (15958–15989, guarded only by FAIL=0 and NOT_YET=0) then prints "the steps that waited for it may follow" and `on chase` (15976). F3 is never proved.
+
+Three texts are wrong in this case:
+1. 15884, the deploy summary, promises "UJ-ON judges F3 on it, and until one has it reads NOT YET". It never judges, and the first --after-only already reads PASSED.
+2. 8005 says "F3 then has nothing to do". With followup_enabled on now and stale rows 
+FIX: The smallest fix, within §L. All of it is text; no refusal (DL2) and no change to PASSED.
+
+1. partUJ, uj_u4 (line 7942). When stage A reads en=off, print a note in capitals, for example: "U4 FOLLOWUP_ENABLED IS OFF AT STAGE A — UJ-ON'S GATE READS THIS VALUE FROM THE STATE FILE, SO F3 WILL NOT BE JUDGED FOR THIS DEPLOY AND ITS --AFTER-ONLY WILL READ PASSED WITHOUT PROOF THAT F3 WORKS. TO HAVE IT JUDGED: ANSWER ANYTHING BUT DEPLOY, TURN FOLLOWUP_ENABLED ON (YOUR RUNBOOK STEP), AND RUN THIS AGAIN." Add the same sentence, merged in, to the existing ug=0 capitals note and to the hours=misread case.
+
+2. partUJ, uj_on (line 8005). Split the note. When only a stage-A condition failed and this run's own conditions hold, say: "UJ-ON cannot be judged for this deploy — stage A's reading is fixed in $STATE; F3 is unproven; step 6 (on chase) would follow without that proof." Keep "F3 then has nothing to do…" only for the "now" conditions.
+
+3. partH, the deploy summary's "check it" line (15884). Make it depend on UJ_A: uj_ok, en=on, ug=1, hours not misread. When that does not hold, print that UJ-ON will not judge F3 for this deploy, and why.
+
+Holding back `on chase` in the §F block (15958–15989) after an unjudged UJ-ON, via a flag such as UJ_GATE_NOTE set in uj_on's gate branch, is a change of design against §L.5, §L.8 and §L.10. Make it only on the owner's word, as an overrule of DL3, and update the rehearsal's "gate note, then PASSED" case to match.
+
+==== texts minor L8-2 REAL | lines 15849 ('what changed … none of the three claim switches present (CS-B1)'), 15853 ('what did not … no
+S: The owner follows the PASSED --after-only's §F step 2 (on chase). Then, as that text instructs ('and --after-only again … LK-AO and QF-ON0–QF-ON5 judge the step now on'), they run --after-only again. That run's summary states twice that none of the three claim switches is present, although LK-AO above reports quote_chase_enabled set. The same false statement appears if the owner, out of the interim habit, turns chase on before the first --after-only. The same 'what changed' line also prints 'the steps that are on keep running ()' empty. The §F block prints 'on chase' even when step 6 is already on.
+V: I could not refute it: the finding is real and minor. One of its points is carried from 5.18.105 rather than introduced, and one is a gap in §L rather than a break from it.
+
+1. **The two summary lines say something false in --after-only.**
+   - Line 15790's `if [ "$MODE" != "rollback" ]` holds through line 15855, and nothing inside it excludes after mode. Line 15843 even tests `MODE = after` inside the block. So both echoes, at 15849 ("none of the three claim switches present (CS-B1)") and 15853 ("(CS-G1, CS-B1)"), print in --after-only.
+   - In after mode neither check runs. `LK_G1` and `LK_B1` are set only by `lk_g1` (7345) and `lk_b1` (7447), after their initialisation to "" at 7266. `qf_stage`, which holds `lk_g1` and `cs_check CS-G1` (8152–8153), is called only inside the deploy-mode block at 13480–13521. CS-B1 runs only in stage B of a deploy.
+   - partH.py added both clauses: line 482 (the doc.line edit for "what changed") and line 488 (the subs for "what did not"). 5.18.105 (S105:14633, 14637) had no such clause, so this is new text, not carried proven logic.
+   - Concrete case: the PASSED --after-only prints §F, the owner runs step 6 (`on chase`, which writes `quote_chase_enabled='1'` in k and s), then runs --after-only again, as line 15979 and the three-run "check it" block both tell them. In that log, LK-AO (7543) notes the ladder changed and lists chase among the steps on. The summary then states twice that none of the three claim switches is present, citing check
+FIX: All in partH.py.
+
+(a) Make the claim-switch clauses depend on the mode.
+- Line 482, "what changed": replace the literal ", none of the three claim switches present (CS-B1)" with `$( [ "$MODE" = "deploy" ] && echo ", none of the three claim switches present (CS-B1)" || echo "; the claim switches as LK-AO above reads them — under $EXPECTED_VERSION steps 6, 11 and 12 may be on (root docs/75 §L.3)")`.
+- Line 488, "what did not": do the same with "(CS-G1, CS-B1)". In after mode say "as LK-AO above reads them".
+- Optionally, in after mode take the "keep running (…)" list from LK-AO's reading instead of the empty `LK_B1`/`LK_G1`. That is a fix to carried text.
+
+(b) In partH's §F block at lines 15973–15979, use the reading LK-AO has already taken.
+- In `lk_ao`, after `lk_ok` passes, add one global assignment: `LK_AO_ON="$(qf_kv "$o" on)"`, initialised to "" beside 7266. Assert the anchor in the derivation.
+- In the §F block, when `LK_AO_ON` holds chase (`case ",$LK_AO_ON," in *,chase,*`), print "2. Step 6 (chase) is already on (LK-AO above) — do not run on chase again: it would re-stamp quote_chase_not_before" in place of the `on chase` command. Print the command only when chase is not on.
+- When LK-AO could not read the keys, print the command with a line saying to check `show` first.
+
+Every new anchor gets the derivation's usual count assertions.
+
+==== texts minor L8-3 REAL | lines 15786 (rollback 'what it means'), 8705 (as_after_verdict header), 8676 (as_para '*' branch)
+S: Typed rollback. followup_auto_send reads on and condition 3 fails (the file and the row disagree), so AS-RB1 writes nothing (AS_RB1=not-written:differ). The summary's 'what it means' then reads 'followup_auto_send not written: condition 3 … — with it off a person approves each draft, and it stays off until you turn it on', although it reads ON. The capitals after the verdict contradict it. Second case: AS_RB1=written-check:row-others (or mode, owner). The value is '0' and effectively off, but as_after_verdict prints 'AS-RB1 DID NOT SET followup_auto_send OFF … UNDER 5.18.105 IT APPROVES AND SENDS AUTOMATICALLY WHILE IT READS ON:' and then 'It already reads off … nothing to run'.
+V: The finding is real but minor. Both texts can be wrong on the server, and neither leads to a wrong action, because the correct command still prints next to them.
+
+Case 1 (line 15786, written by partH.py:478): the 'what it means' line always ends "— with it off a person approves each draft, and it stays off until you turn it on". Nothing in that line depends on AS_RB1 or on what AS-RB2 read. The not-written value of AS_RB1_SAY (lines 8912-8917) never says the setting reads on. I ran the functions with stub readers on stdin (eff=on, pre=differ). The summary printed "followup_auto_send not written: condition 3: the file and the store row disagree on <key> (AS-RB1; AS-RB2 above reads it under 5.18.105) — with it off ... it stays off until you turn it on". The capitals from as_after_verdict that follow it say the opposite and print the command.
+
+A worse path the finding does not name: under RB_NOTHING, a --rollback run that only checks a put-back done by hand. That put-back does not write followup_auto_send, so the key can still read on. AS-RB2 is then only a note (lines 9012-9014), so the run can end PASSED. Its summary says "not written by this run ... it stays off until you turn it on", and the only correct text is AS-RB2's capitals note higher up. §L.7's "followup_auto_send off" stays true only when AS-RB1 wrote the key or found it off.
+
+Case 2 (lines 8676 and 8705, written by partR.py:387 and :418): as_after_verdict and as_para's '*' branch return early only for '', written a
+FIX: partR:
+- In as_rb2, record what it read: AS_RB2_EFF="$(kv "$o" eff)". Set it to "unread" when the reader fails.
+- In as_para's '*' branch (partR.py:387) and as_after_verdict's header (partR.py:418), word the text by AS_RB1:
+  - written-check:* → "AS-RB1 WROTE followup_auto_send '0', BUT ITS READ-BACK DID NOT HOLD (<check>)"
+  - unknown:* → "WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (...)"
+  - not-written:* → keep "DID NOT SET … OFF"
+- In as_after_verdict, read once (o="$(as_read)"). When eff=off, print a plain line instead of the capitals: "followup_auto_send reads off now (AS-RB1: <say>): nothing to run". Otherwise keep the capitals and as_owner_text 0 "$o".
+
+partH (partH.py:478): replace the unconditional "— with it off a person approves each draft, and it stays off until you turn it on" with a clause chosen by AS_RB2_EFF:
+- off → "— it reads off, so a person approves each draft, and it stays off until you turn it on"
+- on → "— IT READS ON: UNDER $BASELINE_VERSION IT APPROVES AND SENDS AUTOMATICALLY WHILE IT DOES; your own command is printed $( [ -n "$RB_NOTHING" ] && echo 'above (AS-RB2)' || echo 'after the verdict')"
+- otherwise → "— whether it reads off is not shown (AS-RB2 above)"
+
+Add partZ assertions pinning the three branches. partZ does not pin these strings today.
+
+==== texts minor L8-4 REAL | lines 8727-8736 (as_back_on gated on REDEPLOY=1 in the state file), 12321 (BR1: a deploy after a rollback 
+S: A typed rollback writes followup_auto_send '0' (AS_RB1=written). The operator then runs --check (the header calls a --check first wise) without --redeploy, and its GO prints the plain deploy command. Or they use the header's command. BR1 notes the 3 left-over files and the deploy proceeds with REDEPLOY= empty in the new state file. Every later PASSED --after-only skips as_back_on, so the owner's command to turn followup_auto_send back on, which §L.8 promises, is never printed, and nothing says it is off.
+V: The finding is real but minor. Two parts of it overstate the case.
+
+**What the code does.** In 5.18.105, `REDEPLOY` only affected labels, log names and BR1's note. 5.18.106 makes it matter in one place: `as_back_on` (8727-8736) returns early unless `REDEPLOY=1` is in the deploy's state file.
+
+Nothing requires the flag after a rollback:
+- BR1 (12321) only notes that "--redeploy was not asked for", and the deploy goes on with `REDEPLOY=` written empty (13633).
+- A plain `--check`'s GO (15745, 15772-15777) adds `--redeploy` to the command it prints only if the operator typed it. So a `--check` run after a rollback without the flag hands over `RUNBOOK_CMD`, with no `--redeploy`. It does this even though the same run's BR1 found 5.18.106's test files left on disk (`BR1_LEFT>0`) and so knows a rollback happened.
+
+The header encourages that path: line 504 says "A --check first is wise" and gives no command.
+
+**The scenario.** A typed rollback writes `followup_auto_send` to '0' (`AS_RB1=written`, 8939). The operator runs `--check` without `--redeploy`, gets GO, and runs the command it prints. Every later PASSED `--after-only` then skips `as_back_on`. The owner never gets the command to turn `followup_auto_send` back on, which the rollback's own summary told them to expect (15935-15938). BR1's note says only that "the copy replaces its files", so nothing says anything is lost.
+
+**Where the finding overstates.**
+- §L.8 itself limits the offer to "a --redeploy", so the script does not c
+FIX: **Fix in partR, `as_back_on` (8727-8736).** Replace the `REDEPLOY=1` condition with "this deploy followed the latest rollback":
+- Read `COPY_AT` from `$STATE` (`tail -n1`, digits only, as A14 reads it at 13064-13069).
+- Read the latest rollback record's `RB_COPY_AT`, as `as_rb_last` already finds it. Have `as_rb_last` also return that time, or add a small companion function.
+- Go on only when both are numbers and `RB_COPY_AT` is less than `COPY_AT`. Keep the existing tests that the setting reads off and that the record says `AS_RB1=written`.
+
+**Why this check.** It treats any deploy after a rollback as the redeploy §L.8 means, whether or not the flag was typed. It also prints nothing after a rollback that failed while 5.18.106 kept serving: there `stamp_copy` makes `RB_COPY_AT` later than `COPY_AT`.
+
+**Wording to change with it:**
+- the comments at 8723-8726, 15958 and header 736-737 ("a deploy after a rollback", not "a --redeploy");
+- BR1's note at 12321, so it no longer implies nothing is lost;
+- §L.8's wording in docs/75, to match.
+
+**Alternative that keeps §L.8's wording.** Edit partH (or partCS): when `BR1_LEFT>0`, add `--redeploy` to `F_FLAGS` in the `--check` GO, and have BR1's note say that without `--redeploy` the offer to turn the setting back on is not made. This does not cover a plain deploy typed by hand, so the partR fix is the more robust one.
+
+==== texts minor L8-5 REFUTED | lines 15966-15969 and 15982-15985 (§F set_config commands for followup_daily_cap and followup_run_limit)
+S: After a PASSED --after-only, <data>/kyc_config.json is present but does not decode, or cannot be read by DB_OWNER. LK-AO and the other checks only note this, so PASSED is possible. The §F block still prints the set_config commands. Run as printed with a number, set_config's saveOverrides reads the file as [] and replaces it with a one-key file, losing every override in it. For exactly this cause §L.7 forbids printing the followup_auto_send command: 'NO COMMAND IS PRINTED: REPAIR IT BY HAND FIRST'. When file and row disagree (cause 3), the mirror of the whole file into the row is not said either.
+V: Refuted. One half of the finding misreads the code, the other half cannot happen through anything on the server, and §L does not require what the finding asks for.
+
+(1) The case where DB_OWNER cannot read the file loses nothing. At bf29cbd, PluginConfig::readExistingForSave returns [false, '…cannot be read by this process…'] when the file exists but cannot be read. saveOverrides returns that at once (`if (($existing[0] ?? null) === false …) return $existing;`), before writeKycFile runs. set_config.php:652-653 then prints "Could not save" and exits 1. Nothing is written and the file is untouched.
+
+(2) A kyc_config.json that does not decode cannot arise between the deploy and its --after-only through any path on the server.
+- The deploy's stage A runs lk_g1 (line 8152). Line 7343 stops with a NO-GO when unread is not "-". The lk reading (line 6261) puts k in unread whenever $readJson returns null, and it does so for a file that cannot be read and for one that does not decode. So the file decoded when 5.18.106 was deployed.
+- Every writer of the file in bf29cbd goes through PluginConfig::writeKycFile, which writes a temporary file and renames it. file_put_contents returns false on a short write, so a crash or a full disk cannot leave a half-written file.
+- Every other `$store->save('kyc_config.json', …)` in the tree writes the store row, not the file.
+- So only a person editing the file by hand between the two runs could produce it. That is not a defect of the script.
+
+(3) Nothi
+FIX: None required. If the owner nonetheless wants it, a one-line addition in partH could print LK-AO's unread state beside step 1. Gating the set_config lines on as_read alone would be inconsistent with step 2's `on chase` and with §L.7's own uncheck-gated switch-tool commands.
+
+==== texts minor L8-6 REFUTED | lines 16027-16032 (summary by-hand paragraph, as_para sum), 8633 and 8659 (as_owner_text's nx texts)
+S: In a PASSED deploy, the by-hand paragraph applies 'Only if that script cannot run'. It prints the put-back first and the followup_auto_send '0' command after it, without saying to run the setting command before the put-back. AS-RB1 writes before the put-back for §I's reason: 5.18.105's run and sender must not start with automatic approval on. The paragraph then ends 'without that line take nothing as saved (run the rollback again: it reads the setting first)', but the rollback is exactly what cannot run there. as_back_on's --value 1 text likewise says 'run --after-only again: it reads the setting first', but --after-only prints followup_auto_send nowhere once it reads on: U4 is stage A only and as_back_on is silent when it reads on.
+V: Refuted. The evidence misreads what the rollback script does. The order claim also overstates the text.
+
+1. The claim that the rollback "cannot run" there. I traced every state the by-hand path can leave, and a re-run of the rollback reads followup_auto_send and reports it in each one:
+   - **5.18.106 still live** (do_rollback failed): rb_pre106 reads it (AS-RB0) before the ROLLBACK prompt. The owner can answer anything else and nothing changes (13749-13752).
+   - **Mixed tree**: the rollback-mode refusal at 12281 prints as_para pb, which runs as_read and as_owner_text.
+   - **After a clean put-back by hand**: the record names 7835906, so the run takes RB_NOTHING (13760). rb106's as_rb2 (8998, 9007-9022) then reads the setting: ok when it reads off, and a capitals notice with the owner's command when it reads on.
+   
+   So "(run the rollback again: it reads the setting first)" names a reading that exists. It is also the design's own wording: §L.7 says "without that line nothing should be taken as saved (the rollback, run again, reads the setting first)". "Only if that script cannot run" means the scripted put-back did not complete. It does not mean the script cannot start; if it could not start, as_read could not run either.
+
+2. The order claim. Rendered with stubs, the text reads, in order:
+   - the put-back's own lead-in: "it does not switch followup_auto_send off, as the rollback above does first, AS-RB1; your own command for that follows";
+   - $PUTBACK_CMD;
+   - a paragr
+FIX: No fix required. Optional, wording only, in partR's as_para sum: make the order imperative, for example "followup_auto_send — run your own command below first, alone, before a put-back by hand, which writes no setting (…)". Nothing else changes.
+
+==== texts minor L8-7 REFUTED | lines 13768
+S: The stage V heading still reads 'V. Verification over the public address (nothing signed in; nothing written)'. In a deploy whose sign-in page redirects, V1's automatic rollback runs inside stage V: as_rb1 v1 writes followup_auto_send '0', then do_rollback runs (13790). This stage heading claims nothing is written in the stage that holds the rollback's one write.
+V: The heading's wording is accurate as far as it goes, but the finding does not meet the bar of a real defect.
+
+1. The heading is unchanged from 5.18.105, and its "nothing written" has never covered the rollback inside stage V. In the source (S105:12576 to 12600), the same heading `hdr "V. Verification over the public address (nothing signed in; nothing written)"` already sits over V1's automatic rollback. That rollback runs `do_rollback`, which checks out 7835906, runs deploy-hybrid.sh and writes the deployment record. That is a far larger write than one config key, and 5.18.105 was deployed and PASSED with this text. So the parenthetical has always meant "the verification probes write nothing", not "nothing in this stage can write".
+
+2. §L.7 is followed as written. Its reword list names lines explicitly (S105:102-103, 427-436, …, 12561, 12566, 12589-12591, 12596, 14385, 14392, 14407, 14458, 14570, 14726-14730), and 12576 is not among them. Its general sentence covers "the texts that said the script never writes a key or opens the live book read-write". A stage heading about its probes says neither. §L.7 also says the write is named "once". Inside stage V that naming is 12596, V1's "every switch kept", which the script now prints at line 13790: `ROLLING BACK — the public address must never redirect (every switch of the sales follow-up kept; followup_auto_send set off first, AS-RB1)`. That is exactly the rewording §L.7 asks for. Adding the write to the heading as well would nam
+FIX: None required. If the owner wants the heading tightened anyway, the narrowest change is in partH or partR, beside the V1 edits: reword line 13768 to "(nothing signed in; the probes write nothing)". Do not name followup_auto_send there, which would break §L.7's "named once" (line 13790 already names it). Add that string to K5's reworded-text assertions.
+

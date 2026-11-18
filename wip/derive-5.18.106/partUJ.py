@@ -12,19 +12,28 @@
 #       two or more approved drafts); U4 the settings as the jobs read them — $config as followup_close reads it,
 #       PluginConfig::load over the copy's settings and vault — and StaffJobsGate::applies.
 #   conf's keep list gains followup_max_age_hours, followup_run_limit and followup_scan_limit (none a secret, none a vault
-#   key, none kept before — asserted), or every reading of a copy would see their defaults.
+#   key, none kept before — asserted), or every reading of a copy would see their defaults. The uj mode also names DIR as
+#   the data folder (DN_DATA_DIR; review UJ-1), so dn_tz() — the zone FollowUpPolicy::withinSendingWindow reads — comes
+#   from the copy's own kyc_config.json, as the live sender's comes from its own; tz= says which zone it read.
 #   Stage A (qf_stage, on QF-G1's copy, after QF-N1–QF-N7): U1–U4 as notes, before DEPLOY is asked; the deploy run keeps
 #   the line as UJ_A in its state file, in the backup block beside 5.18.99's QG3_A (--check stops before that block and
-#   writes nothing). U5 is NOT read here: the slot U5 is left in qf_stage right after the call, for partR (§L.7's one
-#   reader, on the live kyc_config.json and store row); partZ closes it.
+#   writes nothing). Then FE-G1 (DL11, 18 Nov), right after uj_stage and so after CS-G1: NO-GO, nothing changed, when U4
+#   read followup_enabled off as the jobs read it — UJ-ON reads stage A's value for the life of the deploy, so F3 could
+#   never be judged — with the owner's own command to turn it on (set_config, --value 1, OWNER_AUTOSEND_CMD's form)
+#   printed by echo, alone, never run: display text for the driver's K5 and partZ's Z2, as partH prints §F's set_config
+#   commands. No refusal when U4 could not read it (DL2). U5 is NOT read here: the slot U5 is left in qf_stage right after
+#   FE-G1's call, for partR (§L.7's one reader, on the live kyc_config.json and store row); partZ closes it.
 #   After the copy (stage R, the deploy run and --after-only, after ME-CA1): UJ-CA — U1–U3 again on a fresh copy, beside
 #   UJ_A, and the closes, expiries and sends since the copy — notes; --after-only: UJ-ON, judged exactly as §L.5 defines
-#   it (uj_on). NOT YET is a summary state of its own: the NOT_YET counter (notyet), the third verdict branch — FAIL first —
-#   with the --after-only command alone on its line with its log, and exit status 3 (0 PASSED, 1 FAILED).
+#   it (uj_on): its gate measured false now, F3 has nothing to do; false only at stage A, F3 may run now but cannot be
+#   judged for this deploy (review UJ-2). uj_gate_a and uj_judgeable answer that from UJ_A (for partH's check it). NOT YET
+#   is a summary state of its own: the NOT_YET counter (notyet), the third verdict branch — FAIL first — with the
+#   --after-only command alone on its line with its log, and exit status 3 (0 PASSED, 1 FAILED); UJ_NY_SAY carries its
+#   counts (review UJ-3).
 # Not here: ME-CA1 (partME), U5 and every rollback text (partR), the header, the §F steps a PASSED --after-only prints and
-# a NOT YET withholds, and the summary's other blocks (partH), the carried texts (partT).
+# a NOT YET withholds, the check-it sentence and the summary's other blocks (partH), the carried texts (partT).
 import re, textwrap
-from d106lib import git, slot_line
+from d106lib import git, sha_at, slot_line
 
 
 def cw(text, lead="# ", cont=None):
@@ -54,6 +63,21 @@ DELIVERY = ["WHERE m.direction = 'out' AND m.sent_at > datetime(?, '-1 day') AND
             "AND m.wa_message_id IS NOT NULL AND m.wa_message_id <> ''"]
 SLOT_U5 = slot_line("U5", "partR: U5 (root docs/75 §L.4), the one reader of §L.7 on the live files, before DEPLOY is asked")
 UJ_RULE = rule("5.18.106: the enquiry follow-ups, read before and after the copy (UJ; root docs/75 §L.4, §L.5)")
+# FE-G1 (DL11, 18 Nov): the owner's own command to turn followup_enabled on, in OWNER_AUTOSEND_CMD's form — printed by
+# echo, alone on its line, never run: display text, which the driver's K5 and partZ's Z2 pass over, as partH's §F lines
+FE_CMD = (r'''    echo "      docker exec -u $DB_OWNER -e DN_DATA_DIR=$PDD_IN $CONTAINER php $IN_CONTAINER/tools/set_config.php'''
+          r''' --key followup_enabled --value 1 2>&1 | sed '/^  AI SETTINGS\$/,\$d' $(LOGW followup-enabled-1)"'''
+          r'''   # the owner's own command: printed, never run (FE-G1)''')
+FE_STOP = ('  stop "NO-GO (FE-G1): followup_enabled reads off — the enquiry follow-ups are paused (the 18 Nov interim). UJ-ON '
+           'reads this value from stage A for the life of this deploy, so F3 could never be judged and the claim steps (6, 11, '
+           '12) would follow unproven (root docs/75 §L.5, DL3). Turn step 6 off first if it is on (CS-G1), then turn '
+           'followup_enabled on, each its own command, alone, then run this again. Nothing was changed."')
+FE_CALL = ("  uj_fe_g1   # FE-G1 — 5.18.106 (DL11): U4 read followup_enabled off — NO-GO, nothing changed; not read — no "
+           "refusal (DL2)\n")
+# UJ-1 (review): the uj mode names DIR as the data folder too, so dn_tz() reads the copy's own settings (QF_PHP's top)
+DD = ("// 5.18.106 (root docs/75 §L.4; review UJ-1): uj names DIR as the data folder too, so dn_tz() — the sending\n"
+      "// window's zone — reads the copy's own kyc_config.json, as the live sender reads its own; never a live folder.\n"
+      "if ($mode === 'uj') putenv('DN_DATA_DIR=' . rtrim((string)($a[1] ?? ''), '/'));\n")
 
 # ── QF_PHP's uj mode: ⟦LIBS⟧, ⟦REFUSAL⟧, ⟦DELIVERY0⟧ … and ⟦XS⟧ (expireStale's SELECT, from Git) are put in by apply() ──
 UJ_PHP = r'''    case 'uj':     // uj ROOT DIR [COPYUNIX [AUNIX]] — 5.18.106 (root docs/75 §L.4, §L.5): the enquiry follow-ups on
@@ -92,10 +116,12 @@ UJ_PHP = r'''    case 'uj':     // uj ROOT DIR [COPYUNIX [AUNIX]] — 5.18.106 (
         $ug = StaffJobsGate::applies($c, $dir);
         $stale = FollowUpService::staleBefore($c, $nowTs);
         $ledger = !WaSendBudget::on($c, $dir) ? 'off' : (WaSendBudget::enquiryClaims($c) ? 'claim' : 'record');
+        // the sender's window, in the zone dn_tz() reads from DIR's kyc_config.json (DN_DATA_DIR, set for uj at
+        // QF_PHP's top), as the live sender's own process reads its data folder's; tz= says which zone it read
         $win = FollowUpPolicy::withinSendingWindow($now);
         $f = ['uj=read', 'at=' . $nowTs, 'now=' . $iso($now), 'ug=' . ($ug ? '1' : '0'), 'en=' . (!empty($c['followup_enabled']) ? 'on' : 'off'),
               'hours=' . ($stale === null ? 'misread' : FollowUpService::staleHours($c)), 'cutoff=' . ($stale === null ? '-' : $iso($stale)),
-              'ledger=' . $ledger, 'window=' . (!empty($win['ok']) ? 'in' : 'out')];
+              'ledger=' . $ledger, 'window=' . (!empty($win['ok']) ? 'in' : 'out'), 'tz=' . preg_replace('~[^A-Za-z0-9_/+-]~', '?', dn_tz())];
         // U4 — followup_auto_send as FollowUpPolicy::mayAutoSend reads it, and where it is present on this copy (k, s,
         // p, d); the numbers as cron/followup_run.php and cron/followup_scan.php cast them
         $ap = [];
@@ -295,7 +321,8 @@ UJ_FUNCS = (
        "which carries followup_max_age_hours, followup_run_limit and followup_scan_limit since 5.18.106. Counts, UTC times "
        "and generic channel labels (sales, support, account, retailer, their -N, else other) — never a phone, a message, an "
        "instance name or an event's detail; never expireStale() or close(), only their SELECTs, expireStale's copied from the "
-       "pin (derive106.py asserts it against bf29cbd). None of it refuses (DL2).")
+       "pin (derive106.py asserts it against bf29cbd). The readings never refuse (DL2): FE-G1, on U4's reading of "
+       "followup_enabled, is the one refusal here (DL11).")
     + cw("Stage A (a deploy and --check), on QF-G1's copy: U1–U4 as notes, before DEPLOY is asked — U2 and U3 being the "
          "only record of the state before the first passes and of what they were expected to close, since a close is "
          "permanent (070's fu_closed_is_history). The deploy run keeps the line as UJ_A in its state file, in the backup "
@@ -325,6 +352,19 @@ uj_ok() { case "$1" in "uj=read at="[0-9]*" ug="?*" en="?*" hours="?*) return 0 
 }
 uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; }   # uj_was KEY A — stage A's value beside it
 '''
+    + cw("uj_gate_a A — UJ-ON's gate at stage A, on A (UJ_A): each condition that did not hold, as UJ-ON names it (\" … at "
+         "stage A;\"), or nothing when each held or A is not a whole reading (UJ-ON then judges on its own run's values "
+         "alone). uj_judgeable — status 0 when stage A lets UJ-ON judge F3 for this deploy, by UJ_A: partH's check it says "
+         "so, or why not by uj_gate_a \"$UJ_A\" (review L8-1).")
+    + r'''uj_gate_a() {
+  uj_ok "$1" && uj_gate_ok "$1" || return 0
+  [ "$(kv "$1" en)" = "on" ] || printf ' followup_enabled was off at stage A;'
+  [ "$(kv "$1" ug)" = "1" ] || printf ' StaffJobsGate::applies did not read Uganda at stage A;'
+  [ "$(kv "$1" hours)" != "misread" ] || printf ' followup_max_age_hours was not a positive number at stage A;'
+  return 0
+}
+uj_judgeable() { [ -z "$(uj_gate_a "$UJ_A")" ]; }   # uj_judgeable — stage A lets UJ-ON judge F3 for this deploy (UJ_A)
+'''
     + cw("uj_out LINE — U1's deliveries as the log may carry them: each channel label, its last delivery (UTC) and its count "
          "in 24 h")
     + r'''uj_out() {
@@ -352,7 +392,7 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
   local c="$1" o="$2" a="${3:-}" p=""
   [ "$c" = "U" ] || p="$c "
   note "${p}U1 F1's positive control — each channel's last outbound delivery (wa_messages out with WhatsApp's id, placed by created_at as F1 places it) and its count in the last 24 h: $(uj_out "$o")$(uj_ok "$a" && printf ' — at stage A: %s' "$(uj_out "$a")")"
-  note "${p}U1 the sender's ten places$( [ -z "$p" ] || echo " now"), in its own order, as it would meet them — the ledger $(kv "$o" ledger) (claim mode leaves F1 out), the registry's held numbers $(kv "$o" held), the sending window $( [ "$(kv "$o" window)" = "in" ] && echo open || echo closed) now: $(uj_places "$o")"
+  note "${p}U1 the sender's ten places$( [ -z "$p" ] || echo " now"), in its own order, as it would meet them — the ledger $(kv "$o" ledger) (claim mode leaves F1 out), the registry's held numbers $(kv "$o" held), the sending window $( [ "$(kv "$o" window)" = "in" ] && echo open || echo closed) now (in $(kv "$o" tz), the zone the sender reads): $(uj_places "$o")"
   if [ -n "$(kv "$o" u2)" ]; then note "${p}U2 could not be read on the copy ($(kv "$o" u2))"
   else note "${p}U2 enquiry sends: the last $(kv "$o" last_send), $(kv "$o" sends7) in 7 days$(uj_was sends7 "$a"); approved drafts on open enquiry follow-ups $(kv "$o" approved) (drafts/follow-ups)$(uj_was approved "$a") — stale, the conversation's customer quiet past the limit (what F2 expires) $(kv "$o" approved_stale), fresh $(kv "$o" approved_fresh), gone $(kv "$o" approved_gone); failed sends in 7 days $(kv "$o" failed7), of them a 400 to sendText (F1's kind) $(kv "$o" failed7_f1); open enquiry follow-ups $(kv "$o" open)$(uj_was open "$a"), by the customer's last message $(kv "$o" open_age | tr ',' ' '); due now $(kv "$o" due105) under 5.18.105's due(), $(kv "$o" due106) under the pin's"; fi
   if [ -n "$(kv "$o" u3)" ]; then note "${p}U3 could not be read on the copy ($(kv "$o" u3))"
@@ -376,6 +416,27 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
   else UJ_A=""; note "U1–U4 could not be read on the copy (${o#uj=}) — NOT ESTABLISHED; the deploy run keeps no stage-A reading for UJ-CA and UJ-ON (UJ-ON then judges on its own run's values, and says so)"; fi
 }
 '''
+    + cw("uj_fe_g1 — FE-G1 (DL11, 18 Nov; root docs/75 §L.5, DL3), stage A — a deploy, --redeploy and --check — called in "
+         "qf_stage right after uj_stage, so after CS-G1: when U4 read followup_enabled off as the jobs read it (UJ_A a whole "
+         "reading, en=off; followup_close returns at once while it is empty), NO-GO before anything is changed — UJ-ON reads "
+         "stage A's value from the state file for the life of the deploy, so F3 could never be judged, and the claim steps "
+         "(6, 11, 12) would follow unproven. When U4 could not read it (UJ_A empty, or not a whole reading), no refusal: "
+         "U4's note stands (DL2). The owner's own command to turn it on — set_config as the book's owner on the live data "
+         "folder, --value 1, its output cut where the settings listing begins, its own log: the form of the owner's command "
+         "for followup_auto_send (root docs/75 §L.7) — is printed by echo, alone on its line, never run (display text for "
+         "the driver's K5 and partZ's Z2, as partH's §F commands are). No off command is printed here: CS-G1, on the same "
+         "stage A just before, stops first while any claim switch is present, and prints it — so when FE-G1 runs, none is.")
+    + r'''uj_fe_g1() {
+  uj_ok "$UJ_A" && [ "$(kv "$UJ_A" en)" = "off" ] || return 0
+  echo
+  echo "  FE-G1 FOLLOWUP_ENABLED READS OFF AS THE JOBS READ IT (U4 above): THE ENQUIRY FOLLOW-UPS ARE PAUSED, AND UJ-ON WOULD READ THIS VALUE FROM STAGE A FOR THE LIFE OF THIS DEPLOY — F3 COULD NEVER BE JUDGED. CS-G1 above found none of the three claim switches present, so step 6 is off. Turn followup_enabled on yourself, its own command, alone, with its own log — this script never runs it:"
+  if [ -n "$DB_OWNER" ]; then
+''' + FE_CMD + r'''
+    echo "  It prints the line \"  followup_enabled = 1\" once it has saved; without that line take nothing as saved (this script, run again, reads it first: U4, FE-G1)."
+  else
+    echo "  No command is printed: the owner of plugin.sqlite3 is not known (DB_OWNER) — a settings write runs as that user, never as root; find why first."
+  fi
+''' + FE_STOP + "\n}\n"
     + cw("uj_after — after the copy (stage R, the deploy run and --after-only): UJ-CA, U1–U3 again on a fresh copy through "
          "the pin's code (P3B_PIN), beside stage A's (UJ_A: this run's, or in --after-only the deploy's, from its state "
          "file), and the closes, expiries and sends since the copy — notes; then, in --after-only, UJ-ON (uj_on). Never stops.")
@@ -405,7 +466,9 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
     + cw("uj_on LINE COPYUNIX — UJ-ON (root docs/75 §L.5, DL3), --after-only only: whether F3 works, on this run's reading "
          "(LINE) beside stage A's (UJ_A, the deploy's). Its gate first — at stage A and now, followup_enabled on, "
          "StaffJobsGate::applies reading Uganda, the age limit a positive number and the same at both: a condition measured "
-         "false is a note naming it, no verdict, which never holds back PASSED; a reading that could not be made is never "
+         "false is a note naming it, no verdict, which never holds back PASSED — false now, F3 has nothing to do (or another "
+         "limit to do it by); false only at stage A, or the limit differing, F3 may run now but cannot be judged for this "
+         "deploy, whose stage A is fixed in the state file (review UJ-2); a reading that could not be made is never "
          "the gate's note — this run's is a FAIL, stage A's absent or unread judges on this run's values alone and says so. "
          "With the gate holding, exactly one of PASS, FAIL and NOT YET; any other outcome is a FAIL. PASS: an enquiry "
          "follow-up closed expired by the closer since the copy, with F3's own detail; or, the positive control holding, "
@@ -416,22 +479,25 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
          "or more cancelled at or after T (the close passes' places went to gone conversations). The control: "
          "followup_close's entry in master_schedule.json (on this run's copy) started after the copy and ended — last_run, "
          "a UTC epoch, later than COPY_AT, and duration_ms at least 0 — and T is that last_run (never last_run_at, local "
-         "time and overwritten with the job's end). NOT YET also sets UJ_NY_AT and UJ_NY_SAY for the summary.")
+         "time and overwritten with the job's end). NOT YET also sets UJ_NY_AT and UJ_NY_SAY — its counts with it (review "
+         "UJ-3) — for the summary.")
     + r'''uj_on() {
-  local o="$1" cu="$2" a="$UJ_A" g="" alone="" ex ctl t cn st stn r cnt
+  local o="$1" cu="$2" a="$UJ_A" g="" ga="" gs="" alone="" ex ctl t cn st stn r cnt
   if ! uj_ok "$o" || ! uj_gate_ok "$o"; then bad "UJ-ON FAIL — this run's reading could not be made (${o#uj=}): whether F3 works is not shown"; return 0; fi
   uj_ok "$a" && uj_gate_ok "$a" || alone="; judged on this run's values alone — stage A's reading is not on record (UJ_A in $STATE)"
   [ "$(kv "$o" en)" = "on" ] || g="$g followup_enabled is off now;"
   [ "$(kv "$o" ug)" = "1" ] || g="$g StaffJobsGate::applies does not read Uganda now;"
   [ "$(kv "$o" hours)" != "misread" ] || g="$g followup_max_age_hours is not a positive number now;"
   if [ -z "$alone" ]; then
-    [ "$(kv "$a" en)" = "on" ] || g="$g followup_enabled was off at stage A;"
-    [ "$(kv "$a" ug)" = "1" ] || g="$g StaffJobsGate::applies did not read Uganda at stage A;"
-    [ "$(kv "$a" hours)" != "misread" ] || g="$g followup_max_age_hours was not a positive number at stage A;"
+    gs="$(uj_gate_a "$a")"; ga="$gs"
     [ "$(kv "$a" hours)" = "$(kv "$o" hours)" ] || [ "$(kv "$a" hours)" = "misread" ] || [ "$(kv "$o" hours)" = "misread" ] \
-      || g="$g the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"
+      || ga="$ga the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"
   fi
-  if [ -n "$g" ]; then note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by; a note, which holds back nothing"; return 0; fi
+  # a condition measured false now: F3 has nothing to do now, or another limit to do it by (review UJ-2)
+  if [ -n "$g" ]; then g="$g$ga"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by; a note, which holds back nothing"; return 0; fi
+  # false only at stage A, or the limit differing: F3 may run now, but this deploy's stage A is fixed in the state
+  # file (a deploy run while 5.18.106 serves is an --after-only of it): UJ-ON cannot judge F3 for it (review UJ-2)
+  if [ -n "$ga" ]; then note "UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now, but this deploy's stage A reading is fixed in $STATE (a deploy run while $EXPECTED_VERSION serves is an --after-only of this one), so UJ-ON cannot judge F3 for this deploy: F3 stays unproven, and the steps that wait for it (6, 11, 12) would follow without that proof. A judged UJ-ON needs a rollback and then a --redeploy, its stage A taken with the gate holding$( [ -n "$gs" ] || echo " — or followup_max_age_hours set back to stage A's $(kv "$a" hours) h"); a note, which holds back nothing"; return 0; fi
   [ -n "$cu" ] || { bad "UJ-ON FAIL — the copy's time is not on record (COPY_AT in $STATE), so nothing since the copy can be counted$alone"; return 0; }
   ex="$(kv "$o" on_expired)"; ctl="$(kv "$o" control)"; t="$(kv "$o" t)"; cn="$(kv "$o" on_cancelled_t)"; st="$(kv "$o" on_stale_t)"; stn="$(kv "$o" on_stale_t_n)"
   r="$(kv "$o" replied_a)"; [ "$r" != "-" ] || r="not counted (stage A's time is not on record)"
@@ -446,13 +512,13 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
       elif [ "$st" = "0" ]; then ok "UJ-ON PASS — nothing stale for F3 to close: followup_close started at $t, after the copy, and ended; expireStale's SELECT at that moment (the pin's staleBefore at $t, a present conversation, LIMIT 1) selects no row; none closed expired since the copy; $cnt$alone"
       elif [ "$cn" -ge 200 ]; then
         UJ_NY_AT="$(kv "$o" again)"
-        UJ_NY_SAY="the close passes' places went to gone conversations — $cn closed cancelled by the closer since followup_close started at $t, none expired, $stn stale follow-up(s) with a present conversation left at $t"
-        notyet "UJ-ON NOT YET — $UJ_NY_SAY; $cnt$alone; run it again after $UJ_NY_AT"
+        UJ_NY_SAY="the close passes' places went to gone conversations — $cn closed cancelled by the closer since followup_close started at $t, none expired, $stn stale follow-up(s) with a present conversation left at $t; $cnt"
+        notyet "UJ-ON NOT YET — $UJ_NY_SAY$alone; run it again after $UJ_NY_AT"
       else bad "UJ-ON FAIL — F3 did not expire: followup_close started at $t, after the copy, and ended; none closed expired by the closer since the copy, $cn closed cancelled at or after that start (fewer than 200, so a pass's cap does not explain it), and expireStale's SELECT at $t still selects $stn stale enquiry follow-up(s) with a present conversation; $cnt$alone"; fi ;;
     not)
       UJ_NY_AT="$(kv "$o" again)"
-      UJ_NY_SAY="followup_close has not started and ended since the copy (its last start $(kv "$o" fc_last), $(kv "$o" fc_state)), and none closed expired yet"
-      notyet "UJ-ON NOT YET — $UJ_NY_SAY; $cnt$alone; run it again after $UJ_NY_AT" ;;
+      UJ_NY_SAY="followup_close has not started and ended since the copy (its last start $(kv "$o" fc_last), $(kv "$o" fc_state)), and none closed expired yet; $cnt"
+      notyet "UJ-ON NOT YET — $UJ_NY_SAY$alone; run it again after $UJ_NY_AT" ;;
     *) bad "UJ-ON FAIL — followup_close's entry in master_schedule.json could not be read on this run's copy (the schedule $(kv "$o" sched), the control ${ctl:-unread})$alone" ;;
   esac
   return 0
@@ -460,7 +526,8 @@ uj_was() { uj_ok "$2" && printf ' (stage A: %s)' "$(kv "$2" "$1")"; return 0; } 
 ''')
 
 STAGE_CALL = ("  uj_stage \"$sub\"   # U1–U4 — 5.18.106 (root docs/75 §L.4): on this copy, through the pin's code; notes; the deploy run keeps the line (UJ_A)\n"
-              "  " + SLOT_U5 + "\n")
+              + FE_CALL
+              + "  " + SLOT_U5 + "\n")
 STATE_LINES = (cw("5.18.106 (root docs/75 §L.4): stage A's UJ reading (U1–U4 — counts, UTC times and generic channel labels, "
                   "never a phone, a message, an instance name or an event's detail), for UJ-CA and UJ-ON of a later --after-only "
                   "(uj_after). --check never reaches this block: it writes nothing.", "  # ")
@@ -618,6 +685,24 @@ def apply(doc, ctx):
                  ("lib/AutomationPolicy.php", "    public function sqlHeld(string $column): array\n"),
                  ("migrations/070_followups.sql", "CREATE TRIGGER IF NOT EXISTS fu_closed_is_history\n")):
         need(show(pin, f), s, f)
+    # FE-G1 (DL11) and UJ-1 stand on these, from Git. set_config — FE-G1's printed command runs the installed one, 7835906's
+    # at stage A, the pin's the same — lists followup_enabled as a bool and names it nowhere else (no refusal, no warning, no
+    # other handling), saves through saveOverrides, prints "  followup_enabled = 1" once saved and its listing after that
+    # line (the cut); dn_tz() reads DN_DATA_DIR's kyc_config.json, and the sender's window reads dn_tz()
+    for c in (base, pin):
+        sc = show(c, "tools/set_config.php")
+        for s in ("    'followup_enabled' => ['bool',\n", "$dataDir = cliDataDir($root);\n",
+                  "list($ok, $err) = PluginConfig::saveOverrides($dataDir, [$key => $new]);\n",
+                  'else                 echo "\\n  " . $key . " = " . $new . "\\n";\n$show();\nexit(0);\n',
+                  '    echo "\\n  AI SETTINGS\\n\\n";\n', "followup_enabled"):
+            need(sc, s, f"tools/set_config.php at {c[:7]} (FE-G1)")
+    if sha_at(repo, base, f"{plugin}/tools/set_config.php") != sha_at(repo, pin, f"{plugin}/tools/set_config.php"):
+        raise SystemExit("PART UJ: tools/set_config.php differs between 7835906 and the pin — FE-G1 prints a command for the installed one")
+    tzf = show(pin, "lib/timezone.php")
+    for s in ("    function dn_tz(?array $config = null): string\n", "        $dir = getenv('DN_DATA_DIR') ?: '';\n",
+              "        $f = rtrim($dir, '/') . '/kyc_config.json';\n"):
+        need(tzf, s, "lib/timezone.php at the pin (UJ-1)")
+    need(show(pin, "lib/FollowUpPolicy.php"), "        $local = $t->setTimezone(dn_tz_obj());\n", "the sending window's zone (UJ-1)")
     for l in UJ_LIBS:
         git(repo, "cat-file", "-e", f"{pin}:{plugin}/lib/{l}.php")
     # the three keys conf keeps since 5.18.106: kept nowhere before, none a secret, none a vault key, none a ladder key
@@ -630,6 +715,9 @@ def apply(doc, ctx):
         for txt, what in ((lad, "the ladder"), (sec, "PluginConfig::SECRET_KEYS"), (vlt.group(1), "ConfigVault::VAULT_KEYS")):
             if f"'{k}'" in txt:
                 raise SystemExit(f"PART UJ: {k} is named by {what} at the pin — §L.4's reason to add it to conf would not hold")
+    if "'followup_enabled'" in sec:
+        raise SystemExit("PART UJ: followup_enabled is a secret at the pin — conf would cut it, every copy would read it off, "
+                         "and FE-G1 would refuse every deploy")
 
     # ── the source: what UJ stands on ──
     qf = block_between(doc.t, "QF_PHP=\"$(cat <<'PHP'\n", "\nPHP\n)\"\n", "QF_PHP")
@@ -637,6 +725,15 @@ def apply(doc, ctx):
     for k in KEEP3:
         if f"'{k}'" in conf:
             raise SystemExit(f"PART UJ: conf already keeps {k}")
+    need(conf, "        $n1 = ['followup_enabled', ", "conf keeps followup_enabled — U4 reads it on the copy, and FE-G1 refuses on it")
+    # FE-G1 runs after CS-G1, which returns only when none of the three claim switches is present and otherwise stops
+    csb = block_between(doc.t, "cs_check() {\n", "\n}\n", "cs_check")
+    csl = csb.split("\n")
+    if csb.count("return 0") != 1 or csb.count("  if [ -z \"$f\" ]; then\n") != 1 \
+            or not csb.index("  if [ -z \"$f\" ]; then\n") < csb.index("    return 0\n") < csb.index("  fi\n") \
+            or not csl[-3].startswith("  stop \"NO-GO (CS-G1): a claim switch is present ($f)"):
+        raise SystemExit("PART UJ: cs_check does not stop whenever a claim switch is present — FE-G1, after it, must be reached "
+                         "only with none")
     need(conf, "        $keep = array_values(array_diff(array_unique(array_merge($L['all'], $L['settings'], $L['pre'], $book, $n1)), $secret($root)));\n",
          "conf's keep list")
     for s in ("$flat = function (PDO $p, string $name) use ($has) {", "$docRows = function (PDO $p, string $name) use ($has) {",
@@ -654,13 +751,17 @@ def apply(doc, ctx):
               "PASS=0; FAIL=0; NOTE=0\n", "note() { NOTE=$((NOTE+1)); printf '  note  %s\\n' \"$*\"; }\n"):
         need(doc.t, s, "the source UJ reads")
     # (the word NOT_YET is the switch tool's status in the source, read into notes; the counter NOT_YET is new)
-    for s in ("uj_", "UJ_A", "UJ-ON", "UJ-CA", "NOT_YET=", "$NOT_YET", "notyet", "case 'uj':", "SLOT U5"):
+    for s in ("uj_", "UJ_A", "UJ-ON", "UJ-CA", "NOT_YET=", "$NOT_YET", "notyet", "case 'uj':", "SLOT U5", "FE-G1",
+              "followup-enabled-1", "--key followup_enabled"):
         doc.mustnot(s, why="UJ's names are new")
 
     # ── QF_PHP: the vault rule names uj; conf keeps the three keys; the uj mode, before rbn ──
     doc.sub("if (in_array($mode, ['notes', 'ca4', 'ca6', 'ca8', 'on3', 'lon', 'cfgkey'], true)) putenv('DN_VAULT_FILE='",
             "if (in_array($mode, ['notes', 'ca4', 'ca6', 'ca8', 'on3', 'lon', 'cfgkey', 'uj'], true)) putenv('DN_VAULT_FILE='",
             why="QF_PHP's vault rule names uj")
+    doc.insert_after("if (in_array($mode, ['notes', 'ca4', 'ca6', 'ca8', 'on3', 'lon', 'cfgkey', 'uj'], true)) "
+                     "putenv('DN_VAULT_FILE=' . rtrim((string)($a[1] ?? ''), '/') . '/vault.json');\n", DD,
+                     why="QF_PHP: uj's data folder too (review UJ-1)")
     doc.sub("               'alert_hours_from', 'alert_hours_to'];\n",
             "               'alert_hours_from', 'alert_hours_to',\n"
             "               // 5.18.106 (root docs/75 §L.4): UJ's readings — F2's and F3's age limit, the run's and the scan's places\n"
@@ -703,7 +804,15 @@ def apply(doc, ctx):
                  ("uj_places() {\n", 1), ("uj_notes() {\n", 1), ("uj_u4() {\n", 1), ("uj_stage() {\n", 1), ("uj_after() {\n", 1),
                  ("uj_on() {\n", 1), ("notyet() {", 1), (STAGE_CALL, 1), ("\n  " + SLOT_U5 + "\n  cih_drop \"$sub\"\n", 1),
                  ("printf 'UJ_A=%s\\n'", 1), ("\nuj_after   # ", 1), ("UJ-ON NOT YET — ", 2), ("UJ-ON PASS — ", 2),
-                 ("NOT_YET=$((NOT_YET+1))", 1), ("return 3", 1)):
+                 ("NOT_YET=$((NOT_YET+1))", 1), ("return 3", 1), (DD, 1),
+                 ("'tz=' . preg_replace('~[^A-Za-z0-9_/+-]~', '?', dn_tz())];\n", 1),
+                 ("now (in $(kv \"$o\" tz), the zone the sender reads)", 1),
+                 ("uj_gate_a() {\n", 1), ("uj_judgeable() {", 1), ("uj_fe_g1() {\n", 1), (FE_CALL, 1), (FE_CMD + "\n", 1),
+                 (FE_STOP + "\n}\n", 1), ("  FE-G1 FOLLOWUP_ENABLED READS OFF AS THE JOBS READ IT (U4 above)", 1),
+                 ("UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by", 1),
+                 ("UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now", 1),
+                 ("left at $t; $cnt\"\n", 1), ("and none closed expired yet; $cnt\"\n", 1),
+                 ('notyet "UJ-ON NOT YET — $UJ_NY_SAY$alone; run it again after $UJ_NY_AT"', 2)):
         doc.must(s, n, why="UJ as written")
     for s in (F3_DETAIL, F2_DETAIL, F1_DETAIL, F5_TAKEN, F5_SIBS):
         doc.must("'" + s + "'", 1, why="UJ counts by the pin's own text")
@@ -717,10 +826,22 @@ def apply(doc, ctx):
         raise SystemExit("PART UJ: uj_after is not called in stage R after lm_after and before qf_on")
     if not (t.index("QF_PHP=\"$(cat <<'PHP'") < t.index("    case 'uj':") < t.index("    case 'rbn':")):
         raise SystemExit("PART UJ: the uj mode is not inside QF_PHP, before rbn")
-    added = php + funcs + STAGE_CALL + STATE_LINES + R_CALL + NOTYET_DEF + SUM_NEW + EXIT_NEW
-    for l in added.split("\n"):
+    if not (t.index("qf_stage() {\n") < t.index('  cs_check CS-G1 "$LK_G1"') < t.index(STAGE_CALL)):
+        raise SystemExit("PART UJ: FE-G1 is not called in qf_stage after CS-G1 — it must be reached only with no claim switch "
+                         "present")
+    if [l for l in t.split("\n") if "--key followup_enabled" in l] != [FE_CMD] \
+            or not re.match(r'\s+echo "      docker exec -u \$DB_OWNER ', FE_CMD):
+        raise SystemExit("PART UJ: FE-G1's command is not printed once, on its own echo line, and run nowhere")
+    fb = block_between(t, "uj_fe_g1() {\n", "\n}\n", "uj_fe_g1")
+    if not fb.startswith("uj_fe_g1() {\n  uj_ok \"$UJ_A\" && [ \"$(kv \"$UJ_A\" en)\" = \"off\" ] || return 0\n") \
+            or fb.count('\n  stop "') != 1 or not fb.endswith(FE_STOP + "\n}\n") or fb.index(FE_CMD) > fb.index(FE_STOP):
+        raise SystemExit("PART UJ: uj_fe_g1 is not — followup_enabled read off at stage A, its command printed, then STOP")
+    added = php + funcs + STAGE_CALL + STATE_LINES + R_CALL + NOTYET_DEF + SUM_NEW + EXIT_NEW + DD
+    if added.split("\n").count(FE_CMD) != 1:
+        raise SystemExit("PART UJ: FE-G1's command is not among UJ's lines exactly once")
+    for l in added.split("\n"):   # FE-G1's command, printed by echo, is the one line here naming set_config
         s = l.lstrip()
-        if re.search(r"saveOverrides|writeKycFile|->save\(|set_config\.php|sales-followup\.sh|qf_tool|\$QF_WRAPPER|->close\(|->expireStale\(", l):
+        if l != FE_CMD and re.search(r"saveOverrides|writeKycFile|->save\(|set_config\.php|sales-followup\.sh|qf_tool|\$QF_WRAPPER|->close\(|->expireStale\(", l):
             raise SystemExit(f"PART UJ: a line UJ adds names a writer, the switch tool or a close: {s[:100]}")
         if s.startswith(("#", "//")) and not s.startswith(("# ── ", "# ── SLOT")) and len(l) > 120:
             raise SystemExit(f"PART UJ: a comment line UJ adds is longer than 120 characters: {l[:80]!r}")
