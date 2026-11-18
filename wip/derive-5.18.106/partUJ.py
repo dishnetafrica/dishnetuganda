@@ -330,7 +330,7 @@ UJ_FUNCS = (
          "— is the one reader's of §L.7, on the live files, never a copy's.", "#   ")
     + cw("After the copy (the deploy run and --after-only): UJ-CA — U1–U3 again on a fresh copy, beside stage A's, and the "
          "closes, expiries and sends since the copy — notes. --after-only: UJ-ON, judged (uj_on): PASS, FAIL or NOT YET.", "#   ")
-    + 'UJ_A=""; UJ_NY_AT=""; UJ_NY_SAY=""\n'
+    + 'UJ_A=""; UJ_NY_AT=""; UJ_NY_SAY=""; UJ_ON_GATE=""\n'
     + cw("uj_read SUB [COPYUNIX [AUNIX]] — one reading on SUB's copy through SUB's code root (QF_PHP uj): its line, or "
          "\"uj=unread(<why>)\" and status 1. Runs in $( … ): it reads nothing under the run's folder but SUB.")
     + r'''uj_read() {
@@ -486,7 +486,8 @@ uj_judgeable() { [ -z "$(uj_gate_a "$UJ_A")" ]; }   # uj_judgeable — stage A l
          "followup_close's entry in master_schedule.json (on this run's copy) started after the copy and ended — last_run, "
          "a UTC epoch, later than COPY_AT, and duration_ms at least 0 — and T is that last_run (never last_run_at, local "
          "time and overwritten with the job's end). NOT YET also sets UJ_NY_AT and UJ_NY_SAY — its counts with it (review "
-         "UJ-3) — for the summary.")
+         "UJ-3) — for the summary; the gate's note measured now, or on the limit alone, sets UJ_ON_GATE (now, limit), "
+         "so the summary's check it says when the next run judges F3 (review 2).")
     + r'''uj_on() {
   local o="$1" cu="$2" a="$UJ_A" g="" ga="" gs="" lim="" alone="" ex ctl t cn st stn r cnt
   if ! uj_ok "$o" || ! uj_gate_ok "$o"; then bad "UJ-ON FAIL — this run's reading could not be made (${o#uj=}): whether F3 works is not shown"; return 0; fi
@@ -500,13 +501,13 @@ uj_judgeable() { [ -z "$(uj_gate_a "$UJ_A")" ]; }   # uj_judgeable — stage A l
       || lim=" the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"
   fi
   # a condition measured false now: F3 has nothing to do now, or another limit to do it by (review UJ-2)
-  if [ -n "$g" ]; then g="$g$ga$lim"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by; a note, which holds back nothing"; return 0; fi
+  if [ -n "$g" ]; then g="$g$ga$lim"; UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by; a note, which holds back nothing"; return 0; fi
   # false only at stage A: F3 may run now, but this deploy's stage A is fixed in the state file (a deploy run while
   # 5.18.106 serves is an --after-only of it): UJ-ON cannot judge F3 for it (review UJ-2)
   if [ -n "$ga" ]; then ga="$ga$lim"; note "UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now, but this deploy's stage A reading is fixed in $STATE (a deploy run while $EXPECTED_VERSION serves is an --after-only of this one), so UJ-ON cannot judge F3 for this deploy: F3 stays unproven, and the steps that wait for it (6, 11, 12) would follow without that proof. A judged UJ-ON needs a rollback and then a --redeploy, its stage A taken with the gate holding; a note, which holds back nothing"; return 0; fi
   # stage A's gate held, but the age limit is another now: UJ-ON judges F3 only by the limit stage A read — set
   # back, and a close pass run after that, the next --after-only judges F3 (review 2: UJ2-G3)
-  if [ -n "$lim" ]; then note "UJ-ON not judged on this run — stage A's gate held, but followup_max_age_hours is $(kv "$o" hours) h now and was $(kv "$a" hours) h at stage A, and UJ-ON judges F3 only by the limit stage A read: set it back to $(kv "$a" hours) h and, once a close pass has run after that (followup_close runs every 10 minutes), run --after-only again to have F3 judged — or, to keep the new limit, a rollback and then a --redeploy, whose stage A reads it. Until then F3 is unproven, and the steps that wait for it (6, 11, 12) would follow without that proof; a note, which holds back nothing"; return 0; fi
+  if [ -n "$lim" ]; then UJ_ON_GATE="limit"; note "UJ-ON not judged on this run — stage A's gate held, but followup_max_age_hours is $(kv "$o" hours) h now and was $(kv "$a" hours) h at stage A, and UJ-ON judges F3 only by the limit stage A read: set it back to $(kv "$a" hours) h and, once a close pass has run after that (followup_close runs every 10 minutes), run --after-only again to have F3 judged — or, to keep the new limit, a rollback and then a --redeploy, whose stage A reads it. Until then F3 is unproven, and the steps that wait for it (6, 11, 12) would follow without that proof; a note, which holds back nothing"; return 0; fi
   [ -n "$cu" ] || { bad "UJ-ON FAIL — the copy's time is not on record (COPY_AT in $STATE), so nothing since the copy can be counted$alone"; return 0; }
   ex="$(kv "$o" on_expired)"; ctl="$(kv "$o" control)"; t="$(kv "$o" t)"; cn="$(kv "$o" on_cancelled_t)"; st="$(kv "$o" on_stale_t)"; stn="$(kv "$o" on_stale_t_n)"
   r="$(kv "$o" replied_a)"; [ "$r" != "-" ] || r="not counted (stage A's time is not on record)"
@@ -821,6 +822,8 @@ def apply(doc, ctx):
                  ("UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by", 1),
                  ("UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now", 1),
                  ("UJ-ON not judged on this run — stage A's gate held, but followup_max_age_hours is ", 1),
+                 ('UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:', 1),
+                 ('UJ_ON_GATE="limit"; note "UJ-ON not judged on this run', 1), ('UJ_ON_GATE=""\n', 1),
                  ("cannot judge F3 for this deploy", 1), ("set back to stage A's", 0),
                  ("U4 UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY:", 1),
                  ("left at $t; $cnt\"\n", 1), ("and none closed expired yet; $cnt\"\n", 1),

@@ -60,3 +60,30 @@ the count of its replacement afterwards, and that the anchor is gone. It writes 
   It is recorded for the docs/75 addendum.
 - **The optional `--check` GO clause and the optional check-it clause.** They are not needed once U4's note prints
   before DEPLOY and UJ-ON's limit-only note names its way out.
+
+## Round 3 — the re-check of round 2 (`recheck2-findings.txt`, `fix3.py`)
+
+Two read-only reviewers re-ran round 2. They confirmed every fix, and found four more, all minor. Three of them were
+introduced by round 2.
+
+| Finding | Part | Change |
+|---|---|---|
+| R2-V1OFF | R, Z | Round 2's guard returned on *any* `AS_RB1` in this deploy's state file. That hid the typed rollback's offer when V1 wrote nothing because the key was already off. `as_back_on` now returns only on `written`, `written-check:*` or `unknown:*`, that is, when this deploy's V1 wrote the key or may have. `as_rb_last` reads only the kept and rollback records again: a V1 that wrote nothing set nothing off. Z25 re-pinned. New copies: the loop reading `$STATE`; the guard returning on any `AS_RB1`. |
+| Z20-RET | Z | Z20 now pins each gate note's `return 0` and the limit note's close-pass clause. Z27 pins U4's DEPLOY clause by mode. New copies: each note falling through to the verdict; the close pass dropped; the DEPLOY clause made unconditional. |
+| UJ2-G3-r | UJ, H, Z | `uj_on` records which gate note it gave (`UJ_ON_GATE`: `now`, `limit`). The summary's check it then says when the next run judges F3, and no longer promises NOT YET where the run reads PASSED. New copies: the flag not set; check it promising a verdict regardless of the flag. |
+| UJ-AO-CLOSES | H | Check it's else branch now says what the run reads: U1–U3 and the sender's closes and sends (UJ-CA). A close pass's own closes are counted only by a judged UJ-ON. |
+
+**Result:**
+- 277 edits.
+- 16,196 lines.
+- sha256 `c2a3d13d175b4fd848fc0b6aae8ca3c3a602dac4e219013a34e064fd6e20bf9d`.
+- Two runs, byte-identical.
+- `bash -n` is clean.
+- Every partZ rule holds, and each copy is refused by its own rule alone.
+
+**Stub runs:**
+- The offer is made with no V1.
+- The offer is made with V1 `off`, its copy recorded or not; it names the typed rollback.
+- No offer with V1 `written`, `written-check` or `unknown`.
+- `UJ_ON_GATE` is `limit` and `now` for those notes, and empty for the stage-A note.
+- Check it prints each of its three texts.

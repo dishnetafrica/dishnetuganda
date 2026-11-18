@@ -439,14 +439,16 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
   as_show "$(as_owner_text 0 "$o")"
 }
 ''')
-    p.append(cw("as_rb_last — the latest rollback record (root docs/75 §L.8): among this deploy's own state file (where "
-                "a V1 rollback records its own; review 2), this folder's kept state-*.env.prev-* "
-                "files and rollback-state-*.env, the one with the newest RB_COPY_AT (A14 reads them so); prints its AS_RB1 "
+    p.append(cw("as_rb_last — the latest rollback record (root docs/75 §L.8): among this folder's kept state-*.env.prev-* "
+                "files and rollback-state-*.env — never this deploy's own state file: a V1 of this deploy that wrote "
+                "followup_auto_send, or may have, stops as_back_on before it asks, and one that wrote nothing set nothing "
+                "off, so it must not hide an earlier rollback's record (review 2) — the one with the newest RB_COPY_AT (A14 "
+                "reads them so); prints its AS_RB1 "
                 "(\"written\", a cause, or \"none\" when that record carries none) and that RB_COPY_AT, a space between, or "
                 "nothing when no rollback is on record."))
     p.append(r'''as_rb_last() {
   local f v t="" w=""
-  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do
+  for f in "$STATE".prev-* "$OUT"/rollback-state-*.env; do
     [ -f "$f" ] || continue
     v="$(sed -n 's/^RB_COPY_AT=//p' "$f" 2>/dev/null | tail -n1)"
     case "$v" in ''|*[!0-9]*) continue ;; esac
@@ -463,12 +465,13 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
                 "L8-4) — that finds it off reads that rollback's record and, only when the record carries AS_RB1=written, "
                 "says so and prints the owner's own command to turn it back on (--value 1), alone, as the owner's choice. A "
                 "rollback whose copy came after this deploy's (one that left 5.18.106 serving), or a V1 rollback of this "
-                "deploy (its AS_RB1 in this state file, its copy made or not; review 2), offers nothing here: its own "
+                "deploy that wrote followup_auto_send or may have (its AS_RB1 written, written-check or unknown in this "
+                "state file, its copy made or not; review 2), offers nothing here: its own "
                 "stop said what it left. Prints nothing otherwise; never runs it."))
     p.append(r'''as_back_on() {
   local o c r t
   [ "$MODE" = "after" ] || return 0
-  ! grep -q '^AS_RB1=' "$STATE" 2>/dev/null || return 0   # a V1 rollback of this deploy (review 2)
+  case "$(sed -n 's/^AS_RB1=//p' "$STATE" 2>/dev/null | tail -n1)" in written|written-check:*|unknown:*) return 0 ;; esac   # this deploy's V1 wrote it, or may have (review 2)
   c="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"
   r="$(as_rb_last)"; t="${r##* }"
   case "$c" in ''|*[!0-9]*) return 0 ;; esac
@@ -990,8 +993,10 @@ def apply(doc, ctx):
                  ("WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (", 2), ("AS-RB1 DID NOT SET followup_auto_send OFF (", 2),
                  ("followup_auto_send reads off now, through $BASELINE_VERSION's code (AS-RB1: ", 1),
                  ("printf '%s %s' \"${v:-none}\" \"$t\"", 1), ('  [ "$t" -lt "$c" ] || return 0\n', 1),
-                 ('  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n', 1),
-                 ("  ! grep -q '^AS_RB1=' \"$STATE\" 2>/dev/null || return 0   # a V1 rollback of this deploy", 1),
+                 ('  for f in "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n', 1),
+                 ('  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n', 0), ("grep -q '^AS_RB1='", 0),
+                 ("  case \"$(sed -n 's/^AS_RB1=//p' \"$STATE\" 2>/dev/null | tail -n1)\" in written|written-check:*|unknown:*) "
+                  "return 0 ;; esac   # this deploy's V1 wrote it, or may have", 1),
                  ('written) echo "nothing else moved but followup_auto_send: ', 1),
                  ('written-check:*) echo "the rollback ran no switch tool and no off-hook, applied or removed no migration, '
                   'and wrote followup_auto_send \'0\' before the put-back through the plugin\'s own writer — but its '
