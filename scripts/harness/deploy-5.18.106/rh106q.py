@@ -55,8 +55,8 @@
 #                         where each of the comma-separated KEYS is present, by place, and as the readers read it:
 #                         file= row= pcfg= dcfg= (absent|decoded|undecodable|unreadable; the row also nodb|unread)
 #                         keys=<key>@<place><type>,…;… (type s string, i int, f float, b bool, n null, a array; '-' in no
-#                         place) eff=<key>:on|off;… (PluginConfig::read's files, FILTER_VALIDATE_BOOLEAN — the jobs'
-#                         reading) asplaces=k:…,s:…,p:…,d:… (AS_PHP's places= for followup_auto_send: on, off, - absent,
+#                         place) eff=<key>:on|off;… (PluginConfig::read's files, as the jobs read each key: followup_enabled
+#                         by empty(), the others by FILTER_VALIDATE_BOOLEAN) asplaces=k:…,s:…,p:…,d:… (AS_PHP's places= for followup_auto_send: on, off, - absent,
 #                         ? unread) cs=<cs_found's claim switches in k or s, highest step first, '+' between, or -> pd=<the
 #                         KEYS held by a config.json, key@p,d, or -> pre13=ok|<§L.7's conditions 1-3 that fail: file,row,
 #                         differ> differ=<condition 3's keys, as AS_PHP lists them, or -> (conditions 4 and 5 are the
@@ -337,7 +337,7 @@ def as_row(book):
 
 def files_config(plugin, data):
     """PluginConfig::read's three files, merged in its order (a later file wins a key), normalised (BOOL_KEYS to booleans,
-    strings trimmed). The vault fills only its own keys, and no key these readers use is one (lib/ConfigVault.php)."""
+    strings trimmed). The vault (not read here) fills only its own keys: none that u1mirror, u2u3 or a followup_* eff= reads is one, but evo_api_key and evo_api_url are (lib/ConfigVault.php VAULT_KEYS), so kycplaces' eff= for those two is not PluginConfig::read's (no call site reads it)."""
     c = {}
     for p in (os.path.join(plugin, 'data', 'config.json'), os.path.join(data, 'config.json'), os.path.join(data, 'kyc_config.json')):
         if not os.path.isfile(p) or not os.access(p, os.R_OK):
@@ -969,7 +969,7 @@ def kycplaces(a):
         if h:
             pd.append('%s@%s' % (asname(k), ','.join(h)))
     cfg = files_config(plugin, data)
-    eff = ['%s:%s' % (asname(k), 'on' if filter_bool(cfg.get(k, False)) else 'off') for k in keys]
+    eff = ['%s:%s' % (asname(k), (('off' if php_empty(cfg.get(k)) else 'on') if k == 'followup_enabled' else ('on' if filter_bool(cfg.get(k, False)) else 'off'))) for k in keys]   # followup_enabled as the jobs read it: empty() (cron/followup_close.php:33, followup_send.php:48); every other key FILTER_VALIDATE_BOOLEAN (followup_auto_send's, lib/FollowUpPolicy.php:101) (review r4 Q106-1)
 
     def asplace(doc):   # AS_PHP's $asPlace
         if not isinstance(doc, dict):

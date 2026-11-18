@@ -17,7 +17,8 @@
 // under the rehearsal's clock (LD_PRELOAD and RH104_CLOCK_FILE, as R4's seed104c runs rh104-seed.php): every stamp below
 // is the clock's (time(), gmdate(), SQLite's datetime('now')). The file fixtures run as root or as the file's owner, and
 // put back the owner and mode they found (a state file is root's: its two ops run as root).
-// The ops that write the book (its plugin.sqlite3 must be there):
+// The ops that write the book (its plugin.sqlite3 must be there). NOT SENT by rehearse.sh (review r4 S2), kept but unexercised:
+// inbound, fx_state_drop and fx_state_back (the state-file fixture is rehearse.sh's own dstdrop106).
 //   {"op":"enquiry","phone":…,"channel":…,"name":…,"text":…,"lca":"Y-m-d H:i:s"|"lca_ago_s":n,"upto":"open"|"draft"|"approve",
 //    "body":…,"by":…[,"drafts":1|2][,"body2":…]}
 //        — the customer's text stored inbound at lca (UTC) — the conversation's last_customer_at then exactly lca, or the
@@ -343,6 +344,7 @@ $plant = function (array $o, int $drafts, string $upto) use ($conv, $fu, $h16, $
     if ($fu->openFor($cid) !== null) throw new RuntimeException('enquiry: the conversation holds an open follow-up already');
     $mid = $conv->storeMessage($cid, ['direction' => 'in', 'role' => 'customer', 'body' => (string)$o['text'],
         'wa_message_id' => 'RH106IN' . $h16($digits((string)$o['phone']) . '|' . $ch . '|' . $lca), 'sent_at' => $lca]);
+    if ($mid === null) throw new RuntimeException('enquiry: that customer message is stored already');   // review r4 S1
     $cv = $conv->getConversation($cid);
     if ($cv === null || (string)($cv['last_customer_at'] ?? '') !== $lca) throw new RuntimeException('enquiry: the customer last wrote later than the chosen time');
     $f = $fu->open($cv, ['topic' => RH106_MARK . 'topic', 'opened_by' => 'scan']);
