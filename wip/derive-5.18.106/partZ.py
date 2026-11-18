@@ -25,6 +25,10 @@
 # the mode, and §F's step 2 by LK-AO's reading (LK_AO_ON; L8-2). Z27 check it by stage A's reading (L8-1) and "what it
 # means" by AS-RB2's (L8-3). Z28 after a typed rollback and in V1's stop, the headline by what AS-RB1 recorded, and a
 # plain line when it reads off now (RB-3, L8-3).
+# 18 Nov, review 2 (rev106-2-findings): Z20 the limit alone differing is its own note, judged once set back, and only
+# the stage-A note says F3 cannot be judged for this deploy (UJ2-G3); Z23 a written-check never says nothing else
+# moved (RB2-wc); Z25 as_rb_last reads this deploy's own state file, and as_back_on offers nothing after this
+# deploy's own V1 (L84-V1); Z27 stage A says, in capitals before DEPLOY, where UJ-ON will not judge F3 (L8-1).
 import re
 from d106lib import close
 
@@ -124,10 +128,16 @@ G_CONDS = ('  [ "$(kv "$o" en)" = "on" ] || g="$g followup_enabled is off now;"\
            '  [ "$(kv "$o" ug)" = "1" ] || g="$g StaffJobsGate::applies does not read Uganda now;"\n',
            '  [ "$(kv "$o" hours)" != "misread" ] || g="$g followup_max_age_hours is not a positive number now;"\n',
            '    gs="$(uj_gate_a "$a")"; ga="$gs"\n')
-G_NOW = ('  if [ -n "$g" ]; then g="$g$ga"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing '
+G_NOW = ('  if [ -n "$g" ]; then g="$g$ga$lim"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing '
          'to do, or another limit to do it by; a note, which holds back nothing"; return 0; fi\n')
-G_A = ('  if [ -n "$ga" ]; then note "UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be '
-       'running now')
+G_A = ('  if [ -n "$ga" ]; then ga="$ga$lim"; note "UJ-ON not judged for this deploy — its gate did not hold at stage A:'
+       '${ga%;}. F3 may be running now')
+G_LIM = ('      || lim=" the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"\n',
+         '  if [ -n "$lim" ]; then note "UJ-ON not judged on this run — stage A\'s gate held, but followup_max_age_hours is ')
+U4_WARN = ('  [ "$(kv "$o" en)" = "off" ] || [ -z "$(uj_gate_a "$o")" ] || note "U4 UJ-ON WILL NOT JUDGE F3 FOR THIS '
+           'DEPLOY:$(uj_gate_a "$o" | sed \'s/;$//\'). STAGE A\'S READING IS KEPT IN THE STATE FILE FOR THE LIFE OF THE DEPLOY')
+RB_LAST_LOOP = '  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n'
+BACK_V1 = "  ! grep -q '^AS_RB1=' \"$STATE\" 2>/dev/null || return 0   # a V1 rollback of this deploy (review 2)\n"
 JUDGEABLE = 'uj_judgeable() { [ -z "$(uj_gate_a "$UJ_A")" ]; }'
 NY_LINE = 'notyet "UJ-ON NOT YET — $UJ_NY_SAY$alone; run it again after $UJ_NY_AT"'
 RB0_HEAD = "  # followup_auto_send: what the rollback will write, said before the question"
@@ -141,8 +151,11 @@ RB0_MAYNOT = ('            if [ "$(kv "$a" pre)" = "ok" ]; then w="MAY NOT"; AS_
 RB0_UNREAD = ('    *) AS_RB0_SAY="followup_auto_send set off first only if AS-RB1, reading it again, finds it on and the five '
               'conditions holding"\n      as_show "$(as_owner_text 0 "$a")" ;;\n  esac\n  return 0\n')
 RB_NOTE = 'note "RB the code is $BASELINE_VERSION\'s again where $EXPECTED_VERSION changed it'
-RB2_MARKS = ('$( case "${AS_RB1:-}" in written|written-check:*) echo "nothing else moved but followup_auto_send: ',
+RB2_MARKS = ('$( case "${AS_RB1:-}" in written) echo "nothing else moved but followup_auto_send: ',
              "and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)\" ;; ",
+             "written-check:*) echo \"the rollback ran no switch tool and no off-hook, applied or removed no migration, and "
+             "wrote followup_auto_send '0' before the put-back through the plugin's own writer — but its read-back did not "
+             "hold, so whether anything else moved is not shown",
              'unknown:*) echo "nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no '
              "migration; whether it wrote followup_auto_send '0' before the put-back is not known",
              '*) echo "nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, and '
@@ -186,12 +199,12 @@ WHAT_MEANS = ('$( case "${AS_RB2_EFF:-}" in off) echo "— it reads off now, so 
 ONCE.update({
     "Z18": (FE_CALL, FE_GUARD, FE_STOP, FE_CMD + "\n", "uj_fe_g1() {\n"),
     "Z19": (DD_LINE, VAULT_LINE) + TZ,
-    "Z20": (G_NOW, G_A, JUDGEABLE, "uj_gate_a() {\n") + G_CONDS,
+    "Z20": (G_NOW, G_A, JUDGEABLE, "uj_gate_a() {\n") + G_CONDS + G_LIM,
     "Z22": (RB0_NOOWNER, RB0_ARM_NOOWNER, RB0_CAUSE, RB0_MAYNOT, RB0_UNREAD),
     "Z24": (RB4,) + EFF,
-    "Z25": (RB_LAST, BR1, BACK_ON[5]),
+    "Z25": (RB_LAST, BR1, BACK_ON[5], RB_LAST_LOOP, BACK_V1),
     "Z26": (LKAO[0], LKAO[1], WHAT_CHANGED[0], WHAT_DIDNOT[0], STEP2[0]),
-    "Z27": (CHECK_IT[0], WHAT_MEANS[0]),
+    "Z27": (CHECK_IT[0], WHAT_MEANS[0], U4_WARN),
 })
 NONE.update({
     "Z22": ("THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF ($(as_causes_say",),
@@ -410,8 +423,9 @@ def rules(t):
         B("Z19", "the uj mode does not name its copy as the data folder, right after the vault rule, at QF_PHP's top")
     # Z20 UJ-2: false now — nothing to do; false only at stage A — not judged for this deploy; nothing of stage A in g
     uo = _body(t, "uj_on")
-    if not _seq(uo, G_CONDS + (G_NOW, G_A, '  [ -n "$cu" ] || { bad "UJ-ON FAIL — the copy')) \
-            or t.count("F3 then has nothing to do") != 1 or re.search(r'\bg="\$g[^"$]*at stage A', uo):
+    if not _seq(uo, G_CONDS + (G_LIM[0], G_NOW, G_A, G_LIM[1], '  [ -n "$cu" ] || { bad "UJ-ON FAIL — the copy')) \
+            or t.count("F3 then has nothing to do") != 1 or re.search(r'\bg="\$g[^"$]*at stage A', uo) \
+            or t.count("cannot judge F3 for this deploy") != 1 or "set back to stage A's" in t:
         B("Z20", "UJ-ON's gate is not split: false now (nothing to do), then false only at stage A (not judged for this deploy)")
     # Z21 UJ-3: NOT YET's counts in UJ_NY_SAY, so the wait line and the summary carry them once each
     ny = [l.strip() for l in uo.split("\n") if l.strip().startswith("UJ_NY_SAY=")]
@@ -434,7 +448,8 @@ def rules(t):
         B("Z24", "AS-RB2's could-not-read branch is not a note after AS-RB1's recorded cause, or AS_RB2_EFF is not what it read")
     # Z25 L8-4: as_back_on by the latest rollback's RB_COPY_AT against this deploy's COPY_AT, --redeploy typed or not
     bo = _body(t, "as_back_on")
-    if not _seq(bo, BACK_ON) or "REDEPLOY" in bo or not _body(t, "as_rb_last").endswith(RB_LAST):
+    if not _seq(bo, BACK_ON) or "REDEPLOY" in bo or not _body(t, "as_rb_last").endswith(RB_LAST) \
+            or RB_LAST_LOOP not in _body(t, "as_rb_last") or not bo.startswith("  local o c r t\n" + BACK_ON[0] + BACK_V1):
         B("Z25", "as_back_on does not go by the latest rollback's RB_COPY_AT against this deploy's COPY_AT")
     # Z26 L8-2: LK_AO_ON defined once and set once, in lk_ao; the claim clauses by the mode; §F's step 2 by LK-AO's
     # reading
@@ -448,7 +463,8 @@ def rules(t):
     # Z27 L8-1, L8-3: check it by stage A's reading (uj_judgeable); what it means by AS-RB2's (AS_RB2_EFF)
     ckt = t[ck:t.find('  echo "      $QCHECK_CMD"', ck)] if ck >= 0 else ""
     wm = [l for l in L if l.startswith('            echo "  what it means     ')]
-    if not _seq(ckt, CHECK_IT) or ckt.count("if uj_judgeable") != 1 or len(wm) != 1 or not _seq(wm[0], WHAT_MEANS):
+    if not _seq(ckt, CHECK_IT) or ckt.count("if uj_judgeable") != 1 or len(wm) != 1 or not _seq(wm[0], WHAT_MEANS) \
+            or U4_WARN not in _body(t, "uj_u4"):
         B("Z27", "check it does not go by stage A's reading, or what it means by what AS-RB2 read")
     # Z28 RB-3, L8-3: the headline by what AS-RB1 recorded — written but not read back, not known, not written — after a
     # typed rollback's verdict (as_after_verdict, which first reads it again: off now is a plain line) and in as_para
@@ -542,7 +558,12 @@ CONTROLS = [   # (rule, what, the weakened copy)
     ("Z19", "the uj mode without its data folder", lambda t: _at(t, lambda l: l == DD_LINE, lambda l: [])),
     ("Z19", "the data folder named for another mode", lambda t: _rep(t, DD_LINE, DD_LINE.replace("'uj'", "'lk'"))),
     ("Z20", "UJ-ON's two gate branches swapped",
-     lambda t: _swap(t, '  if [ -n "$g" ]; then g="$g$ga"; note "UJ-ON not judged', '  if [ -n "$ga" ]; then note "UJ-ON not judged')),
+     lambda t: _swap(t, '  if [ -n "$g" ]; then g="$g$ga$lim"; note "UJ-ON not judged',
+                     '  if [ -n "$ga" ]; then ga="$ga$lim"; note "UJ-ON not judged')),
+    ("Z20", "the limit alone differing put back into the stage-A note",
+     lambda t: _rep(t, '      || lim=" the age limit differs', '      || ga="$ga the age limit differs')),
+    ("Z20", "the limit-only note saying F3 cannot be judged for this deploy",
+     lambda t: _rep(t, "run --after-only again to have F3 judged", "UJ-ON cannot judge F3 for this deploy")),
     ("Z20", "the stage-A branch says nothing to do", lambda t: _rep(t, "F3 may be running now", "F3 then has nothing to do")),
     ("Z21", "NOT YET's counts left out of UJ_NY_SAY",
      lambda t: _rep(t, ', and none closed expired yet; $cnt"\n', ', and none closed expired yet"\n')),
@@ -552,14 +573,20 @@ CONTROLS = [   # (rule, what, the weakened copy)
          '      note "THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (${a#as=}): ANSWER ANYTHING BUT ROLLBACK BELOW"\n'
          '      as_show "$(as_owner_text 0 "$a")" ;;\n'))),
     ("Z22", "an empty cause", lambda t: _rep(t, RB0_CAUSE, '            c="$c"\n')),
+    ("Z23", "a read-back that did not hold said as nothing else moved",
+     lambda t: _rep(t, '"${AS_RB1:-}" in written) echo "nothing else moved but',
+                    '"${AS_RB1:-}" in written|written-check:*) echo "nothing else moved but')),
     ("Z23", "the RB note's write unconditional",
-     lambda t: _in_line(t, RB_NOTE, '$( case "${AS_RB1:-}" in written|', " esac )",
+     lambda t: _in_line(t, RB_NOTE, '$( case "${AS_RB1:-}" in written)', " esac )",
                         "nothing else moved but followup_auto_send: the rollback ran no switch tool and no off-hook, applied or "
                         "removed no migration, and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: "
                         "${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7)")),
     ("Z24", "AS-RB2 failing again on AS-RB1's recorded cause",
      lambda t: _rep(t, '         not-written:*) note "AS-RB2 followup_auto_send could not be read',
                     '         not-written:*) bad "AS-RB2 followup_auto_send could not be read')),
+    ("Z25", "as_rb_last blind to this deploy's own state file (a V1 rollback's record)",
+     lambda t: _rep(t, RB_LAST_LOOP, '  for f in "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n')),
+    ("Z25", "as_back_on offering after this deploy's own V1", lambda t: _rep(t, BACK_V1, "")),
     ("Z25", "as_back_on gated on --redeploy again",
      lambda t: _rep(t, BACK_ON[5], '  [ "$(sed -n \'s/^REDEPLOY=//p\' "$STATE" 2>/dev/null | tail -n1)" = "1" ] || return 0\n')),
     ("Z26", "LK_AO_ON never set", lambda t: _at(t, lambda l: l.startswith('  LK_AO_ON="$(qf_kv "$o" on)"'), lambda l: [])),
@@ -572,6 +599,8 @@ CONTROLS = [   # (rule, what, the weakened copy)
     ("Z28", "no plain line when it reads off now",
      lambda t: _rep(t, "    echo \"  followup_auto_send reads off now, through $BASELINE_VERSION's code (AS-RB1: ",
                     "    echo \"  FOLLOWUP_AUTO_SEND READS OFF NOW, through $BASELINE_VERSION's code (AS-RB1: ")),
+    ("Z27", "stage A silent before DEPLOY where UJ-ON will not judge F3",
+     lambda t: _at(t, lambda l: l.startswith(U4_WARN), lambda l: [])),
     ("Z27", "check it promising a judgement whatever stage A read",
      lambda t: _rep(t, "  if uj_judgeable; then   # 5.18.106 (review L8-1)", "  if true; then   # 5.18.106 (review L8-1)")),
     ("Z27", "what it means unconditional again",

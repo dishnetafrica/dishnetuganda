@@ -1,0 +1,281 @@
+11 findings
+==== rollback minor RB2-wc REAL | lines 15788 (the RB note's `written|written-check:*)` arm), with 9018 (AS_RB1=written-check:<codes>) and 8
+S: Typed rollback. AS-RB1's saveOverrides lands, but its read-back fails with file-others, row-others, keys, config-json or decodes. For example, the rewritten kyc_config.json no longer decodes, so 5.18.105 ignores every override in it. AS-RB1 FAILs: 'FOLLOWUP_AUTO_SEND WAS WRITTEN, BUT ITS READ-BACK DID NOT HOLD (file-others)'. The RB note after rb106 then says 'nothing else moved but followup_auto_send: … wrote one key before the put-back, followup_auto_send '0' (AS-RB1: written, but its read-back did not hold (file-others) …)'.
+V: The finding holds, and it is minor. It only changes what the log says. The verdict is FAILED either way, and nothing different happens on the server.
+
+**What line 15788 does.** It is one `note` that chooses its clause with `case "${AS_RB1:-}" in written|written-check:*) echo "nothing else moved but followup_auto_send: … and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-?}; …)"`.
+
+**Stub run.** I ran line 15788 alone on stdin with `AS_RB1=written-check:row-others` and the matching `AS_RB1_SAY`. It printed: "…and nothing else moved but followup_auto_send: the rollback ran no switch tool … and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: written, but its read-back did not hold (row-others); …)".
+
+**What the read-back codes mean (lines 8988-9008).**
+- `$hs` (line 8973) hashes every key except followup_auto_send.
+- `file-others` and `row-others` therefore mean that some other key of the file or of the row differs after the write.
+- `keys` means the file's key set is not the set before plus followup_auto_send.
+- `config-json` means one of the two config.json files changed.
+- `decodes` means the file no longer decodes.
+- Line 9018 sets `AS_RB1=written-check:<codes>`, and line 9019 FAILs in capitals: "WAS WRITTEN, BUT ITS READ-BACK DID NOT HOLD (<codes>)".
+
+So the RB note says "nothing else moved" right after the script's own read-back measured that something else did. That is the class round 1 judged real as RB-2. The round-1 verdict prescribed keeping `written|written-check:*` in one arm (review1-findings.txt, RB-2 FIX), and fix round 1 did exactly that (fix1-notes.md:49). So the defect was left in by the round-1 fix.
+
+**How it actually happens on the server.** Under §L.7's preconditions, the plugin's writer cannot itse
+FIX: The edit is in partR.py, in the RB note's `doc.line` new text at partR.py:948.
+
+1. Split the arm into two. Keep `written)` with today's text ("nothing else moved but followup_auto_send: … and wrote one key before the put-back, followup_auto_send '0' …"), which is true only there.
+2. Add a separate `written-check:*)` arm that does not claim "nothing else moved". For example:
+
+`written-check:*) echo "the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote followup_auto_send '0' before the put-back through the plugin's own writer, but its read-back did not hold (${AS_RB1#written-check:}): whether anything else moved is not shown — AS-RB1's FAIL above names what differed (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)" ;;`
+
+This wording avoids the phrase "wrote one key", so Z23's `count("wrote one key") != 1` still holds. If you word it differently, raise that count to 2.
+
+3. Update the `doc.must` anchor at partR.py:990, which is `'written|written-check:*) echo "nothing else moved but followup_auto_send: '`. Change it to the `written)` arm, and add the new `written-check:*)` arm's text with count 1.
+4. In partZ.py, re-pin Z23. `RB2_MARKS` (partZ.py:144) should expect `written) echo "nothing else moved but followup_auto_send: ` followed by the `written-check:*)` arm's text. The weakened copy at partZ.py:555-559 still makes the write unconditional and stays as it is.
+5. Re-run the derivation twice and check the output is byte-identical. Then stub-run line 15788 with each AS_RB1 value: `written`, `written-check:row-others`, `unknown:no-answer`, `off`, `not-written:refused`, and empty.
+
+==== rollback minor RB4-sib REAL | lines 9129 (as_rb2's `on` arm, `not-written:*` note)
+S: Typed rollback. followup_auto_send reads on and condition 5 (code) or condition 1 (file) fails, so AS-RB1 records AS_RB1=not-written:code (or :file…). AS-RB2 reads on and notes 'your own command is printed after the verdict'. After the verdict, as_after_verdict prints 'AS-RB1 DID NOT SET … OFF' and then as_owner_text's 'NO COMMAND IS PRINTED: the code a settings write would load here is not 7835906's …' (or the undecodable-file text). In V1 the same note says 'in the stop message below', and that message prints no command either.
+V: The finding holds. It is minor: a misleading printed promise. Round 1 did not introduce it but left it in place: the text is the same as line 9017 of the earlier script.
+
+1. **The path happens as described.** In a typed rollback, `as_rb1` (line 9022) records `AS_RB1="not-written:$(kv "$o" pre)"` when the setting reads on and a condition fails, for example `not-written:file` or `not-written:code`. If nothing writes `followup_auto_send` after that, `as_rb2` (line 9128) reads `eff=on`, takes the `not-written:*` arm at line 9129, and prints "your own command is printed after the verdict" (in V1, "in the stop message below"). That promise has no qualifier.
+
+2. **After the verdict, no command is printed for those causes.** `as_after_verdict` (lines 8772-8788) re-reads the setting and calls `as_owner_text 0 "$o"`. In `as_owner_text` (lines 8695-8726), both `code` and `file` set `cmd=""` and print "NO COMMAND IS PRINTED…", and the function returns before `as_owner_cmd`. V1's stop message reaches the same function through `as_para v1`.
+
+3. **The put-back does not remove those causes.**
+   - `do_rollback` (line 13800) runs `deploy-hybrid.sh`. That script copies the tree with tar, excluding `./data`, and never deletes a file.
+   - So an undecodable or unreadable `<data>/kyc_config.json` (condition 1) is still there afterwards. QF-RB1 is retired, and AS-RB1 is the script's only write.
+   - A `<plugin>/seed` or an extra migration file (condition 5) also stays, because nothing deletes it.
+   - Only a changed checksum on one of the six files would be repaired by the copy.
+
+4. **Stub run.** I fed `as_rb2` and `as_after_verdict` to bash on stdin, with a stubbed `as_read` returning `eff=on`.
+   - With `pre=file` and with `pre=code` (seed): the note promises a command, then "NO COMMAND IS
+FIX: Edit `/home/user/dev105/wip/derive-5.18.106/partR.py:686` (`as_rb2`, the `on` arm, `not-written:*` case; line 9129 of the script). Replace "your own command is printed $( [ "$MODE" = "rollback" ] && echo "after the verdict" || echo "in the stop message below")" with "your own command, where its cause allows one, is printed $( [ "$MODE" = "rollback" ] && echo "after the verdict" || echo "in the stop message below")". That is the wording of `as_rb1`'s FAIL at line 9023 and of §L.7.
+
+No partZ assertion names this text: grep finds it only at partR.py:686. Z24's count of exactly two `bad "AS-RB2` is unaffected because this line is a `note`. Re-derive, and confirm the derivation's own count assertion still finds the line once.
+
+==== rollback minor L84-V1 REAL | lines 8795 (as_rb_last's loop, which leaves out "$STATE"), 8807-8810 (as_back_on's promise), 13812 (do_rol
+S: A deploy D2 that follows a typed rollback R1 (R1's record: AS_RB1=written, RB_COPY_AT before D2's COPY_AT). V1 detects a redirect and runs as_rb1 v1, which writes '0' and records AS_RB1 in $STATE. Then do_rollback fails after stamp_copy (deploy-hybrid rc≠0), so RB_COPY_AT, later than COPY_AT, also lands in $STATE, and 5.18.106 keeps serving. The operator later runs --after-only and it PASSES. as_rb_last scans only $STATE.prev-* and rollback-state-*.env, so it never sees V1's record. It picks R1 instead and offers the --value 1 command with 'the latest rollback set it off (… its copy at <R1's time>, before this deploy's …)'.
+V: The finding is real, and minor. Fix round 1 introduced it: L8-4's fix added the `RB_COPY_AT < COPY_AT` test and the promise at 8807-8810, but did not widen as_rb_last's file list to match.
+
+What the code does in /tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/deploy106-fx1-run1.sh:
+- Under V1, MODE is "deploy", so `STATE_W="$STATE"` (13717). The typed-rollback branch only sets STATE_W to rollback-state-$TS.env, and a typed rollback reaches do_rollback only under the same condition as the backup block (13641).
+- V1 runs `as_rb1 v1`, which always appends `AS_RB1=…` to `${STATE_W:-$STATE}`, that is $STATE (9048).
+- do_rollback, once its git checkout has succeeded, always appends `RB_COPY_AT=` to `${STATE_W:-$STATE}` (13812), whatever deploy-hybrid's exit code. When it fails, the stop at 13914 runs, with `as_para rb`: for `rb:written` it says 5.18.106 keeps serving with automatic approval off.
+- as_rb_last (8793-8804) reads only `"$STATE".prev-* "$OUT"/rollback-state-*.env`. A14's loop at 13179 also reads "$STATE". as_rb_last is called only from as_back_on (8816), and as_back_on only from the PASSED --after-only block (16129).
+- So V1's record (an RB_COPY_AT later than COPY_AT, and its AS_RB1) is never seen, and the earlier typed rollback R1 (AS_RB1=written, RB_COPY_AT before COPY_AT) is taken as "the latest rollback".
+
+I confirmed this with the real as_rb_last and as_back_on bodies, extracted with sed and fed to bash on stdin with stubbed `[`, sed, as_read, kv, utc_of and as_show (no files). The $STATE stub held COPY_AT=1000, AS_RB1=written and RB_COPY_AT=1100; the R1 record held AS_RB1=written and RB_COPY_AT=500.
+- **Current code:** as_rb_last returns "written 500", and as_back_on prints "the latest rollback set it off (AS_RB1=writte
+FIX: The fix is in partR (/home/user/dev105/wip/derive-5.18.106/partR.py:448), inside as_rb_last.
+
+1. Change the loop to `for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do`. In --after-only, $STATE holds an RB_COPY_AT only from this deploy's own V1 (13717/13641 keep a typed rollback's in rollback-state-*.env), and that time is always later than COPY_AT. So as_back_on's existing `[ "$t" -lt "$c" ] || return 0` then offers nothing, as its comment promises.
+2. Update the as_rb_last comment in partR (442-445) to name "this deploy's own state file (a V1 rollback's record)".
+3. partZ pins only as_rb_last's final printf (RB_LAST, partZ.py:160) and the as_back_on sequence, so no partZ change is needed. Add a one-line docs/75 §L.8 addendum: it lists only the rollback-state and prev files.
+
+**More robust alternative.** Put this as the first test after the MODE check in as_back_on: `grep -q '^AS_RB1=' "$STATE" 2>/dev/null && return 0`. as_rb1 v1 always appends AS_RB1 to $STATE (9048), and only V1 writes it there. It covers both the case above and a V1 whose git checkout failed and recorded no RB_COPY_AT.
+
+==== rollback minor DOC-L8 REAL | lines 8805-8822 (as_back_on, no longer reads REDEPLOY), 566-572 and 596-601 (the header's '--redeploy type
+S: Someone checks the script against the design. docs/75 §L.8 still says 'A later PASSED --after-only of a --redeploy … reads the latest rollback record'. The script now offers the turn-back-on command after any deploy whose COPY_AT follows the latest rollback's RB_COPY_AT. §L.9 has no DL11 row, and FE-G1 is in no section of §L.
+V: The finding is real but minor. It reads the code correctly, and the contradiction is with §L as committed, which the task names as reportable. It is also the unfinished half of round-1 finding L8-4, whose fix listed "§L.8's wording in docs/75, to match".
+
+Checked in deploy106-fx1-run1.sh:
+- **as_back_on (8812-8822)** no longer reads REDEPLOY. It offers the --value 1 command when three things hold: this state file's COPY_AT is later than the latest rollback's RB_COPY_AT, the record carries AS_RB1=written, and the key reads off.
+- **The header (568-571, 596-601)** and **BR1's printed note (12436)** say a deploy after a rollback gets the offer "--redeploy typed or not". The BR1 note cites "root docs/75 §L.8" for this, but §L.8 (doc lines 651-655) still says "A later PASSED --after-only of a --redeploy".
+- **FE-G1 (uj_fe_g1, 7999-8010; called at 8240 in stage A, so in a deploy and in --check)** stops with NO-GO. The committed §L.4 says "None refuses", DL2 says the readings are "never a refusal", §L.9 ends at DL10, and §L.10 has no FE-G1 case.
+- **Grep finds neither DL11 nor FE-G1 anywhere in docs/75.** Yet the operator sees the citation printed: the summary at 15837-15838 says "(root docs/75 §L.3–§L.7, DL11)", and FE-G1's own stop cites §L.5 and DL3, whose text calls a gate condition measured false at stage A "a note".
+- **fix1-notes.md §5** lists these docs/75 updates as still to do.
+
+Nothing goes wrong on the server: the behaviour follows DL11 and the L8-4 fix. But anyone who checks a printed citation against docs/75 finds the opposite rule there, or no rule at all. One addition to the proposed fix: §L.4, §L.5 and §L.10 also need changes, not only §L.8 and §L.9.
+FIX: Docs only (docs/75 §L), committed with or before the script. No change to the script parts.
+
+1. **§L.4**: change "None refuses" to "None refuses but FE-G1 (DL11): stage A, and so --check, stops with NO-GO and changes nothing when U4 reads followup_enabled off as the jobs read it. It prints the owner's set_config --value 1 command alone on its line and never runs it. There is no refusal when U4 could not read the setting."
+2. **§L.5, UJ-ON's gate**: record the split partUJ built. A condition false now gives the plain note. A condition false only at stage A gives the stage-A note: F3 stays unproven for this deploy, and a judged UJ-ON needs a rollback and then a --redeploy.
+3. **§L.8**: replace "A later PASSED --after-only of a --redeploy" with "The PASSED --after-only of a deploy that followed the latest rollback (this state file's COPY_AT later than that rollback's RB_COPY_AT), --redeploy typed or not". Add the DL11 operator rule: under the 18 Nov interim, turn step 6 off first (and steps 11 and 12 if on), then turn followup_enabled on, each its own command, never the reverse.
+4. **§L.9**: amend DL2 to say "except FE-G1 (DL11)". Add a DL11 row covering FE-G1, its reason (UJ-ON reads stage A's value for the life of the deploy) and the interim order.
+5. **§L.10**: add two rehearsal cases:
+   - FE-G1 refusing with followup_enabled off: NO-GO, nothing changed, the command alone on its line, then run as printed, then GO. Not refusing when the setting is unreadable.
+   - A plain deploy after a rollback, with no --redeploy, whose PASSED --after-only offers the turn-back-on command.
+
+==== readings minor UJ2-G3 REAL | lines 8061-8069 (uj_on: ga/gs and the 'not judged for this deploy' note); 16001-16005 (check it, uj_judgea
+S: An --after-only of a deploy whose stage A held every gate condition (followup_enabled on, ug=1, hours=168). After the deploy the owner changed followup_max_age_hours to 336. uj_on reaches the stage-A branch with gs empty and ga holding only 'the age limit differs'. It prints 'UJ-ON not judged for this deploy — its gate did not hold at stage A: the age limit differs — 168 h at stage A, 336 h now. F3 may be running now, but this deploy's stage A reading is fixed in <STATE> …, so UJ-ON cannot judge F3 for this deploy: F3 stays unproven … A judged UJ-ON needs a rollback and then a --redeploy … — or followup_max_age_hours set back to stage A's 168 h'. The note says F3 cannot be judged for this deploy, then names a step that lets the very next --after-only judge it. It also gives the wrong cause: stage A's reading held; the live limit is what changed. In the same log, the summary's 'check it' (uj_judgeable reads only UJ_A) says 'UJ-ON judges F3 on it'. The owner is led towards a rollback and --redeploy that are not needed, and the run ends PASSED with §F's 'on chase'.
+V: The finding is real. Fix round 1 introduced it: in run1 the age-limit difference went into g, and its note said "another limit to do it by". Fix round 1 moved it into ga (diff: `-|| g=...` became `+|| ga=...`), and fix1-notes.md G3 records "the same note, plus '— or followup_max_age_hours set back…'".
+
+How it happens, in deploy106-fx1-run1.sh:
+- Line 8060: alone stays empty, because UJ_A is a whole reading.
+- Lines 8055-8058: g stays empty, because en=on, ug=1 and hours=336 all hold now.
+- Line 8061: gs=$(uj_gate_a "$a") is empty. uj_gate_a (7935-7941) finds en=on, ug=1 and hours=168, so it prints nothing.
+- Lines 8062-8063: 168 ≠ 336 and neither value is misread, so ga=" the age limit differs — 168 h at stage A, 336 h now;".
+- Line 8066 is skipped because g is empty. Line 8069 is taken because ga is non-empty.
+
+I ran the real kv, uj_ok, uj_gate_ok, uj_gate_a and uj_on on stdin with stubs, UJ_A hours=168 and now hours=336. It printed exactly: "UJ-ON not judged for this deploy — its gate did not hold at stage A: the age limit differs — 168 h at stage A, 336 h now. … so UJ-ON cannot judge F3 for this deploy: F3 stays unproven … A judged UJ-ON needs a rollback and then a --redeploy, its stage A taken with the gate holding — or followup_max_age_hours set back to stage A's 168 h; a note, which holds back nothing".
+
+That note is wrong in three ways:
+1. It says the gate did not hold at stage A. It did hold: uj_gate_a "$UJ_A" is empty, and what changed is the live limit.
+2. It says UJ-ON "cannot judge F3 for this deploy: F3 stays unproven". In the same stub, the next --after-only with hours back at 168 passes the gate and reaches a verdict (it printed a judged FAIL against the stub's stale rows). So F3 can be judged for this deploy without a rollback.
+3. It lists a rollback and
+FIX: Make all edits in the derivation, not in the script.
+
+1. partUJ.py, uj_on, just before the ga note (partUJ.py:500; script line 8069). Add a branch of its own for the case where stage A held and only the limit differs:
+   `if [ -n "$ga" ] && [ -z "$gs" ]; then note "UJ-ON not judged — followup_max_age_hours differs from stage A's ($(kv "$a" hours) h at stage A, $(kv "$o" hours) h now); stage A's gate held. UJ-ON judges F3 only by the limit stage A read: set followup_max_age_hours back to $(kv "$a" hours) h and run --after-only again to have F3 judged, or roll back and then --redeploy, which takes a new stage A at the new limit; until then F3 is unproven and the steps that wait for it (6, 11, 12) would follow without that proof; a note, which holds back nothing"; return 0; fi`
+   Then remove the now-dead `$( [ -n "$gs" ] || echo " — or followup_max_age_hours set back …")` clause from the existing stage-A note, so that note is only reached when gs is non-empty.
+   Keep the 'now' note (g non-empty, line 8066) unchanged: it already appends ga.
+
+2. partUJ.py's own text assertion (line 813). Keep the stage-A note's pin and add one for the new limit-only note.
+
+3. partZ.py. Re-pin G_A (line 129) to the edited stage-A note and add the limit-only note to Z20's anchors. Add one weakened copy: the limit-only branch saying "cannot judge F3 for this deploy". That copy must be refused.
+
+4. Optional, partH.py check-it (script line 16001). In --after-only, uj_judgeable reads only UJ_A, so this log's "UJ-ON judges F3 on it" is right only once the live limit equals stage A's. A clause such as "(while followup_max_age_hours is stage A's <A> h)" would align it with the note.
+
+==== readings minor L8-1-pt1-unbuilt REAL | lines 7975-7981 (uj_u4: the ug=0 capitals note and the hours=misread wording); 8239-8240 (uj_stage then uj
+S: Stage A of a deploy reads followup_enabled on (FE-G1 passes) but followup_max_age_hours is not a positive number (hours=misread), or StaffJobsGate::applies is false (ug=0). U4 prints the plain line 'followup_max_age_hours not a positive number — F2 and F3 inactive' (or, for ug=0, its existing capitals line), and DEPLOY is asked. Nothing before DEPLOY says that UJ_A now fixes this for the life of the deploy, so UJ-ON can never judge F3 and §F's claim steps would later follow unproven. Only the post-deploy summary's 'check it' (16004) and later --after-only notes say so, after the deploy has already been typed. This is round-1 finding L8-1, fix point 1: 'Add the same sentence, merged in, to the existing ug=0 capitals note and to the hours=misread case'. It was not built.
+V: I could not refute it. The finding reads the code correctly, the scenario can happen on the server, and it is a round-1 point that was left unbuilt. It is minor.
+
+1. uj_u4 (7975-7982) is byte-identical to run1's. When stage A reads ug=0, it prints only the existing capitals line, "U4 STAFFJOBSGATE::APPLIES IS FALSE … F1 TO F5 ARE INERT HERE …". When it reads hours=misread, it prints only an inline phrase inside the long U4 note: "not a positive number — F2 and F3 inactive: nothing is expired on a misread". Neither says that this stage-A value goes into the state file (13761, before DEPLOY at 13823) and fixes UJ-ON's gate for the life of the deploy.
+
+2. uj_fe_g1 (7999-8010; called at 8240, right after uj_stage at 8239) refuses only when the reading is whole and en=off. So for ug=0 or hours=misread with en=on, stage A passes on to DEPLOY. --check (13817-13818) does the same and stops at GO.
+
+3. uj_gate_a and uj_judgeable (7935-7942) are used only at 8061 (uj_on, --after-only) and 16001-16004 (the summary's "check it"). Both come after DEPLOY. No other line before DEPLOY says this; the wording "life of the deploy" appears only in FE-G1's stop text and in comments. What the owner learns afterwards: uj_on's ga branch at 8069, and the summary at 16004. For both causes the only remedy they name is a rollback then a --redeploy. The age-limit way out at 8069 is offered only when gs is empty, so never for a stage-A misread. Answering anything but DEPLOY and fixing the setting first would have cost nothing.
+
+4. fix1-notes.md §1 says the capitals merges for these two cases were not built "because DL11 replaces them". DL11, as the task states it, covers only followup_enabled off, so it does not replace them. The fixers also mixed up two different things:
+   - Widening the refusal is
+FIX: partUJ, uj_u4 only. The note stays a note (DL2), and no refusal or exit status changes.
+
+(a) Ug=0: append a sentence to the existing capitals note (partUJ.py line 407). Suggested wording: "— AND UJ-ON READS THIS STAGE-A VALUE FROM THE STATE FILE FOR THE LIFE OF THE DEPLOY, SO F3 WILL NOT BE JUDGED FOR IT AND ITS --AFTER-ONLY CAN READ PASSED WITHOUT THAT PROOF; AFTERWARDS A JUDGED UJ-ON NEEDS A ROLLBACK AND A --REDEPLOY. TO HAVE IT JUDGED, DO NOT DEPLOY ON THIS READING: FIX THE CAUSE AND RUN THIS AGAIN."
+
+(b) Hours=misread: add the same sentence as a new capitals note, behind the guard [ "$(kv "$o" hours)" != "misread" ] ||. The line would start "U4 FOLLOWUP_MAX_AGE_HOURS IS NOT A POSITIVE NUMBER AT STAGE A — …".
+
+Word the remedy "do not deploy on this reading" rather than "answer anything but DEPLOY". uj_u4 also runs in --check and --redeploy, and --check never asks DEPLOY.
+
+partZ: add an anchor, under Z27 or a new code, that requires both sentences. Add a weakened copy that drops each sentence, so the anchor is shown to catch the removal.
+
+If the owner instead widens FE-G1 to these two causes, the condition in partUJ's uj_fe_g1 changes, together with partZ's Z18 and FE-G1's stop text. That is the owner's call, not this fix.
+
+==== texts minor FX1-1 (L8-1 point 1, left) REAL | lines 7975-7981 (uj_u4: ug=0 capitals at 7979 say only 'F1 TO F5 ARE INERT'; hours=misread is a lower-case
+S: Stage A of a deploy reads U4 with followup_max_age_hours not a positive number (hours=misread), or with StaffJobsGate::applies false (ug=0), and followup_enabled on. FE-G1 passes, as DL11 intends. Before DEPLOY is asked, the operator sees only the U4 note ('not a positive number — F2 and F3 inactive') or the existing ug=0 capitals. Neither says that UJ_A is fixed for the life of the deploy, that UJ-ON will therefore never judge F3, or that answering anything but DEPLOY and fixing the setting first is the way to have it judged. DEPLOY is typed and the copy is made. Only then does the summary's check it (16004) say 'UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY … a judged UJ-ON needs a rollback, then a --redeploy'. Every later PASSED --after-only then prints §F step 2, on chase. With hours misread, F2 is inactive too, so this is the claim-mode-over-a-stale-backlog case.
+V: I could not refute it. Round 1 left part of L8-1's fix point 1 unbuilt, and the reason given for leaving it (DL11 replaces it) holds for the en=off case only.
+
+How the fixed script runs:
+- **uj_u4 (7975-7981) is byte-identical to run1** (I diffed the function).
+  - For ug=0 it prints only the existing capitals, "F1 TO F5 ARE INERT HERE …".
+  - For hours=misread it prints only the lower-case clause inside the U4 note, "not a positive number — F2 and F3 inactive" (7978).
+  - Neither says that stage A's reading is fixed for the life of the deploy.
+- **FE-G1 refuses on en=off only.** uj_fe_g1 (7999-8010), called at 8240, returns at once unless en=off. So ug=0 or hours=misread with en=on passes stage A, and the DEPLOY prompt (13823) follows.
+- **UJ_A keeps the bad reading.** It is written to the state file at 13761, before that prompt.
+- **uj_gate_a (7935-7941) names both conditions.** So uj_judgeable is false, and uj_on (8061-8069) takes the "not judged for this deploy … needs a rollback and then a --redeploy" branch on every later --after-only. That branch is a note, so PASSED and §F's on chase still follow.
+- **The only runtime warning comes after the copy.** The summary's check-it text at 16001-16004 says "UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY … needs a rollback, then a --redeploy".
+- **--check never prints it.** Its summary (15860-15897) stops before the check-it block, and the GO it prints is followed by the deploy command.
+- The only pre-deploy statement of the rule is a source comment (header, 131-133), which the run does not print.
+
+**Plausibility.** staleBefore() returns null only for followup_max_age_hours ≤ 0 or non-numeric (the default is 336 when the key is absent). StaffJobsGate::applies is false whenever the copy's profile does not resolve to Uganda. Both a
+FIX: Edit partUJ.py only: the uj_u4 r''' block, around lines 402-410. Leave the en=off line as it is, since FE-G1 handles that case. Keep both additions as note calls, never stop, per DL2.
+
+1. **The ug=0 line.** Extend the existing capitals note with: "— AND UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY: STAGE A'S READING IS KEPT IN THE STATE FILE FOR ITS WHOLE LIFE, SO STEPS 6, 11 AND 12 WOULD FOLLOW UNPROVEN. TO HAVE IT JUDGED, FIND WHY IT IS FALSE AND CORRECT IT BEFORE THE DEPLOY$( [ -n "$CHECK_ONLY" ] || echo " — ANSWER ANYTHING BUT DEPLOY BELOW"), THEN RUN THIS AGAIN".
+
+2. **A new line for hours=misread.** Add:
+   `[ "$h" != "misread" ] || note "U4 FOLLOWUP_MAX_AGE_HOURS IS NOT A POSITIVE NUMBER — F2 AND F3 DO NOTHING, AND UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY: STAGE A'S READING IS KEPT IN THE STATE FILE FOR ITS WHOLE LIFE, SO STEPS 6, 11 AND 12 WOULD FOLLOW UNPROVEN. TO HAVE IT JUDGED, CORRECT THE SETTING BEFORE THE DEPLOY$( [ -n "$CHECK_ONLY" ] || echo " — ANSWER ANYTHING BUT DEPLOY BELOW"), THEN RUN THIS AGAIN"`
+
+   Make the "ANSWER ANYTHING BUT DEPLOY" part depend on the mode, as shown, because a --check never asks for DEPLOY.
+
+3. **Re-derive and recheck.**
+   - Update partUJ's expected sha256 and the chain's line count.
+   - Run the stub checks with ug=0, hours=misread, both, and a full on-reading. The last must print no new note.
+   - Whether FE-G1 should also refuse on these two cases remains the owner's call (fix1-notes item 1). These notes do not decide it.
+
+==== texts minor FX1-2 (check it, else branch) REAL | lines 16004 (the sentence ends 'a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the
+S: A deploy, or an --after-only, whose UJ_A reads ug=0 or hours=misread. Stub-run on stdin with UJ_A='… ug=0 en=on hours=misread', the summary prints '…; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate:' and, on the very next line, the --after-only command. The colon after a clause naming a rollback and a --redeploy introduces a command that is neither. An operator reading 'needs X:' followed by a command is invited to take that command as the way to X. The run it actually introduces (again after a close pass) is 40 words back, before the long 'but UJ-ON WILL NOT JUDGE…' interjection.
+V: Confirmed. This is a minor wording defect added in fix round 1. The else branch at lines 16003–16004 is new: deploy106-run1.sh had only the line that is now 16002. The else branch can run on the server. FE-G1 (uj_fe_g1, lines 7999–8010) refuses only when stage A reads en=off. uj_u4 (lines 7975–7980) only notes ug!=1 and hours=misread and refuses neither. So a deploy with StaffJobsGate false, or with an age limit that is not a positive number, passes stage A. Line 13761 writes UJ_A to the state file, and the deploy's summary prints this branch. So does every --after-only, which reads UJ_A back at line 8020. uj_judgeable (line 7942) is then false, because uj_gate_a returns a reason.
+
+I ran the code on stdin with stubs: kv, lines 7922–7942, UJ_A='uj=read at=1 ug=0 en=on hours=misread', and lines 16001–16006. The output is '…its gate did not hold at stage A (StaffJobsGate::applies did not read Uganda at stage A; followup_max_age_hours was not a positive number at stage A), …; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate:'. The next line printed is '      cd … && bash scripts/deploy-5.18.106.sh --after-only …'. That command comes from the echo at line 16006, which both branches share.
+
+The colon ends a clause about a rollback and a --redeploy. Grammatically it presents the next command as the way to get them, but that command is the second --after-only. The clause it really belongs to ('again once a close pass has run…, to read the closes') is about 60 words earlier, before the capitals interjection. The if branch at line 16002 ends its own sentence with the colon correctly. The harm is small: the printed command visibly says --after-only, is read-only, and no rollback command is printed (which is correct). Still, under this review's criter
+FIX: In partH.py at line 540, change the else-branch text so that the rollback clause ends with a full stop. Then add a new clause that introduces the --after-only and ends with the colon. For example, change '…; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate:' to '…; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate. This --after-only still reads the closes, its own command, alone:'. Leave the echo of $AFTER_CMD at line 16006, which both branches share, unchanged, and print no rollback or --redeploy command here. Re-derive the script and check that the else text ends with the new colon clause.
+
+==== texts minor FX1-3 (deploy again: the interim order not printed) REAL | lines 16057-16061 (rollback summary, 'deploy again', edited by round 1 to add FE-G1)
+S: After a typed rollback, 5.18.105 serves. The owner has paused the enquiry follow-ups the way the 18 Nov interim did (followup_enabled 0) and has a claim switch on: rb_pre106 printed its capitals notice, and DL8 accepts claim mode until it is turned off. The rollback's own summary then tells the operator to deploy again 'with every claim switch off (CS-G1 refuses otherwise) and followup_enabled on (FE-G1 refuses otherwise)'. It gives no order. Turning followup_enabled on first, while the claim switch is still on, is exactly root docs/75 §F's hazard under 5.18.105, which the header now calls binding: 'THEN followup_enabled on … never the reverse'. Of the texts that name FE-G1, this is the only one printed while 5.18.105 serves, which is when the order matters.
+V: The finding is real but minor. The text was confirmed by reading lines 15996, 16052 and 16057–16061 of deploy106-fx1-run1.sh, and the diff against deploy106-run1.sh (old line 15936) shows fix round 1 added it.
+
+The 'deploy again' lines sit in the else branch of `if [ "$MODE" != "rollback" ]` (15996 / 16052), so they print only in a rollback run, when 5.18.105 serves again. They name two changes joined by "and": "with every claim switch off (CS-G1 refuses otherwise) and followup_enabled on (FE-G1 refuses otherwise)". There is no "first", "then" or "never the reverse".
+
+Three other places do state the order:
+- The header, 509–514: "turn step 6 off first … THEN followup_enabled on … never the reverse — followup_enabled on while a claim switch is on is root docs/75 §F's hazard under 5.18.105". The header is a comment and is never printed.
+- FE-G1's stop at 8010: "Turn step 6 off first if it is on (CS-G1), then turn followup_enabled on".
+- DL11: step 6 off, THEN followup_enabled on.
+
+Root docs/75 §F gives the hazard. Under 5.18.105, claim mode closes the refused drafts after three tries each, then sends the stale backlog from the sales number.
+
+The scenario can happen on the server. rb_pre106 (8878–8897) only prints a capitals notice for a claim switch that is on and never refuses, so a rollback can leave step 6 on under 5.18.105. The owner's own precedent for that state (18 Nov, DL11) is to set followup_enabled 0 and keep chase on. That leaves both changes needed before the redeploy, and this printed line is the script's instruction for that moment.
+
+CS-G1 and FE-G1 cannot protect that window, because they run only when the script is started. If the owner turns followup_enabled on first, FE-G1 then reads it on and stays silent. CS-G1 refuses only after the hazard has been l
+FIX: The fix goes in partH.py, in the doc.sub(..., why="summary: deploy again") at about lines 589–594. Its replacement text should state the order explicitly, for example:
+
+  echo "  deploy again      only once the cause of the rollback is understood, with every claim switch off first (CS-G1"
+  echo "                    refuses otherwise), THEN followup_enabled on (FE-G1 refuses otherwise) — each its own command,"
+  echo "                    alone, never the reverse: under $BASELINE_VERSION followup_enabled on while a claim switch is on is"
+  echo "                    root docs/75 §F's hazard (claim mode closes the refused drafts, then sends the stale backlog);"
+  echo "                    then --redeploy, its own command, alone; where this rollback set followup_auto_send off it stays"
+  echo "                    off, and that deploy's PASSED --after-only prints your own command to turn it back on:"
+  echo "      $REDEPLOY_CMD"
+
+Keep $REDEPLOY_CMD alone on its own line, as now, and print no switch command here.
+
+Optionally, add a partH check that the 'deploy again' block (between `echo "  deploy again` and `echo "      $REDEPLOY_CMD"`) contains "THEN followup_enabled on" and "never the reverse". Without that check, a later edit could drop the order unnoticed.
+
+==== sweep minor L8-1-residual REAL | lines 7975-7980 (uj_u4: hours=misread gets only a lower-case U4 note; ug=0 has its capitals note but no UJ
+S: Stage A reads ug=0 (StaffJobsGate false), or followup_max_age_hours not a positive number (hours=misread), with followup_enabled on. FE-G1 does not refuse, because it checks only en. Stage A then prints no warning that this deploy's UJ-ON can never judge F3. The --check reads GO and the deploy PASSES. Only after the deploy does 'check it' say 'UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY'. Every later --after-only then gives the gate note and no verdict, ends PASSED (exit 0), and §F prints step 2 'on chase' (and the other steps that wait for F3) without F3 proof. A gate measured false now (followup_enabled turned off after the deploy, ug=0 now, or hours misread now) does the same. With ug=0, F1–F5 are inert, and 'on chase' puts the enquiry sends into claim mode, which is the §F hazard L8-1 named.
+V: Real and minor, but only one half of it holds: the stage-A warning is missing. The §F half is not a defect against §L as written.
+
+1. **Point 1 of round-1 L8-1 is still unbuilt for StaffJobsGate false and a misread age limit.** I checked this by reading the code and by a stub run.
+   - In fx1-run1.sh, uj_u4 (7975-7980) is unchanged for both cases. partUJ.py lines 402-409 match it.
+   - With ug=0, stage A prints only the capitals "F1 TO F5 ARE INERT" note. With hours=misread, it prints only the lower-case "F2 and F3 inactive" text. Neither says UJ-ON will not judge F3 for this deploy.
+   - uj_fe_g1 (7999) returns 0 unless en=off, so stage A does not refuse.
+   - Stub run on stdin with the real functions, for "ug=0 en=on hours=168" and "ug=1 en=on hours=misread": FE-G1 rc=0, uj_judgeable rc=1, and no UJ-ON sentence.
+   - So --check ends "GO — stage A holds" (15892) and the deploy is asked and run.
+   - The owner first learns that UJ-ON cannot judge F3 after DEPLOY, in "check it" (16001-16004). The only remedy then is a rollback plus a --redeploy.
+   - In every later --after-only, uj_on takes the ga branch (8061-8070): a note, with no FAIL and no NOT YET, so the run reads PASSED.
+   - Round 1 rated L8-1 REAL. Its point 1 asked for the same capitals sentence, merged into the ug=0 note and the hours=misread case.
+   - The fix notes (item 1) say these merges are "not built, because DL11 replaces them". That reason does not hold. DL11 covers only followup_enabled off and says nothing about ug or hours. A capitals note is still a note under DL2, so it needs no owner decision. Only turning it into a refusal would.
+   - Both cases are unlikely on this server: the gate reads Uganda unless the profile cannot be resolved, and the limit defaults to 336. They can still happen, though,
+FIX: 1. **partUJ.py, uj_u4** (partUJ 402-409; script 7975-7980). After the StaffJobsGate capitals note, add a capitals note for the ug=0 and hours=misread cases. Leave en=off to FE-G1, which stops right after with its own text:
+
+   ```
+   [ "$(kv "$o" en)" = "off" ] || [ -z "$(uj_gate_a "$o")" ] || note "U4 UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY:$(uj_gate_a "$o" | sed 's/;$//') — STAGE A'S READING IS KEPT IN THE STATE FILE FOR THE LIFE OF THE DEPLOY, SO F3 WOULD STAY UNPROVEN AND THE STEPS THAT WAIT FOR IT (6, 11, 12) WOULD FOLLOW WITHOUT THAT PROOF. TO HAVE IT JUDGED: ANSWER ANYTHING BUT DEPLOY, PUT THE SETTING RIGHT, AND RUN --check AGAIN"
+   ```
+
+   - uj_gate_a is already defined above (7935), and uj_u4 only receives a whole reading.
+   - Add partUJ need() assertions for the new sentence. Add one stub case per condition (ug=0; hours=misread) and a control: en=on, ug=1 and a numeric limit print no such note.
+   - partZ needs a change only if it pins uj_u4's body. It does not today.
+
+2. **Optional, partH.** In the --check GO branch (15892), when `uj_judgeable` fails, add a clause pointing to U4's note, so "stage A holds" does not read as a full all-clear.
+
+3. **docs/75.**
+   - §L.4 U4: add the new capitals sentence. FE-G1 remains the only refusal.
+   - §L.9: record the owner's answer on fix-notes item 1, which has two parts: whether FE-G1 should also refuse on ug=0 and hours=misread, and whether §F (partH, 16083) should withhold step 2 after a UJ-ON gate note (an overrule of §L.5 and §L.8 in DL3's favour).
+   - Record both before the rehearsal. If §F is to withhold step 2, partH's guard and the rehearsal's "gate note, then PASSED" case must change together.
+
+==== sweep minor UJ-2-limit-text REAL | lines 8061-8070 (uj_on: ga gets 'the age limit differs' while gs is empty, then the G_A note)
+S: Stage A reads en=on, ug=1, hours=168. After the deploy the owner changes followup_max_age_hours to 336. The next --after-only prints: 'UJ-ON not judged for this deploy — its gate did not hold at stage A: the age limit differs — 168 h at stage A, 336 h now … so UJ-ON cannot judge F3 for this deploy: F3 stays unproven … A judged UJ-ON needs a rollback and then a --redeploy … — or followup_max_age_hours set back to stage A's 168 h'. Each of the first two clauses is wrong here. The gate held at stage A, and F3 can be judged for this deploy, because setting the limit back makes the next --after-only judge it, as the note's own tail says. The deploy's 'check it' also told the owner 'UJ-ON judges F3 on it', since uj_judgeable ignores the limit.
+V: Confirmed by reading lines 8053-8070 and by a stub run on stdin of the extracted kv (3019), uj_ok (7922), uj_gate_ok (7925-7929), uj_gate_a/uj_judgeable (7935-7942) and uj_on. Inputs: UJ_A 'ug=1 en=on hours=168', this run 'ug=1 en=on hours=336'.
+
+How the code reaches the wrong note:
+- g stays empty, because every condition holds now.
+- alone stays empty, because UJ_A is a whole reading.
+- gs = uj_gate_a(UJ_A) is empty, because every condition held at stage A.
+- ga then gets only ' the age limit differs — 168 h at stage A, 336 h now;' (line 8061).
+- So line 8068 prints, verbatim: 'UJ-ON not judged for this deploy — its gate did not hold at stage A: the age limit differs — 168 h at stage A, 336 h now. … so UJ-ON cannot judge F3 for this deploy: F3 stays unproven, and the steps that wait for it (6, 11, 12) would follow without that proof. A judged UJ-ON needs a rollback and then a --redeploy, its stage A taken with the gate holding — or followup_max_age_hours set back to stage A's 168 h; a note, which holds back nothing'.
+- A control with ug=0 at stage A (non-empty gs) prints the same note without the 'or set back' tail. So the limit-only case differs only by that appended clause, as the finding says.
+
+Why the text is wrong:
+- Stage A's own gate held. 'Same at both' compares two moments, so 'did not hold at stage A' is false.
+- 'Cannot judge F3 for this deploy: F3 stays unproven … would follow without that proof' is also false. Once followup_max_age_hours is back at 168, the next --after-only meets the whole gate (en on, ug 1, 168 = 168) and judges F3, as the note's own tail admits.
+- The printed text therefore contradicts itself, and it puts a rollback plus --redeploy first as what a judged UJ-ON 'needs'.
+
+Fix round 1 introduced this. Before it, the limit clause went into
+FIX: partUJ.py, uj_on (partUJ.py:494-500, script lines 8058-8068):
+
+1. Keep the limit clause separate from ga. Set lim=' the age limit differs — <A> h at stage A, <now> h now;' instead of appending it to ga.
+2. When gs is non-empty, keep the existing stage-A note with ga="$gs$lim". Drop the '— or followup_max_age_hours set back …' tail there: setting the limit back alone cannot help in that case.
+3. When gs is empty and lim is set, print a note of its own and return 0, for example: "UJ-ON not judged on this run — the age limit differs: 168 h at stage A, 336 h now, so F3's closes may have been made under another limit than stage A's. Set followup_max_age_hours back to 168 h, wait for a close pass (followup_close runs every 10 minutes), then run --after-only again; a note, which holds back nothing".
+   - The 'wait for a close pass' clause is needed. Without it, T can still be a pass that ran under 336 h, and with no expired closes since the copy, the SELECT at T under 168 h could read as a false FAIL.
+4. Update the pins that name this text:
+   - partUJ.py:813: the doc.must string and count, and add one for the new note.
+   - partZ.py G_A (line 129) and the Z20 sequence (line 413): G_CONDS + (G_NOW, G_LIM, G_A, …), or whatever order is chosen. Z20 must still assert that nothing of stage A goes into g.
+5. Re-run the derivation twice (byte-identical), then bash -n.
+

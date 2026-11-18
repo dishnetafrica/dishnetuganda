@@ -439,13 +439,14 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
   as_show "$(as_owner_text 0 "$o")"
 }
 ''')
-    p.append(cw("as_rb_last — the latest rollback record (root docs/75 §L.8): among this folder's kept state-*.env.prev-* "
+    p.append(cw("as_rb_last — the latest rollback record (root docs/75 §L.8): among this deploy's own state file (where "
+                "a V1 rollback records its own; review 2), this folder's kept state-*.env.prev-* "
                 "files and rollback-state-*.env, the one with the newest RB_COPY_AT (A14 reads them so); prints its AS_RB1 "
                 "(\"written\", a cause, or \"none\" when that record carries none) and that RB_COPY_AT, a space between, or "
                 "nothing when no rollback is on record."))
     p.append(r'''as_rb_last() {
   local f v t="" w=""
-  for f in "$STATE".prev-* "$OUT"/rollback-state-*.env; do
+  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do
     [ -f "$f" ] || continue
     v="$(sed -n 's/^RB_COPY_AT=//p' "$f" 2>/dev/null | tail -n1)"
     case "$v" in ''|*[!0-9]*) continue ;; esac
@@ -461,11 +462,13 @@ as_cmd_ok() { case "$1" in "as=read "*) case ",$(kv "$1" pre)," in *,code,*|*,fi
                 "state file's COPY_AT later than that rollback's RB_COPY_AT, whether --redeploy was typed or not (review "
                 "L8-4) — that finds it off reads that rollback's record and, only when the record carries AS_RB1=written, "
                 "says so and prints the owner's own command to turn it back on (--value 1), alone, as the owner's choice. A "
-                "rollback whose copy came after this deploy's (one that left 5.18.106 serving) offers nothing here: its own "
+                "rollback whose copy came after this deploy's (one that left 5.18.106 serving), or a V1 rollback of this "
+                "deploy (its AS_RB1 in this state file, its copy made or not; review 2), offers nothing here: its own "
                 "stop said what it left. Prints nothing otherwise; never runs it."))
     p.append(r'''as_back_on() {
   local o c r t
   [ "$MODE" = "after" ] || return 0
+  ! grep -q '^AS_RB1=' "$STATE" 2>/dev/null || return 0   # a V1 rollback of this deploy (review 2)
   c="$(sed -n 's/^COPY_AT=//p' "$STATE" 2>/dev/null | tail -n1)"
   r="$(as_rb_last)"; t="${r##* }"
   case "$c" in ''|*[!0-9]*) return 0 ;; esac
@@ -683,7 +686,7 @@ PHP
         as_show "$(as_owner_text 0 "$o")"
       else
         case "${AS_RB1:-}" in
-          not-written:*) note "AS-RB2 followup_auto_send reads on under $BASELINE_VERSION — AS-RB1 did not write it (${AS_RB1_SAY:-?}; its FAIL above): your own command is printed $( [ "$MODE" = "rollback" ] && echo "after the verdict" || echo "in the stop message below")" ;;
+          not-written:*) note "AS-RB2 followup_auto_send reads on under $BASELINE_VERSION — AS-RB1 did not write it (${AS_RB1_SAY:-?}; its FAIL above): your own command, where its cause allows one, is printed $( [ "$MODE" = "rollback" ] && echo "after the verdict" || echo "in the stop message below")" ;;
           *) bad "AS-RB2 FOLLOWUP_AUTO_SEND READS ON UNDER $BASELINE_VERSION AFTER THE ROLLBACK (AS-RB1: ${AS_RB1_SAY:-not run}) — IT APPROVES AND SENDS AUTOMATICALLY WHILE IT DOES ($(as_places_say "$o"))" ;;
         esac
       fi ;;
@@ -945,7 +948,7 @@ def apply(doc, ctx):
     for o, n in rb_texts:
         doc.sub(o, n, why="the RB section's texts")
     doc.line("note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved:",
-             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php — and $( case \"${AS_RB1:-}\" in written|written-check:*) echo \"nothing else moved but followup_auto_send: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)\" ;; unknown:*) echo \"nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no migration; whether it wrote followup_auto_send '0' before the put-back is not known (AS-RB1: ${AS_RB1_SAY:-?}; AS-RB2 above reads it)\" ;; *) echo \"nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote no key (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7)\" ;; esac ) — every other step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds (its tests) are on disk (deploy-hybrid.sh never deletes; counted above), named by nothing $BASELINE_COMMIT tracks (QC-RB1). ECO Bank, the uCRM catalogue, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
+             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php — and $( case \"${AS_RB1:-}\" in written) echo \"nothing else moved but followup_auto_send: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote one key before the put-back, followup_auto_send '0' (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)\" ;; written-check:*) echo \"the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote followup_auto_send '0' before the put-back through the plugin's own writer — but its read-back did not hold, so whether anything else moved is not shown: AS-RB1's FAIL above names what differed (AS-RB1: ${AS_RB1_SAY:-?}; root docs/75 §L.7)\" ;; unknown:*) echo \"nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no migration; whether it wrote followup_auto_send '0' before the put-back is not known (AS-RB1: ${AS_RB1_SAY:-?}; AS-RB2 above reads it)\" ;; *) echo \"nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, and wrote no key (AS-RB1: ${AS_RB1_SAY:-this run put nothing back}; root docs/75 §L.7)\" ;; esac ) — every other step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one), and so do the drafts it set expired. $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds (its tests) are on disk (deploy-hybrid.sh never deletes; counted above), named by nothing $BASELINE_COMMIT tracks (QC-RB1). ECO Bank, the uCRM catalogue, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
              why="the RB note")
 
     # ── R5: AS-RB1's command after the verdict of a typed rollback ──
@@ -987,7 +990,12 @@ def apply(doc, ctx):
                  ("WHETHER AS-RB1 SET followup_auto_send OFF IS NOT KNOWN (", 2), ("AS-RB1 DID NOT SET followup_auto_send OFF (", 2),
                  ("followup_auto_send reads off now, through $BASELINE_VERSION's code (AS-RB1: ", 1),
                  ("printf '%s %s' \"${v:-none}\" \"$t\"", 1), ('  [ "$t" -lt "$c" ] || return 0\n', 1),
-                 ('written|written-check:*) echo "nothing else moved but followup_auto_send: ', 1),
+                 ('  for f in "$STATE" "$STATE".prev-* "$OUT"/rollback-state-*.env; do\n', 1),
+                 ("  ! grep -q '^AS_RB1=' \"$STATE\" 2>/dev/null || return 0   # a V1 rollback of this deploy", 1),
+                 ('written) echo "nothing else moved but followup_auto_send: ', 1),
+                 ('written-check:*) echo "the rollback ran no switch tool and no off-hook, applied or removed no migration, '
+                  'and wrote followup_auto_send \'0\' before the put-back through the plugin\'s own writer — but its '
+                  'read-back did not hold, so whether anything else moved is not shown', 1),
                  ('unknown:*) echo "nothing else moved: the rollback ran no switch tool and no off-hook and applied or removed no '
                   'migration; whether it wrote followup_auto_send \'0\' before the put-back is not known', 1),
                  ('*) echo "nothing else moved: the rollback ran no switch tool and no off-hook, applied or removed no migration, '

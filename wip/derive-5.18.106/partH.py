@@ -537,7 +537,7 @@ def apply(doc, ctx):
         '  if uj_judgeable; then   # 5.18.106 (review L8-1): stage A\'s reading (UJ_A) lets UJ-ON judge F3 for this deploy\n'
         '  echo "                    again once a close pass has run since the copy (followup_close runs every 10 minutes) — UJ-ON judges F3 on it, and until one has it reads NOT YET (exit status 3) and says when to run it again:"\n'
         '  else\n'
-        '  echo "                    again once a close pass has run since the copy (followup_close runs every 10 minutes), to read the closes — but UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY: its gate did not hold at stage A ($(uj_gate_a "$UJ_A" | sed -e \'s/^ //\' -e \'s/;$//\')), and stage A\'s reading is fixed in the deploy\'s state file, so F3 stays unproven and the steps that wait for it (6, 11, 12) would follow without that proof; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate:"\n'
+        '  echo "                    again once a close pass has run since the copy (followup_close runs every 10 minutes), to read the closes — but UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY: its gate did not hold at stage A ($(uj_gate_a "$UJ_A" | sed -e \'s/^ //\' -e \'s/;$//\')), and stage A\'s reading is fixed in the deploy\'s state file, so F3 stays unproven and the steps that wait for it (6, 11, 12) would follow without that proof; a judged UJ-ON needs a rollback, then a --redeploy whose stage A holds the gate. This --after-only still reads the closes, its own command, alone:"\n'
         '  fi\n'
         '  echo "      $AFTER_CMD"\n'
         '  echo "                    and the next day, Monday to Saturday, after 15:00 UTC and before 17:00 UTC — inside the sender\'s window (08:00–20:00 Kampala), where F1\'s closes, the sends and the front moving show, and after the evening WhatsApp (18:00 Kampala) has run on the new code$( [ -n "$F_QORG" ] && echo " — the uCRM catalogue\'s switch is said as found (QC-ON1: ok while it is on, a note while it is off)"):"\n'
@@ -587,11 +587,20 @@ def apply(doc, ctx):
         '  echo "                    A step behaves under $EXPECTED_VERSION as under $BASELINE_VERSION but for the enquiry follow-ups (F1–F5, root docs/75 §C)."',
         why="summary: your steps")
     doc.sub('  echo "  deploy again      only once the cause of the rollback is understood — with --redeploy, its own command, alone:"\n',
-            '  echo "  deploy again      only once the cause of the rollback is understood, with every claim switch off (CS-G1 refuses"\n'
-            '  echo "                    otherwise) and followup_enabled on (FE-G1 refuses otherwise) — with --redeploy, its own command,"\n'
+            '  echo "  deploy again      only once the cause of the rollback is understood. First every claim switch off (CS-G1"\n'
+            '  echo "                    refuses otherwise), THEN followup_enabled on (FE-G1 refuses otherwise) — each its own"\n'
+            '  echo "                    command, alone, never the reverse: under $BASELINE_VERSION, followup_enabled on while a"\n'
+            '  echo "                    claim switch is on is root docs/75 §F\'s hazard (claim mode closes the refused drafts"\n'
+            '  echo "                    after three tries each, then sends the stale backlog). Then --redeploy, its own command,"\n'
             '  echo "                    alone; where this rollback set followup_auto_send off it stays off, and that deploy\'s PASSED"\n'
             '  echo "                    --after-only prints your own command to turn it back on:"\n',
             why="summary: deploy again")
+    da = doc.t[doc.t.index('  echo "  deploy again      '):]
+    da = da[:da.index('  echo "      $REDEPLOY_CMD"')]
+    if not (da.index("First every claim switch off") < da.index("THEN followup_enabled on") < da.index("never the reverse")
+            < da.index("Then --redeploy")) or "set_config" in da or "sales-followup.sh" in da:
+        raise SystemExit("PART H: deploy again does not say the order — claim switches off first, THEN followup_enabled on, "
+                         "never the reverse, then --redeploy — or prints a switch command (review 2: FX1-3)")
     doc.sub('  echo "  Send this LOG FILE back (not a copy of the terminal, and never the cash sheet). Then --after-only again, its own command, alone, with its own log:"\n',
             '  echo "  Send this LOG FILE back (not a copy of the terminal, and never the cash sheet). The owner\'s steps (root docs/75 §F) wait for a PASSED --after-only. Then --after-only again, its own command, alone, with its own log:"\n',
             why="summary: NOT YET withholds the owner's steps")
