@@ -408,9 +408,9 @@ dpre106 "106-6f3" "$P106" on "offers_live_enabled@s+offers_test_enabled@s+quote_
 rbx106 "106-6f4"
 O="$RBX106_OUT"
 # deploy-5.18.106.sh:8897/:8899 (step 12), :8903/:8905 (step 11), :8909/:8911 (step 6), :13881 (the prompt), :9032 (AS-RB1)
-check "$(order106 "$O" "  note  STEP 12 (OFFERS-LIVE) IS ON: offers_live_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 offers-live" "  note  STEP 11 (OFFERS-TEST) IS ON: offers_test_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 offers-test" "  note  STEP 6 (CHASE) IS ON: quote_chase_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 chase" "$TRB106")|$(for w106 in offers-live offers-test chase; do grep -cxF "$OFFW106 $w106" <<<"$O"; done | paste -sd, -)|$(okline "$O" AS-RB1 'followup_auto_send set off before the put-back (typed)')|$(sget106 "$RBX106_REC" AS_RB1)|$( [ "$(digest105)" = "$DG6F_106" ] && echo kept)" \
-      "ordered|1,1,1|yes|written|kept" \
-  "106-6f4'' step 6 on and the offers keys in the store row at the rollback: AS-RB0's three notices in capitals, highest step first — STEP 12, STEP 11, STEP 6 — each followed by its off command alone on its line (S:8897-8911), before the question; never run; the key on and the five conditions holding, AS-RB1 wrote (its record AS_RB1=written); every ladder key, the offers keys and chase among them, as before"
+check "$(order106 "$O" "  note  STEP 12 (OFFERS-LIVE) IS ON: offers_live_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 offers-live" "  note  STEP 11 (OFFERS-TEST) IS ON: offers_test_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 offers-test" "  note  STEP 6 (CHASE) IS ON: quote_chase_enabled IS PRESENT IN <data>/kyc_config.json OR ITS STORE ROW. UNDER $BV106 THIS MEANS CLAIM MODE FOR THE ENQUIRY SENDS. CHANGE NO SWITCH WHILE THIS SCRIPT WAITS." "$OFFW106 chase" "$TRB106")|$(for w106 in offers-live offers-test chase; do grep -cxF "$OFFW106 $w106" <<<"$O"; done | paste -sd, -)|$(okline "$O" AS-RB1 'followup_auto_send set off before the put-back (typed)')|$(sget106 "$RBX106_REC" AS_RB1)|$(kv106 "$(q106 kycplaces "$PD" "$DATA" offers_live_enabled,offers_test_enabled,quote_chase_enabled)" cs)" \
+      "ordered|1,1,1|yes|written|offers_live_enabled@s+offers_test_enabled@s+quote_chase_enabled@k,s" \
+  "106-6f4'' step 6 on and the offers keys in the store row at the rollback: AS-RB0's three notices in capitals, highest step first — STEP 12, STEP 11, STEP 6 — each followed by its off command alone on its line (S:8897-8911), before the question; never run; the key on and the five conditions holding, AS-RB1 wrote (its record AS_RB1=written); the three claim switches still where 106-6f3 found them (every ladder key across the rollback is rbx106's own check, against its k0 taken with the fixture in place)"
 X6F5_106="$(plant106 '[{"op":"fx_store_keys_undo","keys":["offers_live_enabled","offers_test_enabled"]}]')"
 check "$(jf105 "$X6F5_106" ops)|$(sd106 "$X6F5_106" 0 file)|$(kv106 "$(q106 kycplaces "$PD" "$DATA" offers_live_enabled,offers_test_enabled)" cs)|$( [ "$(digest105)" = "$DG6F_106" ] && echo before-fixture)" \
       "1|unchanged|quote_chase_enabled@k,s|before-fixture" \
@@ -551,7 +551,7 @@ KK7F106="$(keep106 p5-k7f "$DATA/kyc_config.json")"; KV7F106="$(keep106 p5-v7f "
 E7F4_106="$(evo_calls)"; O7F4_106="$(setevo106 --url "$EVF106" --allow-insecure)"; R7F4_106="$(sevrc106)"; EVS106=$(( EVS106 + $(evo_calls) - E7F4_106 ))
 check "$(grep -cxF "    API URL  $EVF106" <<<"$O7F4_106")|$R7F4_106|$(kv106 "$(q106 kycplaces "$PD" "$DATA" evo_api_url)" pre13):$(kv106 "$(q106 kycplaces "$PD" "$DATA" evo_api_url)" differ)" "1|1|differ:evo_api_url" \
   "106-7f4 the file-only key planted through set_evolution.php --url as the book's owner (the file and the vault kept first, $KK7F106/$KV7F106): condition 3 fails on evo_api_url"
-dpre106 "106-7f5" "$B106" on - "on:$LIM106" "written:nothing:not-before"
+dpre106 "106-7f5" "$B106" on - "on:$LIM106" "written:nothing:v1guard"   # STATE106 still 106-7e4's V1 deploy (AS_RB1=written): the guard first (S:8829); a typed rollback never writes STATE (review r2 F1)
 PL7F_106="$(pls106 "$(q106 kycplaces "$PD" "$DATA" followup_auto_send)")"; CA7F_106="condition 3: the file and the store row disagree on evo_api_url"
 v1run106 "106-7f6" lock
 O="$V1OUT106"; C7F_106="$(printed "$O" "docker exec -u ")"
@@ -583,7 +583,7 @@ dpre106 "106-7g0" "$P106" off - "on:$LIM106" "written:nothing:v1guard"
 O7G1_106="$(setcfg106 followup_auto_send 1)"
 check "$(grep -cxF '  followup_auto_send = 1' <<<"$O7G1_106")|$(setrc106)" "1|0" "106-7g1 followup_auto_send on through set_config as the book's owner, $V106 serving, so the typed rollback below writes"
 rbx106 "106-7g2"; RB7G_106="$RBX106_REC"
-dpre106 "106-7g3" "$B106" off - "on:$LIM106" "written:nothing:not-before"
+dpre106 "106-7g3" "$B106" off - "on:$LIM106" "written:nothing:v1guard"   # STATE106 still 106-7f6's V1 deploy (AS_RB1=not-written:differ): the guard first (S:8829) (review r2 F2)
 v1run106 "106-7g4" lock
 O="$V1OUT106"
 # deploy-5.18.106.sh:9036 (AS-RB1: already off), :13818, :13929, :8749 (as_para rb:off)

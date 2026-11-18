@@ -808,7 +808,7 @@ def staleorder(a):
             f += ['planted_open=-', 'planted_conv=-']
         f += xs_forecast(con, E, cut)
         # the first close pass, cron/followup_close.php in its order: allOpen(200, 'enquiry') by due_at (lib/FollowUpService.php
-        # :337-345), its five cases; then expireStale(staleBefore(now), 200) over the rows still open (Uganda)
+        # :347-354), its five cases; then expireStale(staleBefore(now), 200) over the rows still open (Uganda)
         k2 = " AND COALESCE(kind,'enquiry') = 'enquiry'" if E else ''
         main = {'cancelled': 0, 'replied': 0, 'human_closed': 0, 'opted_out': 0, 'exhausted': 0}
         shut = set()
