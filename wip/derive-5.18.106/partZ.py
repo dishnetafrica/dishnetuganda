@@ -34,7 +34,8 @@
 # the kept and rollback records (R2-V1OFF); Z27 U4's DEPLOY clause by the mode, and check it by UJ_ON_GATE (UJ2-G3-r).
 # 18 Nov, the re-check of round 3: Z20 the 'now' note says to wait for a close pass once the gate holds again
 # (R3-NOW-CP); Z25 as_back_on returns too on a V1 that read it on (R3-V1NW); Z27 pins check it's three arms and its
-# else text whole (R3-PIN-ARMS, CHK-WAIT).
+# else text whole (R3-PIN-ARMS, CHK-WAIT). The re-check of round 4: Z20 the 'now' note's wait only where stage A's gate
+# held; otherwise that this deploy will not be judged (R4-NOW-STAGEA).
 import re
 from d106lib import close
 
@@ -136,8 +137,11 @@ G_CONDS = ('  [ "$(kv "$o" en)" = "on" ] || g="$g followup_enabled is off now;"\
            '    gs="$(uj_gate_a "$a")"; ga="$gs"\n')
 WAIT_NOW = (" Once it holds again, run --after-only only after a close pass has run under it (followup_close runs every 10 "
             "minutes): a run before that judges F3 by passes made while it did not hold, and can read FAIL;")
+STAGEA_TOO = (" Stage A's gate did not hold either, so UJ-ON will not judge F3 for this deploy whatever is put right now (a "
+              "judged UJ-ON needs a rollback and then a --redeploy);")
 G_NOW = ('  if [ -n "$g" ]; then g="$g$ga$lim"; UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing '
-         'to do, or another limit to do it by.' + WAIT_NOW + ' a note, which holds back nothing"; return 0; fi\n')
+         'to do, or another limit to do it by.$( [ -z "$ga" ] && echo "' + WAIT_NOW + '" || echo "' + STAGEA_TOO + '") a note, '
+         'which holds back nothing"; return 0; fi\n')
 G_A = ('  if [ -n "$ga" ]; then ga="$ga$lim"; note "UJ-ON not judged for this deploy — its gate did not hold at stage A:'
        '${ga%;}. F3 may be running now')
 G_LIM = ('      || lim=" the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"\n',
@@ -590,6 +594,8 @@ CONTROLS = [   # (rule, what, the weakened copy)
     ("Z20", "the limit alone differing put back into the stage-A note",
      lambda t: _rep(t, '      || lim=" the age limit differs', '      || ga="$ga the age limit differs')),
     ("Z20", "the 'now' note without its close pass", lambda t: _rep(t, WAIT_NOW, ";")),
+    ("Z20", "the 'now' note promising the wait whatever stage A read",
+     lambda t: _rep(t, '$( [ -z "$ga" ] && echo "' + WAIT_NOW, '$( true && echo "' + WAIT_NOW)),
     ("Z20", "the limit-only note falling through to the verdict",
      lambda t: _rep(t, 'without that proof; a note, which holds back nothing"; return 0; fi\n  [ -n "$cu" ]',
                     'without that proof; a note, which holds back nothing"; fi\n  [ -n "$cu" ]')),

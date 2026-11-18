@@ -1,0 +1,39 @@
+SUMMARY: Round 4's candidate is deploy106-fx4-run1.sh (16,197 lines, sha256 8b2bafb2…aa3d). It passes bash -n, run2 is byte-identical, and the diff from fx3 is exactly seven hunks: 8073, 8800-8804, 8822-8825, 8829, 15981, 15985 and 16017. All five findings hold in fx4.
+
+Pins: partZ.rules(fx4) is empty. All 66 CONTROLS are refused by their own rule alone (Z20 has 9, Z25 5, Z27 9), and all 28 rules have one. The fx3 text is refused by Z20, Z25 and Z27.
+
+Task 2, as_back_on:
+- AS_RB1 is assigned at 8530, 8964, 8966, 9031, 9033, 9035, 9037, 9039, 9041 and 9043, and written only at 9063.
+- Every value the script can produce takes the intended branch. The not-written causes come only from $asPre: code, file, row, differ and type. None of them can collide with owner-unknown or unread.
+- An empty AS_RB1 matches the '' pattern and proceeds, as fx3 did. Under set -u nothing in it can be unbound.
+
+The citation "§L.3, §L.8, DL3, §F" is true against the dry-run docs:
+- §L.3: none of the three switches may be on until 5.18.106 serves.
+- §L.8: after a PASSED --after-only, step 6.
+- DL3: the owner's claim steps wait for proof.
+- §F: none of the three may come on until 5.18.106 is deployed.
+
+The docs addendum's §L.8 and §L.10 sentences touched in round 4 match the script. §L.5 does too, except in the case of the one new defect, which is minor:
+- uj_on's new 'now' sentence, and §L.5's matching 'false now' sentence, promise a judged F3 once the gate holds and a close pass has run, and warn that a run before that pass can read FAIL.
+- Both are false when stage A's gate also failed. Neither judgement nor FAIL can come for that deploy, and the same run's check it says UJ-ON WILL NOT JUDGE F3.
+
+Observations, not defects:
+- CITE-LAO's citations are pinned by partH's must list (801-802), not by partZ. Reverting either citation passes partZ.rules().
+- An AS_RB1 that could not be recorded reads as '' and is treated as no V1. This predates round 4.
+
+Nothing was written. Stubs ran on stdin. partZ was imported with python3 -I -B.
+CHECKED: [["R3-NOW-CP", true], ["R3-V1NW", true], ["R3-PIN-ARMS", true], ["CHK-WAIT", true], ["CITE-LAO", true]]
+==== R4-NOW-STAGEA minor | fx4 8073 (uj_on's 'now' note, with g="$g$ga$lim"); 7930-7937 (uj_gate_a); 8076 (the stage-A branch that the next run reaches); 7983 (U4's note, never a refusal); 16016-16019 (check it: uj_judgeable false gives the else text); dry-run docs/75 467-469 (§L.5 'false now') and 475 ('check it follows the note this run gave')
+S: 1. Stage A reads StaffJobsGate::applies false, or followup_max_age_hours not a positive number. U4 prints its capitals note at 7983, which is never a refusal (DL2, and §L.9 leaves the refusal to the owner), and the owner deploys.
+2. At --after-only the condition still fails. g is non-empty and so is ga, so uj_on gives the 'now' note. The note lists the stage-A condition and adds round 4's sentence: 'Once it holds again, run --after-only only after a close pass has run under it …: a run before that judges F3 by passes made while it did not hold, and can read FAIL'.
+3. The owner puts it right, waits for a close pass and runs --after-only again. g is now empty and ga is not, so UJ-ON gives the stage-A note: 'cannot judge F3 for this deploy'.
+4. A run before the pass gives the same note, never a FAIL.
+So the promised judgement, and the warned-of FAIL, cannot happen for this deploy. The same run's summary already says UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY (check it's else branch, because uj_judgeable is false), so one output contradicts itself. §L.5's 'false now' sentence makes the same promise.
+E: A stub run of kv, uj_ok, uj_gate_ok, uj_gate_a and uj_on from fx4, on stdin, with note, ok, bad and notyet stubbed:
+- C1: UJ_A ug=0 and now ug=0 prints 'NOTE UJ-ON not judged — its gate did not hold: StaffJobsGate::applies does not read Uganda now; StaffJobsGate::applies did not read Uganda at stage A. … Once it holds again, run --after-only only after a close pass has run under it … and can read FAIL'. UJ_ON_GATE=now and uj_judgeable is no.
+- C1b: the same, with ug=1 now, control held, t after the copy and stale rows, prints the stage-A note 'UJ-ON not judged for this deploy … cannot judge F3 for this deploy'.
+- C2 and C2b: UJ_A hours=misread with en off now, then on. Same pattern.
+- Check it stub (16016-16020) with UJ_A ug=0 and UJ_ON_GATE=now prints '… but UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY …'.
+Round 3's note had no forward sentence, so this falsehood is new in round 4. §L.5's 'check it follows the note this run gave' (475) is likewise untrue in this case, but that sentence predates round 4.
+FIX: partUJ, uj_on's 'now' branch: give WAIT_NOW only when ga is empty. When ga is non-empty, say what the stage-A note says instead: stage A's part is fixed in the state file for the life of the deploy, UJ-ON cannot judge F3 for it, and a judged UJ-ON needs a rollback and then a --redeploy. Keep the 'now' note itself (Z20 refuses swapping the branches). In doc75.py §L.5, scope 'false now — once it holds again … judges F3' to stage A's gate having held, and say that when it failed at stage A too, the note says the stage-A rule. Pin it in partZ Z20, with a weakened copy that gives WAIT_NOW unconditionally.
+

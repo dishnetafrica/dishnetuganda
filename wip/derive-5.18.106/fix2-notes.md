@@ -115,3 +115,31 @@ latest record, and it hides an earlier typed rollback's `written`. In that case 
 - No offer for `differ`, `refused`, `written`, `written-check` and `unknown`.
 - The 'now' note carries the wait.
 - Check it prints each arm.
+
+## Round 5 — the re-check of round 4 (`recheck4-findings.txt`, `fix5.py`)
+
+The re-check confirmed all five round-4 fixes. All 66 weakened copies are refused by their own rule alone. The
+citations are true against the addendum.
+
+It found one more, minor: **R4-NOW-STAGEA**. Where stage A's gate also failed, the 'now' note promised a judgement
+once the gate held again and a close pass had run. That cannot happen for this deploy, and the same run's check it
+said so. The note's wait clause is now conditional:
+- With stage A's gate held, or stage A unread, the note carries the wait.
+- With stage A's gate failed too, it says "Stage A's gate did not hold either, so UJ-ON will not judge F3 for this
+  deploy whatever is put right now (a judged UJ-ON needs a rollback and then a --redeploy)".
+
+Z20 re-pinned, with a new copy: the wait promised whatever stage A read. docs/75 §L.5 says the same (`doc75.py`).
+
+**Result:**
+- 277 edits.
+- 16,197 lines.
+- sha256 `3189cee22818fb3a7650d510fcb05614cc3da27ed8bd5c3e4c3453d7f258967d`.
+- Two runs, byte-identical.
+- `bash -n` is clean.
+
+**Stub runs:** en off now with stage A held, and stage A unread: the wait. ug=0, and a misread limit, at stage A and
+now: "will not judge F3 for this deploy".
+
+The reviewer recorded two observations, not built:
+- The CITE-LAO citations are pinned by partH's must list, not by partZ.
+- An `AS_RB1` that could not be recorded reads as no V1. This predates round 4.

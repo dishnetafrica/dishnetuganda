@@ -501,7 +501,7 @@ uj_judgeable() { [ -z "$(uj_gate_a "$UJ_A")" ]; }   # uj_judgeable — stage A l
       || lim=" the age limit differs — $(kv "$a" hours) h at stage A, $(kv "$o" hours) h now;"
   fi
   # a condition measured false now: F3 has nothing to do now, or another limit to do it by (review UJ-2)
-  if [ -n "$g" ]; then g="$g$ga$lim"; UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by. Once it holds again, run --after-only only after a close pass has run under it (followup_close runs every 10 minutes): a run before that judges F3 by passes made while it did not hold, and can read FAIL; a note, which holds back nothing"; return 0; fi
+  if [ -n "$g" ]; then g="$g$ga$lim"; UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:${g%;}$alone. F3 then has nothing to do, or another limit to do it by.$( [ -z "$ga" ] && echo " Once it holds again, run --after-only only after a close pass has run under it (followup_close runs every 10 minutes): a run before that judges F3 by passes made while it did not hold, and can read FAIL;" || echo " Stage A's gate did not hold either, so UJ-ON will not judge F3 for this deploy whatever is put right now (a judged UJ-ON needs a rollback and then a --redeploy);") a note, which holds back nothing"; return 0; fi
   # false only at stage A: F3 may run now, but this deploy's stage A is fixed in the state file (a deploy run while
   # 5.18.106 serves is an --after-only of it): UJ-ON cannot judge F3 for it (review UJ-2)
   if [ -n "$ga" ]; then ga="$ga$lim"; note "UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now, but this deploy's stage A reading is fixed in $STATE (a deploy run while $EXPECTED_VERSION serves is an --after-only of this one), so UJ-ON cannot judge F3 for this deploy: F3 stays unproven, and the steps that wait for it (6, 11, 12) would follow without that proof. A judged UJ-ON needs a rollback and then a --redeploy, its stage A taken with the gate holding; a note, which holds back nothing"; return 0; fi
@@ -823,7 +823,7 @@ def apply(doc, ctx):
                  ("UJ-ON not judged for this deploy — its gate did not hold at stage A:${ga%;}. F3 may be running now", 1),
                  ("UJ-ON not judged on this run — stage A's gate held, but followup_max_age_hours is ", 1),
                  ('UJ_ON_GATE="now"; note "UJ-ON not judged — its gate did not hold:', 1),
-                 (" Once it holds again, run --after-only only after a close pass has run under it (followup_close runs every 10 minutes): a run before that judges F3 by passes made while it did not hold, and can read FAIL;", 1),
+                 (" Once it holds again, run --after-only only after a close pass has run under it (followup_close runs every 10 minutes): a run before that judges F3 by passes made while it did not hold, and can read FAIL;", 1), (" Stage A's gate did not hold either, so UJ-ON will not judge F3 for this deploy whatever is put right now (a judged UJ-ON needs a rollback and then a --redeploy);", 1),
                  ('UJ_ON_GATE="limit"; note "UJ-ON not judged on this run', 1), ('UJ_ON_GATE=""\n', 1),
                  ("cannot judge F3 for this deploy", 1), ("set back to stage A's", 0),
                  ("U4 UJ-ON WILL NOT JUDGE F3 FOR THIS DEPLOY:", 1),
