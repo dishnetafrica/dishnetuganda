@@ -1,0 +1,107 @@
+[
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part1.sh",
+  "lines": "454-455",
+  "problem": "seed106's comment calls its first argument MODE, but every caller (Part 3's plant106, Part 4's dstale106) passes rh106-seed.php's argv: code root, data folder, ops JSON, zone; and it does not say where RH106_RANGE comes from (see the next fix).",
+  "old": "seed106() {   # seed106 MODE ARG\u2026 \u2014 rh106-seed.php as the store's user, with a copy of the live vault of its own (removed after), under\n              # the clock; ARG\u2026 passed as given (as rh106-seed.php states its modes); one line of JSON, or none(<why>)",
+  "new": "seed106() {   # seed106 CODE-ROOT DATA OPS-JSON [ZONE] \u2014 rh106-seed.php as the store's user, with a copy of the live vault of its own\n              # (removed after), under the clock, and RH106_RANGE \u2014 this rehearsal's ten digits, read from PR106, which the helper\n              # requires \u2014 given to that one run, never exported; the arguments passed as given (rh106-seed.php's own argv: the\n              # code root, the data folder, the ops, the zone); one line of JSON, or none(<why>)"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part1.sh",
+  "lines": "459",
+  "problem": "seed106 never sets RH106_RANGE, which rh106-seed.php requires (rh106-seed.php:300-301 refuses with exit 2 without it; p3-open 1, p4-open 1). Part 3 worked around it with a prefix assignment in plant106 and Part 4 by exporting it into the whole rehearsal's environment (every later run then inherits it). Fixed in the defining helper; the two workarounds are taken out below.",
+  "old": "env DN_VAULT_FILE=\"$v\" LD_PRELOAD=\"$CLKPRE104\" RH104_CLOCK_FILE=\"$CLKF104\" \\",
+  "new": "env DN_VAULT_FILE=\"$v\" RH106_RANGE=\"${PR106#+}\" LD_PRELOAD=\"$CLKPRE104\" RH104_CLOCK_FILE=\"$CLKF104\" \\"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part1.sh",
+  "lines": "774-775",
+  "problem": "Variable defined twice: Part 1 uses GL106 for the git checkout's exit status in 106-infra k, and Part 3 (106-pre5) reassigns GL106 as the gone rows' last_customer_at, a hand-over variable of p3-interface. Harmless today only because Part 1's use ends first; renamed in Part 1 (the local use).",
+  "old": "git -C \"$REPO\" checkout -q \"$B106F\" >/dev/null 2>&1; GL106=$?\nif [ \"$GL106\" = 0 ]; then",
+  "new": "git -C \"$REPO\" checkout -q \"$B106F\" >/dev/null 2>&1; GLK106=$?\nif [ \"$GLK106\" = 0 ]; then"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part1.sh",
+  "lines": "777",
+  "problem": "The rest of the GL106 rename in 106-infra k's check (two occurrences in this one fragment).",
+  "old": "$( [ \"$GL106\" != 0 ] && echo refused || echo \"rc:$GL106\")",
+  "new": "$( [ \"$GLK106\" != 0 ] && echo refused || echo \"rc:$GLK106\")"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "15-17",
+  "problem": "plant106 sets RH106_RANGE by a prefix assignment because seed106 did not; with seed106 setting it (Part 1 fix), the range is given in one place, and plant106's comment says so.",
+  "old": "               # Kampala's zone (106-infra's seed106: a vault copy of its own, removed after). RH106_RANGE \u2014 this rehearsal's ten\n               # digits, which the helper requires \u2014 is given to that one run and never exported. Its JSON line, or none(<why>)\n  RH106_RANGE=\"${PR106#+}\" seed106 \"$H106/ref/$P\" \"$DATA\" \"$1\" Africa/Kampala",
+  "new": "               # Kampala's zone (106-infra's seed106: a vault copy of its own, removed after; RH106_RANGE, this rehearsal's ten\n               # digits, which the helper requires, given to that one run by seed106 itself, never exported). Its JSON line, or\n               # none(<why>)\n  seed106 \"$H106/ref/$P\" \"$DATA\" \"$1\" Africa/Kampala"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "182",
+  "problem": "Variable defined twice: RF0_106 is Part 1's refusal baseline for 106-infra h (rehearse.part1.sh:647, :681) and Part 3 reassigns it as the jam's baseline before J1's passes. Renamed in Part 3 to RF4_106, which Part 6 (106-10a) reads as the jam's baseline.",
+  "old": "RF0_106=\"$(refused106)\"",
+  "new": "RF4_106=\"$(refused106)\""
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "204",
+  "problem": "The rest of the RF0_106 \u2192 RF4_106 rename (106-pre4e's 15 refusals).",
+  "old": "$(( $(refused106) - RF0_106 ))",
+  "new": "$(( $(refused106) - RF4_106 ))"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "517",
+  "problem": "HELD106 is used in Part 4 (rehearse.part4.sh:216, 106-4d) and set by no part (p4-open 4): Part 4 then passes 'unstated' to u1mirror whenever UJ_A's held is not none. Part 3's own 106-1k1 mirror already read the five places with none held, so Part 3 states it at the hand-over.",
+  "old": "CLK3_106=\"$(fnow104)\"",
+  "new": "CLK3_106=\"$(fnow104)\"\nHELD106=-   # the registry's held channels (AutomationPolicy::sqlHeld) as this rehearsal states them to 106-4d's mirror: none \u2014 106-1k1's mirror read the five places with none held; a registry holding a channel shows there as a held= mismatch, visibly"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "41",
+  "problem": "Release line cited wrongly: in 7835906 cron/followup_send.php the sender's summary 'sent= held= failed=' is echoed at :362; :364 is 'if ($fsCounts !== []) {'.",
+  "old": "(7835906 cron/followup_send.php:364)",
+  "new": "(7835906 cron/followup_send.php:362)"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part3.sh",
+  "lines": "282",
+  "problem": "Release lines cited wrongly: in 7835906 tools/sales_followup.php the '<step>: <status>' line is printed at :171 (:170 computes it) and the exit 3 on FAIL is at :180 (:178 closes the parts loop).",
+  "old": "# 7835906 tools/sales_followup.php:170 (\"<step>: <status>\"), :178 (exit 3 only on FAIL)",
+  "new": "# 7835906 tools/sales_followup.php:171 (\"<step>: <status>\"), :180 (exit 3 only on FAIL)"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part4.sh",
+  "lines": "15-17",
+  "problem": "Part 4 exports RH106_RANGE into the rehearsal's whole environment (so every later deploy run, tool run and stand-in inherits it), with a comment that is false once seed106 sets it. Removed; 106-10f asserts the rehearsal's environment never carries it.",
+  "old": "# rh106-seed.php refuses unless RH106_RANGE names 106's own ten digits; seed106 (106-infra) passes its environment through but\n# does not set it, so it is exported here \u2014 read from PR106, never written as a literal \u2014 unless an earlier part has.\n[ \"${RH106_RANGE:-}\" = \"${PR106#+}\" ] || export RH106_RANGE=\"${PR106#+}\"",
+  "new": "# rh106-seed.php refuses unless RH106_RANGE names 106's own ten digits: 106-infra's seed106 gives it to each run, read from\n# PR106 \u2014 nothing here exports it (106-10f asserts the rehearsal's own environment never carries it)."
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part4.sh",
+  "lines": "85",
+  "problem": "dstale106 calls seed106 directly with no zone (rh106-seed.php then defaults to UTC, rh106-seed.php:295), where Part 3's plant106 \u2014 the helper p3-interface names for book plants \u2014 plants every other enquiry in Africa/Kampala. Use plant106.",
+  "old": "  o=\"$(seed106 \"$H106/ref/$P\" \"$DATA\" \"$ops\")\"",
+  "new": "  o=\"$(plant106 \"$ops\")\""
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part4.sh",
+  "lines": "222",
+  "problem": "Script line cited wrongly: uj_places' classes sentence ('held (a second draft this pass) %s, F5 expires \u2026') is deploy-5.18.106.sh:7960; :7959 is the place list's awk.",
+  "old": "   # uj_places' own sentence (S:7959)",
+  "new": "   # uj_places' own sentence (S:7960)"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part4.sh",
+  "lines": "207",
+  "problem": "Hand-over not asserted: p3-interface says Part 4 should assert pig106 = PIG0_106 at the copy (A2's plant-to-copy span starts at J2's plant); 106-4b compares only with PIG4_106, taken just before the run, so the span from 106-pre5 to the copy is never one assertion.",
+  "old": "$( [ \"$(pig106)\" = \"$PIG4_106\" ] && echo kept)",
+  "new": "$( [ \"$(pig106)\" = \"$PIG4_106\" ] && [ \"$PIG4_106\" = \"${PIG0_106:-unset}\" ] && echo kept)"
+ },
+ {
+  "file": "/tmp/claude-0/-home-user-dishnetuganda/24e2e11c-566f-5aa4-a11b-ebc146471ab5/scratchpad/rh106/parts/rehearse.part4.sh",
+  "lines": "209",
+  "problem": "106-4b's label for the strengthened piggyback assertion.",
+  "old": "the installed public.php's piggyback record unchanged across the run (A2)",
+  "new": "the installed public.php's piggyback record unchanged from J2's plant (106-pre5's PIG0_106) through the run \u2014 A2's plant-to-copy span"
+ }
+]

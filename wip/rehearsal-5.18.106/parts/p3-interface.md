@@ -1,0 +1,56 @@
+STATE HANDED TO PART 4 (106-4), each part asserted at 106-1k:
+
+- **What serves.** 7835906 ($B106, 5.18.105).
+  - 106-pre1a redeployed it through the real deploy-5.18.105.sh --redeploy (run105c, no RH106_TOUCH, so its COPY_AT in $STATE105 is wall-clock).
+  - Its --after-only read PASSED (106-pre1b). qcheck106 ran after it (106-pre1c).
+  - $RECS/dnb-5.18.105 → $OUT105 (106-pre1d).
+  - No 5.18.106 copy has happened. 5.18.106's added files are not on disk, so 106-4's deploy is a plain first deploy.
+  - $OUT106 holds no state-5.18.106.env*, rollback-state, backup-* or lk-key-5.18.106: tidy106 moved each into $R106/case/{106-1i-no,106-1j-csb1,106-1j-csb}. ql-key-* files may remain (fresh106 keeps them, as R5 did).
+- **The key.** followup_auto_send on (k,s, through set_config). followup_daily_cap 3, followup_run_limit 2.
+- **en.** followup_enabled on (k,s), set back by FE-G1's printed command run as printed in 106-1h.
+- **Age limit.** followup_max_age_hours 336, set explicitly in 106-1i6 (k,s). HRS106 is the default read at 106-pre3 (expected 336).
+- **Ladder and chase.** Steps 1–5 on (report, ack, tracking, list, voice-measure). Chase off (absent in k and s), nothing held, the ledger in record mode.
+- **Latest rollback record.** None: rblast over $OUT106 reads last=- records=0. cond106's default RECORD is "- 0".
+- **J1.**
+  - J1FU106 = "A B S" follow-up ids (space-separated), on phones ph106 00, 01, 02, channel sales, one approved SEND draft each.
+  - A and B are fresh (customer quiet 1 h at the plant). S is stale (420 h): the F2 case.
+  - Each has 5 F1-kind refusals, each after a delivery. rwd reads n3=3, nall=5, rf=5, dl≥5, ge3=3/3. RW5_106 is the exact rwd line.
+  - The 5 planted deliveries are on ph106 03.
+  - The chain's approved draft(s) (C106 of them, the 9 Nov one among them) were sent or closed in pass 1.
+  - $SB/evo/rh106-refuse.list still lists J1's three numbers, deliberately: 106-6's 5.18.106 sender pass needs it. cleanup106 removes it at exit.
+- **J2.**
+  - J2FU106: two present stale follow-ups (ph106 04 and 05, 380 h and 400 h before 106-pre5).
+  - 400 gone rows on conversation ids 9000001–9000400 (ph106 07), last_customer_at GL106 (a day before the oldest open enquiry row, at most clock − 180 d).
+  - staleorder at 336: first400_gone=400/400, gone_first=yes, gone_older=yes, planted_open=400, planted_conv=0, xs_first_cancel=200, xs_first_expire=0, xs_all≥401, stale_present≥3, p1_cn≥200, p1_ex=0. SO1_106 is the line.
+- **J3.** J3FU106 (ph106 08) holds two approved drafts (J3DR106), fresh at 1 h before 106-pre6. F5A106 is u2u3's f5_multi after it.
+- **The rehearsal's own forecasts.**
+  - apd106 = "n=5 fu=A,B,S,J3,J3".
+  - u1mirror: en=on, hours=336, ledger=record, places=5, classes=held:1,f5:0,closes:0,f2:1,f1:2,waits:1.
+- **Master idle since J1's pass 5.**
+  - SCH5_106 is "<followup_send entry>|<followup_close entry>" as that pass left them. followup_close's entry is master104's quiet plant at a clock time before any later 106 COPY_AT, so ctl106 should read "before".
+  - PIG0_106 is pig106 taken right after J2's plant (A2's plant-to-copy span), unchanged through 106-1. Part 4 should assert pig106 = PIG0_106 at the copy.
+- **The clock.**
+  - J1's five passes ran on Kampala date KWD106 (the first non-Sunday after the clock's date at 106-pre4), from 09:00, about 301 s apart: ~09:25 at the last pass.
+  - Since then it has moved only with wall time: 106-pre5–7 take seconds; 106-1 is ~16 script runs, roughly 20–35 min.
+  - So it reads about 09:45–10:05 Kampala on KWD106: inside the sending window, not a Sunday. CLK3_106 holds the exact epoch, and the closing RH-NOTE prints it.
+  - Part 4 must not run sender106 before 106-6, or J3 would send. master106 is fine: it runs followup_close alone.
+- **Numbers used.** ph106 00, 01, 02, 03, 04, 05, 07, 08. 06 and 09 are reserved to Part 3, unused. Part 1 holds 98 and 99. Later parts must take theirs from 10–97, fresh for every re-plant.
+- **Anchors set in $AN106.** cs1, fe1, u41, csb. The weakened copies are removed and asserted gone.
+- **Helpers defined (Parts 4–6 may use them; do not redefine):**
+  - plant106 OPS-JSON: seed106 with RH106_RANGE and Part 2's argv, as the book's owner.
+  - seed106r OPS-JSON: as root, for fx_file, fx_file_back, fx_state_drop and fx_state_back.
+  - sd106 LINE N FIELD; ag106 LINE N SECS; rwdk106 RWD ID; fsl106 MASTER-OUT; f5d106 A B; apd106.
+  - outsum106; still106 ("data94|cfgsha all|outsum106").
+  - order106 OUTPUT PREFIX… (stdin, bytes).
+  - cond106 LABEL SERVES KEY CHASE EN [RECORD].
+  - srtcsv106; dlv106 TAG (bound to J1D106); csb1run106 LABEL SCRIPT -- ACTION… (sets CSB1OUT106 and CSB1RC106).
+- **Variables.**
+  - HRS106, J1A106, J1B106, J1S106, J1D106, J1FU106, J1P106, C106, RW5_106, SCH5_106, KWD106.
+  - J2A106, J2B106, J2G106, J2FU106, GL106, SO1_106, PIG0_106.
+  - J3PH106, J3FU106, J3DR106, F5A106.
+  - U4C106 (the capitals note's text up to "PUT IT RIGHT"); OFFW106 and CHKL106 (the printed off and --check lines).
+  - FEX106 (FE-G1's printed command); OUTFE106; CLK3_106.
+- **Fixtures.**
+  - The uj hook trigger, the store-only keys and both config.json keys are each undone and asserted.
+  - $R106/kept/lkg1 exists and is empty.
+  - No index.lock and no .redirect106 are planted in this part.
