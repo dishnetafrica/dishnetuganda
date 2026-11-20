@@ -676,6 +676,11 @@ assert sum(1 for l in s2.split('\n') if l.startswith(anc)) == 1 and sum(1 for l 
 assert s2.index(log) < s2.index('rh106') < s2.index(anc), 'order'
 open(p, 'w').write(s2)
 PY
+# The stand-in runs under PHP's built-in server, whose OPcache (opcache.enable, on by default there: enable_cli covers only the
+# command line) re-checks a cached script at most every opcache.revalidate_freq seconds, so a request inside that window still
+# runs the router as it was before the edit. Trial 1 (20 Nov) read the listed number answered with a key.id; replayed against
+# snap4's router, the request right after the edit got a key.id and the same request three seconds later the refusal. Waited out.
+sleep "$(( $(php -r 'echo max(0, (int)ini_get("opcache.revalidate_freq"));') + 1 ))"
 refuse106 >/dev/null; C1_106="$(evopost106 sendText "$PA106")"   # list absent: a key.id
 refuse106 "$PA106" >/dev/null
 C2_106="$(evopost106 sendText "$PA106")|$(evopost106 sendText "$PB106")|$(evopost106 sendMedia "$PA106")"   # listed: 400; another: a key.id; a media send: a key.id
@@ -1917,11 +1922,15 @@ v1run106() {   # v1run106 LABEL [lock] — V1's automatic rollback (design-v2 A7
                # directly. The quarantine's --check after it is the caller's, once the case's own readings are taken
   local lab="$1" lk="${2:-}" o
   arm106 $lk
+  # The stand-in's public.php runs as the web user (ubuntu) and the clone's .git is root's (755): its @touch of the index lock
+  # failed silently in trial 1 (20 Nov), and the rollback's checkout went through. While the lock is armed, .git is writable
+  # by others; its own mode is put back right after the run, and asserted.
+  local gm=""; if [ -n "$lk" ]; then gm="$(stat -c %a "$REPO/.git")"; chmod o+w "$REPO/.git"; fi
   fresh106; o="$(run106c --answer DEPLOY --redeploy)"; V1OUT106="$o"; V1RC106="$(rc106)"
   check "$(failline "$o" V1 'the sign-in page on the public address → 200 after 1 redirect(s)')$(has "$o" '  ROLLING BACK — the public address must never redirect (every switch of the sales follow-up kept; followup_auto_send set off first, AS-RB1)')|$V1RC106|$(spent99 .redirect106)|$( [ -n "$lk" ] && spent99 .redirect106lock || echo -)|$(lock106)" \
         "yesyes|1|spent|$( [ -n "$lk" ] && echo spent || echo -)|$( [ -n "$lk" ] && echo present || echo absent)" \
     "$lab a deploy whose public sign-in page redirects once (the stand-in's $( [ -n "$lk" ] && echo '.redirect106 with .redirect106lock' || echo '.redirect106'), planted, spent once): V1 FAILs on the one redirect (S:13911) and the deploy rolls itself back, AS-RB1 first (S:13923); exit status 1$( [ -n "$lk" ] && echo "; the same request made the clone's index lock (A7), so the put-back's own checkout refuses")"
-  if [ -n "$lk" ]; then check "$(unlock106)" "absent" "$lab' the clone's index lock removed (unlock106; cleanup106 removes it at exit too) — gone"; fi
+  if [ -n "$lk" ]; then chmod "$gm" "$REPO/.git"; check "$(unlock106)|$(stat -c %a "$REPO/.git")" "absent|$gm" "$lab' the clone's index lock removed (unlock106; cleanup106 removes it at exit too) — gone; its .git back to its own mode ($gm)"; fi
   return 0
 }
 AS0OFF106="  note  AS-RB0 followup_auto_send already reads off: the rollback writes nothing (AS-RB1 reads it again, and writes only a key that reads on), whatever §L.7's five conditions say"   # deploy-5.18.106.sh:8925
@@ -2164,13 +2173,14 @@ dpre106 "106-6d0" "$P106" on - "on:$LIM106" "off:nothing:not-written"
 # replaced by marked text that does not decode (writeKycFile always writes JSON), then followup_auto_send '1' in <data>/config.json
 # (uCRM's file, which no production writer of the plugin writes); both put back by fx_file_back, by sha256
 mkdir -p "$R106/kept/p5-6d"; chmod 700 "$R106/kept/p5-6d"
-CF6D0_106="$(q106 cfgsha "$PD" "$DATA")"; D6D_106="$(data94)"; RB6D_106="$(kv106 "$(q106 rblast "$OUT106" "$STATE106")" records)"
+CF6D0_106="$(q106 cfgsha "$PD" "$DATA")"; RB6D_106="$(kv106 "$(q106 rblast "$OUT106" "$STATE106")" records)"
 WD6D_106="$( [ -e "$DATA/config.json" ] && echo present || echo absent)"
 X6D1_106="$(seed106r '[{"op":"fx_file","place":"k","keep":"'"$R106/kept/p5-6d"'","tag":"p5-6d-k","raw":"{\"RH106SECRET-undecodable\":"}]')"
 K6D1_106="$(q106 kycplaces "$PD" "$DATA" followup_auto_send)"; PL6D1_106="$(pls106 "$K6D1_106")"; CF6D1_106="$(kv106 "$(q106 cfgsha "$PD" "$DATA")" all)"
 check "$(jf105 "$X6D1_106" ops)|$(sd106 "$X6D1_106" 0 fixture)|$(sd106 "$X6D1_106" 0 what)|$(kv106 "$K6D1_106" file)|$(kv106 "$K6D1_106" eff)|$(kv106 "$K6D1_106" asplaces)|$(kv106 "$K6D1_106" pre13)" \
       "1|true|a file that does not decode|undecodable|followup_auto_send:off|k:?,s:on,p:-,d:-|file" \
   "106-6d1 the fixture: kyc_config.json replaced by marked text that does not decode — the jobs ignore it, so followup_auto_send reads off as they read it, though its store row says on; §L.7's condition 1 fails"
+D6D_106="$(data94)"   # the data as the fixture leaves it, just before the run: data_dump reads kyc_config.json (trial 1, 20 Nov)
 fresh106; O6D2_106="$(run106c --answer no --rollback)"; RC6D2_106="$(rc106)"
 # deploy-5.18.106.sh:8882 (AS-RB0, condition 1 named), :8925 (already off), :13881 (the prompt), :1689
 check "$(grep -cxF "  note  AS-RB0 followup_auto_send before the rollback, through the installed code (PluginConfig::read, as FollowUpPolicy::mayAutoSend reads it): off — per place: $PL6D1_106; - absent, ? unread; §L.7's five conditions do not hold: condition 1: <data>/kyc_config.json is undecodable" <<<"$O6D2_106")|$(grep -cxF "$AS0OFF106" <<<"$O6D2_106")|$(has "$O6D2_106" 'THE ROLLBACK CANNOT SET')|$(grep -c '^      docker exec ' <<<"$O6D2_106")|$(has "$O6D2_106" "${TRB106}followup_auto_send already off, nothing written, every other switch")|$(has "$O6D2_106" '  STOP: not confirmed')|$RC6D2_106|$(live)|$(data94)|$(kv106 "$(q106 cfgsha "$PD" "$DATA")" all)|$(kv106 "$(q106 rblast "$OUT106" "$STATE106")" records)" \
@@ -2181,6 +2191,7 @@ K6D3_106="$(q106 kycplaces "$PD" "$DATA" followup_auto_send)"; PL6D3_106="$(pls1
 check "$(jf105 "$X6D3_106" ops)|$(sd106 "$X6D3_106" 0 fixture)|$(sd106 "$X6D3_106" 0 keys)|$(kv106 "$K6D3_106" eff)|$(kv106 "$K6D3_106" asplaces)|$(kv106 "$K6D3_106" pd)" \
       "1|true|followup_auto_send|followup_auto_send:on|k:?,s:on,p:-,d:on|followup_auto_send@d" \
   "106-6d3 the sub-case's fixture: followup_auto_send '1' in <data>/config.json, beside the undecodable file — it reads on as the jobs read it"
+D6D_106="$(data94)"   # the data as both fixtures leave it, just before the run: data_dump reads config.json too
 fresh106; O6D4_106="$(run106c --answer no --rollback)"; RC6D4_106="$(rc106)"
 # deploy-5.18.106.sh:8936 (the capitals, no command allowed), :8722 (DOES NOT DECODE … NO COMMAND IS PRINTED), :13881, :1689
 check "$(grep -cxF "  note  THE ROLLBACK CANNOT SET followup_auto_send OFF ITSELF (condition 1: <data>/kyc_config.json is undecodable): $BV106 WILL THEN APPROVE AND SEND AUTOMATICALLY WHILE IT READS ON. TO AVOID THAT, ANSWER ANYTHING BUT ROLLBACK BELOW — NOTHING HAS BEEN CHANGED — AND ACT ON WHAT FOLLOWS (NO COMMAND CAN BE PRINTED FOR THIS CAUSE), THEN RUN THE ROLLBACK AGAIN:" <<<"$O6D4_106")|$(grep -cxF "  It reads on (per place: $PL6D3_106; - absent, ? unread). <data>/KYC_CONFIG.JSON DOES NOT DECODE (IT IS EMPTY OR NOT JSON): THE PLUGIN IGNORES THAT FILE TODAY, SO ITS VALUES ARE NOT IN EFFECT, AND set_config — OR ANY SETTINGS SAVE — WOULD REPLACE IT WITH A ONE-KEY FILE. NO COMMAND IS PRINTED: REPAIR IT BY HAND FIRST, THEN run the rollback again." <<<"$O6D4_106")|$(grep -c '^      docker exec ' <<<"$O6D4_106")|$(has "$O6D4_106" "${TRB106}followup_auto_send NOT set off — the rollback cannot write it (above), every other switch")|$(has "$O6D4_106" '  STOP: not confirmed')|$RC6D4_106|$(live)|$(data94)|$(kv106 "$(q106 cfgsha "$PD" "$DATA")" all)" \
