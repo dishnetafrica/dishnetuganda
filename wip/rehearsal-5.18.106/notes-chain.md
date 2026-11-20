@@ -18,3 +18,17 @@
   core.abbrev 7`. Not a defect; tell the owner the remedy is printed if they meet it at 5.18.106's deploy.
 - Durable fix (later, not now): 5.18.94's 94-0 control asserts the fresh clone writes 7 characters "as the server's
   checkout recorded 69c87a6 on 11 Oct". Once the pushed branches alone pass 16,384, every future chain fails there.
+
+# snap3 lost, snap4 (20 Nov)
+
+- snap3 (04:40Z) stopped at 05:14Z in 96 with 502 ok / 0 FAIL: the container restarted (diag logs 05:55 ... 08:57Z).
+  Its leftovers in /tmp (3 dnb-5.18.96-*-20261120T051455Z-3233 folders, the sandbox tmp.KtQsmJB2X6, 10 cut prefixes
+  tmp.*) were read and removed by literal path; nothing else in /tmp had appeared since its tmp.before.
+- snap4 started about 09:05Z, t106 at 2582cb7, clean.
+- snap4's 97-1 1a FAILED twice (the check and its "...names 5.18.96's file"): its run (r97/run-167) never reached A14.
+  It stopped at "the pin lacks files 5.18.97 is made of: migrations/088_bank_statements.sql(added)", although the same
+  run's header read the usual delta (25 files: 14 changed, 11 added), as every other 5.18.97 run in the section did.
+  That check is `printf '%s\n' "$ADDED" | grep -qxF` under `set -uo pipefail` (deploy-5.18.97.sh:2574): the hazard
+  docs/74 records for the 105 record run's first start (a writer cut off mid-list fails the pipeline, status 141).
+  The committed 5.18.97 script is inherited and is not changed. Nothing changed in the run (its quiet97 fields equal
+  the want). 1a', 1b-1g passed. Not this release's; a record run with it would carry 2 more inherited FAIL lines.
