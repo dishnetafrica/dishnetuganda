@@ -1,15 +1,14 @@
 # 76 — Uganda: the quotation built in code, quoted customers, the "assistant off" list, and the week's fixes (5.18.107 design, 21 November 2026; re-scoped 25 November)
 
 **Status:** DESIGN; nothing is built. **Re-scoped on 25 Nov** at the owner's word: this file is 5.18.107, and Parts H,
-S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed three times (reviews 7, 8 and 9,
-§R.9–§R.11); review 9's changes are **not yet reviewed** (§R.7).
+S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed four times (reviews 7–10, §R.9–§R.12);
+review 10's changes, all minor, are **not yet reviewed** (§R.7).
 
 - **Written:** 21 Nov 2026, from a read-only map of `release/5.18.106` (bf29cbd). Five readers made the map, and a
   critic spot-checked at least two citations per map (§B.7).
-- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **three more times on 25 Nov** (reviews 7, 8
-  and 9).
-Each review
-  was adversarial, in two lenses, and every finding then went to a separate checker that tried to refute it:
+- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **four more times on 25 Nov** (reviews 7, 8,
+  9 and 10). Each review was adversarial, in two lenses, and every finding then went to a separate checker that tried to
+  refute it:
   - **Review 1:** correctness against the code, and safety, rollout and the owner's intent. 41 findings: 30 confirmed,
     11 partly confirmed.
   - **Review 2:** whether review 1's fixes were taken correctly, and new defects. 34 findings: 30 confirmed, 4 partly
@@ -22,7 +21,8 @@ Each review
   - **Review 7 (25 Nov):** Part W, the re-scope, and review 6's changes to Part X. 29 findings: 13 confirmed, 14
     partly confirmed, 2 refuted.
   - **Review 8 (25 Nov):** review 7's changes. 16 findings: 7 confirmed, 8 partly confirmed, 1 refuted.
-  - **Review 9 (25 Nov):** review 8's changes. 17 findings: 9 confirmed, 7 partly confirmed, 1 refuted.
+  - **Review 9 (25 Nov):** review 8's changes. 17 findings: 8 confirmed, 8 partly confirmed, 1 refuted.
+  - **Review 10 (25 Nov):** review 9's changes. 17 findings, all minor: 4 confirmed, 10 partly confirmed, 3 refuted.
   - Every finding that held is taken; the refuted ones are kept as notes. §R says where.
 - **Re-scoped, 25 Nov.** The owner split the next version in two. **5.18.107** keeps Part Q (the quotation built in
   code), Part K (quoted customers), Part X (the "assistant off" list), F-1, F-7 and F-8, and gains **Part W**, the
@@ -48,7 +48,7 @@ Each review
 
   A rollback of the release is the only undo for O7's and W.2's code; W.3 can also be emptied in settings (§W.3).
   South Sudan must stay byte for byte unchanged.
-- **Before the build:** the production values in §N, and a review of review 9's changes. The owner confirmed the
+- **Before the build:** the production values in §N, and a review of review 10's changes. The owner confirmed the
   defaults W-O1–W-O5 and X-O1 on 25 Nov (§O).
 
 Paths below are relative to `dishnet-hybrid-sudan/` unless they start with `docs/` (this repository's root `docs/`) or
@@ -609,9 +609,13 @@ It runs once per turn, and only while `quoted_no_prices_enabled` is on. Its answ
 salesperson, then the sender. That is how "the salesperson who sent it" is read (decision O10, answered 25 Nov).
 - `owner_first_name` comes from `retailers.json`: letters only, at most 30 characters, absent when the owner is pending
   or none or has no name. Part K never puts it into the system prompt: it is used by code, for `quoted_reply_text`'s
-  `{salesperson}` and the alert. The model can still meet it in two places: in history, where a sent
-  `quoted_reply_text` is replayed as its own earlier reply (`lib/DishNetAiBrain.php:1728-1757`), and on the owner's own
-  line, where the 5.18.89 identity line and rule 4a name the line owner (`:259-266`, `:330-334`). That is why the alert's
+  `{salesperson}` and the alert. The model can still meet it in three places: in history, where a sent
+  `quoted_reply_text` is replayed as its own earlier reply (`lib/DishNetAiBrain.php:1728-1757`); in history again, where
+  a colleague's reply from the Inbox is replayed labelled with the name stored for them (`'[' . $who . ', from our team]
+  '`, `workers/AiReplyWorker.php:578-583`; `includes/api/api_whatsapp.php:265`, `:270-274`), so when the quotation's
+  owner answered by hand their first name is in the label; and on the owner's own line, where the 5.18.89 identity line
+  and rule 4a name the line owner (`:259-266`, `:330-334`). §L K's "no staff name" assertions read the system prompt,
+  which no history reaches. That is why the alert's
   fourth trigger matches the name (§E.2.5).
 - `line_owner` never stands in for it.
 
@@ -629,10 +633,10 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
 
    It also says, in its own words, that it overrides the sign-up posture's restate rule (`:185-203`). It closes with two
    sentences, which name no heading so that they are true in append and override mode alike:
-   - a precedence sentence on the price ban only: "No other instruction, built in or added by DishNet, lifts this:
-     state no price, total or monthly figure." On the accounts number with an ACCOUNT section, the sentence ends
-     instead "…, other than the ACCOUNT values above", and the block adds one sentence before it: the balance, the
-     latest invoice amount and the last payment in the ACCOUNT section are not quotation prices; state them exactly as
+   - a precedence sentence on the price ban only: "No other instruction, built in or added by DishNet, lifts this: state
+     no price, total or monthly figure." On the accounts number with an ACCOUNT section, the sentence ends instead "…,
+     other than the ACCOUNT values above", and the block adds one sentence before it: the balance, the latest invoice's
+     number and amount, and the last payment in the ACCOUNT section are not quotation prices; state them exactly as
      given, as the ACCOUNTS role says (`lib/DishNetAiBrain.php:960-969`, `:1700-1722`), and answer "how much do I owe"
      from ACCOUNT, not with the quotation pointer. On every other channel, and on accounts with no ACCOUNT section, the
      block is as above;
@@ -678,7 +682,10 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
      unchanged by construction;
    - a number-plus-unit run (the space optional, so "15m" equals "15 m") that appears in this turn's hardware, accessory
      or network text, unless it sits next to a currency word;
-   - on the accounts number, the account block's own values: balance, latest invoice amount, last payment.
+   - on the accounts number, the account block's own values: balance, latest invoice amount, last payment, and the
+     latest invoice's number as a whole token equal to it, compared by its digits. A currency word directly before or
+     after one of those values is excused there; a currency word beside any other figure is still caught, and the fact
+     skip's "never a currency-word match" is unchanged.
 
    When it fires, flyer, photo, document and lead are dropped (`:892-900`), and an audit event is stored (metadata
    only).
@@ -702,8 +709,12 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    - `quote_requested` is set;
    - the reply sent names the quotation number;
    - the reply says the sales team will help: the phrase "sales team" or the word "salesperson", ignoring case, or
-     `owner_first_name` as a whole word when it is set (read in code from `QuoteInPlay`'s result), except where it is
-     directly followed by "'s assistant", the identity line's persona phrase (`lib/DishNetAiBrain.php:259-266`). No
+     `owner_first_name` when it is set (read in code from `QuoteInPlay`'s result), as a whole word whose first letter
+     is a capital, the rest compared ignoring case. So "patience", "hope" or "your bill" never match, and a name stored
+     as "GRACE" still matches "Grace". It does not count where it is followed by "'s" and then, within two words,
+     "assistant", "line" or "behalf": the identity line's persona phrases (`lib/DishNetAiBrain.php:259-266`). In the
+     matcher's own copy of the text only, U+2019 and U+02BC are first turned into an ASCII apostrophe; the text sent is
+     never changed. No
      other wording counts, so the fixed `human_ask` hand-over, the holding line and `ReplyPrivacyGuard::SAFE_FALLBACK`
      do not match it.
 
@@ -712,11 +723,20 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    hand-overs (the holding line). The hand-over's own alert stands.
 
    **On a model turn that keeps `<<ESCALATE>>`**, with or without `<<QUOTE>>`, the four triggers apply as on any other
-   turn. The Part K alert goes to the quotation's owner (key `quoted:<ref>`); the hand-over alert goes to the central
-   number or the line owner, as today (`escalate:conv:<id>`, `workers/AiReplyWorker.php:1618-1629`, `:1754-1763`). The
-   Part K alert is skipped when its resolved phone equals one the hand-over alert reached that turn, compared before
-   sending, so one person never gets both: an owner who is pending or none (the central number), or a line owner who is
-   the quotation's owner.
+   turn. The Part K alert goes to the quotation's owner (key `quoted:<ref>`). The hand-over alert goes where
+   `AlertService::handover` routes it (`lib/AlertService.php:96-118`; `workers/AiReplyWorker.php:1618-1629`,
+   `:1754-1763`):
+   - no line owner (`handoverOwner()` null): the central `alert_whatsapp`, key `escalate:conv:<id>`;
+   - a line owner with a phone: that phone (`escalate:conv:<id>:owner`), plus the central number unless
+     `wa_handover_copy_central` is saved off (absent or empty means on);
+   - a line owner with no phone: the central number.
+
+   The Part K alert is skipped when its resolved phone is one the hand-over alert of that turn **is routed to**, worked
+   out by that same routing before either alert is sent; the hand-over runs after the reply is sent, and
+   `Handover::escalate` returns nothing (`lib/Handover.php:20-23`), so what it actually reached cannot be read.
+   Phones are compared by digits only, on the international form (`StaffDirectory::phoneOf` for staff, `target()` for
+   the central number). So one person never gets both: a pending or unknown owner, when the central number is in that
+   set; a line owner who is the quotation's owner.
 
    **How it is sent:**
    - `AlertService::notifyTo(<owner's phone>, 'quoted:<ref>', <text>, cooldown)`;
@@ -751,8 +771,12 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
 
 `quoted_reply_text` is rendered by one helper, used by every path that puts it in place of the reply: the floor
 (§E.2.3), the filled holding line (§E.2.4) and the marker-only branch (§D.4). `{salesperson}` is the owner's first name
-when there is one; otherwise "our sales team", capitalised when it starts a sentence, as it does in the default. That
-covers an owner who is pending or none, and a name left empty by the letters-only filter. `{ref}` and `{valid_until}` are
+only when `owner_first_name` is set **and** the Part K alert's resolved recipient is that owner's own phone; otherwise it
+is "our sales team", capitalised when it starts a sentence, as it does in the default. Rendering and routing use one
+resolver, which returns the recipient and whether it is the owner's own phone, so whatever sends the alert to the
+central number also removes the name: an owner who is pending or none or has no phone. A nameless owner with a phone is
+alerted on that phone and reads "our sales team". When the dedupe skips the Part K alert because the hand-over is routed
+to the owner's phone, the name stays: the owner is told. `{ref}` and `{valid_until}` are
 always present for a live quotation.
 
 ### E.5 The website chat
@@ -950,8 +974,8 @@ reused.
 Eight items found or asked for between the 5.18.106 deploy and the split. Each was mapped read-only on 25 Nov against
 `release/5.18.106` (bf29cbd) by two readers. The exception is the two root scripts W.7 and W.8 cite, which bf29cbd does
 not contain: they were read on the development branch at c0d0868 (they last changed in 745e668 and 7408a70). Every
-citation below is theirs. The section was reviewed three times (reviews 7, 8 and 9, §R.9–§R.11); review 9's changes are
-not yet reviewed (§R.7). Each item is Uganda only unless it says otherwise; South Sudan stays byte for byte unchanged.
+citation below is theirs. The section was reviewed four times (reviews 7–10, §R.9–§R.12); review 10's changes are not
+yet reviewed (§R.7). Each item is Uganda only unless it says otherwise; South Sudan stays byte for byte unchanged.
 
 ### W.1 One reply to a burst of messages
 
@@ -1067,13 +1091,19 @@ handler's own message comes last in the joined text, so the anchored pattern sti
 it, unlike the reads around it that fail open (`workers/AiReplyWorker.php:592`, `:1402-1404`, `:1694-1696`):
 - step 2's mark write, step 3's claim and step 3's collection let any Throwable reach `WorkerBase` before
   `buildContext`: a counted failure, Part X's shape (§X.5), never `WorkerDefer`. Nothing is sent, and the seed's retry
-  collects again from the seed. A failed mark write leaves the older event `failed` with attempts left, so a newer
-  handler's claim still takes it. The handler never returns after a mark write that failed, and never goes on with the
+  collects again from the seed. The handler never returns after a mark write that failed, and never goes on with the
   seed alone after a collection that failed. If the seed dies, `onDead` hands over, or §X.5 applies;
-- step 1's re-read and step 2's search propagate too. A failed search is harmless: the older message is answered on its
-  own. A failed re-read of a carried row costs its mark, because `EventBus::fail` replaces `error`
-  (`lib/EventBus.php:272-286`), so that row can be answered again on its retry: a double, as today, never a loss.
-  `EventBus::fail` is shared by every worker and is not changed. This is recorded in §P.
+- a failed mark write is a counted failure of the older event, and nothing is sent. With attempts left the event is
+  `failed`, and a newer handler's claim takes it. On its last attempt `EventBus::fail` makes it `dead`
+  (`lib/EventBus.php:260`, `:285`): `onDead` hands over, or §X.5 applies, and the claim skips it. The newer message is
+  still answered, without the older text: the hand-over's `needs_human` does not stop the worker, which a pause stops
+  only on `human_active` (`workers/AiReplyWorker.php:1388`);
+- step 1's re-read and step 2's search propagate too. A failed search is a counted failure of the older event: nothing
+  is sent and no mark is written. While it is `failed` with attempts left, a newer handler's claim takes it; on its
+  retry it steps aside for a newer event that has not run, or answers on its own; on its last attempt it dies and
+  `onDead` hands over, or §X.5 applies. No message is lost. A failed re-read of a carried row costs its mark, because
+  `EventBus::fail` replaces `error` (`lib/EventBus.php:272-286`), so that row can be answered again on its retry: a
+  double, as today, never a loss. `EventBus::fail` is shared by every worker and is not changed. This is recorded in §P.
 
 **Why nothing is left unanswered.** An event is acked without a reply of its own in three ways:
 - by step 1, because its row carries a mark: a newer handler claimed it, or it stepped aside for a newer event that has
@@ -1114,17 +1144,24 @@ one retries. A marked row that is itself back to `pending` would instead be answ
 Before a rollback the switch is turned off and the marks are drained with the drain check (§K). The gate doubt is
 recorded in §P; §N narrows it but cannot exclude it.
 
-**The drain check.** `tools/sales_followup.php --check burst-drain` is read-only. Over typed `ai.reply` events of
-conversations above 0, it parses marks exactly as **The mark** says and prints counts, and the conversation and event
-ids behind them, never a phone or a text:
-- (a) marks naming an event still `pending`, `processing` or `failed`. A named event parked behind a colleague (its
-  `error` holds `parked: a colleague is active on this conversation`, `workers/AiReplyWorker.php:1436-1447`) is counted
-  apart: `answeredMeanwhile` or the park's age limit drops it, so its older message is not gathered whether or not a
-  rollback happens;
+**The drain check.** `tools/sales_followup.php --check burst-drain` is read-only. It is a named mode of `--check`,
+handled in `sf_check_cmd` before the ladder-step lookup (`tools/sales_followup.php:168-169`), so it is judged whatever
+`ai_burst_merge_enabled` reads and never prints "OFF — not judged"; it runs under the `check` command on the read-only
+connection and falls under `sf_main`'s `total_changes()` assertion. Over typed `ai.reply` events of conversations above
+0, it parses marks exactly as **The mark** says and prints counts, and the conversation and event ids behind them, never
+a phone or a text:
+- (a) marks naming an event still `pending`, `processing` or `failed`. A named event is counted apart only when
+  `answeredMeanwhile` would drop it now: `wa_human_cooldown_minutes` is not 0 and a colleague message is stored after
+  its received time (`lib/ConversationService.php:962-973`). Its older message is then not gathered whether or not a
+  rollback happens. The park note alone proves nothing: two texts parked by one pause leave the newer one carrying the
+  note after the pause ends, and it then gathers the older one;
 - (b) marked events that are themselves `pending`, `processing` or `failed`. Step 1 acks these at the next worker run;
   under 5.18.106, which has no step 1, each would be answered a second time;
-- as its positive control, the number of marked rows it read in the last day, so that "nothing to drain" is told apart
-  from a read that saw nothing.
+- as its positive control, the number of typed `ai.reply` events read in the last day, marked or not. A reading whose
+  control is 0 is INDETERMINATE: it cannot tell "nothing to drain" from a read that saw nothing.
+
+It exits 0 whatever the counts, as a reading, not a failed check: the owner reads the counts, and the rehearsal asserts
+the listing.
 
 **Not in this release:**
 - a second check after the model and before the send, which would narrow the race further at the cost of a model call;
@@ -1463,13 +1500,19 @@ non-staff number. Steps for 5.18.108's parts are in docs/77 §K.
    base; the uCRM catalogue screen lists any plan whose two prices differ.
 
 **Before a rollback of 5.18.107:** turn `ai_burst_merge_enabled` off, then run `--check burst-drain` (§W.1) until (a)
-and (b) both read 0. With the switch off no new marks are written: step 3's collection drains (a) as the named events
-run, and step 1 acks (b) at the next worker run. The longest wait is about an hour, while a named event retries; events
-parked behind a colleague are counted apart and need no wait.
+and (b) both read 0 **twice**, the second reading at least 2 minutes after the switch-off. A worker reads its settings
+when its run starts, so a run that began before the switch-off can still write a mark for up to its 45-second budget
+plus a typing call (`run_worker.php:43`, `workers/WorkerBase.php:200`, `lib/EvolutionApiService.php:110`); no run that
+starts after the switch-off writes one. Step 3's collection drains (a) as the named events run, and step 1 acks (b) at
+the next worker run. A reading whose control is 0 is INDETERMINATE and does not count. The longest wait is about an
+hour, while a named event retries; a named event parked by a pause that has since ended clears within its remaining
+park (at most 600 s) plus one worker run, about 15 minutes, and takes up to `wa_parked_max_minutes` only if a pause
+holds again. A named event a colleague answered after it arrived is counted apart and needs no wait.
 
-**If the rollback cannot wait** (for example, the worker fails every turn): turn the switch off, run the check, roll
-back anyway, and hand the conversation ids it lists to staff. For (a), rolling back sooner costs the loss §W.1 records;
-for (b), a second reply to a message already answered.
+**If the rollback cannot wait** (for example, the worker fails every turn), or the control stays at 0: turn the switch
+off, run the check, roll back anyway, and hand the conversation ids it lists to staff. For (a), rolling back sooner
+costs the loss §W.1 records; for (b), a second reply to a message already answered. Step 1's re-read and the collection
+run with the switch off, so a persistent fault in them is removed only by a rollback.
 
 ---
 
@@ -1526,7 +1569,8 @@ guards.
 - **What the floor lets through, unchanged:**
   - a "how do I pay" answer;
   - the office or a salesperson's number;
-  - an accounts-number balance;
+  - an accounts-number balance, and "your latest invoice 000005 has UGX <amount> due" with ACCOUNT data and a live
+    quotation (the same reply with a kit price added is still caught; a copy without the invoice-number skip fails);
   - "15m Ethernet cable" and "about 100 m".
 - **What it catches:** the same replies with a kit price added; "2.6m"; "2.6 million"; "UGX 950k"; a fee typed into the
   delivery fact; a PRICES-fact figure.
@@ -1543,16 +1587,27 @@ guards.
   `quoted_reply_text` and no Part K alert. The same holds for an external ShopBot hand-over. A weakened copy that keys
   the replacement on `escalate_requested` alone is caught.
 - **The alert:** a compliant reply with no amount still alerts once.
-- **`{salesperson}`:** for an owner who is pending, none or nameless, through the floor and through a marker-only
+- **`{salesperson}`:** for an owner who is pending, none or nameless, or named with no phone on record (whose one alert
+  goes to the central number), through the floor and through a marker-only
   `<<QUOTATION>>` turn, the sent text contains no `{` or `}`, no doubled space, and "Our sales team will help"; a named
   owner's text contains the first name and no "sales team" (the control). Weakened copies that leave `{salesperson}`
-  literal, or substitute an empty string, are caught.
+  literal, substitute an empty string, or render the name whenever `owner_first_name` is set (the no-phone case), are
+  caught.
 - **Model hand-overs of a quoted customer,** each with a weakened copy that is caught:
   - `<<QUOTE>>` with `<<ESCALATE>>` whose text names the quotation number: the hand-over, and one alert to the
     quotation's owner;
   - `<<ESCALATE>>` with "our sales team will help": the same;
   - a guard block for a quoted customer, with and without `<<QUOTE>>`: the hand-over and no Part K alert;
-  - an owner who is pending or none, and a line owner who is the quotation's owner: exactly one message to that phone.
+  - an owner who is pending or none, and a line owner who is the quotation's owner: exactly one message to that phone;
+  - on a salesperson's own line with the central copy on and a pending quotation owner: the central number gets exactly
+    one message and the line owner one (a copy that predicts the line owner only is caught);
+  - the same line with the copy saved off and the line owner having a phone: the line owner gets the hand-over alert
+    and the central number the Part K alert;
+  - a line owner with no phone and a pending quotation owner: the central number gets exactly one message;
+  - an `<<ESCALATE>>` turn inside the hand-over's 30-minute cooldown: no Part K alert to the central number, as §P
+    records;
+  - a quotation owner whose number equals `alert_whatsapp` written another way (local against international): one
+    message.
 - **Elsewhere:** the prompt in three modes; the scan's SQL exclusion; `check()` unchanged by `phoneSpans()`, South Sudan
   included.
 - **The precedence sentence:** for a customer with a live quotation, Part K on, in append and override mode with any
@@ -1577,12 +1632,18 @@ guards.
   - a reply that says "our sales team will help" and names neither the quotation number nor an amount alerts once;
   - off the owner's line, after a stored `quoted_reply_text` turn and past the cooldown, a reply naming the owner ("…
     will help you with any change"), with no number and no amount, alerts once;
-  - on the owner's own line, the persona phrase "… 's assistant" alone does not alert;
+  - on the owner's own line, the persona phrases alone do not alert: "… 's assistant", "… 's AI assistant", "on …'s
+    own line", "on …'s behalf", and "…’s assistant" with a typographic apostrophe;
+  - an owner named Patience with "Thank you for your patience", and one named Hope with "I hope this helps": no alert;
+  - an owner stored as "GRACE" with "Grace will help you with any change", and "Please contact Grace about any change"
+    (no hand-over verb): each alerts once;
   - **the negative control, on a turn that is not a hand-over** (no `<<ESCALATE>>`, no `<<QUOTE>>`, non-empty text): a
     reply saying "someone from our team will call you", with no number, no amount, no quotation number, and neither
     "sales team" nor "salesperson", raises no Part K alert;
-  - weakened copies, each caught: no fourth trigger; no name match; no "'s assistant" exclusion; a trigger matching
-    "team" alone (the negative control).
+  - weakened copies, each caught: no fourth trigger; no name match; no persona exclusion; a trigger matching "team"
+    alone (the negative control); a name match ignoring case (Patience); an exact-case match ("GRACE"); no apostrophe
+    normalisation (the typographic case); an exclusion limited to the exact "'s assistant" ("AI assistant"); a match
+    that requires a hand-over phrase ("Please contact Grace").
 
 **X — the "assistant off" list**
 - **A listed number writes in (text):**
@@ -1745,8 +1806,16 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
     holds both texts.
 - **The drain check** (`--check burst-drain`): both states planted through the real writers, a step-aside whose newer
   event is still `pending`, and a claimed row put back to `pending` by `cron/event_processor.php`'s release while the
-  event it names is `done`, read 1 and 1, with the day's marked-row count as the positive control; after one worker run
-  under 5.18.107, and the named event answered, they read 0 and 0. Counts and ids only, never a phone or a text.
+  event it names is `done`, read 1 and 1, with the day's typed-event count as the positive control; read again with
+  the switch turned off, they still read 1 and 1 and list the ids; after one worker run under 5.18.107, and the named
+  event answered, they read 0 and 0. Counts and ids only, never a phone or a text. Also:
+  - a colleague message, then two typed texts both parked by that pause, the newer one due after the older (its 30-s
+    floor): after the pause ends the older steps aside, and the check counts the named event in (a), not apart, until
+    it has gathered the older text; with a colleague message stored after the newer text arrived, the same parked event
+    is counted apart (the control);
+  - typed events present and no marks: 0 and 0 with a non-zero control; no typed events in the day: INDETERMINATE;
+  - a worker built with the switch on, the switch turned off before its next batch: the step-2 mark it writes after the
+    switch-off is seen by a reading taken after its run ends.
 - **Conversation 0:** never checked.
 - **The switch off:** two messages give two replies, as today (the control), and nothing is marked or claimed.
 - **South Sudan:** with `ai_burst_merge_enabled` stored as `'1'`, two typed messages give two replies, nothing is
@@ -1774,7 +1843,10 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
   - marking or claiming with the switch off;
   - a collection that swallows its error (the claimed text is then in no reply);
   - a mark write that swallows its error and returns (the older text is then in no reply);
-  - a drain check that omits (b), or matches marks with `LIKE` (caught by an `n` / `10n+k` pair).
+  - a drain check that omits (b), or matches marks with `LIKE` (caught by an `n` / `10n+k` pair);
+  - a drain check gated on the switch, or given the OFF gate (the read with the switch off);
+  - a drain check that exempts every event carrying the park note (the two-parked case);
+  - a drain check whose control counts only marked rows (the INDETERMINATE case).
 - **No re-point is expected:** the switch is off by default, so the existing tests that queue two events for one
   conversation behave as today. The build runs them to confirm it.
 
@@ -1921,7 +1993,8 @@ medium: the brain's only gate is the setter.
    placement, the website chat. O7's phrase removal is built in the same step, but it is **not** behind
    `connection_quote_enabled`: it is live at the deploy.
 4. **W.1:** the re-read, the step-aside check, the claim and the collection, behind the Uganda gate; the mark and the
-   claim also behind their switch; `asksForHuman` made public.
+   claim also behind their switch; `asksForHuman` made public; the drain check, `--check burst-drain`, as a named
+   read-only mode of the switch tool.
 5. **W.2, W.3, W.5 and W.6;** **W.4** only after step 7's check has read PASS with `gpt-transcribe` (§W.4).
 
 Then: the suite twice; the deploy script's design, as a section of this document reviewed before the derivation, as
@@ -1929,8 +2002,9 @@ docs/75 §L was. That section must name 092: a migration trial of 092 on a copy 
 QF-G2 did for 089–091; after the first boot, `_migrations` holds 092 with its md5, its `migration.log` line reads OK, and
 `wa_no_ai` can be read the way the worker reads it, with a positive control; any failure is a NO-GO and the rollback.
 The rollback instructions it prints say first to turn `ai_burst_merge_enabled` off and drain the marks with
-`--check burst-drain` (§K, before a rollback). The rehearsal asserts that check: a planted mark whose named event is
-retrying is listed, and the list is empty once that event is answered.
+`--check burst-drain` (§K, before a rollback). The rehearsal asserts that check with the switch off, as the printed
+instructions direct: a planted mark whose named event is retrying is listed, and the list is empty once that event is
+answered.
 Then `deploy-5.18.107.sh` derived from 5.18.106's, with W.7; the harness fix W.8; and the rehearsal chained on
 5.18.106's.
 
@@ -1949,7 +2023,9 @@ parts need are in docs/77 §N.
   `ai_fact_location_pin`, `stock_statement`, `ai_fact_business_cap`, `quote_company_phone`.
 - **The knowledge base (W.3):** whether `OFFICE_LOCATION` is approved, whether its `wa_answer` is set, and its length.
   Never its content.
-- **Quotations:** `quote_tracking_enabled`, `quote_chase_enabled`.
+- **Quotations:** `quote_tracking_enabled`, `quote_chase_enabled`; and uCRM's invoice-number setting, its prefix
+  and length only, never a value. The repository already records six-digit numbers on the live install
+  (`tabs/customer_app/portal.php:1367`); the floor's skip does not depend on this read.
 - **The tenant (W.1):** which source selects Uganda, by `TenantProfile::resolveId`'s rule (`lib/TenantProfile.php:73-80`)
   applied to the plugin's own configuration without the vault: `tenant_profile`; or `currency_code`, when present; or
   `cashbook_base_currency`, only when `currency_code` is absent; or nothing, so Uganda comes only from the vault. Key
@@ -2015,9 +2091,16 @@ The limits of Parts H and S are in docs/77 §P.
   person gives the burst one reply, the fixed hand-over, and the older texts get no AI answer of their own (§W.1). Voice
   notes are never merged. An older event whose reply went out but whose handler then failed is answered again, as today.
   A rollback, or a worker run whose Uganda gate reads false on a doubt, inside a burst can leave a marked message
-  gathered by nobody (§W.1); before a rollback the switch is turned off and the marks drained (§K), and §N narrows, but
-  cannot exclude, a gate doubt, whose reach on the live install is not established. A carried row whose re-read throws
-  loses its mark and can be answered again on its retry.
+  gathered by nobody (§W.1); a marked row that is itself back to `pending`, `processing` or `failed` is answered a
+  second time under 5.18.106 unless the drain check's (b) read 0 first; before a rollback the switch is turned off and
+  the marks drained (§K), and §N narrows, but cannot exclude, a gate doubt, whose reach on the live install is not
+  established. A carried row whose re-read throws loses its mark and can be answered again on its retry.
+- **The salesperson's alert on a model hand-over (K)** is skipped where the hand-over alert is routed to the same
+  phone, so a hand-over alert held back by its 30-minute per-conversation cooldown, or one that fails to send, still
+  withholds it that turn. The conversation is already red and its recipient was alerted within the window.
+- **An owner whose first name is an ordinary word (K)** can still draw one wrong alert per quotation per cooldown (6 h)
+  when the word is capitalised, at the start of a sentence ("Hope this helps") or as a day name, and so can "I'm not
+  <owner>" on the owner's own line.
 - **The topic rule (W.2)** is prompt-level, like every absolute rule. No stored setting reaches any brain; only the
   worker, the website chat and the two checks set it. Email drafts never get it.
 - **The office line (W.3)** is admin text, cut at 400 characters and judged by Part K's floor like every code-appended
@@ -2215,11 +2298,9 @@ Two lenses: review 5's changes to Part X, and its other changes. 5 confirmed, 3 
 
 ### R.7 Not yet reviewed
 
-- **Review 9's changes** (§R.11): §W.1's step 2 (no carried target), its failure rule, its drain check and the 15-minute
-  pause figure; §E.1's and §E.2.1's account of where the owner's name reaches the model; §E.2.1's account-values
-  exception and first bullet; §E.2.5's narrowed no-alert rule, its dedupe and the name in trigger 4; §E.4's
-  `{salesperson}` fallback; §K's step 1 tests and rollback steps; §M's drain-check requirement; §N's tenant read; the
-  status block and §O after the owner's confirmation; and their tests in §L.
+- **Review 10's changes** (§R.12), all minor: the drain check's parked rule, dispatch, control and two readings; the
+  failure rule's wording; §E.2.5's routed-to dedupe and the name match's exact form; §E.4's resolver; §E.2.1's and
+  §E.2.3's invoice number and currency word; §E.1's third place; and their rows in §K, §L, §M, §N and §P.
 
 ### R.8 The re-scope (25 Nov)
 
@@ -2303,7 +2384,7 @@ completely (B). Every finding then went to a separate checker that tried to refu
 ### R.11 Review 9 (17 findings, 25 Nov)
 
 Two lenses on review 8's changes: §W.1 and §W.7 against the code (C), and whether review 8's fixes were taken correctly
-and completely (D). Every finding then went to a separate checker that tried to refute it. 9 confirmed, 7 partly
+and completely (D). Every finding then went to a separate checker that tried to refute it. 8 confirmed, 8 partly
 confirmed, 1 refuted.
 
 | Finding | Verdict | Taken in |
@@ -2325,3 +2406,29 @@ confirmed, 1 refuted.
 | R9-D10 — the status block said the owner asked for W.3 | P (the owner has since confirmed all six defaults) | status block, §O, §W.3 |
 | R9-D11 — §A and W-O1 left out two behaviours | **refuted**: one-line summaries, specified in §W.1 and §P | — |
 | R9-D12 — the status block counted seven reviews | C | status block |
+
+### R.12 Review 10 (17 findings, 25 Nov)
+
+Two lenses on review 9's changes: §W.1 and Part K against the code (E), and whether review 9's fixes were taken
+correctly and completely (F). Every finding then went to a separate checker that tried to refute it. All seventeen
+were minor: 4 confirmed, 10 partly confirmed, 3 refuted.
+
+| Finding | Verdict | Taken in |
+|---|---|---|
+| R10-E1 — the drain check set aside every parked named event, but two texts parked by one pause leave the newer one to gather the older | P (an age exemption would bring the loss back) | §W.1 (counted apart only when `answeredMeanwhile` would drop it now), §K, §L W.1 |
+| R10-E2 — `--check burst-drain` had no dispatch, and the tool's OFF gate would answer "not judged" exactly when §K runs it | P | §W.1 (a named mode before the step lookup, judged whatever the switch says), §M, §L W.1 |
+| R10-E3 — the positive control could read 0 on a broken read | **refuted**: a missing store raises, not 0 | — |
+| R10-E4 — "reached that turn" cannot be known before sending, and the hand-over route was misdescribed | P | §E.2.5 (routed to, by AlertService's own routing; digits compared), §P, §L K |
+| R10-F2 — the same, from the consistency lens | P | as R10-E4 |
+| R10-E5 — the owner-name match would fire on names that are ordinary words, and the persona exclusion missed a curly apostrophe and paraphrases | P (a hand-over-phrase requirement would bring back D-3's miss) | §E.2.5 (capitalised name; the matcher's own copy normalised; wider exclusion), §P, §L K |
+| R10-F4 — the same, and the owner's line phrases | P | as R10-E5 |
+| R10-E6 — "the ACCOUNT values above" is false in override mode | **refuted**: the data block is still in the prompt | — |
+| R10-E7 — `{salesperson}` named an owner the alert never reached | C | §E.4 (one resolver: the name only when the alert goes to that owner's own phone), §L K |
+| R10-E8 — "a failed search is harmless" described failing open | P | §W.1 |
+| R10-F8 — the same, and a mark write on the last attempt dies rather than being claimed | P | §W.1 |
+| R10-E9 — the model meets the owner's name in a third place, a colleague's Inbox reply | P | §E.1 |
+| R10-F1 — review 9's tally was wrong | C | status block, §R.11 |
+| R10-F3 — the drain's control read 0 on a quiet day, and a run that began before the switch-off can still write a mark | C | §W.1 (typed events as the control; INDETERMINATE), §K (two zero readings), §L W.1 |
+| R10-F5 — the floor did not exempt the ACCOUNT section's invoice number, nor a currency word beside an account value | C | §E.2.1, §E.2.3, §N, §L K |
+| R10-F6 — §P did not record (b)'s double reply | P | §P |
+| R10-F7 — a merged "Agent" takes away the owner's alert | **refuted**: one message saying the same gets the same result today | — |
