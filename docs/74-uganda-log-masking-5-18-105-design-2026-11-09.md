@@ -1,6 +1,6 @@
 # 74 — Uganda: 5.18.105, no phone number in any log line (design, 9 Nov 2026)
 
-Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), pushed on 15 Nov on the owner's word; rehearsed in full (§S.4); the suite's second pass still to run; NOT deployed (§S, 15 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
+Status: **built and re-cut — `release/5.18.105` = `7835906` (the first cut, `f764699`, is kept), pushed on 15 Nov on the owner's word; rehearsed in full (§S.4); both suite passes run, identical; DEPLOYED 16 Nov, copy 04:44:05 UTC: PASSED 232 ok, 0 failed, 81 notes (§S.6, 22 Nov 2026).** The design below stands as written on 9 Nov. It follows the owner's rulings of 9 Nov (root `docs/07`:16641-16653):
 
 - 5.18.105 masks **every** log line that can carry a phone number on Uganda (option B), not only the four lines of 5.18.104's known limit 13.
 - The chase (step 6) does not wait for 5.18.105. Offers-live (step 12) does.
@@ -1540,11 +1540,12 @@ The plan is sized for option B (gap 6). A step waits only for what it reads.
   - `post_kyc.php:269` and `post_cashbook.php:612` join B (the default, under ruling B);
   - South Sudan's copies of the same lines are masked too (the default: log text only, D7).
 
-## S. Status, 15 Nov 2026 — built, re-cut and rehearsed; the suite's second pass still to run; NOT deployed
+## S. Status, 22 Nov 2026 — built, re-cut and rehearsed; both suite passes run, identical; DEPLOYED 16 Nov (copy 04:44:05 UTC)
 
-This section records what was built. The design above stands as written on 9 Nov and is not rewritten. Where this
-section and §H disagree, this section records what was built. §S.4 is complete since 15 Nov; §S.3 is
-completed when the suite's second pass ends.
+This section records what was built, and since 22 Nov how it was deployed. The design above stands as written on 9 Nov
+and is not rewritten. Where this section and §H disagree, this section records what was built. §S.4 is complete since
+15 Nov; §S.3 is completed by §S.6, which records pass B2. §S.5 stands as written on 15 Nov; §S.6 records the deploy and
+which of the items §S.3 and §S.5 left pending are now done.
 
 ### S.1 The release
 
@@ -1849,3 +1850,28 @@ every one on the same line, `D03 --all: byte for byte 221c9dc's output`. Nothing
   waits for that (the owner's ruling, 9 Nov). Steps 1–6 do not wait.
 - **The owner's, separately:** the older faults of §S.2 item 3. The first two are in jobs that run on Uganda (LN-10's
   and LN-14's).
+
+### S.6 Deployed
+
+From the operator's records of 16 and 22 Nov; the run logs themselves are not in the repository. The entry is root
+`docs/07`, *16 Nov — 5.18.105 DEPLOYED*.
+
+- **The deploy, 16 Nov:** the copy at 04:44:05 UTC; **PASSED, 232 ok, 0 failed, 81 notes**, so no LK or LM check
+  failed. It ran before pass B2 had ended, where §S.5 put it after; B2 then came out identical to B1.
+- **`--after-only`**, begun 05:07:30 UTC: **PASSED, 151 ok, 0 failed, 28 notes**, R19 conclusive. A second one, the
+  next day after 15:00 UTC, is not in the records.
+- **The quarantine's own `--check`** was not run after the copy until 22 Nov (begun 05:39:46 UTC), when 5.18.106's
+  stage A required one begun after 5.18.105's copy (A14; root `docs/75` §L.6): **PASSED, 9 ok, 0 failed, 2 notes.**
+- **What §S.3 and §S.5 left pending:**
+  - **Pass B2 (§S.3, §S.5) — done.** On `7835906`, begun 16 Nov at 00:00 UTC: 317 files, 22,979 passed, 7 failed,
+    identical to B1; the seven are the four container-only files', as in 5.18.104's pass B. Its end time is not in the
+    records. D03 `--all` did not fail, so §S.3's reading rule was not needed.
+  - **Root `docs/07`'s 5.18.105 entry (§S.5) — done:** *9–16 Nov — 5.18.105* and *16 Nov — 5.18.105 DEPLOYED*.
+    Written after the deploy, they record the runs and carry no command: §S.5's deploy command and rollback block are
+    not in them.
+  - **The deploy and its `--after-only` (§S.5) — done**, above. The server's `--check` had read GO on 15 Nov.
+  - **Step 12, `offers-live` (§S.5):** the condition the owner set on it was met on 16 Nov — 5.18.105 serving and its
+    `--after-only` passed. Root `docs/75` §F holds steps 6, 11 and 12 until 5.18.106 is deployed, for a reason of its
+    own.
+  - **The older faults of §S.2 item 3 (§S.5) — not done.** 5.18.105 changes none of them; they remain the owner's to
+    decide, for a later release.

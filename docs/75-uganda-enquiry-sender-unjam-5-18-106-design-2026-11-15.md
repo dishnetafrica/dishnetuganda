@@ -1,9 +1,16 @@
 # 75 — Uganda: the enquiry follow-up sender, unjammed (5.18.106 design, 15 November 2026)
 
-**Status:** DESIGN, reviewed — written 15 Nov 2026 (evening, UTC), from the read-only report's two runs on the Uganda
-server and a read of the code at `release/5.18.105` (7835906); revised the same evening after an adversarial review in
-two lenses (correctness against the code; safety and rollout), whose ten findings are taken in §C–§J. Nothing here is
-built yet. 5.18.106 is cut from 5.18.105 and can be deployed only after it.
+**Status:** **DEPLOYED on 22 Nov 2026** (§S, 24 Nov 2026).
+- **The release:** `release/5.18.106` = `bf29cbd`, one commit on 5.18.105 (`7835906`), pushed that morning on the owner's
+  word.
+- **The deploy:** copied at 05:48:21 UTC; PASSED 234 ok / 0 failed / 93 notes.
+- **The after-checks:** `--after-only` PASSED on 22 Nov (154 ok / 0 failed / 32 notes) and on 23 Nov (155 ok / 0 failed /
+  31 notes), UJ-ON PASS both times.
+
+The design below stands as written on 15 Nov 2026 (evening, UTC). It came from two runs of the read-only report on the
+Uganda server and a read of the code at `release/5.18.105` (7835906). It was revised the same evening after an
+adversarial review in two lenses, correctness against the code and safety and rollout; the review's ten findings are
+taken in §C–§J. §K records where the build departs from the design, and §L is the deploy script's design.
 
 **Asked for:** the owner, after the report: "yes build it" — a failing message is moved aside instead of blocking the
 rest, old approved messages expire instead of going out weeks late, and the run stops spending itself on old enquiries.
@@ -777,3 +784,46 @@ Everything seeded is fictitious, from the rehearsal's own number range.
 5.18.105's B2, then its deploy and `--after-only` (the owner's); 5.18.106's suite twice on its release commit (T1's 548
 confirmed there); the derivation; the rehearsal (dev trials, then a record run); the docs/07 entry; then, on the owner's
 word, `release/5.18.106` pushed and the deploy. Until 5.18.106 serves, steps 6, 11 and 12 stay off (§F).
+
+## S. Status, 24 Nov 2026 — deployed
+
+The design above is not rewritten; where it and §K disagree, §K records what was built. The runs are recorded in root
+`docs/07`'s two 5.18.106 entries (15–22 Nov and 22–23 Nov).
+
+- **The release:** `release/5.18.106` = `bf29cbd`, as §K committed it: 23 files (20 changed, 3 added), no migration, no
+  setting. Pushed on 22 Nov on the owner's word.
+  - The release suite ran twice on it. C1: 317 files, 23,132 passed, 7 failed, only the container-only checks. C2 failed
+    in the same files.
+  - `scripts/deploy-5.18.106.sh` was derived as §L designs it and committed as `745e668`.
+- **The rehearsal (§L.10) never completed its record run.**
+  - A container restart cut the first run.
+  - A harness defect stopped the rerun: the fake docker's `-u` deletes failed on the session's unreadable `rm`
+    wrapper. The script was not at fault.
+  - Trial 2, 5.18.106's own sections, had passed 470 ok, 0 failed. The owner chose to deploy without the record run.
+- **Deployed 22 Nov:**
+  - A first `--check` stopped at A14; after the quarantine's `--check` passed, the second read GO.
+  - The copy was made at 05:48:21 UTC: PASSED 234 / 0 / 93.
+  - `--after-only` PASSED at 18:26:41 UTC on 22 Nov (154 / 0 / 32) and at 06:37:15 UTC on 23 Nov (155 / 0 / 31).
+  - The quarantine's `--check` PASSED again at 06:46:27 UTC on 23 Nov.
+- **Against §E and §H:**
+  - F3 had expired 3,088 stale follow-ups by the evening of 22 Nov and 3,121 by 23 Nov (§E: about 2,800).
+  - Open enquiry follow-ups went from 4,160 at stage A to 1,032, then to 1,000 (§H: about 1,100).
+  - The approved drafts on them went from 2,336 to 0; on 23 Nov, 2 were waiting, on 2 follow-ups. The ten refused drafts
+    of §A no longer hold the sender's places.
+  - F1 had closed none by 23 Nov. §E expected F2 to expire the ten refused drafts first, and since `on chase` (below)
+    enquiry sends are in claim mode, where F1 does not apply (§C F1).
+  - The sender's front moved: 9 enquiry follow-ups were sent on Monday 23 Nov by 06:31 UTC.
+- **§F:**
+  - Step 1: `followup_daily_cap` set to 20.
+  - Step 2: `on chase` turned on at 18:34:46 UTC on 22 Nov, so enquiry sends claim through the ledger. `--check chase`
+    read `NOT_YET no_traffic`.
+  - Step 3, raising `followup_run_limit`: not taken; §F leaves it until sends flow.
+- **Open:**
+  - the `--after-only` in the window the script names (the next day, Monday to Saturday, 15:00–17:00 UTC);
+  - `--check chase`, after the first quotation chase;
+  - ME-CA1, a defect in the check, for 5.18.107: it reads `data/plugin.log`, where the runs found no `[master]` line;
+    `master_log()` only echoes to standard output (`cron/master.php:440-443`), and where that goes on the server is NOT
+    ESTABLISHED;
+  - the rehearsal harness's fix, before 5.18.107's rehearsal.
+
+  §H's known limits and §K item 5 stand.

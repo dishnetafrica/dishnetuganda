@@ -16805,3 +16805,335 @@ established, and measured on `994d660`'s own page (the rig's C19):
 and reviewed twice (21 defects fixed; a third review did not run), not yet run. Suite pass A was cut by the restart in file 189 — to that
 point 11,788 passed and 4 failed, the three files of known limit 11 it had reached — and does not count; both passes and
 the rehearsal are still to run.
+
+## 9–16 Nov — 5.18.105: on Uganda, no phone number in any log line — 35 edits in 19 files take the number out of 37 log statements, and the sales report's BY NUMBER table lines up again; no message, send, stored record, setting or migration changes, and every sales follow-up switch stays as found; South Sudan's shared lines lose their numbers too, and nothing else changes there. `release/5.18.105` = `7835906`, one commit on 5.18.104 (`994d660`), re-cut on 14 Nov for two test fixes (the first cut, `f764699`, kept); pushed 15 Nov on the owner's word; `scripts/deploy-5.18.105.sh` pinned to it; the release suite twice on it, passes B1 and B2 identical: 317 files, 22,979 passed, 7 failed — the seven container-only checks alone; the rehearsal's record, the whole chain unrestored: 2,710 ok, 3 failed — the three inherited checks alone; DEPLOYED 16 Nov (copy 04:44:05 UTC): PASSED 232 ok / 0 failed / 81 notes — the entry below
+
+**Request.** The owner's rulings of 8 and 9 Nov (5.18.104's known limit 13, above): 5.18.105 masks every log line that
+can carry a phone number on Uganda, not only the four older lines named there; the chase (step 6) does not wait for
+it; step 12 (`offers-live`) waits until 5.18.105 serves and its `--after-only` has passed. The report's column fault,
+seen in the live report on 9 Nov (5.18.104's deploy entry, above), is in scope. The design is root `docs/74` (9 Nov);
+what was built, and where it departs from the design, is its §S.
+
+**What changes** (root `docs/74` §A and §H.1; the release's `SAFETY.md`):
+- **35 edits, LN-01…LN-35, in 19 runtime files, cover 37 log statements:** the four lines of 5.18.104's known limit 13
+  and 33 more — the webhook and Evolution webhook logs, the quotation WhatsApps in `quote_wa_log.json`, the invoice,
+  lead, watchdog, reconcile, reminder and sync jobs, the staff reports, and three admin actions in the Activity Log.
+- **What stands in the number's place:** usually nothing, since the line already names its record; a record id where
+  it named nothing else (conversation, client, lead or invoice); `••••` and the last two digits in the webhook log's
+  three phone fields, through a new `PluginLog::tail()`; `<number>` where free text passes through `PluginLog::mask()`
+  (LN-03, LN-24); `changed` for the mobile and note fields of a KYC edit (LN-34).
+- **The BY NUMBER table** of `tools/sales_followup_report.php` pads by characters, not bytes, so `••••57` and a
+  four-digit count print as two fields again.
+- **One search changes:** a new entry can no longer be found by a full phone number in the Failed Queue's CRM Events
+  search or the Activity Log's filter. The client id, the invoice number and the name still find it.
+- **Unchanged:** every message and send, every stored record, every screen's code, every setting, the migrations (091
+  stays last) and every sales follow-up switch. The deploy never runs the switch tool, and a rollback puts 5.18.104
+  back with every step as found.
+
+**Files** (against `994d660`): 89 — 43 added, 46 changed; 4,175 insertions, 76 deletions; no migration. Outside the
+tests, 23 changed files: the 19 log files, `lib/PluginLog.php`, `tools/sales_followup_report.php`, `SAFETY.md` (a
+5.18.105 section) and `manifest.json` (the version line). The tests, 66 files: `tests/test_log_mask.php` with
+`tests/log_mask/` — each LN driven through its real path, in 21 groups, with 73 weakened copies, each caught — and
+`tests/fixtures/r105_revert.php`, the layer through which every older boundary test still judges `994d660`'s tree; the
+rest are re-points and version pins (root `docs/74` §S.1).
+
+**The re-cut, 14 Nov** (root `docs/74` §S.1, §S.2 items 6 and 7). The first cut, `f764699` (9 Nov), failed two checks
+of its own suite in pass A3: `test_quote_summary` M, a hold on `webhook.php` that the design's list of re-points
+(§H.1.24) missed, and 5.18.104's TL40 control, which the date had broken from 12 Nov. M now reads `webhook.php` through
+the layer, with a new control that the raw file fails; TL40's control book is judged at one fixed moment, 7 Nov 2026
+12:00 Kampala. The fix is three test files and `SAFETY.md`, nothing else, and the release was cut again as one commit
+on `994d660`, as the pin must be (§H.4.1); the re-cut and the script derived again on it are recorded in `2a41c9d`.
+Every runtime file is `f764699`'s, byte for byte. The first cut is kept as `refs/keep/5.18.105-cut1`.
+
+**The suite** (root `docs/74` §S.3, §S.6). Two passes on `7835906`, 317 files each: B1 (14 Nov, 11:48:16–18:12:07
+UTC, in one piece) and B2 (begun 16 Nov, 00:00 UTC). They read identically: **22,979 passed, 7 failed**, the seven in
+the four files that fail in this container only (`test_install_authorisation` 379/2, `test_mail_quote` 91/1,
+`test_migration_integrity` 27/1, `test_secure_file` 22/3), as in 5.18.104's pass B. Beside that pass, every other
+difference is a count that 5.18.105's own tests and re-points add. Passes A and A2 (each cut by a container restart)
+and A3 (which found the two faults above), all on `f764699`, do not count.
+
+**The deploy script**, `scripts/deploy-5.18.105.sh` (14,745 lines, sha256 `c70820cd69af899b…`), pinned to `7835906`:
+derived from 5.18.104's by 300 asserted edits in eleven parts, and derived again on the new pin after the re-cut
+(`2a41c9d`). It deploys over a sales follow-up that is switched on and changes no switch: every ladder key reads after
+the copy, and after a rollback, exactly as before (LK-G1, LK-B1, LK-CA1, LK-CA2, LK-ON, LK-RB0, LK-RB1). The masked
+lines are checked in the release at stage A (LM-G1, LM-G2), installed after the copy (LM-CA1, LM-CA2), and back after a
+rollback (LM-RB1). `--clear-switches` is refused (root `docs/74` §S.4).
+
+**The rehearsal** (`scripts/harness/deploy-5.18.105/`, chained on 5.18.104's up to just before its 104-10; root
+`docs/74` §S.4): reviewed three times before any run, then six development trials, their defects fixed in the
+derivation or the rehearsal. **The record run** (14 Nov, 19:53:46 – 15 Nov, 05:41:41 UTC, on `a7b52e7`, nothing beside
+it): the whole chain in one piece, from 5.18.93's rehearsal to 5.18.105's, unrestored — **2,710 ok, 3 failed**, the
+three inherited checks alone (98-0, 99-0 and 100-0; 5.18.103's known limit 10). 5.18.105's own sections read 153 ok,
+0 failed. Recorded in `d0e6d7f`.
+
+**Pushed and checked.** `release/5.18.105` was pushed on 15 Nov at 10:15 UTC on the owner's word (*"Push now, deploy
+after B2"*; `9b7e356`). The server's `--check` read GO at 10:23:30 UTC: 78 ok, 0 failed, 62 notes; nothing was changed
+(`299d00d`).
+
+**Known limits** (root `docs/74` §H.2 and §S.2–§S.4; the release's `SAFETY.md`):
+1. **The masking holds only from the moment 5.18.105 serves.** Lines already written stay until their log drops or
+   rotates them; no clean-up tool is designed.
+2. **A rollback brings the numbers back in all 37 statements.** It is never blocked; if step 12 is on, the script says
+   so in capitals before `ROLLBACK` is typed.
+3. **Only phone numbers are masked**, as ruled. Names, amounts and record ids stay, and so do e-mail addresses except
+   where a line passes through `mask()` (limit 6); so a name field that holds a number is logged as it is.
+4. **Lines left unmasked on purpose**, K-01…K-18 (root `docs/74` §H.1.20, §H.2): lines only South Sudan runs or that
+   nothing runs on Uganda; error messages and uCRM's or URA's answers, which hold a number only if someone else put one
+   there; the dry-run capture; the operator's own tools. Each that names a phone variable stays on test E2's list.
+5. **Stores that code reads back are records, not logs, and keep the number:** the Message Log, `quotes_log.json`, a
+   KYC application's audit record, `evo_sync_state.json` and the dry-run capture file.
+6. **`PluginLog::mask()`** (LN-03, LN-24) replaces runs of seven characters or more of digits, spaces, brackets and
+   hyphens that start and end with a digit; a number written with dots, slashes or in words passes. It also replaces
+   e-mail-like text, dates and long references, puts the text on one line and cuts it at 400 characters.
+7. **The search may still have missed** a whole record handed to a log, or a number under a name that does not say
+   phone. Test E2 fails on any new log statement that names a phone variable.
+8. **Whether LN-02, LN-04 and LN-24…LN-27 ever run on Uganda is not established:** read from the code, the live
+   settings not read. They are masked all the same.
+9. **LN-35 is reached only by a hand-made request** (root `docs/74` §S.2 item 1).
+10. **Five older faults the tests met, recorded and not changed** (root `docs/74` §S.2 item 3; measured in the tests'
+    harness on `994d660`'s own files, not on the server): renewal reminders are never sent; the queued quotation PDFs
+    are dropped; the `cashbook_add_entry` handler answers 500 after its work; `cron/cashbook_reconcile.php` stops on a
+    book fresh from the migrations; `cron_wa_sync.php` run alone stops at every row. The first two are in jobs that
+    run on Uganda. Each is the owner's to decide, for a later release.
+11. **Observed, not changed:** `cron_wa_sync.php` runs unless `wa_sync_enabled` is false, and the feed it polls
+    defaults to South Sudan's WASender feed (inferred from the defaults; the live value not read).
+12. **The `071_dpo_payments.sql` checksum mismatch is untouched** (5.18.104's deploy entry, above).
+13. **The switch tool does not check for 5.18.105.** Step 12 only after 5.18.105's `--after-only` has passed is the
+    operator's rule to keep, as is root `docs/75` §F's hold on steps 6, 11 and 12 until 5.18.106 is deployed.
+14. **The design's eight questions (root `docs/74` §Q) ship with their defaults.**
+15. **5.18.104's known limits 11 and 12 stand:** the seven container-only checks, the same seven in B1 and B2, and
+    the one wrong sentence of 5.18.103's `SAFETY.md` section. Its limit 13 is what this release answers.
+16. **Some of 5.18.104's tests depend on the day they run** (root `docs/74` §S.3), none changed here: CK12 and HK11
+    on a Kampala Sunday, CK12 also from 20 Nov 21:00 UTC; `test_pilot_safety` on Sunday daytime UTC; wa_offers K07,
+    which has passed without exercising its recent-offer exemption since 9 Nov; voice_ack K02 from 31 Dec 2026;
+    `test_tick_auto_pull_log` at hh:59:5x UTC; `test_cashbook_physical_list` between 21:00 and 24:00 UTC (5.18.102's
+    known limit 12); and **`test_master_104` D03 `--all`, by chance, in 38 of 530 runs (7.2%)**, measured on 15 Nov
+    (`536663c`). The cause was shown by experiment: in 11 of 300 runs the two printouts differed only in job 1's
+    last-run column, which D03 does not mask, and with that column masked 0 of 300 failed. A suite pass runs D03
+    twice. No deploy script runs it; the fix, masking that column too, is for a later release.
+17. **Git's short form:** from 16,384 packed objects a checkout writes 8-character short ids, and the script refuses
+    at A0 with nothing changed; the remedy it prints is `git -C /opt/dishnet config core.abbrev 7`.
+
+## 16 Nov — 5.18.105 DEPLOYED (copy 04:44:05 UTC) — PASSED 232 ok / 0 failed / 81 notes
+
+**From the operator's records** of 16 and 22 Nov; the run logs themselves are not in the repository. Each run its own
+command, as root on the server (root `docs/74` §S.6).
+
+- **The deploy, 16 Nov:** the copy at 04:44:05 UTC; **PASSED, 232 ok, 0 failed, 81 notes.** With 0 failed, no ladder
+  (LK) or masking (LM) check failed; their single readings are not in the records.
+  - It ran before suite pass B2 had ended; the word of 15 Nov was to deploy after it. B2 then came out identical to B1
+    (5.18.105's entry, above), so it found nothing that would have held the deploy.
+- **The after-check** (`--after-only`, begun 05:07:30 UTC): **PASSED, 151 ok, 0 failed, 28 notes.** R19 conclusive:
+  the retry job ran after the copy, and the quarantine holds.
+- **A second `--after-only`**, the next day after 15:00 UTC, as the entry's draft runbook asked
+  (`wip/docs07-5.18.105-entry-draft.md`, step 4): not in the records.
+- **The quarantine's own `--check`**, which the draft runbook put after `--after-only`, was not run after the copy until
+  22 Nov (begun 05:39:46 UTC), when 5.18.106's stage A required one begun after 5.18.105's copy (A14; root `docs/75`
+  §L.6): **PASSED, 9 ok, 0 failed, 2 notes.**
+- **For the ladder:** from 16 Nov, 5.18.105 served and its `--after-only` had passed — the condition the owner set on
+  step 12 (`offers-live`; the rulings of 8 and 9 Nov). Root `docs/75` §F holds steps 6, 11 and 12 until 5.18.106 is
+  deployed, for a reason of its own. The masking holds from the copy; lines written before it stay (known limit 1).
+
+## 15–22 Nov — 5.18.106: on Uganda, the enquiry follow-up sender unjammed (root `docs/75`) — outside claim mode, a follow-up whose draft Evolution keeps refusing while its number delivers other messages is closed (F1); a draft whose customer last wrote past the age limit is never sent (F2); stale follow-ups expire and no longer take the run's places (F3); one follow-up per quiet spell (F4); one approved draft per follow-up (F5); no setting, no migration; South Sudan unchanged. `release/5.18.106` = `bf29cbd`, one commit on 5.18.105 (`7835906`); the release suite twice on it (C1: 317 files, 23,132 passed, 7 failed, only the container-only checks; C2 the same failing files); `scripts/deploy-5.18.106.sh` pinned to it; the rehearsal's record run never completed; pushed and DEPLOYED 22 Nov — next entry
+
+**Request.** The owner, 15 Nov, after two runs of the read-only report on the server (`scripts/enquiry-followup-report.php`):
+*"yes build it"*. The report (root `docs/75` §A) found the enquiry sender stopped: no enquiry follow-up had been sent for
+44.5 days. The sender's ten places were held by ten approved drafts that had each failed about 38,000 times since
+approval, the latest failure of each an Evolution `HTTP 400`. 1,979 approved drafts waited, held by only 40 follow-ups,
+and every one of their customers had last written more than 30 days ago. The causes are in `docs/75` §B and the design
+in §C–§J; §K says where the build departs from it.
+
+### Release notes (Uganda only; root `docs/75` §C and §K, the release's `SAFETY.md`)
+
+- **F1** (`cron/followup_send.php`): outside claim mode, an enquiry follow-up is closed `send_failed` once its draft has
+  been refused three times (`HTTP 400` to `sendText`). A refusal counts only if the same number delivered another
+  message between it and the refusal before it (for the first, since the approval), so an outage's refusals do not
+  count (§K items 1 and 6).
+- **F2** (the sender): a draft whose customer last wrote longer ago than `followup_max_age_hours` is closed `expired` and
+  never sent. That is the scan's own limit, default 336.
+- **F3** (`cron/followup_close.php`; `FollowUpService::expireStale()` and `due()`): the close job expires up to 200
+  stale open enquiry follow-ups a pass, and the run leaves them out.
+- **F4** (`cron/followup_scan.php`): one follow-up per quiet spell, with one second chance after `send_failed`.
+- **F5** (the run and the sender):
+  - the run does not judge again a follow-up that holds an approved draft, or an uncertain draft of its current attempt;
+  - the sender handles one draft of a follow-up a pass and never sends a draft whose attempt is taken;
+  - after a send, the sender expires the follow-up's other approved drafts.
+- Every change sits behind `StaffJobsGate::applies()`, so South Sudan is unchanged. No migration, no new setting, no new
+  screen. The release touches no sales follow-up switch.
+- **Files:** 23 differ from `7835906`: 20 changed and 3 added, with 1,749 insertions and 28 deletions.
+  - Runtime: the four follow-up jobs (`cron/followup_close.php`, `followup_run.php`, `followup_scan.php`,
+    `followup_send.php`) and `lib/FollowUpService.php`, plus `SAFETY.md` and `manifest.json`.
+  - Tests, 16 files: among them section U (`tests/quote_followup/U_unjam.php`), its 67 weakened copies
+    (`mutants_U.php`) and the r106 layer (`tests/fixtures/r106_revert.php`). Every older boundary still judges
+    `7835906`'s tree through that layer.
+
+### Tests, the script, the rehearsal
+
+- **Section U:** 85 passed, 0 failed, and its 67 weakened copies each caught (`docs/75` §K).
+- **The release suite on `bf29cbd`.** C1 ran from 16 Nov 05:10 to 18 Nov 08:45 UTC and was resumed once, at file 230.
+  It read 317 files: 23,132 passed and 7 failed, only the seven container-only checks of 5.18.104's known limit 11. It
+  differs from 5.18.105's pass B2 only in `test_quote_followup`, 921 checks against 768. C2 failed in the same files.
+- **`scripts/deploy-5.18.106.sh`** (`745e668`): derived by 277 asserted edits on 5.18.105's script; 16,197 lines, sha256
+  `3189cee2…`; committed after five review rounds. The derivation's 28 whole-text rules refuse 67 weakened copies, each
+  by its own rule.
+  - Its design is `docs/75` §L, reviewed four times (43 → 35 → 25 → 9 points, all applied).
+  - New checks: CS-G1 and CS-B1 (the three claim switches absent), FE-G1 (`followup_enabled` on), the readings U1–U5
+    and UJ-CA (notes), UJ-ON (F3, judged in `--after-only`) and ME-CA1.
+  - The rollback (§L.7) makes the script's one write, `followup_auto_send` off (AS-RB1, only when §L.7's conditions
+    hold), before it puts `7835906` back.
+- **The rehearsal** (`scripts/harness/deploy-5.18.106/`):
+  - Trial 1, from a snapshot: 440 ok and 30 failed in 5.18.106's own sections, none of them the script's (fixed in
+    `58dec53`). Trial 2, the same sections from a snapshot: 470 ok, 0 failed.
+  - **The full-chain record run never completed.** Run 1 was cut by a container restart on 21 Nov at 09:22 UTC, and the
+    rerun stopped at 09:47 UTC.
+  - The cause, found on 22 Nov, is in the harness, not the script. The session's `rm` wrapper comes first on PATH and
+    uid 1000 cannot read it, so the fake docker's `-u` deletes exit 2.
+  - **The owner chose to deploy without the record run.** The fix comes before 5.18.107's rehearsal: the fake docker's
+    `-u` exec gets the container's PATH.
+- **Pushed:** `release/5.18.106` = `bf29cbd`, on 22 Nov before the first `--check` at 05:38 UTC, on the owner's word
+  (*"publish and give deploy"*).
+
+## 22–23 Nov — 5.18.106 DEPLOYED (copy 05:48:21 UTC) — PASSED 234 ok / 0 failed / 93 notes; after-checks PASSED 22 and 23 Nov
+
+**From the terminal, pasted by the owner** on 22 and 23 Nov. Each run was its own command, as root on the server.
+
+- **`--check`, 05:38:04 UTC: NO-GO at A14**, nothing changed. The quarantine's newest passing `--check` (9 Nov, above)
+  was older than 5.18.105's copy (16 Nov).
+- **The quarantine's `--check`, 05:39:46 UTC: PASSED, 9 ok, 0 failed, 2 notes.** K2: the container served `7835906`.
+  K7: `config.json` rewritten by another writer since the move.
+- **`--check` again, 05:40:25 UTC: GO, 79 ok, 0 failed, 68 notes.** CS-G1: no claim switch present. `followup_enabled`
+  on (FE-G1). The interim of 18 Nov (`docs/75` §L.8) was not in effect, so there was nothing to undo.
+- **The deploy** (begun 05:44:41 UTC; the backup is in `/root/dnb-5.18.106/backup-20261122T054441Z`): `DEPLOY` typed;
+  **the container serves `bf29cbd`**, copied at 05:48:21 UTC. **PASSED, 234 ok, 0 failed, 93 notes.** R19 was not yet
+  conclusive, because the retry job had not run since the copy. ME-CA1 read NOT ESTABLISHED, a note (DL10).
+- **The after-check, 22 Nov** (`--after-only`, begun 18:26:41 UTC): **PASSED, 154 ok, 0 failed, 32 notes.**
+  - R19 conclusive: the retry job ran at 18:20:04 UTC and the quarantine holds.
+  - **UJ-ON PASS:** the close job had expired 3,088 stale enquiry follow-ups (F3), the sender had closed 13 (F2), and F5
+    had expired 3 drafts.
+  - Open enquiry follow-ups went from 4,160 at stage A to 1,032, none older than 14 days. The approved drafts on them
+    went from 2,336 to 0. 981 were due, and none was sent (a Sunday).
+  - ME-CA1 still NOT ESTABLISHED: no `[master]` lines in `data/plugin.log`.
+- **The owner's steps, 22 Nov** (`docs/75` §F):
+  - `followup_daily_cap` set to 20 (saved, and printed back).
+  - `on chase`, first attempt: refused. The confirmation was typed `yesyes`, so the tool answered `not_confirmed` and
+    saved nothing.
+  - `on chase`, second attempt: on at 18:34:46 UTC (`quote_chase_enabled`, `quote_chase_not_before`,
+    `sf_chase_first_on`). From then on, enquiry sends claim through the ledger, where F1 does not apply.
+  - `--check chase` at 18:35:42 UTC: `NOT_YET no_traffic`.
+  - Q1 is still unanswered (the persona is unconfirmed), so on a salesperson's own number the day-3 chase stays held
+    (root `docs/73` §Q).
+- **The after-check, 23 Nov** (`--after-only`, begun 06:37:15 UTC, a Monday): **PASSED, 155 ok, 0 failed, 31 notes.**
+  - It ran at 09:37 Kampala: inside the sender's window, but not in the window the summary names, the next day, Monday
+    to Saturday, between 15:00 and 17:00 UTC (`scripts/deploy-5.18.106.sh:16022`).
+  - R19 conclusive: the retry job ran at 06:30:05 UTC.
+  - **UJ-ON PASS:** 3,121 follow-ups expired by the close job since the copy; 1,000 open (4,160 at stage A); 991 due.
+    2 approved drafts wait, on 2 follow-ups, and neither has failed since approval.
+  - **9 enquiry follow-ups sent since the copy**, all on Monday, the last at 06:31:02 UTC. F1 has closed none.
+  - QF-ON4 (chase) PASS: 9 claims, which are the enquiry sends in claim mode; no quotation chase sent yet.
+  - VA-ON1 PASS: 74 voice notes skipped as `persona_unconfirmed`.
+  - LM-ON: the PHP log could not be read (no `error_log` is set), a note.
+  - **ME-CA1 NOT ESTABLISHED again: a defect in the check, for 5.18.107.** The check looks for `[master]` lines in
+    `<plugin>/data/plugin.log` (`docs/75` §L.5; `scripts/deploy-5.18.106.sh:8185-8205`), and the runs found none there.
+    `master_log()` only echoes them to standard output (`cron/master.php:440-443`); where that output goes on this server
+    is NOT ESTABLISHED. The result is a note in every mode (DL10), so it held nothing back.
+- **The quarantine's `--check`, 23 Nov, 06:46:27 UTC: PASSED, 9 ok, 0 failed, 2 notes.**
+  - K13: the retry job ran at 06:45:04 UTC and the quarantine holds.
+  - K2: the container serves `bf29cbd`. K7: as before.
+  - The quarantine's newest passing `--check` now postdates 5.18.106's copy, which is what 5.18.107's A14 looks for.
+- **Not run:**
+  - the `--after-only` in the named window, the next day, Monday to Saturday, between 15:00 and 17:00 UTC, which would
+    cover a full day of sends and the first quotation chases;
+  - `--check chase`, once the first quotation chase has been sent.
+
+## 22–24 Nov — on the live Uganda install, no release: the assistant's settings text v7–v9, the office answer, plan prices from uCRM, the website and the voice notes
+
+**None of this is a code release.** The installed plugin stays 5.18.106 (`bf29cbd`). Each change below is a setting or a
+database row written on the server, or the website's own deploy. Items left for the next release are marked *5.18.107*.
+
+**The assistant's settings text (`bot_custom_instructions`).**
+- **v7, 22 Nov about 06:00 UTC** (4,329 bytes, sha256 `a28a97fc0031…`, read back identical). The quotation text as
+  before, plus one paragraph, *STAY ON DISHNET TOPICS*. The owner had reported the assistant answering questions that had
+  nothing to do with DishNet. A topic rule built into the code: 5.18.107.
+- **v8, 23 Nov about 13:15 UTC** (4,690 bytes, `ed93f6491af4…`). No fixed prices (see the prices below), and an answer
+  for DATA PLANS.
+- **v9, 23 Nov about 13:45 UTC** (5,617 bytes, `fca936af7760…`). A paragraph, *OFFICE PHONE NUMBER*. The assistant had
+  refused to give the office number, citing its rules 4 and 4a and the lines that say never to send a customer to
+  another number. Two agents reviewed the wording.
+- **The v8 and v9 save commands each refused to run unless the saved text was the expected previous version.** Each was
+  tested with the real prompt builder and reply guard: sample replies pass; old prices, wrong totals and a number running
+  into the next figure are refused.
+- **Not reached by v9:** the pre-model shortcut `asksForHuman` (`lib/DishNetAiBrain.php:1986`). It catches *"customer
+  care"* and *"call me"* and answers with a fixed hand-over before the model is asked, so it never gives the number.
+  5.18.107.
+
+**The office answer, 23 Nov.**
+- The reply to *"where is your office"* is the short form of the knowledge row `OFFICE_LOCATION`. It left out TT06, which
+  the full answer had.
+- **The screen for that row cannot be reached.** `public.php` lists the tab key `knowledge_base` twice: `:2680` is the
+  admin screen and `:2813` is the Help Guide. PHP keeps the later, so Admin → *AI Knowledge Base* opens the Help Guide.
+  5.18.107.
+- **A one-off command updated the row instead:** *Office TT06* and the office mobile, in both the answer and the WhatsApp
+  short form.
+  - The owner typed the number at a prompt, and it was never logged.
+  - `updated_by` is set to `admin`. The seeder corrects only rows still marked `seed` (`lib/KnowledgeSeeder.php:39`,
+    `:70`), so it will not revert the row, and no release that edits the office entry in `knowledge_seed.json` will
+    reach it.
+  - Tested in a harness first (27 checks; 4 weakened copies, each caught) and reviewed.
+- **Then `ai_fact_office` was aligned.** It is a second, older office text: the address, with neither TT06 nor a number.
+  - It now reads TT06 and gives the office mobile in its +256 form and its 07 form, so that a reply using the local form
+    passes the reply guard.
+  - The opening-hours rule and *"off Acacia Avenue"* are kept.
+  - Tested first (21 checks; 5 weakened copies, each caught), and read back identical.
+
+**Plan prices: from uCRM, 23 Nov.**
+- **Two prices for each plan.** A read-only probe found that the assistant reads a plan's price from the uCRM **service
+  plan** (`lib/DishNetTools.php:373`, `getProducts`). The staff quotation forms quote the uCRM **product** of the same
+  name, and refuse the plan when the two prices differ (`price_differs`, `lib/UcrmQuoteLines.php:406`).
+- The owner had changed the two residential products, to 203,704 and 285,000, but not their service plans, which still
+  read 249,000 and 329,000.
+- **The owner's decisions:**
+  - **The prices.** The real monthly prices are UGX 203,704 for Residential Lite (up to 100 Mbps) and UGX 285,185 for
+    Residential (up to 350 Mbps). The owner sets them in uCRM, on both service plans and on the Residential product;
+    that was still pending when this was written.
+  - **Every quotation price comes from uCRM**, so the settings text carries no fixed price (v8).
+  - **The *TOTAL WITH THE FIRST MONTH* line is dropped.** The reply guard's permitted sums never add a monthly plan to
+    one-time items (`workers/AiReplyWorker.php:997`, `permittedAmounts`).
+- A screen warning when a plan's two prices differ: 5.18.107.
+
+**The website, 24 Nov.**
+- The website (EasyPanel app `web-uganda`, built from `claude/study-this-jhe2eg`) was still the 26 Oct launch.
+- **The owner chose to publish everything waiting:**
+  - `718e74f`, the prices and the shop;
+  - `1003a2a`, the wordmark;
+  - `d4aa8ba`, five fixes;
+  - `29797c8`, the Privacy Policy's paragraph naming OpenAI (root `docs/73` §H.3.23).
+
+  The policy pages are dated the day they went live.
+- **`f94cbbe`:** `UPDATED` in `policies/build.py` set to 24 November 2026, and the nine policy pages rebuilt.
+  - `build.py --check`, `verify-address.py`, `stamp-assets.sh --check` and `node --check` each exit 0.
+  - `verify-site.sh` was **NOT RUN**: it needs nginx, and this session has none.
+- **The owner deployed.** At 07:23 UTC the live Privacy Policy carried the paragraph once, in section 7, dated
+  24 November 2026.
+
+**The voice notes, 24 Nov.**
+- **06:21:59 UTC, `sf_persona_confirmed` = 2026-11-24.** The owner confirmed the wordings on salespeople's numbers: the
+  voice-note reply, and the day-3 and day-7 quote chase forms (root `docs/73` Q1). Until then, 74 of 120 voice-note
+  replies had been held.
+- **07:25:38 UTC, `ai_media_voice_privacy_line` = 2026-11-24.**
+- **OpenAI's ten points** (root `docs/73` §H.3.22), read on 24 Nov from search excerpts only. §H.3.22 asks for them on
+  OpenAI's own pages; this session cannot reach openai.com, so none was read there.
+  - `whisper-1` and the gpt-4o transcribe models are deprecated, shutting down on 26 Feb 2027. `gpt-transcribe`
+    ($0.0045 a minute) is the file-transcription replacement.
+  - ogg is in the accepted list; Opus is not named.
+  - API data is not used for training by default.
+  - The transcription row shows no retention (not read directly).
+  - Processing happens in OpenAI's regions, the US and Europe, none of them in Africa.
+  - Swahili is supported; Luganda is not listed.
+  - No key can be limited to audio alone.
+- **07:34:38 UTC, `ai_media_openai_stt_model` = `gpt-transcribe`.** The owner's decision; D2 had said Whisper. Making it
+  the code's default: 5.18.107.
+- **07:35:05 UTC, step 7 (`voice-dry-run`) on.** Its conditions held: VN-ON1 PASS, the privacy line's date, and the key
+  set.
+  - Voice notes now go to OpenAI to be transcribed and are counted only. Customers and staff see nothing new (root
+    `docs/73` §H.3.1).
+  - Its check, VN-ON2, reads `too_soon` for the first 2 days (§H.3.20), so it is due from 26 Nov.
