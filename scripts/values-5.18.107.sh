@@ -35,7 +35,7 @@ IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/$PLUGIN}"
 PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 READER="$HERE/values-5.18.107.php"
-READER_SHA256="2de4496af877ca5b9f5fdd33214414a96c9b3934c2f39a95148c5714ca558835"
+READER_SHA256="5daac93a424bf90e4c2a357662607c5f4a62cdc16ea039ad36a02e1dfab6e80c"
 LIVE_COMMIT_FULL="bf29cbd7171639f93e674ab174a6d09948b68932"   # 5.18.106 (release), live since 22 Nov 05:48Z
 # every file of lib/, both profiles and the shop catalogue at 5.18.106 (git ls-tree; 299) — not only the 20 the reader names:
 # those load others at the top level, and the code they call loads more
@@ -371,7 +371,9 @@ GOT="$(printf '%s\n' "$LIVE_SUMS" | docker exec -i -u "$OWNER" "$CONTAINER" php 
   echo "CONTROL ", hash("sha256", "dnb-values-107"), "\n"; $n = 0;
   while (($l = fgets(STDIN)) !== false) { $f = trim(substr($l, 66)); if ($f === "") continue; $n++;
     $p = $argv[1] . "/" . $f;
-    if (!is_file($p)) { echo "MISSING  ", $f, "\n"; continue; }
+    if (!is_file($p)) {   // missing only when the nearest folder that exists can be listed; else it could not be read
+      $d = dirname($p); while (!is_dir($d) && $d !== dirname($d)) $d = dirname($d);
+      echo (is_readable($d) && is_executable($d)) ? "MISSING" : "UNREAD", "  ", $f, "\n"; continue; }
     $h = is_readable($p) ? @hash_file("sha256", $p) : false;
     echo ($h === false ? "UNREAD" : $h), "  ", $f, "\n"; }
   echo "END ", $n, "\n";' "$IN_CONTAINER" 2>/dev/null)"
@@ -389,8 +391,14 @@ MISSING="$(sed -n 's/^MISSING //p' <<< "$RES" | tr '\n' ' ')"; UNREAD="$(sed -n 
 echo "  installed       5.18.106 (commit $REC); all $N files of lib/, profiles/ and the shop catalogue are 5.18.106's bytes; the book owned by $OWNER"
 echo "  reader          scripts/values-5.18.107.php (sha256 ${READER_SHA256:0:12}…), fed on stdin; nothing is copied into the container"
 
-docker exec -i -u "$OWNER" "$CONTAINER" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- "$IN_CONTAINER" "$PDD" < "$READER" 2>&1 | mask
-RC="${PIPESTATUS[0]}"
+ROUT="$(mktemp)" || stop "a file of this run's could not be made"
+trap 'rm -f "$ROUT"' EXIT
+docker exec -i -u "$OWNER" "$CONTAINER" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- "$IN_CONTAINER" "$PDD" < "$READER" > "$ROUT" 2>&1
+RC=$?
+mask < "$ROUT"
+# the reader's own last line ("READ-ONLY — …") says whether it ran to its end; an exit code of 1 alone could be docker's
+FINISHED=no; grep -q '^READ-ONLY — ' "$ROUT" && FINISHED=yes
+rm -f "$ROUT"
 
 echo
 echo "── W.8: the container's PATH (for the rehearsal's fake docker) ───────────────────────────────────────────"
@@ -398,10 +406,10 @@ echo "  as the container's default user: $(docker exec "$CONTAINER" printenv PAT
 echo "  as the book's owner:             $(docker exec -u "$OWNER" "$CONTAINER" printenv PATH 2>/dev/null </dev/null | mask)"
 echo
 echo "  exit $RC (0 done, nothing changed; 1 the reading stopped part-way; 2 refused before reading; 3 done, but SQLite's own -wal/-shm were re-created as the book was opened; 4 the book reported changes — UNEXPECTED)"
-case "$RC" in
-  0) echo "  READ-ONLY — nothing was changed" ;;
-  1|3|4) echo "  the reader's last line above says what happened; send the log as it is" ;;
-  *) echo "  the reader ended without its last line (exit $RC); send the log as it is" ;;
+case "$FINISHED:$RC" in
+  yes:0) echo "  READ-ONLY — nothing was changed" ;;
+  yes:1|yes:3|yes:4) echo "  the reader's last line above says what happened; send the log as it is" ;;
+  *) echo "  the reader ended without its last line (exit $RC): it may not have run at all (the lines above say why); nothing it runs writes; send the log as it is" ;;
 esac
 echo "  Send back the log:  cat $LOG"
 exit "$RC"

@@ -11,7 +11,7 @@
  *     only when its -wal and -shm already exist (so the open creates nothing); total_changes() is printed and must be 0.
  *     One window remains: a plugin process closing the book between that check and the first read deletes both files,
  *     and the read re-creates them (SQLite's own; the next plugin connection uses them). The reader holds the checked
- *     -wal open, sees it unlinked, says so and ends with exit 1 — never "nothing was changed" unqualified;
+ *     -wal open, sees it unlinked, says so and ends with exit 3 — never "nothing was changed";
  *   - uCRM only through GetOnlyCrm: GET on four paths (service-plans, products, invoices, organizations); every other
  *     verb, path and helper refused;
  *   - the product lookup with the cache off (catalogue_cache_seconds 0: the cache file is neither read nor written).
@@ -102,11 +102,16 @@ $numbers = function ($v) use ($cc): string {
     if (!is_scalar($v)) return 'not text';
     $t = trim((string)$v);
     if ($t === '') return 'empty';
-    preg_match_all('/(?<!\d)(?:\+?\d[\d\s-]{8,}\d)(?!\d)/', $t, $m);
+    $runs = [];
+    foreach (preg_split('#\s*(?:[/,;|\n]|\s{2,}|\bor\b)\s*#u', $t) as $part) {
+        preg_match_all('/(?<!\d)(?:\+?\d[\d\s()-]{6,}\d)(?!\d)/', $part, $m);
+        foreach ($m[0] as $r) $runs[] = $r;
+    }
     $each = array_map(function (string $r) use ($cc): string {
         $d = preg_replace('/\D/', '', $r);
-        return ($r[0] === '+' ? 'with +' : 'no +') . ', ' . $cc($d) . ', ' . strlen($d) . ' digits';
-    }, $m[0]);
+        return ($r[0] === '+' ? 'with +' : 'no +') . ', ' . $cc($d) . ', ' . strlen($d) . ' digits'
+            . (strlen($d) > 15 ? ' (more than one number?)' : '');
+    }, $runs);
     return 'set, ' . strlen($t) . ' bytes, phone-shaped runs: ' . count($each) . ($each ? ' (' . implode('; ', $each) . ')' : '');
 };
 
@@ -662,7 +667,7 @@ try {
     }
     $say('uCRM asked (GET only): ' . (GetOnlyCrm::$asked ? implode(', ', array_map(function ($p) { return preg_replace('/\?.*$/', '', $p) . ' ' . (GetOnlyCrm::$codes[$p] ?? '?'); }, GetOnlyCrm::$asked)) : 'nothing') . '; anything else refused: ' . GetOnlyCrm::$refused);
 } catch (Throwable $e) {
-    $say('STOPPED at ' . basename($e->getFile()) . ':' . $e->getLine() . ' — ' . get_class($e) . '; nothing was changed');
+    $say('STOPPED at ' . basename($e->getFile()) . ':' . $e->getLine() . ' — ' . get_class($e));
     if ($db !== null) { try { $db->exec('ROLLBACK'); } catch (Throwable $e2) {} }
     $stopped = true;
 }

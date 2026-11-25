@@ -22,7 +22,10 @@
 #       reader and through the wrapper (never "nothing was changed"); and its control, the same with the detection
 #       removed, shows the race does re-create the files (the holder gone, the -wal there) and nothing says so
 #   S11 alert_whatsapp absent from the files, set in the row: the watchdog's number is the row's
-# then weakened copies — each must be caught: of the reader (R1-R11, run directly) and of the wrapper (X1-X9).
+#   S12 the race, then the reading stops: exit 1, both causes on the last line, never "nothing was changed"
+#   S13 the reading stops, through the wrapper   S14 docker fails the reader's exec: the wrapper does not claim it ran
+#   S4f a folder the book's owner cannot enter: its files "could not be read", never "not installed"
+# then weakened copies — each must be caught: of the reader (R1-R14, run directly) and of the wrapper (X1-X11).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRCREPO="$(cd "$HERE/../../.." && pwd)"
@@ -66,6 +69,8 @@ cat > "$SB/bin/docker" <<SH
 printf '%s\n' "\$*" >> "$SB/docker.log"
 # S4d: the container goes away as the files are hashed — containerd prints this on stdout (deploy-hybrid.sh:41-50)
 if [ -f "$SB/fail-hash" ] && grep -q 'dnb-values-107' <<< "\$*"; then echo "NotFound: task 1a2b3c not found"; exit 1; fi
+# S14: the reader's exec meets a container that is restarting
+if [ -f "$SB/fail-reader" ] && grep -q 'opcache.enable_cli=0' <<< "\$*"; then echo "Error response from daemon: Container 1a2b3c is restarting, wait until the container is running"; exit 1; fi
 [ "\$1" = exec ] || { echo "fake docker: only exec" >&2; exit 1; }; shift
 user=""; while :; do case "\$1" in -u) user="\$2"; shift 2 ;; -i) shift ;; *) break ;; esac; done
 [ "\$1" = ucrm ] || { echo "Error: No such container: \$1" >&2; exit 1; }; shift
@@ -222,6 +227,11 @@ echo "-- S4e a 5.18.106 lib file missing from the install"
 mv "$P/lib/PublicPriceFeed.php" "$SB/ppf.moved"; run_wrap "$WRAP"; refused S4e "these 5.18.106 files are not installed: lib/PublicPriceFeed.php"
 hasnt "$OUT" "could not be read by the book's owner" "S4e: a missing file is never called unreadable"
 mv "$SB/ppf.moved" "$P/lib/PublicPriceFeed.php"
+echo "-- S4f a folder the book's owner cannot enter"
+PM="$(stat -c %a "$P/profiles")"; chmod 700 "$P/profiles"; run_wrap "$WRAP"
+refused S4f "these installed files could not be read by the book's owner, so they were not compared: profiles/south-sudan.json profiles/uganda.json"
+hasnt "$OUT" "not installed" "S4f: a file in a closed folder is never called not installed"
+chmod "$PM" "$P/profiles"
 echo "-- S5 a reader that is not the reviewed one"
 mkdir -p "$SB/s5/scripts"; cp "$WRAP" "$SB/s5/scripts/"; { cat "$READ"; echo "// x"; } > "$SB/s5/scripts/values-5.18.107.php"
 run_wrap "$SB/s5/scripts/values-5.18.107.sh"; refused S5 "scripts/values-5.18.107.php is not the reviewed one (sha256)"
@@ -266,43 +276,85 @@ s9_off
 
 # ── S10 the race at open ─────────────────────────────────────────────────────────────────────────────────────────────
 echo "-- S10 a plugin process closes the book between the check and the first read"
-race_copy() {  # $1 = out file, $2 = 1 to also remove the detection
+# stage(): a copy of a reader that, before opening the book, tells the holder to close it and waits until the -wal is
+# gone (so the order is certain, not timed), and records whether it was; optionally without the detection, or throwing
+# right after the first read. raced(): the -wal was gone before the open, the holder has gone, and a -wal is back.
+stage() {  # $1 = source reader, $2 = out, $3 = 1 to stage the race, $4 = 1 to remove the detection, $5 = 1 to throw
+  rm -f "$SB/ctmp/raced"
   python3 -I -c '
 import sys
-s = open(sys.argv[1]).read(); a = "        $db = new PDO(\x27sqlite:\x27 . $book,"
-assert s.count(a) == 1; s = s.replace(a, "        touch(" + repr(sys.argv[3]) + "); usleep(1500000);\n" + a)
-if sys.argv[4] == "1":
+src, out, stop, mark, race, nodetect, throw = sys.argv[1:8]
+s = open(src).read()
+a = "        $db = new PDO(\x27sqlite:\x27 . $book,"
+assert s.count(a) == 1
+if race == "1":
+    inj = ("        touch(%r); for ($i = 0; $i < 200 && (clearstatcache() || true) && is_file($book . \x27-wal\x27); $i++) usleep(50000);\n"
+           "        clearstatcache(); file_put_contents(%r, is_file($book . \x27-wal\x27) ? \x27present\x27 : \x27absent\x27);\n") % (stop, mark)
+    s = s.replace(a, inj + a)
+if nodetect == "1":
     d = "$recreated = is_array($st) && (int)$st[\x27nlink\x27] === 0;"
     assert s.count(d) == 1; s = s.replace(d, "$recreated = false;")
-open(sys.argv[2], "w").write(s)' "$READ" "$1" "$SB/ctmp/stop" "$2"; }
+if throw == "1":
+    t = "    // ── 2. Operator facts"
+    assert s.count(t) == 1; s = s.replace(t, "    throw new RuntimeException(\x27injected\x27);\n" + t)
+open(out, "w").write(s)' "$1" "$2" "$SB/ctmp/stop" "$SB/ctmp/raced" "${3:-0}" "${4:-0}" "${5:-0}"; }
+repin() { sed "s/^READER_SHA256=\"[0-9a-f]\{64\}\"$/READER_SHA256=\"$(sha256sum "$2" | cut -c1-64)\"/" "$1" > "$3"; }   # wrapper, reader, out
 after_race() { wait "$HPID" 2>/dev/null; HPID=""; hold; unhold; hold; }
-raced() { ! kill -0 "$HPID" 2>/dev/null && [ -f "$D/plugin.sqlite3-wal" ]; }   # the holder closed the book, and a -wal is there
-race_copy "$SB/race.php" 0; run_read "$SB/race.php"
-if raced; then ok "S10: the race happened (the holder closed the book; the -wal is back)"; else bad "S10: the race was not staged"; fi
+raced() { [ "$(cat "$SB/ctmp/raced" 2>/dev/null)" = absent ] && ! kill -0 "$HPID" 2>/dev/null && [ -f "$D/plugin.sqlite3-wal" ]; }
+stage "$READ" "$SB/race.php" 1; run_read "$SB/race.php"
+if raced; then ok "S10: the race happened (the -wal gone before the open, back after)"; else bad "S10: the race was not staged"; fi
 check "$RC" 3 "S10: exit 3"
 has "$OUT" "NOTE: a plugin process closed the book at the moment it was opened, so this read re-created SQLite's own -wal and -shm files" "S10: the re-created files said so"
 has "$OUT" "READ-ONLY — SQLite's own -wal/-shm were re-created as the book was opened (see the NOTE)" "S10: the last line names the cause"
 check "$(grep -c 'nothing was changed' <<< "$OUT")" 0 "S10: never 'nothing was changed'"
 after_race
 echo "-- S10 through the wrapper"
-mkdir -p "$SB/s10/scripts"; race_copy "$SB/s10/scripts/values-5.18.107.php" 0
-sed "s/^READER_SHA256=\"[0-9a-f]\{64\}\"$/READER_SHA256=\"$(sha256sum "$SB/s10/scripts/values-5.18.107.php" | cut -c1-64)\"/" "$WRAP" > "$SB/s10/scripts/values-5.18.107.sh"
+mkdir -p "$SB/s10/scripts"; stage "$READ" "$SB/s10/scripts/values-5.18.107.php" 1
+repin "$WRAP" "$SB/s10/scripts/values-5.18.107.php" "$SB/s10/scripts/values-5.18.107.sh"
 run_wrap "$SB/s10/scripts/values-5.18.107.sh"
 if raced; then ok "S10w: the race happened"; else bad "S10w: the race was not staged"; fi
 check "$RC" 3 "S10w: exit 3"
 check "$(grep -c 'nothing was changed' <<< "$OUT")" 0 "S10w: neither the reader nor the wrapper says 'nothing was changed'"
 has "$OUT" "  the reader's last line above says what happened; send the log as it is" "S10w: the wrapper points to the reader's last line"
 after_race
-race_copy "$SB/race0.php" 1; run_read "$SB/race0.php"
+stage "$READ" "$SB/race0.php" 1 1; run_read "$SB/race0.php"
 if raced && ! grep -qF "NOTE: a plugin process" <<< "$OUT"; then ok "S10 control: without the detection the race re-creates the files and nothing says so"; else bad "S10 control: the race did not happen as staged, or was reported"; fi
 after_race
 
+# ── S12 the race, then a stop ────────────────────────────────────────────────────────────────────────────────────────
+echo "-- S12 the race, then the reading stops"
+stage "$READ" "$SB/race12.php" 1 0 1; run_read "$SB/race12.php"
+if raced; then ok "S12: the race happened"; else bad "S12: the race was not staged"; fi
+check "$RC" 1 "S12: exit 1 (stopped comes first)"
+has "$OUT" "STOPPED at " "S12: the stop said so"
+has "$OUT" "READ-ONLY — the reading stopped part-way (send the log as it is); SQLite's own -wal/-shm were re-created as the book was opened (see the NOTE)" "S12: the last line names both causes"
+check "$(grep -c 'nothing was changed' <<< "$OUT")" 0 "S12: never 'nothing was changed'"
+after_race
+
+# ── S13 a stop, through the wrapper ──────────────────────────────────────────────────────────────────────────────────
+echo "-- S13 the reading stops, through the wrapper"
+mkdir -p "$SB/s13/scripts"; stage "$READ" "$SB/s13/scripts/values-5.18.107.php" 0 0 1
+repin "$WRAP" "$SB/s13/scripts/values-5.18.107.php" "$SB/s13/scripts/values-5.18.107.sh"
+run_wrap "$SB/s13/scripts/values-5.18.107.sh"
+check "$RC" 1 "S13: exit 1"
+has "$OUT" "READ-ONLY — the reading stopped part-way (send the log as it is); nothing was changed" "S13: the reader's last line"
+has "$OUT" "  the reader's last line above says what happened; send the log as it is" "S13: the wrapper points to it"
+
+# ── S14 docker fails the reader's exec ───────────────────────────────────────────────────────────────────────────────
+echo "-- S14 the container restarts as the reader starts"
+touch "$SB/fail-reader"; run_wrap "$WRAP"; rm -f "$SB/fail-reader"
+check "$RC" 1 "S14: exit 1 (docker's)"
+has "$OUT" "the reader ended without its last line (exit 1): it may not have run at all" "S14: the wrapper does not claim the reader ran"
+hasnt "$OUT" "the reader's last line above says what happened" "S14: no pointer to a reader line that does not exist"
+
 # ── S11 the watchdog's alert number ──────────────────────────────────────────────────────────────────────────────────
-s11_on()  { cp -p "$D/config.json" "$SB/cfg.bak"; jset "$D/config.json" alert_whatsapp DEL; }
+s11_on()  { cp -p "$D/config.json" "$SB/cfg.bak"; jset "$D/config.json" alert_whatsapp DEL; jset "$D/config.json" quote_company_phone '"+256 000 111 222  0000 999 888"'; }
 s11_off() { cp -p "$SB/cfg.bak" "$D/config.json"; }
 echo "-- S11 alert_whatsapp only in the row"
 s11_on; run_wrap "$WRAP"; check "$RC" 0 "exit 0"
 has "$OUT" "alert_whatsapp               worker not set (alerts off) · row no +, starting 0 (local), 10 digits · watchdog no +, starting 0 (local), 10 digits" "the watchdog pages the row's number"
+has "$OUT" "quote_company_phone    worker set, 30 bytes, phone-shaped runs: 2 (with +, starting 256, 12 digits; no +, starting 0 (local), 10 digits) · row not set" "two company numbers, each on its own"
+privacy "$OUT" "S11"
 s11_off
 
 # ── weakened copies ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -323,6 +375,10 @@ open(sys.argv[2], "w").write(s)' "$READ" "$f" "$2" || { bad "$id: the copy could
           rm -f "$D/plugin.sqlite3-wal" "$D/plugin.sqlite3-shm"; hold ;;
     cache) rm -f "$SB/ctmp/"dishnet_catalogue_*; run_read "$f"; if ls "$SB/ctmp" | grep -q dishnet_catalogue; then ok "$id caught (a catalogue cache was written)"; else bad "$id NOT caught"; fi; rm -f "$SB/ctmp/"dishnet_catalogue_* ;;
     absent:*) run_read "$f"; if grep -qF -- "${3#absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught (no: ${3#absent:})"; fi ;;
+    s12rc) stage "$f" "$f.s12" 1 0 1; run_read "$f.s12"; local st=no; raced && st=yes; after_race
+           if [ "$st" != yes ]; then bad "$id not staged"; elif [ "$RC" != 1 ]; then ok "$id caught (S12 exit $RC, not 1)"; else bad "$id NOT caught"; fi ;;
+    s12line) stage "$f" "$f.s12" 1 0 1; run_read "$f.s12"; local st=no; raced && st=yes; after_race
+           if [ "$st" != yes ]; then bad "$id not staged"; elif grep -qF "the reading stopped part-way" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught (S12's last line lacks the stop)"; fi ;;
     s11absent:*) s11_on; run_read "$f"; s11_off; if grep -qF -- "${3#s11absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught under S11 (no: ${3#s11absent:})"; fi ;;
     s8absent:*) s8_on; run_read "$f"; s8_off; if grep -qF -- "${3#s8absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught under S8 (no: ${3#s8absent:})"; fi ;;
     present:*) run_read "$f"; if grep -qE -- "${3#present:}" <<< "$OUT"; then ok "$id caught (found: ${3#present:})"; else bad "$id NOT caught"; fi ;;
@@ -342,6 +398,9 @@ weak_read R7 "(\$withSha ? (strlen(\$t) >= 200 ? ', sha256 ' . \$sha(\$t) : ', n
 weak_read R8 "' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qoRow))->direct())|||' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qo))->direct())" "s8absent:direct mode on for the staff screens (row gate) yes"
 weak_read R10 "\$form(\$filled['alert_whatsapp'] ?? null|||\$form(\$cfg['alert_whatsapp'] ?? null" "s11absent:watchdog no +, starting 0 (local), 10 digits"
 weak_read R11 "(strlen(\$t) >= 200 ? ', sha256 ' . \$sha(\$t) : ', no hash (under 200 bytes)')|||', sha256 ' . \$sha(\$t)" "present:row set, 26 bytes / 26 chars, sha256"
+weak_read R12 "\$rc = \$stopped ? 1 : (\$changed ? 4 : (\$recreated ? 3 : 0));|||\$rc = \$recreated ? 3 : (\$stopped ? 1 : (\$changed ? 4 : 0));" s12rc
+weak_read R13 "if (\$stopped) \$causes[] = 'the reading stopped part-way (send the log as it is)';|||" s12line
+weak_read R14 "preg_split('#\\s*(?:[/,;|\\n]|\\s{2,}|\\bor\\b)\\s*#u', \$t)|||[\$t]" "s11absent:phone-shaped runs: 2 (with +, starting 256, 12 digits; no +"
 weak_read R9 "\$say(sprintf('%-28s %s', 'flyer_available', \$both('flyer_available')));|||" "absent:flyer_available              worker"
 
 echo "-- weakened copies of the wrapper, each must be caught"
@@ -362,9 +421,13 @@ open(sys.argv[2], "w").write(s.replace(old, new))' "$WRAP" "$d/values-5.18.107.s
          grep -qF "could not be read by the book's owner, so they were not compared: lib/PublicPriceFeed.php" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4c: the unreadable file not reported as such)" ;;
     S4e) mv "$P/lib/PublicPriceFeed.php" "$SB/ppf.moved"; run_wrap "$d/values-5.18.107.sh"; mv "$SB/ppf.moved" "$P/lib/PublicPriceFeed.php"
          grep -qF "these 5.18.106 files are not installed: lib/PublicPriceFeed.php" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4e: the missing file not reported as such)" ;;
-    S10w) race_copy "$d/values-5.18.107.php" 0; sed -i "s/^READER_SHA256=\"[0-9a-f]\{64\}\"$/READER_SHA256=\"$(sha256sum "$d/values-5.18.107.php" | cut -c1-64)\"/" "$d/values-5.18.107.sh"
-          run_wrap "$d/values-5.18.107.sh"; after_race
-          [ "$(grep -c 'nothing was changed' <<< "$OUT")" = 0 ] && bad "$id NOT caught" || ok "$id caught (S10w: the wrapper said 'nothing was changed')" ;;
+    S10w) stage "$READ" "$d/values-5.18.107.php" 1; repin "$d/values-5.18.107.sh" "$d/values-5.18.107.php" "$d/w.sh"; mv "$d/w.sh" "$d/values-5.18.107.sh"
+          run_wrap "$d/values-5.18.107.sh"; local st=no; raced && [ "$RC" = 3 ] && st=yes; after_race
+          if [ "$st" != yes ]; then bad "$id not staged (raced/exit 3)"; elif [ "$(grep -c 'nothing was changed' <<< "$OUT")" = 0 ]; then bad "$id NOT caught"; else ok "$id caught (S10w: the wrapper said 'nothing was changed')"; fi ;;
+    S14) touch "$SB/fail-reader"; run_wrap "$d/values-5.18.107.sh"; rm -f "$SB/fail-reader"
+         grep -qF "the reader ended without its last line (exit 1)" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S14: claimed the reader ran)" ;;
+    S4f) local pm; pm="$(stat -c %a "$P/profiles")"; chmod 700 "$P/profiles"; run_wrap "$d/values-5.18.107.sh"; chmod "$pm" "$P/profiles"
+         grep -qF "could not be read by the book's owner, so they were not compared: profiles/south-sudan.json" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4f: a closed folder called not installed)" ;;
     S4d) touch "$SB/fail-hash"; run_wrap "$d/values-5.18.107.sh"; rm -f "$SB/fail-hash"
          grep -qF "did not hash a known string" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4d: the failed hashing not reported as such)" ;;
   esac
@@ -375,8 +438,10 @@ weak_wrap X3 '[ -z "$BAD" ] || stop "these installed files' 'true || stop "these
 weak_wrap X4 '[ "$(sha256sum "$READER" 2>/dev/null | cut -c1-64)" = "$READER_SHA256" ] || stop' 'true || stop' S5
 weak_wrap X5 '0:*) stop "the book is root'"'"'s' '0:*) : "the book is root'"'"'s' S6
 weak_wrap X6 '[ "$(sed -n '"'"'s/^CONTROL \([0-9a-f]\{64\}\)$/\1/p'"'"' <<< "$GOT")" = "$CONTROL_SHA256" ] && grep -qx "END $N" <<< "$GOT"' 'true' S4d
-weak_wrap X8 'if (!is_file($p)) { echo "MISSING  ", $f, "\n"; continue; }' '' S4e
-weak_wrap X9 '  1|3|4) echo "  the reader'"'"'s last line above says what happened; send the log as it is" ;;' '  1|3|4) echo "  READ-ONLY — nothing was changed" ;;' S10w
+weak_wrap X8 '? "MISSING" : "UNREAD"' '? "UNREAD" : "UNREAD"' S4e
+weak_wrap X9 '  yes:1|yes:3|yes:4) echo "  the reader'"'"'s last line above says what happened; send the log as it is" ;;' '  yes:1|yes:3|yes:4) echo "  READ-ONLY — nothing was changed" ;;' S10w
+weak_wrap X10 'FINISHED=no; grep -q '"'"'^READ-ONLY — '"'"' "$ROUT" && FINISHED=yes' 'FINISHED=yes' S14
+weak_wrap X11 'echo (is_readable($d) && is_executable($d)) ? "MISSING" : "UNREAD", "  ", $f, "\n"; continue; }' 'echo "MISSING  ", $f, "\n"; continue; }' S4f
 weak_wrap X7 'if (g !~ /^[0-9a-f]+$/ || length(g) != 64) print "UNREAD " f; else if' 'if' S4c
 
 echo; echo "passed $PASS, failed $FAIL"
