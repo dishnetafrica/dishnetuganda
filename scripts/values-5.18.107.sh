@@ -3,14 +3,17 @@
 # values-5.18.107.sh — READ-ONLY: the production values 5.18.107's build needs (root docs/76 §N), 25 Nov 2026.
 #
 # It changes nothing — no table, no row, no setting, no file in the plugin or its data folder, nothing in uCRM or
-# Evolution. It prints COUNTS, NAMES OF PRODUCTS AND PRICES, AND SHAPES ONLY: no phone number, no person's name, no
-# message text, no key or token; a text setting is "set, its size, a hash prefix, digit counts"; an invoice number only
-# its shape (<6d>). As root on the host:
+# Evolution. One window remains, and is reported when it happens: a plugin process closing the book at the instant the
+# reader opens it, when the read re-creates SQLite's own -wal/-shm beside it (exit 3; the next plugin connection uses
+# them). It prints COUNTS, NAMES OF PRODUCTS AND PRICES, AND SHAPES ONLY: no phone number, no person's name, no message
+# text, no key or token; a text setting is "set, its size, digit counts" (a hash prefix only for the long settings text);
+# a number only its form; an invoice number only its shape (<6d>). As root on the host:
 #
 #   1. it finds the uCRM container, the installed plugin, its data folder and the book's owner (the report wrappers'
 #      discovery), refuses a root-owned book, and checks that the installed plugin is 5.18.106 (bf29cbd) and that every
 #      file of its lib/, both profiles and the shop catalogue (299) are 5.18.106's bytes — hashed by the container's php
-#      as the book's owner, after a positive control, a file it cannot read reported apart from a file that differs;
+#      as the book's owner, after a positive control; a missing file, a file it cannot read and a file that differs are
+#      each reported as such;
 #   2. it checks scripts/values-5.18.107.php beside it against the sha256 this file pins, and feeds it on stdin to php
 #      inside the container, as the book's owner — nothing is copied into the container;
 #   3. the reader (see its header) opens the book read-only (only when its -wal and -shm already exist), asks uCRM with
@@ -32,7 +35,7 @@ IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/$PLUGIN}"
 PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 READER="$HERE/values-5.18.107.php"
-READER_SHA256="c5d71fd234951332a65675f3327e62dd4be1a8465769ce439a2e2fa16135fbb7"
+READER_SHA256="2de4496af877ca5b9f5fdd33214414a96c9b3934c2f39a95148c5714ca558835"
 LIVE_COMMIT_FULL="bf29cbd7171639f93e674ab174a6d09948b68932"   # 5.18.106 (release), live since 22 Nov 05:48Z
 # every file of lib/, both profiles and the shop catalogue at 5.18.106 (git ls-tree; 299) — not only the 20 the reader names:
 # those load others at the top level, and the code they call loads more
@@ -367,7 +370,9 @@ N="$(grep -c . <<< "$LIVE_SUMS")"
 GOT="$(printf '%s\n' "$LIVE_SUMS" | docker exec -i -u "$OWNER" "$CONTAINER" php -d display_errors=0 -r '
   echo "CONTROL ", hash("sha256", "dnb-values-107"), "\n"; $n = 0;
   while (($l = fgets(STDIN)) !== false) { $f = trim(substr($l, 66)); if ($f === "") continue; $n++;
-    $h = (is_file($argv[1] . "/" . $f) && is_readable($argv[1] . "/" . $f)) ? @hash_file("sha256", $argv[1] . "/" . $f) : false;
+    $p = $argv[1] . "/" . $f;
+    if (!is_file($p)) { echo "MISSING  ", $f, "\n"; continue; }
+    $h = is_readable($p) ? @hash_file("sha256", $p) : false;
     echo ($h === false ? "UNREAD" : $h), "  ", $f, "\n"; }
   echo "END ", $n, "\n";' "$IN_CONTAINER" 2>/dev/null)"
 [ "$(sed -n 's/^CONTROL \([0-9a-f]\{64\}\)$/\1/p' <<< "$GOT")" = "$CONTROL_SHA256" ] && grep -qx "END $N" <<< "$GOT" \
@@ -375,9 +380,10 @@ GOT="$(printf '%s\n' "$LIVE_SUMS" | docker exec -i -u "$OWNER" "$CONTAINER" php 
 RES="$(awk 'NR == FNR { want[$2] = $1; order[++n] = $2; next }
             $1 != "CONTROL" && $1 != "END" { got[$2] = $1 }
             END { for (i = 1; i <= n; i++) { f = order[i]; g = got[f];
-                    if (g !~ /^[0-9a-f]+$/ || length(g) != 64) print "UNREAD " f; else if (g != want[f]) print "BAD " f } }' \
+                    if (g == "MISSING") print "MISSING " f; else if (g !~ /^[0-9a-f]+$/ || length(g) != 64) print "UNREAD " f; else if (g != want[f]) print "BAD " f } }' \
         <(printf '%s\n' "$LIVE_SUMS") <(printf '%s\n' "$GOT"))"
-UNREAD="$(sed -n 's/^UNREAD //p' <<< "$RES" | tr '\n' ' ')"; BAD="$(sed -n 's/^BAD //p' <<< "$RES" | tr '\n' ' ')"
+MISSING="$(sed -n 's/^MISSING //p' <<< "$RES" | tr '\n' ' ')"; UNREAD="$(sed -n 's/^UNREAD //p' <<< "$RES" | tr '\n' ' ')"; BAD="$(sed -n 's/^BAD //p' <<< "$RES" | tr '\n' ' ')"
+[ -z "$MISSING" ] || stop "these 5.18.106 files are not installed: $MISSING"
 [ -z "$UNREAD" ] || stop "these installed files could not be read by the book's owner, so they were not compared: $UNREAD"
 [ -z "$BAD" ] || stop "these installed files are not 5.18.106's bytes: $BAD"
 echo "  installed       5.18.106 (commit $REC); all $N files of lib/, profiles/ and the shop catalogue are 5.18.106's bytes; the book owned by $OWNER"
@@ -391,7 +397,11 @@ echo "── W.8: the container's PATH (for the rehearsal's fake docker) ──�
 echo "  as the container's default user: $(docker exec "$CONTAINER" printenv PATH 2>/dev/null </dev/null | mask)"
 echo "  as the book's owner:             $(docker exec -u "$OWNER" "$CONTAINER" printenv PATH 2>/dev/null </dev/null | mask)"
 echo
-echo "  exit $RC (0 done; 1 the reading stopped part-way; 2 refused before reading)"
-echo "  READ-ONLY — nothing was changed"
+echo "  exit $RC (0 done, nothing changed; 1 the reading stopped part-way; 2 refused before reading; 3 done, but SQLite's own -wal/-shm were re-created as the book was opened; 4 the book reported changes — UNEXPECTED)"
+case "$RC" in
+  0) echo "  READ-ONLY — nothing was changed" ;;
+  1|3|4) echo "  the reader's last line above says what happened; send the log as it is" ;;
+  *) echo "  the reader ended without its last line (exit $RC); send the log as it is" ;;
+esac
 echo "  Send back the log:  cat $LOG"
 exit "$RC"

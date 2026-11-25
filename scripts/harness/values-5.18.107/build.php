@@ -24,7 +24,7 @@ $pdo = $store->getPdo();
 // the settings files after the book: its first boot imports a data folder's kyc_config.json and config_vault.json
 $w($D . '/config.json', [
     'ai_enabled' => true, 'ai_hardware_expert' => '1', 'ai_sales_on_all_numbers' => '0', 'ai_qualification' => '1',
-    'bot_custom_instructions' => 'PLANT_CUSTOM topic rule text', 'ai_fact_payment' => 'Pay to account 1234567890 PLANT_PAY',
+    'bot_custom_instructions' => 'PLANT_CUSTOM topic rule text. ' . str_repeat('Answer briefly and in plain words. ', 6), 'ai_fact_payment' => 'Pay to account 1234567890 PLANT_PAY',
     'ai_fact_office' => 'Plot 5 PLANT_OFFICE, call +256 000 111 222', 'ai_fact_prices' => '', 'ai_fact_kit_taxes' => 'omit',
     'quote_company_phone' => '+256000333444', 'alert_whatsapp' => '+256 000 999 888', 'ai_handover_message' => 'Please hold PLANT_HOLD',
     'quote_tracking_enabled' => '1', 'quote_chase_enabled' => '0', 'wa_send_ledger' => 'on', 'timezone' => 'Africa/Kampala',
@@ -39,7 +39,7 @@ $w($D . '/config_vault.json', ['config' => ['currency_code' => 'UGX', 'evolution
 $store->save('kyc_config.json', [
     'wa_bot_enabled' => false, 'bot_instructions_mode' => 'override', 'bot_custom_instructions' => 'PLANT_ROWCUSTOM other text',
     'ai_hardware_expert' => '1', 'quote_tracking_enabled' => '1', 'alert_whatsapp' => '0000999888', 'ucrm_quote_organization_id' => '1',
-    'wa_webhook_secret' => '', 'openai_api_key' => 'sk-PLANT_ROWKEY', 'alert_patience_minutes' => '15',
+    'wa_webhook_secret' => '', 'openai_api_key' => 'sk-PLANT_ROWKEY', 'alert_patience_minutes' => '15', 'web_chat_enabled' => '1',
 ]);
 $ins = function (string $t, array $r) use ($pdo): void {
     $pdo->prepare('INSERT INTO ' . $t . ' (' . implode(',', array_keys($r)) . ') VALUES (' . implode(',', array_fill(0, count($r), '?')) . ')')->execute(array_values($r));

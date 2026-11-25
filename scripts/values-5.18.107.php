@@ -18,7 +18,8 @@
  *
  * It prints no phone number, no person's name, no message text, no secret: a text setting is "set, n bytes, digit
  * counts" — never a hash, which a short value (a phone number) could be recovered from; the one exception is the long
- * settings text, whose hash prefix is compared with the recorded v9's; a number setting only its form; an invoice number
+ * settings text (200 bytes or more), whose hash prefix is compared with the recorded v9's; a number setting only its
+ * form (with or without '+', its country prefix, its digit count); an invoice number
  * only its shape (<6d>); counts, product names and prices. As a last guard every run of nine or more digits is withheld,
  * and the wrapper masks again.
  */
@@ -58,7 +59,8 @@ $txt = function ($v, bool $withSha = false) use ($sha, $d5, $phoneShaped): strin
     $t = trim((string)$v);
     if ($t === '') return 'empty';
     if (strtolower($t) === 'omit') return '"omit"';
-    return 'set, ' . strlen($t) . ' bytes / ' . mb_strlen($t) . ' chars' . ($withSha ? ', sha256 ' . $sha($t) : '')
+    return 'set, ' . strlen($t) . ' bytes / ' . mb_strlen($t) . ' chars'
+        . ($withSha ? (strlen($t) >= 200 ? ', sha256 ' . $sha($t) : ', no hash (under 200 bytes)') : '')
         . ', digit runs of 5+: ' . $d5($t) . ', phone-shaped: ' . $phoneShaped($t);
 };
 
@@ -76,17 +78,36 @@ $cls = function (array $a, string $k): string {
     return 'text of ' . strlen($t) . ' bytes';
 };
 $bool = function ($v): bool { return filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN); };
-/** A number setting's form only (the digits stripped of everything else, as AlertService::target() does) — never a digit. */
-$form = function ($v, string $none = 'not set'): string {
+/** The country prefix of a run of digits: 256, 211, a leading 0 (local), or another start — never more of it. */
+$cc = function (string $digits): string {
+    if (strpos($digits, '256') === 0) return 'starting 256';
+    if (strpos($digits, '211') === 0) return 'starting 211';
+    return ($digits !== '' && $digits[0] === '0') ? 'starting 0 (local)' : 'another start';
+};
+/**
+ * A number setting's form only, stripped as AlertService::target() strips it (only digits and '+' kept) — never a digit
+ * beyond its country prefix. More than one '+' means more than one number was written.
+ */
+$form = function ($v, string $none = 'not set') use ($cc): string {
     $t = preg_replace('/[^0-9+]/', '', (string)(is_scalar($v) ? $v : ''));
     if ($t === '') return $none;
-    $digits = ltrim($t, '+');
-    if ($t[0] === '+') $f = 'international with +';
-    elseif (strpos($digits, '256') === 0) $f = 'digits starting with 256';
-    elseif (strpos($digits, '211') === 0) $f = 'digits starting with 211';
-    elseif ($digits !== '' && $digits[0] === '0') $f = 'local, starting with 0';
-    else $f = 'other';
-    return $f . ', ' . strlen($digits) . ' digits';
+    $digits = preg_replace('/\D/', '', $t);
+    $plus = substr_count($t, '+');
+    return ($t[0] === '+' ? 'with +' : 'no +') . ', ' . $cc($digits) . ', ' . strlen($digits) . ' digits'
+        . ($plus > 1 ? ', ' . $plus . ' plus signs (more than one number?)' : '');
+};
+/** A text that may hold phone numbers (printed as it is, on a letterhead): each phone-shaped run's form, on its own. */
+$numbers = function ($v) use ($cc): string {
+    if ($v === null) return 'not set';
+    if (!is_scalar($v)) return 'not text';
+    $t = trim((string)$v);
+    if ($t === '') return 'empty';
+    preg_match_all('/(?<!\d)(?:\+?\d[\d\s-]{8,}\d)(?!\d)/', $t, $m);
+    $each = array_map(function (string $r) use ($cc): string {
+        $d = preg_replace('/\D/', '', $r);
+        return ($r[0] === '+' ? 'with +' : 'no +') . ', ' . $cc($d) . ', ' . strlen($d) . ' digits';
+    }, $m[0]);
+    return 'set, ' . strlen($t) . ' bytes, phone-shaped runs: ' . count($each) . ($each ? ' (' . implode('; ', $each) . ')' : '');
 };
 
 $say('== 5.18.107 production values — read-only — ' . gmdate('Y-m-d\TH:i:s\Z') . ' ==');
@@ -131,9 +152,9 @@ final class GetOnlyCrm extends CrmApiClient
     public function findWebhookByUrl(string $urlPattern): ?array { throw self::no('webhook'); }
 }
 
-$rc = 0;
 $db = null;
 $walH = null;
+$stopped = false; $changed = false; $recreated = false;
 try {
     // ── the settings: the workers' view, and the book's kyc_config row (the screens' and the old path's view) ──────────
     $cfg = PluginConfig::read($P, $D);
@@ -162,7 +183,6 @@ try {
     $q = function (string $sql) use (&$db): array { return $db->query($sql)->fetchAll(PDO::FETCH_ASSOC); };
     $row = [];
     $hasRow = $tbl('kyc_config');   // the first read: SQLite opens the WAL here
-    $recreated = false;
     if ($walH !== null) { $st = @fstat($walH); $recreated = is_array($st) && (int)$st['nlink'] === 0; }
     if ($db !== null && $hasRow) {
         $data = $db->query('SELECT data FROM kyc_config WHERE id = 0 LIMIT 1')->fetchColumn();
@@ -196,7 +216,11 @@ try {
     // ── 1. AI settings ───────────────────────────────────────────────────────────────────────────────────────────────
     $head('1. AI settings (§K step 2, §D, Part N gate)');
     $web = function (string $k) use ($db): string { return $db === null ? 'not established (row not read)' : ''; };
-    foreach (['ai_enabled', 'ai_hardware_expert', 'ai_sales_on_all_numbers', 'ai_qualification'] as $k) {
+    $say(sprintf('%-28s %s → the worker reads it as %s (the website chat does not read it)', 'ai_enabled', $both('ai_enabled'), $bool($cfg['ai_enabled'] ?? false) ? 'ON' : 'off'));
+    // web_chat.php:182 — PluginConfig::toBool on the gap-filled view
+    $say(sprintf('%-28s %s → the website chat answers: %s', 'web_chat_enabled', $both('web_chat_enabled'),
+        $db === null ? 'not established (row not read)' : (PluginConfig::toBool($filled['web_chat_enabled'] ?? false) ? 'yes' : 'no (it is off)')));
+    foreach (['ai_hardware_expert', 'ai_sales_on_all_numbers', 'ai_qualification'] as $k) {
         $say(sprintf('%-28s %s → the worker reads it as %s; the website chat as %s', $k, $both($k), $bool($cfg[$k] ?? false) ? 'ON' : 'off',
             $web($k) !== '' ? $web($k) : ($bool($filled[$k] ?? false) ? 'ON' : 'off')));
     }
@@ -226,8 +250,8 @@ try {
               'stock_statement', 'ai_fact_business_cap'] as $k) {
         $say(sprintf('%-22s %s', $k, $bothTxt($k)));
     }
-    $say(sprintf('%-22s worker %s · row %s', 'quote_company_phone', $form($cfg['quote_company_phone'] ?? null),
-        $db === null ? 'not read' : $form($row['quote_company_phone'] ?? null)));
+    $say(sprintf('%-22s worker %s · row %s', 'quote_company_phone', $numbers($cfg['quote_company_phone'] ?? null),
+        $db === null ? 'not read' : $numbers($row['quote_company_phone'] ?? null)));
     $kn = KitTaxNote::note($cfg);
     $say('the kit tax note the worker appends: ' . ($kn === '' ? 'none (hardware module off, or "omit")' : ($kn === KitTaxNote::DEFAULT_NOTE ? 'the code\'s default sentence' : 'the operator\'s own wording')));
     $pn = PlanFenceGuard::note($cfg);
@@ -633,16 +657,24 @@ try {
         $tc = (int)$db->query('SELECT total_changes()')->fetchColumn();
         $db->exec('ROLLBACK'); $db = null;
         $say('the book: changes made ' . $tc . ($tc === 0 ? ' (none)' : ' — UNEXPECTED'));
-        if ($tc !== 0) $rc = 1;
-        if ($recreated) { $say('the book: its -wal/-shm were re-created by this read (see the NOTE above)'); $rc = 1; }
+        $changed = $tc !== 0;
+        if ($recreated) $say('the book: its -wal/-shm were re-created by this read (see the NOTE above)');
     }
     $say('uCRM asked (GET only): ' . (GetOnlyCrm::$asked ? implode(', ', array_map(function ($p) { return preg_replace('/\?.*$/', '', $p) . ' ' . (GetOnlyCrm::$codes[$p] ?? '?'); }, GetOnlyCrm::$asked)) : 'nothing') . '; anything else refused: ' . GetOnlyCrm::$refused);
 } catch (Throwable $e) {
     $say('STOPPED at ' . basename($e->getFile()) . ':' . $e->getLine() . ' — ' . get_class($e) . '; nothing was changed');
     if ($db !== null) { try { $db->exec('ROLLBACK'); } catch (Throwable $e2) {} }
-    $rc = 1;
+    $stopped = true;
 }
 if ($walH !== null) { @fclose($walH); $walH = null; }
 $say('runs of 9+ digits withheld: ' . $n9);
-$say($rc === 0 ? 'READ-ONLY — nothing was changed' : (!empty($recreated) ? 'READ-ONLY — nothing was changed but SQLite\'s own -wal/-shm, re-created as the book was opened (see the NOTE)' : 'READ-ONLY — nothing was changed (the reading did not finish; send the log as it is)'));
+// exit 0 done, nothing changed; 1 stopped part-way; 3 done, SQLite's own -wal/-shm re-created at the open; 4 the book
+// reported changes. The last line names every cause that applies, and says "nothing was changed" only when that is so.
+$causes = [];
+if ($stopped) $causes[] = 'the reading stopped part-way (send the log as it is)';
+if ($changed) $causes[] = 'the book reported changes — UNEXPECTED';
+if ($recreated) $causes[] = 'SQLite\'s own -wal/-shm were re-created as the book was opened (see the NOTE)';
+$rc = $stopped ? 1 : ($changed ? 4 : ($recreated ? 3 : 0));
+$say($causes === [] ? 'READ-ONLY — nothing was changed'
+    : 'READ-ONLY — ' . implode('; ', $causes) . (($changed || $recreated) ? '' : '; nothing was changed'));
 exit($rc);
