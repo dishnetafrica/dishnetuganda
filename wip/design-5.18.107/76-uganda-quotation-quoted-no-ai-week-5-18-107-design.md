@@ -1,13 +1,13 @@
 # 76 — Uganda: the quotation built in code, quoted customers, the "assistant off" list, and the week's fixes (5.18.107 design, 21 November 2026; re-scoped 25 November)
 
 **Status:** DESIGN; nothing is built. **Re-scoped on 25 Nov** at the owner's word: this file is 5.18.107, and Parts H,
-S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed four times (reviews 7–10, §R.9–§R.12);
-review 10's changes, all minor, are **not yet reviewed** (§R.7).
+S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed five times (reviews 7–11, §R.9–§R.13);
+review 11's seven minor changes are checked by the build's tests and code review, not by a further design review (§R.7).
 
 - **Written:** 21 Nov 2026, from a read-only map of `release/5.18.106` (bf29cbd). Five readers made the map, and a
   critic spot-checked at least two citations per map (§B.7).
-- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **four more times on 25 Nov** (reviews 7, 8,
-  9 and 10). Each review was adversarial, in two lenses, and every finding then went to a separate checker that tried to
+- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **five more times on 25 Nov** (reviews 7 to
+  11). Each review was adversarial, in two lenses, and every finding then went to a separate checker that tried to
   refute it:
   - **Review 1:** correctness against the code, and safety, rollout and the owner's intent. 41 findings: 30 confirmed,
     11 partly confirmed.
@@ -23,6 +23,7 @@ review 10's changes, all minor, are **not yet reviewed** (§R.7).
   - **Review 8 (25 Nov):** review 7's changes. 16 findings: 7 confirmed, 8 partly confirmed, 1 refuted.
   - **Review 9 (25 Nov):** review 8's changes. 17 findings: 8 confirmed, 8 partly confirmed, 1 refuted.
   - **Review 10 (25 Nov):** review 9's changes. 17 findings, all minor: 4 confirmed, 10 partly confirmed, 3 refuted.
+  - **Review 11 (25 Nov):** review 10's changes. 7 findings, all minor: 5 confirmed, 2 partly confirmed.
   - Every finding that held is taken; the refuted ones are kept as notes. §R says where.
 - **Re-scoped, 25 Nov.** The owner split the next version in two. **5.18.107** keeps Part Q (the quotation built in
   code), Part K (quoted customers), Part X (the "assistant off" list), F-1, F-7 and F-8, and gains **Part W**, the
@@ -48,7 +49,7 @@ review 10's changes, all minor, are **not yet reviewed** (§R.7).
 
   A rollback of the release is the only undo for O7's and W.2's code; W.3 can also be emptied in settings (§W.3).
   South Sudan must stay byte for byte unchanged.
-- **Before the build:** the production values in §N, and a review of review 10's changes. The owner confirmed the
+- **Before the build:** the production values in §N. The owner confirmed the
   defaults W-O1–W-O5 and X-O1 on 25 Nov (§O).
 
 Paths below are relative to `dishnet-hybrid-sudan/` unless they start with `docs/` (this repository's root `docs/`) or
@@ -637,9 +638,9 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
      no price, total or monthly figure." On the accounts number with an ACCOUNT section, the sentence ends instead "…,
      other than the ACCOUNT values above", and the block adds one sentence before it: the balance, the latest invoice's
      number and amount, and the last payment in the ACCOUNT section are not quotation prices; state them exactly as
-     given, as the ACCOUNTS role says (`lib/DishNetAiBrain.php:960-969`, `:1700-1722`), and answer "how much do I owe"
-     from ACCOUNT, not with the quotation pointer. On every other channel, and on accounts with no ACCOUNT section, the
-     block is as above;
+     given, on the same line as any "total due" wording, as the ACCOUNTS role says (`lib/DishNetAiBrain.php:960-969`,
+     `:1700-1722`), and answer "how much do I owe" from ACCOUNT, not with the quotation pointer. On every other channel,
+     and on accounts with no ACCOUNT section, the block is as above;
    - then one that claims no precedence: "Answer the rest of their question about DishNet within your other rules,
      rules 1 to 8 included."
 
@@ -665,7 +666,10 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    - a number with a bare "m" or "k" next to a currency word (UGX, USh, Shs, shillings), or directly after a decimal
      amount ("2.6m");
    - a figure next to a currency word;
-   - or a TOTAL label.
+   - or a TOTAL label: `ReplyTotals`' own `LABEL` or `VERB_LABEL` at a line start, with its `NOT_A_LABEL` and
+     `MONEY_WORDS` rules, so that "Total users: 50" is not one. The constants are private, so `ReplyTotals` gains one
+     public method, `labelSpans(string $text)`, that reads them and returns each label line with its offset, as
+     `phoneSpans()` does for the guard; `findings()` is unchanged by construction.
 
    **What it skips**, so a quoted customer still gets general answers:
    - the digits of the quotation number and of dates;
@@ -685,7 +689,10 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    - on the accounts number, the account block's own values: balance, latest invoice amount, last payment, and the
      latest invoice's number as a whole token equal to it, compared by its digits. A currency word directly before or
      after one of those values is excused there; a currency word beside any other figure is still caught, and the fact
-     skip's "never a currency-word match" is unchanged.
+     skip's "never a currency-word match" is unchanged. A TOTAL label is excused there too when every figure on its
+     line is one of those values, the quotation number or a date. A TOTAL label beside any other figure, one with no
+     figure on its line (the figure on a later line), and any TOTAL label on another channel or on accounts with no
+     ACCOUNT section, are still caught.
 
    When it fires, flyer, photo, document and lead are dropped (`:892-900`), and an audit event is stored (metadata
    only).
@@ -709,14 +716,14 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    - `quote_requested` is set;
    - the reply sent names the quotation number;
    - the reply says the sales team will help: the phrase "sales team" or the word "salesperson", ignoring case, or
-     `owner_first_name` when it is set (read in code from `QuoteInPlay`'s result), as a whole word whose first letter
-     is a capital, the rest compared ignoring case. So "patience", "hope" or "your bill" never match, and a name stored
-     as "GRACE" still matches "Grace". It does not count where it is followed by "'s" and then, within two words,
-     "assistant", "line" or "behalf": the identity line's persona phrases (`lib/DishNetAiBrain.php:259-266`). In the
-     matcher's own copy of the text only, U+2019 and U+02BC are first turned into an ASCII apostrophe; the text sent is
-     never changed. No
-     other wording counts, so the fixed `human_ask` hand-over, the holding line and `ReplyPrivacyGuard::SAFE_FALLBACK`
-     do not match it.
+     `owner_first_name` when it is set (read in code from `QuoteInPlay`'s result), as a whole word whose first letter is
+     a capital, the rest compared ignoring case. So "patience", "hope" or "your bill" never match, and a name stored as
+     "GRACE" still matches "Grace". It does not count where it is followed by a possessive and then, within two words,
+     "assistant", "line" or "behalf": the identity line's persona phrases. The possessive is "'s", or, when the stored
+     first name ends in s (compared ignoring case), a bare "'" (`lib/DishNetAiBrain.php:259-266`). In the matcher's own
+     copy of the text only, U+2019 and U+02BC are first turned into an ASCII apostrophe; the text sent is never changed.
+     No other wording counts, so the fixed `human_ask` hand-over, the holding line and
+     `ReplyPrivacyGuard::SAFE_FALLBACK` do not match it.
 
    **No Part K alert on a turn whose final text cannot carry a quotation pointer:** the `human_ask` short-circuit
    (§W.3), a guard block's `SAFE_FALLBACK` (with `<<QUOTE>>` too, the guard's `escalate` wins), and §D.4's empty-reply
@@ -734,9 +741,14 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    The Part K alert is skipped when its resolved phone is one the hand-over alert of that turn **is routed to**, worked
    out by that same routing before either alert is sent; the hand-over runs after the reply is sent, and
    `Handover::escalate` returns nothing (`lib/Handover.php:20-23`), so what it actually reached cannot be read.
-   Phones are compared by digits only, on the international form (`StaffDirectory::phoneOf` for staff, `target()` for
-   the central number). So one person never gets both: a pending or unknown owner, when the central number is in that
-   set; a line owner who is the quotation's owner.
+   Phones are compared by digits only, on the international form: `StaffDirectory::phoneOf` for staff, and for the
+   central number `PhoneNumber::international(<alert_whatsapp>, TenantProfile::current($config, $dataDir))`, as
+   `InternalNumbers::configured` already does (`lib/InternalNumbers.php:387-400`), falling back to the digits of
+   `target()` when that returns nothing. `target()` itself only strips non-digits (`lib/AlertService.php:51-54`), and
+   the settings page saves the number in any form. This is for the comparison only: the alerts are sent exactly as
+   today, and a central number stored in a form that cannot be delivered is the failed-send case §P records. So one
+   person never gets both: a pending or unknown owner, when the central number is in that set; a line owner who is the
+   quotation's owner.
 
    **How it is sent:**
    - `AlertService::notifyTo(<owner's phone>, 'quoted:<ref>', <text>, cooldown)`;
@@ -974,8 +986,8 @@ reused.
 Eight items found or asked for between the 5.18.106 deploy and the split. Each was mapped read-only on 25 Nov against
 `release/5.18.106` (bf29cbd) by two readers. The exception is the two root scripts W.7 and W.8 cite, which bf29cbd does
 not contain: they were read on the development branch at c0d0868 (they last changed in 745e668 and 7408a70). Every
-citation below is theirs. The section was reviewed four times (reviews 7–10, §R.9–§R.12); review 10's changes are not
-yet reviewed (§R.7). Each item is Uganda only unless it says otherwise; South Sudan stays byte for byte unchanged.
+citation below is theirs. The section was reviewed five times (reviews 7–11, §R.9–§R.13). Each item is Uganda only
+unless it says otherwise; South Sudan stays byte for byte unchanged.
 
 ### W.1 One reply to a burst of messages
 
@@ -1571,6 +1583,10 @@ guards.
   - the office or a salesperson's number;
   - an accounts-number balance, and "your latest invoice 000005 has UGX <amount> due" with ACCOUNT data and a live
     quotation (the same reply with a kit price added is still caught; a copy without the invoice-number skip fails);
+    "Total due: UGX <balance>" and "Your total amount due is <balance>" on the same footing, while "Total due: UGX <kit
+    price>" and "TOTAL: [sum]" are caught (copies without the accounts excuse, or excusing any label there, are each
+    caught);
+  - on the sales number, "TOTAL TO GET CONNECTED: (add the kit and installation)" is caught;
   - "15m Ethernet cable" and "about 100 m".
 - **What it catches:** the same replies with a kit price added; "2.6m"; "2.6 million"; "UGX 950k"; a fee typed into the
   delivery fact; a PRICES-fact figure.
@@ -1606,8 +1622,9 @@ guards.
   - a line owner with no phone and a pending quotation owner: the central number gets exactly one message;
   - an `<<ESCALATE>>` turn inside the hand-over's 30-minute cooldown: no Part K alert to the central number, as §P
     records;
-  - a quotation owner whose number equals `alert_whatsapp` written another way (local against international): one
-    message.
+  - a quotation owner whose number equals `alert_whatsapp` written another way: `alert_whatsapp` saved as "07…" and
+    the owner's `retailers.json` phone as "+2567…" for the same handset, one message; the reverse, one message. A
+    weakened copy that compares the raw digits of `target()` is caught by the first.
 - **Elsewhere:** the prompt in three modes; the scan's SQL exclusion; `check()` unchanged by `phoneSpans()`, South Sudan
   included.
 - **The precedence sentence:** for a customer with a live quotation, Part K on, in append and override mode with any
@@ -1637,13 +1654,20 @@ guards.
   - an owner named Patience with "Thank you for your patience", and one named Hope with "I hope this helps": no alert;
   - an owner stored as "GRACE" with "Grace will help you with any change", and "Please contact Grace about any change"
     (no hand-over verb): each alerts once;
+  - an owner named Moses on his own line who is also the quotation's owner: "I'm Moses' assistant" and "on Moses’
+    behalf" (U+2019) do not alert; an owner named Grace with "please ask 'Grace' about any change" alerts once, since a
+    bare apostrophe after a name not ending in s is not a possessive;
+  - a quoted customer who shares the owner's first name (owner Grace, the customer's DATA name beginning "Grace"): "Thank
+    you, Grace, installation takes two days", with no number, no amount and no "sales team", gives exactly one Part K
+    alert, as §P records;
   - **the negative control, on a turn that is not a hand-over** (no `<<ESCALATE>>`, no `<<QUOTE>>`, non-empty text): a
     reply saying "someone from our team will call you", with no number, no amount, no quotation number, and neither
     "sales team" nor "salesperson", raises no Part K alert;
   - weakened copies, each caught: no fourth trigger; no name match; no persona exclusion; a trigger matching "team"
     alone (the negative control); a name match ignoring case (Patience); an exact-case match ("GRACE"); no apostrophe
     normalisation (the typographic case); an exclusion limited to the exact "'s assistant" ("AI assistant"); a match
-    that requires a hand-over phrase ("Please contact Grace").
+    that requires a hand-over phrase ("Please contact Grace"); a possessive of "'s" only ("Moses' assistant"); a bare
+    "'" accepted after any name (the 'Grace' control).
 
 **X — the "assistant off" list**
 - **A listed number writes in (text):**
@@ -1813,6 +1837,10 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
     floor): after the pause ends the older steps aside, and the check counts the named event in (a), not apart, until
     it has gathered the older text; with a colleague message stored after the newer text arrived, the same parked event
     is counted apart (the control);
+  - the long-cooldown variant: `wa_human_cooldown_minutes` above `wa_parked_max_minutes` (the test may set both small),
+    two texts parked by one pause, the newer due after the older, each text's last parked run before it passes the
+    limit, and the pause ending after the newer text is older than `wa_parked_max_minutes`: the older steps aside, (a)
+    counts the named event in until it has gathered the older text, and the reply holds both;
   - typed events present and no marks: 0 and 0 with a non-zero control; no typed events in the day: INDETERMINATE;
   - a worker built with the switch on, the switch turned off before its next batch: the step-2 mark it writes after the
     switch-off is seen by a reading taken after its run ends.
@@ -1846,6 +1874,7 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
   - a drain check that omits (b), or matches marks with `LIKE` (caught by an `n` / `10n+k` pair);
   - a drain check gated on the switch, or given the OFF gate (the read with the switch off);
   - a drain check that exempts every event carrying the park note (the two-parked case);
+  - a drain check that also counts apart a named event older than `wa_parked_max_minutes` (the long-cooldown variant);
   - a drain check whose control counts only marked rows (the INDETERMINATE case).
 - **No re-point is expected:** the switch is off by default, so the existing tests that queue two events for one
   conversation behave as today. The build runs them to confirm it.
@@ -1997,7 +2026,8 @@ medium: the brain's only gate is the setter.
    read-only mode of the switch tool.
 5. **W.2, W.3, W.5 and W.6;** **W.4** only after step 7's check has read PASS with `gpt-transcribe` (§W.4).
 
-Then: the suite twice; the deploy script's design, as a section of this document reviewed before the derivation, as
+Then: an adversarial code review of the build, each finding checked by a refuter, as the builds of 5.18.104–106
+were reviewed; the suite twice; the deploy script's design, as a section of this document reviewed before the derivation, as
 docs/75 §L was. That section must name 092: a migration trial of 092 on a copy through the pin's `MigrationRunner`, as
 QF-G2 did for 089–091; after the first boot, `_migrations` holds 092 with its md5, its `migration.log` line reads OK, and
 `wa_no_ai` can be read the way the worker reads it, with a positive control; any failure is a NO-GO and the rollback.
@@ -2096,11 +2126,17 @@ The limits of Parts H and S are in docs/77 §P.
   the marks drained (§K), and §N narrows, but cannot exclude, a gate doubt, whose reach on the live install is not
   established. A carried row whose re-read throws loses its mark and can be answered again on its retry.
 - **The salesperson's alert on a model hand-over (K)** is skipped where the hand-over alert is routed to the same
-  phone, so a hand-over alert held back by its 30-minute per-conversation cooldown, or one that fails to send, still
-  withholds it that turn. The conversation is already red and its recipient was alerted within the window.
+  phone. So it is also withheld that turn when the hand-over alert:
+  - is held back by its 30-minute per-conversation cooldown: the conversation is red, and that phone had a hand-over
+    alert about this conversation within the last 30 minutes;
+  - fails to send: the conversation is red, but nobody is alerted that turn, unless the failure may have left
+    (`AlertService::mayHaveGone`), when the cooldown stands and the alert may have arrived. This is accepted because the
+    withheld alert would leave through the same sender to the same phone and would most likely fail too.
 - **An owner whose first name is an ordinary word (K)** can still draw one wrong alert per quotation per cooldown (6 h)
   when the word is capitalised, at the start of a sentence ("Hope this helps") or as a day name, and so can "I'm not
   <owner>" on the owner's own line.
+- **A customer who shares the quotation owner's first name (K)** can draw one wrong alert per quotation per cooldown
+  (6 h) when the model addresses them by name, whether the name comes from DATA or from the conversation.
 - **The topic rule (W.2)** is prompt-level, like every absolute rule. No stored setting reaches any brain; only the
   worker, the website chat and the two checks set it. Email drafts never get it.
 - **The office line (W.3)** is admin text, cut at 400 characters and judged by Part K's floor like every code-appended
@@ -2298,9 +2334,9 @@ Two lenses: review 5's changes to Part X, and its other changes. 5 confirmed, 3 
 
 ### R.7 Not yet reviewed
 
-- **Review 10's changes** (§R.12), all minor: the drain check's parked rule, dispatch, control and two readings; the
-  failure rule's wording; §E.2.5's routed-to dedupe and the name match's exact form; §E.4's resolver; §E.2.1's and
-  §E.2.3's invoice number and currency word; §E.1's third place; and their rows in §K, §L, §M, §N and §P.
+- **Review 11's changes** (§R.13), all minor: the dedupe's normalised central number, the bare-apostrophe possessive,
+  the TOTAL label on the accounts number, two §P entries and their tests. They are checked by the build's tests and
+  weakened copies and by the code review of the build (§M), not by a further design review.
 
 ### R.8 The re-scope (25 Nov)
 
@@ -2415,7 +2451,7 @@ were minor: 4 confirmed, 10 partly confirmed, 3 refuted.
 
 | Finding | Verdict | Taken in |
 |---|---|---|
-| R10-E1 — the drain check set aside every parked named event, but two texts parked by one pause leave the newer one to gather the older | P (an age exemption would bring the loss back) | §W.1 (counted apart only when `answeredMeanwhile` would drop it now), §K, §L W.1 |
+| R10-E1 — the drain check set aside every parked named event, but two texts parked by one pause leave the newer one to gather the older | P (an age exemption would bring the loss back) | §W.1 (counted apart only when `answeredMeanwhile` would drop it now), §K, §L W.1 (the long-cooldown case only in review 11, R11-F3) |
 | R10-E2 — `--check burst-drain` had no dispatch, and the tool's OFF gate would answer "not judged" exactly when §K runs it | P | §W.1 (a named mode before the step lookup, judged whatever the switch says), §M, §L W.1 |
 | R10-E3 — the positive control could read 0 on a broken read | **refuted**: a missing store raises, not 0 | — |
 | R10-E4 — "reached that turn" cannot be known before sending, and the hand-over route was misdescribed | P | §E.2.5 (routed to, by AlertService's own routing; digits compared), §P, §L K |
@@ -2432,3 +2468,20 @@ were minor: 4 confirmed, 10 partly confirmed, 3 refuted.
 | R10-F5 — the floor did not exempt the ACCOUNT section's invoice number, nor a currency word beside an account value | C | §E.2.1, §E.2.3, §N, §L K |
 | R10-F6 — §P did not record (b)'s double reply | P | §P |
 | R10-F7 — a merged "Agent" takes away the owner's alert | **refuted**: one message saying the same gets the same result today | — |
+
+### R.13 Review 11 (7 findings, 25 Nov)
+
+The same two lenses, narrowed to review 10's changes. Every finding then went to a separate checker that tried to
+refute it. All seven were minor and none was refuted: 5 confirmed, 2 partly confirmed. They touch only Part K's alert
+and the drain check's tests, so the review rounds stop here. These changes are checked by the build's own tests and
+weakened copies, and by the code review of the build (§M).
+
+| Finding | Verdict | Taken in |
+|---|---|---|
+| R11-E1 — `target()` does not give the central number in international form, so the dedupe could miss a local `alert_whatsapp` | P (a duplicate on the live install is not shown) | §E.2.5 (normalised as `InternalNumbers::configured` does, for the comparison only), §L K |
+| R11-E2 — the persona exclusion missed the bare-apostrophe possessive ("Moses' assistant") | C | §E.2.5, §L K |
+| R11-F2 — the same | C | as R11-E2 |
+| R11-E3 — a customer who shares the owner's first name draws a wrong alert when the model addresses them | C | §P, §L K (the outcome pinned) |
+| R11-F1 — §P justified a failed hand-over send as if someone had been alerted | P | §P |
+| R11-F3 — R10-E1's age-exemption copy was left out of §L W.1 | C | §L W.1, §R.12 |
+| R11-F4 — the floor's TOTAL label was undefined and would replace a correct accounts answer | C | §E.2.1, §E.2.3 (`ReplyTotals::labelSpans`; the accounts excuse), §L K |
