@@ -1,12 +1,14 @@
 # 76 — Uganda: the quotation built in code, quoted customers, the "assistant off" list, and the week's fixes (5.18.107 design, 21 November 2026; re-scoped 25 November)
 
 **Status:** DESIGN; nothing is built. **Re-scoped on 25 Nov** at the owner's word: this file is 5.18.107, and Parts H,
-S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed twice (reviews 7 and 8, §R.9, §R.10);
-review 8's changes are **not yet reviewed** (§R.7).
+S, N and L moved to 5.18.108 (docs/77). The re-scope and Part W were reviewed three times (reviews 7, 8 and 9,
+§R.9–§R.11); review 9's changes are **not yet reviewed** (§R.7).
 
 - **Written:** 21 Nov 2026, from a read-only map of `release/5.18.106` (bf29cbd). Five readers made the map, and a
   critic spot-checked at least two citations per map (§B.7).
-- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **a seventh time on 25 Nov**. Each review
+- **Reviewed six times on 21 Nov,** all seven parts as they then stood, and **three more times on 25 Nov** (reviews 7, 8
+  and 9).
+Each review
   was adversarial, in two lenses, and every finding then went to a separate checker that tried to refute it:
   - **Review 1:** correctness against the code, and safety, rollout and the owner's intent. 41 findings: 30 confirmed,
     11 partly confirmed.
@@ -20,6 +22,7 @@ review 8's changes are **not yet reviewed** (§R.7).
   - **Review 7 (25 Nov):** Part W, the re-scope, and review 6's changes to Part X. 29 findings: 13 confirmed, 14
     partly confirmed, 2 refuted.
   - **Review 8 (25 Nov):** review 7's changes. 16 findings: 7 confirmed, 8 partly confirmed, 1 refuted.
+  - **Review 9 (25 Nov):** review 8's changes. 17 findings: 9 confirmed, 7 partly confirmed, 1 refuted.
   - Every finding that held is taken; the refuted ones are kept as notes. §R says where.
 - **Re-scoped, 25 Nov.** The owner split the next version in two. **5.18.107** keeps Part Q (the quotation built in
   code), Part K (quoted customers), Part X (the "assistant off" list), F-1, F-7 and F-8, and gains **Part W**, the
@@ -38,15 +41,15 @@ review 8's changes are **not yet reviewed** (§R.7).
     store), no Uganda customer gets an AI reply, and each `ai.reply` ends in a staff alert with no hand-over (§X.5); the
     deploy script checks 092 (§M);
   - F-1, F-7 and F-8 are defect fixes;
-  - W.2 and W.3 are behaviour the owner asked for, live at the deploy; W.4–W.6 are a default change, a screen fix and
-    screens;
+  - W.2 is behaviour the owner asked for (22 Nov); W.3 is a design default the owner confirmed on 25 Nov (W-O3); both
+    are live at the deploy. W.4–W.6 are a default change, a screen fix and screens;
   - **O7** removes "Nothing is added on top." from the uCRM quotation's WhatsApp message, the app and KYC quotation
     message and the plugin's fallback PDF at the deploy, on the owner's 25 Nov decision.
 
   A rollback of the release is the only undo for O7's and W.2's code; W.3 can also be emptied in settings (§W.3).
   South Sudan must stay byte for byte unchanged.
-- **Before the build:** the production values in §N; the owner's confirmation of the defaults W-O1–W-O5 and X-O1
-  (§O); and a review of review 8's changes.
+- **Before the build:** the production values in §N, and a review of review 9's changes. The owner confirmed the
+  defaults W-O1–W-O5 and X-O1 on 25 Nov (§O).
 
 Paths below are relative to `dishnet-hybrid-sudan/` unless they start with `docs/` (this repository's root `docs/`) or
 are written root `scripts/…` (this repository's root `scripts/`).
@@ -605,35 +608,45 @@ It runs once per turn, and only while `quoted_no_prices_enabled` is on. Its answ
 **The owner** is the quotation's owner under rules 1–7 (docs/72 F4): the KYC salesperson, then the lead's assigned
 salesperson, then the sender. That is how "the salesperson who sent it" is read (decision O10, answered 25 Nov).
 - `owner_first_name` comes from `retailers.json`: letters only, at most 30 characters, absent when the owner is pending
-  or none or has no name. It is used only by code, `quoted_reply_text`'s `{salesperson}` and the alert, and never
-  reaches the prompt (§E.2.1).
+  or none or has no name. Part K never puts it into the system prompt: it is used by code, for `quoted_reply_text`'s
+  `{salesperson}` and the alert. The model can still meet it in two places: in history, where a sent
+  `quoted_reply_text` is replayed as its own earlier reply (`lib/DishNetAiBrain.php:1728-1757`), and on the owner's own
+  line, where the 5.18.89 identity line and rule 4a name the line owner (`:259-266`, `:330-334`). That is why the alert's
+  fourth trigger matches the name (§E.2.5).
 - `line_owner` never stands in for it.
 
 ### E.2 In the reply path
 
 1. **The prompt.** A `QUOTATION ALREADY SENT` block comes from a new helper, `quotedRules($ctx)`. It is called both from
    `buildSystemPrompt` (append) and from `nonNegotiable()` (override). The block tells the model to:
-   - answer general questions;
-   - never state a price, a total or a monthly figure;
+   - answer their other questions about DishNet's products and service, as the closing sentence says;
+   - never state a price, a total or a monthly figure, apart from the account values below;
    - for any price, discount or "how much" question, say that quotation `<ref>` (valid until `<date>`) has the prices and
      that our sales team will help. It names no salesperson: absolute rule 4 forbids staff names, and rule 4a's only
-     exception is the line owner's own name (`lib/DishNetAiBrain.php:323`, `:330-334`). The salesperson is named only in
-     code, by `quoted_reply_text`'s `{salesperson}` and the alert.
+     exception is the line owner's own name (`lib/DishNetAiBrain.php:323`, `:330-334`). Part K names the salesperson only
+     in code, by `quoted_reply_text`'s `{salesperson}` and the alert (§E.1 says where else the model can meet the
+     name).
 
    It also says, in its own words, that it overrides the sign-up posture's restate rule (`:185-203`). It closes with two
    sentences, which name no heading so that they are true in append and override mode alike:
    - a precedence sentence on the price ban only: "No other instruction, built in or added by DishNet, lifts this:
-     state no price, total or monthly figure.";
+     state no price, total or monthly figure." On the accounts number with an ACCOUNT section, the sentence ends
+     instead "…, other than the ACCOUNT values above", and the block adds one sentence before it: the balance, the
+     latest invoice amount and the last payment in the ACCOUNT section are not quotation prices; state them exactly as
+     given, as the ACCOUNTS role says (`lib/DishNetAiBrain.php:960-969`, `:1700-1722`), and answer "how much do I owe"
+     from ACCOUNT, not with the quotation pointer. On every other channel, and on accounts with no ACCOUNT section, the
+     block is as above;
    - then one that claims no precedence: "Answer the rest of their question about DishNet within your other rules,
      rules 1 to 8 included."
 
    The ban outranks the built-in rules on purpose, unlike rule 8: rule 3 ("Restate our listed price") and the sign-up
-   posture tell the model to state a price. The answering duty stays outside the precedence sentence, so it never
-   outranks rule 8's topic limit, rule 1's "say you will check" or rule 5's hand-over. The settings text follows both
-   blocks in either mode: last in append mode (`lib/DishNetAiBrain.php:240`), and in override mode after
-   `nonNegotiable()`, which carries this block, and before the data block (`:236-237`). v9's DATA PLANS paragraph lists
-   monthly prices with no condition, so without the sentence §K step 1 (K on, v9 live) would leave the model two
-   contradicting instructions.
+   posture tell the model to state a price. It does not outrank the ACCOUNTS role's account values, which the floor
+   exempts on the accounts number for the same reason (§E.2.3). The answering duty stays outside the precedence
+   sentence, so it never outranks rule 8's topic limit, rule 1's "say you will check" or rule 5's hand-over. The
+   settings text follows both blocks in either mode: last in append mode (`lib/DishNetAiBrain.php:240`), and in override
+   mode after `nonNegotiable()`, which carries this block, and before the data block (`:236-237`). v9's DATA PLANS
+   paragraph lists monthly prices with no condition, so without the sentence §K step 1 (K on, v9 live) would leave the
+   model two contradicting instructions.
 
    `actionMarkers($ctx, …)` offers no `<<QUOTATION>>`, `<<FLYER>>` or `<<QUOTE>>` while `quotation` is set. Support and
    accounts get the same key in their legacy context.
@@ -688,13 +701,22 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
    - the floor fired;
    - `quote_requested` is set;
    - the reply sent names the quotation number;
-   - the reply says the sales team will help: the phrase "sales team" or the word "salesperson", ignoring case. No
+   - the reply says the sales team will help: the phrase "sales team" or the word "salesperson", ignoring case, or
+     `owner_first_name` as a whole word when it is set (read in code from `QuoteInPlay`'s result), except where it is
+     directly followed by "'s assistant", the identity line's persona phrase (`lib/DishNetAiBrain.php:259-266`). No
      other wording counts, so the fixed `human_ask` hand-over, the holding line and `ReplyPrivacyGuard::SAFE_FALLBACK`
      do not match it.
 
-   **On a turn that keeps today's hand-over** (`escalate` kept, not set only through `<<QUOTE>>`) and whose text the
-   floor did not replace, no Part K alert is sent; the hand-over's own alert stands. This is §D.4's rule for empty
-   replies, stated here for every hand-over: the `human_ask` turn (§W.3) and a guard block alike.
+   **No Part K alert on a turn whose final text cannot carry a quotation pointer:** the `human_ask` short-circuit
+   (§W.3), a guard block's `SAFE_FALLBACK` (with `<<QUOTE>>` too, the guard's `escalate` wins), and §D.4's empty-reply
+   hand-overs (the holding line). The hand-over's own alert stands.
+
+   **On a model turn that keeps `<<ESCALATE>>`**, with or without `<<QUOTE>>`, the four triggers apply as on any other
+   turn. The Part K alert goes to the quotation's owner (key `quoted:<ref>`); the hand-over alert goes to the central
+   number or the line owner, as today (`escalate:conv:<id>`, `workers/AiReplyWorker.php:1618-1629`, `:1754-1763`). The
+   Part K alert is skipped when its resolved phone equals one the hand-over alert reached that turn, compared before
+   sending, so one person never gets both: an owner who is pending or none (the central number), or a line owner who is
+   the quotation's owner.
 
    **How it is sent:**
    - `AlertService::notifyTo(<owner's phone>, 'quoted:<ref>', <text>, cooldown)`;
@@ -726,6 +748,12 @@ salesperson, then the sender. That is how "the salesperson who sent it" is read 
 | `quoted_no_prices_enabled` | off; **needs** `quote_tracking_enabled`, which the ladder tool reports |
 | `quoted_reply_text` | "Your quotation {ref} has all the prices, valid until {valid_until}. {salesperson} will help you with any change — I have let them know." |
 | `quoted_alert_cooldown_hours` | 6 |
+
+`quoted_reply_text` is rendered by one helper, used by every path that puts it in place of the reply: the floor
+(§E.2.3), the filled holding line (§E.2.4) and the marker-only branch (§D.4). `{salesperson}` is the owner's first name
+when there is one; otherwise "our sales team", capitalised when it starts a sentence, as it does in the default. That
+covers an owner who is pending or none, and a name left empty by the letters-only filter. `{ref}` and `{valid_until}` are
+always present for a live quotation.
 
 ### E.5 The website chat
 
@@ -922,8 +950,8 @@ reused.
 Eight items found or asked for between the 5.18.106 deploy and the split. Each was mapped read-only on 25 Nov against
 `release/5.18.106` (bf29cbd) by two readers. The exception is the two root scripts W.7 and W.8 cite, which bf29cbd does
 not contain: they were read on the development branch at c0d0868 (they last changed in 745e668 and 7408a70). Every
-citation below is theirs. The section was reviewed twice (reviews 7 and 8, §R.9, §R.10); review 8's changes are not
-yet reviewed (§R.7). Each item is Uganda only unless it says otherwise; South Sudan stays byte for byte unchanged.
+citation below is theirs. The section was reviewed three times (reviews 7, 8 and 9, §R.9–§R.11); review 9's changes are
+not yet reviewed (§R.7). Each item is Uganda only unless it says otherwise; South Sudan stays byte for byte unchanged.
 
 ### W.1 One reply to a burst of messages
 
@@ -993,7 +1021,10 @@ handler's own message comes last in the joined text, so the anchored pattern sti
    `:235`), before the voice block and `sendTyping`, and unless its own text asks for a person, the handler looks for a
    newer typed `ai.reply` event of the same conversation: `event_type = 'ai.reply'`, `entity_type = 'conversation'`, the
    same `entity_id`, `id` above its own, `created_by = 'evo_webhook'`, `origin` not `voice`, `status` `pending` or
-   `processing`, and created no more than `ai_burst_merge_window_minutes` (15) after its own.
+   `processing`, and created no more than `ai_burst_merge_window_minutes` (15) after its own. Its own `error` must carry
+   no mark, read as **The mark** says and in the same query as its status (F20's note and ` [stale lock released]` are
+   not marks): a carried event is stopped by step 1 and never runs step 3. If nothing counts, the older message goes on,
+   gathers its own older ones, and answers.
    - A newer event that is `done`, `failed` or `dead` does not count. One that ran cannot have carried this message: the
      mark is written only when the older one runs. One that failed may next run 30 minutes later.
    - If one is found, the handler adds the mark naming it to its own `error`, logs one line naming the conversation id
@@ -1032,6 +1063,18 @@ handler's own message comes last in the joined text, so the anchored pattern sti
    (`lib/VoiceTranscription.php:249-281`), and 5.18.104's F20 and R-13 already govern its order. A typed message never
    steps aside for a voice event, a voice event never steps aside, and the claim never takes one.
 
+**When a read or write fails.** PDO throws on any error (`lib/SqliteStore.php:149`), and nothing in steps 1–3 catches
+it, unlike the reads around it that fail open (`workers/AiReplyWorker.php:592`, `:1402-1404`, `:1694-1696`):
+- step 2's mark write, step 3's claim and step 3's collection let any Throwable reach `WorkerBase` before
+  `buildContext`: a counted failure, Part X's shape (§X.5), never `WorkerDefer`. Nothing is sent, and the seed's retry
+  collects again from the seed. A failed mark write leaves the older event `failed` with attempts left, so a newer
+  handler's claim still takes it. The handler never returns after a mark write that failed, and never goes on with the
+  seed alone after a collection that failed. If the seed dies, `onDead` hands over, or §X.5 applies;
+- step 1's re-read and step 2's search propagate too. A failed search is harmless: the older message is answered on its
+  own. A failed re-read of a carried row costs its mark, because `EventBus::fail` replaces `error`
+  (`lib/EventBus.php:272-286`), so that row can be answered again on its retry: a double, as today, never a loss.
+  `EventBus::fail` is shared by every worker and is not changed. This is recorded in §P.
+
 **Why nothing is left unanswered.** An event is acked without a reply of its own in three ways:
 - by step 1, because its row carries a mark: a newer handler claimed it, or it stepped aside for a newer event that has
   not run yet. Whichever handler next runs with the Uganda gate holding gathers it from the marks, switch on or off;
@@ -1044,7 +1087,8 @@ too. What remains:
 - **The newer event waits.** Left `processing` by a worker that ran out of its 45-second budget, it is freed only after
   at least 300 s, then picked up at the next spawn or master cycle: up to about 10 minutes (`lib/EventBus.php:60`,
   `:330-344`; `cron/master.php:105-106`, `:194`). Parked behind a pause that then ends early, it comes back up to 600 s
-  later (`workers/AiReplyWorker.php:1445`). It is late, not lost.
+  later (`workers/AiReplyWorker.php:1445`), and is then picked up at the next spawn or master cycle: up to about 15
+  minutes. It is late, not lost.
 - **The newer event fails after the older one stepped aside or was claimed.** The four backoffs add up to about 36
   minutes (10 s, 30 s, 5 minutes, 30 minutes), and each retry then waits for the next worker run. With no new message to
   spawn one, that is master's next cycle, up to about 5 minutes per retry. The older message is answered up to about an
@@ -1056,15 +1100,31 @@ too. What remains:
   burst that opens a conversation (epoch 0, `lib/ConversationService.php:645-646`), or for an identity that cannot be
   replayed, the model does not see it at all. This is recorded in §P.
 
-**Two replies, never none.** An older message more than 15 minutes from the next is answered on its own, and so are a
-message that asks for a person and one whose newer event had already run. Two replies are what happens today; a lost
-message is not.
+**Two replies, never none.** An older message more than 15 minutes from the next is answered on its own, and so are an
+older message that asks for a person and one whose newer event had already run. Two replies are what happens today; a
+lost message is not. A newest message that asks for a person still takes the older texts of its window into its turn, so
+the burst gets one reply, the fixed hand-over with W.3's office line. The older texts then get no AI answer of their
+own; the person who takes the chat sees them.
 
 **What can still lose a message: a rollback, or a doubtful gate, inside a burst.** Under 5.18.106 after a rollback, or
 in a worker run whose Uganda gate read false on a doubt, no handler reads the marks, so a marked older message is
 gathered by nobody. The window is how long a marked message waits for its newer one: seconds within a batch, up to about
-10 minutes after a timeout or a pause, up to about an hour while the newer one retries. Before a rollback the switch is
-turned off and the marks are drained (§K). The gate doubt is recorded in §P, with what §N reads about it.
+10 minutes after a timeout, up to about 15 minutes after a pause that ends early, up to about an hour while the newer
+one retries. A marked row that is itself back to `pending` would instead be answered a second time under 5.18.106.
+Before a rollback the switch is turned off and the marks are drained with the drain check (§K). The gate doubt is
+recorded in §P; §N narrows it but cannot exclude it.
+
+**The drain check.** `tools/sales_followup.php --check burst-drain` is read-only. Over typed `ai.reply` events of
+conversations above 0, it parses marks exactly as **The mark** says and prints counts, and the conversation and event
+ids behind them, never a phone or a text:
+- (a) marks naming an event still `pending`, `processing` or `failed`. A named event parked behind a colleague (its
+  `error` holds `parked: a colleague is active on this conversation`, `workers/AiReplyWorker.php:1436-1447`) is counted
+  apart: `answeredMeanwhile` or the park's age limit drops it, so its older message is not gathered whether or not a
+  rollback happens;
+- (b) marked events that are themselves `pending`, `processing` or `failed`. Step 1 acks these at the next worker run;
+  under 5.18.106, which has no step 1, each would be answered a second time;
+- as its positive control, the number of marked rows it read in the last day, so that "nothing to drain" is told apart
+  from a read that saw nothing.
 
 **Not in this release:**
 - a second check after the model and before the send, which would narrow the race further at the cost of a model call;
@@ -1131,7 +1191,7 @@ brain has no install check of its own; Uganda and South Sudan differ only throug
 up shortly.", with `escalate` set. So v9's OFFICE PHONE NUMBER paragraph never reaches these messages, and the
 customer is never given the number.
 
-**The change** (the design's default; the owner may overrule it, §O):
+**The change** (the design's default, confirmed by the owner on 25 Nov, W-O3; §O):
 1. The brain keeps its fixed text and adds one key to the short-circuit's result, `'human_ask' => true`
    (`lib/DishNetAiBrain.php:108-112`).
 2. In `AiReplyWorker::guardReply`'s safe branch, beside `PlanFenceGuard` and `KitTaxNote` (`workers/AiReplyWorker.php:842-869`),
@@ -1360,9 +1420,14 @@ non-staff number. Steps for 5.18.108's parts are in docs/77 §K.
 0. **X and O7:** nothing to switch. The "assistant off" list works as soon as a number is added. **The O7 test:** a
    Uganda quotation sent after the deploy carries the tax sentence without "Nothing is added on top."
 1. **K:** `quoted_no_prices_enabled` on. It needs `quote_tracking_enabled`, which is on according to the record. **The
-   test:** from a non-staff number holding a live quotation, a mixed message (a general question plus "how much") gets
-   the general answer and the quotation pointer, which names "our sales team" and no salesperson, and no floor
-   replacement.
+   tests,** from a non-staff number holding a live quotation:
+   - an on-topic mixed message ("how long does installation take, and how much?") gets the installation answer and the
+     quotation pointer, which names "our sales team" and no salesperson, and no floor replacement;
+   - an off-topic question plus "how much" gets rule 8's one-sentence redirect for the off-topic part, the quotation
+     pointer for the price, no answer to the off-topic question, and no floor replacement. Rule 8 is live from the
+     deploy (W.2), and this is the live check that the QUOTATION ALREADY SENT block never overrides it;
+   - an identified, quoted customer on the accounts number asking "how much do I owe?" gets the balance as given, no
+     quotation pointer for that part, and no floor replacement.
 2. **Q:** `connection_quote_enabled` on.
    - **First, check that §N's read shows `ai_hardware_expert` on** (it was on at 5.18.48's deploy check, 27 Sep). If it
      is off, the quotation is never offered and the tests below fail. Do not switch Q on, and do not save v10.
@@ -1397,10 +1462,14 @@ non-staff number. Steps for 5.18.108's parts are in docs/77 §K.
 5. **W.5 and W.6:** nothing to switch. *WhatsApp → AI Knowledge Base* (beside *WhatsApp AI*) opens the knowledge
    base; the uCRM catalogue screen lists any plan whose two prices differ.
 
-**Before a rollback of 5.18.107:** turn `ai_burst_merge_enabled` off, then wait until no typed `ai.reply` event's mark
-names an event that is still `pending`, `processing` or `failed`. With the switch off no new marks are written, and
-step 3's collection drains the existing ones. A message still marked when 5.18.106 runs again is gathered by nobody
-(§W.1).
+**Before a rollback of 5.18.107:** turn `ai_burst_merge_enabled` off, then run `--check burst-drain` (§W.1) until (a)
+and (b) both read 0. With the switch off no new marks are written: step 3's collection drains (a) as the named events
+run, and step 1 acks (b) at the next worker run. The longest wait is about an hour, while a named event retries; events
+parked behind a colleague are counted apart and need no wait.
+
+**If the rollback cannot wait** (for example, the worker fails every turn): turn the switch off, run the check, roll
+back anyway, and hand the conversation ids it lists to staff. For (a), rolling back sooner costs the loss §W.1 records;
+for (b), a second reply to a message already answered.
 
 ---
 
@@ -1474,18 +1543,46 @@ guards.
   `quoted_reply_text` and no Part K alert. The same holds for an external ShopBot hand-over. A weakened copy that keys
   the replacement on `escalate_requested` alone is caught.
 - **The alert:** a compliant reply with no amount still alerts once.
+- **`{salesperson}`:** for an owner who is pending, none or nameless, through the floor and through a marker-only
+  `<<QUOTATION>>` turn, the sent text contains no `{` or `}`, no doubled space, and "Our sales team will help"; a named
+  owner's text contains the first name and no "sales team" (the control). Weakened copies that leave `{salesperson}`
+  literal, or substitute an empty string, are caught.
+- **Model hand-overs of a quoted customer,** each with a weakened copy that is caught:
+  - `<<QUOTE>>` with `<<ESCALATE>>` whose text names the quotation number: the hand-over, and one alert to the
+    quotation's owner;
+  - `<<ESCALATE>>` with "our sales team will help": the same;
+  - a guard block for a quoted customer, with and without `<<QUOTE>>`: the hand-over and no Part K alert;
+  - an owner who is pending or none, and a line owner who is the quotation's owner: exactly one message to that phone.
 - **Elsewhere:** the prompt in three modes; the scan's SQL exclusion; `check()` unchanged by `phoneSpans()`, South Sudan
   included.
 - **The precedence sentence:** for a customer with a live quotation, Part K on, in append and override mode with any
   non-empty `bot_custom_instructions` (override needs one, `lib/DishNetAiBrain.php:229-232`), the QUOTATION ALREADY
   SENT block's precedence sentence is present and holds no answering duty (no "answer" inside it), and rule 8's text is
   unchanged. Weakened copies of `quotedRules()`, one without the sentence and one with the answering duty moved back
-  inside it, are each caught. What the model then does is checked live (§K steps 1 and 2), not here.
-- **No staff name:** with `quotation` set, in append, override and legacy modes, on a salesperson's own line and off
-  it, the prompt contains no owner first name. A weakened copy that puts the name into the block is caught.
-- **The alert's fourth trigger:** a reply that says "our sales team will help" and names neither the quotation number
-  nor an amount alerts once. A reply whose only team wording is the fixed hand-over's "someone from our team" does not.
-  A weakened copy without the fourth trigger is caught.
+  inside it, are each caught. The block contains no "general"; a weakened copy whose first line says "Answer general
+  questions." is caught. On the accounts number with ACCOUNT data the block carries the account-values exception, in
+  append and override mode; on sales and support, and on accounts with no ACCOUNT section, it does not. Weakened copies
+  that drop the exception, or add it on another channel, are caught. What the model then does is checked live (§K
+  steps 1 and 2), not here.
+- **No staff name from Part K,** in append, override and legacy modes:
+  - the QUOTATION ALREADY SENT block, taken from its heading to the next heading, contains neither `owner_first_name`
+    nor `line_owner`, in every sub-case below;
+  - the quotation owner's first name differs from the line owner's and from every other name in the fixture: it
+    appears nowhere in the prompt, on the salesperson's line and off it; off a salesperson's line no staff first name
+    appears at all;
+  - the two first names are the same, on the salesperson's own line: the name appears as often in the prompt with
+    `quotation` set as in the prompt built from the same context without it;
+  - weakened copies that put `owner_first_name`, or `line_owner`, into the block are caught.
+- **The alert's fourth trigger:**
+  - a reply that says "our sales team will help" and names neither the quotation number nor an amount alerts once;
+  - off the owner's line, after a stored `quoted_reply_text` turn and past the cooldown, a reply naming the owner ("…
+    will help you with any change"), with no number and no amount, alerts once;
+  - on the owner's own line, the persona phrase "… 's assistant" alone does not alert;
+  - **the negative control, on a turn that is not a hand-over** (no `<<ESCALATE>>`, no `<<QUOTE>>`, non-empty text): a
+    reply saying "someone from our team will call you", with no number, no amount, no quotation number, and neither
+    "sales team" nor "salesperson", raises no Part K alert;
+  - weakened copies, each caught: no fourth trigger; no name match; no "'s assistant" exclusion; a trigger matching
+    "team" alone (the negative control).
 
 **X — the "assistant off" list**
 - **A listed number writes in (text):**
@@ -1600,7 +1697,9 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
   epoch 0.
 - **`cron/event_processor.php` holding the older event:** with its gate check reading false it claims the older event,
   the newer handler claims it before the release, and the release puts it back to `pending` with the mark. Step 1 stops
-  it; one reply holds both.
+  it; one reply holds both. Then an older O, within 15 minutes before the carried event and more than 15 minutes before
+  its carrier, runs before the carried event is handled again: O does not step aside for the carried event and is
+  answered on its own.
 - **Step 2's states:** a newer event `done`, `failed` or `dead` at the older one's check does not make it step aside;
   the older one is answered.
 - **The window:** a newer event created more than 15 minutes after the older one: the older does not step aside, and
@@ -1615,6 +1714,9 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
   hand-over, a blank line and the office line, with `needs_human` and one hand-over alert, and no model call; the second
   message is answered on its own. The same with "operator?", and in the tie. The control: a single message
   "Agent\nmy kit is broken" keeps today's result.
+- **A request for a person last:** "How much is the kit?", then "Agent", both queued, with the switch on, and again in
+  the tie: one reply, the fixed hand-over, a blank line and the office line; `needs_human`, one hand-over alert and no
+  model call; the older event done with the mark naming the newer one. The same with "operator?".
 - **Voice:** typed A, a voice event V, typed B, all queued before A's retry (A deferred by F20). B's final turn holds A
   then B; V is answered on its own. A newer voice event never makes a typed message step aside, a voice event never
   steps aside, and the claim never takes one.
@@ -1635,6 +1737,16 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
     budget, and the newest is uncut;
   - in an opening burst whose older texts exceed 1,500 characters, the oldest is dropped whole and the log line counts
     it.
+- **Failures,** through a test subclass that overrides the one method running each query (the events table cannot be
+  broken from outside):
+  - a claim that succeeds, then a collection that throws: the seed fails with its attempt counted and nothing sent; on
+    its retry, the final user turn holds the claimed text;
+  - a step-2 mark write that throws: the older event is `failed`; the newer handler's claim takes it, and one reply
+    holds both texts.
+- **The drain check** (`--check burst-drain`): both states planted through the real writers, a step-aside whose newer
+  event is still `pending`, and a claimed row put back to `pending` by `cron/event_processor.php`'s release while the
+  event it names is `done`, read 1 and 1, with the day's marked-row count as the positive control; after one worker run
+  under 5.18.107, and the named event answered, they read 0 and 0. Counts and ids only, never a phone or a text.
 - **Conversation 0:** never checked.
 - **The switch off:** two messages give two replies, as today (the control), and nothing is marked or claimed.
 - **South Sudan:** with `ai_burst_merge_enabled` stored as `'1'`, two typed messages give two replies, nothing is
@@ -1646,18 +1758,23 @@ turn of a reply that was sent, or got a reply of its own, or a hand-over. A step
   - no claim from the newer side (the tie);
   - the claim without step 1's re-read (a double reply in the tie);
   - step 1 stopping only a `done` row (the `event_processor` case);
+  - step 2 counting a newer event that carries a mark (the `event_processor` case's older O);
   - the collection without the seed (steps aside, and the retry after the claim);
   - the collection behind the switch (the switch turned off mid-burst);
   - the chain not followed (the chain);
   - a mark matched with `LIKE` (exact marks);
   - a message that asks for a person merged like any other (asks for a person);
+  - the handler's own message placed anywhere but last in the joined text (a request for a person last);
   - a voice event taken into the set (voice);
   - `error` overwritten instead of added to (F20's note);
   - the pin dropped; the oldest pin taken instead of the newest;
   - the handler's own message cut;
   - checking conversation 0;
   - no Uganda gate (South Sudan);
-  - marking or claiming with the switch off.
+  - marking or claiming with the switch off;
+  - a collection that swallows its error (the claimed text is then in no reply);
+  - a mark write that swallows its error and returns (the older text is then in no reply);
+  - a drain check that omits (b), or matches marks with `LIKE` (caught by an `n` / `10n+k` pair).
 - **No re-point is expected:** the switch is off by default, so the existing tests that queue two events for one
   conversation behave as today. The build runs them to confirm it.
 
@@ -1811,8 +1928,9 @@ Then: the suite twice; the deploy script's design, as a section of this document
 docs/75 §L was. That section must name 092: a migration trial of 092 on a copy through the pin's `MigrationRunner`, as
 QF-G2 did for 089–091; after the first boot, `_migrations` holds 092 with its md5, its `migration.log` line reads OK, and
 `wa_no_ai` can be read the way the worker reads it, with a positive control; any failure is a NO-GO and the rollback.
-The rollback instructions it prints say first to turn `ai_burst_merge_enabled` off and drain the marks (§K, before a
-rollback).
+The rollback instructions it prints say first to turn `ai_burst_merge_enabled` off and drain the marks with
+`--check burst-drain` (§K, before a rollback). The rehearsal asserts that check: a planted mark whose named event is
+retrying is listed, and the list is empty once that event is answered.
 Then `deploy-5.18.107.sh` derived from 5.18.106's, with W.7; the harness fix W.8; and the rehearsal chained on
 5.18.106's.
 
@@ -1832,8 +1950,13 @@ parts need are in docs/77 §N.
 - **The knowledge base (W.3):** whether `OFFICE_LOCATION` is approved, whether its `wa_answer` is set, and its length.
   Never its content.
 - **Quotations:** `quote_tracking_enabled`, `quote_chase_enabled`.
-- **The tenant (W.1):** whether `tenant_profile` is set in the plugin's own configuration, or Uganda is chosen only
-  through the vault. Only then can the Uganda gate read false on a doubt (`lib/TenantProfile.php:60-65`, `:88-90`).
+- **The tenant (W.1):** which source selects Uganda, by `TenantProfile::resolveId`'s rule (`lib/TenantProfile.php:73-80`)
+  applied to the plugin's own configuration without the vault: `tenant_profile`; or `currency_code`, when present; or
+  `cashbook_base_currency`, only when `currency_code` is absent; or nothing, so Uganda comes only from the vault. Key
+  names and the resolved id only. Also whether `profiles/uganda.json` is readable by the worker's user. The gate can
+  read false on a doubt when that file cannot be read (`:87-90`), whatever the configuration selects, and, when Uganda
+  comes only from the vault, also when the vault cannot be read (`:60-65`). A selector in the configuration narrows the
+  doubt but does not exclude it.
 - **Hand-overs and alerts:** `ai_handover_message` (the holding line), the voice rung in use, `alert_whatsapp`,
   `alert_patience_minutes`.
 - **The old auto-reply path (Part X):** `wa_bot_enabled`, `wa_auto_reply_enabled`, `wa_sync_enabled`, whether
@@ -1862,9 +1985,9 @@ parts need are in docs/77 §N.
 
 **Moved to 5.18.108** with their parts, still open: O1, O1b, O1c, O2, O3, O4, O5, O6, O8, O9 and O12 (docs/77 §O).
 
-**Defaults taken in this design, to be confirmed by the owner before the build.** On 25 Nov the owner said to go with
-the recommendations for the plan and the split; these defaults were set in the design afterwards, and W.3's office line
-is recorded as a default to confirm. Any can be overruled:
+**Defaults taken in this design, confirmed by the owner on 25 Nov.** On 25 Nov the owner said to go with the
+recommendations for the plan and the split; these defaults were set in the design afterwards, and after review 8 the
+owner confirmed all six ("Keep all six"). Any can still be overruled:
 
 | | Default | Instead, if the owner prefers |
 |---|---|---|
@@ -1883,15 +2006,18 @@ The limits of Parts H and S are in docs/77 §P.
 
 - **One reply to a burst (W.1)** is decided before the model is asked. A newer message that arrives while the older
   one's reply is being written still gets its own reply. An older message waits on the newer event: up to about 10
-  minutes after a worker timeout or a pause that ends early, and up to about an hour while the newer event's retries run
-  (about 36 minutes of backoff, plus up to one master cycle per retry). If the newer event dies, the older one gets the
-  hand-over (or, under §X.5, a staff alert), not an answer. Older texts beyond 1,500 characters are dropped whole,
-  oldest first; in a burst that opens a conversation, or for an identity that cannot be replayed, the model does not see
-  them. A message more than 15 minutes from the next is answered on its own, and so is a message that asks for a person.
-  Voice notes are never merged. An older event whose reply went out but whose handler then failed is answered again, as
-  today. A rollback, or a worker run whose Uganda gate reads false on a doubt, inside a burst can leave a marked message
-  gathered by nobody (§W.1); before a rollback the switch is turned off and the marks drained (§K), and §N reads whether
-  the gate can doubt at all.
+  minutes after a worker timeout, up to about 15 minutes after a pause that ends early (600 s, plus up to one master
+  cycle), and up to about an hour while the newer event's retries run (about 36 minutes of backoff, plus up to one
+  master cycle per retry). If the newer event dies, the older one gets the hand-over (or, under §X.5, a staff alert),
+  not an answer. Older texts beyond 1,500 characters are dropped whole, oldest first; in a burst that opens a
+  conversation, or for an identity that cannot be replayed, the model does not see them. A message more than 15 minutes
+  from the next is answered on its own, and so is an older message that asks for a person; a newest one that asks for a
+  person gives the burst one reply, the fixed hand-over, and the older texts get no AI answer of their own (§W.1). Voice
+  notes are never merged. An older event whose reply went out but whose handler then failed is answered again, as today.
+  A rollback, or a worker run whose Uganda gate reads false on a doubt, inside a burst can leave a marked message
+  gathered by nobody (§W.1); before a rollback the switch is turned off and the marks drained (§K), and §N narrows, but
+  cannot exclude, a gate doubt, whose reach on the live install is not established. A carried row whose re-read throws
+  loses its mark and can be answered again on its retry.
 - **The topic rule (W.2)** is prompt-level, like every absolute rule. No stored setting reaches any brain; only the
   worker, the website chat and the two checks set it. Email drafts never get it.
 - **The office line (W.3)** is admin text, cut at 400 characters and judged by Part K's floor like every code-appended
@@ -2089,11 +2215,11 @@ Two lenses: review 5's changes to Part X, and its other changes. 5 confirmed, 3 
 
 ### R.7 Not yet reviewed
 
-- **Review 8's changes** (§R.10): §W.1 again (the seed; only the writes behind the switch; a message that asks for a
-  person never merged; marks parsed as integers and read whatever the status; the delays), rule 8's wording, §W.7's
-  poll and PASS clause, the two sentences of §E.2.1, §D.5's marker line and its paragraph, §E.2.5's fourth trigger and
-  hand-over rule, "our sales team" in place of the owner's name, Part X's statements in the status block, §X.3 and §P,
-  §O's defaults marked to be confirmed, and their rows in §A, §K, §L, §M, §N and §P.
+- **Review 9's changes** (§R.11): §W.1's step 2 (no carried target), its failure rule, its drain check and the 15-minute
+  pause figure; §E.1's and §E.2.1's account of where the owner's name reaches the model; §E.2.1's account-values
+  exception and first bullet; §E.2.5's narrowed no-alert rule, its dedupe and the name in trigger 4; §E.4's
+  `{salesperson}` fallback; §K's step 1 tests and rollback steps; §M's drain-check requirement; §N's tenant read; the
+  status block and §O after the owner's confirmation; and their tests in §L.
 
 ### R.8 The re-scope (25 Nov)
 
@@ -2173,3 +2299,29 @@ completely (B). Every finding then went to a separate checker that tried to refu
 | R8-B6 — the PASS line always said caught errors are not judged, while the kept log rule judges them | P (the rehearsal's log state is measured) | §W.7 (the clause follows the log reading), §L W.7 |
 | R8-B7 — the H1–H3 renumbering collides with §H.1–§H.10 | **refuted**: no string has two meanings | — |
 | R8-B8 — §D.5 still named the 21 Nov stop-gap | C | §D.5, §R.8 |
+
+### R.11 Review 9 (17 findings, 25 Nov)
+
+Two lenses on review 8's changes: §W.1 and §W.7 against the code (C), and whether review 8's fixes were taken correctly
+and completely (D). Every finding then went to a separate checker that tried to refute it. 9 confirmed, 7 partly
+confirmed, 1 refuted.
+
+| Finding | Verdict | Taken in |
+|---|---|---|
+| R9-C1 — step 2 could step aside for a newer event that had itself been carried, and that event never runs step 3 | P (the killed-worker path needs the switch flipped twice) | §W.1 step 2 (a newer event counts only without a mark), §L W.1 |
+| R9-C2 — a newest message that asks for a person takes the older texts into a turn that is only the fixed hand-over | P (intended; the summaries were wrong) | §W.1 ("Two replies, never none"), §P, §L W.1 |
+| R9-C3 — the rollback drain had no instrument, no path for a rollback that cannot wait, and missed the parked case | P | §W.1 (the drain check), §K (before a rollback), §M, §L W.1 |
+| R9-C4 — "up to about 10 minutes after a pause" left out the wait for the next worker run | P (a pause that does not end early is not a loss window) | §W.1, §P (up to about 15 minutes) |
+| R9-C5 — W.1 gave no rule for a read or write that fails | P (propagating does not keep a carried row's mark) | §W.1 (failures propagate), §P, §L W.1 |
+| R9-D1 — the no-alert rule silenced the quotation's owner on every model hand-over | C | §E.2.5 (no alert only where the text cannot carry a pointer; dedupe by phone), §L K |
+| R9-D2 — the "no staff name" test fails a correct build on the owner's own line | C | §L K |
+| R9-D3 — the owner's name still reaches the model, through history and the owner's own line | P | §E.1, §E.2.1, §E.2.5 (trigger 4 matches the name again), §L K |
+| R9-D4 — `{salesperson}` had no fallback once the prompt sentence went | C | §E.4, §L K |
+| R9-D5 — "answer general questions" still collided with rule 8, and §K step 1's test could expect the wrong answer | C | §E.2.1, §K step 1, §L K |
+| R9-D6 — the price ban outranked the accounts role, which the floor exempts | C | §E.2.1 (the account values excepted), §K step 1, §L K |
+| R9-D7 — the fourth trigger's negative control ran on a hand-over turn, so it could not catch a widened match | C | §L K |
+| R9-D8 — the drain condition missed a marked row that is itself back to `pending` | P | §W.1 (the drain check counts both), §K, §P, §L W.1 |
+| R9-D9 — §N's tenant read could not establish what §P said it did | C | §N, §W.1, §P |
+| R9-D10 — the status block said the owner asked for W.3 | P (the owner has since confirmed all six defaults) | status block, §O, §W.3 |
+| R9-D11 — §A and W-O1 left out two behaviours | **refuted**: one-line summaries, specified in §W.1 and §P | — |
+| R9-D12 — the status block counted seven reviews | C | status block |
