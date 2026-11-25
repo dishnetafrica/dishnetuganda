@@ -10,10 +10,16 @@
 #      file of the data folder and the plugin unchanged, no file added, uCRM asked GET only on its four paths, no
 #      catalogue cache written); the log is mode 600 and names itself
 #   S2 the book idle (no process holds it): not opened, and no -wal/-shm left behind
-#   S3 the installed plugin is not 5.18.106          S4 an installed file the reader loads is not 5.18.106's bytes
+#   S3 the installed plugin is not 5.18.106          S4 an installed file the reader names is not 5.18.106's bytes
+#   S4b a lib file the reader does not name differs   S4c a lib file the book's owner cannot read (not compared)
+#   S4d the container cannot hash (containerd's NotFound): nothing compared, said so
 #   S5 the reader is not the reviewed one            S6 a root-owned book
 #   S7 uCRM does not answer: the run ends, says what it could not read, changes nothing
-# then weakened copies — each must be caught: of the reader (R1-R5, run directly) and of the wrapper (X1-X5).
+#   S8 the worker's quoting organization off, the row's on: the switch judged under the staff screens' gate
+#   S9 flyer_available in a settings file with no flyer: the assistant is offered <<FLYER>>, said so
+#   S10 a plugin process closes the book between the reader's check and its first read: said so, exit 1; and its
+#       control, the same with the detection removed, shows the race does re-create the files
+# then weakened copies — each must be caught: of the reader (R1-R8, run directly) and of the wrapper (X1-X7).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRCREPO="$(cd "$HERE/../../.." && pwd)"
@@ -26,7 +32,7 @@ git -C "$SRCREPO" cat-file -e "$COMMIT^{commit}" 2>/dev/null || { echo "this che
 
 SB="$(mktemp -d /tmp/v107-XXXXXX)"; chmod 755 "$SB"
 UPID=""; HPID=""
-cleanup() { [ -n "$HPID" ] && touch "$SB/stop" 2>/dev/null; [ -n "$UPID" ] && kill "$UPID" 2>/dev/null; wait 2>/dev/null; rm -rf "$SB"; }
+cleanup() { [ -n "$HPID" ] && touch "$SB/ctmp/stop" 2>/dev/null; [ -n "$UPID" ] && kill "$UPID" 2>/dev/null; wait 2>/dev/null; rm -rf "$SB"; }
 trap cleanup EXIT
 PASS=0; FAIL=0
 ok()    { PASS=$((PASS + 1)); echo "  ok   $1"; }
@@ -47,14 +53,16 @@ start_ucrm
 php -d log_errors=0 "$HERE/build.php" "$P" "$D" "http://127.0.0.1:$PORT" >/dev/null || { echo "build.php failed"; exit 2; }
 chown -R 1000:1000 "$D"; chmod 755 "$SB/plugins"
 # a process of uid 1000 holding the book open, as the workers do; it closes it cleanly (so its -wal/-shm go) when told
-hold() { rm -f "$SB/stop"; setpriv --reuid=1000 --regid=1000 --clear-groups php -r '$p = new PDO("sqlite:" . $argv[1]); $p->query("SELECT COUNT(*) FROM events")->fetchColumn(); $n = 0; while (!is_file($argv[2]) && $n++ < 9000) usleep(100000); $p = null;' "$D/plugin.sqlite3" "$SB/stop" & HPID=$!
+hold() { rm -f "$SB/ctmp/stop"; setpriv --reuid=1000 --regid=1000 --clear-groups php -r '$p = new PDO("sqlite:" . $argv[1]); $p->query("SELECT COUNT(*) FROM events")->fetchColumn(); $n = 0; while (!is_file($argv[2]) && $n++ < 9000) usleep(100000); $p = null;' "$D/plugin.sqlite3" "$SB/ctmp/stop" & HPID=$!
          for _ in $(seq 50); do [ -f "$D/plugin.sqlite3-shm" ] && break; sleep 0.1; done; }
-unhold() { [ -n "$HPID" ] && { touch "$SB/stop"; wait "$HPID" 2>/dev/null; }; HPID=""; }
+unhold() { [ -n "$HPID" ] && { touch "$SB/ctmp/stop"; wait "$HPID" 2>/dev/null; }; HPID=""; }
 hold
 
 cat > "$SB/bin/docker" <<SH
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$SB/docker.log"
+# S4d: the container goes away as the files are hashed — containerd prints this on stdout (deploy-hybrid.sh:41-50)
+if [ -f "$SB/fail-hash" ] && grep -q 'dnb-values-107' <<< "\$*"; then echo "NotFound: task 1a2b3c not found"; exit 1; fi
 [ "\$1" = exec ] || { echo "fake docker: only exec" >&2; exit 1; }; shift
 user=""; while :; do case "\$1" in -u) user="\$2"; shift 2 ;; -i) shift ;; *) break ;; esac; done
 [ "\$1" = ucrm ] || { echo "Error: No such container: \$1" >&2; exit 1; }; shift
@@ -84,9 +92,12 @@ privacy() { check "$(leaks "$1")" " none" "$2: nothing planted, no phone digits,
 # ── S1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 echo "-- S1 the run"
 check "$(sed -n 's/^READER_SHA256="\([0-9a-f]\{64\}\)"$/\1/p' "$WRAP")" "$(sha256sum "$READ" | cut -c1-64)" "the wrapper pins the reader's sha256"
-for f in $(sed -n 's/^[0-9a-f]\{64\}  \(lib\/[A-Za-z]*\.php\)$/\1/p' "$WRAP"); do
-  check "$(sed -n "s#^\([0-9a-f]\{64\}\)  $f\$#\1#p" "$WRAP")" "$(git -C "$SRCREPO" show "$COMMIT:$PLUGIN/$f" | sha256sum | cut -c1-64)" "the wrapper's sum for $f is bf29cbd's"
-done
+PINNED="$(grep -E '^[0-9a-f]{64}  [^ ]+$' "$WRAP")"
+WANT="$(git -C "$SRCREPO" ls-tree -r --name-only "$COMMIT" "$PLUGIN/lib" "$PLUGIN/profiles" "$PLUGIN/assets/shop/catalogue.json" | sed "s#^$PLUGIN/##" \
+        | while read -r f; do printf '%s  %s\n' "$(git -C "$SRCREPO" show "$COMMIT:$PLUGIN/$f" | sha256sum | cut -c1-64)" "$f"; done)"
+check "$PINNED" "$WANT" "the wrapper pins every file of lib/, profiles/ and the shop catalogue at bf29cbd, each with bf29cbd's sum"
+check "$(grep -c . <<< "$PINNED")" 299 "299 files pinned"
+check "$(sed -n 's/^CONTROL_SHA256="\([0-9a-f]\{64\}\)".*$/\1/p' "$WRAP")" "$(printf 'dnb-values-107' | sha256sum | cut -c1-64)" "the hash control's sum is right"
 B="$(snap)"; : > "$SB/ucrm.log"
 run_wrap "$WRAP"
 [ -n "${V107_KEEP:-}" ] && printf '%s\n' "$OUT" > "$V107_KEEP"
@@ -94,22 +105,25 @@ check "$RC" 0 "exit 0"
 check "$LOGT" "$OUT" "the log holds exactly what the terminal showed"
 check "$(stat -c %a "$LOGF")" 600 "the log is mode 600"
 has "$OUT" "Send back the log:  cat $LOGF" "it ends with the cat line naming its log"
-has "$OUT" "installed       5.18.106 (commit bf29cbd); the 20 files the reader loads are 5.18.106's bytes; the book owned by 1000:1000" "the installed code checked"
+has "$OUT" "installed       5.18.106 (commit bf29cbd); all 299 files of lib/, profiles/ and the shop catalogue are 5.18.106's bytes; the book owned by 1000:1000" "the installed code checked"
 has "$OUT" "the book: opened read-only (query_only, one read transaction)" "the book opened read-only"
-has "$OUT" 'ai_hardware_expert           worker "1" · row "1" → the worker reads it as ON' "ai_hardware_expert, both sources"
-has "$OUT" 'bot_instructions_mode        worker absent · row "override" → the worker reads it as append' "the mode, where it is stored"
+has "$OUT" 'ai_hardware_expert           worker "1" · row "1" → the worker reads it as ON; the website chat as ON' "ai_hardware_expert, both sources, both readers"
+has "$OUT" 'bot_instructions_mode        worker absent · row "override" → the worker reads it as append; the website chat as override' "the mode: the website chat fills it from the row"
 hasre "$OUT" 'bot_custom_instructions      worker set, 28 bytes / 28 chars, sha256 [0-9a-f]{12}, digit runs of 5\+: 0, phone-shaped: 0 · row set, 26 bytes' "the custom text as a size and hash, both sources"
-has "$OUT" "override in effect on the worker (mode \"override\" AND custom text not empty; the knowledge base and business facts then leave the prompt): no" "override on the worker"
+has "$OUT" "override in effect (mode \"override\" AND custom text not empty; the knowledge base and business facts then leave the prompt): on WhatsApp no · on the website chat yes" "override, on each surface"
+has "$OUT" 'flyer_available              worker absent · row absent' "flyer_available read"
 has "$OUT" "flyer: file" "the flyer"; has "$OUT" "wa_flyer.jpg: 10 KB, usable" "the flyer file"; has "$OUT" "wa_flyer_url: set, scheme https" "the flyer URL as a scheme"
 has "$OUT" 'ai_fact_kit_taxes      worker "omit"' "a fact set to omit"
-hasre "$OUT" 'ai_fact_payment        worker set, 35 bytes / 35 chars, sha256 [0-9a-f]{12}, digit runs of 5\+: 1, phone-shaped: 1 · row not set' "a fact with an account number: counted, never shown"
+has "$OUT" 'ai_fact_payment        worker set, 35 bytes / 35 chars, digit runs of 5+: 1, phone-shaped: 1 · row not set' "a fact with an account number: counted, never shown, no hash"
+has "$OUT" 'quote_company_phone    worker international with +, 12 digits · row not set' "the company phone as a form only"
+check "$(grep -c 'sha256 [0-9a-f]' <<< "$OUT")" 2 "a hash prefix only on the reader's own line and the settings text"
 hasre "$OUT" 'ai_fact_office         worker set, [0-9]+ bytes .*phone-shaped: 1' "a fact with a spaced phone number: counted"
 has "$OUT" "ai_fact_prices         worker empty" "an empty fact"
 has "$OUT" "the kit tax note the worker appends: none (hardware module off, or \"omit\")" "the kit tax note"
 has "$OUT" "the business-plan note: the code's default sentence" "the business note's default"
 has "$OUT" 'rows by kind and status: "fact"/"approved" 1, "fact"/"disabled" 1, "rule"/"approved" 1' "the knowledge base by kind and status"
 hasre "$OUT" 'OFFICE_LOCATION: kind "fact", status "approved", approved \(rendered\): yes, updated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "OFFICE_LOCATION's status"
-hasre "$OUT" 'wa_answer: set, 33 bytes / 33 chars, sha256 [0-9a-f]{12}, digit runs of 5\+: 0, phone-shaped: 1, over the 300-char chat cut: no' "OFFICE_LOCATION's chat answer"
+has "$OUT" 'wa_answer: set, 33 bytes / 33 chars, digit runs of 5+: 0, phone-shaped: 1, over the 300-char chat cut: no' "OFFICE_LOCATION's chat answer"
 has "$OUT" "rows spelled like OFFICE_LOCATION but not exactly it: 1" "a near-duplicate key counted"
 has "$OUT" "plugin data/config.json:     tenant_profile null · currency_code \"\" · cashbook_base_currency selects south-sudan" "the plugin's own file, by class"
 has "$OUT" "without the vault: south-sudan (decided by currency_code)" "without the vault"
@@ -117,8 +131,8 @@ has "$OUT" "with the vault, as TenantProfile::current() reads it: uganda (decide
 has "$OUT" "the gate the workers ask (StaffJobsGate::applies on the worker view): yes" "the gate"
 has "$OUT" "the vault: the data folder's config_vault.json (the plugins folder is not writable by this user); present yes, readable yes, valid yes; tenant_profile absent · currency_code selects uganda · cashbook_base_currency absent" "the vault, as classes"
 has "$OUT" "profiles/uganda.json: present yes, readable yes, valid yes" "the profile readable"
-has "$OUT" "alert_whatsapp               worker international with +, 12 digits · row local, starting with 0, 10 digits" "the alert number as a form"
-has "$OUT" 'alert_patience_minutes       worker "" · row absent → 0 minutes' "a blank patience setting reads 0"
+has "$OUT" "alert_whatsapp               worker international with +, 12 digits · row local, starting with 0, 10 digits · watchdog international with +, 12 digits" "the alert number as a form, each reader"
+has "$OUT" 'alert_patience_minutes       worker "" · row "15" → the watchdog waits 15 minutes' "a blank patience setting: the watchdog fills it from the row"
 has "$OUT" 'wa_handover_copy_central     worker absent · row absent → ON (unset)' "the central copy"
 has "$OUT" 'wa_human_cooldown_minutes    worker "60" · row absent → 60 minutes' "the cooldown"
 has "$OUT" "the voice rung on each number: sales dry_run · support dry_run · account dry_run · sales-001 dry_run" "the voice rung per number"
@@ -150,7 +164,7 @@ has "$OUT" 'duplicates among the raw products (the shop'"'"'s exact-name key): "
 hasre "$OUT" "the installation link \(worker's organization\): ok · active records 1 · product id 13 · its organization matches yes · linked [0-9]{4}-" "the installation link judged"
 has "$OUT" 'the installation at use (UcrmQuoteLines::installLine, with the plugin'"'"'s own key): ok · "Installation" UGX 200,000 · product id 13' "the installation at use"
 has "$OUT" "the quoting organization: worker on, source setting, id present yes · row on, source setting, id present yes" "the quoting organization, both views"
-has "$OUT" "the uCRM catalogue switch: no ucrm_catalogue table (never switched) → off" "the switch"
+has "$OUT" "the uCRM catalogue switch: mode records in force 1 · the record in force says on yes · direct mode on for the staff screens (row gate) yes · under the worker gate yes" "the switch, under each gate"
 has "$OUT" "last 7 days: 5 typed events in 3 conversations; 1 had a newer typed one within 15 minutes, in 1 conversations" "the bursts"
 has "$OUT" '  by number: "sales" 1/5' "the bursts by number"
 has "$OUT" '  the older event'"'"'s status (with a newer one): "done" 1' "the bursts by status"
@@ -188,6 +202,17 @@ echo bf29cbd > "$P/.deployed-commit"
 echo "-- S4 a changed installed file"
 cp "$P/lib/KitTaxNote.php" "$SB/ktn"; echo "// x" >> "$P/lib/KitTaxNote.php"; run_wrap "$WRAP"; refused S4 "these installed files are not 5.18.106's bytes: lib/KitTaxNote.php"
 cp "$SB/ktn" "$P/lib/KitTaxNote.php"
+echo "-- S4b a lib file the reader does not name"
+cp "$P/lib/PublicPriceFeed.php" "$SB/ppf"; echo "// x" >> "$P/lib/PublicPriceFeed.php"; run_wrap "$WRAP"; refused S4b "these installed files are not 5.18.106's bytes: lib/PublicPriceFeed.php"
+cp "$SB/ppf" "$P/lib/PublicPriceFeed.php"
+echo "-- S4c a lib file the book's owner cannot read"
+chmod 600 "$P/lib/PublicPriceFeed.php"; run_wrap "$WRAP"; refused S4c "these installed files could not be read by the book's owner, so they were not compared: lib/PublicPriceFeed.php"
+hasnt "$OUT" "are not 5.18.106's bytes" "S4c: an unreadable file is never called changed"
+chmod 664 "$P/lib/PublicPriceFeed.php"
+echo "-- S4d the container cannot hash"
+touch "$SB/fail-hash"; run_wrap "$WRAP"; refused S4d "the installed files could not be checked: php in the 'ucrm' container did not hash a known string"
+hasnt "$OUT" "are not 5.18.106's bytes" "S4d: nothing is called changed"
+rm -f "$SB/fail-hash"
 echo "-- S5 a reader that is not the reviewed one"
 mkdir -p "$SB/s5/scripts"; cp "$WRAP" "$SB/s5/scripts/"; { cat "$READ"; echo "// x"; } > "$SB/s5/scripts/values-5.18.107.php"
 run_wrap "$SB/s5/scripts/values-5.18.107.sh"; refused S5 "scripts/values-5.18.107.php is not the reviewed one (sha256)"
@@ -208,6 +233,49 @@ check "$(snap)" "$B" "S7: nothing changed"
 privacy "$OUT" "S7"
 start_ucrm
 
+# ── S8 the two gates differ ──────────────────────────────────────────────────────────────────────────────────────────
+jset() {  # $1 = file, $2 = key, $3 = JSON value or DEL — keeps the file's owner
+  php -r '$f = $argv[1]; $a = json_decode((string)file_get_contents($f), true) ?: []; if ($argv[3] === "DEL") unset($a[$argv[2]]); else $a[$argv[2]] = json_decode($argv[3], true);
+          file_put_contents($f, json_encode($a, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));' "$1" "$2" "$3"; }
+s8_on()  { cp -p "$D/config.json" "$SB/cfg.bak"; jset "$D/config.json" ucrm_quote_organization_id '"0"'; }
+s8_off() { cp -p "$SB/cfg.bak" "$D/config.json"; }
+echo "-- S8 the worker's quoting organization off, the row's on"
+s8_on; run_wrap "$WRAP"; check "$RC" 0 "exit 0"
+has "$OUT" "the quoting organization: worker off, source explicit-off, id present no · row on, source setting, id present yes" "the two gates"
+has "$OUT" "the record in force says on yes · direct mode on for the staff screens (row gate) yes · under the worker gate no" "the switch judged under the staff screens' gate"
+s8_off
+
+# ── S9 a stray flyer_available ───────────────────────────────────────────────────────────────────────────────────────
+s9_on()  { cp -p "$D/config.json" "$SB/cfg.bak"; cp -p "$D/kyc_config.json" "$SB/kyc.bak"; mv "$D/wa_flyer.jpg" "$SB/flyer.bak"
+           jset "$D/config.json" wa_flyer_url DEL; jset "$D/kyc_config.json" flyer_available '"1"'; }
+s9_off() { cp -p "$SB/cfg.bak" "$D/config.json"; cp -p "$SB/kyc.bak" "$D/kyc_config.json"; mv "$SB/flyer.bak" "$D/wa_flyer.jpg"; }
+echo "-- S9 flyer_available in a settings file, no flyer"
+s9_on; run_wrap "$WRAP"; check "$RC" 0 "exit 0"
+has "$OUT" 'flyer_available              worker "1" · row absent' "the key read"
+has "$OUT" "flyer: none, BUT flyer_available is set in the settings: the assistant IS offered <<FLYER>> and nothing sends it" "the stray key said so"
+s9_off
+
+# ── S10 the race at open ─────────────────────────────────────────────────────────────────────────────────────────────
+echo "-- S10 a plugin process closes the book between the check and the first read"
+race_copy() {  # $1 = out file, $2 = 1 to also remove the detection
+  python3 -I -c '
+import sys
+s = open(sys.argv[1]).read(); a = "        $db = new PDO(\x27sqlite:\x27 . $book,"
+assert s.count(a) == 1; s = s.replace(a, "        touch(" + repr(sys.argv[3]) + "); usleep(1500000);\n" + a)
+if sys.argv[4] == "1":
+    d = "$recreated = is_array($st) && (int)$st[\x27nlink\x27] === 0;"
+    assert s.count(d) == 1; s = s.replace(d, "$recreated = false;")
+open(sys.argv[2], "w").write(s)' "$READ" "$1" "$SB/ctmp/stop" "$2"; }
+after_race() { wait "$HPID" 2>/dev/null; HPID=""; hold; unhold; hold; }
+race_copy "$SB/race.php" 0; run_read "$SB/race.php"
+check "$RC" 1 "S10: exit 1"
+has "$OUT" "NOTE: a plugin process closed the book at the moment it was opened, so this read re-created SQLite's own -wal and -shm files" "S10: the re-created files said so"
+has "$OUT" "READ-ONLY — nothing was changed but SQLite's own -wal/-shm, re-created as the book was opened (see the NOTE)" "S10: never 'nothing was changed' unqualified"
+after_race
+race_copy "$SB/race0.php" 1; run_read "$SB/race0.php"
+if ls "$D" | grep -q 'plugin.sqlite3-wal' && ! grep -qF "NOTE: a plugin process" <<< "$OUT"; then ok "S10 control: without the detection the race re-creates the files and nothing says so"; else bad "S10 control: the race did not happen as staged"; fi
+after_race
+
 # ── weakened copies ──────────────────────────────────────────────────────────────────────────────────────────────────
 echo "-- weakened copies of the reader (run directly), each must be caught"
 weak_read() {  # $1 = id, $2 = python replacement list (old|||new), $3 = how it is caught (privacy|idle|cache)
@@ -225,15 +293,24 @@ open(sys.argv[2], "w").write(s)' "$READ" "$f" "$2" || { bad "$id: the copy could
     idle) unhold; run_read "$f"; if ls "$D" | grep -q 'plugin.sqlite3-\(wal\|shm\)'; then ok "$id caught (the idle book got -wal/-shm)"; else bad "$id NOT caught"; fi
           rm -f "$D/plugin.sqlite3-wal" "$D/plugin.sqlite3-shm"; hold ;;
     cache) rm -f "$SB/ctmp/"dishnet_catalogue_*; run_read "$f"; if ls "$SB/ctmp" | grep -q dishnet_catalogue; then ok "$id caught (a catalogue cache was written)"; else bad "$id NOT caught"; fi; rm -f "$SB/ctmp/"dishnet_catalogue_* ;;
+    absent:*) run_read "$f"; if grep -qF -- "${3#absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught (no: ${3#absent:})"; fi ;;
+    s8absent:*) s8_on; run_read "$f"; s8_off; if grep -qF -- "${3#s8absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught under S8 (no: ${3#s8absent:})"; fi ;;
+    present:*) run_read "$f"; if grep -qE -- "${3#present:}" <<< "$OUT"; then ok "$id caught (found: ${3#present:})"; else bad "$id NOT caught"; fi ;;
   esac
 }
 weak_read R1 'return '"'"'<9+ digits withheld>'"'"';|||return $m_[0] ?? '"'"''"'"';
 @@
 function () use (&$n9) {|||function ($m_) use (&$n9) {' privacy
 weak_read R2 "    return 'set, ' . strlen(\$t) . ' bytes / '|||    return \$t . ' set, ' . strlen(\$t) . ' bytes / '" privacy
-weak_read R3 "elseif (!is_file(\$book . '-wal') || !is_file(\$book . '-shm')) \$bookWhy|||elseif (false) \$bookWhy" idle
+weak_read R3 "elseif (!is_file(\$book . '-wal') || !is_file(\$book . '-shm')) \$bookWhy|||elseif (false) \$bookWhy
+@@
+    elseif ((\$walH = @fopen(\$book . '-wal', 'rb')) === false) \$bookWhy|||    elseif (false) \$bookWhy" idle
 weak_read R4 "\$ai['catalogue_cache_seconds'] = 0;|||\$ai['catalogue_cache_seconds'] = 60;" cache
 weak_read R5 "\$say('wa_webhook_secret set: worker ' . \$yn(trim((string)(\$cfg['wa_webhook_secret'] ?? '')) !== '')|||\$say('wa_webhook_secret set: worker ' . (string)(\$cfg['wa_webhook_secret'] ?? '')" privacy
+weak_read R6 "        if (!array_key_exists(\$k, \$filled) || \$filled[\$k] === '' || \$filled[\$k] === null) \$filled[\$k] = \$v;|||        // gap-fill removed" "absent:on the website chat yes"
+weak_read R7 "(\$withSha ? ', sha256 ' . \$sha(\$t) : '')|||', sha256 ' . \$sha(\$t)" "present:ai_fact_payment +worker set, [0-9]+ bytes / [0-9]+ chars, sha256"
+weak_read R8 "' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qoRow))->direct())|||' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qo))->direct())" "s8absent:direct mode on for the staff screens (row gate) yes"
+weak_read R9 "\$say(sprintf('%-28s %s', 'flyer_available', \$both('flyer_available')));|||" "absent:flyer_available              worker"
 
 echo "-- weakened copies of the wrapper, each must be caught"
 weak_wrap() {  # $1 = id, $2 = old, $3 = new, $4 = scenario to run (S1log|S3|S4|S5|S6)
@@ -249,6 +326,10 @@ open(sys.argv[2], "w").write(s.replace(old, new))' "$WRAP" "$d/values-5.18.107.s
     S4) echo "// x" >> "$P/lib/KitTaxNote.php"; run_wrap "$d/values-5.18.107.sh"; [ "$RC" = 2 ] && bad "$id NOT caught" || ok "$id caught (S4 ran the reader)"; cp "$SB/ktn" "$P/lib/KitTaxNote.php" ;;
     S5) echo "// x" >> "$d/values-5.18.107.php"; run_wrap "$d/values-5.18.107.sh"; [ "$RC" = 2 ] && bad "$id NOT caught" || ok "$id caught (S5 ran the reader)" ;;
     S6) chown 0:0 "$D/plugin.sqlite3"; run_wrap "$d/values-5.18.107.sh"; grep -qF "the book is root's" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S6 not refused as root's)"; chown 1000:1000 "$D/plugin.sqlite3" ;;
+    S4c) chmod 600 "$P/lib/PublicPriceFeed.php"; run_wrap "$d/values-5.18.107.sh"; chmod 664 "$P/lib/PublicPriceFeed.php"
+         grep -qF "could not be read by the book's owner, so they were not compared: lib/PublicPriceFeed.php" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4c: the unreadable file not reported as such)" ;;
+    S4d) touch "$SB/fail-hash"; run_wrap "$d/values-5.18.107.sh"; rm -f "$SB/fail-hash"
+         grep -qF "did not hash a known string" <<< "$OUT" && bad "$id NOT caught" || ok "$id caught (S4d: the failed hashing not reported as such)" ;;
   esac
 }
 weak_wrap X1 'chmod 600 "$LOG"' 'chmod 644 "$LOG"' S1log
@@ -256,6 +337,8 @@ weak_wrap X2 '[ "${#REC}" -ge 7 ] && [ "${LIVE_COMMIT_FULL#"$REC"}" != "$LIVE_CO
 weak_wrap X3 '[ -z "$BAD" ] || stop "these installed files' 'true || stop "these installed files' S4
 weak_wrap X4 '[ "$(sha256sum "$READER" 2>/dev/null | cut -c1-64)" = "$READER_SHA256" ] || stop' 'true || stop' S5
 weak_wrap X5 '0:*) stop "the book is root'"'"'s' '0:*) : "the book is root'"'"'s' S6
+weak_wrap X6 '[ "$(sed -n '"'"'s/^CONTROL \([0-9a-f]\{64\}\)$/\1/p'"'"' <<< "$GOT")" = "$CONTROL_SHA256" ] && grep -qx "END $N" <<< "$GOT"' 'true' S4d
+weak_wrap X7 'if (g !~ /^[0-9a-f]+$/ || length(g) != 64) print "UNREAD " f; else if' 'if' S4c
 
 echo; echo "passed $PASS, failed $FAIL"
 [ "$FAIL" = 0 ] && echo "ALL PASSED" || echo "FAILURES — see above"

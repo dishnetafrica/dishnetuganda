@@ -39,7 +39,7 @@ $w($D . '/config_vault.json', ['config' => ['currency_code' => 'UGX', 'evolution
 $store->save('kyc_config.json', [
     'wa_bot_enabled' => false, 'bot_instructions_mode' => 'override', 'bot_custom_instructions' => 'PLANT_ROWCUSTOM other text',
     'ai_hardware_expert' => '1', 'quote_tracking_enabled' => '1', 'alert_whatsapp' => '0000999888', 'ucrm_quote_organization_id' => '1',
-    'wa_webhook_secret' => '', 'openai_api_key' => 'sk-PLANT_ROWKEY',
+    'wa_webhook_secret' => '', 'openai_api_key' => 'sk-PLANT_ROWKEY', 'alert_patience_minutes' => '15',
 ]);
 $ins = function (string $t, array $r) use ($pdo): void {
     $pdo->prepare('INSERT INTO ' . $t . ' (' . implode(',', array_keys($r)) . ') VALUES (' . implode(',', array_fill(0, count($r), '?')) . ')')->execute(array_values($r));
@@ -70,6 +70,10 @@ $ins('wa_voice_calls', ['media_id' => 1, 'conversation_id' => 1, 'attempt' => 1,
 $ins('support_tickets', ['subject' => 'PLANT_TICKET', 'phone' => '256000555444', 'source' => 'whatsapp_bot']);
 $store->save('ucrm_quote_links.json', [['id' => 1, 'item' => 'install', 'row_id' => 0, 'product_id' => 13, 'organization_id' => 1, 'product_name' => 'Installation',
     'linked_at' => gmdate('Y-m-d H:i:s', strtotime('-20 days')), 'linked_by_name' => 'PLANT_LINKER', 'linked_by_id' => 4, 'ended_at_ts' => null, 'row_stamp' => '']]);
+
+// the uCRM catalogue switch, turned on by a staff member (5.18.103's mode record)
+$store->save('ucrm_catalogue.json', [['id' => 1, 'kind' => 'mode', 'on' => true, 'at' => gmdate('Y-m-d H:i:s', strtotime('-3 days')),
+    'by_id' => 4, 'by_name' => 'PLANT_SWITCHER', 'ended_at_ts' => null]]);
 
 $tz = new DateTimeZone('Africa/Kampala');
 $w($D . '/wa_webhook_log.json', [

@@ -8,14 +8,19 @@
  *   - the settings through PluginConfig::read() (never load(), which refreshes the vault), the vault only for the
  *     three tenant keys' presence, and the book's kyc_config row by name — never a whole file printed;
  *   - the book opened SQLITE_OPEN_READONLY with query_only on, inside one read transaction that is rolled back, and
- *     only when its -wal and -shm already exist (so the open creates nothing); total_changes() is printed and must be 0;
+ *     only when its -wal and -shm already exist (so the open creates nothing); total_changes() is printed and must be 0.
+ *     One window remains: a plugin process closing the book between that check and the first read deletes both files,
+ *     and the read re-creates them (SQLite's own; the next plugin connection uses them). The reader holds the checked
+ *     -wal open, sees it unlinked, says so and ends with exit 1 — never "nothing was changed" unqualified;
  *   - uCRM only through GetOnlyCrm: GET on four paths (service-plans, products, invoices, organizations); every other
  *     verb, path and helper refused;
  *   - the product lookup with the cache off (catalogue_cache_seconds 0: the cache file is neither read nor written).
  *
- * It prints no phone number, no person's name, no message text, no secret: a text setting is "set, n bytes, sha256
- * prefix, digit counts"; an invoice number only its shape (<6d>); counts, product names and prices. As a last guard
- * every run of nine or more digits is withheld, and the wrapper masks again.
+ * It prints no phone number, no person's name, no message text, no secret: a text setting is "set, n bytes, digit
+ * counts" — never a hash, which a short value (a phone number) could be recovered from; the one exception is the long
+ * settings text, whose hash prefix is compared with the recorded v9's; a number setting only its form; an invoice number
+ * only its shape (<6d>); counts, product names and prices. As a last guard every run of nine or more digits is withheld,
+ * and the wrapper masks again.
  */
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -42,14 +47,18 @@ $sha = function (string $s): string { return substr(hash('sha256', $s), 0, 12); 
 $d5 = function (string $s): int { return (int)preg_match_all('/\d{5,}/', $s); };
 $phoneShaped = function (string $s): int { return (int)preg_match_all('/(?<!\d)(?:\+?\d[\d\s-]{8,}\d)(?!\d)/', $s); };
 
-/** A text value: set or not, its size, a hash prefix and two digit counts — never the text. */
-$txt = function ($v) use ($sha, $d5, $phoneShaped): string {
+/**
+ * A text value: set or not, its size and two digit counts — never the text, and never a hash: a hash prefix of a short
+ * value (a phone number, an account number in a known sentence) can be searched back. $withSha only for the long
+ * settings text, to compare it with the recorded v9's prefix.
+ */
+$txt = function ($v, bool $withSha = false) use ($sha, $d5, $phoneShaped): string {
     if ($v === null) return 'not set';
     if (!is_scalar($v)) return 'not text (' . gettype($v) . ')';
     $t = trim((string)$v);
     if ($t === '') return 'empty';
     if (strtolower($t) === 'omit') return '"omit"';
-    return 'set, ' . strlen($t) . ' bytes / ' . mb_strlen($t) . ' chars, sha256 ' . $sha($t)
+    return 'set, ' . strlen($t) . ' bytes / ' . mb_strlen($t) . ' chars' . ($withSha ? ', sha256 ' . $sha($t) : '')
         . ', digit runs of 5+: ' . $d5($t) . ', phone-shaped: ' . $phoneShaped($t);
 };
 
@@ -67,6 +76,18 @@ $cls = function (array $a, string $k): string {
     return 'text of ' . strlen($t) . ' bytes';
 };
 $bool = function ($v): bool { return filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN); };
+/** A number setting's form only (the digits stripped of everything else, as AlertService::target() does) — never a digit. */
+$form = function ($v, string $none = 'not set'): string {
+    $t = preg_replace('/[^0-9+]/', '', (string)(is_scalar($v) ? $v : ''));
+    if ($t === '') return $none;
+    $digits = ltrim($t, '+');
+    if ($t[0] === '+') $f = 'international with +';
+    elseif (strpos($digits, '256') === 0) $f = 'digits starting with 256';
+    elseif (strpos($digits, '211') === 0) $f = 'digits starting with 211';
+    elseif ($digits !== '' && $digits[0] === '0') $f = 'local, starting with 0';
+    else $f = 'other';
+    return $f . ', ' . strlen($digits) . ' digits';
+};
 
 $say('== 5.18.107 production values — read-only — ' . gmdate('Y-m-d\TH:i:s\Z') . ' ==');
 if ($P === '' || $D === '' || !is_file($P . '/manifest.json')) { $say('STOP: the plugin folder was not given or holds no manifest; nothing was read'); exit(2); }
@@ -112,6 +133,7 @@ final class GetOnlyCrm extends CrmApiClient
 
 $rc = 0;
 $db = null;
+$walH = null;
 try {
     // ── the settings: the workers' view, and the book's kyc_config row (the screens' and the old path's view) ──────────
     $cfg = PluginConfig::read($P, $D);
@@ -120,12 +142,14 @@ try {
     $bookWhy = '';
     if (!is_file($book)) $bookWhy = 'no plugin.sqlite3 in the data folder';
     elseif (!is_file($book . '-wal') || !is_file($book . '-shm')) $bookWhy = 'its -wal/-shm files are absent (no plugin process has it open), so it was not opened: opening it would create them';
+    elseif (($walH = @fopen($book . '-wal', 'rb')) === false) $bookWhy = 'its -wal file went away as it was checked (a plugin process closed the book), so it was not opened';
     else {
         $db = new PDO('sqlite:' . $book, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 10,
             PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
         $db->exec('PRAGMA query_only = ON');
         $db->exec('BEGIN');
     }
+    if ($walH === false) $walH = null;
     $tbl = function (string $n) use (&$db): bool {
         if ($db === null) return false;
         return (int)$db->query("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = " . $db->quote($n))->fetchColumn() > 0;
@@ -137,9 +161,19 @@ try {
     };
     $q = function (string $sql) use (&$db): array { return $db->query($sql)->fetchAll(PDO::FETCH_ASSOC); };
     $row = [];
-    if ($db !== null && $tbl('kyc_config')) {
+    $hasRow = $tbl('kyc_config');   // the first read: SQLite opens the WAL here
+    $recreated = false;
+    if ($walH !== null) { $st = @fstat($walH); $recreated = is_array($st) && (int)$st['nlink'] === 0; }
+    if ($db !== null && $hasRow) {
         $data = $db->query('SELECT data FROM kyc_config WHERE id = 0 LIMIT 1')->fetchColumn();
         $row = is_string($data) ? (json_decode($data, true) ?: []) : [];
+    }
+    // web_chat.php:76-86 and cron/wa_watchdog.php:30-37: the files and the vault, then every key absent, "" or null there
+    // filled from a row value that is neither null nor ""
+    $filled = $cfg;
+    foreach ($row as $k => $v) {
+        if ($v === null || $v === '') continue;
+        if (!array_key_exists($k, $filled) || $filled[$k] === '' || $filled[$k] === null) $filled[$k] = $v;
     }
     $json1 = false;
     if ($db !== null) { try { $json1 = (int)$db->query("SELECT json_valid('{}')")->fetchColumn() === 1; } catch (Throwable $e) { $json1 = false; } }
@@ -147,29 +181,38 @@ try {
     $say('PHP ' . PHP_VERSION . ' · SQLite ' . ($db !== null ? (string)$db->query('SELECT sqlite_version()')->fetchColumn() : '(book not opened)')
         . ' · JSON functions: ' . $yn($json1) . ' · reading as uid ' . (function_exists('posix_geteuid') ? posix_geteuid() : '?'));
     $say('the book: ' . ($db !== null ? 'opened read-only (query_only, one read transaction)' : 'NOT READ — ' . $bookWhy));
+    if ($recreated) $say('  NOTE: a plugin process closed the book at the moment it was opened, so this read re-created SQLite\'s own -wal and -shm files beside it (the next plugin connection uses them); nothing else');
     $say('the kyc_config row: ' . ($db === null ? 'not read' : ($row ? count($row) . ' keys' : 'absent or empty')));
-    $say('"worker" below is PluginConfig::read (the three settings files, then the vault), what the workers read; "row" is the book\'s kyc_config row, what the admin screens, master\'s job flags and the old auto-reply path read.');
+    $say('"worker" below is PluginConfig::read (the three settings files, then the vault): what the WhatsApp workers read. "row" is the book\'s kyc_config row: what the staff screens (Send Quotation, the KYC form, the uCRM catalogue screen), master\'s job flags and the old auto-reply path read. The website chat and the alert watchdog read the worker view with every gap (absent, "" or null) filled from the row.');
     $both = function (string $k) use ($cfg, $row, $cls, $db): string {
         return 'worker ' . $cls($cfg, $k) . ' · row ' . ($db === null ? 'not read' : $cls($row, $k));
     };
-    $bothTxt = function (string $k) use ($cfg, $row, $txt, $db): string {
+    $bothTxt = function (string $k, bool $withSha = false) use ($cfg, $row, $txt, $db): string {
         $a = $cfg[$k] ?? null; $b = $row[$k] ?? null;
         $same = trim((string)(is_scalar($a) ? $a : '')) === trim((string)(is_scalar($b) ? $b : ''));
-        return 'worker ' . $txt($a) . ' · row ' . ($db === null ? 'not read' : ($same ? 'the same' : $txt($b)));
+        return 'worker ' . $txt($a, $withSha) . ' · row ' . ($db === null ? 'not read' : ($same ? 'the same' : $txt($b, $withSha)));
     };
 
     // ── 1. AI settings ───────────────────────────────────────────────────────────────────────────────────────────────
     $head('1. AI settings (§K step 2, §D, Part N gate)');
+    $web = function (string $k) use ($db): string { return $db === null ? 'not established (row not read)' : ''; };
     foreach (['ai_enabled', 'ai_hardware_expert', 'ai_sales_on_all_numbers', 'ai_qualification'] as $k) {
-        $say(sprintf('%-28s %s → the worker reads it as %s', $k, $both($k), $bool($cfg[$k] ?? false) ? 'ON' : 'off'));
+        $say(sprintf('%-28s %s → the worker reads it as %s; the website chat as %s', $k, $both($k), $bool($cfg[$k] ?? false) ? 'ON' : 'off',
+            $web($k) !== '' ? $web($k) : ($bool($filled[$k] ?? false) ? 'ON' : 'off')));
     }
-    $mode = trim((string)($cfg['bot_instructions_mode'] ?? 'append'));
-    $say(sprintf('%-28s %s → the worker reads it as %s', 'bot_instructions_mode', $both('bot_instructions_mode'), $mode === 'override' ? 'override' : 'append'));
-    $say(sprintf('%-28s %s', 'bot_custom_instructions', $bothTxt('bot_custom_instructions')));
-    $custom = trim((string)($cfg['bot_custom_instructions'] ?? ''));
-    $say('  override in effect on the worker (mode "override" AND custom text not empty; the knowledge base and business facts then leave the prompt): ' . $yn($custom !== '' && $mode === 'override'));
+    $modeOf = function (array $c): string { return trim((string)($c['bot_instructions_mode'] ?? 'append')) === 'override' ? 'override' : 'append'; };
+    $overrideOf = function (array $c) use ($modeOf): bool { return trim((string)($c['bot_custom_instructions'] ?? '')) !== '' && $modeOf($c) === 'override'; };
+    $say(sprintf('%-28s %s → the worker reads it as %s; the website chat as %s', 'bot_instructions_mode', $both('bot_instructions_mode'), $modeOf($cfg),
+        $db === null ? 'not established (row not read)' : $modeOf($filled)));
+    $say(sprintf('%-28s %s', 'bot_custom_instructions', $bothTxt('bot_custom_instructions', true)));
+    $say('  override in effect (mode "override" AND custom text not empty; the knowledge base and business facts then leave the prompt): on WhatsApp '
+        . $yn($overrideOf($cfg)) . ' · on the website chat ' . ($db === null ? 'not established (row not read)' : $yn($overrideOf($filled))));
+    // the worker sets flyer_available to '1' when it finds a flyer and never clears a value a settings file holds; the
+    // brain offers <<FLYER>> on the sales number whenever the key is not empty (AiReplyWorker.php:75-78, DishNetAiBrain.php:577)
+    $say(sprintf('%-28s %s', 'flyer_available', $both('flyer_available')));
     $fl = FlyerAsset::find($cfg, $D);
-    $say('flyer: ' . ($fl === null ? 'none (the assistant is never told <<FLYER>> exists)' : $fl['kind']));
+    $say('flyer: ' . ($fl !== null ? $fl['kind'] : (empty($cfg['flyer_available']) ? 'none (the assistant is never told <<FLYER>> exists)'
+        : 'none, BUT flyer_available is set in the settings: the assistant IS offered <<FLYER>> and nothing sends it')));
     foreach (array_keys(FlyerAsset::EXTS) as $ext) {
         $f = $D . '/' . FlyerAsset::FILE_BASE . '.' . $ext;
         if (is_file($f)) { $s = (int)@filesize($f); $say('  ' . basename($f) . ': ' . round($s / 1024) . ' KB, ' . ($s > 0 && $s <= FlyerAsset::MAX_FILE_BYTES ? 'usable' : 'REFUSED (empty or over 4 MB)')); }
@@ -180,9 +223,11 @@ try {
     // ── 2. Operator facts ────────────────────────────────────────────────────────────────────────────────────────────
     $head('2. Operator facts (§D, Part K floor; content never printed)');
     foreach (['ai_fact_kit_taxes', 'ai_fact_prices', 'ai_fact_delivery', 'ai_fact_payment', 'ai_fact_office', 'ai_fact_location_pin',
-              'stock_statement', 'ai_fact_business_cap', 'quote_company_phone'] as $k) {
+              'stock_statement', 'ai_fact_business_cap'] as $k) {
         $say(sprintf('%-22s %s', $k, $bothTxt($k)));
     }
+    $say(sprintf('%-22s worker %s · row %s', 'quote_company_phone', $form($cfg['quote_company_phone'] ?? null),
+        $db === null ? 'not read' : $form($row['quote_company_phone'] ?? null)));
     $kn = KitTaxNote::note($cfg);
     $say('the kit tax note the worker appends: ' . ($kn === '' ? 'none (hardware module off, or "omit")' : ($kn === KitTaxNote::DEFAULT_NOTE ? 'the code\'s default sentence' : 'the operator\'s own wording')));
     $pn = PlanFenceGuard::note($cfg);
@@ -239,8 +284,8 @@ try {
     };
     $idNo = TenantProfile::resolveId($noVault);
     $say('without the vault: ' . $idNo . ' (decided by ' . $decider($noVault) . ($decider($noVault) === 'nothing' ? ': south-sudan is the default, so nothing selects Uganda' : '') . ')');
-    $filled = ConfigVault::fill($P, $D, $noVault, TenantProfile::SELECTOR_SOURCES);
-    $say('with the vault, as TenantProfile::current() reads it: ' . TenantProfile::resolveId($filled) . ' (decided by ' . $decider($filled) . ')');
+    $vaultFilled = ConfigVault::fill($P, $D, $noVault, TenantProfile::SELECTOR_SOURCES);
+    $say('with the vault, as TenantProfile::current() reads it: ' . TenantProfile::resolveId($vaultFilled) . ' (decided by ' . $decider($vaultFilled) . ')');
     $say('the gate the workers ask (StaffJobsGate::applies on the worker view): ' . $yn(StaffJobsGate::applies($cfg, $D)));
     $vp = ConfigVault::path($P, $D);
     $branch = getenv('DN_VAULT_FILE') ? 'DN_VAULT_FILE' : (basename($vp) === 'config_vault.json' ? 'the data folder\'s config_vault.json (the plugins folder is not writable by this user)' : 'the plugins folder\'s .dishnet-sudan.vault.json');
@@ -258,20 +303,11 @@ try {
     // ── 5. Hand-overs and alerts ─────────────────────────────────────────────────────────────────────────────────────
     $head('5. Hand-overs and alerts (Part K, Part X, W.3)');
     $say(sprintf('%-28s %s', 'ai_handover_message', $bothTxt('ai_handover_message')));
-    $form = function ($v): string {
-        $t = preg_replace('/[^0-9+]/', '', (string)($v ?? ''));
-        if ($t === '') return 'not set (alerts off)';
-        $digits = ltrim($t, '+');
-        if ($t[0] === '+') $f = 'international with +';
-        elseif (strpos($digits, '256') === 0) $f = 'digits starting with 256';
-        elseif (strpos($digits, '211') === 0) $f = 'digits starting with 211';
-        elseif ($digits[0] === '0') $f = 'local, starting with 0';
-        else $f = 'other';
-        return $f . ', ' . strlen($digits) . ' digits';
-    };
-    $say(sprintf('%-28s worker %s · row %s', 'alert_whatsapp', $form($cfg['alert_whatsapp'] ?? null), $db === null ? 'not read' : $form($row['alert_whatsapp'] ?? null)));
-    $ap = $cfg['alert_patience_minutes'] ?? null;
-    $say(sprintf('%-28s %s → %d minutes', 'alert_patience_minutes', $both('alert_patience_minutes'), $ap === null ? 10 : (int)$ap));
+    $say(sprintf('%-28s worker %s · row %s · watchdog %s', 'alert_whatsapp', $form($cfg['alert_whatsapp'] ?? null, 'not set (alerts off)'),
+        $db === null ? 'not read' : $form($row['alert_whatsapp'] ?? null, 'not set (alerts off)'), $db === null ? 'not established (row not read)' : $form($filled['alert_whatsapp'] ?? null, 'not set (watching nothing)')));
+    $apGap = !array_key_exists('alert_patience_minutes', $cfg) || $cfg['alert_patience_minutes'] === '' || $cfg['alert_patience_minutes'] === null;
+    $say(sprintf('%-28s %s → the watchdog waits %s', 'alert_patience_minutes', $both('alert_patience_minutes'),
+        ($db === null && $apGap) ? 'not established (row not read)' : (int)($filled['alert_patience_minutes'] ?? 10) . ' minutes'));
     $hc = $cfg['wa_handover_copy_central'] ?? null;
     $say(sprintf('%-28s %s → %s', 'wa_handover_copy_central', $both('wa_handover_copy_central'), ($hc === null || $hc === '') ? 'ON (unset)' : ($bool($hc) ? 'ON' : 'off')));
     $hm = $cfg['wa_human_cooldown_minutes'] ?? null;
@@ -300,7 +336,7 @@ try {
 
     $qo = QuoteOrganization::setting($cfg, $D);
     $rawCrm = CrmApiClient::fromUcrm($P, $cfg);
-    $crm = $rawCrm->isConfigured() ? GetOnlyCrm::of($rawCrm) : null;
+    $crm = $rawCrm->isConfigured() ? GetOnlyCrm::of($rawCrm)->withTimeouts(5, 20) : null;
     $shape = function ($s): string { return (string)preg_replace_callback('/\d+/', function ($m) { return '<' . strlen($m[0]) . 'd>'; }, (string)$s); };
     if ($crm === null) $say('uCRM: no connection is configured; nothing was asked');
     else {
@@ -532,7 +568,7 @@ try {
             if ($crm !== null && UcrmCatalogue::gateOpen($qo)) {
                 $token = trim((string)($cfg['crm_auth_token'] ?? ''));
                 if ($token === '') { $qc = $crm; $kind = 'the plugin\'s own key'; }
-                else { $url = trim((string)($cfg['crm_base_url'] ?? '')); $qc = new GetOnlyCrm($url !== '' ? $url : rtrim($rawCrm->getBaseUrl(), '/'), $token, 'x-auth-token'); $kind = 'the admin token'; }
+                else { $url = trim((string)($cfg['crm_base_url'] ?? '')); $qc = (new GetOnlyCrm($url !== '' ? $url : rtrim($rawCrm->getBaseUrl(), '/'), $token, 'x-auth-token'))->withTimeouts(5, 20); $kind = 'the admin token'; }
                 $line = (new UcrmQuoteLines($qc, $qo, $links))->installLine();
                 $l = $line['line'] ?? null;
                 $say('the installation at use (UcrmQuoteLines::installLine, with ' . $kind . '): ' . (!empty($line['ok']) ? 'ok' : 'REFUSED, why ' . $j($line['why'] ?? ''))
@@ -543,7 +579,9 @@ try {
         if ($cr === null) $say('the uCRM catalogue switch: no ucrm_catalogue table (never switched) → off');
         else {
             $inForce = function (string $k) use ($cr): int { $n = 0; foreach ($cr as $r) if (($r['kind'] ?? null) === $k && ($r['ended_at_ts'] ?? null) === null) $n++; return $n; };
-            $say('the uCRM catalogue switch: mode records in force ' . $inForce('mode') . ' · direct mode on (worker gate) ' . $yn(UcrmCatalogue::fromRecords($cr, UcrmCatalogue::gateOpen($qo))->direct())
+            $say('the uCRM catalogue switch: mode records in force ' . $inForce('mode') . ' · the record in force says on ' . $yn(UcrmCatalogue::fromRecords($cr, true)->direct())
+                . ' · direct mode on for the staff screens (row gate) ' . $yn(UcrmCatalogue::fromRecords($cr, UcrmCatalogue::gateOpen($qoRow))->direct())
+                . ' · under the worker gate ' . $yn(UcrmCatalogue::fromRecords($cr, UcrmCatalogue::gateOpen($qo))->direct())
                 . ' · hidden ' . $inForce('hidden') . ', standard ' . $inForce('standard') . ', install ' . $inForce('install') . ' record(s) in force');
         }
     }
@@ -596,6 +634,7 @@ try {
         $db->exec('ROLLBACK'); $db = null;
         $say('the book: changes made ' . $tc . ($tc === 0 ? ' (none)' : ' — UNEXPECTED'));
         if ($tc !== 0) $rc = 1;
+        if ($recreated) { $say('the book: its -wal/-shm were re-created by this read (see the NOTE above)'); $rc = 1; }
     }
     $say('uCRM asked (GET only): ' . (GetOnlyCrm::$asked ? implode(', ', array_map(function ($p) { return preg_replace('/\?.*$/', '', $p) . ' ' . (GetOnlyCrm::$codes[$p] ?? '?'); }, GetOnlyCrm::$asked)) : 'nothing') . '; anything else refused: ' . GetOnlyCrm::$refused);
 } catch (Throwable $e) {
@@ -603,6 +642,7 @@ try {
     if ($db !== null) { try { $db->exec('ROLLBACK'); } catch (Throwable $e2) {} }
     $rc = 1;
 }
+if ($walH !== null) { @fclose($walH); $walH = null; }
 $say('runs of 9+ digits withheld: ' . $n9);
-$say($rc === 0 ? 'READ-ONLY — nothing was changed' : 'READ-ONLY — nothing was changed (the reading did not finish; send the log as it is)');
+$say($rc === 0 ? 'READ-ONLY — nothing was changed' : (!empty($recreated) ? 'READ-ONLY — nothing was changed but SQLite\'s own -wal/-shm, re-created as the book was opened (see the NOTE)' : 'READ-ONLY — nothing was changed (the reading did not finish; send the log as it is)'));
 exit($rc);
