@@ -5,6 +5,11 @@
 It is replaced at each milestone and the folder is removed when the release branch is pushed on the operator's word.
 Nothing here is deployed or deployable.
 
+`design-5.18.107/` holds two design drafts, not yet reviewed in their present form and not yet in root `docs/`:
+`76-…-5-18-107-design.md`, the 5.18.107 design as re-scoped on 25 Nov (Parts Q, K, X, F-1, F-7, F-8 and the week's items,
+Part W), and `77-…-5-18-108-draft.md`, Parts H, S, N and L carried to 5.18.108 word for word. Each moves to root `docs/`
+once its review findings are taken. Nothing in them is built.
+
 `release-5.18.104.patch` is `git diff 221c9dc..994d660`: the 5.18.104 release (root `docs/73`), one commit on
 `origin/release/5.18.103` (`221c9dc`). `release/5.18.104` = `994d660` was pushed on the operator's word on 7 Nov, so the
 patch is now only a copy of it. Apply with `git apply` on a checkout of `221c9dc`. Nothing here is deployed.
