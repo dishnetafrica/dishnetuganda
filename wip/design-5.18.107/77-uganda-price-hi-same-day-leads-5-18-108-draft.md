@@ -4,8 +4,10 @@
 
 - **Why this file exists.** On 25 Nov the owner split the next version in two. 5.18.107 keeps the quotation built in
   code (Part Q), quoted customers (Part K), the "assistant off" list (Part X), F-1, F-7, F-8 and the week's items
-  (docs/76). **5.18.108 gets Parts H, S, N and L**, carried here word for word from docs/76 as it stood on 21 Nov after
-  six reviews.
+  (docs/76). **5.18.108 gets Parts H, S, N and L**, carried here from docs/76 as it stood on 21 Nov after
+  six reviews. The part sections, the step bodies and the decisions are word for word; §L and §P are word for word
+  apart from one paragraph docs/76's review 7 found dropped and restored; §N is a selection. Review 7 (docs/76 §R.9,
+  R7-R11) also corrected the step numbering below, one stale release number (§H.3) and two §N values.
 - **The section letters are docs/76's**, kept so that every cross-reference still resolves: §C (Part H), §F (Part S),
   §G (Part N) and §H (Part L) are here. **A reference to any other section (§A, §B, §D, §E, §I, §J, §X, §R, …) means
   docs/76's.** The parts of §K, §L, §M, §N, §O and §P that belong to these four parts are collected at the end of this
@@ -465,7 +467,7 @@ After the switch is on, the owner removes the NAME AND EMAIL paragraph from Extr
 2. **A late name.** The merge treats a `customer_name` equal to the phone (compared by `LeadMatcher::key`) as empty, so
    the first real name replaces it and the marker clears. A name a salesperson typed is never overwritten.
 3. **Provenance.** Only the create branch of `UcrmLeadSync` (inside its `withLock` callback, near `:180`) writes
-   `crm_created_by_plugin = 1`. `writeBack` (`:523`) does not. A lead whose `crm_client_id` came from before 5.18.107, or
+   `crm_created_by_plugin = 1`. `writeBack` (`:523`) does not. A lead whose `crm_client_id` came from before 5.18.108, or
    from a match by phone, has no such field, and takes the matched-by-phone path below.
 4. **A synced lead stays a prospect on the sales number.** A client carrying the plugin's provenance, still `isLead` and
    with no service, does not make the caller "identified" there: the worker drops `customer` (§G.2). Support and accounts
@@ -521,15 +523,19 @@ After the switch is on, the owner removes the NAME AND EMAIL paragraph from Extr
 
 ## K. The owner's settings after the deploy (these parts)
 
-Carried from docs/76 §K, steps 3–5. Steps 0–2 (X, K and Q) are 5.18.107's.
+The steps for H, N/L and S from docs/76 §K as it stood on 21 Nov, renumbered H1–H3 here so that "§K step 3" cannot
+mean both W.1 (docs/76) and H. 5.18.107's own steps are docs/76 §K steps 0–5.
 
-3. **H:** check that `wa_send_ledger` is `on` (the switch refuses otherwise), then `price_hi_enabled` on.
-4. **N and L.**
+All switches stay off at the deploy. Turn them on one at a time, **in this order**, and check each with a test from a
+non-staff number.
+
+- **H1 — H:** check that `wa_send_ledger` is `on` (the switch refuses otherwise), then `price_hi_enabled` on.
+- **H2 — N and L.**
    - Check that `ai_lead_capture` and `ai_qualification` are on, and that the prompt is not in override mode with custom
      text.
    - Then turn on `lead_ask_enabled` and `lead_contact_enabled`, and remove the NAME AND EMAIL paragraph.
    - `ai_crm_lead_sync` goes on only on the owner's word, after decision O6.
-5. **S:** raise `followup_daily_cap`, then turn on `followup_same_day_enabled`.
+- **H3 — S:** raise `followup_daily_cap`, then turn on `followup_same_day_enabled`.
 
 ---
 
@@ -673,6 +679,10 @@ Carried from docs/76 §L. New test files: `test_price_hi.php`, `test_followup_sa
   - `test_multi_number_routing.php` check 20 (two clients created, both leads linked). Its leads are created by the real
     worker, which writes `created_at_utc`, so only a stamp from before that run is needed, whatever zone
     `mn_open_zone` picks.
+
+  The cases that run as South Sudan need no stamp: `test_ucrm_lead_sync.php` (no tenant key),
+  `test_event_processor_protected.php`, `test_lead_path_batch0.php` and `test_lead_switches.php`. Of these, only
+  `test_event_processor_protected.php` changes, and that change is 5.18.107's, for Part X (docs/76 §L).
 - `test_master_104` (job list and order) and `tools/cron_status.php`;
 - the cadence tests (Uganda only);
 
@@ -680,12 +690,13 @@ Carried from docs/76 §L. New test files: `test_price_hi.php`, `test_followup_sa
 
 ## M. Build order (these parts)
 
-Carried from docs/76 §M, steps 4–6.
+The steps for H, N/L and S from docs/76 §M as it stood on 21 Nov, renumbered M1–M3 here; 5.18.107's own steps are
+docs/76 §M steps 1–5.
 
-4. **H:** migration 092, the record, the sleepers and the job, the gates, the send.
-5. **N and L:** the column (092), the count, the predicates, the question, the number-only lead, the provenance, the
+- **M1 — H:** migration 092, the record, the sleepers and the job, the gates, the send.
+- **M2 — N and L:** the column (092), the count, the predicates, the question, the number-only lead, the provenance, the
    uCRM paths, the sync cutoff.
-6. **S:** the schedule function and its readers. Last, because it waits on decision O3.
+- **M3 — S:** the schedule function and its readers. Last, because it waits on decision O3.
 
 ---
 
@@ -700,6 +711,8 @@ From docs/76 §N, the values only these parts need; read again when 5.18.108 is 
 - **The server:** whether a per-minute crontab runs master.
 - **uCRM:** the organizations; the client attribute with key `leadSource` (its id, expected 8).
 - **Volumes:** conversations per day reaching 4 inbound messages; replies per day that §C.1 would call priced.
+- **Shared with docs/76 §N, read again with this list:** `bot_instructions_mode` and whether `bot_custom_instructions`
+  is empty (Part N's gate 1, §G.2, and step H2), and `ai_sales_on_all_numbers` (gate 1's "the number sells").
 
 ---
 
