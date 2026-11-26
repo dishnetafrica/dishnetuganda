@@ -1506,9 +1506,16 @@ non-staff number. Steps for 5.18.108's parts are in docs/77 §K.
      block's own precedence sentences (§D.5, §E.2.1) hold whatever the settings text says. v9 types no figure of its
      own (every price comes from uCRM), so nothing else leaves the paragraph.
    - The v10 save is a command of its own, refused unless the saved text is v9, as the v8 and v9 saves were. It keeps
-     the v9 text it replaces in a file of its own on the server (mode 0600). A v9-restore command is handed over with
-     it: it refuses unless the saved text is v10 and the kept file's sha256 is v9's (`fca936af7760…`), writes the kept
-     text back, and reads it back identical. Neither command is in the deploy script (§T.7, §T.9).
+     the v9 text it replaces in a file of its own on the server (mode 0600). Neither it nor the restore below is in the
+     deploy script (§T.7, §T.9).
+   - **The v9-restore** is handed over in the same handover as the v10 save, so that §T.7's rollback note (step 6) can
+     point to it, but in a copyable block of its own, marked *only if needed (before a rollback of 5.18.107, or by the
+     owner's decision)*, and never in one block with the v10 save, in the chat or in a document (CLAUDE.md "Always";
+     root docs/44 §16.9). It refuses unless the saved text is v10 and the kept file's sha256 is v9's (`fca936af7760…`).
+     Then it asks for a typed word, `RESTORE`: any other answer ends it with *nothing was changed*, and it never takes a
+     default. Only then does it write the kept text back and read it back identical. Its sha256 guard alone cannot stop
+     a joint paste: right after a v10 save the saved text is v10 and the kept file is v9, exactly what the guard
+     accepts.
    - **The tests:** on the sales number, on the support number with sales-on-all on, and on the website chat. Each must
      show the code-built block, with its TOTAL WITH THE FIRST MONTH, **and** no kit, installation, mount, plan or total
      figure in the model's own text before it. On an offered turn at the fifth message or later, the reply has exactly
@@ -2548,7 +2555,8 @@ Written after the build's code review (§M) and before the derivation, from two 
 `scripts/deploy-5.18.106.sh` against the 5.18.107 delta (the build branch at `8f0d53d`): 90 items and 44 facts.
 `S106:n` is a line of 5.18.106's script as committed in `745e668` (16,197 lines, sha256 `3189cee22818fb3a…`). Nothing
 here is derived, run or deployed. The owner may overrule any decision in §T.10. The section is reviewed before the
-derivation, as docs/75 §L was: review 1 (26 Nov) reported 18 findings, of which 17 held and are taken (§T.13).
+derivation, as docs/75 §L was: review 1 (26 Nov) reported 18 findings, of which 17 held and are taken; review 2 (26 Nov)
+reported 19, all of which held and are taken (§T.13).
 
 **What 5.18.107 asks of the deploy, in one paragraph.** A first migration since 5.18.104, 092, which must apply on
 the first boot after the copy or no Uganda customer gets an AI reply (§X.5). Three switches (K, Q, W.1) that must be
@@ -2625,12 +2633,23 @@ F3 readings and the rollback's one write.
       greps the base's. Replacing it alone would fail RB after every rollback.
     - `UG_PIN_SIGNATURE` is re-measured on the release commit. It is expected unchanged, since its five probe events
       exclude the new type.
-    - **A probe run of its own for `wa.no_ai_alert`**: a second `EP_PHP` run over that one event, with its own two
-      constants. On Uganda the pin leaves it for the worker (`pending/0`); `bf29cbd` settles it done as unknown
-      (`done/0+unknown`), on Uganda and on South Sudan alike, and the pin's South Sudan run reads the same. A6 compares
-      the pin's run and the live run, R13 the pin's after the copy, and RB `bf29cbd`'s after a rollback: what a
-      rollback does to a queued alert (§T.7). The three five-event signatures stay as they are. Joining the new event
-      to their run would change all three, and A6 and RB would refuse.
+    - **A probe run of its own for `wa.no_ai_alert`**, with its own two constants:
+      - **The mechanism.** `EP_PHP` takes an optional fourth argument, a comma-separated list of `type:priority`
+        pairs; absent or empty, the list is exactly S106:1963's five pairs. `ep_run` gains an optional third parameter
+        and passes it only when it is set. The new run is `ep_run <root> <profile> wa.no_ai_alert:3`, 3 being the
+        priority `evo_webhook.php` raises the alert with. The five existing `ep_run` calls (S106:13114-13115,
+        15011-15012 and 15502) stay byte for byte.
+      - **The constants**, in the signatures' own form: `EP_NOAI_PIN_UG='wa.no_ai_alert=pending/0'`, the pin on Uganda,
+        which leaves the alert for the worker; `EP_NOAI_DONE='wa.no_ai_alert=done/0+unknown'`, `bf29cbd` on both
+        profiles and the pin on South Sudan, which settle it done as unknown.
+      - **The readers:** A6 compares the pin's run and the live run, R13 the pin's after the copy, and RB `bf29cbd`'s
+        after a rollback: what a rollback does to a queued alert (§T.7).
+      - **The derivation asserts text only:** the default list is S106:1963's five pairs unchanged, and the five
+        existing call lines carry no third argument. It runs no PHP, so the output is shown by execution: the two
+        constants are measured on `bf29cbd` and on the release commit at §T.12 step 2, and the rehearsal's A6, R13 and
+        RB compare the five-event runs with the carried signatures, so a changed default fails there.
+      - The three five-event signatures stay as they are. Joining the new event to their run would change all three,
+        and A6 and RB would refuse.
   - **`NotificationService`** (F-8). `QF_HOOKS` is re-read at the pin; it was measured unchanged on the build branch
     (3 in all, one per method).
   - **The ladder:** `lib/SalesFollowupLadder.php` (two W settings) and `tools/sales_followup.php` (`--check
@@ -2706,8 +2725,9 @@ F3 readings and the rollback's one write.
      a rollback).
 
    Anything else is **NO-GO**, and nothing is changed: present with other bytes, or present without its row.
-   - **Why:** a 092 that went PARTIAL is never re-run. A deploy over it would leave the list unreadable and stop AI
-     replies to every Uganda customer (§X.5).
+   - **Why:** a 092 that went PARTIAL is never re-run. Where its CREATE TABLE did not complete, the list stays
+     unreadable and no Uganda customer gets an AI reply (§X.5); where it did, the objects or the self-check row it
+     skipped are missing for good. A deploy over it repairs neither.
    - Its repair is not the script's (§T.10, known limits).
 3. **QF-G2, the one trial, extended to 089 → 092** through the pin's `MigrationRunner`, on a copy.
    - **The expected counts.** `QF_SC_EXPECT` and the PHP `$SC` stay at three (089–091). 092 gets its own constant,
@@ -2723,18 +2743,22 @@ F3 readings and the rollback's one write.
    - Then NA-G1 (item 5) on the trial copy.
    - VN-G7's and OF-G2's code is unchanged. They read 090 and 091, and OF-G2's census compares only tables that were
      present before the trial. Their texts say "089 → 090 → 091 → 092".
-4. **neg092, a negative control on a further copy**, carried from S106's `neg` mode (S106:6436-6463) with its reset
+4. **neg092, a negative control on a copy of its own**, carried from S106's `neg` mode (S106:6436-6463) with its reset
    branch:
-   1. the third copy is opened read-write, and the pin's files below 092 are run into it (on a live 091 book, nothing);
+   1. its own copy (a fourth `qf_copy`, separate from Part V's `g2n`, with its own subfolders and log, dropped after) is
+      opened read-write, and the pin's files below 092 are run into it (on a live 091 book, nothing);
    2. if `wa_no_ai` exists on this throwaway copy (a redeploy), it is taken off: `DROP TABLE wa_no_ai`, which removes
       its index and triggers, and 092's `_schema_checks` and `_migrations` rows are deleted; the line says `reset=1`;
    3. a `wa_no_ai` of another shape is planted, and 092 runs alone through the pin's runner;
-   4. it must read status partial, a PARTIAL line naming `CHECK constraint failed`, and no 092 row.
+   4. it must read status partial, a PARTIAL line for `092_wa_no_ai.sql` itself naming `CHECK constraint failed`, and
+      no 092 row. S106's match (`stripos($log, 'CHECK constraint failed')`, S106:6463) is tied here to 092's own line.
+   - The two controls' copies are kept apart so that neither one's planted state or log can satisfy the other's
+     reading: Part V's own `PARTIAL: 090 … CHECK constraint failed` line would satisfy an untied match for 092.
    - QF-G2 accepts `reset=0` only where MG-G1 read 092 absent, and `reset=1` only where it read 092 present. Any other
-     pairing is NO-GO. (QF-G2's pattern for Part V's control is at S106:8298 and 9785.)
+     pairing is NO-GO, with nothing changed. (QF-G2's pattern for Part V's control is at S106:8298 and 9785.)
    - This was modelled in Python's SQLite 3.45.1: 5 ok, 1 skipped, no row. The server runs 3.48.0, and that result is
      the rehearsal's to show.
-   - Part V's control is carried unchanged: its copy takes only the files below 090.
+   - Part V's control is carried unchanged: its copy (`g2n`) takes only the files below 090.
 
 5. **NA-G1 and NA-CA1: `wa_no_ai` readable the way the worker reads it, with a positive control.**
    - **How the code reads the list:**
@@ -2759,6 +2783,11 @@ F3 readings and the rollback's one write.
    - **Where it runs:** NA-G1 at stage A, on QF-G2's trial copy, through the pin's code; any failure is NO-GO and
      nothing is changed. NA-CA1 after the copy, through the installed code.
 6. **MG-CA1 and MG-CA2 (new, after the copy, in stage R and `--after-only`).**
+   - **MG-G1's verdict travels to `--after-only` in the state file.** At the DEPLOY step, beside `QF_BASE` (S106:13850's
+     `printf`), the deploy run writes `MG_G1=absent` or `MG_G1=present`. `--after-only` reads it with S106's
+     `sed -n 's/^MG_G1=//p' "$STATE" | tail -n1` pattern, never from its own stage A, which sees 092 present after any
+     deploy. A missing or unreadable record (an older state file) never falls back to the redeploy readings: each
+     reading below that is keyed on MG-G1 is then NOT ESTABLISHED in capitals, naming the missing record.
    - **MG-CA1:** first a wait of up to 60 s on the live ledger, read-only (VN-M1's pattern), for 092. If it does not
      appear, a FAIL naming the wait. Then, on a fresh copy:
      - 092's checksum is `c51beb50…`;
@@ -2766,26 +2795,56 @@ F3 readings and the rollback's one write.
      - NA-CA1 holds.
    - **No bound on `applied_at`.** 092 can be applied during the copy, before `COPY_AT` (above), so comparing them would
      fail a correct deploy. That this copy's first boot applied 092 is shown by MG-G1 (absent at stage A) and R7
-     (*applied*: one row more, 092 last). Beside them, a note only: `applied_at` against the copy's start,
-     `QF_COPY_UNIX` (S106:7478-7481), which the state file now keeps for `--after-only`. Earlier than that start is a
-     note, never a FAIL: A0 makes a 092 placed before the copy harmless.
-   - **MG-CA2** reads `$PDD_IN/migration.log`:
-     - a PARTIAL line for 092 is a FAIL; a log naming 092 with no OK line is a FAIL;
-     - **no 092 line, where this deploy applied 092** (MG-G1 read it absent): NOT ESTABLISHED in capitals, not a FAIL
-       (TD11). Halving cannot remove a line that recent: the runner halves only when a write finds the log over
-       256 KiB, and it keeps the newest half. The cause is a log write that failed silently (`@file_put_contents`);
-     - **no 092 line on a redeploy** (092 applied by an earlier deploy): a note. The runner writes nothing for an
+     (*applied*: one row more, 092 last). Beside them, a note only, against the copy's start, `QF_COPY_UNIX`
+     (S106:7478-7481), which the state file now keeps for `--after-only`. It is never a FAIL, and it is worded by case:
+     - MG-G1 read 092 absent and `applied_at` is earlier than that start: *092 was applied before this copy began (a
+       process ran the runner after stage A); A0 makes such a 092 harmless, and MG-G1 and R7 show it is this
+       release's*;
+     - MG-G1 read 092 present: *092 was applied by an earlier deploy, before this copy*.
+   - **MG-CA2** reads `$PDD_IN/migration.log`. The runner writes three kinds of line naming a file: OK, PARTIAL and the
+     checksum WARNING. MG-CA2 judges only the OK and PARTIAL lines for 092.
+     - **A PARTIAL line for 092 is a FAIL**, in every mode.
+     - **A checksum WARNING for 092** (*has been modified after being applied (checksum mismatch)*) is never a FAIL of
+       MG-CA2's:
+       - on a redeploy (MG-G1 read 092 present, R7 *same*) it is a note naming the tar straddle (§T.6, TD12) when all
+         three hold: MG-CA1 reads the live ledger's checksum `c51beb50…` with its 5-of-5 row and five objects; NA-CA1
+         holds; and R1 reads the installed `migrations/092_wa_no_ai.sql` at the pin's sha256. Otherwise it is a FAIL.
+         Why: the runner logs OK or PARTIAL only for a file it has no ledger row for, so on a redeploy a WARNING can
+         come only from a read that met other bytes. R1, not MG-CA1, shows the bytes on disk are whole after the copy,
+         so the WARNING was transient;
+       - on a first deploy a real WARNING comes only with a ledger checksum other than `c51beb50…`, so the FAIL is
+         MG-CA1's; the line itself is not counted, and the missing OK line is judged as below.
+     - **No 092 OK line, on a first deploy (MG-G1 read 092 absent):**
+       - **in stage R:** NOT ESTABLISHED in capitals, not a FAIL (TD11). Minutes after the first boot, halving would
+         need about 128 KiB (some 1,080 lines) logged after 092's line, so the cause named is a log write that failed
+         silently (`@file_put_contents`). The deploy run writes what it read to the state file: `MG_CA2_SEEN=1` when it
+         read `OK: 092_wa_no_ai.sql`, else `MG_CA2_SEEN=0`;
+       - **in `--after-only`:** a note when either holds: the state file says stage R read the OK line
+         (`MG_CA2_SEEN=1`), or the log's first line is the runner's `--- earlier entries trimmed ---` marker. The note
+         names the real cause: 071_dpo_payments.sql's checksum WARNING is written on every `SqliteStore::create`, so
+         the runner halves the log within hours (087's OK line, present at 5.18.88's deploy at 09:52, was gone by
+         19:02; docs/07:7561-7563). Otherwise (stage R did not see the line, and no trim marker): NOT ESTABLISHED in
+         capitals, as in stage R, never a FAIL and never a note;
+       - **no timestamp comparison:** the marker's stamp comes from PHP's `date()` in the writing process's zone.
+         `master.php` and `public.php` call `dn_tz_apply()` first (Africa/Kampala, UTC+3); `evo_webhook.php` and
+         `run_worker.php` do not. So the stamp is never compared with `applied_at` or `QF_COPY_UNIX`: the marker's
+         presence is the evidence.
+     - **No 092 OK line on a redeploy** (092 applied by an earlier deploy): a note. The runner writes nothing for an
        applied file, and halving may have dropped the line since.
    - "7 stmts" is not pinned on the live log. Two racing first boots both log OK, the second with fewer statements,
-     because its self-check INSERT fails safe on the unique key. An empty read during the copy logs `OK: … (0 stmts`,
-     which MG-CA2 passes and MG-CA1's checksum does not (§T.6).
+     because its self-check INSERT fails safe on the unique key. A read during the copy that was empty or cut short can
+     log OK with fewer than 7 statements, which MG-CA2 passes and MG-CA1's checksum does not (§T.6).
    - QF-CA1 is carried for 089–091.
 
-7. **A failure after the copy.** §M says any failure here means the rollback. While 092 does not read, no Uganda
-   customer gets an AI reply: each `ai.reply` dies after about 36 minutes of backoff, with a staff alert and no hand-over
-   (§X.5).
-   - The FAILED summary leads with that consequence in capitals, and prints the rollback command alone on its line
-     after the verdict.
+7. **A failure after the copy.** §M says any failure here means the rollback.
+   - **Where NA-CA1 fails** (the list does not read): no Uganda customer gets an AI reply; each `ai.reply` dies after
+     about 36 minutes of backoff, with a staff alert and no hand-over (§X.5). The FAILED summary leads with that
+     consequence in capitals.
+   - **Where NA-CA1 holds** and only MG-CA1 or MG-CA2 fails (for example a read that reached past 092's CREATE TABLE,
+     §T.6): AI replies go on, so the summary leads with the checksum, ledger or log fact and its consequence: the runner
+     never re-runs 092, and after a rollback MG-G1 refuses every redeploy until the ledger row is repaired by hand. It
+     never claims that AI replies have stopped.
+   - Either way it prints the rollback command alone on its line after the verdict.
    - It is not an automatic rollback (TD5).
 8. **R7 (`db_judge`), re-pointed.** 5.18.104's *applied* rule is revived as `db_mig107` (root
    `scripts/deploy-5.18.104.sh:10385-10400`).
@@ -2853,8 +2912,9 @@ F3 readings and the rollback's one write.
     and the switch tool's `set` as undeclared. Its repair is a separate step the owner authorises (root docs/76 §T.10,
     known limits), never this script. Nothing was changed.*
     - On a first deploy no 5.18.106 writer can have set one.
-    - On a redeploy after a 5.18.107 rollback, one may have been left on. That is why the rollback and the put-back
-      print 5.18.107's own off commands first, while it still serves (§T.7).
+    - On a redeploy after a 5.18.107 rollback, one may have been left on. That is why rb_pre107 prints 5.18.107's own
+      off commands before the rollback's copy, while 5.18.107's tools still serve (§T.7); after that copy they may be
+      refused.
     - LK-G1's refusal (S106:7368) named a writer, the plugin's own Settings. Here, once 5.18.106 serves, no shipped tool
       can write these keys.
   - **The texts** (the five above and `no_ai_alert_cooldown_hours`, all now in the `lk` list, and the window) are one
@@ -2935,10 +2995,16 @@ F3 readings and the rollback's one write.
     - A −1 at or before `COPY_AT`, in the cycle the copy straddled, is a note, as in 5.18.106. This also covers a
       straddling master that included the new `followup_send` before `NoAiList.php` was extracted.
   - **An unreadable schedule** is a capitals NOT ESTABLISHED note, never a PASS (docs/75 DL10's rule).
-- **ME-CA2 (new): the other jobs 5.18.107 changes, in the same read and in both modes, FAIL-only.** It covers each
-  master entry whose script or a class it loads is in 5.18.107's delta, other than the four: `event_processor`,
-  `ai_reply`, `wa_watchdog`, `customer_reminders`, `quote_chase`, `ai_media` and `offers_send`. The derivation asserts
-  that list against master's table at the pin.
+- **ME-CA2 (new): seven other jobs, in the same read and in both modes, FAIL-only.** It covers the seven master entries
+  whose own script, or the class the script exists to run, 5.18.107 changes: `event_processor` (its script),
+  `ai_reply` (`workers/AiReplyWorker.php`), `wa_watchdog` (its script), `customer_reminders` (its script and
+  `lib/WinBack.php`), `quote_chase` (`lib/QuoteChase.php`), `ai_media` (`workers/MediaWorker.php`) and `offers_send`
+  (`lib/OfferAudience.php`). The derivation asserts only that each of the seven is in master's table at the pin; it
+  does not compute the criterion.
+  - **Why not every entry that loads a changed file:** 29 more do (known limits), most only through
+    `lib/NotificationService.php` or `lib/EvolutionApiService.php`. A FAIL here means the rollback, and those entries
+    reach uCRM, Splynx, the LTE and fibre APIs, Google Drive and mail. A death of theirs that 5.18.107 did not cause,
+    unmeasured on production, would roll back a correct deploy.
   - **FAIL** when an entry is exactly (L, −1), with L later than `COPY_AT`, and some entry is later than L. A new cycle
     has begun, so master's process at L has ended: it holds master's lock while it runs.
   - Every other reading is a note. There is no poll and no NOT YET: polling an early, frequent job such as
@@ -2957,11 +3023,22 @@ F3 readings and the rollback's one write.
     that leaves the event *processing* until `releaseStale` (300 s or more). The message is late, not lost.
   - **092 itself.** GNU tar creates `migrations/092_wa_no_ai.sql` under its final name and then writes it; there is no
     temporary name. A `SqliteStore::create` whose runner reads the file in that moment runs, and records, what it read.
-    - Empty: `OK: … (0 stmts`, with the empty string's md5. MG-CA2 passes it; MG-CA1's checksum does not.
-    - Truncated: PARTIAL, with the md5 of the part it read.
-    - Either way the runner never re-runs it. MG-CA1 and NA-CA1 FAIL; no Uganda customer gets an AI reply until the
-      rollback (§X.5); and after it MG-G1 refuses every redeploy until the ledger row is repaired by hand.
-    - On a redeploy, the same moment meets an applied 092 and logs only a checksum warning.
+    Root `scripts/deploy-hybrid.sh:120-121` extracts from a pipe, so a reader sees the file cut at a multiple of 512
+    bytes.
+    - **Empty or cut short:** the runner logs PARTIAL, or OK with fewer than 7 statements. A read that stopped in the
+      header comment logs `OK: … (0 stmts`, like the empty case; one that stopped at a statement boundary logs OK with
+      fewer than 7. It records the md5 of what it read, so MG-CA1's checksum fails in every case. MG-CA2 passes every
+      OK line.
+    - **Read ended before the CREATE TABLE was complete** (about byte 1,982 of 3,430; tar's splits at 512, 1,024 and
+      1,536): `wa_no_ai` does not exist. MG-CA1 and NA-CA1 FAIL, and no Uganda customer gets an AI reply until the
+      rollback (§X.5).
+    - **Read reached past it** (2,048, 2,560 or 3,072): the table exists and reads. NA-CA1 holds and AI replies go on;
+      only MG-CA1 FAILs, on the checksum and usually on the missing 5/5 row and objects. §T.3 item 7 words the summary
+      by which of the two it is.
+    - **In both cases** the runner never re-runs 092, and after a rollback MG-G1 refuses every redeploy until the
+      ledger row is repaired by hand.
+    - **On a redeploy**, the same moment meets an applied 092 and logs a checksum WARNING naming 092, which MG-CA2 reads
+      as a note while MG-CA1, NA-CA1 and R1 hold (§T.3 item 6).
     - The window is a 3,430-byte write. Its likelihood is not measured (TD12, known limits). 089–091 crossed the same
       tar at 5.18.104.
 
@@ -3052,19 +3129,40 @@ F3 readings and the rollback's one write.
   skipped §K's drain leaves marks that nobody gathers (§W.1).
 - **The put-back by hand** (`PUTBACK_CMD`) still writes nothing. Its `followup_auto_send` paragraph goes. In its place,
   at every site that prints the put-back (the summary, stage A's mixed-tree refusals, the deploy that did not verify,
-  and a rollback that did not verify), before `PUTBACK_CMD`:
-  - §K's two commands, every time, each alone on its line with its own log in `/root/dnb-sales`: the switch-off (*it
-    changes nothing that matters if the switch already reads off: it leaves `'0'`*) and `--check burst-drain`, with
-    §K's rule and §K's way out;
-  - when K or Q reads on or cannot be read, 5.18.107's `set_config --value 0` for each, alone, with its own log,
-    and the reason: after the put-back no shipped tool can write these keys;
-  - the switch and a drain reading made at print time, as a dated note only: *read at `<UTC>`: switch
+  and a rollback that did not verify, V1's included), before `PUTBACK_CMD`:
+  - **A tools reading, made at print time, first.** By `docker exec`, the sha256 of the four installed files the
+    commands use, against the pin's constants as R1 and Q-G1 already do: `tools/sales_followup.php` (`burst-drain`),
+    `lib/SalesFollowupLadder.php` (`set`), `lib/BurstMerge.php` (the switch's reader) and `tools/set_config.php` (K and
+    Q). It needs no pin. The paragraph is worded from that reading, never assumed from the site:
+    - **all four at the pin's:** the commands below are printed as 5.18.107's own;
+    - **otherwise (5.18.106's or mixed):** the commands are still printed, each alone, with the plain statement that a
+      5.18.106 or mixed tool refuses `set ai_burst_merge_enabled` (the ladder, as undeclared), `--check burst-drain`
+      (as an unknown step) and `set_config` for K and Q (as unmanaged); that a refusal changes nothing and saves
+      nothing; and that for any switch that may still be on, the repair is §T.10's known limit, the owner's authorised
+      edit of `kyc_config.json`, never this script;
+    - **not read** (a `docker exec` that failed): said so, with the same statement as a possibility.
+  - §K's two commands, every time, each alone on its line with its own log in `/root/dnb-sales`: the switch-off and
+    `--check burst-drain`, with §K's rule and §K's way out. *It leaves `'0'`* is said only where the tools reading is
+    the pin's, and in the summary, where 5.18.107 serves.
+  - When K or Q reads on or cannot be read, `set_config --value 0` for each, alone, with its own log, and the reason:
+    once 5.18.106's tools are installed, none can write these keys.
+  - The switch and a drain reading made at print time, as a dated note only: *read at `<UTC>`: switch
     `<reading>`; (a) N, (b) N, control N. One reading, not a drain.* It never says *nothing to drain*, and it never
-    leaves the commands out (TD6, §K);
-  - where a mixed tree may hold 5.18.106's tool, that it refuses `burst-drain`.
+    leaves the commands out (TD6, §K).
+  - **Per site:**
+    - **the deploy that did not verify (S106:13874) and V1's rollback that did not complete (S106:13929):** NS-G1 and
+      NS-B1 read all three switches off before the copy, so nothing there needs repair unless a switch was changed
+      during the run, which the header forbids;
+    - **a rollback that did not verify (S106:13890):** rb_pre107 printed the off commands before `ROLLBACK`; if a
+      switch was left on and 5.18.106's tools are now installed, the known-limits repair is the route that remains;
+    - **stage A's mixed-tree refusals (S106:12375, 12409-12413):** they come before the pin is staged, so the
+      print-time switch and drain reading is *NOT READ (the pin is not yet staged)*, and K and Q read *cannot be read*,
+      so their lines print, worded by the tools reading. `P3B_PIN` and `P3B_WHY` are defined before those sites (empty,
+      and that reason), because `set -u` is active.
 
   In the summary the paragraph may point to the rollback paragraph's identical commands above it. The stop messages
   carry no rollback paragraph, so they print the commands themselves. `PUTBACK_CMD` keeps its own log.
+
 - **What stays after a rollback:**
   - the list and its rows, read by nothing;
   - 092 and the nine classes on disk;
@@ -3085,6 +3183,15 @@ F3 readings and the rollback's one write.
 
 ### T.8 The whole-text checks of the derivation
 
+- **Display text, defined once for K1 and K5.** It is docs/75 §L.1's definition, with `OWNER_AUTOSEND_CMD`'s place
+  taken by the right-hand side of each named display variable. The derivation declares those variables in one list,
+  and K1 and K5 read that same list. There is one variable per new printed command: §T.7 step 4's switch-off and drain
+  commands; step 5's `set_config --value 0` commands for K and Q; the put-back paragraph's copies of those (the same
+  variables where the text is the same); and §T.9's owner steps 1 to 3. No other assignment is display text.
+  - Asserted: each listed variable is assigned exactly once, and expanded only inside display text.
+  - Weakened copies, each caught by K5: a listed variable expanded as a command word (`$V` or `"$V"` at command
+    position); one in `eval "$V"`; one in `sh -c "$V"` or `bash -c "$V"`; a display variable added to the script but
+    not to the list. A command moved out of its variable into code is K1's first weakened copy below.
 - **K1, carried.** No clear and no by-hand put-back. The switch tool runs only `show`, `--check` (`burst-drain`
   included) or `doctor`, through `qf_tool` on copies. `$QF_WRAPPER` and the new owner commands appear only in display
   text. Two new clauses guard the act, not the word:
@@ -3097,7 +3204,8 @@ F3 readings and the rollback's one write.
     `qf_tool "$X" --check burst-drain`. Reading `qf_tool`'s output by its `burst-drain: ` prefix is allowed.
   - Weakened copies: a `set ai_burst_merge_enabled 0` outside display text; a `--key ai_burst_merge_enabled` to
     `set_config` outside display text; a live `sales-followup.sh --check burst-drain` outside display text. The control
-    on the controls: the correctly derived script, with its key lists and its parsing of the drain, passes both.
+    on the controls: the correctly derived script, with its key lists, its parsing of the drain and its named display
+    variables, passes both.
 - **K2, carried:** `lk_ca1` is defined with both verdicts and called once, from `qf_after`.
 - **K3, re-anchored** on 5.18.107's V1 line: V1 runs no QF-RB1 and no switch-tool verb before `do_rollback`.
 - **K4, carried.** **K4b, new:** `lk_rows_judge` accepts exactly one extra `_schema_checks` row,
@@ -3108,8 +3216,8 @@ F3 readings and the rollback's one write.
     `kyc_config.json`, a run of `set_config.php`, or the switch tool's `on`, `off`, `skip`, `set` or `erase`.
   - Its two known exceptions are asserted: SLR_PHP's `->save` on a throwaway store, and Q-CA6's `set_config` run under
     the run's `/tmp`.
-  - Each new printed command is a named display variable. K5 shows each is never a command word, and never in `eval`
-    or `sh -c`.
+  - Each new printed command is a named display variable from the list above. K5 shows each is never a command word,
+    and never in `eval`, `sh -c` or `bash -c`.
   - Weakened copies: each detector form in code.
 - **K6, new: the trial and the list probes touch copies only.**
   - Every `new MigrationRunner(` sits in a `QF_PHP` mode whose database is a `qf_copy` path or `:memory:`.
@@ -3152,8 +3260,9 @@ F3 readings and the rollback's one write.
   2. **Q.**
      - First check that `ai_hardware_expert` is on (§N.1 read it on), and keep v9.
      - Save v10 with its own command. That command is not in this script: it refuses unless the saved text is v9, as
-       the v8 and v9 saves did, keeps the v9 text it replaces, and is handed over separately, with the v9-restore
-       command beside it (§K step 2).
+       the v8 and v9 saves did, keeps the v9 text it replaces, and is handed over separately. The v9-restore command is
+       handed over in a block of its own, marked *only if needed*, never in one block with the save, and asks for a
+       typed `RESTORE` before it writes (§K step 2).
      - Then the same `set_config` form with `connection_quote_enabled`, then §K's tests.
   3. **W.1:** `cd /opt/dishnet && bash scripts/sales-followup.sh set ai_burst_merge_enabled 1`.
   4. **W.2–W.6:** tests only.
@@ -3175,11 +3284,11 @@ F3 readings and the rollback's one write.
 | TD4 | the rollback writes nothing (AS-RB1 retired) | its hazard was 5.18.105's sender; 5.18.107 changes neither approval nor the run |
 | TD5 | a 092 failure after the copy is a FAIL whose summary leads with the consequence and the rollback command; not an automatic rollback | V1 is the one automatic rollback, and the one rehearsed. MG-G1 and QF-G2 ran the same runner over the same book before anything changed, so a failure after them is not expected. In the deploy run the switch is off (NS-G1, NS-B1), so no drain is needed and a typed rollback can follow at once. Instead: roll back automatically, as V1 does |
 | TD6 | the drain before a rollback is read and printed, never acted on | the script reads the switch and the pin's `--check burst-drain` on copies, waits 125 s once, and asks. It never runs `set`, never polls after `ROLLBACK` is typed, never calls one reading *drained* or says *nothing to drain*, and never refuses the rollback because of marks or because a switch reads on (§K's way out) |
-| TD7 | before a rollback or a put-back, a capitals note and 5.18.107's own off commands when K, Q or W.1 reads on or cannot be read (not in §K); the rollback still proceeds if the owner types `ROLLBACK` | 5.18.106's tools cannot turn them off afterwards, and a redeploy's NS-G1 refuses while one reads on. Refusing the rollback instead would block it in exactly the case where 5.18.107's own tools are what is broken. Instead: a typed acknowledgement naming the redeploy block |
+| TD7 | before a rollback, a capitals note and 5.18.107's own off commands when K, Q or W.1 reads on or cannot be read (not in §K); the rollback still proceeds if the owner types `ROLLBACK`. At a put-back the same commands are printed, worded by a print-time reading of the installed tools (§T.7) | 5.18.106's tools cannot turn them off afterwards, and a redeploy's NS-G1 refuses while one reads on. At a put-back the installed tools may already be 5.18.106's, which refuse all three commands, so the wording follows what is installed. Refusing the rollback instead would block it in exactly the case where 5.18.107's own tools are what is broken. Instead: a typed acknowledgement naming the redeploy block |
 | TD8 | `lk_read` reads the pin only | one ladder in every mode; otherwise LK-RB0 and LK-RB1 disagree over the two W settings |
 | TD9 | R7 reads *applied* exactly once, for 092, and otherwise *same* (`db_mig107`) | 5.18.104's shape, for this release's one migration |
 | TD10 | the release commit carries the plugin tree only (A7 carried) | `scripts/lib/ai_check.php` goes on the development branch, as every root script does |
-| TD11 | on a first deploy, a missing 092 line in `migration.log` is NOT ESTABLISHED in capitals, not a FAIL; a PARTIAL line or a 092 line with no OK is a FAIL | MG-CA1's checksum, 5-of-5 row and objects and NA-CA1 are the stronger evidence that 092 applied; a missing line means the runner's log write failed silently. This departs from §M's "its migration.log line reads OK" read literally. Instead: a FAIL, and so the rollback |
+| TD11 | on a first deploy, a missing 092 OK line in `migration.log` is NOT ESTABLISHED in capitals in stage R, and in `--after-only` unless stage R saw the line or the log has been trimmed since (then a note); MG-CA2 judges only OK and PARTIAL lines, and a PARTIAL line is a FAIL in every mode; on a redeploy a 092 checksum WARNING is a note while MG-CA1, NA-CA1 and R1 hold | MG-CA1's checksum, 5-of-5 row and objects and NA-CA1 are the stronger evidence that 092 applied. In stage R a missing line means the log write failed silently; later it may have been trimmed, because 071's checksum WARNING is logged on every boot and the runner halves the log within hours. This departs from §M's "its migration.log line reads OK" read literally; §M asks for the line "after the first boot", and a redeploy has none for 092. Instead: a FAIL, which in any `--after-only` after a trim would roll back a correct deploy |
 | TD12 | the tar straddle of 092 (§T.6) is recorded as a known limit, not designed out in this release | designing it out needs either a change to the shared root `scripts/deploy-hybrid.sh` (write the file under a name the runner's `*.sql` glob does not match, then `mv` it into place) or 092 placed and applied before the copy, which moves its apply ahead of `COPY_AT` and touches R7 and LK-CA2. Either is the owner's decision. Instead: one of those two |
 
 **Known limits, recorded, not built:**
@@ -3193,6 +3302,17 @@ F3 readings and the rollback's one write.
   step the owner authorises, never this script. §T.7's off commands before a rollback or a put-back are what avoid it.
 - **Jobs ME-CA1 and ME-CA2 do not fully judge.** ME-CA2 fails only on an (L, −1) a later cycle has passed. A caught
   `Throwable` leaves `duration_ms` at 0 or more on every job, and stays unjudged wherever `plugin.log` is silent (§W.7).
+  **29 more master entries load a file 5.18.107 changes and are not judged after the copy:** `notify_watchdog`,
+  `starlink_mail`, `inbound_mail`, `wa_sync`, `crm_sync`, `quote_wa`, `kyc_crm_sync`, `pay_catchup`, `splynx_sync`,
+  `wa_webhook_guard`, `photo_retry`, `inv_notify`, `overdue_email`, `gdrive_backup`, `lte_usage`, `lte_cron`,
+  `bidal_summary`, `staff_jobs`, `cash_carry_remind`, `cashbook_summary`, `staff_ssp_report`, `cashbook_reconcile`,
+  `maintenance`, `fiber_sync`, `leads`, `lead_alerts`, `sl_block_retry`, `notify_retry` and `quote_daily_list`. Most
+  reach the delta only through `lib/NotificationService.php` (F-8) or `lib/EvolutionApiService.php`; `inbound_mail`
+  and `wa_sync` also load `lib/DishNetAiBrain.php`, and `quote_wa` `lib/QuoteTaxLine.php` (O7). The list was computed
+  from each script's require closure at the build commit (`8f0d53d`) against the delta from `bf29cbd`, conditional
+  requires counted as loads. Requires through a variable holding the whole path (`require_once $f` and the like, for
+  example `lib/NotificationService.php:1949` and `lib/EvolutionApiService.php:86`) are left out, so the list is exact
+  for the static requires only.
 - **The poll's conclusiveness and the heartbeat are not measured** (§T.6). The margin of 60 s is chosen, not derived.
 - **A worker meeting an old class in memory and a new file on disk** is mapped by signature only, not exercised for
   every combination (§T.6).
@@ -3213,6 +3333,9 @@ F3 readings and the rollback's one write.
     - a first deploy: 092 applied on the trial copy (ok, 7 statements, 5 of 5, the objects), with NA-G1's three
       probes;
     - neg092 with `reset=0` on a first deploy, and with `reset=1` on each redeploy below (partial, `CHECK`, no row);
+    - **the pairing rule fires:** a fixture plants `wa_no_ai` with no 092 ledger row (said so). MG-G1 reads 092 absent,
+      neg092 `reset=1`, and QF-G2 reads NO-GO naming the pairing, with nothing changed. A weakened copy that accepts any
+      pairing, and one that drops the pairing check, are each caught;
     - a book holding a partial 092, planted by a fixture writer and said so: NO-GO, nothing changed;
     - 092 present with other bytes: NO-GO;
     - a redeploy with 092 whole: GO, none pending.
@@ -3228,17 +3351,41 @@ F3 readings and the rollback's one write.
   - **Stage A's notes:** the settings text reading *v9* over v9's bytes, then *not v9*, never the text;
     `StaffJobsGate::applies` false: the capitals note, and no refusal.
   - **The deploy, PASSED:** MG-CA1, MG-CA2 and NA-CA1 after the first boot; R7 *applied*; LK-CA2 with exactly one row
-    more. **A process applies 092 between the extraction and `stamp_copy`** (planted, said so): MG-CA1 still PASSES in
-    the deploy run and in a later `--after-only`. A weakened copy that keeps an `applied_at` ≥ `COPY_AT` bound must
-    FAIL there.
+    more; the state file holds `MG_G1=absent` and `MG_CA2_SEEN=1`.
+    - **A process applies 092 between the extraction and `stamp_copy`** (planted, said so). The plant hook then moves
+      the rehearsal's clock on by at least 2 s (`clk_to104`), so that 092's `applied_at` is strictly earlier than
+      `COPY_AT`; the case asserts that strict order before it judges anything. MG-CA1 still PASSES in the deploy run and
+      in a later `--after-only`. A weakened copy that keeps an `applied_at` ≥ `COPY_AT` bound must FAIL there.
+    - **The `QF_COPY_UNIX` note:** a fixture applies 092 to the live ledger after stage A's MG-G1 and before the DEPLOY
+      step's baseline (`QF_BASE`), said so. MG-CA1 PASS with the dated note *applied before this copy began*, R7
+      *applied*, LK-CA2 exact. In the `--redeploy` case below, the note reads *applied by an earlier deploy*.
   - **Failures after the copy:**
-    - `wa_no_ai` renamed in the sandbox after the boot: NA-CA1 FAIL; the summary leads with the consequence, and the
-      rollback command stands alone after the verdict;
-    - a 092 ledger row with another md5: MG-CA1 FAIL;
+    - `wa_no_ai` renamed in the sandbox after the boot: NA-CA1 FAIL; the summary leads with the AI-reply consequence in
+      capitals, and the rollback command stands alone after the verdict;
+    - a 092 ledger row with another md5 over a whole, readable table: MG-CA1 FAIL; NA-CA1 holds, and the summary leads
+      with the checksum and the redeploy consequence and does not claim that AI replies have stopped;
     - no first boot within 60 s: MG-CA1's wait times out, FAIL;
-    - a PARTIAL line planted in `migration.log`: MG-CA2 FAIL; a log naming 092 with no OK line: FAIL;
-    - on a first deploy, the 092 line removed or the log made unwritable (said so): NOT ESTABLISHED in capitals, with
-      a weakened copy that turns it into a note caught; on a redeploy, no 092 line: the note.
+    - a PARTIAL line for 092 planted in `migration.log`: MG-CA2 FAIL, in the deploy run and in `--after-only`.
+  - **MG-CA2's missing line, and its WARNING** (each plant said so):
+    - **stage R, first deploy,** the 092 line removed or the log made unwritable: NOT ESTABLISHED in capitals, with a
+      weakened copy that turns it into a note caught; the state file holds `MG_CA2_SEEN=0`;
+    - **`--after-only` after that first deploy,** no trim marker: NOT ESTABLISHED in capitals, as in stage R, never a
+      FAIL and never a note. A weakened copy that reads MG-G1 from the `--after-only` run's own stage A, and so takes
+      the redeploy note, is caught;
+    - **`--after-only` after a first deploy whose stage R read the OK line, the log then trimmed:** the book carries an
+      applied file whose checksum differs (071's state), and enough boots follow for the runner to halve the log and
+      drop 092's line. It must read the note naming 071's per-boot WARNING. A weakened copy that ignores both
+      `MG_CA2_SEEN` and the trim marker, and so prints NOT ESTABLISHED, is caught; the control, with no trim marker and
+      no stage-R sighting, still prints NOT ESTABLISHED;
+    - **`--after-only` with a state file lacking `MG_G1`** (an older state file): NOT ESTABLISHED naming the missing
+      record, never the redeploy note;
+    - **a redeploy with a planted 092 checksum WARNING line and no OK line:** the note, and the run PASSED. A weakened
+      copy that counts the WARNING as a FAIL is caught;
+    - **the same planted line on a first deploy:** with the ledger whole, NOT ESTABLISHED (the missing OK line), never a
+      PASS; with the ledger's md5 other as well, MG-CA1 FAIL;
+    - **a redeploy where 092's installed bytes are altered after the copy, beside the planted WARNING:** R1 FAIL, so the
+      note masks nothing. A weakened copy that keys the note on MG-CA1 alone, without R1, is caught by this case;
+    - **a redeploy with no 092 line:** the note.
   - **ME-CA1 (W.7):**
     - the deploy run: NOT YET, as a note;
     - `--after-only` after the four jobs ran: PASS, with the *not judged (plugin.log: …)* clause. The sandbox's master
@@ -3250,8 +3397,9 @@ F3 readings and the rollback's one write.
     - a re-dispatch between two reads: NOT YET, *missed*;
     - an unreadable schedule: the capitals note;
     - the NOT YET summary state, exit 3, and the next-run time.
-  - **ME-CA2:** an (L, −1) on one of its entries followed by a later cycle: FAIL; an (L, −1) with no later entry: a
-    note.
+  - **ME-CA2:** an (L, −1) on one of its seven entries followed by a later cycle: FAIL; an (L, −1) with no later entry:
+    a note; an (L, −1) on an entry outside the seven (`notify_retry`, said so) followed by a later cycle: no ME-CA2
+    line, as the known limit says.
   - **The rollback:**
     - `rb_pre107` with the switch off and no marks: two readings 125 s apart, then the question;
     - with the switch on: the capitals notice, the two commands each alone, the redeploy sentence, and the prompt
@@ -3260,7 +3408,9 @@ F3 readings and the rollback's one write.
       `rb107`'s drain note lists that mark's ids; a later `--check` is an NS-G1 NO-GO naming the key and its places,
       with nothing changed;
     - with the switch NOT READ (the pin made unavailable in `--rollback`): *SWITCH NOT READ*, both commands, the
-      prompt saying *NOT READ*; a weakened copy that drops the set command is caught;
+      prompt saying *NOT READ*; a weakened copy that drops the set command is caught. The same case asserts step 5:
+      its capitals note naming K and Q as not read, and `set_config --value 0` for each key, each alone with its own
+      log;
     - a book with no typed `ai.reply` in the last day: INDETERMINATE, the capitals text and the drain command; that
       reading does not count towards the two zero readings;
     - **§M's assertion:** a planted mark whose named event is retrying is listed by the drain with the switch off, as
@@ -3272,13 +3422,26 @@ F3 readings and the rollback's one write.
     - V1, with the drain's note and no mark; and **a `--redeploy` after a rollback that took §K's way out, with a
       planted leftover mark, ending in V1**: the headline says *this run wrote no mark* with the stage-A count, never
       *no mark to drain*, and the stop message lists the ids;
+    - V1 with a post-rollback drain whose control is 0: its stop message reads INDETERMINATE, never *nothing to
+      drain*, and a weakened copy that words it so is caught;
     - `rb107` and `RB_NOTHING`;
     - **the put-back paragraph**, with the switch off and (a) 0, (b) 0: the two commands are there, the reading is a
-      dated note, and no text says *nothing to drain*; with the switch on: the same commands, the reading saying on.
+      dated note, and no text says *nothing to drain*; with the switch on: the same commands, the reading saying on;
+    - **the put-back after a rollback that did not verify, with 5.18.106's tools installed:** the tools reading names
+      them; the paragraph says the commands are refused and nothing is saved, names the known-limits repair, never says
+      *it leaves `'0'`*, and makes no claim that the commands are 5.18.107's;
+    - **the same with Q planted on (K off):** Q's `set_config --value 0` line alone with its own log, with the reason
+      *once 5.18.106's tools are installed, none can write these keys*, and no K line;
+    - **a put-back where 5.18.107's tools remain** (the rollback's checkout made to fail, said so): the commands printed
+      as working;
+    - **a stage-A mixed-tree refusal:** the print-time reading *NOT READ (the pin is not yet staged)*, K and Q *cannot
+      be read* with their lines, the wording from the tools reading, and no unbound-variable error under `set -u`.
   - **`--redeploy` after the rollback:** 092 already applied, so MG-G1 reads it present: GO, none pending, neg092
-    `reset=1`, R7 *same*, LK-CA2 exact. NS-G1 with the `'0'` that §K's switch-off left: GO.
-  - **The printed commands, run as printed:** owner steps 1 and 3, and the drain commands through the wrapper, each
-    alone, each with its own log. No summary prints a deploy and a rollback in one block.
+    `reset=1`, R7 *same*, LK-CA2 exact, and MG-CA1's note *applied by an earlier deploy*. NS-G1 with the `'0'` that §K's
+    switch-off left: GO.
+  - **The printed commands, run as printed:** owner steps 1 and 3, the drain commands through the wrapper, and the
+    put-back's and step 5's `set_config --value 0` lines, each alone, each with its own log. No summary prints a deploy
+    and a rollback in one block.
 
 - **K1–K6's weakened copies are the derivation's**, run on every derivation. The rehearsal does not repeat them, and
   says so.
@@ -3297,7 +3460,7 @@ F3 readings and the rollback's one write.
 
 **Review 1 (26 Nov)**, of §T as first written. Two read-only lenses: A, correctness against the code and 5.18.106's
 script; B, completeness and safety against §M, §K, §W.7, §W.8, §X.5 and the project's rules. Every finding then went to
-a separate checker that tried to refute it, refuted when uncertain. 18 findings: 10 confirmed, 7 partly confirmed,
+a separate checker that tried to refute it, refuted when uncertain. 18 findings: 8 confirmed, 9 partly confirmed,
 1 refuted. Every finding that held is taken; where the checker corrected the fix, its correction is what was taken.
 
 | Finding | Verdict | Taken in |
@@ -3305,7 +3468,7 @@ a separate checker that tried to refute it, refuted when uncertain. 18 findings:
 | A1, B1 — MG-CA1 bounded `applied_at` by `COPY_AT`, but 092 can be applied during the copy, before `COPY_AT`: a correct first deploy would read FAIL, and every later `--after-only` with it | C, C | §T.3 (the copy window; no bound; a note against `QF_COPY_UNIX`), §T.11 (a boot during the copy, and its weakened copy) |
 | A2 — neg092 had no reset branch, so it failed on every redeploy | C | §T.3 item 4 (S106's `neg` reset; `reset` paired with MG-G1), §T.11 |
 | A3 — NS-G1 could not be built "with no new reader": the `lk` mode prints no values | C | §T.4 (a per-place verdict in PHP, its in-memory positive control, the pin's readers as notes), §T.11 |
-| A4 — K1's new clause would refuse the correctly derived script, which must name the key and parse the drain | P | §T.8 (two clauses guarding the act: no write of the switch, the drain only on a copy) |
+| A4 — K1's new clause would refuse the correctly derived script, which must name the key and parse the drain | P | §T.8 (two clauses guarding the act: no write of the switch, the drain only on a copy); the correction's display-variable sentence was left out at first, and review 2 (A4) took it |
 | A5 — a sixth probe event joined to `EP_PHP`'s one run would change all three signatures | C | §T.2 (a probe run of its own, with its own constants) |
 | B2 — a rollback with W.1 on left the redeploy block unsaid, and the prompt fixed at *off* | P | §T.7 step 4 and the prompt, TD7, *What stays*, §T.11 (not a refusal: the checker's correction) |
 | B3 — NS-G1's only remedy was an unlogged edit by hand | P | §T.4 (the message), §T.7 step 5 and the put-back (5.18.107's own off commands first), §T.10 known limits (the repair, as the owner's authorised step) |
@@ -3319,3 +3482,23 @@ a separate checker that tried to refute it, refuted when uncertain. 18 findings:
 | B11 — `no_ai_alert_cooldown_hours` was reported but never read | C | §T.4 (the `lk` list) |
 | B12 — V1's *no mark to drain* could be false on a redeploy | P | §T.5 (the count kept for V1), §T.7 (V1's headline and stop message), §T.11 |
 | B13 — several new branches were never made to fire in the rehearsal | P | §T.11 (one case per branch; the unread switch after its branch was defined) |
+
+**Review 2 (26 Nov)**, of §T after review 1 (`32ca551`): the same two lenses and the same refuting checker, which here
+also re-checked every fix review 1 had taken. 19 findings: 10 confirmed, 9 partly confirmed, none refuted. Each is
+taken; where the checker corrected the fix, its correction is what was taken.
+
+| Finding | Verdict | Taken in |
+|---|---|---|
+| B7, N3 — MG-CA2's missing-line rule rested on "halving cannot remove a line that recent", false on this book: 071's checksum WARNING is logged on every boot, so a later `--after-only` would read a capitals NOT ESTABLISHED with a false cause, and TD11's alternative would roll back a correct deploy | P, C | §T.3 item 6 (stage R kept; `MG_CA2_SEEN`; the trim marker; no timestamp comparison, the marker's zone being the writer's), TD11, §T.11 |
+| N4 — `--after-only` had no MG-G1 reading to key on; the `applied_at` note was worded for a first deploy only | P | §T.3 item 6 (`MG_G1` in the state file; a missing record is NOT ESTABLISHED; the note worded by case), §T.11 |
+| B9, N5 — a redeploy's tar straddle logs a 092 checksum WARNING, which MG-CA2's "no OK line" rule read as a FAIL, and so the rollback | P, C | §T.3 item 6 (only OK and PARTIAL judged; on a redeploy the WARNING is a note while MG-CA1, NA-CA1 and R1 hold), §T.6, TD11, §T.11. B9's "the same line on a first deploy: still FAIL" became NOT ESTABLISHED (the missing OK line) under N5's correction, since a WARNING is never counted; a real one comes with another ledger checksum, which MG-CA1 fails |
+| N6 — the straddle's consequences were overstated: a cut read can log OK, and a read past the CREATE TABLE leaves the list readable, so "no AI reply" was not always true | C | §T.6 (split at about byte 1,982), §T.3 item 7 (the summary's lead conditional on NA-CA1), MG-G1's Why, §T.11 |
+| B10 — the v9-restore was "handed over with" the v10 save, with no block of its own and no typed word | P | §K step 2 (its own block, *only if needed*, a typed `RESTORE`), §T.9 step 2; §T.7 step 6 unchanged |
+| B8, N2 — ME-CA2's criterion covered every entry loading a changed file, and its list named seven | C, C | §T.6 (the seven by name, with the reason not to widen: a FAIL means the rollback), known limits (the 29 others, computed) |
+| B4, N1 — the put-back printed 5.18.107's off commands where 5.18.106's tools, which refuse all three, may be installed | C, P | §T.7 (a print-time reading of four files' sha256, wording per site, `P3B_PIN` and `P3B_WHY` defined under `set -u`), §T.4's NS-G1 note, TD7, §T.11 |
+| A4 — §T never defined display text, and review 1's correction naming K5's display variables had been left out | P | §T.8 (one definition and one list for K1 and K5; four weakened copies), §T.13's A4 row |
+| A2 — neg092 named "the third copy", Part V's; its pairing NO-GO never fired | P | §T.3 item 4 (a fourth copy; the match tied to 092's own line), §T.11 (the pairing case and its weakened copies) |
+| A5 — the alert's own probe run had no mechanism | P | §T.2 (`EP_PHP`'s fourth argument, `ep_run`'s third parameter, priority 3 as the webhook raises it, two named constants, text assertions only; S106:1963 cited) |
+| B13, N8 — new branches without a case: the `applied_at` note, the pairing, step 5's *cannot be read*, the put-back's K/Q lines and refusal wording, V1's INDETERMINATE, MG-CA2 in `--after-only` | P, C | §T.11 |
+| N7 — the straddle case's weakened copy could pass when the plant and `stamp_copy` fall in the same second | C | §T.11 (the clock moved on 2 s; the strict order asserted first) |
+| T.13, N9 — the record's counts read 10/7/1; its table gives 8/9/1 | C, C | §T.13 |
