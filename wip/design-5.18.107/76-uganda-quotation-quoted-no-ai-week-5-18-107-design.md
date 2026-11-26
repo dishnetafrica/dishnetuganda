@@ -1458,6 +1458,7 @@ fake):
 | **F-8** | `sendImage` sends as `CLASS_PROACTIVE`, so a STOP silently drops the assistant's photo and flyer, and Inbox images, while the text reply goes out | `lib/EvolutionApiService.php` (`sendImage`, `sendMedia`); `workers/AiReplyWorker.php:1208`, `:1326`; `lib/NotificationService.php` (`sendImage`) | **fixed**, Uganda. `sendImage` takes a `$class` parameter (default `CLASS_PROACTIVE`). The worker passes `CLASS_REPLY` for its photo and flyer, as its document send already does. `NotificationService::sendImage` gains the opt-out check `sendDocument` has (`CLASS_TRANSACTIONAL`), and only then sends as `CLASS_STAFF`. Never `CLASS_STAFF` without that check, or an `all` opt-out would be bypassed. |
 | **F-9** | The Help Guide has been admin-only since 3 Sep: it shares the `knowledge_base` key, and so the `*admin` entry, with the AI Knowledge Base screen. Its links are drawn for every user, and a non-admin gets an empty page | `public.php:2813`, `:2907`, `:2976-2995`; `includes/navigation.php:653-655` | recorded (§W.5, W-O4). Shared with South Sudan |
 | **F-10** | `$_tabPerms` lists `api_docs` twice, `*admin` then `settings`, so `settings` applies | `public.php:2912`, `:2920` | recorded (§W.5, W-O4) |
+| **F-11** | The assistant's account block never has an invoice number. `normaliseInvoice` reads only `invoiceNumber`, and this uCRM (API v2.1) sends `number` without it (§N.1, all 5 latest invoices). So the prompt says "Latest invoice: no number". `webhook.php` already reads `number` first. | `lib/DishNetTools.php:610`; `lib/DishNetAiBrain.php:1713`; `webhook.php:1001` | found by §N.1; whether 5.18.107 fixes it is O17 |
 
 ---
 
@@ -2075,6 +2076,32 @@ parts need are in docs/77 §N.
 - **Transcription (W.4):** step 7's check result, and the `provider_model` of the last transcribed voice notes. Counts and
   model names only.
 - **Optional (W.8):** the real `ucrm` container's PATH (`docker exec ucrm printenv PATH`).
+
+### N.1 Read on the live install, 26 Nov 2026
+
+Read at 12:18 UTC by `scripts/values-5.18.107.sh` (reader sha256 `0a25ad28…`, commit `fd63167`), read-only, as the
+book's owner. The install was 5.18.106, and all 299 files of `lib/`, `profiles/` and the shop catalogue were 5.18.106's
+bytes. The book was read beside a running plugin process, so nothing was created and `total_changes()` read 0. uCRM was
+asked GET only: invoices, organizations, service plans and products.
+
+A first run at 09:47 UTC found the book idle and did not open it. The reader now waits up to 70 seconds for a plugin
+process to hold the book; the second run did not need to wait.
+
+| §N item | Read | What follows |
+|---|---|---|
+| **AI settings** | `ai_hardware_expert`, `ai_sales_on_all_numbers`, `ai_qualification` and `web_chat_enabled` on, the same in the files and the row. `bot_instructions_mode` absent everywhere, so append. The custom text is 5,617 bytes, sha256 `fca936af7760`, which is v9, the same in the files and the row. Override is off on WhatsApp and on the website chat. No flyer: no file, no URL, no `flyer_available`. | §K step 2's precondition holds. Part N's gate 1 reads append. The flyer offer stays absent. |
+| **Operator facts** | All set except `ai_fact_business_cap` (the code's default note). The files and the row agree. `ai_fact_kit_taxes` holds the operator's own wording. `ai_fact_payment` has 1 phone-shaped run; `ai_fact_office` has 2. `quote_company_phone` is one +256 number, 12 digits. | §D.3 holds: the kit note's code default never reaches this install. |
+| **OFFICE_LOCATION** | Approved, kind `fact`, updated 23 Nov 07:23 UTC. `answer` 383 characters, 1 phone-shaped run. `wa_answer` 145 characters, 1 phone-shaped run, under the 300-character chat cut. No near-duplicate key. | W.3 has its row and its `wa_answer`. |
+| **Quotations** | `quote_tracking_enabled` and `quote_chase_enabled` on, in the files and the row. `wa_send_ledger` on. Zone `Africa/Kampala`. `QuoteTracker::on` and `QuoteChase::on` both true. | The chase is live. |
+| **Invoice number** | The 5 latest invoices carry `number` (6 digits) and **no `invoiceNumber`** key; each carries a proforma key. uCRM's organizations expose no numbering setting. | **F-11** (§J): the assistant's account block never has an invoice number. The floor's skip for six-digit numbers stands as written. |
+| **Tenant** | Uganda is selected by `cashbook_base_currency` in the data folder's `kyc_config.json`, in the row and in the vault. The plugin's own `data/config.json` holds all three selectors as null, so `currency_code` falls through. `StaffJobsGate` reads true. Both profiles are readable by uid 1000: owner 1000:1000, mode 0600. | W.1's gate reads Uganda without the vault. A process of another uid could not read the profile and would read the gate false, which fails closed. |
+| **Hand-overs and alerts** | `ai_handover_message` set, 78 characters, no number. `alert_whatsapp` is a **+211 number**, 12 digits, the same in the files, the row and the watchdog's view. `alert_patience_minutes` unset, so 10. `wa_handover_copy_central` unset, so on. **`wa_human_cooldown_minutes` is 5**, not the code's 1,440. `wa_parked_max_minutes` unset, so 120. `no_ai_alert_cooldown_hours` absent. | Part K's alerts go where `AlertService` sends them today; O14 asks about the +211 number. W.1 and Part X read the cooldown as set. |
+| **Voice** | Rung `dry_run` on all 8 registered numbers: sales, support, account, and sales-001 to sales-005. Model `gpt-transcribe`, in the files and the row. Last 7 days: 5 transcripts and 5 successful calls, after 29 `fetch_only` notes from before step 7. | W-O5 waits on step 7's check, which read NOT_YET (5 of 10 calls) on 26 Nov 09:48 UTC. |
+| **Old auto-reply path** | `wa_bot_enabled` false in the row, absent in the files. `wa_auto_reply_enabled` absent. No webhook secret. No `wa_webhook_log.json`. In 30 days: 0 inbound messages stored by the old path, 0 replies, 0 `bot_replied_at`, 0 log events, 0 tickets. The sync job runs every minute and stores nothing (last batch 0, total 0). | Part X: nothing posts to `wa_webhook.php`; the old path is inert. |
+| **Catalogue** | 8 active service plans, 40 products, no duplicates. One row each: **Starlink Standard Kit** 3,200,000 (product 2); **Starlink Mini Kit** 2,549,000 (product 1); **Pivot Mount \| Standard 4 and 4 X, Enterprise** 377,000 (product 16); **Pivot Mount \| Mini** 377,000 (product 26); **Residential (up to 350 Mbps)** 329,000 a month (plan 3); **Starlink Residential Lite ( up to 100 Mbps)** 249,000 a month (plan 2); **Professional Installation** 150,000 (product 3). The active plans also include "ICT Consultancy Services" and "Monthly AI ShopBot Hosting & API Usage Charges". | §D.2's names are these exactly. The kits match `catalogue.json`'s match lists as they stand. O15 asks about the two plans that are not internet plans. |
+| **Installation** | The 5.18.102 `install` link: **none** (0 active records; `installLine()` refuses `unlinked`). The uCRM catalogue switch: **direct mode on**, under both the staff screens' gate and the worker's, with 1 `install` record and 2 `standard` records in force. | §D.2's installation source changes: O16. |
+| **Bursts** | Last 7 days: 1,769 typed `ai.reply` events in 593 conversations. 1,022 had a newer typed one within 15 minutes, in 284 conversations. By number: sales-003 432 of 742, sales-001 316 of 599, support 237 of 372, sales 30 of 41, sales-004 7 of 15. Done events reach back to 27 Oct. | W.1 matters: 58% of typed messages had a newer one within 15 minutes. The count takes every pair, answered or not; the merge acts only on pending ones. |
+| **Runtime** | PHP 8.1.34. SQLite 3.48.0, with its JSON functions. The container's PATH is `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` for both users. | The build targets PHP 8.1. W.8's fake docker uses that PATH. |
 
 ---
 
