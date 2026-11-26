@@ -415,7 +415,10 @@ flip() { env PATH="$SB/bin:$PATH" DN_DATA_DIR="$DATA" bash "$SB/bin/docker" exec
 # ── The fake docker — strict: exec (-d, -i, -u, -e), cp into the container, logs, ps -aq, and inspect with exactly the
 # formats the scripts use; anything else fails loudly, so a new call cannot pass silently. Its containers are a table:
 # id|name|mounts (Destination=Source;…)|StartedAt|RestartCount. Once the plugin's files are the server's owner's
-# ($SB/.server-owner), -u is honoured with setpriv, as the container's own user would be.
+# ($SB/.server-owner), -u is honoured with setpriv, as the container's own user would be, and with the container's PATH
+# (5.18.107, root docs/76 §W.8): setpriv keeps the caller's environment, and a caller whose PATH starts with a command
+# uid 1000 cannot run (this session's own rm wrapper, 22 Nov) made every -u delete exit 2. Execs without -u keep the
+# caller's PATH. The real ucrm container's PATH is not recorded; the Debian default is assumed.
 printf '%s\n' "ucrm|ucrm|/data=$MOUNT|2026-10-11T13:06:30.123456789Z|0" \
   "c0ffee000001|unms|/data=$SB/other/unms-data;/config=$SB/other/unms-config|2026-10-01T08:00:00.000000001Z|2" \
   "c0ffee000002|unms-postgres|/var/lib/postgresql/data=$SB/other/pg|2026-10-01T08:00:00.000000001Z|0" > "$SB/containers"
@@ -469,7 +472,7 @@ row "\$1" >/dev/null || { echo "Error: No such container: \$1" >&2; exit 1; }
 shift
 args=(); for a in "\$@"; do case "\$a" in /data/*) args+=("$MOUNT/\${a#/data/}") ;; /usr/local/etc|/usr/local/etc/*) args+=("$SB/etc\${a#/usr/local/etc}") ;; *) args+=("\$a") ;; esac; done
 pre=()
-if [ -n "\$user" ] && [ -f "$SB/.server-owner" ]; then pre=(setpriv --reuid "\${user%%:*}" --regid "\${user#*:}" --clear-groups --); fi
+if [ -n "\$user" ] && [ -f "$SB/.server-owner" ]; then pre=(setpriv --reuid "\${user%%:*}" --regid "\${user#*:}" --clear-groups -- env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin); fi
 if [ -n "\$detach" ]; then
   [ -n "\${FAKE_EXEC_D_FAIL:-}" ] && { echo "fake docker: exec -d refused (rehearsal control)" >&2; exit 1; }
   "\${pre[@]}" "\${args[@]}" </dev/null >/dev/null 2>&1 & exit 0
@@ -943,6 +946,23 @@ check "$(stat -c %u:%g "$SRC")$(stat -c %u:%g "$DATA/plugin.sqlite3")$(standin_p
   "control: the stray store and the live database are the server's owner's (1000:1000), and the stand-in still serves the installed plugin"
 check "$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec -u 1000:1000 ucrm id -u)$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec ucrm id -u)" "10000" \
   "control: the fake docker runs -u 1000:1000 as that user, and no -u as root — as the container would"
+# 5.18.107 (root docs/76 §W.8): -u runs with the container's PATH, never the caller's; an exec without -u keeps the caller's.
+W8_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"; W8_P1="$SB/u/w8-probe-1"; W8_P2="$SB/u/w8-probe-2"
+: > "$W8_P1"; : > "$W8_P2"; chown 1000:1000 "$W8_P1" "$W8_P2"
+check "$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec -u 1000:1000 ucrm printenv PATH)|$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec -u 1000:1000 ucrm sh -c 'command -v rm')|$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec -u 1000:1000 ucrm rm "$W8_P1" >/dev/null 2>&1; echo $?)|$([ -e "$W8_P1" ] && echo kept || echo gone)|$( [ "$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" exec ucrm printenv PATH)" = "$SB/bin:$PATH" ] && echo caller)" \
+      "$W8_PATH|/usr/bin/rm|0|gone|caller" \
+  "control: -u runs with the container's PATH (rm is /usr/bin/rm, and a file of the server's owner is deleted as that user, exit 0); without -u the caller's PATH (root docs/76 §W.8)"
+# The control on the control: the same docker without the container's PATH (W.8 undone) runs -u with the caller's PATH; where
+# the caller's rm is one uid 1000 cannot run (this session's wrapper), the delete fails and the file stays — the 22 Nov failure.
+W8_OLD="$SB/w8-docker-old"; W8_N="$(grep -cF -- "--clear-groups -- env PATH=$W8_PATH); fi" "$SB/bin/docker")"
+sed "s#--clear-groups -- env PATH=$W8_PATH); fi#--clear-groups --); fi#" "$SB/bin/docker" > "$W8_OLD"
+check "$W8_N|$(grep -cF -- "env PATH=$W8_PATH" "$W8_OLD")|$(env PATH="$SB/bin:$PATH" bash "$W8_OLD" exec -u 1000:1000 ucrm printenv PATH)" "1|0|$SB/bin:$PATH" \
+  "control on the control: the docker with W.8 undone (one line changed) runs -u with the caller's PATH"
+if ! setpriv --reuid 1000 --regid 1000 --clear-groups -- test -x "$(command -v rm)"; then
+  check "$(env PATH="$SB/bin:$PATH" bash "$W8_OLD" exec -u 1000:1000 ucrm rm "$W8_P2" >/dev/null 2>&1; echo $?)|$([ -e "$W8_P2" ] && echo kept || echo gone)" "2|kept" \
+    "control on the control: with W.8 undone, the caller's rm ($(command -v rm)) is first on that PATH and uid 1000 cannot run it — the -u delete exits 2 and the file stays (22 Nov)"
+else echo "  (W.8's control on the control not run: the caller's rm, $(command -v rm), is one uid 1000 can run, so no wrapper shadows it)"; fi
+rm -f "$W8_OLD" "$W8_P1" "$W8_P2"
 check "$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" inspect ucrm --format '{{.Unknown}}' >/dev/null 2>&1; echo $?)$(env PATH="$SB/bin:$PATH" bash "$SB/bin/docker" ps -a >/dev/null 2>&1; echo $?)" "9999" \
   "control: the fake docker refuses a format or an option the scripts do not use — a new call cannot pass silently"
 
