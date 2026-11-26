@@ -3,9 +3,10 @@
 # values-5.18.107.sh — READ-ONLY: the production values 5.18.107's build needs (root docs/76 §N), 25 Nov 2026.
 #
 # It changes nothing — no table, no row, no setting, no file in the plugin or its data folder, nothing in uCRM or
-# Evolution. One window remains, and is reported when it happens: a plugin process closing the book at the instant the
-# reader opens it, when the read re-creates SQLite's own -wal/-shm beside it (exit 3; the next plugin connection uses
-# them). It prints COUNTS, NAMES OF PRODUCTS AND PRICES, AND SHAPES ONLY: no phone number, no person's name, no message
+# Evolution. The plugin's jobs hold the book only for moments, so the reader waits up to 70 s for one to hold it and
+# reads beside it, creating nothing; if none comes, or one closes it at the instant it is opened, the open creates
+# SQLite's own empty -wal/-shm beside the book, as every plugin process does, and it says so (exit 3; the next plugin
+# connection uses and removes them). It prints COUNTS, NAMES OF PRODUCTS AND PRICES, AND SHAPES ONLY: no phone number, no person's name, no message
 # text, no key or token; a text setting is "set, its size, digit counts" (a hash prefix only for the long settings text);
 # a number only its form; an invoice number only its shape (<6d>). As root on the host:
 #
@@ -16,7 +17,7 @@
 #      each reported as such;
 #   2. it checks scripts/values-5.18.107.php beside it against the sha256 this file pins, and feeds it on stdin to php
 #      inside the container, as the book's owner — nothing is copied into the container;
-#   3. the reader (see its header) opens the book read-only (only when its -wal and -shm already exist), asks uCRM with
+#   3. the reader (see its header) opens the book read-only (waiting up to 70 s for a plugin process to hold it), asks uCRM with
 #      GET only, and prints the values with every run of nine or more digits withheld; this file masks again;
 #   4. it prints the container's PATH (W.8: the harness fix needs it), then where the log is.
 #
@@ -35,7 +36,7 @@ IN_CONTAINER="${IN_CONTAINER:-/data/ucrm/data/plugins/$PLUGIN}"
 PLUGINS_IN="$(dirname "$IN_CONTAINER")"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 READER="$HERE/values-5.18.107.php"
-READER_SHA256="5daac93a424bf90e4c2a357662607c5f4a62cdc16ea039ad36a02e1dfab6e80c"
+READER_SHA256="0a25ad287a4dfa41c73fad8e4bcbb07dc706bb1d39a75561cb2ee28659eb8cb1"
 LIVE_COMMIT_FULL="bf29cbd7171639f93e674ab174a6d09948b68932"   # 5.18.106 (release), live since 22 Nov 05:48Z
 # every file of lib/, both profiles and the shop catalogue at 5.18.106 (git ls-tree; 299) — not only the 20 the reader names:
 # those load others at the top level, and the code they call loads more
@@ -392,8 +393,9 @@ echo "  installed       5.18.106 (commit $REC); all $N files of lib/, profiles/ 
 echo "  reader          scripts/values-5.18.107.php (sha256 ${READER_SHA256:0:12}…), fed on stdin; nothing is copied into the container"
 
 ROUT="$(mktemp)" || stop "a file of this run's could not be made"
+WAIT_S="${DNB_VALUES_WAIT:-70}"; case "$WAIT_S" in ''|*[!0-9]*) WAIT_S=70 ;; esac   # seconds the reader waits for a plugin process
 trap 'rm -f "$ROUT"' EXIT
-docker exec -i -u "$OWNER" "$CONTAINER" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- "$IN_CONTAINER" "$PDD" < "$READER" > "$ROUT" 2>&1
+docker exec -i -u "$OWNER" "$CONTAINER" php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -- "$IN_CONTAINER" "$PDD" "$WAIT_S" < "$READER" > "$ROUT" 2>&1
 RC=$?
 mask < "$ROUT"
 # the reader's own last line ("READ-ONLY — …") says whether it ran to its end; an exit code of 1 alone could be docker's
@@ -405,7 +407,7 @@ echo "── W.8: the container's PATH (for the rehearsal's fake docker) ──�
 echo "  as the container's default user: $(docker exec "$CONTAINER" printenv PATH 2>/dev/null </dev/null | mask)"
 echo "  as the book's owner:             $(docker exec -u "$OWNER" "$CONTAINER" printenv PATH 2>/dev/null </dev/null | mask)"
 echo
-echo "  exit $RC (0 done, nothing changed; 1 the reading stopped part-way; 2 refused before reading; 3 done, but SQLite's own -wal/-shm were re-created as the book was opened; 4 the book reported changes — UNEXPECTED)"
+echo "  exit $RC (0 done, nothing changed; 1 the reading stopped part-way; 2 refused before reading; 3 done, but SQLite's own empty -wal/-shm were created beside the book by this read (it was idle, or closed as it was opened); 4 the book reported changes — UNEXPECTED)"
 case "$FINISHED:$RC" in
   yes:0) echo "  READ-ONLY — nothing was changed" ;;
   yes:1|yes:3|yes:4) echo "  the reader's last line above says what happened; send the log as it is" ;;

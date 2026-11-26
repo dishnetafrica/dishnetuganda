@@ -7,8 +7,10 @@
  * It changes nothing:
  *   - the settings through PluginConfig::read() (never load(), which refreshes the vault), the vault only for the
  *     three tenant keys' presence, and the book's kyc_config row by name — never a whole file printed;
- *   - the book opened SQLITE_OPEN_READONLY with query_only on, inside one read transaction that is rolled back, and
- *     only when its -wal and -shm already exist (so the open creates nothing); total_changes() is printed and must be 0.
+ *   - the book opened SQLITE_OPEN_READONLY with query_only on, inside one read transaction that is rolled back, while
+ *     a plugin process holds it (its -wal and -shm exist, so the open creates nothing): the reader waits up to 70 s for
+ *     one, the jobs holding it only for moments; total_changes() is printed and must be 0. If none comes, it opens the
+ *     book anyway and says so: the open creates SQLite's own empty -wal/-shm, as every plugin process does (exit 3).
  *     One window remains: a plugin process closing the book between that check and the first read deletes both files,
  *     and the read re-creates them (SQLite's own; the next plugin connection uses them). The reader holds the checked
  *     -wal open, sees it unlinked, says so and ends with exit 3 — never "nothing was changed";
@@ -30,6 +32,8 @@ ini_set('log_errors', '0');
 
 $P = rtrim((string)($argv[1] ?? ''), '/');
 $D = rtrim((string)($argv[2] ?? ''), '/');
+// how long to wait for a plugin process to hold the book open (seconds; the wrapper passes 70, a master pass a minute)
+$WAIT = (isset($argv[3]) && ctype_digit((string)$argv[3])) ? min(300, (int)$argv[3]) : 70;
 
 $n9 = 0;
 $say = function (string $s = '') use (&$n9): void {
@@ -159,17 +163,24 @@ final class GetOnlyCrm extends CrmApiClient
 
 $db = null;
 $walH = null;
-$stopped = false; $changed = false; $recreated = false;
+$stopped = false; $changed = false; $recreated = false; $created = false; $waited = 0;
 try {
     // ── the settings: the workers' view, and the book's kyc_config row (the screens' and the old path's view) ──────────
     $cfg = PluginConfig::read($P, $D);
 
     $book = $D . '/plugin.sqlite3';
     $bookWhy = '';
+    $idleOpen = false;
     if (!is_file($book)) $bookWhy = 'no plugin.sqlite3 in the data folder';
-    elseif (!is_file($book . '-wal') || !is_file($book . '-shm')) $bookWhy = 'its -wal/-shm files are absent (no plugin process has it open), so it was not opened: opening it would create them';
-    elseif (($walH = @fopen($book . '-wal', 'rb')) === false) $bookWhy = 'its -wal file went away as it was checked (a plugin process closed the book), so it was not opened';
     else {
+        // The plugin's jobs hold the book only for moments. Wait for one to hold it (its -wal and -shm exist), so this
+        // read creates nothing; if none does in $WAIT seconds, open it anyway: the open then creates SQLite's own empty
+        // -wal/-shm beside it, as every plugin process does, and the next plugin connection uses and removes them.
+        $t0 = microtime(true);
+        while (!(is_file($book . '-wal') && is_file($book . '-shm')) && microtime(true) - $t0 < $WAIT) { usleep(200000); clearstatcache(); }
+        $waited = (int)round(microtime(true) - $t0);
+        if (!(is_file($book . '-wal') && is_file($book . '-shm'))) $idleOpen = true;
+        elseif (($walH = @fopen($book . '-wal', 'rb')) === false) { $walH = null; $idleOpen = true; }   // it went as it was checked
         $db = new PDO('sqlite:' . $book, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 10,
             PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY]);
         $db->exec('PRAGMA query_only = ON');
@@ -189,6 +200,7 @@ try {
     $row = [];
     $hasRow = $tbl('kyc_config');   // the first read: SQLite opens the WAL here
     if ($walH !== null) { $st = @fstat($walH); $recreated = is_array($st) && (int)$st['nlink'] === 0; }
+    if ($idleOpen) { clearstatcache(); $created = is_file($book . '-wal') || is_file($book . '-shm'); }
     if ($db !== null && $hasRow) {
         $data = $db->query('SELECT data FROM kyc_config WHERE id = 0 LIMIT 1')->fetchColumn();
         $row = is_string($data) ? (json_decode($data, true) ?: []) : [];
@@ -205,7 +217,9 @@ try {
 
     $say('PHP ' . PHP_VERSION . ' · SQLite ' . ($db !== null ? (string)$db->query('SELECT sqlite_version()')->fetchColumn() : '(book not opened)')
         . ' · JSON functions: ' . $yn($json1) . ' · reading as uid ' . (function_exists('posix_geteuid') ? posix_geteuid() : '?'));
-    $say('the book: ' . ($db !== null ? 'opened read-only (query_only, one read transaction)' : 'NOT READ — ' . $bookWhy));
+    $say('the book: ' . ($db !== null ? 'opened read-only (query_only, one read transaction), '
+        . ($idleOpen ? 'after waiting ' . $waited . ' s with no plugin process holding it' : 'while a plugin process held it (waited ' . $waited . ' s)') : 'NOT READ — ' . $bookWhy));
+    if ($created) $say('  NOTE: no plugin process held the book in the ' . $WAIT . ' s waited, so this read created SQLite\'s own empty -wal and -shm files beside it (the book owner\'s, as every plugin process makes them; the next plugin connection uses and removes them); nothing else');
     if ($recreated) $say('  NOTE: a plugin process closed the book at the moment it was opened, so this read re-created SQLite\'s own -wal and -shm files beside it (the next plugin connection uses them); nothing else');
     $say('the kyc_config row: ' . ($db === null ? 'not read' : ($row ? count($row) . ' keys' : 'absent or empty')));
     $say('"worker" below is PluginConfig::read (the three settings files, then the vault): what the WhatsApp workers read. "row" is the book\'s kyc_config row: what the staff screens (Send Quotation, the KYC form, the uCRM catalogue screen), master\'s job flags and the old auto-reply path read. The website chat and the alert watchdog read the worker view with every gap (absent, "" or null) filled from the row.');
@@ -663,7 +677,7 @@ try {
         $db->exec('ROLLBACK'); $db = null;
         $say('the book: changes made ' . $tc . ($tc === 0 ? ' (none)' : ' — UNEXPECTED'));
         $changed = $tc !== 0;
-        if ($recreated) $say('the book: its -wal/-shm were re-created by this read (see the NOTE above)');
+        if ($recreated || $created) $say('the book: its -wal/-shm were ' . ($created ? 'created' : 're-created') . ' by this read (see the NOTE above)');
     }
     $say('uCRM asked (GET only): ' . (GetOnlyCrm::$asked ? implode(', ', array_map(function ($p) { return preg_replace('/\?.*$/', '', $p) . ' ' . (GetOnlyCrm::$codes[$p] ?? '?'); }, GetOnlyCrm::$asked)) : 'nothing') . '; anything else refused: ' . GetOnlyCrm::$refused);
 } catch (Throwable $e) {
@@ -679,7 +693,8 @@ $causes = [];
 if ($stopped) $causes[] = 'the reading stopped part-way (send the log as it is)';
 if ($changed) $causes[] = 'the book reported changes — UNEXPECTED';
 if ($recreated) $causes[] = 'SQLite\'s own -wal/-shm were re-created as the book was opened (see the NOTE)';
-$rc = $stopped ? 1 : ($changed ? 4 : ($recreated ? 3 : 0));
+if ($created) $causes[] = 'SQLite\'s own empty -wal/-shm were created by this read, the book being idle (see the NOTE)';
+$rc = $stopped ? 1 : ($changed ? 4 : (($recreated || $created) ? 3 : 0));
 $say($causes === [] ? 'READ-ONLY — nothing was changed'
-    : 'READ-ONLY — ' . implode('; ', $causes) . (($changed || $recreated) ? '' : '; nothing was changed'));
+    : 'READ-ONLY — ' . implode('; ', $causes) . (($changed || $recreated || $created) ? '' : '; nothing was changed'));
 exit($rc);

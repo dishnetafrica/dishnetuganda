@@ -9,7 +9,8 @@
 #   S1 the run: every section's expected lines; privacy (no PLANT_* string, no phone digits, no key); read-only (every
 #      file of the data folder and the plugin unchanged, no file added, uCRM asked GET only on its four paths, no
 #      catalogue cache written); the log is mode 600 and names itself
-#   S2 the book idle (no process holds it): not opened, and no -wal/-shm left behind
+#   S2 the book idle and no plugin process comes: opened after the wait, the created -wal/-shm said so, exit 3
+#   S2b the book idle, a plugin process comes during the wait: read beside it, nothing created, exit 0
 #   S3 the installed plugin is not 5.18.106          S4 an installed file the reader names is not 5.18.106's bytes
 #   S4b a lib file the reader does not name differs   S4c a lib file the book's owner cannot read (not compared)
 #   S4d the container cannot hash (containerd's NotFound): nothing compared, said so
@@ -25,7 +26,7 @@
 #   S12 the race, then the reading stops: exit 1, both causes on the last line, never "nothing was changed"
 #   S13 the reading stops, through the wrapper   S14 docker fails the reader's exec: the wrapper does not claim it ran
 #   S4f a folder the book's owner cannot enter: its files "could not be read", never "not installed"
-# then weakened copies — each must be caught: of the reader (R1-R14, run directly) and of the wrapper (X1-X11).
+# then weakened copies — each must be caught: of the reader (R1-R15, run directly) and of the wrapper (X1-X11).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRCREPO="$(cd "$HERE/../../.." && pwd)"
@@ -83,11 +84,11 @@ chmod 755 "$SB/bin/docker"
 snap() { (cd "$SB/plugins" && find . -type f ! -name 'plugin.sqlite3-shm' -print0 | sort -z | xargs -0 sha256sum); }
 run_wrap() {  # $1 = the wrapper to run (it reads the reader beside it)
   local w="$1"; rm -f "$SB/logs/"*
-  OUT="$(PATH="$SB/bin:$PATH" IN_CONTAINER="$P" DNB_LOG_DIR="$SB/logs" bash "$w" 2>&1 </dev/null)"; RC=$?
+  OUT="$(PATH="$SB/bin:$PATH" IN_CONTAINER="$P" DNB_LOG_DIR="$SB/logs" DNB_VALUES_WAIT="${W_WAIT:-70}" bash "$w" 2>&1 </dev/null)"; RC=$?
   sleep 0.3; LOGF="$(ls "$SB/logs/"values-5.18.107-*.log 2>/dev/null | head -1)"; LOGT="$( [ -n "$LOGF" ] && cat "$LOGF")"
 }
 run_read() {  # $1 = a reader, run directly as the container's user (the weakened copies of the reader)
-  OUT="$(PATH="$SB/bin:$PATH" docker exec -i -u 1000:1000 ucrm php -d display_errors=stderr -d log_errors=0 -- "$P" "$D" < "$1" 2>&1)"; RC=$?
+  OUT="$(PATH="$SB/bin:$PATH" docker exec -i -u 1000:1000 ucrm php -d display_errors=stderr -d log_errors=0 -- "$P" "$D" "${W_WAIT:-70}" < "$1" 2>&1)"; RC=$?
 }
 leaks() {  # $1 = text: every planted string, phone digit run or key it holds
   local t="$1" leaked=""
@@ -191,15 +192,30 @@ check "$(grep -cv '^GET /api/v2.1/\(service-plans\|products\|invoices\|organizat
 check "$(ls "$SB/ctmp" | grep -c dishnet_catalogue)" 0 "S1: no catalogue cache written"
 
 # ── S2 the book idle ─────────────────────────────────────────────────────────────────────────────────────────────────
-echo "-- S2 the book idle"
+walshm() { ls "$D" | grep -c 'plugin.sqlite3-\(wal\|shm\)'; }
+tidy() { hold; unhold; hold; }   # a plugin connection that is the last to close removes the -wal/-shm
+echo "-- S2 the book idle, no plugin process comes"
 unhold
-check "$(ls "$D" | grep -c 'plugin.sqlite3-\(wal\|shm\)')" 0 "the book idle has no -wal/-shm"
-run_wrap "$WRAP"
-check "$RC" 0 "exit 0"
-has "$OUT" "the book: NOT READ — its -wal/-shm files are absent" "it says the book was not opened"
-check "$(ls "$D" | grep -c 'plugin.sqlite3-\(wal\|shm\)')" 0 "S2: no -wal/-shm left behind"
+check "$(walshm)" 0 "the book idle has no -wal/-shm"
+W_WAIT=2 run_wrap "$WRAP"
+check "$RC" 3 "S2: exit 3"
+has "$OUT" "the book: opened read-only (query_only, one read transaction), after waiting 2 s with no plugin process holding it" "S2: it waited, then opened"
+has "$OUT" "NOTE: no plugin process held the book in the 2 s waited, so this read created SQLite's own empty -wal and -shm files beside it" "S2: the created files said so"
+has "$OUT" "READ-ONLY — SQLite's own empty -wal/-shm were created by this read, the book being idle (see the NOTE)" "S2: the last line names the cause"
+check "$(grep -c 'nothing was changed' <<< "$OUT")" 0 "S2: never 'nothing was changed'"
+has "$OUT" "OFFICE_LOCATION: kind" "S2: the book was read"
+check "$(walshm)" 2 "S2: SQLite's -wal and -shm are there, as the NOTE says"
+check "$(stat -c %u "$D/plugin.sqlite3-wal")" 1000 "S2: they are the book owner's"
 privacy "$OUT" "S2"
-hold
+tidy
+echo "-- S2b the book idle, a plugin process comes during the wait"
+unhold
+( W_WAIT=20 run_wrap "$WRAP"; printf '%s' "$OUT" > "$SB/s2b.out"; echo "$RC" > "$SB/s2b.rc" ) & BG=$!
+sleep 2; hold; wait "$BG"; OUT="$(cat "$SB/s2b.out")"; RC="$(cat "$SB/s2b.rc")"
+check "$RC" 0 "S2b: exit 0"
+hasre "$OUT" "the book: opened read-only \(query_only, one read transaction\), while a plugin process held it \(waited [0-9]+ s\)" "S2b: it read beside the plugin process"
+hasnt "$OUT" "NOTE: no plugin process held the book" "S2b: nothing created, nothing said"
+has "$OUT" "OFFICE_LOCATION: kind" "S2b: the book was read"
 
 # ── S3–S6 refusals ───────────────────────────────────────────────────────────────────────────────────────────────────
 refused() {  # $1 = label, $2 = expected text
@@ -371,8 +387,9 @@ for pair in sys.argv[3].split("\n@@\n"):
 open(sys.argv[2], "w").write(s)' "$READ" "$f" "$2" || { bad "$id: the copy could not be made"; return; }
   case "$3" in
     privacy) run_read "$f"; local l; l="$(leaks "$OUT")"; if [ "$l" != " none" ]; then ok "$id caught (leaks:$l)"; else bad "$id NOT caught"; fi ;;
-    idle) unhold; run_read "$f"; if ls "$D" | grep -q 'plugin.sqlite3-\(wal\|shm\)'; then ok "$id caught (the idle book got -wal/-shm)"; else bad "$id NOT caught"; fi
-          rm -f "$D/plugin.sqlite3-wal" "$D/plugin.sqlite3-shm"; hold ;;
+    idle) unhold; W_WAIT=1 run_read "$f"; if [ "$(walshm)" -gt 0 ] && ! grep -qF "NOTE: no plugin process held the book" <<< "$OUT"; then ok "$id caught (the idle book got -wal/-shm, unsaid)"; else bad "$id NOT caught"; fi; tidy ;;
+    s2b) unhold; ( W_WAIT=20 run_read "$f"; printf '%s' "$OUT" > "$SB/w2b.out" ) & local bg=$!; sleep 2; hold; wait "$bg"; OUT="$(cat "$SB/w2b.out")"
+         if grep -qF "NOTE: no plugin process held the book" <<< "$OUT"; then ok "$id caught (it did not wait for the plugin process)"; else bad "$id NOT caught"; fi; tidy ;;
     cache) rm -f "$SB/ctmp/"dishnet_catalogue_*; run_read "$f"; if ls "$SB/ctmp" | grep -q dishnet_catalogue; then ok "$id caught (a catalogue cache was written)"; else bad "$id NOT caught"; fi; rm -f "$SB/ctmp/"dishnet_catalogue_* ;;
     absent:*) run_read "$f"; if grep -qF -- "${3#absent:}" <<< "$OUT"; then bad "$id NOT caught"; else ok "$id caught (no: ${3#absent:})"; fi ;;
     s12rc) stage "$f" "$f.s12" 1 0 1; run_read "$f.s12"; local st=no; raced && st=yes; after_race
@@ -388,9 +405,8 @@ weak_read R1 'return '"'"'<9+ digits withheld>'"'"';|||return $m_[0] ?? '"'"''"'
 @@
 function () use (&$n9) {|||function ($m_) use (&$n9) {' privacy
 weak_read R2 "    return 'set, ' . strlen(\$t) . ' bytes / '|||    return \$t . ' set, ' . strlen(\$t) . ' bytes / '" privacy
-weak_read R3 "elseif (!is_file(\$book . '-wal') || !is_file(\$book . '-shm')) \$bookWhy|||elseif (false) \$bookWhy
-@@
-    elseif ((\$walH = @fopen(\$book . '-wal', 'rb')) === false) \$bookWhy|||    elseif (false) \$bookWhy" idle
+weak_read R3 "    if (\$idleOpen) { clearstatcache(); \$created = is_file(\$book . '-wal') || is_file(\$book . '-shm'); }|||" idle
+weak_read R15 "microtime(true) - \$t0 < \$WAIT) { usleep(200000); clearstatcache(); }|||false) { usleep(200000); clearstatcache(); }" s2b
 weak_read R4 "\$ai['catalogue_cache_seconds'] = 0;|||\$ai['catalogue_cache_seconds'] = 60;" cache
 weak_read R5 "\$say('wa_webhook_secret set: worker ' . \$yn(trim((string)(\$cfg['wa_webhook_secret'] ?? '')) !== '')|||\$say('wa_webhook_secret set: worker ' . (string)(\$cfg['wa_webhook_secret'] ?? '')" privacy
 weak_read R6 "        if (!array_key_exists(\$k, \$filled) || \$filled[\$k] === '' || \$filled[\$k] === null) \$filled[\$k] = \$v;|||        // gap-fill removed" "absent:on the website chat yes"
@@ -398,7 +414,7 @@ weak_read R7 "(\$withSha ? (strlen(\$t) >= 200 ? ', sha256 ' . \$sha(\$t) : ', n
 weak_read R8 "' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qoRow))->direct())|||' · direct mode on for the staff screens (row gate) ' . \$yn(UcrmCatalogue::fromRecords(\$cr, UcrmCatalogue::gateOpen(\$qo))->direct())" "s8absent:direct mode on for the staff screens (row gate) yes"
 weak_read R10 "\$form(\$filled['alert_whatsapp'] ?? null|||\$form(\$cfg['alert_whatsapp'] ?? null" "s11absent:watchdog no +, starting 0 (local), 10 digits"
 weak_read R11 "(strlen(\$t) >= 200 ? ', sha256 ' . \$sha(\$t) : ', no hash (under 200 bytes)')|||', sha256 ' . \$sha(\$t)" "present:row set, 26 bytes / 26 chars, sha256"
-weak_read R12 "\$rc = \$stopped ? 1 : (\$changed ? 4 : (\$recreated ? 3 : 0));|||\$rc = \$recreated ? 3 : (\$stopped ? 1 : (\$changed ? 4 : 0));" s12rc
+weak_read R12 "\$rc = \$stopped ? 1 : (\$changed ? 4 : ((\$recreated || \$created) ? 3 : 0));|||\$rc = (\$recreated || \$created) ? 3 : (\$stopped ? 1 : (\$changed ? 4 : 0));" s12rc
 weak_read R13 "if (\$stopped) \$causes[] = 'the reading stopped part-way (send the log as it is)';|||" s12line
 weak_read R14 "preg_split('#\\s*(?:[/,;|\\n]|\\s{2,}|\\bor\\b)\\s*#u', \$t)|||[\$t]" "s11absent:phone-shaped runs: 2 (with +, starting 256, 12 digits; no +"
 weak_read R9 "\$say(sprintf('%-28s %s', 'flyer_available', \$both('flyer_available')));|||" "absent:flyer_available              worker"
