@@ -720,6 +720,13 @@ From docs/76 §N, the values only these parts need; read again when 5.18.108 is 
 
 Carried from docs/76 §O.
 
+**Added on 26 Nov (docs/76 §O, O15): plans that are not internet plans.** The live catalogue (docs/76 §N.1) has two
+active service plans that are not internet plans: "ICT Consultancy Services" and "Monthly AI ShopBot Hosting & API Usage
+Charges". `DishNetTools::getProducts()` keeps every active plan, so the assistant may offer them as connection plans.
+The owner chose to **hide them from the assistant**, keeping them active in uCRM for billing. To be designed in this
+release: which plans the assistant offers (for example only those `PublicPriceFeed` or `catalogue.json` names as
+internet plans), Uganda only, with the website chat and the quotation builder reading the same list.
+
 | | Question | Recommended |
 |---|---|---|
 | **O1** | "Hi" at most once per conversation. As recorded this means **ever**, since a conversation is one row per number and channel. Or **once a day**? | the recorded choice, **ever**, unless a returning customer should get another "Hi" on another day |

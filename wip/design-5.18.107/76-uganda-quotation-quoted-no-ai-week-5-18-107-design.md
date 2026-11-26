@@ -41,7 +41,7 @@ review 11's seven minor changes are checked by the build's tests and code review
   - Part X's list is its own switch. While `wa_no_ai` cannot be read (a failed 092, a missing table or a corrupt
     store), no Uganda customer gets an AI reply, and each `ai.reply` ends in a staff alert with no hand-over (§X.5); the
     deploy script checks 092 (§M);
-  - F-1, F-7 and F-8 are defect fixes;
+  - F-1, F-7, F-8 and F-11 are defect fixes (F-11 added on 26 Nov, O17);
   - W.2 is behaviour the owner asked for (22 Nov); W.3 is a design default the owner confirmed on 25 Nov (W-O3); both
     are live at the deploy. W.4–W.6 are a default change, a screen fix and screens;
   - **O7** removes "Nothing is added on top." from the uCRM quotation's WhatsApp message, the app and KYC quotation
@@ -112,6 +112,7 @@ are written root `scripts/…` (this repository's root `scripts/`).
 | **F-1** | enquiry follow-ups stored as `DishNet Plugin`, so a follow-up never makes the AI drop a customer's message | none (a defect fix, Uganda) | — |
 | **F-7** | a reply blocked by an opt-out is a final, quiet outcome, not a failed send retried through the AI | none (a defect fix, Uganda) | — |
 | **F-8** | the assistant's photo and flyer go as replies (`CLASS_REPLY`), so a STOP no longer drops them; Inbox images get the transactional opt-out check before they are sent as staff | none (a defect fix, Uganda) | — |
+| **F-11** | the assistant's account answers carry the latest invoice's number: on Uganda, `number` when `invoiceNumber` is absent (added 26 Nov, O17) | none (a defect fix, Uganda) | — |
 | **W.1** | one reply to a burst: the newest typed message of a conversation gathers the older unanswered ones (each within 15 minutes of the next) and answers them together | `ai_burst_merge_enabled` (Uganda) | — |
 | **W.2** | rule 8, *STAY ON DISHNET TOPICS*, in the absolute rules, on WhatsApp and the website chat | none: Uganda always, no setting can remove it | — |
 | **W.3** | the customer-care hand-over also gives the office line from the knowledge base | none (Uganda) | — |
@@ -121,8 +122,8 @@ are written root `scripts/…` (this repository's root `scripts/`).
 | **W.7** | ME-CA1 judges master from its schedule record, not from a log it never writes | none (the deploy script) | — |
 | **W.8** | the rehearsal's stand-in docker gives `-u` children the container's PATH | none (the harness) | — |
 
-Build order (§M): F-1, F-7 and F-8 → X → K → Q → W.1 → W.2–W.6. W.7 goes into the deploy script and W.8 into the
-harness. The switch-on order (§K): **K before Q**, then W.1.
+Build order (§M): F-1, F-7, F-8 and F-11 → X → K → Q → W.1 → W.2–W.6. W.7 goes into the deploy script and W.8 into
+the harness. The switch-on order (§K): **K before Q**, then W.1.
 
 **Two new `BrainContext` keys** (15 → 17), so that per-turn facts reach the prompt. Today `DishNetAiBrain`'s config is
 fixed when the worker is built.
@@ -400,17 +401,24 @@ code. `load()` today drops unknown fields (`lib/ShopCatalogue.php:25-51`); it is
 | the Standard kit | `"option": "standard"`, `"mount": "<exact name of Pivot Mount \| Standard 4 and 4 X, Enterprise>"`, `"plan": "<exact name of Residential (up to 350 Mbps)>"` |
 | the Mini kit | `"option": "mini"`, `"mount": "<exact name of Pivot Mount \| Mini>"`, `"plan": "<exact name of Residential Lite (up to 100 Mbps)>"` |
 
-The exact live names are measured before the build (§N). The fixture from the live logs names the Mini kit "Starlink
-Mini Kit + Mini Router", which today's kit match list does not contain.
+The exact live names were read on 26 Nov (§N.1): "Starlink Standard Kit", "Starlink Mini Kit", "Pivot Mount | Standard 4
+and 4 X, Enterprise", "Pivot Mount | Mini", "Residential (up to 350 Mbps)" and "Starlink Residential Lite ( up to 100
+Mbps)". Both kits are in today's match lists. An older live-log fixture names the Mini kit "Starlink Mini Kit + Mini
+Router"; the live catalogue no longer does.
 
-**The installation.** Exactly one record is used:
-1. **The record:** 5.18.102's `UcrmQuoteLinks` `install` link, judged `ok` for `QuoteOrganization::setting()`'s
-   organization, exactly as `UcrmQuoteLines::installLine()` reads it (`lib/UcrmQuoteLines.php:353-357`).
-2. **The match:** its product id is matched against a raw hardware row's `id`. This keeps the operator's rule "never a
-   name". This is the record §N measures.
-3. **The fallback**, if §N shows the link not `ok` on Uganda: a **top-level** `"installation": "<exact uCRM name>"` field
-   in `catalogue.json`. It is never an item entry: `load()` would turn an item into an accessory. Which of the two is
-   used is fixed at the build.
+**The installation (O16, 26 Nov).** Exactly one record is used, matched by product id, never by name:
+1. **In direct mode** (the uCRM catalogue's switch on, as §N.1 read): the catalogue's `install` record in force,
+   `UcrmCatalogue::installProductId()`, read under `QuoteOrganization::setting()`'s gate. It is the record Send Quotation
+   and the KYC form already use (`lib/QuotationService.php:1207`, `lib/KycService.php:572`).
+2. **Otherwise:** 5.18.102's `UcrmQuoteLinks` `install` link, judged `ok` for the same organization, exactly as
+   `UcrmQuoteLines::installLine()` reads it (`lib/UcrmQuoteLines.php:353-357`).
+3. **The match:** the record's product id is matched against a raw hardware row's `id`.
+4. **Neither** (no `install` record in force in direct mode, or the link not `ok` outside it): the builder returns
+   `null` with the reason in the log, and the offer flag is not set. There is no name fallback, and `catalogue.json`
+   carries no `"installation"` field.
+
+§N.1 read direct mode on with one `install` record in force, and the 5.18.102 link unset. The deploy's check reads the
+record in force and confirms that its product id is exactly one raw product row.
 
 **Exactly one row must match, for every item it prices.** Zero, or two or more, makes the builder return `null` with the
 reason in the log, and the offer flag is not set. Never `ShopCatalogue::resolve()`'s first-wins lookup.
@@ -1458,7 +1466,7 @@ fake):
 | **F-8** | `sendImage` sends as `CLASS_PROACTIVE`, so a STOP silently drops the assistant's photo and flyer, and Inbox images, while the text reply goes out | `lib/EvolutionApiService.php` (`sendImage`, `sendMedia`); `workers/AiReplyWorker.php:1208`, `:1326`; `lib/NotificationService.php` (`sendImage`) | **fixed**, Uganda. `sendImage` takes a `$class` parameter (default `CLASS_PROACTIVE`). The worker passes `CLASS_REPLY` for its photo and flyer, as its document send already does. `NotificationService::sendImage` gains the opt-out check `sendDocument` has (`CLASS_TRANSACTIONAL`), and only then sends as `CLASS_STAFF`. Never `CLASS_STAFF` without that check, or an `all` opt-out would be bypassed. |
 | **F-9** | The Help Guide has been admin-only since 3 Sep: it shares the `knowledge_base` key, and so the `*admin` entry, with the AI Knowledge Base screen. Its links are drawn for every user, and a non-admin gets an empty page | `public.php:2813`, `:2907`, `:2976-2995`; `includes/navigation.php:653-655` | recorded (§W.5, W-O4). Shared with South Sudan |
 | **F-10** | `$_tabPerms` lists `api_docs` twice, `*admin` then `settings`, so `settings` applies | `public.php:2912`, `:2920` | recorded (§W.5, W-O4) |
-| **F-11** | The assistant's account block never has an invoice number. `normaliseInvoice` reads only `invoiceNumber`, and this uCRM (API v2.1) sends `number` without it (§N.1, all 5 latest invoices). So the prompt says "Latest invoice: no number". `webhook.php` already reads `number` first. | `lib/DishNetTools.php:610`; `lib/DishNetAiBrain.php:1713`; `webhook.php:1001` | found by §N.1; whether 5.18.107 fixes it is O17 |
+| **F-11** | The assistant's account block never has an invoice number. `normaliseInvoice` reads only `invoiceNumber`, and this uCRM (API v2.1) sends `number` without it (§N.1, all 5 latest invoices). So the prompt says "Latest invoice: no number". `webhook.php` already reads `number` first. | `lib/DishNetTools.php:610`; `lib/DishNetAiBrain.php:1713`; `webhook.php:1001` | **fixed**, Uganda (O17). `normaliseInvoice` reads `invoiceNumber` as today and, on Uganda only, `number` when `invoiceNumber` is absent. Uganda is `TenantProfile::resolveId()` over the tools' own configuration. It serves both callers, the account summary and the invoice list. South Sudan is unchanged (§I rule 5); its uCRM may send the same shape, recorded for a later decision. |
 
 ---
 
@@ -1762,6 +1770,13 @@ Weakened copies that throw (retry), that skip the hand-over, or that try the hol
 - `sendImage` with no class still sends as `CLASS_PROACTIVE`;
 - a weakened copy that sends Inbox images as `CLASS_STAFF` without the check is caught. South Sudan is unchanged.
 
+**F-11:**
+- on Uganda, an invoice row with `number` and no `invoiceNumber` gives the account summary and the invoice list that
+  number, and the prompt's "Latest invoice:" line shows it;
+- a row with both keys keeps `invoiceNumber`; a row with neither still reads "no number";
+- South Sudan, with the same row, still reads "no number" (unchanged);
+- weakened copies that drop the Uganda gate, or prefer `number` over `invoiceNumber`, are each caught.
+
 **W.1 — one reply to a burst** (`test_burst_merge.php`). Each case is driven through the real webhook and the real
 worker on the Uganda sales channel. **Each case asserts what became of every older text**: it reached the final user
 turn of a reply that was sent, or got a reply of its own, or a hand-over. A step-aside alone is never the assertion.
@@ -2011,8 +2026,8 @@ medium: the brain's only gate is the setter.
 
 ## M. Build order
 
-1. **F-1, F-7 and F-8:** one hunk each (F-8 two: the worker's two image sends, and `NotificationService::sendImage`),
-   with their tests.
+1. **F-1, F-7, F-8 and F-11:** one hunk each (F-8 two: the worker's two image sends, and
+   `NotificationService::sendImage`), with their tests.
 1a. **X:** `wa_no_ai` (092), the converter with its trunk-0 check, the list check in the worker, `MediaWorker::handover()`
    and the senders, win-back with the tenant passed in, the watchdog filter, the `onDead` re-check and exemption, the
    screen and the Inbox toggle with the session token and the evidence rule, and the alert raised in the webhook and
@@ -2115,6 +2130,15 @@ process to hold the book; the second run did not need to wait.
 | **O10** | Who is alerted about a quoted customer: the quotation's owner (KYC salesperson, then the lead's assigned salesperson, then the sender), or always the person who pressed send? | **The quotation's owner.** Quotations the system sends have no human sender. |
 | **O11** | A customer who has already chosen one kit: (a) both options in full, Standard first; or (b) the chosen option in full plus a short line for the other? | **(a), both options in full, Standard first**, as recorded ("two options"). The live v9 text asks for (b) when the model types the quotation itself; §K step 2 replaces that paragraph when Part Q goes on. |
 | **O13** | The "assistant off" list: should offers and the win-back message ("We miss you", sent to customers whose service ended 7–10 days ago) also stop for those numbers? | **Yes, stop both.** |
+
+**Answered on 26 Nov**, after §N.1 (the owner took each recommendation, or confirmed):
+
+| | Question | Answer |
+|---|---|---|
+| **O14** | Hand-over alerts go to a +211 number (§N.1). Is that the number for Uganda's alerts? | **Yes, intended.** Part K's alerts follow it. |
+| **O15** | uCRM's active plans include "ICT Consultancy Services" and "Monthly AI ShopBot Hosting & API Usage Charges", and the assistant treats every active plan as an internet plan it may offer. | **Hide them from the assistant**, keeping them active in uCRM for billing: designed in 5.18.108 (docs/77), not here. |
+| **O16** | The 5.18.102 installation link is unset while direct mode is on with an `install` record. Which does the quotation use? | **The direct-mode record** (§D.2); the link only outside direct mode; never a name. |
+| **O17** | F-11: fix it in 5.18.107? | **Yes**, Uganda (§J). |
 
 **Moved to 5.18.108** with their parts, still open: O1, O1b, O1c, O2, O3, O4, O5, O6, O8, O9 and O12 (docs/77 §O).
 
