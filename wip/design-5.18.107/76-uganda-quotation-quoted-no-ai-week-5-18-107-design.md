@@ -3695,6 +3695,9 @@ twelve parts, 349 asserted edits. The result has 16,290 lines and sha256 `e37aec
 (`6bde507`). The first derivation was `1e731dd` (346 edits, 16,232 lines, `f6ce1207…`). Five reviews of the derived
 script followed, each fixed in the derivation and never in the script.
 
+Since then it has been derived twice more: against the re-cut `771a3c1` (§T.15, `d790edf`), and with two probes
+fixed (§T.16, `abf0a25`). The figures in this section are those of `6bde507`.
+
 Where the derivation found §T wrong, incomplete or in conflict with itself, it follows the code and the difference is
 recorded here. None of them changes a decision of §T.10.
 
@@ -3924,6 +3927,119 @@ answered then silent, silent then a thrown reading, silent throughout, and `--af
 | C32 — `} >&2` was code, against the documented rule | keepcheck107: standard error alone after a group stays display; a pass control |
 | C33 — the shell patterns matched argument and quoted text (`\| grep -c sh`, `sed "s/-/ dash /"`, `grep bash < f`) | keepcheck107: both patterns removed; shells judged by program only; pass controls |
 | C34 — `exec 3>&1` and `exec 3>&-`, arrays beginning `.` or holding `source`, and `command -v source` were refused | keepcheck107: descriptors read one by one; array contents no commands; `command -v` a query; pass controls |
+
+### T.15 The suite's findings and the re-cut (27 Nov)
+
+**Suite pass D1 on the first cut, `5b6245b`.** 317 files, 23,873 passed, and 16 FAIL lines in nine files. Every line
+was read; none is a runtime defect.
+
+| Lines | Where | Cause |
+|---|---|---|
+| 7 | `test_install_authorisation` ×2, `test_mail_quote`, `test_migration_integrity`, `test_secure_file` ×3 | this container's own, the same lines as 5.18.106's pass C2; the same three files print no summary in both passes (`test_collections_export_auth`, `test_install_quote_prefill`, `test_reminder_email_cc`) |
+| 1 | `test_master_104` D03 | known limit 16's flake |
+| 6 | `test_quote_followup` F19 ×2, M02 ×2 and QM-M6; `test_sales_followup_tool` CK12 | the calendar: each builds a quotation valid until 20 November 2026, a fixed date now past, and the chase reads it against the real clock as expired. Recorded before the cut as pre-existing; CK12 failed the same way on unchanged `bf29cbd` (26 Nov, 18:30 UTC) |
+| 1 | `test_timezone` | new: no executable line may pin a timezone identifier. The rule exempts `test_*.php` files by name, and three of 5.18.107's section files (`WB_burst.php`, `QW_web.php`, `QR_reply.php`) named `Africa/Juba` literally |
+| 1 | `test_voice_switches` VK1 | new: every key Part V's files read must be in the ladder's lists. 5.18.107 adds key reads to `workers/AiReplyWorker.php`, one of Part V's files, and those keys belong to 5.18.107's own boundary (`R107_SETTINGS`, judged by FX's XB05), not the ladder's |
+
+**The fixes** (wip `5ba62c0`, tests only), each re-pointed on purpose, never weakened:
+
+- **`test_timezone`.** The three section files spell the zone in parts, `implode('/', ['Africa', 'Juba'])`, as their
+  sibling section files already do.
+- **VK1.** It scans the judged tree with 5.18.105 onward taken out (`r105_less`), as TL14 already does for the same scan
+  over the whole tree. Its plant controls still read the planted copy.
+- **F19, M02 and CK12.** Each quotation is valid thirty days past the run, from the clock, so the test cannot age.
+  `sft_chase()` takes `valid_until`, defaulting to 20 November 2026, so its other callers are unchanged.
+- **The boundary.** The five files not already in 5.18.107's delta (`VK_tool.php`, `F_stops.php`, `M_logging.php`,
+  `sales_followup_tool/_lib.php` and `CK_checks.php`) are declared in `tests/fixtures/r107_revert.php` as changed by
+  §T.15.
+
+**Checked before the cut.** Batch R1 ran the fixed tree's 15 affected files, each 0 failed:
+
+They ran on 27 November, 13:04:38 to 17:29:42 UTC, one vault per file, on the wip tree: `1d8b9f3` with the nine fixed
+files, committed unchanged as `5ba62c0`. Each of the nine was last written before the batch began, and each is byte for
+byte the blob `771a3c1` holds.
+
+| File | Passed | Failed |
+|---|---|---|
+| `test_timezone.php` | 31 | 0 |
+| `test_voice_switches.php` | 50 | 0 |
+| `test_sales_followup_tool.php` | 397 | 0 |
+| `test_quote_followup.php` | 1,709 | 0 |
+| `test_quote_summary.php` | 59 | 0 |
+| `test_sales_numbers.php` | 163 | 0 |
+| `test_quote_company.php` | 300 | 0 |
+| `test_bank_boundaries.php` | 159 | 0 |
+| `test_cashbook_physical_list.php` | 496 | 0 |
+| `test_voice_ack.php` | 342 | 0 |
+| `test_log_mask.php` | 384 | 0 |
+| `test_quote_agent_copy.php` | 357 | 0 |
+| `test_catalogue_direct.php` | 526 | 0 |
+| `test_wa_offers.php` | 931 | 0 |
+| `test_quote_from_ucrm.php` | 1,729 | 0 |
+| **15 files** | **7,633** | **0** |
+
+**The re-cut.** `release/5.18.107` is now `771a3c1`, one commit on `bf29cbd`. It holds the wip tree with
+`scripts/lib/ai_check.php` at `bf29cbd`'s version, as A7 requires, and differs from the first cut in those nine test
+files only. `5b6245b` is kept as `refs/keep/5.18.107-cut1`. Both are local; nothing is pushed.
+
+- **The delta is 115 files:** 75 changed and 40 added. The five re-pointed tests were in 5.18.106's kept list, so 46 of
+  the 75 come from it (41 before), 16 from its delta and 13 from neither.
+- **The kept list is 416** (421 before).
+- **No runtime file differs:** still 36 changed and 10 added.
+
+§T.2's counts are updated to these.
+
+**Measured on `771a3c1`.**
+
+- **T1:** 548 passed, 0 failed, rc 0, as in pass D1 on the first cut.
+- **T4:** with `--no-mutants` against `f4b4c96` (5.18.94), 20 passed, 0 failed, 0 skipped, rc 0. The same on
+  `5b6245b`.
+
+Both are now *measured* in partB.
+
+**M0: A6's gated values, before the rehearsal.** A6 runs in every deploy and every `--check` and stops NO-GO when a
+value it reads differs from the literal the script pins (S:13136–13142). A wrong literal would therefore stop the
+rehearsal at its first deploy. A6's own probes (EP_PHP, B2_PHP, P90_PHP), taken from the script, were run on
+`771a3c1` and on `bf29cbd`'s tree with this session's PHP 8.3 CLI, each in a throwaway directory. That is the PHP the
+rehearsal's stand-in container runs. Every value matched its literal:
+
+- `SS_SIGNATURE` and `UG_SIGNATURE` (5.18.106);
+- `UG_PIN_SIGNATURE`;
+- `B2_SIGNATURE` and `P90_SIGNATURE`;
+- the assistant-off alert: `EP_NOAI_DONE` on `bf29cbd` as Uganda and South Sudan and on the pin as South Sudan, and
+  `EP_NOAI_PIN_UG` on the pin as Uganda.
+
+`UG_PIN_SIGNATURE`, `EP_NOAI_PIN_UG` and `EP_NOAI_DONE` are now *measured* in partB (`ceac392`). The rehearsal's A6
+and R13 read them again, and the server's own A6 still gates them at the deploy.
+
+**The measured-values gate** (`803a656`). partB's comment said the driver refuses to write the committed script while
+any value is expected, but the driver never checked. It now refuses. `DERIVE_ALLOW_EXPECTED=1` writes an interim build,
+and its last line says that build is not the script to hand over. With M0 every value is measured, and the derivation
+passes its own gate.
+
+**Re-derived against `771a3c1`** (`d790edf`): 349 edits, as before, and 16,295 lines, sha256 `8934c835…`. Two runs gave
+the same bytes. Against `6bde507`'s build, these differ:
+
+- the pin;
+- the counts in the texts: 70 → 75, 110 → 115, 421 → 416, 41 → 46 and 414 → 409;
+- `EXPECTED_CHANGED`;
+- the sha256 lists. The five files leave `PREV_KEPT_SHA256S` and enter `PREV_CHANGED_SHA256S` at `bf29cbd`'s sha256 and
+  `PIN_SHA256S` at the pin's. Four of 5.18.107's own tests change their pin sha256.
+
+Nothing else changed. Derived again without `DERIVE_ALLOW_EXPECTED` after M0: rc 0 and the same bytes. The committed
+script is the final build.
+
+**The idle container.** Pass D1 was cut twice. The session's container is reclaimed a few minutes after a turn ends
+unless a background task is running. Each resume started at file 258, the file the cut interrupted, and replaced its
+partial block. Every long run now has a background waiter for its whole length.
+
+**Next:**
+
+1. Suite passes E1 and E2 on `771a3c1`, as 5.18.105's re-cut was followed by B1 and B2.
+2. The rehearsal (§T.11): designed in `wip/rehearsal-5.18.107/` (the maps, the skeleton, review 1's 41 findings,
+   design v2), then built in parts, reviewed, given development trials and a record run.
+3. The docs/07 entry.
+4. `release/5.18.107` pushed and deployed, on the owner's word.
 
 ### T.16 Two QF-G2 probes refused every book (found building the rehearsal, 27 Nov)
 
