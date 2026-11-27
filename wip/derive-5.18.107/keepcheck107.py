@@ -7,9 +7,12 @@
 #   - a printf's arguments, unless it is printf -v, piped into a command other than tee, or writing into >( … );
 #   - the right-hand side of each named display variable (DISPLAY_VARS, the same list as partDV's) when its assignment is
 #     the whole command.
-# A command substitution inside display text is code again, except for display commands inside it; a command
-# substitution inside code is code whatever it holds. Heredoc bodies are code. Comments (# at a word's start) are
-# neither; whole lines beginning # or // are skipped as 5.18.106's checks skipped them.
+# A command substitution inside display text is code again, except for display commands inside it (arithmetic
+# expansions included, review 4); a command substitution inside code is code whatever it holds. Output that leaves the
+# terminal is code: a pipe, a process substitution, standard output to a file spaced or glued, standard error to a file
+# beside >&2 — and the same after a group's closer, decided at the end of that command (reviews 3 and 4). Heredoc bodies
+# (H) and single-quoted text (Q) are code; comments (# at a word's start) are neither. A whole line is skipped only as
+# a PHP comment: # or // first, in the body of a heredoc delimited PHP, the line wholly H (review 4).
 import re
 import sys
 import os
@@ -35,10 +38,19 @@ class ParseError(Exception):
 
 
 class _Word:
-    __slots__ = ("s", "e", "subs", "psub_out", "redir_out")
+    # redir_out: standard output to a file; err_file: standard error to a file (not /dev/null, not &N); to_err: >&2 (review 4)
+    __slots__ = ("s", "e", "subs", "psub_out", "redir_out", "err_file", "to_err")
 
     def __init__(self, s):
         self.s, self.e, self.subs, self.psub_out, self.redir_out = s, s, [], False, False
+        self.err_file = self.to_err = False
+
+    def out(self):
+        """this word sends output somewhere other than the terminal"""
+        return self.redir_out or self.psub_out or self.err_file
+
+
+PREFIX_WORDS = {"command", "builtin", "exec", "nohup", "env"}   # a command word that runs the word after it (review 4)
 
 
 class Tok:
@@ -48,6 +60,8 @@ class Tok:
         self.t, self.n, self.dv = t, len(t), set(display_vars)
         self.mask = bytearray(b"C" * self.n)
         self.pending = []   # heredocs waiting for the next newline at command level: (delimiter, strip_tabs)
+        self.php_lines = set()   # the offsets of body lines of heredocs delimited PHP (review 4)
+        self.cmdwords = []   # (offset, command word, effective command word), quotes and backslashes removed (review 4)
         end, spans = self.cmds(0, None)
         if self.pending:
             raise ParseError("a heredoc never ends")
@@ -58,11 +72,20 @@ class Tok:
     def cmds(self, i, closer):
         t, n = self.t, self.n
         words, spans = [], []
-        st = {"ci": None, "case": 0, "paren": 0, "grp": [], "spans": spans}   # grp: len(spans) at each open group (review 3)
+        # grp: len(spans) at each open group (review 3); closed: the group whose closer this command follows; pat: a case
+        # pattern is being read, where keywords are words (review 4)
+        st = {"ci": None, "case": 0, "paren": 0, "grp": [], "spans": spans, "closed": None, "pat": False}
 
         def finish(piped_at=None):
             if words:
+                if st["ci"] is not None:
+                    self.record(words, st["ci"])
                 spans.extend(self.judge(words, st["ci"], piped_at))
+            # (review 4) a group's output is decided at the end of the command after its closer: a pipe, or any
+            # redirection there of standard output or standard error to a file, makes the display text inside it code
+            at, st["closed"] = st["closed"], None
+            if at is not None and (piped_at is not None or any(w.out() or w.to_err for w in words)):
+                del spans[at:]
             words.clear()
             st["ci"] = None
 
@@ -89,7 +112,10 @@ class Tok:
                 i = j
             elif c == ";":
                 finish()
-                i += 3 if t.startswith(";;&", i) else 2 if t.startswith((";;", ";&"), i) else 1
+                k = 3 if t.startswith(";;&", i) else 2 if t.startswith((";;", ";&"), i) else 1
+                if k > 1 and st["case"] > 0:
+                    st["pat"] = True   # the next case pattern
+                i += k
             elif c == "&" and not t.startswith("&>", i):
                 finish()
                 i += 2 if t.startswith("&&", i) else 1
@@ -100,10 +126,12 @@ class Tok:
                 else:
                     finish(piped_at=i + (2 if t.startswith("|&", i) else 1))
                     i += 2 if t.startswith("|&", i) else 1
+            elif c == "(" and st["pat"] and not words:
+                i += 1   # a case pattern's optional opening parenthesis
             elif c == "(":
                 if t.startswith("((", i):
                     w = _Word(i)
-                    w.e = self.arith(i + 2)
+                    w.e = self.arith(i + 2, w)
                     self.add_word(words, w, st)
                     i = w.e
                 else:
@@ -112,7 +140,11 @@ class Tok:
                     st["grp"].append(len(spans))
                     i += 1
             elif c == ")":
-                if st["paren"] > 0:
+                if st["pat"] and st["case"] > 0:
+                    finish()
+                    st["pat"] = False   # a case pattern ends
+                    i += 1
+                elif st["paren"] > 0:
                     finish()
                     st["paren"] -= 1
                     self.group_end(i + 1, st)
@@ -135,8 +167,23 @@ class Tok:
 
     def add_word(self, words, w, st):
         words.append(w)
+        txt = self.t[w.s:w.e]
+        if st["pat"]:   # (review 4) inside a case pattern keywords are words; esac there ends the case
+            if txt == "esac" and len(words) == 1:
+                st["pat"] = False
+                self.group_end(w.e, st)
+                st["case"] = max(0, st["case"] - 1)
+            return
+        if st["ci"] is not None:
+            cw = self.t[words[st["ci"]].s:words[st["ci"]].e]
+            if cw == "case" and txt == "in" and len(words) == st["ci"] + 3:
+                st["pat"] = True
+            elif cw in ("function", "coproc") and txt == "{":   # (review 4) a body opens: a group, a fresh command
+                st["grp"].append(len(st["spans"]))
+                words.clear()
+                st["ci"] = None
+            return
         if st["ci"] is None:
-            txt = self.t[w.s:w.e]
             if txt in ("{", "if", "for", "while", "until", "select"):
                 st["grp"].append(len(st["spans"]))
             elif txt in ("}", "fi", "done", "esac"):
@@ -152,19 +199,20 @@ class Tok:
                     st["grp"].append(len(st["spans"]))
 
     def group_end(self, pos, st):
-        """a group closes: when its output goes to a pipe or a file, the display text inside it is code (review 3)"""
-        if not st["grp"]:
-            return
-        at = st["grp"].pop()
-        m = re.compile(r"[ \t]*(\|\|?|&>|1?>>?|2>|>)").match(self.t, pos)
-        if not m:
-            return
-        op = m.group(1)
-        if op == "||" or op == "2>":
-            return
-        if op.endswith(">") and self.t.startswith("&2", m.end()):
-            return
-        del st["spans"][at:]
+        """a group closes (review 3); finish() decides, at the end of the command its closer begins, whether its output
+        goes to a pipe or a file (review 4)"""
+        if st["grp"]:
+            st["closed"] = st["grp"].pop()
+
+    def record(self, words, ci):
+        """the command word, and the word it runs after command, builtin, exec, nohup or env, quotes removed (review 4)"""
+        bare = [re.sub(r"[\"'\\]", "", self.t[w.s:w.e]) for w in words[ci:]]
+        k = 0
+        while k + 1 < len(bare) and bare[k] in PREFIX_WORDS:
+            k += 1
+            while k + 1 < len(bare) and (bare[k].startswith("-") or ASSIGN.match(bare[k])):
+                k += 1
+        self.cmdwords.append((words[ci].s, bare[0], bare[k], any(w.out() for w in words[ci:])))
 
     def judge(self, words, ci, piped_at):
         """The display spans of one finished command."""
@@ -191,6 +239,9 @@ class Tok:
         if any(w.psub_out for w in args):
             return []
         if any(w.redir_out for w in words):
+            return []
+        # (review 4) standard error sent to a file, and standard output sent after it (>&2): the order is not weighed
+        if any(w.err_file for w in words) and any(w.to_err for w in words):
             return []
         out = []
         for w in args:
@@ -225,6 +276,8 @@ class Tok:
                     i = j + 1
                     break
                 self.mask[i:j] = b"H" * (j - i)   # a heredoc body: code (PHP, sums, texts)
+                if delim == "PHP":
+                    self.php_lines.add(i)
                 i = j + 1
         self.pending = []
         return i
@@ -282,7 +335,13 @@ class Tok:
                     w.subs.append((s, i, inner))
                 elif c == ">":   # standard output redirected, spaced or glued; 2> and >&2 are standard error (review 3)
                     k = 2 if t.startswith((">>", ">|"), i) else 1
-                    if not (t[w.s:i] == "2" or (t.startswith("&2", i + k) and not t[i + k + 2:i + k + 3].isdigit())):
+                    if t[w.s:i] == "2":   # (review 4) standard error: to a file unless /dev/null or another descriptor
+                        tgt = re.compile(r"[ \t]*([^ \t\n;|&()<>]*)").match(t, i + k).group(1)
+                        if not (t.startswith("&", i + k) or tgt == "/dev/null"):
+                            w.err_file = True
+                    elif t.startswith("&2", i + k) and not t[i + k + 2:i + k + 3].isdigit():
+                        w.to_err = True
+                    else:
                         w.redir_out = True
                     i += k
                 else:
@@ -309,7 +368,7 @@ class Tok:
     def dollar(self, i, w):
         t = self.t
         if t.startswith("$((", i):
-            return self.arith(i + 3)
+            return self.arith(i + 3, w)
         if t.startswith("$(", i):
             s = i
             i, inner = self.cmds(i + 2, ")")
@@ -372,10 +431,22 @@ class Tok:
                 i = self.dollar(i, w)
         raise ParseError("an unclosed ${")
 
-    def arith(self, i):
+    def arith(self, i, w):
+        """an arithmetic expression; a command substitution inside it is recorded in w.subs like any other (review 4)"""
         t, n, depth = self.t, self.n, 0
         while i < n:
             c = t[i]
+            if c == "$":
+                i = self.dollar(i, w)
+                continue
+            if c == "`":
+                s = i
+                i, inner = self.cmds(i + 1, "`")
+                w.subs.append((s, i, inner))
+                continue
+            if c == '"':
+                i = self.dq(i + 1, w)
+                continue
             if c == "(":
                 depth += 1
             elif c == ")":
@@ -392,7 +463,8 @@ class Tok:
 class View:
     def __init__(self, t):
         self.t = t
-        self.mask = Tok(t, DISPLAY_VARS).mask
+        tok = Tok(t, DISPLAY_VARS)
+        self.mask, self.cmdwords = tok.mask, tok.cmdwords
         self.lines = []   # (lineno, raw, code): code keeps the code characters (C, Q, H), every other one a space
         self.shell = {}   # lineno -> the unquoted shell code alone (C)
         self.skipped = set()
@@ -400,9 +472,9 @@ class View:
         for n, raw in enumerate(t.split("\n"), 1):
             m = self.mask[at:at + len(raw)]
             lead = len(raw) - len(raw.lstrip())
-            # (review 3) a line is skipped only as a PHP comment — // or # first, inside a heredoc or a quoted string —
-            # never by its raw prefix: a shell line beginning //usr/bin/env, or # inside a string, is code
-            if raw.lstrip().startswith(("#", "//")) and lead < len(raw) and m[lead] in (72, 81):
+            # (review 3, review 4) a line is skipped only as a PHP comment: // or # first, in the body of a heredoc
+            # delimited PHP, the whole line H — never by its raw prefix, never in a quoted string or another heredoc
+            if raw.lstrip().startswith(("#", "//")) and at in tok.php_lines and all(b == 72 for b in m[lead:]):
                 code, sh = "", ""
                 self.skipped.add(n)
             else:
@@ -806,8 +878,9 @@ def k6(v):
 HIDERS = [   # (review 3) each found anywhere in code, not anchored to a line's start
     (re.compile(r"(?<![\w$./>:-])eval\b"), "eval"),
     (re.compile(r"(?<![\w$./>:-])source\s+[\"$/]"), "a file sourced"),
-    (re.compile(r"\b(?:sh|bash|dash|zsh)\s*<(?!<)"), "a shell reading a script from a redirection"),
-    (re.compile(r"\|\s*(?:sh|bash|dash|zsh)\b(?!\s+-n)"), "a shell reading a pipe"),
+    # (review 4) a shell by any path, after options, reading <, << or <<<; a shell anywhere in a piped command
+    (re.compile(r"(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\b(?:\s+-[-\w]+)*\s*<"), "a shell reading a script from a redirection"),
+    (re.compile(r"(?<!\|)\|&?(?!\|)[^|;&\n]*?(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\b(?!\s+-[nc]\b)"), "a shell reading a pipe"),
     (re.compile(r"\$\{!"), "an indirect expansion ${!…}"),
     (re.compile(r"\b(?:sh|bash|dash|zsh)\s+-c\s+[\"$]"), "a shell given an expanding command string"),
     (re.compile(r"(?:tools|scripts)/[^\s\"';|&)]*[*?\[]"), "a glob in a tools/ or scripts/ path"),
@@ -822,6 +895,8 @@ HIDERS = [   # (review 3) each found anywhere in code, not anchored to a line's 
 # the dot form of sourcing, on unquoted shell code alone: in PHP (heredocs, quoted strings) "." is concatenation
 DOT = re.compile(r"(?:^\s*|[;&|({]\s*|\b(?:then|do|else)\s+|\)\s+)\.\s+[\"$/]")
 RUN_OK = 'bash "$REPO/scripts/deploy-hybrid.sh"'
+SHC = re.compile(r"(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\s+(?:-[-\w]+\s+)*-c\s+'([^']*)'")
+SHC_IN = re.compile(r"(?:^|[;&|({\n!]|\b(?:then|do|else|if|while|until|elif|command|builtin|exec|time)\b)\s*(?:\.|source|eval)(?:\s|$)")
 
 
 def k7(v):
@@ -835,6 +910,20 @@ def k7(v):
                 bad.append(("K7", f"line {n}: {what} in code ({raw.strip()[:80]})"))
         if DOT.search(v.shell[n]):
             bad.append(("K7", f"line {n}: a file sourced in code ({raw.strip()[:80]})"))
+    # (review 4) the tokenizer's command words, quotes removed: eval, source and . whatever follows, after command,
+    # builtin, exec, nohup or env too; exec redirecting the script's own output
+    for at, cw, eff, out in v.cmdwords:
+        for hit, what in ((eff in ("eval", "source", "."), "eval, source or . run as a command"),
+                          (cw == "exec" and out, "exec redirecting the script's output")):
+            if hit:   # the line is counted only for a finding: 10,000 commands, each a scan of the text, cost seconds
+                n = v.t.count("\n", 0, at) + 1
+                bad.append(("K7", f"line {n}: {what} in code ({v.lines[n - 1][1].strip()[:80]})"))
+    # (review 4) a shell's literal command string: sourcing or eval inside it
+    code = "\n".join(c for _, _, c in v.lines)
+    for m in SHC.finditer(code):
+        if SHC_IN.search(m.group(1)):
+            n = code.count("\n", 0, m.start()) + 1
+            bad.append(("K7", f"line {n}: a file sourced or a string run inside a shell's command string in code ({v.lines[n - 1][1].strip()[:80]})"))
     return bad
 
 
@@ -1032,6 +1121,49 @@ def run(doc, ctx):
     kweak(RB0, ins("dxo php -r '$m = \"writeKycFile\"; KycService::$m(\"/x\", []);'"), "K7", "a writer named as a string",
           "a writer named as a string in code")
     kweak(RB0, ins("printf -v X '%s' x"), "K7", "printf -v", "printf -v in code")
+    # (review 4) a group's output decided after its closer; standard error to a file beside >&2; exec redirecting
+    kweak(RB0, ins('{ echo "$K_OFF_CMD"; } 2>&1 | tee "$OUT/x.sh"'), "K5", "K_OFF_CMD in a group, 2>&1 then a pipe into tee",
+          "K_OFF_CMD expanded in code")
+    kweak(RB0, ins('{ echo "$Q_OFF_CMD"; } 2>/dev/null >"$OUT/x.sh"'), "K5", "Q_OFF_CMD in a group, 2>/dev/null then a file",
+          "Q_OFF_CMD expanded in code")
+    kweak(RB0, ins('while false; do echo "$K_ON_CMD"; done < /dev/null | tee "$OUT/x.sh"'), "K5",
+          "K_ON_CMD in a loop reading a file, then a pipe into tee", "K_ON_CMD expanded in code")
+    kweak(RB0, ins('echo "$Q_ON_CMD" 2>"$OUT/x.sh" >&2'), "K5", "Q_ON_CMD sent after standard error into a file",
+          "Q_ON_CMD expanded in code")
+    kweak(RB0, ins('{ echo "$W1_ON_CMD" >&2; } 2>"$OUT/x.sh"'), "K5", "W1_ON_CMD to standard error, a group sending it to a file",
+          "W1_ON_CMD expanded in code")
+    kweak(RB0, ins('{ echo "$BD_OFF_CMD"; } >&23'), "K5", "BD_OFF_CMD in a group sent to descriptor 23", "BD_OFF_CMD expanded in code")
+    kweak(RB0, ins('exec 9>&1 >"$OUT/x.sh"; echo "$K_OFF_CMD"; exec >&9 9>&-'), "K7", "the script's output sent to a file by exec",
+          "exec redirecting the script's output in code")
+    # (review 4) a line skipped only in a PHP heredoc, the whole line H
+    kweak(RB0, ins(f"dxo php -r '$x = 1;\n// x'; {LIVE} php \"$IN_CONTAINER/tools/set_config.php\" --key followup_enabled --value 0"),
+          "K5", "a run after a quoted string closed on a line beginning //", N5)
+    kweak(RB0, ins(f"{LIVE} sh -c '\n//usr/bin/env php \"$1/tools/set_config.php\" --key followup_enabled --value 0\n' _ \"$IN_CONTAINER\""),
+          "K5", "a run in a shell's quoted string, on a line beginning //", N5)
+    kweak(RB0, ins('docker exec -i "$CONTAINER" sh <<\'EOS\'\n//usr/bin/env php /x/tools/set_config.php --key followup_enabled --value 0\nEOS'),
+          ("K5", "K7"), "a heredoc read by a shell, its line beginning //", "a shell reading a script from a redirection in code")
+    # (review 4) sourcing and eval as command words, quotes removed; inside a shell's literal command string
+    kweak(RB0, ins('bash <<\'EOS\'\n. "$OUT/x.sh"\nEOS'), "K7", "a file sourced in a heredoc read by bash",
+          "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('"source" "$OUT/x.sh"'), "K7", "source quoted", "eval, source or . run as a command in code")
+    kweak(RB0, ins('if . "$OUT/x.sh"; then :; fi'), "K7", "a file sourced with . after if", "eval, source or . run as a command in code")
+    kweak(RB0, ins('command . "$OUT/x.sh"'), "K7", "a file sourced with . after command", "eval, source or . run as a command in code")
+    kweak(RB0, ins('e\\val "$OUT"'), "K7", "eval spelled with a backslash", "eval, source or . run as a command in code")
+    kweak(RB0, ins(f"{LIVE} sh -c '. \"$1\"' _ \"$OUT/x.sh\""), "K7", "a file sourced inside sh -c's literal string",
+          "a file sourced or a string run inside a shell's command string in code")
+    # (review 4) a shell reading a script, by any path, after options, from <, << or <<<, or anywhere in a piped command
+    kweak(RB0, ins('bash -s < "$OUT/x.sh"'), "K7", "bash -s reading a file", "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('bash <<<"$(cat "$OUT/x.sh")"'), "K7", "bash reading a here-string", "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('cat "$OUT/x.sh" | /bin/sh'), "K7", "a pipe into /bin/sh", "a shell reading a pipe in code")
+    kweak(RB0, ins('cat "$OUT/x.sh" | docker exec -i "$CONTAINER" sh'), "K7", "a pipe into a shell in the container",
+          "a shell reading a pipe in code")
+    # (review 4) case patterns spelled as keywords; a function's body; a command inside an arithmetic expansion
+    kweak(RB0, ins('while false; do\n  echo "$K_OFF_CMD"\n  case "$MODE" in\n    if) : ;;\n  esac\ndone | tee "$OUT/x.sh"'), "K5",
+          "K_OFF_CMD in a piped loop holding a case pattern spelled if", "K_OFF_CMD expanded in code")
+    kweak(RB0, ins('function g { echo "$Q_OFF_CMD"; } | tee "$OUT/x"'), "K5", "Q_OFF_CMD in a function body piped into tee",
+          "Q_OFF_CMD expanded in code")
+    kweak(RB0, ins(f'note "x $(( $({LIVE} php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0 >/dev/null; echo 0) ))"'),
+          "K5", "a writer inside a command substitution inside an arithmetic expansion in display text", W5)
     print(f"  keep check: K1–K7 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused by exactly "
           "the checks named for it and by the rule it is for")
 

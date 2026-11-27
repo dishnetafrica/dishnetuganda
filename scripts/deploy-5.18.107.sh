@@ -8394,7 +8394,7 @@ me_ca1() {
 #    (a first boot's SqliteStore::create can run while tar is still writing other files), so it is dated against the
 #    copy's start in a note, never judged. ──
 mg_after() {
-  local inst="$1" mg o sub w at au="" cu v seen="" w0="" ok1="" ok2="" r1 log l1 mk mkt okl pl wl i
+  local inst="$1" mg o sub w at au="" cu v seen="" wk="" ok1="" ok2="" r1 log l1 mk mkt okl pl wl i
   NA_P1=""   # set only by this run's NA-CA1 probe
   cih_main || true   # the run's folder, made in this shell before the readings on copies below, which run in $( … ) (DS3-fix1)
   if [ "$MODE" = "after" ]; then mg="$(sed -n 's/^MG_G1=//p' "$STATE" 2>/dev/null | tail -n1)"; cu="$(sed -n 's/^QF_COPY_UNIX=//p' "$STATE" 2>/dev/null | tail -n1)"
@@ -8403,17 +8403,17 @@ mg_after() {
   # MG-CA1 — a bounded wait (60 s) on the LIVE ledger, read-only, for 092's row; then a fresh copy
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
     o="$(qf_php mgledger "$PDD_IN/plugin.sqlite3")"
-    case "$o" in "mig092=1") seen=1; break ;; "mig092=0") w0=1 ;; esac   # w0: the ledger answered without 092 at least once
+    case "$o" in "mig092=1") seen=1; break ;; "mig092=0") wk="$i" ;; esac   # wk: the last reading at which the ledger answered without 092
     [ "$i" = "13" ] || sleep 5
   done
   r1="$( [ "$(sha256sum "$DEST/$MIG107_LAST_PATH" 2>/dev/null | cut -c1-64)" = "$MIG107_SHA" ] && echo ok || echo bad )"
   # §T.14 (review 2 of the derived script): the wait ends unseen either on the ledger read without 092 (absent) or on a
   # ledger that did not read (unread) — only the first says no boot has applied 092
-  MG_WAIT=""; [ -n "$seen" ] || { [ -n "$w0" ] && MG_WAIT=absent || MG_WAIT=unread; }   # review 3: any answer, not the last read alone
+  MG_WAIT=""; [ -n "$seen" ] || { [ "$o" = "mig092=0" ] && MG_WAIT=absent || MG_WAIT=unread; }   # review 4: the last reading decides; an earlier answer is said, never judged
   if [ -z "$seen" ]; then
     MG_CA1_R=bad
-    if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (it answered mig092=0$( [ "$o" = "mig092=0" ] || echo "; its last reading: ${o:-no answer}")): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
-    else bad "MG-CA1 the live migration ledger could not be read in a wait of 60 s (${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
+    if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (its last reading: mig092=0): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
+    else bad "MG-CA1 $( [ -n "$wk" ] && echo "the live migration ledger answered mig092=0 at reading $wk of 13 and gave no reading after it" || echo "the live migration ledger could not be read in a wait of 60 s") (its last reading: ${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
   elif [ -z "$inst" ] || ! sub="$(qf_copy mg "$inst")"; then
     MG_CA1_R=bad; bad "MG-CA1 092 is in the live ledger, but a fresh copy to read it on could not be made — ${sub:-no installed code to read with}; MG-CA1 and NA-CA1 are not judged"
   else
@@ -8465,7 +8465,7 @@ mg_after() {
   elif [ -z "$mg" ]; then note "MG-CA2 NOT ESTABLISHED — THE STATE FILE HOLDS NO MG_G1 RECORD (an older state file): whether 092 was this deploy's to apply cannot be told, so its missing OK line is not judged"
   elif [ "$mg" = "present" ]; then note "MG-CA2 no OK line for 092 in migration.log — a redeploy: 092 was applied by an earlier deploy, the runner writes nothing for an applied file, and halving may have dropped the line since"
   elif [ "$MODE" = "deploy" ]; then
-    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — $( [ "$MG_WAIT" = "absent" ] && echo "NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ" || echo "092 COULD NOT BE SEEN IN THE LEDGER WHEN THE LOG WAS READ, WHICH DID NOT READ") (MG-CA1's wait; its FAIL stands)"
+    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — $( [ "$MG_WAIT" = "absent" ] && echo "NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ" || echo "092 COULD NOT BE SEEN IN THE LEDGER WHEN THE LOG WAS READ: THE LEDGER GAVE NO READING AT THE END OF THE WAIT") (MG-CA1's wait; its FAIL stands)"
     else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log, THOUGH THE LEDGER HOLDS IT: minutes after the first boot, halving would need about 128 KiB logged after 092's line, so the cause is a log write that failed silently (@file_put_contents)"; fi
   else
     v="$(sed -n 's/^MG_CA2_SEEN=//p' "$STATE" 2>/dev/null | tail -n1)"
@@ -8475,7 +8475,7 @@ mg_after() {
       nowait|"")
         if [ -n "$mk" ] && [ -n "$mkt" ] && [ -n "$au" ] && [ "$mkt" -ge "$au" ]; then
           note "MG-CA2 no OK line for 092 now — $( [ "$v" = "nowait" ] && echo "stage R's wait timed out (MG_CA2_SEEN=nowait), so its reading says nothing about the line;" || echo "the state file holds no MG_CA2_SEEN record;") the log's first line is a trim marker stamped (read as UTC) at or after 092's applied_at: 071_dpo_payments.sql's checksum WARNING is logged on every boot, and the runner halves the log within hours"
-        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then [ "$MG_WAIT" = "absent" ] && echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)" || echo "THE LIVE LEDGER DID NOT READ IN THIS RUN'S WAIT EITHER (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
+        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then [ "$MG_WAIT" = "absent" ] && echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)" || echo "THE LIVE LEDGER GAVE NO READING AT THE END OF THIS RUN'S WAIT (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
       *) note "MG-CA2 NOT ESTABLISHED — THE STATE FILE'S MG_CA2_SEEN RECORD CANNOT BE READ (${v})" ;;
     esac
   fi
