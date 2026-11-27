@@ -8413,7 +8413,7 @@ mg_after() {
   if [ -z "$seen" ]; then
     MG_CA1_R=bad
     if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (its last reading: mig092=0): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
-    else bad "MG-CA1 $( [ -n "$wk" ] && echo "the live migration ledger answered mig092=0 at reading $wk of 13 and gave no reading after it" || echo "the live migration ledger could not be read in a wait of 60 s") (its last reading: ${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
+    else bad "MG-CA1 $( [ -n "$wk" ] && echo "the live migration ledger answered mig092=0 at reading $wk of 13 and did not answer after it" || echo "the live migration ledger could not be read in a wait of 60 s") (its last reading: ${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
   elif [ -z "$inst" ] || ! sub="$(qf_copy mg "$inst")"; then
     MG_CA1_R=bad; bad "MG-CA1 092 is in the live ledger, but a fresh copy to read it on could not be made — ${sub:-no installed code to read with}; MG-CA1 and NA-CA1 are not judged"
   else
@@ -8465,7 +8465,7 @@ mg_after() {
   elif [ -z "$mg" ]; then note "MG-CA2 NOT ESTABLISHED — THE STATE FILE HOLDS NO MG_G1 RECORD (an older state file): whether 092 was this deploy's to apply cannot be told, so its missing OK line is not judged"
   elif [ "$mg" = "present" ]; then note "MG-CA2 no OK line for 092 in migration.log — a redeploy: 092 was applied by an earlier deploy, the runner writes nothing for an applied file, and halving may have dropped the line since"
   elif [ "$MODE" = "deploy" ]; then
-    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — $( [ "$MG_WAIT" = "absent" ] && echo "NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ" || echo "092 COULD NOT BE SEEN IN THE LEDGER WHEN THE LOG WAS READ: THE LEDGER GAVE NO READING AT THE END OF THE WAIT") (MG-CA1's wait; its FAIL stands)"
+    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — $( [ "$MG_WAIT" = "absent" ] && echo "NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ" || echo "092 COULD NOT BE SEEN IN THE LEDGER WHEN THE LOG WAS READ: THE LEDGER DID NOT ANSWER AT THE END OF THE WAIT") (MG-CA1's wait; its FAIL stands)"
     else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log, THOUGH THE LEDGER HOLDS IT: minutes after the first boot, halving would need about 128 KiB logged after 092's line, so the cause is a log write that failed silently (@file_put_contents)"; fi
   else
     v="$(sed -n 's/^MG_CA2_SEEN=//p' "$STATE" 2>/dev/null | tail -n1)"
@@ -8475,13 +8475,13 @@ mg_after() {
       nowait|"")
         if [ -n "$mk" ] && [ -n "$mkt" ] && [ -n "$au" ] && [ "$mkt" -ge "$au" ]; then
           note "MG-CA2 no OK line for 092 now — $( [ "$v" = "nowait" ] && echo "stage R's wait timed out (MG_CA2_SEEN=nowait), so its reading says nothing about the line;" || echo "the state file holds no MG_CA2_SEEN record;") the log's first line is a trim marker stamped (read as UTC) at or after 092's applied_at: 071_dpo_payments.sql's checksum WARNING is logged on every boot, and the runner halves the log within hours"
-        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then [ "$MG_WAIT" = "absent" ] && echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)" || echo "THE LIVE LEDGER GAVE NO READING AT THE END OF THIS RUN'S WAIT (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
+        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then [ "$MG_WAIT" = "absent" ] && echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)" || echo "THE LIVE LEDGER DID NOT ANSWER AT THE END OF THIS RUN'S WAIT (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
       *) note "MG-CA2 NOT ESTABLISHED — THE STATE FILE'S MG_CA2_SEEN RECORD CANNOT BE READ (${v})" ;;
     esac
   fi
   # the FAILED summary's lead (root docs/76 §T.3 item 7): NA-CA1 first, then MG-CA1, then MG-CA2 alone. "na" only where the
-  # list is shown not to read (092 read absent, or probe 1 threw); "unk" where that is not established (the ledger or the
-  # list did not answer); "ctl" where NA-CA1 failed on its controls while probe 1, the worker's own read, answered (§T.14)
+  # list is shown not to read (092 read absent, or probe 1 threw); "unk" where that is not established (the ledger at the
+  # end of MG-CA1's wait, or the list, did not answer); "ctl" where NA-CA1 failed past probe 1, which answered (§T.14)
   # review 3: a list that reads (probe 1 answered none or listed) never outranks MG-CA1's fact; "dat" where probe 1 lists a
   # number nobody can hold (the list reads, its rows are wrong), "ctl" where the rest of NA-CA1 failed
   if [ -z "$seen" ]; then if [ "$MG_WAIT" = "absent" ]; then MG_SAY=na; else MG_SAY=unk; fi
@@ -16145,9 +16145,9 @@ if [ "$FAIL" != "0" ] && [ -n "${MG_SAY:-}" ]; then
     na) echo "  NO UGANDA CUSTOMER GETS AN AI REPLY: THE ASSISTANT-OFF LIST (wa_no_ai, MIGRATION 092) CANNOT BE READ THE WAY THE"
         echo "  WORKER READS IT (NA-CA1, OR MG-CA1'S WAIT ABOVE: NO BOOT HAS APPLIED 092) — EACH ai.reply DIES AFTER ABOUT 36 MINUTES"
         echo "  OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
-    unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER OR THE ASSISTANT-OFF LIST DID NOT ANSWER"
-         echo "  (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER GETS AN AI REPLY, AND EACH ai.reply DIES AFTER"
-         echo "  ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
+    unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER DID NOT ANSWER AT THE END OF MG-CA1'S"
+         echo "  WAIT, OR THE ASSISTANT-OFF LIST DID NOT ANSWER (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER"
+         echo "  GETS AN AI REPLY, AND EACH ai.reply DIES AFTER ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
     ctl) echo "  NA-CA1 failed past its first probe (its line above says how), but that probe, the worker's own read of the"
          echo "  assistant-off list, answered: AI replies go on." ;;
     dat) echo "  NA-CA1 failed: the assistant-off list reads, but its first probe, the worker's own read, lists a number nobody"

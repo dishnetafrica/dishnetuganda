@@ -12,7 +12,9 @@
 # terminal is code: a pipe, a process substitution, standard output to a file spaced or glued, standard error to a file
 # beside >&2 — and the same after a group's closer, decided at the end of that command (reviews 3 and 4). Heredoc bodies
 # (H) and single-quoted text (Q) are code; comments (# at a word's start) are neither. A whole line is skipped only as
-# a PHP comment: # or // first, in the body of a heredoc delimited PHP, the line wholly H (review 4).
+# a PHP comment: # or // first, in the body of a heredoc delimited PHP — quoted, read by cat — the line wholly H, and no
+# ?> on it (reviews 4 and 5). Each command's program is resolved (prefix words, leading redirections, docker exec and
+# dxo followed), and a shell program is judged by what it is given: a literal -c string, or standard input (review 5).
 import re
 import sys
 import os
@@ -39,11 +41,12 @@ class ParseError(Exception):
 
 class _Word:
     # redir_out: standard output to a file; err_file: standard error to a file (not /dev/null, not &N); to_err: >&2 (review 4)
-    __slots__ = ("s", "e", "subs", "psub_out", "redir_out", "err_file", "to_err")
+    # stdin_in: standard input from <, << or <<<; psub_in: a <( … ) argument (review 5)
+    __slots__ = ("s", "e", "subs", "psub_out", "redir_out", "err_file", "to_err", "stdin_in", "psub_in")
 
     def __init__(self, s):
         self.s, self.e, self.subs, self.psub_out, self.redir_out = s, s, [], False, False
-        self.err_file = self.to_err = False
+        self.err_file = self.to_err = self.stdin_in = self.psub_in = False
 
     def out(self):
         """this word sends output somewhere other than the terminal"""
@@ -51,6 +54,9 @@ class _Word:
 
 
 PREFIX_WORDS = {"command", "builtin", "exec", "nohup", "env"}   # a command word that runs the word after it (review 4)
+SHELLS = {"sh", "bash", "dash", "zsh"}
+REDIR_TOK = re.compile(r"(?:\d*|&|\{\w+\})(?:<<<|<<-?|<>|<&|<|>>|>\||>&|>|&>>|&>)")   # a redirection word (review 5)
+DOCKER_ARG_OPTS = {"-u", "-e", "-w", "--user", "--env", "--workdir", "--env-file"}   # docker exec options taking a value
 
 
 class Tok:
@@ -69,31 +75,43 @@ class Tok:
             self.mask[s:e] = b"D" * (e - s)
 
     # ── command level ──
-    def cmds(self, i, closer):
+    def cmds(self, i, closer, array=False):
         t, n = self.t, self.n
         words, spans = [], []
         # grp: len(spans) at each open group (review 3); closed: the group whose closer this command follows; pat: a case
-        # pattern is being read, where keywords are words (review 4)
-        st = {"ci": None, "case": 0, "paren": 0, "grp": [], "spans": spans, "closed": None, "pat": False}
+        # pattern is being read, where keywords are words (review 4); pin: this command reads the last one's pipe (review 5)
+        st = {"ci": None, "case": 0, "paren": 0, "grp": [], "spans": spans, "closed": None, "pat": False, "pin": False}
 
         def finish(piped_at=None):
-            if words:
+            pin = st["pin"]
+            if words or piped_at is not None:
+                st["pin"] = piped_at is not None
+            if words and not array:   # (review 5) an array's contents are words: never commands, never display text
                 if st["ci"] is not None:
-                    self.record(words, st["ci"])
+                    self.record(words, st["ci"], pin)
                 spans.extend(self.judge(words, st["ci"], piped_at))
-            # (review 4) a group's output is decided at the end of the command after its closer: a pipe, or any
-            # redirection there of standard output or standard error to a file, makes the display text inside it code
+            for h in self.pending:   # a heredoc on a command with no command word belongs to no program
+                if h[3] is None:
+                    h[3] = ""
+            # (review 4) a group's output is decided at the end of the command after its closer: a pipe, or a redirection
+            # there of standard output or standard error to a file, makes the display text inside it code; >&2 alone
+            # leaves it on the terminal (review 5)
             at, st["closed"] = st["closed"], None
-            if at is not None and (piped_at is not None or any(w.out() or w.to_err for w in words)):
+            if at is not None and (piped_at is not None or any(w.out() for w in words)):
                 del spans[at:]
             words.clear()
             st["ci"] = None
+
+        def balanced(where):
+            if st["grp"] or st["paren"]:   # (review 5) a group left open is a misreading, never a pass
+                raise ParseError(f"a group is still open at {where} (offset {i})")
 
         while True:
             if i >= n:
                 if closer is not None:
                     raise ParseError(f"unclosed {closer!r} opened before offset {i}")
                 finish()
+                balanced("the end of the text")
                 return i, spans
             c = t[i]
             if c in " \t":
@@ -119,6 +137,8 @@ class Tok:
             elif c == "&" and not t.startswith("&>", i):
                 finish()
                 i += 2 if t.startswith("&&", i) else 1
+            elif c == "|" and st["pat"]:
+                i += 1   # (review 5) a case pattern's alternatives: no pipe
             elif c == "|":
                 if t.startswith("||", i):
                     finish()
@@ -154,11 +174,13 @@ class Tok:
                     i += 1
                 elif closer == ")":
                     finish()
+                    balanced("a closing parenthesis")
                     return i + 1, spans
                 else:
                     raise ParseError(f"a stray ')' at offset {i}")
             elif c == "`" and closer == "`":
                 finish()
+                balanced("a closing backtick")
                 return i + 1, spans
             else:
                 w = self.word(i)
@@ -178,12 +200,16 @@ class Tok:
             cw = self.t[words[st["ci"]].s:words[st["ci"]].e]
             if cw == "case" and txt == "in" and len(words) == st["ci"] + 3:
                 st["pat"] = True
+                words.clear()   # (review 5) the header is done: a pattern's ( on this line is the pattern's
+                st["ci"] = None
             elif cw in ("function", "coproc") and txt == "{":   # (review 4) a body opens: a group, a fresh command
                 st["grp"].append(len(st["spans"]))
                 words.clear()
                 st["ci"] = None
             return
         if st["ci"] is None:
+            if txt in ("{", "if", "for", "while", "until", "select", "then", "do", "else", "elif"):
+                st["closed"] = None   # (review 5) a body opens: a closer just before it (f(), if ( … )) decides nothing
             if txt in ("{", "if", "for", "while", "until", "select"):
                 st["grp"].append(len(st["spans"]))
             elif txt in ("}", "fi", "done", "esac"):
@@ -204,15 +230,88 @@ class Tok:
         if st["grp"]:
             st["closed"] = st["grp"].pop()
 
-    def record(self, words, ci):
-        """the command word, and the word it runs after command, builtin, exec, nohup or env, quotes removed (review 4)"""
-        bare = [re.sub(r"[\"'\\]", "", self.t[w.s:w.e]) for w in words[ci:]]
-        k = 0
-        while k + 1 < len(bare) and bare[k] in PREFIX_WORDS:
+    @staticmethod
+    def unquote(x):
+        """a word as the shell reads it, near enough: $'…' decoded, $ before a quote dropped, quotes and backslashes removed"""
+        m = re.fullmatch(r"\$'((?:[^'\\]|\\.)*)'", x)
+        if m:
+            try:
+                return m.group(1).encode("latin-1", "backslashreplace").decode("unicode_escape")
+            except UnicodeDecodeError:
+                pass
+        return re.sub(r"[\"'\\]", "", re.sub(r"\$(?=['\"])", "", x))
+
+    def record(self, words, ci, pin):
+        """(reviews 4 and 5) the command word, the word it runs after command, builtin, exec, nohup, env or time -p, and
+        the program a runner (docker exec, dxo) starts — read unquoted, leading redirections passed over — and what a
+        shell program is given: a literal -c string, read for sourcing; standard input, a pipe or <( … ), refused"""
+        raw = [self.t[w.s:w.e] for w in words[ci:]]
+        bare = [self.unquote(x) for x in raw]
+        L = len(bare)
+
+        def past_redirections(k):
+            while k < L:
+                m = REDIR_TOK.match(raw[k])
+                if not m:
+                    break
+                k += 2 if m.end() == len(raw[k]) else 1   # a bare operator's target is the next word
+            return k
+
+        k = past_redirections(0)
+        while k < L - 1 and bare[k].startswith("-"):   # time -p: the keyword's own option
             k += 1
-            while k + 1 < len(bare) and (bare[k].startswith("-") or ASSIGN.match(bare[k])):
-                k += 1
-        self.cmdwords.append((words[ci].s, bare[0], bare[k], any(w.out() for w in words[ci:])))
+        chain, query = [], False
+        while k < L - 1 and bare[k] in PREFIX_WORDS and not query:
+            chain.append(bare[k])
+            k = past_redirections(k + 1)
+            while k < L - 1 and (bare[k].startswith("-") or ASSIGN.match(bare[k])):
+                if chain[-1] == "command" and bare[k] in ("-v", "-V"):
+                    query = True   # command -v NAME asks; it runs nothing
+                k = past_redirections(k + 1)
+        k = min(k, L - 1)
+        eff = "command -v" if query else bare[k]
+        p = k
+        if eff == "docker" and p + 1 < L and bare[p + 1] == "exec":
+            j = p + 2
+            while j < L and bare[j].startswith("-"):
+                j += 2 if bare[j] in DOCKER_ARG_OPTS else 1
+            p = j + 1   # past the container
+        elif eff == "dxo":   # the script's own docker exec, as the database's owner
+            p += 1
+        prog = os.path.basename(bare[p]) if p < L and not query else ""
+        hits = []
+        if prog in SHELLS:
+            j, has_c, has_n = p + 1, False, False
+            while j < L and len(bare[j]) > 1 and bare[j][0] in "-+":
+                if bare[j] == "--":
+                    j += 1
+                    break
+                if bare[j] in ("-o", "+o", "-O", "+O"):
+                    j += 2
+                    continue
+                has_c = has_c or re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", bare[j]) is not None
+                has_n = has_n or re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", bare[j]) is not None
+                j += 1
+            if has_c and j < L:
+                if re.fullmatch(r"'[^']*'", raw[j]):
+                    body = raw[j][1:-1]
+                elif re.search(r"[$`\"]", raw[j]):
+                    body = None
+                    hits.append("a shell given an expanding command string")
+                else:
+                    body = bare[j]
+                if body is not None and SHC_IN.search(body):
+                    hits.append("a file sourced or a string run inside a shell's command string")
+            elif not has_c and not has_n:
+                if pin:
+                    hits.append("a shell reading a pipe")
+                if any(w.stdin_in or w.psub_in for w in words[ci:]):
+                    hits.append("a shell reading a script from a redirection")
+        for h in self.pending:   # a heredoc belongs to the program its command runs
+            if h[3] is None:
+                h[3] = prog
+        execf = "exec" in chain or bare[0] == "exec"
+        self.cmdwords.append((words[ci].s, eff, execf, any(w.out() for w in words[ci:]), hits))
 
     def judge(self, words, ci, piped_at):
         """The display spans of one finished command."""
@@ -265,7 +364,7 @@ class Tok:
 
     def bodies(self, i):
         t, n = self.t, self.n
-        for delim, strip in self.pending:
+        for delim, strip, quoted, owner in self.pending:
             while True:
                 if i >= n:
                     raise ParseError(f"heredoc {delim!r} never ends")
@@ -276,7 +375,7 @@ class Tok:
                     i = j + 1
                     break
                 self.mask[i:j] = b"H" * (j - i)   # a heredoc body: code (PHP, sums, texts)
-                if delim == "PHP":
+                if delim == "PHP" and quoted and owner == "cat":   # (review 5) quoted, so nothing in it expands; read by cat
                     self.php_lines.add(i)
                 i = j + 1
         self.pending = []
@@ -294,7 +393,7 @@ class Tok:
             c = t[i]
             if c in " \t\n;|()" or (c == "\\" and t.startswith("\\\n", i)):
                 if c == "(" and i > w.s and t[i - 1] == "=":
-                    i, _ = self.cmds(i + 1, ")")   # an array assignment: its contents are code
+                    i, _ = self.cmds(i + 1, ")", array=True)   # an array assignment: its contents are code
                     continue
                 break
             if c == "&":
@@ -323,28 +422,41 @@ class Tok:
             elif c == "$":
                 i = self.dollar(i, w)
             elif c in "<>":
+                pre = t[w.s:i]
+                fd_in = not (pre.isdigit() and pre != "0")   # (review 5) standard input, unless another descriptor is named
                 if t.startswith("<<<", i):
+                    w.stdin_in = w.stdin_in or fd_in
                     i += 3
                 elif t.startswith("<<", i):
+                    w.stdin_in = w.stdin_in or fd_in
                     i = self.heredoc_op(i)
                 elif i + 1 < n and t[i + 1] == "(":
                     s = i
                     if c == ">":
                         w.psub_out = True
+                    else:
+                        w.psub_in = True
                     i, inner = self.cmds(i + 2, ")")
                     w.subs.append((s, i, inner))
-                elif c == ">":   # standard output redirected, spaced or glued; 2> and >&2 are standard error (review 3)
+                elif c == ">":   # spaced or glued (review 3); by descriptor (reviews 4 and 5)
                     k = 2 if t.startswith((">>", ">|"), i) else 1
-                    if t[w.s:i] == "2":   # (review 4) standard error: to a file unless /dev/null or another descriptor
-                        tgt = re.compile(r"[ \t]*([^ \t\n;|&()<>]*)").match(t, i + k).group(1)
-                        if not (t.startswith("&", i + k) or tgt == "/dev/null"):
-                            w.err_file = True
-                    elif t.startswith("&2", i + k) and not t[i + k + 2:i + k + 3].isdigit():
-                        w.to_err = True
+                    fd = int(pre) if pre.isdigit() else 1
+                    if t.startswith("&", i + k):   # a duplication or a close: >&2 is standard error; 3>&1, 2>&1 move nothing out
+                        if fd == 1:
+                            if t.startswith("&2", i + k) and not t[i + k + 2:i + k + 3].isdigit():
+                                w.to_err = True
+                            else:
+                                w.redir_out = True
                     else:
-                        w.redir_out = True
+                        tgt = re.compile(r"[ \t]*([^ \t\n;|&()<>]*)").match(t, i + k).group(1)
+                        if fd == 1:
+                            w.redir_out = True
+                        elif fd == 2 and tgt != "/dev/null":
+                            w.err_file = True
+                        # another descriptor: what is written to it is judged where it is written (>&N)
                     i += k
                 else:
+                    w.stdin_in = w.stdin_in or fd_in
                     i += 1
             else:
                 i += 1
@@ -362,7 +474,9 @@ class Tok:
         m = re.compile(r"'([^']*)'|\"([^\"]*)\"|\\?([A-Za-z_][A-Za-z0-9_]*)").match(t, i)
         if not m:
             raise ParseError(f"a heredoc delimiter could not be read at offset {i}")
-        self.pending.append((m.group(1) if m.group(1) is not None else m.group(2) if m.group(2) is not None else m.group(3), strip))
+        quoted = m.group(1) is not None or m.group(2) is not None or t[m.start()] == "\\"
+        delim = m.group(1) if m.group(1) is not None else m.group(2) if m.group(2) is not None else m.group(3)
+        self.pending.append([delim, strip, quoted, None])   # the owner is the program its command runs (record)
         return m.end()
 
     def dollar(self, i, w):
@@ -474,7 +588,9 @@ class View:
             lead = len(raw) - len(raw.lstrip())
             # (review 3, review 4) a line is skipped only as a PHP comment: // or # first, in the body of a heredoc
             # delimited PHP, the whole line H — never by its raw prefix, never in a quoted string or another heredoc
-            if raw.lstrip().startswith(("#", "//")) and at in tok.php_lines and all(b == 72 for b in m[lead:]):
+            # (review 5) a quoted PHP heredoc read by cat only, and never a line holding ?>, which ends a PHP comment
+            if raw.lstrip().startswith(("#", "//")) and at in tok.php_lines and all(b == 72 for b in m[lead:]) \
+                    and "?>" not in raw:
                 code, sh = "", ""
                 self.skipped.add(n)
             else:
@@ -878,9 +994,8 @@ def k6(v):
 HIDERS = [   # (review 3) each found anywhere in code, not anchored to a line's start
     (re.compile(r"(?<![\w$./>:-])eval\b"), "eval"),
     (re.compile(r"(?<![\w$./>:-])source\s+[\"$/]"), "a file sourced"),
-    # (review 4) a shell by any path, after options, reading <, << or <<<; a shell anywhere in a piped command
-    (re.compile(r"(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\b(?:\s+-[-\w]+)*\s*<"), "a shell reading a script from a redirection"),
-    (re.compile(r"(?<!\|)\|&?(?!\|)[^|;&\n]*?(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\b(?!\s+-[nc]\b)"), "a shell reading a pipe"),
+    # (review 5) a shell reading a script from standard input, a pipe or <( … ), and a shell's -c string, are judged on
+    # the tokenizer's programs (Tok.record), not by a pattern that cannot tell a program from an argument
     (re.compile(r"\$\{!"), "an indirect expansion ${!…}"),
     (re.compile(r"\b(?:sh|bash|dash|zsh)\s+-c\s+[\"$]"), "a shell given an expanding command string"),
     (re.compile(r"(?:tools|scripts)/[^\s\"';|&)]*[*?\[]"), "a glob in a tools/ or scripts/ path"),
@@ -895,8 +1010,10 @@ HIDERS = [   # (review 3) each found anywhere in code, not anchored to a line's 
 # the dot form of sourcing, on unquoted shell code alone: in PHP (heredocs, quoted strings) "." is concatenation
 DOT = re.compile(r"(?:^\s*|[;&|({]\s*|\b(?:then|do|else)\s+|\)\s+)\.\s+[\"$/]")
 RUN_OK = 'bash "$REPO/scripts/deploy-hybrid.sh"'
-SHC = re.compile(r"(?<![\w.$/-])(?:/\S*/)?(?:sh|bash|dash|zsh)\s+(?:-[-\w]+\s+)*-c\s+'([^']*)'")
-SHC_IN = re.compile(r"(?:^|[;&|({\n!]|\b(?:then|do|else|if|while|until|elif|command|builtin|exec|time)\b)\s*(?:\.|source|eval)(?:\s|$)")
+# inside a shell's literal -c string: sourcing or eval as a command, or another shell reading a pipe or a redirection
+SHC_IN = re.compile(r"(?:^|[;&|({\n!]|\b(?:then|do|else|if|while|until|elif|command|builtin|exec|time)\b)\s*(?:\.|source|eval)(?:\s|$)"
+                    r"|\|\s*(?:\S*/)?(?:sh|bash|dash|zsh)\b(?!\s+-[nc]\b)"
+                    r"|(?:^|[;&|({\n]\s*)(?:\S*/)?(?:sh|bash|dash|zsh)(?:\s+-\S+)*\s*<")
 
 
 def k7(v):
@@ -912,18 +1029,16 @@ def k7(v):
             bad.append(("K7", f"line {n}: a file sourced in code ({raw.strip()[:80]})"))
     # (review 4) the tokenizer's command words, quotes removed: eval, source and . whatever follows, after command,
     # builtin, exec, nohup or env too; exec redirecting the script's own output
-    for at, cw, eff, out in v.cmdwords:
-        for hit, what in ((eff in ("eval", "source", "."), "eval, source or . run as a command"),
-                          (cw == "exec" and out, "exec redirecting the script's output")):
-            if hit:   # the line is counted only for a finding: 10,000 commands, each a scan of the text, cost seconds
-                n = v.t.count("\n", 0, at) + 1
-                bad.append(("K7", f"line {n}: {what} in code ({v.lines[n - 1][1].strip()[:80]})"))
-    # (review 4) a shell's literal command string: sourcing or eval inside it
-    code = "\n".join(c for _, _, c in v.lines)
-    for m in SHC.finditer(code):
-        if SHC_IN.search(m.group(1)):
-            n = code.count("\n", 0, m.start()) + 1
-            bad.append(("K7", f"line {n}: a file sourced or a string run inside a shell's command string in code ({v.lines[n - 1][1].strip()[:80]})"))
+    # (review 5) exec anywhere in the prefix chain (command exec too); the shell programs' findings from Tok.record
+    for at, eff, execf, out, hits in v.cmdwords:
+        found = list(hits)
+        if eff in ("eval", "source", "."):
+            found.append("eval, source or . run as a command")
+        if execf and out:
+            found.append("exec redirecting the script's output")
+        for what in found:   # the line is counted only for a finding: 10,000 commands, each a scan of the text, cost seconds
+            n = v.t.count("\n", 0, at) + 1
+            bad.append(("K7", f"line {n}: {what} in code ({v.lines[n - 1][1].strip()[:80]})"))
     return bad
 
 
@@ -1164,8 +1279,56 @@ def run(doc, ctx):
           "Q_OFF_CMD expanded in code")
     kweak(RB0, ins(f'note "x $(( $({LIVE} php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0 >/dev/null; echo 0) ))"'),
           "K5", "a writer inside a command substitution inside an arithmetic expansion in display text", W5)
+    # (review 5) a shell by its program: positional arguments before the redirection, a runner, a process substitution
+    kweak(RB0, ins('docker exec -i "$CONTAINER" sh -s -- "$IN_CONTAINER" <<\'PHP\'\n//usr/bin/env php "$1/tools/set_config.php" --key followup_enabled --value 0\nPHP'),
+          ("K5", "K7"), "a heredoc delimited PHP read by sh -s -- with an argument", "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('sh -s "$IN_CONTAINER" < "$OUT/x.sh"'), "K7", "sh -s with an argument reading a file",
+          "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('bash <(cat "$OUT/x.sh")'), "K7", "bash running a process substitution", "a shell reading a script from a redirection in code")
+    # (review 5) a case pattern's ( on the case's own line
+    kweak(RB0, ins('{ echo "$K_OFF_CMD"; case "$MODE" in (a) : ;; esac; } | tee "$OUT/x.sh"'), "K5",
+          "K_OFF_CMD in a piped group holding a one-line case with a ( pattern", "K_OFF_CMD expanded in code")
+    # (review 5) a PHP heredoc's lines skipped only when quoted, read by cat, and holding no ?>
+    kweak(RB0, ins(f'XX_PHP="$(cat <<PHP\n// $({LIVE} php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0 >/dev/null)\nPHP\n)"'),
+          "K5", "a run in an unquoted PHP heredoc's comment line", N5)
+    kweak(RB0, ins('XX_PHP="$(cat <<\'PHP\'\n// nothing ?><?php KycService::writeKycFile("/x", []);\nPHP\n)"'), "K5",
+          "a writer after ?> on a PHP comment line", W5)
+    # (review 5) a shell's -c string after clustered options or --
+    kweak(RB0, ins('dxo sh -ec \'. "$1"\' _ "$OUT/x.sh"'), "K7", "a file sourced in sh -ec's string",
+          "a file sourced or a string run inside a shell's command string in code")
+    kweak(RB0, ins("bash -c -- '. ./s.sh'"), "K7", "a file sourced in bash -c --'s string",
+          "a file sourced or a string run inside a shell's command string in code")
+    # (review 5) the command word after $'…', a leading redirection and time -p; exec after command
+    kweak(RB0, ins('$\'source\' "$OUT/x.sh"'), "K7", "source spelled $'source'", "eval, source or . run as a command in code")
+    kweak(RB0, ins("$'\\x2e' \"$OUT/x.sh\""), "K7", ". spelled $'\\x2e'", "eval, source or . run as a command in code")
+    kweak(RB0, ins('2>/dev/null . "$OUT/x.sh"'), "K7", "a file sourced after a leading redirection", "eval, source or . run as a command in code")
+    kweak(RB0, ins('time -p . "$OUT/x.sh"'), "K7", "a file sourced after time -p", "eval, source or . run as a command in code")
+    kweak(RB0, ins('command exec >"$OUT/x.sh"; echo "$K_OFF_CMD"; command exec >/dev/tty'), "K7",
+          "the script's output sent to a file by command exec", "exec redirecting the script's output in code")
     print(f"  keep check: K1–K7 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused by exactly "
           "the checks named for it and by the rule it is for")
+
+    # (review 5) the controls that must pass: shapes a derivation may need, each once refused by an earlier checker
+    n_pass = 0
+    for line, what in (('say_k() { echo "  $K_OFF_CMD" >&2; }', "a function whose first command prints to standard error"),
+                       ('say_k() { echo "  $K_OFF_CMD" 2>"$OUT/e"; }', "a function whose first command sends its errors to a file"),
+                       ('if ( true ) then echo "  $K_OFF_CMD" 2>"$OUT/e"; fi', "an if whose condition is a subshell"),
+                       ('{ echo "$K_OFF_CMD"; } >&2', "a group printed to standard error"),
+                       ('printf "%s" "$x" | grep -c sh', "a pipe into grep looking for the word sh"),
+                       ('printf "%s" "$x" | sed "s/-/ dash /g"', "a pipe into sed whose text holds the word dash"),
+                       ('grep -c bash < "$OUT/f"', "a grep for the word bash reading a file"),
+                       ('printf x | docker exec -i "$CONTAINER" sh -c \'cat > "$1"\' _ f', "a pipe into a container's sh -c 'cat'"),
+                       ('exec 3>&1', "exec keeping a copy of standard output"), ('exec 3>&-', "exec closing a descriptor"),
+                       ('FIND_ARGS=(. -type f -name "*.php")', "an array beginning with ."), ('ROLES=(source target)', "an array holding source"),
+                       ('command -v source >/dev/null', "command -v asking for source"),
+                       ('X="$(case "$MODE" in (a) echo 1 ;; esac)"', "a ( case pattern inside a command substitution"),
+                       ('case "$MODE" in a|b) sh -c \'true\' ;; esac', "a case pattern's alternatives before sh -c"),
+                       ('n=$((${#x}+1)); m=$(( x > 0 ? 1 : 0 ))', "arithmetic with a length and a ternary")):
+        got = keep_check(doc.t.replace(RB0, ins(line)))
+        if got:
+            raise SystemExit(f"KEEP CHECK PASS CONTROL ({what}): refused: {got[:3]}")
+        n_pass += 1
+    print(f"  keep check pass controls: {n_pass} legitimate shapes, none refused")
 
     # the run's folder (DS3-fix1, carried): made in the main shell before any subshell reads it — weakened copies
     print("  folder check: " + folder_check(t))
