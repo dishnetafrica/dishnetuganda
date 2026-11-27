@@ -43,7 +43,7 @@ SRC_COMMIT = "745e668"                                   # scripts/deploy-5.18.1
 SRC_SHA256 = "3189cee22818fb3a"                          # its sha256 (prefix)
 REPORT_PIN = "7835906a0e4af49557f7c0eb994cb9129637ca00"  # scripts/sales-followup-report.sh stays pinned to 5.18.105's commit
 PLUGIN = "dishnet-hybrid-sudan"
-PARTS = ["partA", "partB", "partMG", "partNS", "partSA", "partME", "partL", "partR", "partT", "partH", "partZ"]
+PARTS = ["partA", "partB", "partMG", "partNS", "partSA", "partME", "partL", "partR", "partDV", "partT", "partH", "partZ"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 if len(sys.argv) < 4:
