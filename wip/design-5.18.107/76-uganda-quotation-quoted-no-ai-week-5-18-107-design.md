@@ -2599,23 +2599,24 @@ F3 readings and the rollback's one write.
 
   A14's loop, its two stop messages and its note follow. Its ok line names the whole chain; at 5.18.106 it named only up
   to `PREV5` while the loop read `PREV9` (S106:13168, 13216).
-- **The lists, from Git, never typed.** The delta is 110 files:
-  - 70 changed: the build's 62; `manifest.json` and `SAFETY.md`; the five distributor tests' version pins; and
+- **The lists, from Git, never typed.** The delta is 115 files (110 at the first cut, `5b6245b`; §T.15):
+  - 75 changed: the build's 62; `manifest.json` and `SAFETY.md`; the five distributor tests' version pins;
     `tests/quote_from_ucrm/F_send_quote.php`, F6 re-pointed for O7 when the release-stage run of
-    `test_quote_from_ucrm` found it comparing the Uganda journey with 5.18.101's byte for byte;
+    `test_quote_from_ucrm` found it comparing the Uganda journey with 5.18.101's byte for byte; and the five tests
+    the re-cut re-points for suite pass D1's findings (§T.15);
   - 40 added: 30 tests, nine lib classes and `migrations/092_wa_no_ai.sql`;
-  - 46 of the 110 are runtime files (36 changed, 10 added).
+  - 46 of the 115 are runtime files (36 changed, 10 added).
 
   The three lists:
-  - **`PREV_CHANGED`**: the 70 changed files at `bf29cbd`'s sha256 (what must be live before, and what a rollback puts
-    back). 41 of them were in 5.18.106's kept list, 16 in its delta, and 13 in neither.
-  - **`PIN_SHA256S`**: the 110 at the pin's sha256.
-  - **The kept list**: (455 − 41) + (23 − 16) = **421**, at `bf29cbd`'s sha256 and asserted equal at the pin. The 7
+  - **`PREV_CHANGED`**: the 75 changed files at `bf29cbd`'s sha256 (what must be live before, and what a rollback puts
+    back). 46 of them were in 5.18.106's kept list, 16 in its delta, and 13 in neither.
+  - **`PIN_SHA256S`**: the 115 at the pin's sha256.
+  - **The kept list**: (455 − 46) + (23 − 16) = **416**, at `bf29cbd`'s sha256 and asserted equal at the pin. The 7
     files of 5.18.106's delta that 5.18.107 does not change rejoin it. `lib/QuoteTaxLine.php` leaves it.
 
   The derivation first asserts 5.18.106's own counts (455, 23, 20 changed, 3 added) as its starting point. The counts
-  above were measured on the release commit (`5b6245b`). The derivation re-reads them from it, and a difference is
-  refused, never adjusted.
+  above were measured on the release commit (`771a3c1`, the re-cut of `5b6245b`, §T.15). The derivation re-reads them
+  from it, and a difference is refused, never adjusted.
 - **A7 is carried: the release commit holds the plugin tree only.** The build branch also changes the root file
   `scripts/lib/ai_check.php` (W.2's library list). It goes on the development branch, as every root script does, and no
   earlier release commit touched a root file.

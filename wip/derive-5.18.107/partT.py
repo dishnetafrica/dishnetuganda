@@ -1,12 +1,12 @@
 # Part T — the carried texts (root docs/76 §T.2): what 5.18.106's script said of the release it deploys or rolls back,
-# re-pointed now that bf29cbd (5.18.106) is live and the rollback target and 5b6245b (5.18.107) the release.
+# re-pointed now that bf29cbd (5.18.106) is live and the rollback target and 771a3c1 (5.18.107, §T.15) the release.
 #   T1 the carried texts outside the parts' own regions, the header and the summary that named 5.18.105, 5.18.106 or
 #      7835906 as the live release, the release deployed or the rollback target: 088's and BA1's migrations, BK3's
 #      links, PERSONA's comment (DF-1), the cash probes' "5.18.105's code and the pin's", V4, the cash readings' old
 #      code and new, QC-RB2 before and after and in V1, the catalogue's note, QF-G1's form, QF-G4's retirement note,
 #      Part V's, Part O's and Part P's RB notes, TN, QS, A22 and R23 (public.php, which 5.18.107 changes again), the
 #      put-back's sentence, BASE_DIFFERS, BR1 (and its after-a-rollback note, DF-9), Q-G1, LM's call site, CS-B1's
-#      retirement at LK-B1, V6, Q-CA5, R7, RB's quoting code (§T.2: kyc_form.php and set_config.php are among the 70)
+#      retirement at LK-B1, V6, Q-CA5, R7, RB's quoting code (§T.2: kyc_form.php and set_config.php are among the 75)
 #      and the RB quoting records. Comments and printed words only — no check, no variable and no logic changes here.
 #   T2 every fact a new text states is read off Git first: each file it calls kept is in PREV_KEPT_SHA256S, outside
 #      5.18.107's delta and the same at bf29cbd and the pin; each file it calls changed is in the delta; the one
@@ -72,8 +72,8 @@ def apply(doc, ctx):
     d107 = set(added) | set(changed)
     kept = _kept(doc)
     n_a, n_mod, n_k = len(added), len(changed), len(kept)
-    if (n_a, n_mod, n_k) != (40, 70, 421):
-        raise SystemExit(f"PART T: added {n_a}, changed {n_mod}, kept {n_k} — not §T.2's 40, 70 and 421")
+    if (n_a, n_mod, n_k) != (40, 75, 416):
+        raise SystemExit(f"PART T: added {n_a}, changed {n_mod}, kept {n_k} — not §T.15's 40, 75 and 416")
     tests = [f for f in added if f.startswith("tests/")]
     libs = [f for f in added if f.startswith("lib/")]
     migs = [f for f in added if f.startswith("migrations/")]
@@ -275,7 +275,7 @@ def apply(doc, ctx):
         # the summary's D9 note: post_kyc.php and webhook.php are kept by 5.18.107 too (partH asserts both)
         ("# 5.18.103 through 5.18.106: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks were LM's masked log lines only, and 5.18.106 changes neither",
          "# 5.18.103 through 5.18.107: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks were LM's masked log lines only, and 5.18.106 and 5.18.107 change neither"),
-        # RB: the quoting code in place (§T.2: kyc_form.php and set_config.php are among the 70)
+        # RB: the quoting code in place (§T.2: kyc_form.php and set_config.php are among the 75)
         ("# 5.18.99's quoting code is in place: the rollback target has it. 5.18.106 changes none of its files that reach uCRM:\n"
          "# lib/QuotationService.php (5.18.105's, its log lines masked), lib/KycService.php, lib/KycCrmSync.php, includes/api/api_cron_debug.php,\n"
          "# includes/api/api_products_admin.php, tabs/sales/kyc_form.php, tabs/sales/applications.php, lib/QuoteOrganization.php,\n"
@@ -307,7 +307,7 @@ def apply(doc, ctx):
         "# redeploy. 089–091, applied at 5.18.104's first boot, are in the ledger and are not run again.",
         why="BR1's comment")
 
-    # Q-G1's comment: the live release is 5.18.106; 70 changed, 421 kept, 40 added; what of the named files 5.18.107 changes
+    # Q-G1's comment: the live release is 5.18.106; 75 changed, 416 kept, 40 added; what of the named files 5.18.107 changes
     doc.lines_between(
         "# Q-G1 — 5.18.99 (SPEC-quote-company §6; 5.18.98's G1, carried): the live plugin is 5.18.105 — the container's record and",
         "# an earlier rollback left. Run before a deploy and before the move-list.",

@@ -9,10 +9,10 @@
 # the pin) and off the source's own lists, never typed; the numbers below are §T.2's, asserted equal to what Git gives,
 # never written from them:
 #   PREV_KEPT_SHA256S    (5.18.106's kept ∪ its pinned) − 5.18.107's delta, at bf29cbd's sha, asserted identical at the
-#                        pin: 421 — 5.18.106's 455 kept less the 41 that 5.18.107 changes, its 23 pinned less the 16
-#   PREV_CHANGED_SHA256S exactly 5.18.107's 70 changed files, at bf29cbd's sha (Q-G1 reads them as live 5.18.106; RB puts
-#                        them back): 41 of 5.18.106's kept, 16 of its delta, 13 in neither
-#   PIN_SHA256S          5.18.107's 110 at the pin: 70 changed, 40 added (30 tests, nine lib classes and migrations/092 —
+#                        pin: 416 — 5.18.106's 455 kept less the 46 that 5.18.107 changes, its 23 pinned less the 16
+#   PREV_CHANGED_SHA256S exactly 5.18.107's 75 changed files, at bf29cbd's sha (Q-G1 reads them as live 5.18.106; RB puts
+#                        them back): 46 of 5.18.106's kept, 16 of its delta, 13 in neither (§T.15: the re-cut adds 5 kept)
+#   PIN_SHA256S          5.18.107's 115 at the pin: 75 changed, 40 added (30 tests, nine lib classes and migrations/092 —
 #                        asserted)
 # The source's own lists are asserted first — 455, 23 and 20, each file at the sha Git gives it (7835906's for the kept
 # and the changed, bf29cbd's for the pinned), its EXPECTED_ADDED and EXPECTED_CHANGED Git's 7835906 → bf29cbd delta — so
@@ -22,9 +22,9 @@ from d107lib import sha_at, delta, git
 
 N_KEPT_106, N_PIN_106, N_CHANGED_106 = 455, 23, 20      # 5.18.106's own lists, as its derivation left them (asserted)
 N_ADDED_106_SRC = 3                                     # 5.18.106's own added files (tests only)
-N_FROM_KEPT, N_FROM_PIN, N_NEITHER, N_KEPT_107 = 41, 16, 13, 421   # §T.2: the 70 changed are 41 kept, 16 delta, 13 neither
-N_ADDED_107, N_CHANGED_107 = 40, 70                     # §T.2: the delta at the pin
-N_RT_CHANGED, N_RT_ADDED = 36, 10                       # §T.2: 46 of the 110 are runtime files
+N_FROM_KEPT, N_FROM_PIN, N_NEITHER, N_KEPT_107 = 46, 16, 13, 416   # §T.2, §T.15: the 75 changed are 46 kept, 16 delta, 13 neither
+N_ADDED_107, N_CHANGED_107 = 40, 75                     # §T.2, §T.15: the delta at the pin
+N_RT_CHANGED, N_RT_ADDED = 36, 10                       # §T.2: 46 of the 115 are runtime files (the re-cut changed tests only)
 VERSIONS = ("5.18.105", "5.18.106", "5.18.107")         # the source's baseline, the source, the pin (asserted)
 # §T.2: the nine lib classes and the one migration 5.18.107 adds; every other added file is a test
 LIB_ADDED = ["lib/BurstMerge.php", "lib/ConnectionQuote.php", "lib/NoAiAlert.php", "lib/NoAiGuard.php", "lib/NoAiList.php",

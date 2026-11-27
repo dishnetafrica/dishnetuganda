@@ -22,7 +22,7 @@
 #            (ai_burst_merge_enabled — one reply to a burst of messages). South Sudan unchanged. THIS SCRIPT WRITES
 #            NOTHING, AND NEITHER DOES ITS ROLLBACK: it keeps every key of the sales follow-up's ladder as found, runs
 #            neither the switch tool's on, off, skip, set or erase nor scripts/sales-followup.sh, and refuses (NS-G1)
-#            while K's, Q's or W.1's switch reads on. Files, against bf29cbd: 70 changed, 40 added — 110 (the added ones
+#            while K's, Q's or W.1's switch reads on. Files, against bf29cbd: 75 changed, 40 added — 115 (the added ones
 #            30 tests, nine lib classes and 092).
 #
 #   THE FIGURES GO TO A CASH SHEET, NEVER TO THE TERMINAL OR THE LOG. Each run writes its own sheet,
@@ -356,12 +356,12 @@
 #            reader that could not tell the two apart would pass anything. Whether this server sees the new line is
 #            Q-G2's question — the tenant is Uganda through the installed code on a copy — the gate's own rule
 #            (TenantProfile::current()->id()). By the sha256 pinned here, Q-CA1 reads every file 5.18.107 changes or
-#            adds (its 110, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it
-#            changes (70), as 5.18.106 has them; all three read the 421 files of 5.18.106 it must not touch —
+#            adds (its 115, as the pin has them); Q-G1 before the copy, and RB after a rollback, read every file it
+#            changes (75), as 5.18.106 has them; all three read the 416 files of 5.18.106 it must not touch —
 #            lib/QuoteOrganization.php, lib/TenantProfile.php, lib/PublicPriceFeed.php, lib/UcrmQuoteLinks.php,
 #            lib/UcrmQuoteLines.php, lib/UcrmCatalogue.php, webhook.php, cron_quote_wa.php, post_kyc.php and
 #            lib/SalesFollowupChecks.php among them (lib/QuoteTaxLine.php, the uCRM catalogue screen, the ladder and its
-#            tool are among the 70 it changes). The 40 files it adds (30 tests, nine lib classes and 092) have no
+#            tool are among the 75 it changes). The 40 files it adds (30 tests, nine lib classes and 092) have no
 #            5.18.106 form: BR1 counts any left on disk, and QC-RB1 shows that no file bf29cbd tracks names them.
 #
 #   5.18.100'S CHECKS, CARRIED, AGAINST 5.18.106'S CODE (TN, "technician number"). Refusals before the copy: TN-G1 the
@@ -384,8 +384,8 @@
 #            numbers a technician owns counted — they keep their owner and work under 5.18.106 as before.
 #
 #   5.18.99'S CHECKS, CARRIED, AGAINST 5.18.106'S CODE. Its quoting checks keep their ids (SPEC-quote-company §6): Q-G1 the
-#            live plugin is 5.18.106 — the version, every file 5.18.107 changes (70) by bf29cbd's sha256 (pinned here),
-#            and the 5.18.106 files 5.18.107 must not touch (421) by theirs, the quoting files it keeps (QuoteOrganization,
+#            live plugin is 5.18.106 — the version, every file 5.18.107 changes (75) by bf29cbd's sha256 (pinned here),
+#            and the 5.18.106 files 5.18.107 must not touch (416) by theirs, the quoting files it keeps (QuoteOrganization,
 #            QuotePdfSource, UcrmLeadSync, the Uganda profile; tools/set_config.php is among the changed) and 5.18.100's owner
 #            rule among them; Q-G2 the tenant is Uganda through the INSTALLED code on a copy (TenantProfile::current()->id()
 #            and QuoteTaxLine::applies()); Q-G3 the effective quoting organization through the PIN's
@@ -498,7 +498,7 @@
 #            plugin WhatsApps every new quote to its customer.
 #
 #   THE COMMIT IT INSTALLS IS A RELEASE COMMIT, NOT THE BRANCH TIP. The pin below, on release/5.18.107, is cut on
-#            bf29cbd (5.18.106, live): 110 files — 70 changed, 40 added (30 tests, nine lib classes and 092) — each
+#            bf29cbd (5.18.106, live): 115 files — 75 changed, 40 added (30 tests, nine lib classes and 092) — each
 #            file's sha256 pinned here. Stage A refuses a pin whose parent is not 5.18.106, whose short hash names
 #            another commit, whose delta is not exactly these files by these hashes, which carries any migration but 092
 #            (added, never modified, by its sha256 and md5; 089–091 held at the pin by theirs), and a checkout holding a
@@ -726,7 +726,7 @@
 #            offer through the installed offered(), GET-only, compared with stage A's item by item (QC-CA1), and, in an
 #            --after-only run, the switch, the installation product, the standard quotations and G-7 (QC-ON1–QC-ON4)
 #          RB after a rollback (rb_pre107 before it; RB107 after it — master, LK-RB1, the rows, LM-RB1, RB-X, the pin's
-#            drain on a copy): 5.18.106's files by sha256 where 5.18.107 changed them (Q-G1's set of 70), every ladder
+#            drain on a copy): 5.18.106's files by sha256 where 5.18.107 changed them (Q-G1's set of 75), every ladder
 #            key as before, the 40 files 5.18.107 adds on disk, named by nothing bf29cbd
 #            tracks (QC-RB1, re-pointed), the uCRM catalogue's table counted, 5.18.103's own screen's and read by 5.18.106
 #            again (a note), the web-direct applications with no quotation counted again, ids on the sheet (QC-RB2, a record —
@@ -769,8 +769,8 @@ drained() { local rc; "$@"; rc=$?; cat >/dev/null; return "$rc"; }   # … | dra
 main() {
 PLUGIN="dishnet-hybrid-sudan"
 CONTAINER="${UCRM_CONTAINER:-ucrm}"
-EXPECTED_PLUGIN_COMMIT="5b6245b"   # 5.18.107 (release) — on Uganda, the quotation quoted, no AI where asked, the burst merged (root docs/76): 36 runtime files changed and 10 added (nine lib classes and migrations/092_wa_no_ai.sql, the assistant-off list, applied at the first boot); three new switches (K, Q, W.1), off at the deploy (NS-G1, NS-B1) and turned on one at a time by the owner; the deploy and its rollback write no setting
-EXPECTED_PLUGIN_COMMIT_FULL="5b6245b76c87e252cb85e16eb77afbc94897fbbf"   # the same commit in full: A0 refuses a short hash that names any other
+EXPECTED_PLUGIN_COMMIT="771a3c1"   # 5.18.107 (release) — on Uganda, the quotation quoted, no AI where asked, the burst merged (root docs/76): 36 runtime files changed and 10 added (nine lib classes and migrations/092_wa_no_ai.sql, the assistant-off list, applied at the first boot); three new switches (K, Q, W.1), off at the deploy (NS-G1, NS-B1) and turned on one at a time by the owner; the deploy and its rollback write no setting
+EXPECTED_PLUGIN_COMMIT_FULL="771a3c12fd92cf195ed51b480becd8e21b9939ed"   # the same commit in full: A0 refuses a short hash that names any other
 EXPECTED_VERSION="5.18.107"
 BASELINE_COMMIT="bf29cbd"          # 5.18.106 (release, the enquiry follow-up sender unjammed; live since 22 Nov 05:48:21 UTC, its --after-only PASSED on 22 and 23 Nov — root docs/75 §S) — what the server runs first, and the rollback (every switch kept; the rollback writes nothing); G3 and V3j require ECO Bank's switch ON and a statement kept on it, as 5.18.106's did
 BASELINE_COMMIT_FULL="bf29cbd7171639f93e674ab174a6d09948b68932"
@@ -874,7 +874,7 @@ BK_NAV_BLOCK_SHA256="001cd3878bcb31f472c9e3835cdfe63a50f767c1b3f755f56fff967c4a3
 BK_CEO_BLOCK_SHA256="b6cbebe06664579fbf68a9b39f6a76a7ba314290d3b3c8c836e5b1b7f711d1d3"
 # 5.18.107 (Q-G1, Q-CA1, RB) — the files of 5.18.106 this release must leave exactly as they are, each with the sha256
 # release/5.18.106 (bf29cbd) gives it, pinned here so that no other 5.18.106 can pass for it (root docs/76 §T.2):
-# the 414 of 5.18.106's own kept list that 5.18.107 does not change — all but the 41 it does, lib/QuoteTaxLine.php,
+# the 409 of 5.18.106's own kept list that 5.18.107 does not change — all but the 46 it does, lib/QuoteTaxLine.php,
 # cron/event_processor.php, lib/NotificationService.php, lib/SalesFollowupLadder.php, tools/sales_followup.php,
 # evo_webhook.php and cron/wa_watchdog.php among them — then the 7 of 5.18.106's own release files that 5.18.107 does
 # not change — all but the 16 it does (SAFETY.md, cron/followup_scan.php, cron/followup_send.php, manifest.json,
@@ -1102,7 +1102,6 @@ fcd835b0fac3ccd8e391690d7843ade58c683471b8a87adb4bf11fdccca3ff53  tests/quote_fo
 3f0f4a0baf1250ec4cf5a967f2bb202a045a42de006a6687dec62d04434eed0b  tests/quote_followup/C_owners.php
 2106bec0753630ac3176045a324784c77482fbd7adde88ded7e37eb3983fec69  tests/quote_followup/D_policy.php
 ebd60aa1b4455c1065d9c88f888687ecb20c1e3b77f5840f131588942dfe2fe9  tests/quote_followup/E_number.php
-2f59606eea82083a7e5be4d81a26d0059b38579a67d37863a44d3bf89cddff20  tests/quote_followup/F_stops.php
 339d265fdc4fe19984aeed414155fe8d7bf491f71b891f7de500f4554e2a5803  tests/quote_followup/I_templates.php
 ae38481a47c67ffb7feaa6327a96043d71c5d041f1edaa93abf95f0bb5c99d87  tests/quote_followup/J_list.php
 c267fadfc083dec358ae667b2faa698b9a8d05811360d464530c13fb117e97bd  tests/quote_followup/L_south_sudan.php
@@ -1123,9 +1122,7 @@ fce978d0766b77fafbb5919807f765924a4bbba8a43554f19608f4530d558118  tests/quote_fo
 914825d1be2c80044cf3550db02d611c620b4150b9bd75d48f04f935e339a668  tests/quote_followup/mutants_OH.php
 98ba2a2ef6e22bdcaebcabdf5e0ce120b476ee6c3864af4ce54aff21f4a1f5db  tests/quote_followup/mutants_wa_send_budget.php
 84b4e7496145d269dcb0759e7385f4988fc6ea460c0c52010492e5bf0613090c  tests/quote_followup/run_cron.php
-ff28e8c27b4d95ba7335a0bbd7e153ab2e1b1fc6ade96f6ed301e1bbcc4429ac  tests/sales_followup_tool/CK_checks.php
 f43dfeaa8e65e20cd8b342d2645875e2b6a2728b26cf35fafb615292ce3f20d3  tests/sales_followup_tool/TL_locks.php
-5a28124b8fc364bc0124d9449343601eeedc038d0fddc7736f37bbd7befe42ff  tests/sales_followup_tool/_lib.php
 a4c9220574d694a0f07e711aa651521354576085907aa3199ea4c58cdb8bf528  tests/sales_followup_tool/mutants_CK.php
 fce143a84506b1872609cb9ebf4315d1604a9bfa445f31fb7d2976e437861206  tests/sales_followup_tool/mutants_TL.php
 a37fe4ae6a3803895ca04b3a86da921bd4f99291e32f498b0b5172d2dc092cf6  tests/sales_followup_tool/run_offers.php
@@ -1197,7 +1194,6 @@ b7913d827eb4c81085526886a91ce7a489ad9fcc8e9e30eb966f2f3b91017506  tests/voice_me
 2614fd807bead4d7e4143d3f383b94d1291dec81a450c06f9410364a673aaa83  tests/voice_media/mutants_J.php
 d559d29aa172157cf4e4ff50071ee9058de6be5d19ea5e6ecd5927f2d181e918  tests/voice_media/mutants_K.php
 e804ac4e6d0cf8cac7d94c9fb773c46e50f496902c081858fedb24203c7e46c2  tests/voice_media/owner_evo.php
-7b34a42eccb2ff229b49e440922e563399524d11127fd38465b228324927bae9  tests/voice_switches/VK_tool.php
 ce2069fb99c926ff59d95b9c431f902e61aea0961bc50dc437f0189f5dee7830  tests/voice_switches/mutants_VK.php
 8aeb92c9d3eb2f574c5e7c910f732354bc36751322b472a6c9e77ec7f61386fb  tests/wa_offers/A_schema.php
 506986c6ea48ffe89588d6e47215d64e40d58dc4be6ac8211c0940f767458559  tests/wa_offers/B_switch.php
@@ -1251,7 +1247,6 @@ a0d588ad2057ae4c9a51996a768bad5d15b494aafbb272ce630fe496b0a55d26  lib/PluginLog.
 4cf19a38d3c3ce89453c183a22b59e73a2714c4c829c065f2cd47688a447f314  tests/catalogue_direct/I_boundary.php
 565c31ee6c0d6bac3035412ef11fe3d2c339ead6fcbb179fb516f84853c92c36  tests/catalogue_direct/mutants_I.php
 a364c7d893b35978ec63becdbb6fb63cf45c5dbf14c4d561404874a35917aac9  tests/quote_agent_copy/J.php
-65a6160525639973a39ac1af249bdf1158d507158acd49713c20b41a9b89c995  tests/quote_followup/M_logging.php
 9824c60a1f17c8a925a88b09cf5c4dfcbdbc3de95cc7007a9979d3c0a4a56b8c  tests/quote_from_ucrm/I_boundary.php
 c3f2ff69ef3da9467438a8749fcccd4779ff4fe16309c34d14f40d03ad5c9915  tests/quote_from_ucrm/mutants_I.php
 a3e9fba6b5c4ac10b83117686e9b1b07724c13b071c20580f18b7632a8cced19  tests/sales_followup_tool/TL_tool.php
@@ -1311,10 +1306,10 @@ d9387cd34dc6b2797280529434e739427014f9c54de6dfd665a252b65673c63b  lib/FollowUpSe
 8dab47f63c1d647021c8f736278c2cc350d71eb863888c4d5d94dba4cd13aa4a  tests/quote_followup/N_boundary.php
 SUMS
 )"
-PREV_KEPT_N=421
+PREV_KEPT_N=416
 # 5.18.107 (Q-G1, RB) — every file 5.18.107 changes, with the sha256 release/5.18.106 (bf29cbd) gives it: what the live
 # plugin must hold before anything changes (Q-G1: live 5.18.106), and what a rollback must put back (RB). A0 finds them
-# in 5.18.106's release commit from Git: 41 of them were in 5.18.106's kept list, 16 in its delta and 13 in neither. The
+# in 5.18.106's release commit from Git: 46 of them were in 5.18.106's kept list, 16 in its delta and 13 in neither. The
 # 40 files 5.18.107 adds (30 tests, nine lib classes and migrations/092_wa_no_ai.sql) have no 5.18.106 form (A0 refuses
 # one listed here).
 PREV_CHANGED_SHA256S="$(cat <<'SUMS'
@@ -1352,13 +1347,17 @@ d62beb5bd632f8a28d314d8c9cf334290078751e4e7175f5a39fd480ef448bc0  tabs/engage/wa
 df5808aa1db7a2fb7653da74e1b92fe4da5123f5dfeb838bd03141d9f8a1d05e  tabs/sales/ucrm_catalogue.php
 fa050e33798640560f524ce2b587200207a322378c13657ef779f2213836ad3b  tests/catalogue_direct/E_send_quote.php
 401fb2c27db6f00afcc6946ccfcc4559bc6bb9f1558c169e4665cbf99a93473b  tests/fixtures/r106_revert.php
+2f59606eea82083a7e5be4d81a26d0059b38579a67d37863a44d3bf89cddff20  tests/quote_followup/F_stops.php
 7f95814bcf193199d983f25bf535734b2a9a196f936397199a1f4440fcc22ae1  tests/quote_followup/G_sender.php
+65a6160525639973a39ac1af249bdf1158d507158acd49713c20b41a9b89c995  tests/quote_followup/M_logging.php
 acb3302c2a0d620f23faead20b45c18ea0505f6b2412f7d24c26f96319a6e9db  tests/quote_followup/U_unjam.php
 b977567542bace5f4e76a8925b43bdeee7d910aa4882ee266290a03dfcdc176e  tests/quote_followup/_lib.php
 9ddc9858f54038f2844ed91242648799576b53732ad59c1a2818f1fdd3dcb65d  tests/quote_followup/mutants_G.php
 a3197eb54bb529454e6546c8f14e49c1b4ebd149cbb8073d555135973ec9976b  tests/quote_followup/mutants_N.php
 4ad2108c6ffe84b00a93a007edf9128054c57a8ed3e98a1e12a2468c10bea047  tests/quote_followup/mutants_U.php
 5d6399c43a5c6249e93b48d34787cc28bb73830c51a2d83b1b4857df9b600fe0  tests/quote_from_ucrm/F_send_quote.php
+ff28e8c27b4d95ba7335a0bbd7e153ab2e1b1fc6ade96f6ed301e1bbcc4429ac  tests/sales_followup_tool/CK_checks.php
+5a28124b8fc364bc0124d9449343601eeedc038d0fddc7736f37bbd7befe42ff  tests/sales_followup_tool/_lib.php
 7ba072d84dbb63c695079e10aee0f42d8a25fbf6370edcfac99573194064f3e3  tests/test_airtel_money.php
 ca47b65984892e7bb5710aca388b6c9de6e303f4c0275dea70d74f2d56782e70  tests/test_bank_boundaries.php
 94f699279907bb2df91906bb7cbb7fa69c35c75691ea41510749aad2a5a450ca  tests/test_bank_store.php
@@ -1380,6 +1379,7 @@ f4227a9681542f15f3268770cfb53b4c16251eae647c04f289bb80a99992c824  tests/test_sal
 44474356d7dae68430cddee00fd79dd4faa8852004a98600fc3aef229b1679f7  tests/voice_ack/A_gates.php
 3a3d5feabd08b8e8abfe07b0189512e97388af7e8665a21b4a8ff3926dc00378  tests/voice_ack/H_static.php
 d0582a876dab3fecb0b4c23489fd1f5b05321c1568493ea230112a8813f9c4fe  tests/voice_ack/mutants_A.php
+7b34a42eccb2ff229b49e440922e563399524d11127fd38465b228324927bae9  tests/voice_switches/VK_tool.php
 d81ba1f3ee0f65474c577368380f5afc9448a370c0feb1164a62fd3ea2e1a7cf  tests/wa_offers/J_south_sudan.php
 107d41525629c6d35e0836982bdfba32544c1978a4415a5836b6e88837c0742c  tests/wa_offers/M_boundary.php
 ed9bf86aff79a6b4287c4a664f0eaafe2264a5973c03755ea1c6eb70663b7ea6  tools/ai_eval.php
@@ -1390,8 +1390,8 @@ ed9bf86aff79a6b4287c4a664f0eaafe2264a5973c03755ea1c6eb70663b7ea6  tools/ai_eval.
 bbf192fc4bbe011dfb5b8ad45837a5bf8c35f191e29081972e2d11a8fe79e32d  workers/MediaWorker.php
 SUMS
 )"
-PREV_CHANGED_N=70
-# 5.18.107 — the release's own files, each with the sha256 the release commit (5b6245b) gives it: the delta,
+PREV_CHANGED_N=75
+# 5.18.107 — the release's own files, each with the sha256 the release commit (771a3c1) gives it: the delta,
 # exactly, its 40 added files (nine lib classes, migrations/092_wa_no_ai.sql and 30 tests) among them — A0 reads
 # them in Git, R1 and Q-CA1 installed.
 PIN_SHA256S="$(cat <<'SUMS'
@@ -1429,13 +1429,17 @@ e366a6dddd3955630b9153473b626d686bc7a221f99ec51c5ea649a5a13b814d  tabs/engage/wa
 6fbc2b169bf974cecccdedf158ab9fa1f70acb9a5ff2afc97764f77d77081bbe  tabs/sales/ucrm_catalogue.php
 7655242109c25dd806f50241644bb7ba96d8214227c8c8923be44c818aa6bd7c  tests/catalogue_direct/E_send_quote.php
 45136ce64e253b53de4399e3ce8520a178320a04c6f1c726a4682618925b6b31  tests/fixtures/r106_revert.php
+df009c1855e300f996f94fdd1147fdb9b35bd28a92b2a32b1defd9a4b0e5a308  tests/quote_followup/F_stops.php
 72ab8f92e69abdb577ed8cb799bb282d8c88c2517cbf81ef937c3c4db74c8465  tests/quote_followup/G_sender.php
+af69cc2a1e2672f7a2acc85f807e2898d161d0fbbbf7bb00b4d62bdd569eeca2  tests/quote_followup/M_logging.php
 84ce1d6fbf424b4c5cd8e44ffc686cef85694073c90f9e724e932e8c4facf31f  tests/quote_followup/U_unjam.php
 cf795b56077bc51bdb2fb2125eb0ef97258b3cda11492d355ca6cd558e775916  tests/quote_followup/_lib.php
 9004a1f3388a9084847a905be60d5778b9ec76f7d1585fb63643f17ad46c40cb  tests/quote_followup/mutants_G.php
 d231db716761453f51913e3f1dc3717811825af6cab5b51703c9a43c2ddd6a0d  tests/quote_followup/mutants_N.php
 3da786b65ad5c212de82a42969363e887b85f5337cc144d0487a0cb6dffdb56c  tests/quote_followup/mutants_U.php
 14df4c28cd436787a871f7045ee071fc10ec7c51fed53c32f1019b33aff8d547  tests/quote_from_ucrm/F_send_quote.php
+8adafe9b65f9c49158c4ac23b3dc0285d253f160cbd635bb734bb81a9bc8cc21  tests/sales_followup_tool/CK_checks.php
+c8cbd3afce2430dc695b3cf2834168af0e1b03b7c16d6f506e0611a792f22363  tests/sales_followup_tool/_lib.php
 5c404c8a28652636c0f942efd4ea0e2e4d07cd5c57df8840a994ee0253a93724  tests/test_airtel_money.php
 9287cc5c2a0d5e28e93de0f1bacf482bbf4dde9253a3324141c1fee75f94d664  tests/test_bank_boundaries.php
 eef65db0727a35426f20df4aad35e841ff71ef305a705c72c7aee7258a6b6ab6  tests/test_bank_store.php
@@ -1457,6 +1461,7 @@ ba6f49192e4fcb13764e6643cdad180edcc54c27b487ee899c9066c248af1e17  tests/test_quo
 5d09e5d2c939daf0a4e5a6e908ec2173fab0425a1f86abf1798c0b4aaae4fc57  tests/voice_ack/A_gates.php
 ffe1942a6114ccacfc73640a2fbf5f6806e5e845fef7bda116aa605588ad987c  tests/voice_ack/H_static.php
 5aa9cc159814aa7e5911c0560d25f45d6c2adac7b14c9ea5c2a37dcf209d7366  tests/voice_ack/mutants_A.php
+08e2321e524cc1c43b07900453300140b5ca27d343e409bfd064751ccdf52295  tests/voice_switches/VK_tool.php
 72e020157033491e79cb0d481bacf6f9148858489bec24cbbd95a43ff57aa15f  tests/wa_offers/J_south_sudan.php
 0f086db7de481b6bfacd16fbfe640e7e93a7a2c4ac828375cec8581c9a1a0e1c  tests/wa_offers/M_boundary.php
 8d7a5c385ee7b77b2edab9355c60e1f088dd9cec23fd86b02002580ea833e46c  tools/ai_eval.php
@@ -1477,7 +1482,7 @@ c8949aee7a5f9794b0092b8d54ed1de45165f992155da083de1f10092004baef  lib/TopicRule.
 eb90f11e1160ca7d10f89ed370fc13bdee994ddef2021fce3c5fe92006502cba  migrations/092_wa_no_ai.sql
 83e9db6b2970ec74ee6086979b72e7cb1215bbf47386d63f2425b6a9dbbec556  tests/catalogue_direct/W_two_prices.php
 9b77d3778d7f0ac7d8fc45dbf1ea489f8ab098329a1ff587a243b4035af1a79f  tests/catalogue_direct/mutants_W.php
-198d1b537ee2e493d5088aedb5f8d3bdd821dc1b380636cc87130d25cbdc9a87  tests/fixtures/r107_revert.php
+f618e21fd2b0f41dfce1cdcb4256e58e9ab33196ab2ff0f9315759b1bfd8480f  tests/fixtures/r107_revert.php
 f024cefae4b94d44579797adda18ad3b227527f42be40454a294d91c316941c5  tests/quote_followup/AK_knowledge.php
 22d33da6dba5f95f53b5c41d9a6b946afc35abfe7f285e24e7e3328655a2fb56  tests/quote_followup/FX_defects.php
 e26afb58a2076301297567642bb26f0bd50ed8b0c81075b6dd3adaa6d939b1bc  tests/quote_followup/HA_office.php
@@ -1485,11 +1490,11 @@ e26afb58a2076301297567642bb26f0bd50ed8b0c81075b6dd3adaa6d939b1bc  tests/quote_fo
 72b6498f050ef990d7cf35b82691c713bd7633f89aee29f2e1fa799c592e76df  tests/quote_followup/KR_reply.php
 181736f6bdc32eb5ff61e5f970e35127b40892a383b0595514290d3de9472c80  tests/quote_followup/K_quoted.php
 e1f6634386f073479e5ed891044b4f082bad9fbdce318d719c127134a047f938  tests/quote_followup/QP_prompt.php
-9d2ab13f733e08783d9d7dcf3be76a3c3813dbe4334c757109019437450ec10a  tests/quote_followup/QR_reply.php
-2f4a36903bfc85720a45d3c118e90547e2ae523049fb1b3d2947140dd4d8a3f2  tests/quote_followup/QW_web.php
+725405f0e0b2e3c3099f30bb067ee53dbedce6b1ed16b1fdd0d153cb29289db5  tests/quote_followup/QR_reply.php
+35174cd52574c95e1f278e1e3b0bf0a1c6a1da61c8a58e2576c1c94d488977fa  tests/quote_followup/QW_web.php
 ee9d04af38194a3d29c3ec3e771ada49d2f48788887f47432bfd2b7a0d4f2220  tests/quote_followup/Q_connection.php
 e94a174ce51edd5800c25d1a3b159853d3eb65b92bf52a72bb30fe0af0bd4343  tests/quote_followup/TR_topic.php
-79a905c57e094b2081ee04cd82b062bd6029a528436bfa1aeaf0b41670403a8e  tests/quote_followup/WB_burst.php
+48b5c37b5d24843db4daa8ad654851170bc1b1e45e38c216cf3b40eeaf7c115e  tests/quote_followup/WB_burst.php
 271ace61540da5014e6dfd0994cc835b8bb964b4edab00866162f038385be6cb  tests/quote_followup/WD_drain.php
 4ef9873d9fd64e87694d05a24592e482bb82f86c4885f067875a30b56fd26d52  tests/quote_followup/XW_noai_web.php
 04afd955c81a61790a3c91abf6b1129a53b75a130dac9cbea039ad919fce6ae6  tests/quote_followup/X_noai.php
@@ -1507,7 +1512,7 @@ add9f32da69652623addba3c42f8ddd0a2b4b42adf45f55ec179e7c5205ab1a6  tests/quote_fo
 580ea27193e18e5a9d6e36c02b8713c28bd5b03210251edc9affd69778d721bc  tests/quote_followup/wb_worker.php
 SUMS
 )"
-PIN_SHA_N=110
+PIN_SHA_N=115
 DOMAIN_B="dishnet-mikrotik-control-plane docs"    # Domain B and the plugin's documents, under the plugin directory: never touched (A7, R14)
 # The event processor run once on a throwaway database with five events (A6, R13, RB): type=status/attempts, and +unknown
 # when it was logged as an unknown type. South Sudan's loop — 5.18.87's, kept by 5.18.88 — and Uganda's since 5.18.88, which
@@ -1563,11 +1568,11 @@ P90_SIGNATURE="uganda+on: gaps=sales,support seller=internal_numbers_incomplete;
 # registry off it reads "policy=off/off refusal=-/- sql=-/- evo=off,-/off,- gaps=-/- channels=0:0/0:0 internal=<n>:0/<n>:0
 # statements=0 registry-reads=0 writes=0", then "|" and an HMAC under this run's key — inert; on, it reads the registry and
 # refuses what it finds unsafe. writes= is 0 in every reading.
-# The release's own files, and nothing else: 40 added, 70 changed — 110, each by its sha256
+# The release's own files, and nothing else: 40 added, 75 changed — 115, each by its sha256
 # (PIN_SHA256S). Anything outside this list in the pin is another build. A0 word-splits both lists: no path in them
 # holds a space or a glob character.
 EXPECTED_ADDED="lib/BurstMerge.php lib/ConnectionQuote.php lib/NoAiAlert.php lib/NoAiGuard.php lib/NoAiList.php lib/QuoteInPlay.php lib/QuotedAlert.php lib/QuotedFloor.php lib/TopicRule.php migrations/092_wa_no_ai.sql tests/catalogue_direct/W_two_prices.php tests/catalogue_direct/mutants_W.php tests/fixtures/r107_revert.php tests/quote_followup/AK_knowledge.php tests/quote_followup/FX_defects.php tests/quote_followup/HA_office.php tests/quote_followup/KP_prompt.php tests/quote_followup/KR_reply.php tests/quote_followup/K_quoted.php tests/quote_followup/QP_prompt.php tests/quote_followup/QR_reply.php tests/quote_followup/QW_web.php tests/quote_followup/Q_connection.php tests/quote_followup/TR_topic.php tests/quote_followup/WB_burst.php tests/quote_followup/WD_drain.php tests/quote_followup/XW_noai_web.php tests/quote_followup/X_noai.php tests/quote_followup/mutants_AK.php tests/quote_followup/mutants_FX.php tests/quote_followup/mutants_HA.php tests/quote_followup/mutants_K.php tests/quote_followup/mutants_KP.php tests/quote_followup/mutants_KR.php tests/quote_followup/mutants_Q.php tests/quote_followup/mutants_TR.php tests/quote_followup/mutants_WB.php tests/quote_followup/mutants_X.php tests/quote_followup/wb_drive.php tests/quote_followup/wb_worker.php"
-EXPECTED_CHANGED="SAFETY.md assets/shop/catalogue.json cron/customer_reminders.php cron/event_processor.php cron/followup_scan.php cron/followup_send.php cron/wa_watchdog.php evo_webhook.php includes/api/api_whatsapp.php includes/navigation.php lib/BrainContext.php lib/DishNetAiBrain.php lib/DishNetTools.php lib/EvolutionApiService.php lib/KitTaxNote.php lib/NotificationService.php lib/OfferAudience.php lib/QuoteChase.php lib/QuoteTaxLine.php lib/QuoteTracker.php lib/ReplyPrivacyGuard.php lib/ReplyTotals.php lib/SalesFollowupLadder.php lib/ShopCatalogue.php lib/WinBack.php manifest.json public.php tabs/admin/knowledge_base.php tabs/engage/wa_ai_setup.php tabs/engage/wa_inbox.php tabs/sales/kyc_form.php tabs/sales/ucrm_catalogue.php tests/catalogue_direct/E_send_quote.php tests/fixtures/r106_revert.php tests/quote_followup/G_sender.php tests/quote_followup/U_unjam.php tests/quote_followup/_lib.php tests/quote_followup/mutants_G.php tests/quote_followup/mutants_N.php tests/quote_followup/mutants_U.php tests/quote_from_ucrm/F_send_quote.php tests/test_airtel_money.php tests/test_bank_boundaries.php tests/test_bank_store.php tests/test_brain_context.php tests/test_cash_in_hand_p3b_south_sudan.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_event_processor_protected.php tests/test_kit_tax_note.php tests/test_quote_company.php tests/test_quote_summary.php tests/test_quote_tax_line.php tests/test_sales_numbers.php tests/test_sales_pilot.php tests/voice_ack/A_gates.php tests/voice_ack/H_static.php tests/voice_ack/mutants_A.php tests/wa_offers/J_south_sudan.php tests/wa_offers/M_boundary.php tools/ai_eval.php tools/sales_followup.php tools/set_config.php web_chat.php workers/AiReplyWorker.php workers/MediaWorker.php"
+EXPECTED_CHANGED="SAFETY.md assets/shop/catalogue.json cron/customer_reminders.php cron/event_processor.php cron/followup_scan.php cron/followup_send.php cron/wa_watchdog.php evo_webhook.php includes/api/api_whatsapp.php includes/navigation.php lib/BrainContext.php lib/DishNetAiBrain.php lib/DishNetTools.php lib/EvolutionApiService.php lib/KitTaxNote.php lib/NotificationService.php lib/OfferAudience.php lib/QuoteChase.php lib/QuoteTaxLine.php lib/QuoteTracker.php lib/ReplyPrivacyGuard.php lib/ReplyTotals.php lib/SalesFollowupLadder.php lib/ShopCatalogue.php lib/WinBack.php manifest.json public.php tabs/admin/knowledge_base.php tabs/engage/wa_ai_setup.php tabs/engage/wa_inbox.php tabs/sales/kyc_form.php tabs/sales/ucrm_catalogue.php tests/catalogue_direct/E_send_quote.php tests/fixtures/r106_revert.php tests/quote_followup/F_stops.php tests/quote_followup/G_sender.php tests/quote_followup/M_logging.php tests/quote_followup/U_unjam.php tests/quote_followup/_lib.php tests/quote_followup/mutants_G.php tests/quote_followup/mutants_N.php tests/quote_followup/mutants_U.php tests/quote_from_ucrm/F_send_quote.php tests/sales_followup_tool/CK_checks.php tests/sales_followup_tool/_lib.php tests/test_airtel_money.php tests/test_bank_boundaries.php tests/test_bank_store.php tests/test_brain_context.php tests/test_cash_in_hand_p3b_south_sudan.php tests/test_cashbook_physical_list.php tests/test_distributor_apply.php tests/test_distributor_link_ucrm.php tests/test_distributor_notify.php tests/test_distributor_registry.php tests/test_distributor_territory.php tests/test_event_processor_protected.php tests/test_kit_tax_note.php tests/test_quote_company.php tests/test_quote_summary.php tests/test_quote_tax_line.php tests/test_sales_numbers.php tests/test_sales_pilot.php tests/voice_ack/A_gates.php tests/voice_ack/H_static.php tests/voice_ack/mutants_A.php tests/voice_switches/VK_tool.php tests/wa_offers/J_south_sudan.php tests/wa_offers/M_boundary.php tools/ai_eval.php tools/sales_followup.php tools/set_config.php web_chat.php workers/AiReplyWorker.php workers/MediaWorker.php"
 # 5.18.96 — the two of its tests the server runs under its own PHP, kept by 5.18.97 through 5.18.107 (which change
 # neither). The page tests (T2, T3) serve the plugin over HTTP and run only in the suites; the weakened copies (the
 # mutant driver) only there too; ECO Bank's tests, 5.18.98's (tests/test_cashbook_physical_list.php and its weakened
@@ -12203,9 +12208,9 @@ done
 M87_SHA="$(git -C "$REPO" show "$EXPECTED_PLUGIN_COMMIT:$PLUGIN/$MIG87" 2>/dev/null | sha256sum | cut -c1-64)"
 [ "$M87_SHA" = "$MIG87_SHA256" ] || stop "the pin's $MIG87 is not the reviewed one production applied on 7 Oct (sha256 ${M87_SHA:0:16}…, reviewed ${MIG87_SHA256:0:16}…) — this script is for another build"
 # 5.18.98: every file of the delta by the sha256 pinned in this script (PIN_SHA256S) — the list is the delta exactly, its
-# 110 files and no other, the 40 it adds among them — and the 421 files of 5.18.106 this release must leave
+# 115 files and no other, the 40 it adds among them — and the 416 files of 5.18.106 this release must leave
 # as they are (PREV_KEPT_SHA256S) by theirs, in both release commits: what Q-G1 reads installed before anything changes,
-# Q-CA1 after the copy and RB after a rollback. 5.18.99: and every file it changes (70) by the sha256 5.18.106's
+# Q-CA1 after the copy and RB after a rollback. 5.18.99: and every file it changes (75) by the sha256 5.18.106's
 # release commit (bf29cbd) gives it (PREV_CHANGED_SHA256S; an added file has no such form, and is refused there) —
 # what Q-G1 requires installed before anything changes, and RB after a rollback.
 PS_BAD=""; PS_N=0
@@ -12448,9 +12453,9 @@ if [ "$MODE" = "deploy" ]; then
 fi
 # Q-G1 — 5.18.99 (SPEC-quote-company §6; 5.18.98's G1, carried): the live plugin is 5.18.106 — the container's record and
 # the manifest say so above, and (a deploy) BR1 has read every file bf29cbd tracks — and, by the sha256 THIS SCRIPT pins
-# for each (not only Git's), every file 5.18.107 changes (70: lib/DishNetAiBrain.php, public.php and
+# for each (not only Git's), every file 5.18.107 changes (75: lib/DishNetAiBrain.php, public.php and
 # tools/set_config.php among them) is 5.18.106's as installed (PREV_CHANGED_SHA256S), and every file 5.18.106 has that
-# 5.18.107 must not touch (421, PREV_KEPT_SHA256S):
+# 5.18.107 must not touch (416, PREV_KEPT_SHA256S):
 # ECO Bank's module, its link on the CEO page (BK3 reads the one in navigation.php, whose bank block 5.18.107 leaves
 # byte for byte), the More menu, the styles, the Cashbook's list split, the cash-in-hand tool, the files the quoting
 # code reads and 5.18.99's quoting files that 5.18.107 keeps (TenantProfile; QuoteOrganization, QuotePdfSource and
@@ -14412,8 +14417,8 @@ done
 IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
 [ "$IV" = "$EXPECTED_VERSION" ] && ok "R1 the installed manifest says $IV" || bad "R1 the installed manifest says ${IV:-?}"
 # Q-CA1 — 5.18.99 (SPEC-quote-company §6), carried: the installed files are this release's by the sha256 THIS SCRIPT pins
-# for each of its 110 (R1 compared them with Git), the 40 it adds among them (nine lib classes, migrations/092 and its
-# tests) and the 70 it changes; the 421 5.18.106 files this release must not touch — ECO Bank's module, its link on the
+# for each of its 115 (R1 compared them with Git), the 40 it adds among them (nine lib classes, migrations/092 and its
+# tests) and the 75 it changes; the 416 5.18.106 files this release must not touch — ECO Bank's module, its link on the
 # CEO page, the Cashbook's service, its page, its tab, its export, its routes and its post handler, api/index.php,
 # cron_quote_wa.php, the quoting files 5.18.107 keeps (QuoteOrganization, TenantProfile, PublicPriceFeed,
 # UcrmQuoteLinks, UcrmQuoteLines, UcrmCatalogue), lib/SalesNumbersAdmin.php, master, the switch checks, the migration
@@ -15390,7 +15395,7 @@ hdr "RB. $BASELINE_VERSION, back in place (read-only)"
 IV="$(grep -o '"version": *"5[^"]*"' "$DEST/manifest.json" | head -1 | sed -E 's/.*"(5[^"]*)".*/\1/')"
 [ "$IV" = "$BASELINE_VERSION" ] && ok "RB the installed manifest says $IV" || bad "RB the installed manifest says ${IV:-?}, expected $BASELINE_VERSION"
 RB_REF=""
-# 5.18.107's change is gone (below: bf29cbd's files by sha256 where 5.18.107 changed them (70) and the 421 it keeps
+# 5.18.107's change is gone (below: bf29cbd's files by sha256 where 5.18.107 changed them (75) and the 416 it keeps
 # by theirs; the 40 files it adds left on disk — nine classes nothing in bf29cbd requires, 092 and its tests — named by
 # nothing bf29cbd tracks, QC-RB1; every ladder key as before, RB107, and nothing written; RB-X's counts and the pin's
 # drain once more, notes;
@@ -15575,7 +15580,7 @@ else
 fi
 note "RB run the quarantine's --check next, its own command (printed at the end, with its own log): it is the authority on the kept file, and it measures what this script does not — whether a process holds it"
 # 5.18.107's files are bf29cbd's again, each byte for byte — by Git's sha256 and by the one THIS SCRIPT pins for each
-# (PREV_CHANGED_SHA256S, Q-G1's set read again: 70) — and the 40 files it added stay on disk (deploy-hybrid.sh
+# (PREV_CHANGED_SHA256S, Q-G1's set read again: 75) — and the 40 files it added stay on disk (deploy-hybrid.sh
 # never deletes, nor can the by-hand put-back): nine classes nothing in bf29cbd requires, 092 and its tests. Git's loop
 # below passes over them, since bf29cbd has none of them; QC-RB1 (below) shows that no file bf29cbd tracks names them.
 # The files 5.18.107 adds, as they are on disk now —
@@ -15599,7 +15604,7 @@ else bad "RB installed files that are not $BASELINE_VERSION's after the rollback
 RB_BK=""; RB_KEEP=""; RB_KEEP_N=0; RB_QO=""
 # 5.18.99's quoting code is in place: the rollback target has it. 5.18.107 changes two of its files, neither where it
 # reaches uCRM — tabs/sales/kyc_form.php (the two-prices hint) and tools/set_config.php (Part K's and Part Q's keys),
-# each among the 70 it changes and 5.18.106's again by Q-G1's set (above) — and none of the rest:
+# each among the 75 it changes and 5.18.106's again by Q-G1's set (above) — and none of the rest:
 # lib/QuotationService.php (5.18.105's, its log lines masked), lib/KycService.php, lib/KycCrmSync.php,
 # includes/api/api_cron_debug.php, includes/api/api_products_admin.php, tabs/sales/applications.php,
 # lib/QuoteOrganization.php, lib/UcrmClientTarget.php, lib/UcrmLeadSync.php, lib/PluginQuotePdf.php and the Uganda

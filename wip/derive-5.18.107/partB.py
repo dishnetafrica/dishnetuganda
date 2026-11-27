@@ -56,8 +56,10 @@ MEASURED = {
     "EP_NOAI_PIN_UG": ("wa.no_ai_alert=pending/0", "expected", "§T.2: the pin on Uganda leaves the alert for the worker"),
     "EP_NOAI_DONE": ("wa.no_ai_alert=done/0+unknown", "expected", "§T.2: bf29cbd on both profiles, and the pin on South "
                      "Sudan, settle it done as unknown"),
-    "T1_SIGNATURE": ("548 passed, 0 failed rc=0", "expected", "the release suite's run of T1 on 5b6245b (passes D1 and D2)"),
-    "T4_SIGNATURE": ("20 passed, 0 failed, 0 skipped rc=0", "expected", "T4 with --no-mutants on 5b6245b"),
+    "T1_SIGNATURE": ("548 passed, 0 failed rc=0", "measured", "§T.15: T1 on 771a3c1, 27 Nov (as in suite pass D1 on the "
+                     "first cut, 5b6245b, which the re-cut does not change for it)"),
+    "T4_SIGNATURE": ("20 passed, 0 failed, 0 skipped rc=0", "measured", "§T.15: T4 with --no-mutants on 771a3c1 against "
+                     "f4b4c96 (5.18.94), 27 Nov"),
 }
 
 

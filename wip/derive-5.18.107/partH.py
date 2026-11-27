@@ -44,8 +44,8 @@ def apply(doc, ctx):
     kept_block = doc.t[doc.t.index('PREV_KEPT_SHA256S="$(cat <<\'SUMS\'\n'):]
     kept = set(re.findall(r"(?m)^[0-9a-f]{64}  (\S+)$", kept_block[:kept_block.index("\nSUMS\n)\"")]))
     n_k = len(kept)
-    if (n_a, n_mod, n_k, n_pin) != (40, 70, 421, 110):
-        raise SystemExit(f"PART H: {n_a} added, {n_mod} changed, {n_k} kept — not §T.2's 40, 70, 421")
+    if (n_a, n_mod, n_k, n_pin) != (40, 75, 416, 115):
+        raise SystemExit(f"PART H: {n_a} added, {n_mod} changed, {n_k} kept — not §T.15's 40, 75, 416")
     if (len([f for f in added if f.startswith("tests/")]), len([f for f in added if f.startswith("lib/")]),
             [f for f in added if f.startswith("migrations/")]) != (N_TESTS, N_LIBS, ["migrations/092_wa_no_ai.sql"]):
         raise SystemExit("PART H: the added files are not 30 tests, nine lib classes and 092")
