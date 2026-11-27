@@ -13,8 +13,23 @@
 #                         printed-only=<how many of them are used only in lines that print them: echo or printf, never
 #                         eval, never a bare word, never sh -c>. A wrapper line that is not such an assignment, or a use
 #                         that runs one, shows in the counts and the guard refuses.
+#   ledger DB             mig092=<092's rows in _migrations> wa_no_ai=<table|renamed|none> — 107-pre0's and every reset's word
+#                         (renamed: the table is gone and rh107-seed.php's rh107_wa_no_ai stands in its place)
+#   ledgerx DB            the same, then cks092= at092= (UTC epoch of applied_at, as SQLite's datetime('now') wrote it)
+#                         sc092=<found>/<expected>|missing cks071= sentinel=<active rows on 2560…, NA-CA1's kind> rows=<ledger rows>
+#   log092 LOG            migration.log as MG-CA2 reads it (S:8455–8458), per LINE: ok= partial= warning= (092's) w071=
+#                         mk=<1 when line 1 is the runner's trim marker> mkt=<its stamp, read as UTC, epoch|-> size= okoff=<the
+#                         byte offset of 092's first OK line|-> owner=<uid> lines=
+#   bookdig DB            the book's logical digest — every schema object's text, then every table's rows in rowid order —
+#                         16 hex: unchanged across a run proves the run wrote nothing to the book
+import calendar
+import hashlib
+import json
+import os
 import re
+import sqlite3
 import sys
+import time
 
 
 def code_lines(t):   # rh106q.py's, unchanged: comment lines (# or //) are not code
@@ -60,6 +75,70 @@ def verbs107(path):
           % (lk_, qft, wrp, vb, ','.join(cmds) or '-', printed_only))
 
 
+def ro(db):   # read-only, query_only: a reader never writes the book
+    if not os.path.isfile(db):
+        raise FileNotFoundError(db)
+    c = sqlite3.connect('file:%s?mode=ro' % db, uri=True, timeout=15)
+    c.execute('PRAGMA query_only = ON')
+    return c
+
+
+def has(c, t):
+    return c.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (t,)).fetchone() is not None
+
+
+def utc_epoch(stamp):   # 'Y-m-d H:i:s', read as UTC (SQLite's datetime('now'))
+    return calendar.timegm(time.strptime(stamp.strip()[:19], '%Y-%m-%d %H:%M:%S'))
+
+
+def ledger(db, full):
+    c = ro(db)
+    rows = c.execute("SELECT checksum, applied_at FROM _migrations WHERE filename = '092_wa_no_ai.sql' ORDER BY id DESC").fetchall() if has(c, '_migrations') else []
+    tbl = 'table' if has(c, 'wa_no_ai') else ('renamed' if has(c, 'rh107_wa_no_ai') else 'none')
+    out = ['mig092=%d' % len(rows), 'wa_no_ai=%s' % tbl]
+    if full:
+        out.append('cks092=%s' % (rows[0][0][:16] if rows else '-'))
+        out.append('at092=%s' % (utc_epoch(rows[0][1]) if rows else '-'))
+        sc = c.execute("SELECT found, expected FROM _schema_checks WHERE migration = '092_wa_no_ai.sql'").fetchone() if has(c, '_schema_checks') else None
+        out.append('sc092=%s' % ('%d/%d' % (sc[0], sc[1]) if sc else 'missing'))
+        r71 = c.execute("SELECT checksum FROM _migrations WHERE filename = '071_dpo_payments.sql' ORDER BY id DESC").fetchone() if has(c, '_migrations') else None
+        out.append('cks071=%s' % (r71[0][:16] if r71 else '-'))
+        out.append('sentinel=%d' % (c.execute("SELECT COUNT(*) FROM wa_no_ai WHERE active = 1 AND phone GLOB '2560*'").fetchone()[0] if tbl == 'table' else 0))
+        out.append('rows=%d' % (c.execute('SELECT COUNT(*) FROM _migrations').fetchone()[0] if has(c, '_migrations') else 0))
+    print(' '.join(out))
+
+
+TRIM = re.compile(r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] --- earlier entries trimmed ---$')
+
+
+def log092(path):
+    b = open(path, 'rb').read()
+    lines = b.decode('utf-8', 'replace').split('\n')
+    ok = sum(1 for l in lines if 'OK: 092_wa_no_ai.sql (' in l)
+    pa = sum(1 for l in lines if 'PARTIAL: 092_wa_no_ai.sql' in l)
+    wa = sum(1 for l in lines if 'WARNING: 092_wa_no_ai.sql has been modified after being applied (checksum mismatch)' in l)
+    w71 = sum(1 for l in lines if 'WARNING: 071_dpo_payments.sql has been modified after being applied (checksum mismatch)' in l)
+    m = TRIM.match(lines[0]) if lines else None
+    off = b.find(b'OK: 092_wa_no_ai.sql (')
+    print('ok=%d partial=%d warning=%d w071=%d mk=%d mkt=%s size=%d okoff=%s owner=%d lines=%d'
+          % (ok, pa, wa, w71, 1 if m else 0, utc_epoch(m.group(1)) if m else '-', len(b), off if off >= 0 else '-',
+             os.stat(path).st_uid, len([l for l in lines if l != ''])))
+
+
+def bookdig(db):
+    c = ro(db)
+    h = hashlib.sha256()
+    objs = c.execute("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name").fetchall()
+    for o in objs:
+        h.update((json.dumps(o) + '\n').encode())
+    for o in objs:
+        if o[0] != 'table':
+            continue
+        for r in c.execute('SELECT * FROM "%s"' % o[1].replace('"', '""')):
+            h.update((json.dumps([x if not isinstance(x, bytes) else x.hex() for x in r]) + '\n').encode())
+    print(h.hexdigest()[:16])
+
+
 def main(argv):
     if len(argv) < 2:
         print('unknown'); return 2
@@ -67,6 +146,12 @@ def main(argv):
     try:
         if cmd == 'verbs107' and len(argv) == 3:
             verbs107(argv[2]); return 0
+        if cmd in ('ledger', 'ledgerx') and len(argv) == 3:
+            ledger(argv[2], cmd == 'ledgerx'); return 0
+        if cmd == 'log092' and len(argv) == 3:
+            log092(argv[2]); return 0
+        if cmd == 'bookdig' and len(argv) == 3:
+            bookdig(argv[2]); return 0
     except Exception as e:   # a reader that could not read says so, and never guesses
         print('unread:%s' % type(e).__name__); return 3
     print('unknown'); return 2
