@@ -48,7 +48,7 @@ bd107() {   # bd107 LABEL OUTPUT — the BASE_DIFFERS stop: its text, Nothing wa
 pbt107() { echo "lib/SalesFollowupLadder.php $1, tools/sales_followup.php $2, lib/BurstMerge.php $3, tools/set_config.php $4."; }   # the tools reading as pb_para says it
 D0_107="$(data94)"
 # 1a — the plain 5.18.106 tree: one changed file outside the tools edited (lib/DishNetAiBrain.php, in $V107's delta and bf29cbd's tree)
-check "$(grep -cw 'dishnet-hybrid-sudan/lib/DishNetAiBrain.php' <<<"$CHANGED107")|$(git -C "$REPO" cat-file -e "$B107F:$P/lib/DishNetAiBrain.php" && echo base)" "1|base" "107-1a0 lib/DishNetAiBrain.php is one of the files $V107 changes, and bf29cbd has it"
+check "$(tr ' ' '\n' <<<"$CHANGED107" | grep -cx 'lib/DishNetAiBrain.php')|$(git -C "$REPO" cat-file -e "$B107F:$P/lib/DishNetAiBrain.php" && echo base)" "1|base" "107-1a0 lib/DishNetAiBrain.php is one of the files $V107 changes, and bf29cbd has it"
 keepall107 lib/DishNetAiBrain.php; edit107 lib/DishNetAiBrain.php
 fresh107; O1A107="$(run107c --check)"; bd107 "107-1a1" "$O1A107"
 check "$(has "$O1A107" "$(pbt107 "$BW107" "$BW107" absent "$BW107")")|$(has "$O1A107" '  The switch-off — it is refused (undeclared):')|$(has "$O1A107" '  The drain reading — it is refused (an unknown step):')|$(has "$O1A107" ' A refusal changes nothing and saves nothing.')|$(grep -cF "it leaves '0'" <<<"$O1A107")|$(grep -c '^  quoted_no_prices_enabled cannot be read (the run.s latest reading of the ladder.s keys): .* it is refused (unmanaged):$' <<<"$O1A107")|$(grep -c '^  connection_quote_enabled cannot be read (the run.s latest reading of the ladder.s keys): .* it is refused (unmanaged):$' <<<"$O1A107")|$(has "$O1A107" 'switch NOT READ (the pin is not yet staged)')|$(has "$O1A107" '(Stage A refused before the pin was staged:')" \
@@ -123,17 +123,18 @@ check "$(back106 t107-burst)|$(backall107 tools/sales_followup.php)|$(installed1
 # lines, the wording from the tools reading, no unbound-variable error under set -u; three copies
 keepall107 lib/DishNetAiBrain.php; edit107 lib/DishNetAiBrain.php
 fresh107; O1I107="$(run107c --check)"; bd107 "107-1i1" "$O1I107"
-check "$(has "$O1I107" 'Read at ')$(has "$O1I107" ': switch NOT READ (the pin is not yet staged); the drain not read (the pin is not yet staged). One reading, not a drain.')|$(grep -c 'unbound variable' <<<"$O1I107")|$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$O1I107")" "yesyes|0|2" \
+check "$(has "$O1I107" 'Read at ')$(has "$O1I107" ': switch NOT READ (the pin is not yet staged); the drain not read (unread(the pin is not yet staged)). One reading, not a drain.')|$(grep -c 'unbound variable' <<<"$O1I107")|$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$O1I107")" "yesyes|0|2" \
   "107-1i2 the stage-A mixed-tree refusal: the reading NOT READ (the pin is not yet staged), one reading and not a drain; K and Q cannot be read, their lines printed; no unbound-variable error"
 anc107 p3bunset 'P3B_PIN=""; P3B_WHY="the pin is not yet staged"   #' ': "the pin is not yet staged"   #'
+anc107 pbunguard '  if [ -z "${P3B_PIN:-}" ]; then sw=' '  if [ -z "$P3B_PIN" ]; then sw='   # with p3bunset: the reading's own control (every read on the path is guarded, so the init line alone shows nothing)
 anc107 pbnotread '  if [ -z "${P3B_PIN:-}" ]; then sw="NOT READ (the pin is not yet staged)"; bd="bd=unread(the pin is not yet staged)"; at="$(date -u +%s)"' '  if [ -z "${P3B_PIN:-}" ]; then sw="off"; bd="bd=unread(the pin is not yet staged)"; at="$(date -u +%s)"'
 anc107 pbnokq '    [ "$q" = "off" ] && continue
     kq=' '    continue
     kq='
-mutant107 w107-1i-unset p3bunset -- --check; C1IU107="$(grep -c 'unbound variable' <<<"$MUT107")"
+mutant107 w107-1i-unset p3bunset pbunguard -- --check; C1IU107="$(grep -c 'unbound variable' <<<"$MUT107")"
 mutant107 w107-1i-read pbnotread -- --check; C1IR107="$(has "$MUT107" ': switch NOT READ (the pin is not yet staged);')"
 mutant107 w107-1i-nokq pbnokq -- --check; C1IK107="$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$MUT107")"
 check "$( [ "$(n103 "$C1IU107")" -ge 1 ] && echo unbound)|$C1IR107|$C1IK107" "unbound|no|0" \
-  "107-1i3 its weakened copies caught: P3B_PIN and P3B_WHY left undefined before stage A's sites (the unbound-variable error under set -u); a reading other than NOT READ; the K/Q lines dropped"
+  "107-1i3 its weakened copies caught: P3B_PIN and P3B_WHY left undefined before stage A's sites AND pb_para's read unguarded (the unbound-variable error under set -u — the control that 107-1i2's 0 can read one; either alone shows nothing, every other read on the path being guarded); a reading other than NOT READ; the K/Q lines dropped"
 check "$(backall107 lib/DishNetAiBrain.php)|$(installed107 "$B107F")|$(ancc107)" "same|0|0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-" \
   "107-1z put back; $BV107's tree whole; every anchor of 107-1's weakened copies the script's own text, found once, its replacement different (the control of the controls)"

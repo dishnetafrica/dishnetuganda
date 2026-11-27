@@ -78,7 +78,7 @@ php -l "$H107_DIR/rh107-seed.php" >/dev/null 2>&1 || { echo "refusing: rh107-see
 [ ! -e "$H107_DIR/__pycache__" ] || { echo "refusing: a __pycache__ beside the helpers — remove it"; exit 2; }
 # The static guard. 5.18.106's reader (rh106q.py verbs, 5.18.105's rules unchanged) reads 5.18.107's script as
 # lk=1 qftool=0 wrapper=3 verbs=0: its three wrapper lines are the assignments of the three commands the script PRINTS for the
-# operator (BD_OFF_CMD, BD_DRAIN_CMD, W1_ON_CMD; S:7330–7332), never runs. This rehearsal's reader (rh107q.py verbs107) reads
+# operator (BD_OFF_CMD, BD_DRAIN_CMD, W1_ON_CMD; S:7341–7343), never runs. This rehearsal's reader (rh107q.py verbs107) reads
 # the same counts and, beyond them, that the wrapper lines are exactly those three assignments and that each of the three
 # variables is used only in a line that prints it (echo or printf); its control a planted copy of each kind — a qf_tool verb,
 # the wrapper run, the tool by path, and one of the three commands run (eval, or bare) — each of which must be refused.
@@ -195,13 +195,13 @@ for f107 in run106 run106c run_line106c fresh106 tidy106 installed106 left106 no
             kv104 q104 master104 sched104 ledger104 owner104 sv104 install_commit idle104 base_log onst104 dk104 pubget v1read102 \
             check has okline noteline failline fails printed live inst_ver data94 kept_state evo_calls vt_host qj n103 \
             run105 run105c fresh105 tidy105 weak105 anc105 aft105 rbx105 onall105 on105 lk105 lkmap105 counts105 digest105 q105 kv105 \
-            ref105 jf105 sv105; do
+            ref105 jf105 sv105 sqx; do
   declare -F "$f107" >/dev/null || { echo "refusing: the rehearsals this one runs did not define $f107()"; exit 2; }
 done
 for v107 in SB REPO R P PD DATA VAULT RECS PLUGIN_BASE WEB_OK AFTER94 SCAN96 U99 PHPBIN IN_CONTAINER DATE_TS98 EVO_URL \
             CLKPRE104 CLKF104 R104 SALES104 REPORT104 \
             DEPLOY106 OUT106 STATE106 LKF106 R106 H106 P106 P106F V106 B106 B106F BV106 REL106 CM106 ADDED106 ONP106 L1ON106 L2ON106 \
-            LIM106 PR106 FORMS106 NM106F EVO0_106 AM0_106 RF4_106 J1A106; do
+            LIM106 PR106 FORMS106 NM106F EVO0_106 AM0_106 RF4_106 J1A106 ALLCSV105 SETCSV105 STEPMAP105; do
   [ -n "${!v107:-}" ] || { echo "refusing: the rehearsals this one runs did not set $v107"; exit 2; }
 done
 FAIL_PRE107=$FAILN   # the earlier rehearsals' failures, before this release's own sections: the last line names them

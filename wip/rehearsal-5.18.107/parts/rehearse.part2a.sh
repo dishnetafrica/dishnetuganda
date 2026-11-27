@@ -8,7 +8,7 @@ git -C "$R" ls-files --error-unmatch "$F107" >/dev/null 2>&1 || { echo "refusing
 git -C "$R" diff --quiet HEAD -- "$F107" || { echo "refusing: $F107 differs from the committed one — commit it, then rehearse"; exit 2; }
 cp "$R/$F107" "$DEPLOY107"
 for f107 in scripts/sales-followup.sh scripts/sales-followup-report.sh; do cp "$R/$f107" "$REPO/$f107"; done
-cp "$R/$F106_107" "$REPO/$F106_107"
+cmp -s "$R/$F106_107" "$REPO/$F106_107" || cp -p "$R/$F106_107" "$REPO/$F106_107"   # only if it differs, its time kept: 107-infra e reads -newer than it
 sv107() { sed -nE "s/^$2=\"([^\"]*)\".*/\1/p; t; s/^$2=([^ \";]+).*/\1/p" "${1:-$DEPLOY107}" | head -1; }   # sv107 FILE NAME — a value the script states
 P107="$(sv107 "" EXPECTED_PLUGIN_COMMIT)"; P107F="$(sv107 "" EXPECTED_PLUGIN_COMMIT_FULL)"; V107="$(sv107 "" EXPECTED_VERSION)"
 B107="$(sv107 "" BASELINE_COMMIT)"; B107F="$(sv107 "" BASELINE_COMMIT_FULL)"; BV107="$(sv107 "" BASELINE_VERSION)"
@@ -36,14 +36,19 @@ EXP_REDEPLOY107="cd $REPO && bash $F107 --redeploy $(LOGW107 redeploy)"
 q107() { python3 -I "$H107/rh107q.py" "$@"; }        # this rehearsal's own readers (rh107q.py)
 kv107() { q105 kv "$1" "$2"; }                        # one key=value field of a line, by the chain's reader
 # The pin's ladder, read by the RELEASE's own code from Git (a copy in this rehearsal's own folder), set against 5.18.106's:
-# 5.18.107 changes the ladder (SalesFollowupLadder: W.1's key and its burst-drain step, root docs/76 §W.1), so its keys are
-# read here, never assumed equal.
+# 5.18.107 changes the ladder's declared settings (SalesFollowupLadder::SETTINGS gains W.1's two rows, ai_burst_merge_enabled
+# and ai_burst_merge_window_minutes, root docs/76 §W.1 — part W, so settingKeys(), never allKeys(); no step is added), so its
+# keys are read here, never assumed equal: allKeys() as 5.18.105's (the ladder unchanged since 5.18.104), the settings two more.
 git -C "$REPO" archive "$P107F" "$P/lib" "$P/tools" | tar -xf - -C "$H107/ref"; chown -R 1000:1000 "$H107/ref"
 LAD107="$(ref105 ladder "$H107/ref/$P")"
 ALLCSV107="$(jf105 "$LAD107" all)"; SETCSV107="$(jf105 "$LAD107" settings)"; STEPMAP107="$(jf105 "$LAD107" stepmap)"
-check "$( [ -n "$ALLCSV107" ] && echo read)|$( tr ',' '\n' <<<"$ALLCSV107" | grep -cx 'ai_burst_merge_enabled')|$(git -C "$REPO" diff --quiet "$B107F" "$P107F" -- "$P/lib/SalesFollowupLadder.php" && echo same || echo changed)" \
-      "read|1|changed" \
-  "107-infra b the pin's ladder read by its own code from Git: allKeys() ($(tr ',' '\n' <<<"$ALLCSV107" | grep -c .) keys) holds ai_burst_merge_enabled (W.1); SalesFollowupLadder.php is among the files $V107 changes"
+digest107() {   # digest107 — lk105's reading (rh105q.py lk) over the pin's own key lists, W.1's two settings included
+  sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1
+  kv105 "$(q105 lk "$DATA/plugin.sqlite3" "$DATA/kyc_config.json" "$PD/data/config.json" "$DATA/config.json" "$ALLCSV107" "$SETCSV107" "$STEPMAP107")" digest
+}
+check "$( [ -n "$ALLCSV107" ] && [ -n "$SETCSV105" ] && echo read)|$( [ "$ALLCSV107" = "$ALLCSV105" ] && echo all105)|$(tr ',' '\n' <<<"$SETCSV107" | grep -cxE 'ai_burst_merge_(enabled|window_minutes)')|$(comm -13 <(tr ',' '\n' <<<"$SETCSV105" | sort) <(tr ',' '\n' <<<"$SETCSV107" | sort) | paste -sd, -)|$(comm -23 <(tr ',' '\n' <<<"$SETCSV105" | sort) <(tr ',' '\n' <<<"$SETCSV107" | sort) | grep -c .)|$(git -C "$REPO" diff --quiet "$B107F" "$P107F" -- "$P/lib/SalesFollowupLadder.php" && echo same || echo changed)" \
+      "read|all105|2|ai_burst_merge_enabled,ai_burst_merge_window_minutes|0|changed" \
+  "107-infra b the pin's ladder read by its own code from Git: allKeys() ($(tr ',' '\n' <<<"$ALLCSV107" | grep -c .) keys) as 5.18.105's; settingKeys() ($(tr ',' '\n' <<<"$SETCSV107" | grep -c .)) 5.18.105's and W.1's two, none lost; SalesFollowupLadder.php is among the files $V107 changes"
 CM107="$(sv107 "" COPY_MARK)"
 ADDED107="$(sed -n 's/^EXPECTED_ADDED="\(.*\)"$/\1/p' "$DEPLOY107")"; NA107=$(wc -w <<<"$ADDED107")
 CHANGED107="$(sed -n 's/^EXPECTED_CHANGED="\(.*\)"$/\1/p' "$DEPLOY107")"; NC107=$(wc -w <<<"$CHANGED107")
@@ -62,7 +67,7 @@ installed107() {   # installed107 COMMIT — the files $BV107 → $V107 touches 
   echo "$bad"
 }
 # The --after-only lines of each step, read from the script as 5.18.106's rehearsal reads its own (onst104's reader).
-ONP107="QF-ON0:ack QF-ON3:ledger $(grep -oE 'qf_on_one "\$(sub|1)" [A-Z]+-ON[0-9] [a-z-]+ ' "$DEPLOY107" | awk '{print $3 ":" $4}' | grep -v '^QF-ON0:' | sort -u | paste -sd' ' -)"
+ONP107="QF-ON0:ack QF-ON3:ledger $(grep -oE 'qf_on_one "\$(sub|1)" [A-Z]+-ON[0-9] [a-z-]+ ' "$DEPLOY107" | awk '{print $3 ":" $4}' | grep -v '^QF-ON0:' | sort -u | paste -sd' ' -) $(for p in $(sv107 "" VN_STEPS); do printf '%s:%s ' "${p##*:}" "${p%%:*}"; done)$(grep -q 'note "AC-ON1 OFF — not judged (agent-cc is off)"' "$DEPLOY107" && echo AC-ON1:agent-cc)"   # as 106:256 builds ONP106
 check "$( [ "$(wc -w <<<"$ONP107")" -ge "$(wc -w <<<"$ONP106")" ] && echo some)|$(for p in $ONP106; do grep -qwF -- "$p" <<<"$ONP107" || echo "lost:$p"; done | paste -sd, -)" "some|" \
   "107-infra d the --after-only's step pairs read from the script ($(wc -w <<<"$ONP107") pairs): every one of 5.18.106's kept"
 onall107() { local p; for p in $ONP107; do printf '%s=%s ' "$p" "$(onst104 "$1" "${p%%:*}" "${p#*:}")"; done | sed 's/ $//'; }
@@ -163,10 +168,10 @@ rbx107() {   # rbx107 LABEL — back to 5.18.106 after a deploy of 5.18.107: ROL
              # every file 5.18.107 changes $BV107's, every ladder key as before it; then qcheck106. RBX107_OUT its output, RBX107_T
              # its tag, RBX107_REC the record it wrote (or none) — call it directly
   local o k0 r0
-  k0="$(digest105)"; r0="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null)"
+  k0="$(digest107)"; r0="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null)"
   fresh107; o="$(run107c --answer ROLLBACK --rollback)"; RBX107_OUT="$o"; RBX107_T="$(last107)"
   RBX107_REC="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null | grep -vxF -f <(printf '%s\n' "$r0") | tail -1)"; RBX107_REC="${RBX107_REC:-none}"
-  check "$(fails "$o")$(has "$o" "  $V107 (rollback): PASSED.")|$(rc107)|$(live)|$(installed107 "$B107F")|$( [ "$(digest105)" = "$k0" ] && echo kept)|$( [ "$RBX107_REC" != none ] && echo record)" \
+  check "$(fails "$o")$(has "$o" "  $V107 (rollback): PASSED.")|$(rc107)|$(live)|$(installed107 "$B107F")|$( [ "$(digest107)" = "$k0" ] && echo kept)|$( [ "$RBX107_REC" != none ] && echo record)" \
         "0yes|0|$B107|0|kept|record" "$1 the rollback, ROLLBACK typed, under the clock: PASSED (exit 0) — $B107 serving, every file $V107 changes $BV107's again, every ladder key as before it (this rehearsal's reading)"
   qcheck106 "$1'"
 }

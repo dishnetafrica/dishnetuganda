@@ -78,7 +78,7 @@ php -l "$H107_DIR/rh107-seed.php" >/dev/null 2>&1 || { echo "refusing: rh107-see
 [ ! -e "$H107_DIR/__pycache__" ] || { echo "refusing: a __pycache__ beside the helpers — remove it"; exit 2; }
 # The static guard. 5.18.106's reader (rh106q.py verbs, 5.18.105's rules unchanged) reads 5.18.107's script as
 # lk=1 qftool=0 wrapper=3 verbs=0: its three wrapper lines are the assignments of the three commands the script PRINTS for the
-# operator (BD_OFF_CMD, BD_DRAIN_CMD, W1_ON_CMD; S:7330–7332), never runs. This rehearsal's reader (rh107q.py verbs107) reads
+# operator (BD_OFF_CMD, BD_DRAIN_CMD, W1_ON_CMD; S:7341–7343), never runs. This rehearsal's reader (rh107q.py verbs107) reads
 # the same counts and, beyond them, that the wrapper lines are exactly those three assignments and that each of the three
 # variables is used only in a line that prints it (echo or printf); its control a planted copy of each kind — a qf_tool verb,
 # the wrapper run, the tool by path, and one of the three commands run (eval, or bare) — each of which must be refused.
@@ -195,13 +195,13 @@ for f107 in run106 run106c run_line106c fresh106 tidy106 installed106 left106 no
             kv104 q104 master104 sched104 ledger104 owner104 sv104 install_commit idle104 base_log onst104 dk104 pubget v1read102 \
             check has okline noteline failline fails printed live inst_ver data94 kept_state evo_calls vt_host qj n103 \
             run105 run105c fresh105 tidy105 weak105 anc105 aft105 rbx105 onall105 on105 lk105 lkmap105 counts105 digest105 q105 kv105 \
-            ref105 jf105 sv105; do
+            ref105 jf105 sv105 sqx; do
   declare -F "$f107" >/dev/null || { echo "refusing: the rehearsals this one runs did not define $f107()"; exit 2; }
 done
 for v107 in SB REPO R P PD DATA VAULT RECS PLUGIN_BASE WEB_OK AFTER94 SCAN96 U99 PHPBIN IN_CONTAINER DATE_TS98 EVO_URL \
             CLKPRE104 CLKF104 R104 SALES104 REPORT104 \
             DEPLOY106 OUT106 STATE106 LKF106 R106 H106 P106 P106F V106 B106 B106F BV106 REL106 CM106 ADDED106 ONP106 L1ON106 L2ON106 \
-            LIM106 PR106 FORMS106 NM106F EVO0_106 AM0_106 RF4_106 J1A106; do
+            LIM106 PR106 FORMS106 NM106F EVO0_106 AM0_106 RF4_106 J1A106 ALLCSV105 SETCSV105 STEPMAP105; do
   [ -n "${!v107:-}" ] || { echo "refusing: the rehearsals this one runs did not set $v107"; exit 2; }
 done
 FAIL_PRE107=$FAILN   # the earlier rehearsals' failures, before this release's own sections: the last line names them
@@ -219,7 +219,7 @@ git -C "$R" ls-files --error-unmatch "$F107" >/dev/null 2>&1 || { echo "refusing
 git -C "$R" diff --quiet HEAD -- "$F107" || { echo "refusing: $F107 differs from the committed one — commit it, then rehearse"; exit 2; }
 cp "$R/$F107" "$DEPLOY107"
 for f107 in scripts/sales-followup.sh scripts/sales-followup-report.sh; do cp "$R/$f107" "$REPO/$f107"; done
-cp "$R/$F106_107" "$REPO/$F106_107"
+cmp -s "$R/$F106_107" "$REPO/$F106_107" || cp -p "$R/$F106_107" "$REPO/$F106_107"   # only if it differs, its time kept: 107-infra e reads -newer than it
 sv107() { sed -nE "s/^$2=\"([^\"]*)\".*/\1/p; t; s/^$2=([^ \";]+).*/\1/p" "${1:-$DEPLOY107}" | head -1; }   # sv107 FILE NAME — a value the script states
 P107="$(sv107 "" EXPECTED_PLUGIN_COMMIT)"; P107F="$(sv107 "" EXPECTED_PLUGIN_COMMIT_FULL)"; V107="$(sv107 "" EXPECTED_VERSION)"
 B107="$(sv107 "" BASELINE_COMMIT)"; B107F="$(sv107 "" BASELINE_COMMIT_FULL)"; BV107="$(sv107 "" BASELINE_VERSION)"
@@ -247,14 +247,19 @@ EXP_REDEPLOY107="cd $REPO && bash $F107 --redeploy $(LOGW107 redeploy)"
 q107() { python3 -I "$H107/rh107q.py" "$@"; }        # this rehearsal's own readers (rh107q.py)
 kv107() { q105 kv "$1" "$2"; }                        # one key=value field of a line, by the chain's reader
 # The pin's ladder, read by the RELEASE's own code from Git (a copy in this rehearsal's own folder), set against 5.18.106's:
-# 5.18.107 changes the ladder (SalesFollowupLadder: W.1's key and its burst-drain step, root docs/76 §W.1), so its keys are
-# read here, never assumed equal.
+# 5.18.107 changes the ladder's declared settings (SalesFollowupLadder::SETTINGS gains W.1's two rows, ai_burst_merge_enabled
+# and ai_burst_merge_window_minutes, root docs/76 §W.1 — part W, so settingKeys(), never allKeys(); no step is added), so its
+# keys are read here, never assumed equal: allKeys() as 5.18.105's (the ladder unchanged since 5.18.104), the settings two more.
 git -C "$REPO" archive "$P107F" "$P/lib" "$P/tools" | tar -xf - -C "$H107/ref"; chown -R 1000:1000 "$H107/ref"
 LAD107="$(ref105 ladder "$H107/ref/$P")"
 ALLCSV107="$(jf105 "$LAD107" all)"; SETCSV107="$(jf105 "$LAD107" settings)"; STEPMAP107="$(jf105 "$LAD107" stepmap)"
-check "$( [ -n "$ALLCSV107" ] && echo read)|$( tr ',' '\n' <<<"$ALLCSV107" | grep -cx 'ai_burst_merge_enabled')|$(git -C "$REPO" diff --quiet "$B107F" "$P107F" -- "$P/lib/SalesFollowupLadder.php" && echo same || echo changed)" \
-      "read|1|changed" \
-  "107-infra b the pin's ladder read by its own code from Git: allKeys() ($(tr ',' '\n' <<<"$ALLCSV107" | grep -c .) keys) holds ai_burst_merge_enabled (W.1); SalesFollowupLadder.php is among the files $V107 changes"
+digest107() {   # digest107 — lk105's reading (rh105q.py lk) over the pin's own key lists, W.1's two settings included
+  sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1
+  kv105 "$(q105 lk "$DATA/plugin.sqlite3" "$DATA/kyc_config.json" "$PD/data/config.json" "$DATA/config.json" "$ALLCSV107" "$SETCSV107" "$STEPMAP107")" digest
+}
+check "$( [ -n "$ALLCSV107" ] && [ -n "$SETCSV105" ] && echo read)|$( [ "$ALLCSV107" = "$ALLCSV105" ] && echo all105)|$(tr ',' '\n' <<<"$SETCSV107" | grep -cxE 'ai_burst_merge_(enabled|window_minutes)')|$(comm -13 <(tr ',' '\n' <<<"$SETCSV105" | sort) <(tr ',' '\n' <<<"$SETCSV107" | sort) | paste -sd, -)|$(comm -23 <(tr ',' '\n' <<<"$SETCSV105" | sort) <(tr ',' '\n' <<<"$SETCSV107" | sort) | grep -c .)|$(git -C "$REPO" diff --quiet "$B107F" "$P107F" -- "$P/lib/SalesFollowupLadder.php" && echo same || echo changed)" \
+      "read|all105|2|ai_burst_merge_enabled,ai_burst_merge_window_minutes|0|changed" \
+  "107-infra b the pin's ladder read by its own code from Git: allKeys() ($(tr ',' '\n' <<<"$ALLCSV107" | grep -c .) keys) as 5.18.105's; settingKeys() ($(tr ',' '\n' <<<"$SETCSV107" | grep -c .)) 5.18.105's and W.1's two, none lost; SalesFollowupLadder.php is among the files $V107 changes"
 CM107="$(sv107 "" COPY_MARK)"
 ADDED107="$(sed -n 's/^EXPECTED_ADDED="\(.*\)"$/\1/p' "$DEPLOY107")"; NA107=$(wc -w <<<"$ADDED107")
 CHANGED107="$(sed -n 's/^EXPECTED_CHANGED="\(.*\)"$/\1/p' "$DEPLOY107")"; NC107=$(wc -w <<<"$CHANGED107")
@@ -273,7 +278,7 @@ installed107() {   # installed107 COMMIT — the files $BV107 → $V107 touches 
   echo "$bad"
 }
 # The --after-only lines of each step, read from the script as 5.18.106's rehearsal reads its own (onst104's reader).
-ONP107="QF-ON0:ack QF-ON3:ledger $(grep -oE 'qf_on_one "\$(sub|1)" [A-Z]+-ON[0-9] [a-z-]+ ' "$DEPLOY107" | awk '{print $3 ":" $4}' | grep -v '^QF-ON0:' | sort -u | paste -sd' ' -)"
+ONP107="QF-ON0:ack QF-ON3:ledger $(grep -oE 'qf_on_one "\$(sub|1)" [A-Z]+-ON[0-9] [a-z-]+ ' "$DEPLOY107" | awk '{print $3 ":" $4}' | grep -v '^QF-ON0:' | sort -u | paste -sd' ' -) $(for p in $(sv107 "" VN_STEPS); do printf '%s:%s ' "${p##*:}" "${p%%:*}"; done)$(grep -q 'note "AC-ON1 OFF — not judged (agent-cc is off)"' "$DEPLOY107" && echo AC-ON1:agent-cc)"   # as 106:256 builds ONP106
 check "$( [ "$(wc -w <<<"$ONP107")" -ge "$(wc -w <<<"$ONP106")" ] && echo some)|$(for p in $ONP106; do grep -qwF -- "$p" <<<"$ONP107" || echo "lost:$p"; done | paste -sd, -)" "some|" \
   "107-infra d the --after-only's step pairs read from the script ($(wc -w <<<"$ONP107") pairs): every one of 5.18.106's kept"
 onall107() { local p; for p in $ONP107; do printf '%s=%s ' "$p" "$(onst104 "$1" "${p%%:*}" "${p#*:}")"; done | sed 's/ $//'; }
@@ -374,10 +379,10 @@ rbx107() {   # rbx107 LABEL — back to 5.18.106 after a deploy of 5.18.107: ROL
              # every file 5.18.107 changes $BV107's, every ladder key as before it; then qcheck106. RBX107_OUT its output, RBX107_T
              # its tag, RBX107_REC the record it wrote (or none) — call it directly
   local o k0 r0
-  k0="$(digest105)"; r0="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null)"
+  k0="$(digest107)"; r0="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null)"
   fresh107; o="$(run107c --answer ROLLBACK --rollback)"; RBX107_OUT="$o"; RBX107_T="$(last107)"
   RBX107_REC="$(ls -1 "$OUT107"/rollback-state-*.env 2>/dev/null | grep -vxF -f <(printf '%s\n' "$r0") | tail -1)"; RBX107_REC="${RBX107_REC:-none}"
-  check "$(fails "$o")$(has "$o" "  $V107 (rollback): PASSED.")|$(rc107)|$(live)|$(installed107 "$B107F")|$( [ "$(digest105)" = "$k0" ] && echo kept)|$( [ "$RBX107_REC" != none ] && echo record)" \
+  check "$(fails "$o")$(has "$o" "  $V107 (rollback): PASSED.")|$(rc107)|$(live)|$(installed107 "$B107F")|$( [ "$(digest107)" = "$k0" ] && echo kept)|$( [ "$RBX107_REC" != none ] && echo record)" \
         "0yes|0|$B107|0|kept|record" "$1 the rollback, ROLLBACK typed, under the clock: PASSED (exit 0) — $B107 serving, every file $V107 changes $BV107's again, every ladder key as before it (this rehearsal's reading)"
   qcheck106 "$1'"
 }
@@ -415,15 +420,17 @@ LEFT107() {   # LEFT107 — the chain's and this release's triggers still armed,
   [ -e "$REPO/.git/index.lock" ] && out="$out,index.lock"
   echo "${out#,}" | sed 's/^$/none/'
 }
-# 5.18.106's refusal list stays from 106-6 (its sender pass) until 106-10f, which removes it — and 106-10 is cut with the
-# chain, so its removal is carried here, as 106-10f made it: removed, then a send for J1's first number answered with a key.id
-# and nothing more refused (one call to the stand-in Evolution, outside every run, as 106-10f's).
+# 5.18.106's refusal list (made at 106:966 for 106-6's sender pass) is removed by 106's own rehearsal (106-6s2, 106:2013) and read
+# absent by 106-7z; 106-10f's reading of it — removed, then a send for J1's first number answered with a key.id and nothing
+# more refused — is cut with 106-10, so it is made here (one call to the stand-in Evolution, outside every run, as 106-10f's).
 RLB107="$(if [ -e "$SB/evo/rh106-refuse.list" ]; then grep -c . "$SB/evo/rh106-refuse.list"; else echo absent; fi)"; RFB107="$(refused106)"
 RLA107="$(refuse106)"; RQ107="$(evopost106 sendText "${J1A106:-}")"
 check "$RLA107:$( [ -e "$SB/evo/rh106-refuse.list" ] && echo listed || echo unlisted):$RQ107:$(( $(refused106) - RFB107 ))" "0:unlisted:id:0" \
-  "107-infra e0 $V106's refusal list (it listed $RLB107; 106-10f removes it, cut with 106-10) removed here as 106-10f did: a send for J1's first number answered with a key.id, nothing more refused"
-check "$(LEFT107)|$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)" "none|0" \
-  "107-infra e nothing the chain armed is left armed (106-10f's reading, run before 107 touches a stand-in): no trigger, no index lock, no weakened copy of 5.18.106's script left in the clone"
+  "107-infra e0 $V106's refusal list (read $RLB107 here: 106-6s2 removes it, and 106-10f's reading is cut with 106-10) removed here as 106-10f does: a send for J1's first number answered with a key.id, nothing more refused"
+WC0_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)"
+cp "$DEPLOY106" "$REPO/scripts/.zz107ctl.sh"; WC1_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)"; rm -f "$REPO/scripts/.zz107ctl.sh"
+check "$(LEFT107)|$WC0_107:$WC1_107:$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)" "none|0:1:0" \
+  "107-infra e nothing the chain armed is left armed (106-10f's reading, run before 107 touches a stand-in): no trigger, no index lock, no weakened copy of 5.18.106's script left in the clone — its control a copy planted and counted (1), then removed (106-10f's .zz106ctl.sh)"
 
 # ── 107-infra f — A1: the stand-in web server on the rehearsal's clock (v2 A1, v3). The chain starts it without LD_PRELOAD
 # (root:285, :930), so a boot through it stamped 092's applied_at (SQLite's datetime('now')) and migration.log's lines with
@@ -571,7 +578,7 @@ check "$(cat "$SB/alter092touch107.fired")|$( [ -e "$PD/migrations/092_wa_no_ai.
 # exact call, and only when the docker's parent command line names deploy-hybrid.sh (stage A's LIVE_BEFORE makes the same call
 # from the script itself). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
 cat > "$SB/docker107.hook" <<'HOOK'
-# ── 5.18.107's rehearsal: H4 (.boot107, one boot at deploy-hybrid's record read) and H6 (.rbfail107, a rollback's record read wrong once) ──
+# ── 5.18.107's rehearsal: H4 (boot107, one boot at deploy-hybrid's record read) and H6 (rbfail107, a rollback's record read wrong once) ──
 if [ "$*" = "exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit" ]; then
   _rh_r7="$(tail -n1 "@PD@/.deployed-commit" 2>/dev/null | tr -cd '0-9a-f')"
   if [ -f "@SB@/.boot107" ] && [ "$_rh_r7" = "@P106@" ]; then
@@ -754,8 +761,8 @@ for i107 in $(seq -w 0 99); do n107="$(ph107 "$i107")"; grep -qxF -- "$n107" "$N
 FORMS107="$R107/forms107.pat"; PH4_107="$(q105 phones4 "$R107/phones107.txt" "$FORMS107")"
 NM107F="$R107/names107.pat"; { cat "$NM106F" 2>/dev/null; echo 'RH107SECRET-'; } | grep . | sort -u > "$NM107F"; chmod 600 "$NM107F"
 check "$(kv107 "$PH4_107" n)|$( [ "$(kv107 "$PH4_107" forms)" = "$(( 5 * $(n103 "$(kv107 "$PH4_107" n)") ))" ] && echo five)|$(stat -c %a "$FORMS107")|$(grep -cxF 'RH107SECRET-' "$NM107F")|$(grep -cxF 'RH106SECRET-' "$NM107F")" \
-      "$(( $(grep -c . "$R106/phones106.txt" 2>/dev/null) + 100 ))|five|600|1|1" \
-  "107-infra k the 100 numbers of 107's range beside 106's and the chain's, each in its four written forms and its last nine digits, into a 0600 pattern file; RH107SECRET- added to the names pattern beside RH106SECRET- (v2 A18)"
+      "$(( $(tr -cd '0-9\n' < "$R106/phones106.txt" 2>/dev/null | grep -E '^256[0-9]{9}$' | sort -u | grep -c .) + 100 ))|five|600|1|1" \
+  "107-infra k the 100 numbers of 107's range beside 106's and the chain's (counted once whatever their written form, as 106:575 counts 105's), each in its four written forms and its last nine digits, into a 0600 pattern file; RH107SECRET- added to the names pattern beside RH106SECRET- (v2 A18)"
 # NA-CA1's sentinel (NA_SENTINEL_1, S:861) is the one seeded value outside the range: the script's own constant, read here,
 # never typed; 107-6 plants a row on it and 107-10 asserts it gone (v2 A18).
 NAS107="$(sv107 "" NA_SENTINEL_1)"
@@ -775,12 +782,12 @@ check "$( [ -n "$TRAP0_107" ] && trap -p EXIT | grep -cF -- "cleanup107; $TRAP0_
 EVO0_107="$(evo_calls)"   # Evolution's requests before 107-pre: every later one is a run's or a worker's, each asserted where it is meant
 # ── 107's readers of the live book and its log (rh107q.py, read-only: mode=ro, query_only) and the keep folder every plant
 # keeps what it changes in (rh107-seed.php refuses an undo whose keep is not there). The book is checkpointed first, so a
-# reader sees what the WAL holds. ──
-ledger107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledger "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }    # mig092=N wa_no_ai=table|renamed|none
-ledgerx107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledgerx "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }  # … cks092= at092= sc092= cks071= sentinel= rows=
-log107() { q107 log092 "$DATA/migration.log" 2>/dev/null || echo unread; }                                                               # MG-CA2's reading of migration.log
-bookdig107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 bookdig "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }  # the book's logical digest
-ms107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 sched "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }   # budget=… entries=… (master's own record)
+# reader sees what the WAL holds. A reader that fails prints one line: its own unread:<Error> (exit 3), else unread. ──
+ledger107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledger "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }    # mig092=N wa_no_ai=table|renamed|none
+ledgerx107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledgerx "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }  # … cks092= at092= sc092= cks071= sentinel= rows=
+log107() { q107 log092 "$DATA/migration.log" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }                                                               # MG-CA2's reading of migration.log
+bookdig107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 bookdig "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }  # the book's logical digest
+ms107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 sched "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }   # budget=… entries=… (master's own record)
 logsha107() { sha256sum < "$DATA/migration.log" 2>/dev/null | cut -c1-16; }
 KEEP107="$R107/kept"; mkdir -p "$KEEP107"; chown 1000:1000 "$KEEP107"; chmod 700 "$KEEP107"
 kept107() { find "$KEEP107" -mindepth 1 2>/dev/null | wc -l | tr -d ' '; }   # what is still kept: 0 once every plant is undone
@@ -839,7 +846,7 @@ bd107() {   # bd107 LABEL OUTPUT — the BASE_DIFFERS stop: its text, Nothing wa
 pbt107() { echo "lib/SalesFollowupLadder.php $1, tools/sales_followup.php $2, lib/BurstMerge.php $3, tools/set_config.php $4."; }   # the tools reading as pb_para says it
 D0_107="$(data94)"
 # 1a — the plain 5.18.106 tree: one changed file outside the tools edited (lib/DishNetAiBrain.php, in $V107's delta and bf29cbd's tree)
-check "$(grep -cw 'dishnet-hybrid-sudan/lib/DishNetAiBrain.php' <<<"$CHANGED107")|$(git -C "$REPO" cat-file -e "$B107F:$P/lib/DishNetAiBrain.php" && echo base)" "1|base" "107-1a0 lib/DishNetAiBrain.php is one of the files $V107 changes, and bf29cbd has it"
+check "$(tr ' ' '\n' <<<"$CHANGED107" | grep -cx 'lib/DishNetAiBrain.php')|$(git -C "$REPO" cat-file -e "$B107F:$P/lib/DishNetAiBrain.php" && echo base)" "1|base" "107-1a0 lib/DishNetAiBrain.php is one of the files $V107 changes, and bf29cbd has it"
 keepall107 lib/DishNetAiBrain.php; edit107 lib/DishNetAiBrain.php
 fresh107; O1A107="$(run107c --check)"; bd107 "107-1a1" "$O1A107"
 check "$(has "$O1A107" "$(pbt107 "$BW107" "$BW107" absent "$BW107")")|$(has "$O1A107" '  The switch-off — it is refused (undeclared):')|$(has "$O1A107" '  The drain reading — it is refused (an unknown step):')|$(has "$O1A107" ' A refusal changes nothing and saves nothing.')|$(grep -cF "it leaves '0'" <<<"$O1A107")|$(grep -c '^  quoted_no_prices_enabled cannot be read (the run.s latest reading of the ladder.s keys): .* it is refused (unmanaged):$' <<<"$O1A107")|$(grep -c '^  connection_quote_enabled cannot be read (the run.s latest reading of the ladder.s keys): .* it is refused (unmanaged):$' <<<"$O1A107")|$(has "$O1A107" 'switch NOT READ (the pin is not yet staged)')|$(has "$O1A107" '(Stage A refused before the pin was staged:')" \
@@ -914,18 +921,19 @@ check "$(back106 t107-burst)|$(backall107 tools/sales_followup.php)|$(installed1
 # lines, the wording from the tools reading, no unbound-variable error under set -u; three copies
 keepall107 lib/DishNetAiBrain.php; edit107 lib/DishNetAiBrain.php
 fresh107; O1I107="$(run107c --check)"; bd107 "107-1i1" "$O1I107"
-check "$(has "$O1I107" 'Read at ')$(has "$O1I107" ': switch NOT READ (the pin is not yet staged); the drain not read (the pin is not yet staged). One reading, not a drain.')|$(grep -c 'unbound variable' <<<"$O1I107")|$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$O1I107")" "yesyes|0|2" \
+check "$(has "$O1I107" 'Read at ')$(has "$O1I107" ': switch NOT READ (the pin is not yet staged); the drain not read (unread(the pin is not yet staged)). One reading, not a drain.')|$(grep -c 'unbound variable' <<<"$O1I107")|$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$O1I107")" "yesyes|0|2" \
   "107-1i2 the stage-A mixed-tree refusal: the reading NOT READ (the pin is not yet staged), one reading and not a drain; K and Q cannot be read, their lines printed; no unbound-variable error"
 anc107 p3bunset 'P3B_PIN=""; P3B_WHY="the pin is not yet staged"   #' ': "the pin is not yet staged"   #'
+anc107 pbunguard '  if [ -z "${P3B_PIN:-}" ]; then sw=' '  if [ -z "$P3B_PIN" ]; then sw='   # with p3bunset: the reading's own control (every read on the path is guarded, so the init line alone shows nothing)
 anc107 pbnotread '  if [ -z "${P3B_PIN:-}" ]; then sw="NOT READ (the pin is not yet staged)"; bd="bd=unread(the pin is not yet staged)"; at="$(date -u +%s)"' '  if [ -z "${P3B_PIN:-}" ]; then sw="off"; bd="bd=unread(the pin is not yet staged)"; at="$(date -u +%s)"'
 anc107 pbnokq '    [ "$q" = "off" ] && continue
     kq=' '    continue
     kq='
-mutant107 w107-1i-unset p3bunset -- --check; C1IU107="$(grep -c 'unbound variable' <<<"$MUT107")"
+mutant107 w107-1i-unset p3bunset pbunguard -- --check; C1IU107="$(grep -c 'unbound variable' <<<"$MUT107")"
 mutant107 w107-1i-read pbnotread -- --check; C1IR107="$(has "$MUT107" ': switch NOT READ (the pin is not yet staged);')"
 mutant107 w107-1i-nokq pbnokq -- --check; C1IK107="$(grep -c '^  quoted_no_prices_enabled cannot be read\|^  connection_quote_enabled cannot be read' <<<"$MUT107")"
 check "$( [ "$(n103 "$C1IU107")" -ge 1 ] && echo unbound)|$C1IR107|$C1IK107" "unbound|no|0" \
-  "107-1i3 its weakened copies caught: P3B_PIN and P3B_WHY left undefined before stage A's sites (the unbound-variable error under set -u); a reading other than NOT READ; the K/Q lines dropped"
+  "107-1i3 its weakened copies caught: P3B_PIN and P3B_WHY left undefined before stage A's sites AND pb_para's read unguarded (the unbound-variable error under set -u — the control that 107-1i2's 0 can read one; either alone shows nothing, every other read on the path being guarded); a reading other than NOT READ; the K/Q lines dropped"
 check "$(backall107 lib/DishNetAiBrain.php)|$(installed107 "$B107F")|$(ancc107)" "same|0|0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-" \
   "107-1z put back; $BV107's tree whole; every anchor of 107-1's weakened copies the script's own text, found once, its replacement different (the control of the controls)"
 # ════════════════════════════════════════════════════════════════════════════
@@ -995,7 +1003,7 @@ fxs107() {   # fxs107 PLACE TAG JSON-SET — a key or keys put into PLACE's file
   seed106r "[{\"op\":\"fx_file\",\"place\":\"$1\",\"keep\":\"$NSK107\",\"tag\":\"$2\",\"set\":$3,\"plugin\":\"$PD\"}]"; }
 fxb107() { seed106r "[{\"op\":\"fx_file_back\",\"place\":\"$1\",\"keep\":\"$NSK107\",\"tag\":\"$2\",\"plugin\":\"$PD\"}]"; }   # fxb107 PLACE TAG
 nskept107() { find "$NSK107" -mindepth 1 2>/dev/null | wc -l | tr -d ' '; }
-check "$(sd106 "$(fxs107 k probe '{"rh107_probe":"1"}')" 0 fixture)|$(sd106 "$(fxb107 k probe)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|True|0|same" \
+check "$(sd106 "$(fxs107 k probe '{"rh107_probe":"1"}')" 0 fixture)|$(sd106 "$(fxb107 k probe)" 0 fixture)|$(nskept107)|$(snapeq107)" "true|true|0|same" \
   "107-3-0 the place fixture answers (a probe key into k and out again, the file byte for byte, nothing kept) — the control for every plant below"
 # The per-place weakened copies: NS-G1 with one place left out of its judged set (S:6488). Each must read GO where the script refuses.
 anc107 nsp "\$ns = \$nsOn(\$doc, ['p', 'd', 'k']);" "\$ns = \$nsOn(\$doc, ['d', 'k']);"
@@ -1006,21 +1014,21 @@ for pl107 in p d k; do
   want107="quoted_no_prices_enabled in $pl107; connection_quote_enabled in $pl107$( [ "$pl107" = k ] && echo "; ai_burst_merge_enabled in $pl107") reads on"
   X1="$(fxs107 "$pl107" "on-$pl107" "$set107")"
   D94_107="$(data94)"; fresh107; O107="$(run107c --check)"
-  check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "NO-GO (NS-G1): $want107")|$(has "$O107" 'no value is read out')" "True|yes|yes" \
+  check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "NO-GO (NS-G1): $want107")|$(has "$O107" 'no value is read out')" "true|yes|yes" \
     "107-3$pl107 NS-G1 refuses $( [ "$pl107" = k ] && echo "K, Q and W.1" || echo "K and Q") on in $pl107 (a FIXTURE plant: '1', true$( [ "$pl107" = k ] && echo ', 1')), naming keys and the place, never a value"
   nogo107 "107-3$pl107'" "NO-GO (NS-G1): " "$O107" "$D94_107" "$P106"
   mutant107 "ns-no-$pl107" "ns$pl107" -- --check
   check "$(has "$MUT107" 'NO-GO (NS-G1)')|$(has "$MUT107" "  $V107 (check): GO — stage A holds.")|$MUTRC107" "no|yes|0" \
     "107-3$pl107\" a weakened copy that leaves $pl107 out of NS-G1's judged places reads GO over the same plant — caught"
-  check "$(sd106 "$(fxb107 "$pl107" "on-$pl107")" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3$pl107* the plant put back, the file byte for byte"
+  check "$(sd106 "$(fxb107 "$pl107" "on-$pl107")" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3$pl107* the plant put back, the file byte for byte"
 done
 # W.1's switch in p: a ladder key held by a config.json — LK-G1's refusal, before NS-G1 reads (recorded, root docs/76 §C)
 X1="$(fxs107 p w1-p '{"ai_burst_merge_enabled":"1"}')"
 D94_107="$(data94)"; fresh107; O107="$(run107c --check)"
-check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (LK-G1): 1 of the ladder')|$(has "$O107" 'ai_burst_merge_enabled')|$(has "$O107" 'NO-GO (NS-G1)')" "True|yes|yes|no" \
+check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (LK-G1): 1 of the ladder')|$(has "$O107" 'ai_burst_merge_enabled')|$(has "$O107" 'NO-GO (NS-G1)')" "true|yes|yes|no" \
   "107-3w W.1's switch on in p: LK-G1 refuses it first — a ladder key held by a config.json (S:7480) — so NS-G1 never reads it there; the refusal names the key"
 nogo107 "107-3w'" "NO-GO (LK-G1): " "$O107" "$D94_107" "$P106"
-check "$(sd106 "$(fxb107 p w1-p)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3w* put back"
+check "$(sd106 "$(fxb107 p w1-p)" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3w* put back"
 echo "  note  RH-NOTE 107-3w (for the owner, root docs/76 §C): W.1's switch is a ladder key, so in p or d LK-G1's refusal stands where §T.11 names NS-G1's; nothing is changed either way"
 # 107-3o — off and set, never judged on: K 0, Q 'off' and W.1 '0' in k (§K's own pre-rollback step leaves '0'); K and W.1 on in
 # the store row alone (no reader reads it); the texts set: two in k, W.1's window in the store row. GO, with each note.
@@ -1028,13 +1036,13 @@ X1="$(fxs107 k off-k '{"quoted_no_prices_enabled":0,"connection_quote_enabled":"
 X2="$(seed107 "$PD" '[{"op":"store_keys107","keys":{"quoted_no_prices_enabled":"1","ai_burst_merge_enabled":"1","ai_burst_merge_window_minutes":5}}]')"
 fresh107; O107="$(run107c --check)"
 check "$(sd106 "$X1" 0 fixture)|$(sd107 "$X2" fixture)|$(checkgo107 "$O107")|$(has "$O107" '  ok    NS-G1 quoted_no_prices_enabled (K), connection_quote_enabled (Q) and ai_burst_merge_enabled (W.1) read off in every place their readers read')" \
-      "True|1|yesnono0|0|0|samekey|0|yes" \
+      "true|1|yesnono0|0|0|samekey|0|yes" \
   "107-3o '0', 0 and 'off' present in k read off: NS-G1 ok, the --check GO with nothing changed (FIXTURE plants in k and in the store row)"
 check "$(has "$O107" 'NS-G1 the store row holds quoted_no_prices_enabled in s; ai_burst_merge_enabled in s reading on — reported, never judged')|$(has "$O107" 'NS-G1 the texts and W.1'"'"'s window, set per place, by key name')|$(has "$O107" 'quoted_reply_text in k; no_ai_alert_cooldown_hours in k; ai_burst_merge_window_minutes in s')" \
       "yes|yes|yes" \
   "107-3o' the store row alone: reported, never judged; the texts and W.1's window noted per place by key name, no_ai_alert_cooldown_hours among them — never a value"
 X3="$(seed107 "$PD" '[{"op":"store_keys107_undo","keys":["quoted_no_prices_enabled","ai_burst_merge_enabled","ai_burst_merge_window_minutes"]}]')"
-check "$(sd106 "$(fxb107 k off-k)" 0 fixture)|$(sd107 "$X3" fixture)|$(nskept107)|$(snapeq107)|$(bookdig107)" "True|1|0|same|$B3_107" "107-3o* put back: the file byte for byte, the store row's keys taken out (the book's digest as before 107-3)"
+check "$(sd106 "$(fxb107 k off-k)" 0 fixture)|$(sd107 "$X3" fixture)|$(nskept107)|$(snapeq107)|$(bookdig107)" "true|1|0|same|$B3_107" "107-3o* put back: the file byte for byte, the store row's keys taken out (the book's digest as before 107-3)"
 # 107-3c — the rule's positive control: a weakened copy whose off values include '1' — the in-memory '1' then reads off, and NS-G1
 # refuses NOT ESTABLISHED, nothing planted
 anc107 nsctl "\$nsOff = function (\$v): bool { return \$v === null ||" "\$nsOff = function (\$v): bool { return \$v === '1' || \$v === null ||"
@@ -1043,13 +1051,14 @@ check "$(has "$MUT107" "NO-GO (NS-G1): NOT ESTABLISHED — THE SWITCH RULE'S POS
   "107-3c a weakened copy that counts '1' as off: the in-memory control fails and NS-G1 refuses NOT ESTABLISHED — the control has teeth"
 # 107-3b — NS-B1: Q turned on in k while the script holds at Type DEPLOY (a FIXTURE writer, said so: 5.18.106's tools refuse the key).
 D94_107="$(data94)"
-csb1run107 107-3b "$DEPLOY107" -- fxs107 k nsb1 '{"connection_quote_enabled":"1"}'
+fxsh107() { local o; o="$(fxs107 "$@")"; printf '%s\n' "$o" > "$R107/logs/fxsh-$2.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # fxs107 as a hold's ACTION: non-zero unless the seed answered JSON (never none(…))
+csb1run107 107-3b "$DEPLOY107" -- fxsh107 k nsb1 '{"connection_quote_enabled":"1"}'
 # deploy-5.18.107.sh: ns_check NS-B1 in qf_keep_and_baseline, before LK-B1's comparison and the copy
 check "$HOLDSAW107|$HOLDRC107|$(has "$HOLDOUT107" 'NO-GO (NS-B1): connection_quote_enabled in k reads on')|$(has "$HOLDOUT107" 'it was turned on during this run, after stage A. Nothing was copied.')|$(has "$HOLDOUT107" 'NO-GO (LK-B1)')|$(has "$HOLDOUT107" '  copy            at ')|$(rc107)|$(live)|$(installed107 "$B107F")" \
       "yes|0|yes|yes|no|no|1|$P106|0" \
   "107-3b NS-B1: Q on in k after stage A (a FIXTURE plant at Type DEPLOY), refused before LK-B1's comparison and before the copy — 'Nothing was copied', exit 1, $P106 serving, every file $V107 changes still $BV107's"
 tidy107 107-3b
-check "$(sd106 "$(fxb107 k nsb1)" 0 fixture)|$(nskept107)|$(data94)|$(states107)|$(backups107)" "True|0|$D94_107|0|0" \
+check "$(sd106 "$(fxb107 k nsb1)" 0 fixture)|$(nskept107)|$(data94)|$(states107)|$(backups107)" "true|0|$D94_107|0|0" \
   "107-3b* put back: the data folder's digest as before the run; the refused run's state file and LK key moved into its case folder, so the next deploy is a first deploy"
 # 107-3t — stage A's settings-text note (A3): the planted RH107SECRET- text reads NOT v9 (107-pre6's --check); the v9 branch shown
 # once by a READER CONTROL — a copy whose recorded prefix is the planted text's — never a production reading
@@ -1060,12 +1069,19 @@ check "$(has "$OA2_107" 'NOT v9 as the workers read it')|${#TX107}" "yes|16" \
 mutant107 sa-v9 satxt -- --check
 check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the recorded ${TX107:0:12}")|$(has "$MUT107" 'NOT v9 as the workers read it')|$MUTRC107" "yes|no|0" \
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
-# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in d (a FIXTURE, said so): SA's capitals note, no refusal
-X1="$(fxs107 d sjg '{"tenant_profile":"south-sudan"}')"
+# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in k (a FIXTURE, said so). k, never d: PluginConfig::read
+# merges p, d, k and a later file wins, and the sandbox's kyc_config.json already says uganda (the root rehearsal writes it),
+# so a d plant would read Uganda. fx_file refuses a key the file holds, so the file is kept whole (keep106), the one key
+# rewritten in place (owner and mode kept), and put back byte for byte (back106). SA's capitals note, no refusal.
+SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"
+SJG1_107="$(python3 -I -c 'import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+assert isinstance(d, dict) and d.get("tenant_profile") == "uganda"
+d["tenant_profile"] = "south-sudan"; open(p, "w").write(json.dumps(d)); print("planted")' "$DATA/kyc_config.json" 2>/dev/null || echo refused)"
 fresh107; O107="$(run107c --check)"
-check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "True|yes|yesnono0|0|0|samekey|0" \
-  "107-3g StaffJobsGate::applies false (South Sudan's profile in d): SA's note in capitals, and the --check still GO — a note, never a refusal"
-check "$(sd106 "$(fxb107 d sjg)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3g* put back"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "kept|planted|yes|yesnono0|0|0|samekey|0" \
+  "107-3g StaffJobsGate::applies false (South Sudan's profile in k, the file read last; it said uganda): SA's note in capitals, and the --check still GO — a note, never a refusal"
+check "$(back106 t107-sjg)|$(nskept107)|$(snapeq107)" "same|0|same" "107-3g* put back: kyc_config.json byte for byte"
 check "$(ancc107)|$(snapeq107)|$(bookdig107)|$(ledger107)|$(live)" "0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-|same|$B3_107|mig092=0 wa_no_ai=none|$P106" \
   "107-3z the exit: 107-pre's state — every key absent again (the files byte for byte, the book's digest), no 092, $P106 serving; every anchor so far the script's own text, once"
 # ════════════════════════════════════════════════════════════════════════════
@@ -1097,11 +1113,13 @@ master106 "107-4f"
 aft107 "107-4g" PASSED $L2ON107
 check "$(has "$AFT107" 'ME-CA1 PASS —')|$(has "$AFT107" 'errors master caught are not judged (plugin.log:')|$(has "$AFT107" "  ok    MG-CA2 migration.log holds 092's OK line")" "yes|yes|yes" \
   "107-4h the --after-only after master's cycle: ME-CA1 PASS with its 'not judged (plugin.log: …)' clause; MG-CA2's OK line still there"
-B4_107="$(bookdig107)"; L4_107="$(logsha107)"; S4_107="$(sha256sum < "$STATE107" | cut -c1-16)"; LX4_107="$(ledgerx107)"
+B4_107="$(bookdig107)"; L4_107="$(logsha107)"; LX4_107="$(ledgerx107)"
 
 # ════════════════════════════════════════════════════════════════════════════
-# 107-6 on D1 (MG_CA2_SEEN=1) — each an --after-only, its plant kept and put back after (the book by its digest, the log and the
-# state file by sha256). The branches judged are the same in --after-only and a redeploy (v3 §C item 6).
+# 107-6 on D1 (MG_CA2_SEEN=1) — each an --after-only, its plant kept and put back after (the book by its digest, migration.log by
+# sha256, the state file's two 092 records). The --after-only's V section boots the stand-in before MG-CA2 reads the log, so a
+# case that leaves 092's recorded md5 other than the installed file's (6b, 6g) keeps the log too: that boot logs 092's real
+# checksum WARNING (MigrationRunner, every boot). The branches judged are the same in --after-only and a redeploy (v3 §C item 6).
 # ════════════════════════════════════════════════════════════════════════════
 echo; echo "== 107-6. on D1 (MG_CA2_SEEN=1): the failures after the copy, MG-CA2's missing line, the straddle note's conditions, the ladder edited after the copy =="
 ao107() { idle104; fresh107; AO107="$(run107c --after-only)"; AOT107="$(last107)"; AORC107="$(rc107)"; }   # one --after-only under the clock: AO107, AOT107, AORC107
@@ -1124,12 +1142,14 @@ check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'NA-CA1 wa_no_ai does not 
   "107-6a wa_no_ai renamed (a FIXTURE, the book kept first): NA-CA1 FAIL (probe 1 throws), MG-CA1 FAIL; the FAILED summary leads with the AI-reply consequence in capitals; the rollback command alone on its line"
 check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6a '"what":"rename"')" fixture)" "1" "107-6a' the table's name back (the book from its keep)"; back4_107 "107-6a*"
 # 6b — another md5 over a whole, readable table: MG-CA1 FAIL; NA-CA1 holds; the lead names the checksum and the redeploy consequence, and AI replies go on
-X1="$(seedk107 "$P107R" ledger092 r6b '"what":"checksum"')"
+K0="$(seedk107 "$P107R" log_keep l6b)"; X1="$(seedk107 "$P107R" ledger092 r6b '"what":"checksum"')"
 ao107
-check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'MG-CA1 092 on a fresh copy after the copy is not whole (')|$(has "$AO107" '  ok    NA-CA1 wa_no_ai reads the way the worker reads it')|$(has "$AO107" '  092 is not shown whole in the live migration ledger')|$(has "$AO107" 'MG-G1 refuses every redeploy')|$(has "$AO107" '(NA-CA1): AI replies go on.')|$(has "$AO107" 'NO UGANDA CUSTOMER GETS AN AI REPLY')" \
-      "1|1|yes|yes|yes|yes|yes|no" \
-  "107-6b 092's ledger row with another md5 (a FIXTURE): MG-CA1 FAIL, NA-CA1 holds; the lead names the checksum and that MG-G1 refuses every redeploy, and says AI replies go on — never that they stopped"
-check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6b '"what":"checksum"')" fixture)" "1" "107-6b' the checksum put back"; back4_107 "107-6b*"
+LW6B_107="$(kv107 "$(log107)" warning)"
+check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'MG-CA1 092 on a fresh copy after the copy is not whole (')|$(has "$AO107" '  ok    NA-CA1 wa_no_ai reads the way the worker reads it')|$(has "$AO107" '  092 is not shown whole in the live migration ledger')|$(has "$AO107" 'MG-G1 refuses every redeploy')|$(has "$AO107" '(NA-CA1): AI replies go on.')|$(has "$AO107" 'NO UGANDA CUSTOMER GETS AN AI REPLY')|$( [ "$(n103 "$LW6B_107")" -ge 1 ] && echo real)" \
+      "1|1|yes|yes|yes|yes|yes|no|real" \
+  "107-6b 092's ledger row with another md5 (a FIXTURE): MG-CA1 FAIL, NA-CA1 holds; the lead names the checksum and that MG-G1 refuses every redeploy, and says AI replies go on — never that they stopped; the run's own boot logged 092's real checksum WARNING ($LW6B_107)"
+check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6b '"what":"checksum"')" fixture)" "1" "107-6b' the checksum put back"
+check "$(sd107 "$(seedk107 "$P107R" log_back l6b)" fixture)" "1" "107-6b'' migration.log back (the boot's WARNING with it)"; back4_107 "107-6b*"
 # 6c — MG_CA2_SEEN=1, the OK line removed, no trim marker: the note that does not name the halving. Copies: one ignores MG_CA2_SEEN
 # (the absent branch: NOT ESTABLISHED naming the missing record), one names the halving there
 anc107 vread '    v="$(sed -n '"'"'s/^MG_CA2_SEEN=//p'"'"' "$STATE" 2>/dev/null | tail -n1)"' '    v=""'
@@ -1209,8 +1229,8 @@ anc107 stradnona '    if [ -n "$ok1" ] && [ -n "$ok2" ] && [ "$r1" = "ok" ]; the
 MF107="$PD/migrations/092_wa_no_ai.sql"; cp -p "$MF107" "$STK107/mf092"; printf '%s\n' '-- RH107SECRET- a byte the pin does not have' >> "$MF107"
 K1="$(seedk107 "$P107R" log_keep l6g)"; K2="$(seedk107 "$P107R" log_add l6g '"line":"warning092"')"
 ao107
-check "$AORC107|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (1) — not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin's")|$(has "$AO107" 'the tar straddle')" "1|yes|yes|no" \
-  "107-6g 092's installed bytes altered after the copy (a FIXTURE, one comment line) beside a planted WARNING: R1 FAIL, MG-CA2 names the WARNING as not judged beside R1 — no straddle note"
+check "$AORC107|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (")|$(has "$AO107" ") — not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin's")|$(has "$AO107" 'the tar straddle')|$( [ "$(n103 "$(kv107 "$(log107)" warning)")" -ge 2 ] && echo real)" "1|yes|yes|yes|no|real" \
+  "107-6g 092's installed bytes altered after the copy (a FIXTURE, one comment line) beside a planted WARNING: R1 FAIL, MG-CA2 names the WARNING as not judged beside R1 — no straddle note; the run's own boot logged a real WARNING beside the planted one (2 or more)"
 mutant107 c6g-mg1 stradmg1 -- --after-only
 check "$(has "$MUT107" 'the tar straddle')" "yes" "107-6g' a weakened copy that keys the straddle note on MG-CA1 alone, without R1, prints it — caught"
 cp -p "$STK107/mf092" "$MF107" && rm -f "$STK107/mf092"
@@ -1285,16 +1305,17 @@ clkfwd107() {   # clkfwd107 SECONDS — the rehearsal's clock moved forward (the
 }
 schedL107() { seedk107 "$P107R" sched "$1" '"set":{"followup_send":{"ago_s":0,"duration_ms":-1}}'; }   # schedL107 TAG — the (L, -1) plant
 schedat107() { seed107 "$P107R" "[{\"op\":\"sched\",\"keep\":\"$KEEP107\",\"tag\":\"$1\",\"set\":{\"$2\":{\"ago_s\":$3,\"duration_ms\":$4}}}]"; }   # schedat107 TAG JOB AGO DURATION
+schedath107() { local o; o="$(schedat107 "$@")"; printf '%s\n' "$o" > "$R107/logs/schedat-$1.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # schedat107 as a poll's ACTION: non-zero unless the seed answered JSON (never none(…))
 for c107 in cycle nocycle missed; do
   K1="$(schedL107 "s7b-$c107")"
   case "$c107" in
-    cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedat107 "a7b-$c107" event_processor -30 5 ;;
-    missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedat107 "a7b-$c107" followup_send -30 5 ;;
+    cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" event_processor -30 5 ;;
+    missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" followup_send -30 5 ;;
     nocycle) K0="$(seedk107 "$P107R" budget g7b '"seconds":0')"
              check "$(sd107 "$K0" budget)" "0" "107-7b0 master_budget_seconds 0 in the store's kyc_config row (a small budget, said so: the poll's bound is then 360 s)"
              pollrun107 "107-7b-$c107" "$DEPLOY107" -- clkfwd107 420 ;;
   esac
-  T7_107="$(secs107)"
+  T7_107="$(secs107)"; A7_107="$(( $(cat "$R107/rc/run-$(last107).t1" 2>/dev/null || echo 0) - $(stat -c %Y "$R107/logs/act-107-7b-$c107.rc" 2>/dev/null || echo 0) ))"   # the whole run, and from the ACTION's end to the run's
   case "$c107" in
     cycle)   check "$HOLDSAW107|$HOLDRC107|$(rc107)|$(has "$HOLDOUT107" 'ME-CA1 FAIL —')|$(has "$HOLDOUT107" 'never returned to master (duration_ms -1), and a later cycle has begun')" "yes|0|1|yes|yes" \
                "107-7b1 (L, -1) then a later cycle written while the poll waits: ME-CA1 FAIL — followup_send never returned and a later cycle began" ;;
@@ -1305,8 +1326,8 @@ for c107 in cycle nocycle missed; do
                "107-7b3 (L, -1) and no new cycle within the bound (the clock moved past it, said so): NOT YET, master did not start one; the summary NOT YET (exit 3), 'run it again after', the --after-only command alone"
              check "$(sd107 "$(seedk107 "$P107R" budget_back g7b)" budget)" "$(kv107 "$MS0_107" budget)" "107-7b3' master_budget_seconds back as it was" ;;
   esac
-  check "$( [ "$T7_107" -lt 120 ] && echo quick)|$(sd107 "$(seedk107 "$P107R" sched_back "s7b-$c107")" fixture)" "quick|1" \
-    "107-7b-$c107* the run took ${T7_107} s (no real wait at the bound); master_schedule's row back byte for byte"
+  check "$( [ "$A7_107" -ge 0 ] && [ "$A7_107" -lt 120 ] && echo quick)|$(sd107 "$(seedk107 "$P107R" sched_back "s7b-$c107")" fixture)" "quick|1" \
+    "107-7b-$c107* ${A7_107} s from the action to the run's end (${T7_107} s in all): the poll read the change and never waited out its bound (360 s at the least); master_schedule's row back byte for byte"
   [ "$c107" = nocycle ] || rm -f "$KEEP107/a7b-$c107.meta" "$KEEP107/a7b-$c107.orig"   # the action's own keep, overtaken by the row's
 done
 # 7c — an unreadable schedule (a FIXTURE: the row made text that does not decode): the capitals note, never a PASS, a note

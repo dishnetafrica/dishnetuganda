@@ -11,15 +11,17 @@ LEFT107() {   # LEFT107 — the chain's and this release's triggers still armed,
   [ -e "$REPO/.git/index.lock" ] && out="$out,index.lock"
   echo "${out#,}" | sed 's/^$/none/'
 }
-# 5.18.106's refusal list stays from 106-6 (its sender pass) until 106-10f, which removes it — and 106-10 is cut with the
-# chain, so its removal is carried here, as 106-10f made it: removed, then a send for J1's first number answered with a key.id
-# and nothing more refused (one call to the stand-in Evolution, outside every run, as 106-10f's).
+# 5.18.106's refusal list (made at 106:966 for 106-6's sender pass) is removed by 106's own rehearsal (106-6s2, 106:2013) and read
+# absent by 106-7z; 106-10f's reading of it — removed, then a send for J1's first number answered with a key.id and nothing
+# more refused — is cut with 106-10, so it is made here (one call to the stand-in Evolution, outside every run, as 106-10f's).
 RLB107="$(if [ -e "$SB/evo/rh106-refuse.list" ]; then grep -c . "$SB/evo/rh106-refuse.list"; else echo absent; fi)"; RFB107="$(refused106)"
 RLA107="$(refuse106)"; RQ107="$(evopost106 sendText "${J1A106:-}")"
 check "$RLA107:$( [ -e "$SB/evo/rh106-refuse.list" ] && echo listed || echo unlisted):$RQ107:$(( $(refused106) - RFB107 ))" "0:unlisted:id:0" \
-  "107-infra e0 $V106's refusal list (it listed $RLB107; 106-10f removes it, cut with 106-10) removed here as 106-10f did: a send for J1's first number answered with a key.id, nothing more refused"
-check "$(LEFT107)|$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)" "none|0" \
-  "107-infra e nothing the chain armed is left armed (106-10f's reading, run before 107 touches a stand-in): no trigger, no index lock, no weakened copy of 5.18.106's script left in the clone"
+  "107-infra e0 $V106's refusal list (read $RLB107 here: 106-6s2 removes it, and 106-10f's reading is cut with 106-10) removed here as 106-10f does: a send for J1's first number answered with a key.id, nothing more refused"
+WC0_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)"
+cp "$DEPLOY106" "$REPO/scripts/.zz107ctl.sh"; WC1_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)"; rm -f "$REPO/scripts/.zz107ctl.sh"
+check "$(LEFT107)|$WC0_107:$WC1_107:$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)" "none|0:1:0" \
+  "107-infra e nothing the chain armed is left armed (106-10f's reading, run before 107 touches a stand-in): no trigger, no index lock, no weakened copy of 5.18.106's script left in the clone — its control a copy planted and counted (1), then removed (106-10f's .zz106ctl.sh)"
 
 # ── 107-infra f — A1: the stand-in web server on the rehearsal's clock (v2 A1, v3). The chain starts it without LD_PRELOAD
 # (root:285, :930), so a boot through it stamped 092's applied_at (SQLite's datetime('now')) and migration.log's lines with
@@ -167,7 +169,7 @@ check "$(cat "$SB/alter092touch107.fired")|$( [ -e "$PD/migrations/092_wa_no_ai.
 # exact call, and only when the docker's parent command line names deploy-hybrid.sh (stage A's LIVE_BEFORE makes the same call
 # from the script itself). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
 cat > "$SB/docker107.hook" <<'HOOK'
-# ── 5.18.107's rehearsal: H4 (.boot107, one boot at deploy-hybrid's record read) and H6 (.rbfail107, a rollback's record read wrong once) ──
+# ── 5.18.107's rehearsal: H4 (boot107, one boot at deploy-hybrid's record read) and H6 (rbfail107, a rollback's record read wrong once) ──
 if [ "$*" = "exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit" ]; then
   _rh_r7="$(tail -n1 "@PD@/.deployed-commit" 2>/dev/null | tr -cd '0-9a-f')"
   if [ -f "@SB@/.boot107" ] && [ "$_rh_r7" = "@P106@" ]; then

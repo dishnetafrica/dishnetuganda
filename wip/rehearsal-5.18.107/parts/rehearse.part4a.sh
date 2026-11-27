@@ -27,11 +27,13 @@ master106 "107-4f"
 aft107 "107-4g" PASSED $L2ON107
 check "$(has "$AFT107" 'ME-CA1 PASS —')|$(has "$AFT107" 'errors master caught are not judged (plugin.log:')|$(has "$AFT107" "  ok    MG-CA2 migration.log holds 092's OK line")" "yes|yes|yes" \
   "107-4h the --after-only after master's cycle: ME-CA1 PASS with its 'not judged (plugin.log: …)' clause; MG-CA2's OK line still there"
-B4_107="$(bookdig107)"; L4_107="$(logsha107)"; S4_107="$(sha256sum < "$STATE107" | cut -c1-16)"; LX4_107="$(ledgerx107)"
+B4_107="$(bookdig107)"; L4_107="$(logsha107)"; LX4_107="$(ledgerx107)"
 
 # ════════════════════════════════════════════════════════════════════════════
-# 107-6 on D1 (MG_CA2_SEEN=1) — each an --after-only, its plant kept and put back after (the book by its digest, the log and the
-# state file by sha256). The branches judged are the same in --after-only and a redeploy (v3 §C item 6).
+# 107-6 on D1 (MG_CA2_SEEN=1) — each an --after-only, its plant kept and put back after (the book by its digest, migration.log by
+# sha256, the state file's two 092 records). The --after-only's V section boots the stand-in before MG-CA2 reads the log, so a
+# case that leaves 092's recorded md5 other than the installed file's (6b, 6g) keeps the log too: that boot logs 092's real
+# checksum WARNING (MigrationRunner, every boot). The branches judged are the same in --after-only and a redeploy (v3 §C item 6).
 # ════════════════════════════════════════════════════════════════════════════
 echo; echo "== 107-6. on D1 (MG_CA2_SEEN=1): the failures after the copy, MG-CA2's missing line, the straddle note's conditions, the ladder edited after the copy =="
 ao107() { idle104; fresh107; AO107="$(run107c --after-only)"; AOT107="$(last107)"; AORC107="$(rc107)"; }   # one --after-only under the clock: AO107, AOT107, AORC107
@@ -54,12 +56,14 @@ check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'NA-CA1 wa_no_ai does not 
   "107-6a wa_no_ai renamed (a FIXTURE, the book kept first): NA-CA1 FAIL (probe 1 throws), MG-CA1 FAIL; the FAILED summary leads with the AI-reply consequence in capitals; the rollback command alone on its line"
 check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6a '"what":"rename"')" fixture)" "1" "107-6a' the table's name back (the book from its keep)"; back4_107 "107-6a*"
 # 6b — another md5 over a whole, readable table: MG-CA1 FAIL; NA-CA1 holds; the lead names the checksum and the redeploy consequence, and AI replies go on
-X1="$(seedk107 "$P107R" ledger092 r6b '"what":"checksum"')"
+K0="$(seedk107 "$P107R" log_keep l6b)"; X1="$(seedk107 "$P107R" ledger092 r6b '"what":"checksum"')"
 ao107
-check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'MG-CA1 092 on a fresh copy after the copy is not whole (')|$(has "$AO107" '  ok    NA-CA1 wa_no_ai reads the way the worker reads it')|$(has "$AO107" '  092 is not shown whole in the live migration ledger')|$(has "$AO107" 'MG-G1 refuses every redeploy')|$(has "$AO107" '(NA-CA1): AI replies go on.')|$(has "$AO107" 'NO UGANDA CUSTOMER GETS AN AI REPLY')" \
-      "1|1|yes|yes|yes|yes|yes|no" \
-  "107-6b 092's ledger row with another md5 (a FIXTURE): MG-CA1 FAIL, NA-CA1 holds; the lead names the checksum and that MG-G1 refuses every redeploy, and says AI replies go on — never that they stopped"
-check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6b '"what":"checksum"')" fixture)" "1" "107-6b' the checksum put back"; back4_107 "107-6b*"
+LW6B_107="$(kv107 "$(log107)" warning)"
+check "$(sd107 "$X1" fixture)|$AORC107|$(has "$AO107" 'MG-CA1 092 on a fresh copy after the copy is not whole (')|$(has "$AO107" '  ok    NA-CA1 wa_no_ai reads the way the worker reads it')|$(has "$AO107" '  092 is not shown whole in the live migration ledger')|$(has "$AO107" 'MG-G1 refuses every redeploy')|$(has "$AO107" '(NA-CA1): AI replies go on.')|$(has "$AO107" 'NO UGANDA CUSTOMER GETS AN AI REPLY')|$( [ "$(n103 "$LW6B_107")" -ge 1 ] && echo real)" \
+      "1|1|yes|yes|yes|yes|yes|no|real" \
+  "107-6b 092's ledger row with another md5 (a FIXTURE): MG-CA1 FAIL, NA-CA1 holds; the lead names the checksum and that MG-G1 refuses every redeploy, and says AI replies go on — never that they stopped; the run's own boot logged 092's real checksum WARNING ($LW6B_107)"
+check "$(sd107 "$(seedk107 "$P107R" ledger092_undo r6b '"what":"checksum"')" fixture)" "1" "107-6b' the checksum put back"
+check "$(sd107 "$(seedk107 "$P107R" log_back l6b)" fixture)" "1" "107-6b'' migration.log back (the boot's WARNING with it)"; back4_107 "107-6b*"
 # 6c — MG_CA2_SEEN=1, the OK line removed, no trim marker: the note that does not name the halving. Copies: one ignores MG_CA2_SEEN
 # (the absent branch: NOT ESTABLISHED naming the missing record), one names the halving there
 anc107 vread '    v="$(sed -n '"'"'s/^MG_CA2_SEEN=//p'"'"' "$STATE" 2>/dev/null | tail -n1)"' '    v=""'
@@ -139,8 +143,8 @@ anc107 stradnona '    if [ -n "$ok1" ] && [ -n "$ok2" ] && [ "$r1" = "ok" ]; the
 MF107="$PD/migrations/092_wa_no_ai.sql"; cp -p "$MF107" "$STK107/mf092"; printf '%s\n' '-- RH107SECRET- a byte the pin does not have' >> "$MF107"
 K1="$(seedk107 "$P107R" log_keep l6g)"; K2="$(seedk107 "$P107R" log_add l6g '"line":"warning092"')"
 ao107
-check "$AORC107|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (1) — not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin's")|$(has "$AO107" 'the tar straddle')" "1|yes|yes|no" \
-  "107-6g 092's installed bytes altered after the copy (a FIXTURE, one comment line) beside a planted WARNING: R1 FAIL, MG-CA2 names the WARNING as not judged beside R1 — no straddle note"
+check "$AORC107|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (")|$(has "$AO107" ") — not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin's")|$(has "$AO107" 'the tar straddle')|$( [ "$(n103 "$(kv107 "$(log107)" warning)")" -ge 2 ] && echo real)" "1|yes|yes|yes|no|real" \
+  "107-6g 092's installed bytes altered after the copy (a FIXTURE, one comment line) beside a planted WARNING: R1 FAIL, MG-CA2 names the WARNING as not judged beside R1 — no straddle note; the run's own boot logged a real WARNING beside the planted one (2 or more)"
 mutant107 c6g-mg1 stradmg1 -- --after-only
 check "$(has "$MUT107" 'the tar straddle')" "yes" "107-6g' a weakened copy that keys the straddle note on MG-CA1 alone, without R1, prints it — caught"
 cp -p "$STK107/mf092" "$MF107" && rm -f "$STK107/mf092"

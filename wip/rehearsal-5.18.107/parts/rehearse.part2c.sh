@@ -105,8 +105,8 @@ for i107 in $(seq -w 0 99); do n107="$(ph107 "$i107")"; grep -qxF -- "$n107" "$N
 FORMS107="$R107/forms107.pat"; PH4_107="$(q105 phones4 "$R107/phones107.txt" "$FORMS107")"
 NM107F="$R107/names107.pat"; { cat "$NM106F" 2>/dev/null; echo 'RH107SECRET-'; } | grep . | sort -u > "$NM107F"; chmod 600 "$NM107F"
 check "$(kv107 "$PH4_107" n)|$( [ "$(kv107 "$PH4_107" forms)" = "$(( 5 * $(n103 "$(kv107 "$PH4_107" n)") ))" ] && echo five)|$(stat -c %a "$FORMS107")|$(grep -cxF 'RH107SECRET-' "$NM107F")|$(grep -cxF 'RH106SECRET-' "$NM107F")" \
-      "$(( $(grep -c . "$R106/phones106.txt" 2>/dev/null) + 100 ))|five|600|1|1" \
-  "107-infra k the 100 numbers of 107's range beside 106's and the chain's, each in its four written forms and its last nine digits, into a 0600 pattern file; RH107SECRET- added to the names pattern beside RH106SECRET- (v2 A18)"
+      "$(( $(tr -cd '0-9\n' < "$R106/phones106.txt" 2>/dev/null | grep -E '^256[0-9]{9}$' | sort -u | grep -c .) + 100 ))|five|600|1|1" \
+  "107-infra k the 100 numbers of 107's range beside 106's and the chain's (counted once whatever their written form, as 106:575 counts 105's), each in its four written forms and its last nine digits, into a 0600 pattern file; RH107SECRET- added to the names pattern beside RH106SECRET- (v2 A18)"
 # NA-CA1's sentinel (NA_SENTINEL_1, S:861) is the one seeded value outside the range: the script's own constant, read here,
 # never typed; 107-6 plants a row on it and 107-10 asserts it gone (v2 A18).
 NAS107="$(sv107 "" NA_SENTINEL_1)"

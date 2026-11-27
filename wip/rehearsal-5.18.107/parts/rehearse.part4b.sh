@@ -34,16 +34,17 @@ clkfwd107() {   # clkfwd107 SECONDS — the rehearsal's clock moved forward (the
 }
 schedL107() { seedk107 "$P107R" sched "$1" '"set":{"followup_send":{"ago_s":0,"duration_ms":-1}}'; }   # schedL107 TAG — the (L, -1) plant
 schedat107() { seed107 "$P107R" "[{\"op\":\"sched\",\"keep\":\"$KEEP107\",\"tag\":\"$1\",\"set\":{\"$2\":{\"ago_s\":$3,\"duration_ms\":$4}}}]"; }   # schedat107 TAG JOB AGO DURATION
+schedath107() { local o; o="$(schedat107 "$@")"; printf '%s\n' "$o" > "$R107/logs/schedat-$1.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # schedat107 as a poll's ACTION: non-zero unless the seed answered JSON (never none(…))
 for c107 in cycle nocycle missed; do
   K1="$(schedL107 "s7b-$c107")"
   case "$c107" in
-    cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedat107 "a7b-$c107" event_processor -30 5 ;;
-    missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedat107 "a7b-$c107" followup_send -30 5 ;;
+    cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" event_processor -30 5 ;;
+    missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" followup_send -30 5 ;;
     nocycle) K0="$(seedk107 "$P107R" budget g7b '"seconds":0')"
              check "$(sd107 "$K0" budget)" "0" "107-7b0 master_budget_seconds 0 in the store's kyc_config row (a small budget, said so: the poll's bound is then 360 s)"
              pollrun107 "107-7b-$c107" "$DEPLOY107" -- clkfwd107 420 ;;
   esac
-  T7_107="$(secs107)"
+  T7_107="$(secs107)"; A7_107="$(( $(cat "$R107/rc/run-$(last107).t1" 2>/dev/null || echo 0) - $(stat -c %Y "$R107/logs/act-107-7b-$c107.rc" 2>/dev/null || echo 0) ))"   # the whole run, and from the ACTION's end to the run's
   case "$c107" in
     cycle)   check "$HOLDSAW107|$HOLDRC107|$(rc107)|$(has "$HOLDOUT107" 'ME-CA1 FAIL —')|$(has "$HOLDOUT107" 'never returned to master (duration_ms -1), and a later cycle has begun')" "yes|0|1|yes|yes" \
                "107-7b1 (L, -1) then a later cycle written while the poll waits: ME-CA1 FAIL — followup_send never returned and a later cycle began" ;;
@@ -54,8 +55,8 @@ for c107 in cycle nocycle missed; do
                "107-7b3 (L, -1) and no new cycle within the bound (the clock moved past it, said so): NOT YET, master did not start one; the summary NOT YET (exit 3), 'run it again after', the --after-only command alone"
              check "$(sd107 "$(seedk107 "$P107R" budget_back g7b)" budget)" "$(kv107 "$MS0_107" budget)" "107-7b3' master_budget_seconds back as it was" ;;
   esac
-  check "$( [ "$T7_107" -lt 120 ] && echo quick)|$(sd107 "$(seedk107 "$P107R" sched_back "s7b-$c107")" fixture)" "quick|1" \
-    "107-7b-$c107* the run took ${T7_107} s (no real wait at the bound); master_schedule's row back byte for byte"
+  check "$( [ "$A7_107" -ge 0 ] && [ "$A7_107" -lt 120 ] && echo quick)|$(sd107 "$(seedk107 "$P107R" sched_back "s7b-$c107")" fixture)" "quick|1" \
+    "107-7b-$c107* ${A7_107} s from the action to the run's end (${T7_107} s in all): the poll read the change and never waited out its bound (360 s at the least); master_schedule's row back byte for byte"
   [ "$c107" = nocycle ] || rm -f "$KEEP107/a7b-$c107.meta" "$KEEP107/a7b-$c107.orig"   # the action's own keep, overtaken by the row's
 done
 # 7c — an unreadable schedule (a FIXTURE: the row made text that does not decode): the capitals note, never a PASS, a note

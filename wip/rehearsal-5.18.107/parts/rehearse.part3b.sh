@@ -65,7 +65,7 @@ fxs107() {   # fxs107 PLACE TAG JSON-SET — a key or keys put into PLACE's file
   seed106r "[{\"op\":\"fx_file\",\"place\":\"$1\",\"keep\":\"$NSK107\",\"tag\":\"$2\",\"set\":$3,\"plugin\":\"$PD\"}]"; }
 fxb107() { seed106r "[{\"op\":\"fx_file_back\",\"place\":\"$1\",\"keep\":\"$NSK107\",\"tag\":\"$2\",\"plugin\":\"$PD\"}]"; }   # fxb107 PLACE TAG
 nskept107() { find "$NSK107" -mindepth 1 2>/dev/null | wc -l | tr -d ' '; }
-check "$(sd106 "$(fxs107 k probe '{"rh107_probe":"1"}')" 0 fixture)|$(sd106 "$(fxb107 k probe)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|True|0|same" \
+check "$(sd106 "$(fxs107 k probe '{"rh107_probe":"1"}')" 0 fixture)|$(sd106 "$(fxb107 k probe)" 0 fixture)|$(nskept107)|$(snapeq107)" "true|true|0|same" \
   "107-3-0 the place fixture answers (a probe key into k and out again, the file byte for byte, nothing kept) — the control for every plant below"
 # The per-place weakened copies: NS-G1 with one place left out of its judged set (S:6488). Each must read GO where the script refuses.
 anc107 nsp "\$ns = \$nsOn(\$doc, ['p', 'd', 'k']);" "\$ns = \$nsOn(\$doc, ['d', 'k']);"
@@ -76,21 +76,21 @@ for pl107 in p d k; do
   want107="quoted_no_prices_enabled in $pl107; connection_quote_enabled in $pl107$( [ "$pl107" = k ] && echo "; ai_burst_merge_enabled in $pl107") reads on"
   X1="$(fxs107 "$pl107" "on-$pl107" "$set107")"
   D94_107="$(data94)"; fresh107; O107="$(run107c --check)"
-  check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "NO-GO (NS-G1): $want107")|$(has "$O107" 'no value is read out')" "True|yes|yes" \
+  check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "NO-GO (NS-G1): $want107")|$(has "$O107" 'no value is read out')" "true|yes|yes" \
     "107-3$pl107 NS-G1 refuses $( [ "$pl107" = k ] && echo "K, Q and W.1" || echo "K and Q") on in $pl107 (a FIXTURE plant: '1', true$( [ "$pl107" = k ] && echo ', 1')), naming keys and the place, never a value"
   nogo107 "107-3$pl107'" "NO-GO (NS-G1): " "$O107" "$D94_107" "$P106"
   mutant107 "ns-no-$pl107" "ns$pl107" -- --check
   check "$(has "$MUT107" 'NO-GO (NS-G1)')|$(has "$MUT107" "  $V107 (check): GO — stage A holds.")|$MUTRC107" "no|yes|0" \
     "107-3$pl107\" a weakened copy that leaves $pl107 out of NS-G1's judged places reads GO over the same plant — caught"
-  check "$(sd106 "$(fxb107 "$pl107" "on-$pl107")" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3$pl107* the plant put back, the file byte for byte"
+  check "$(sd106 "$(fxb107 "$pl107" "on-$pl107")" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3$pl107* the plant put back, the file byte for byte"
 done
 # W.1's switch in p: a ladder key held by a config.json — LK-G1's refusal, before NS-G1 reads (recorded, root docs/76 §C)
 X1="$(fxs107 p w1-p '{"ai_burst_merge_enabled":"1"}')"
 D94_107="$(data94)"; fresh107; O107="$(run107c --check)"
-check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (LK-G1): 1 of the ladder')|$(has "$O107" 'ai_burst_merge_enabled')|$(has "$O107" 'NO-GO (NS-G1)')" "True|yes|yes|no" \
+check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (LK-G1): 1 of the ladder')|$(has "$O107" 'ai_burst_merge_enabled')|$(has "$O107" 'NO-GO (NS-G1)')" "true|yes|yes|no" \
   "107-3w W.1's switch on in p: LK-G1 refuses it first — a ladder key held by a config.json (S:7480) — so NS-G1 never reads it there; the refusal names the key"
 nogo107 "107-3w'" "NO-GO (LK-G1): " "$O107" "$D94_107" "$P106"
-check "$(sd106 "$(fxb107 p w1-p)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3w* put back"
+check "$(sd106 "$(fxb107 p w1-p)" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3w* put back"
 echo "  note  RH-NOTE 107-3w (for the owner, root docs/76 §C): W.1's switch is a ladder key, so in p or d LK-G1's refusal stands where §T.11 names NS-G1's; nothing is changed either way"
 # 107-3o — off and set, never judged on: K 0, Q 'off' and W.1 '0' in k (§K's own pre-rollback step leaves '0'); K and W.1 on in
 # the store row alone (no reader reads it); the texts set: two in k, W.1's window in the store row. GO, with each note.
@@ -98,13 +98,13 @@ X1="$(fxs107 k off-k '{"quoted_no_prices_enabled":0,"connection_quote_enabled":"
 X2="$(seed107 "$PD" '[{"op":"store_keys107","keys":{"quoted_no_prices_enabled":"1","ai_burst_merge_enabled":"1","ai_burst_merge_window_minutes":5}}]')"
 fresh107; O107="$(run107c --check)"
 check "$(sd106 "$X1" 0 fixture)|$(sd107 "$X2" fixture)|$(checkgo107 "$O107")|$(has "$O107" '  ok    NS-G1 quoted_no_prices_enabled (K), connection_quote_enabled (Q) and ai_burst_merge_enabled (W.1) read off in every place their readers read')" \
-      "True|1|yesnono0|0|0|samekey|0|yes" \
+      "true|1|yesnono0|0|0|samekey|0|yes" \
   "107-3o '0', 0 and 'off' present in k read off: NS-G1 ok, the --check GO with nothing changed (FIXTURE plants in k and in the store row)"
 check "$(has "$O107" 'NS-G1 the store row holds quoted_no_prices_enabled in s; ai_burst_merge_enabled in s reading on — reported, never judged')|$(has "$O107" 'NS-G1 the texts and W.1'"'"'s window, set per place, by key name')|$(has "$O107" 'quoted_reply_text in k; no_ai_alert_cooldown_hours in k; ai_burst_merge_window_minutes in s')" \
       "yes|yes|yes" \
   "107-3o' the store row alone: reported, never judged; the texts and W.1's window noted per place by key name, no_ai_alert_cooldown_hours among them — never a value"
 X3="$(seed107 "$PD" '[{"op":"store_keys107_undo","keys":["quoted_no_prices_enabled","ai_burst_merge_enabled","ai_burst_merge_window_minutes"]}]')"
-check "$(sd106 "$(fxb107 k off-k)" 0 fixture)|$(sd107 "$X3" fixture)|$(nskept107)|$(snapeq107)|$(bookdig107)" "True|1|0|same|$B3_107" "107-3o* put back: the file byte for byte, the store row's keys taken out (the book's digest as before 107-3)"
+check "$(sd106 "$(fxb107 k off-k)" 0 fixture)|$(sd107 "$X3" fixture)|$(nskept107)|$(snapeq107)|$(bookdig107)" "true|1|0|same|$B3_107" "107-3o* put back: the file byte for byte, the store row's keys taken out (the book's digest as before 107-3)"
 # 107-3c — the rule's positive control: a weakened copy whose off values include '1' — the in-memory '1' then reads off, and NS-G1
 # refuses NOT ESTABLISHED, nothing planted
 anc107 nsctl "\$nsOff = function (\$v): bool { return \$v === null ||" "\$nsOff = function (\$v): bool { return \$v === '1' || \$v === null ||"
@@ -113,13 +113,14 @@ check "$(has "$MUT107" "NO-GO (NS-G1): NOT ESTABLISHED — THE SWITCH RULE'S POS
   "107-3c a weakened copy that counts '1' as off: the in-memory control fails and NS-G1 refuses NOT ESTABLISHED — the control has teeth"
 # 107-3b — NS-B1: Q turned on in k while the script holds at Type DEPLOY (a FIXTURE writer, said so: 5.18.106's tools refuse the key).
 D94_107="$(data94)"
-csb1run107 107-3b "$DEPLOY107" -- fxs107 k nsb1 '{"connection_quote_enabled":"1"}'
+fxsh107() { local o; o="$(fxs107 "$@")"; printf '%s\n' "$o" > "$R107/logs/fxsh-$2.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # fxs107 as a hold's ACTION: non-zero unless the seed answered JSON (never none(…))
+csb1run107 107-3b "$DEPLOY107" -- fxsh107 k nsb1 '{"connection_quote_enabled":"1"}'
 # deploy-5.18.107.sh: ns_check NS-B1 in qf_keep_and_baseline, before LK-B1's comparison and the copy
 check "$HOLDSAW107|$HOLDRC107|$(has "$HOLDOUT107" 'NO-GO (NS-B1): connection_quote_enabled in k reads on')|$(has "$HOLDOUT107" 'it was turned on during this run, after stage A. Nothing was copied.')|$(has "$HOLDOUT107" 'NO-GO (LK-B1)')|$(has "$HOLDOUT107" '  copy            at ')|$(rc107)|$(live)|$(installed107 "$B107F")" \
       "yes|0|yes|yes|no|no|1|$P106|0" \
   "107-3b NS-B1: Q on in k after stage A (a FIXTURE plant at Type DEPLOY), refused before LK-B1's comparison and before the copy — 'Nothing was copied', exit 1, $P106 serving, every file $V107 changes still $BV107's"
 tidy107 107-3b
-check "$(sd106 "$(fxb107 k nsb1)" 0 fixture)|$(nskept107)|$(data94)|$(states107)|$(backups107)" "True|0|$D94_107|0|0" \
+check "$(sd106 "$(fxb107 k nsb1)" 0 fixture)|$(nskept107)|$(data94)|$(states107)|$(backups107)" "true|0|$D94_107|0|0" \
   "107-3b* put back: the data folder's digest as before the run; the refused run's state file and LK key moved into its case folder, so the next deploy is a first deploy"
 # 107-3t — stage A's settings-text note (A3): the planted RH107SECRET- text reads NOT v9 (107-pre6's --check); the v9 branch shown
 # once by a READER CONTROL — a copy whose recorded prefix is the planted text's — never a production reading
@@ -130,11 +131,18 @@ check "$(has "$OA2_107" 'NOT v9 as the workers read it')|${#TX107}" "yes|16" \
 mutant107 sa-v9 satxt -- --check
 check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the recorded ${TX107:0:12}")|$(has "$MUT107" 'NOT v9 as the workers read it')|$MUTRC107" "yes|no|0" \
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
-# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in d (a FIXTURE, said so): SA's capitals note, no refusal
-X1="$(fxs107 d sjg '{"tenant_profile":"south-sudan"}')"
+# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in k (a FIXTURE, said so). k, never d: PluginConfig::read
+# merges p, d, k and a later file wins, and the sandbox's kyc_config.json already says uganda (the root rehearsal writes it),
+# so a d plant would read Uganda. fx_file refuses a key the file holds, so the file is kept whole (keep106), the one key
+# rewritten in place (owner and mode kept), and put back byte for byte (back106). SA's capitals note, no refusal.
+SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"
+SJG1_107="$(python3 -I -c 'import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+assert isinstance(d, dict) and d.get("tenant_profile") == "uganda"
+d["tenant_profile"] = "south-sudan"; open(p, "w").write(json.dumps(d)); print("planted")' "$DATA/kyc_config.json" 2>/dev/null || echo refused)"
 fresh107; O107="$(run107c --check)"
-check "$(sd106 "$X1" 0 fixture)|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "True|yes|yesnono0|0|0|samekey|0" \
-  "107-3g StaffJobsGate::applies false (South Sudan's profile in d): SA's note in capitals, and the --check still GO — a note, never a refusal"
-check "$(sd106 "$(fxb107 d sjg)" 0 fixture)|$(nskept107)|$(snapeq107)" "True|0|same" "107-3g* put back"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "kept|planted|yes|yesnono0|0|0|samekey|0" \
+  "107-3g StaffJobsGate::applies false (South Sudan's profile in k, the file read last; it said uganda): SA's note in capitals, and the --check still GO — a note, never a refusal"
+check "$(back106 t107-sjg)|$(nskept107)|$(snapeq107)" "same|0|same" "107-3g* put back: kyc_config.json byte for byte"
 check "$(ancc107)|$(snapeq107)|$(bookdig107)|$(ledger107)|$(live)" "0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-|same|$B3_107|mig092=0 wa_no_ai=none|$P106" \
   "107-3z the exit: 107-pre's state — every key absent again (the files byte for byte, the book's digest), no 092, $P106 serving; every anchor so far the script's own text, once"

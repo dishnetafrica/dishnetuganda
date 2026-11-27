@@ -2,14 +2,14 @@
 # 5.18.107's rehearsal: its own readers — of the script's own text (the static guard), and of the book, the migration
 # ledger, migration.log and the state file where a case judges what the script read. Each rule is written here from the
 # RELEASE's own code at its pin (771a3c1: lib/MigrationRunner.php, lib/NoAiList.php, lib/BurstMerge.php and the readers
-# they call) or from the script's own lines (deploy-5.18.107.sh at d790edf, cited per mode as S:n), in Python — never by
+# they call) or from the script's own lines (deploy-5.18.107.sh at abf0a25, cited per mode as S:n), in Python — never by
 # running either, so one wrong reading cannot confirm itself. READERS ONLY: the store is opened read-only (mode=ro,
 # query_only) and every file is read as bytes; nothing is written anywhere (run with python3 -I). Every mode prints ONE
 # line of key=value words — counts, ids, fixed codes, UTC times and sha256 hashes; never a value, a name, a phone, a body
 # or an event's detail. Exit 2: an unknown mode or a missing argument; exit 3: unread:<Error>. Modes:
 #   verbs107 SCRIPT       the static guard: rh106q.py verbs' rules (rh105q.py's, unchanged) — lk= qftool= wrapper= verbs=
 #                         — and, because 5.18.107's three wrapper lines are the assignments of the commands it PRINTS
-#                         (S:7330–7332), cmds=<the variables those lines assign, comma-joined, in order> and
+#                         (S:7341–7343), cmds=<the variables those lines assign, comma-joined, in order> and
 #                         printed-only=<how many of them are used only in lines that print them: echo or printf, never
 #                         eval, never a bare word, never sh -c>. A wrapper line that is not such an assignment, or a use
 #                         that runs one, shows in the counts and the guard refuses.
@@ -17,11 +17,11 @@
 #                         (renamed: the table is gone and rh107-seed.php's rh107_wa_no_ai stands in its place)
 #   ledgerx DB            the same, then cks092= at092= (UTC epoch of applied_at, as SQLite's datetime('now') wrote it)
 #                         sc092=<found>/<expected>|missing cks071= sentinel=<active rows on 2560…, NA-CA1's kind> rows=<ledger rows>
-#   log092 LOG            migration.log as MG-CA2 reads it (S:8455–8458), per LINE: ok= partial= warning= (092's) w071=
+#   log092 LOG            migration.log as MG-CA2 reads it (S:8466–8469), per LINE: ok= partial= warning= (092's) w071=
 #                         mk=<1 when line 1 is the runner's trim marker> mkt=<its stamp, read as UTC, epoch|-> size= okoff=<the
 #                         byte offset of 092's first OK line|-> owner=<uid> lines=
 #   sched DB              budget=<master_budget_seconds in the store's kyc_config row, or absent> entries=<master_schedule's
-#                         entries, or absent|unreadable> — what master reads (MS_PHP's reading, S:8212)
+#                         entries, or absent|unreadable> — what master reads (MS_PHP's reading, S:8223)
 #   evstat DB ID…         <id>:<status>:<attempts> for each event id, or <id>:none — the drain's named events, read back
 #   bookdig DB            the book's logical digest — every schema object's text, then every table's rows in rowid order —
 #                         16 hex: unchanged across a run proves the run wrote nothing to the book

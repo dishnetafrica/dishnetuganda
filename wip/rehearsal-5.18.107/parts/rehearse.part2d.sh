@@ -1,11 +1,11 @@
 # ── 107's readers of the live book and its log (rh107q.py, read-only: mode=ro, query_only) and the keep folder every plant
 # keeps what it changes in (rh107-seed.php refuses an undo whose keep is not there). The book is checkpointed first, so a
-# reader sees what the WAL holds. ──
-ledger107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledger "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }    # mig092=N wa_no_ai=table|renamed|none
-ledgerx107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledgerx "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }  # … cks092= at092= sc092= cks071= sentinel= rows=
-log107() { q107 log092 "$DATA/migration.log" 2>/dev/null || echo unread; }                                                               # MG-CA2's reading of migration.log
-bookdig107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 bookdig "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }  # the book's logical digest
-ms107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 sched "$DATA/plugin.sqlite3" 2>/dev/null || echo unread; }   # budget=… entries=… (master's own record)
+# reader sees what the WAL holds. A reader that fails prints one line: its own unread:<Error> (exit 3), else unread. ──
+ledger107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledger "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }    # mig092=N wa_no_ai=table|renamed|none
+ledgerx107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 ledgerx "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }  # … cks092= at092= sc092= cks071= sentinel= rows=
+log107() { q107 log092 "$DATA/migration.log" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }                                                               # MG-CA2's reading of migration.log
+bookdig107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 bookdig "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }  # the book's logical digest
+ms107() { sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 sched "$DATA/plugin.sqlite3" 2>/dev/null || { [ $? -eq 3 ] || echo unread; }; }   # budget=… entries=… (master's own record)
 logsha107() { sha256sum < "$DATA/migration.log" 2>/dev/null | cut -c1-16; }
 KEEP107="$R107/kept"; mkdir -p "$KEEP107"; chown 1000:1000 "$KEEP107"; chmod 700 "$KEEP107"
 kept107() { find "$KEEP107" -mindepth 1 2>/dev/null | wc -l | tr -d ' '; }   # what is still kept: 0 once every plant is undone
