@@ -3924,3 +3924,36 @@ answered then silent, silent then a thrown reading, silent throughout, and `--af
 | C32 — `} >&2` was code, against the documented rule | keepcheck107: standard error alone after a group stays display; a pass control |
 | C33 — the shell patterns matched argument and quoted text (`\| grep -c sh`, `sed "s/-/ dash /"`, `grep bash < f`) | keepcheck107: both patterns removed; shells judged by program only; pass controls |
 | C34 — `exec 3>&1` and `exec 3>&-`, arrays beginning `.` or holding `source`, and `command -v source` were refused | keepcheck107: descriptors read one by one; array contents no commands; `command -v` a query; pass controls |
+
+### T.16 Two QF-G2 probes refused every book (found building the rehearsal, 27 Nov)
+
+The rehearsal's seed helper was tried on a throwaway book built by 5.18.106's migrations, as the rehearsal's chain
+builds its own. A table rename on that book failed, so the script's own 092 probes were run on the same book, one mode
+at a time, through the derived script's PHP (M1). Two of them read wrong on every such book. Each would have stopped the
+first deploy at stage A with QF-G2 NO-GO: nothing changed, but no deploy possible. Neither had been run on a book before.
+
+| Finding | Measured | Fixed in |
+|---|---|---|
+| S-1 — NA-G1's and NA-CA1's probe 3 renames `wa_no_ai` on a throwaway copy and expects the read after it to throw. SQLite (3.26 on) re-parses every view and trigger of the book on a rename, and refuses it when one does not compile. A migration-built book carries three that do not: `v_lte_pending_jobs` (027: `job_queue` has no `run_after`), `v_bluecard_plan_mapping` (no `lp.days`) and `staff_cash_position` (no `retailers` table). The rename threw at the ALTER, so probe 3 read `p3=?PDOException`, the probe's own failure, not `p3=PDOException` | before: `p1=none any=0 active=0 scan=1 p2=listed,none p3=?PDOException gate=false`, with the view dropped as well (two more stop it); after: `… p3=PDOException …` | partMG: `PRAGMA legacy_alter_table = ON` on the throwaway copy before the rename, so the table alone is renamed and the read is the probe |
+| S-2 — neg092 tied its match to 092's own line: `PARTIAL: 092_wa_no_ai.sql` and `CHECK constraint failed` on one line. The runner's PARTIAL entry quotes the failed statement, and 092's self-check INSERT spans two lines, so the error lands on the next line | before: `reset=0 status=partial partial=1 check=0 row=0` on every book; after: `check=1`, at both `reset=0` (a first deploy) and `reset=1` (a redeploy) | partMG: the log split into entries (each from its stamp to the next stamped line); the match stays tied to 092's own entry |
+
+Whether production's book carries such views is not established. S-1 does not depend on it: the probe is meant to
+test the read, not the rest of the schema. S-2 holds on every book.
+
+**M1, after the fix.** Every QF_PHP mode new or changed in 5.18.107 was run on two migration-built books, one at 091
+(a first deploy) and one at 092 (a redeploy), and each reads as the script's pass patterns expect:
+
+- `mgledger`, `mg`;
+- the trial with 092 (`extra=092_wa_no_ai.sql:ok:OK:7`, then `none:none:-` on the redeploy);
+- `mg` on the trial copy (`mig092=1 … sc=5/5 objects=5/5 objsql=same table=1`);
+- `na`, and `neg092` at `reset=0` and at `reset=1`;
+- `sa`, `lk` (with its 48-character key file), `lkrows` and `rbn`;
+- MS_PHP, ME_PHP and RBSW_PHP.
+
+The other probes are unchanged from 5.18.104–5.18.106 and were run on migration-built books in those rehearsals.
+
+**Re-derived** (31 edits in partMG, 349 in all, as before): 16,306 lines, sha256 `8b67f903…`. Two runs gave the same bytes.
+The only difference from `d790edf`'s build is the two fixes, eleven lines. Every `S:n` in this document and in
+`wip/rehearsal-5.18.107/` after S:6737 refers to `d790edf`'s build; add 11 for this one.
+
+The rehearsal (§T.11) runs these probes at every deploy and every `--check`. It would have found both at its first deploy.

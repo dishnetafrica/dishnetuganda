@@ -6735,6 +6735,13 @@ try {
                 $o[] = 'p2=' . (($id > 0 && $L2->listedId($s1) === $id) ? 'listed' : 'notlisted') . ',' . ($L2->listedId($s2) === null ? 'none' : 'listed');
             } catch (Throwable $x) { $o[] = 'p2=?' . get_class($x); }
             try {
+                // legacy_alter_table: a modern SQLite re-parses EVERY view and trigger of the book on a rename and refuses
+                // it when one does not compile — and a book built by the migrations carries three such views
+                // (v_lte_pending_jobs: job_queue has no run_after; v_bluecard_plan_mapping: no lp.days; staff_cash_position:
+                // no retailers table). The rename then threw at the ALTER, not at the read, and probe 3 read ?PDOException
+                // on a list that reads (measured on a book at 5.18.106's 091, the rehearsal's build, 27 Nov). Legacy mode
+                // renames the table alone, on this throwaway copy only: the probe is the read after it, as intended.
+                $q->exec('PRAGMA legacy_alter_table = ON');
                 $q->exec('ALTER TABLE wa_no_ai RENAME TO wa_no_ai_renamed');
                 try { $L2->listedId($s1); $o[] = 'p3=nothrow'; } catch (Throwable $x) { $o[] = 'p3=' . get_class($x); }
             } catch (Throwable $x) { $o[] = 'p3=?' . get_class($x); }
@@ -6769,9 +6776,13 @@ try {
         $res = (new MigrationRunner($p, $dir . '/n2', $dir . '/n2.log'))->run();
         $log = (string)@file_get_contents($dir . '/n2.log');
         $pl = 0; $pc = 0;
-        foreach (explode("\n", $log) as $line) {
-            if (strpos($line, 'PARTIAL: 092_wa_no_ai.sql') === false) continue;
-            $pl = 1; if (stripos($line, 'CHECK constraint failed') !== false) $pc = 1;
+        // per ENTRY, not per line: the runner's PARTIAL entry quotes the failed statement, and 092's self-check INSERT spans
+        // two lines, so its error — CHECK constraint failed — lands on the line after the one naming 092 (measured on a
+        // book at 5.18.106's 091, 27 Nov: per line this read check=0 on every book). An entry runs from its stamp to the
+        // next line that opens with one; the match stays tied to 092's own entry.
+        foreach (preg_split('/\n(?=\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\] )/', $log) ?: [] as $entry) {
+            if (strpos($entry, 'PARTIAL: 092_wa_no_ai.sql') === false) continue;
+            $pl = 1; if (stripos($entry, 'CHECK constraint failed') !== false) $pc = 1;
         }
         $row = $has($p, '_schema_checks') ? (int)$one($p, "SELECT COUNT(*) FROM _schema_checks WHERE migration = '092_wa_no_ai.sql'") : 0;
         echo 'reset=', $reset, ' status=', (string)($res[0]['status'] ?? '-'), ' partial=', $pl, ' check=', $pc, ' row=', $row;
