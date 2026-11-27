@@ -92,9 +92,9 @@ worker107() { env PATH="$SB/bin:$PATH" LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE=
 # NoAiList::add, which the installed worker settles done with no model call (root docs/76 §X.3) — said so.
 N8F_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 06)\",\"name\":\"RH107SECRET- a customer\",\"reason\":\"RH107SECRET- the named event run by the worker's own hold\"}]")"
 check "$( [ "$(n103 "$(sd107 "$N8F_107" id)")" -ge 1 ] && echo listed)|$(sd107 "$N8F_107" event)" "listed|0" "107-8f\"0 #$B8F_107's number listed (no alert): the sandbox reaches no model provider, so this is how the installed worker runs #$B8F_107 here — settled done with no model call, said so"
-WR8F_107="$(worker107)"; ES8F_107="$(sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 evstat "$DATA/plugin.sqlite3" "$A8F_107" "$B8F_107")"
-check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)" "0|$A8F_107:done|$B8F_107:done" \
-  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark, #$B8F_107 held (the list) — each done ($ES8F_107)"
+EW0_107="$(evo_calls)"; WR8F_107="$(worker107)"; EW8F_107=$(( $(evo_calls) - EW0_107 )); ES8F_107="$(sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 evstat "$DATA/plugin.sqlite3" "$A8F_107" "$B8F_107")"
+check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)|$EW8F_107" "0|$A8F_107:done|$B8F_107:done|0" \
+  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark, #$B8F_107 held (the list) — each done ($ES8F_107); Evolution not called by it (the one worker run outside every run)"
 rbno107
 check "$(has "$RBNO107" "; the conversations $C8F_107,")|$(has "$RBNO107" '(a) 0, counted apart')" "no|yes" "107-8f* the drain after the worker: the mark no longer listed, (a) 0 (§T.11:3528–3529)"
 rbq107 "107-8f**"
@@ -104,8 +104,8 @@ check "$(sd107 "$(seedk107 "$P107R" book_back b8f)" fixture)" "1" "107-8f*** the
 anc107 zeroctl '[ "$(kv "$1" b)" = "0" ] && [ "$(kv "$1" control)" != "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE' '[ "$(kv "$1" b)" = "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE'
 clkfwd107 $((2 * 86400 + 600))
 rbno107
-check "$(has "$RBNO107" ', control 0')|$(has "$RBNO107" 'ANSWER ANYTHING BUT ROLLBACK BELOW')|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" "RB107 root docs/76 §K's drain holds")" "yes|yes|1|no" \
-  "107-8g no typed ai.reply in the last day (the clock two days on, said so): the drain's control 0 — the capitals and the drain command stand, never 'the drain holds'"
+check "$(has "$RBNO107" ', control 0')|$(has "$RBNO107" "THEN RUN THE ROLLBACK AGAIN: root docs/76 §K's drain does not hold yet (ai_burst_merge_enabled off; the drain (a) ")|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" "RB107 root docs/76 §K's drain holds")" "yes|yes|1|no" \
+  "107-8g no typed ai.reply in the last day (the clock two days on, said so): the drain's control 0 — the drain's own capitals (K's and Q's notes share their first words, so those are not read) and the drain command stand, never 'the drain holds'"
 rbq107 "107-8g'"
 fresh107; mutant107 c8g-zero zeroctl -- --answer no --rollback
 check "$(has "$MUT107" "RB107 root docs/76 §K's drain holds")" "yes" "107-8g\" a weakened copy that counts a control-0 reading as zero says the drain holds — caught"

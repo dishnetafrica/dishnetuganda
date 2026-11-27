@@ -16,7 +16,7 @@ EVQ107="${EVF106:-}"; EVQ107="/${EVQ107#http://*/}"
 EVA107=$(( $(evo_calls) - EVO0_106 )); EVA5_107=$(( EVO0_106 - EVO0_105 )); RFJ107=$(( $(refused106) - $(n103 "${RF4_106:-}") ))
 EVN107="$(cat "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | awk '{s += $1} $2 == "cron" {c++} END {printf "%d|%d\n", s, c}')"
 check "$EVN107|$(tail -n +"$(( EVO0_105 + 1 ))" "$SB/evo/requests.log" 2>/dev/null | grep -cvE "^(GET|POST) ($EVP107|$EVQ107)/")|$( [ -n "${RF4_106:-}" ] && [ "$RFJ107" -ge 15 ] && [ "$EVA107" -ge "$RFJ107" ] && echo ge)|$( [ -n "${EVODRV105:-}" ] && [ "$EVA5_107" -ge "$(n103 "${EVODRV105:-}")" ] && echo ge)" "0|0|0|ge|ge" \
-  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own"
+  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own; $(( $(evo_calls) - EVO0_107 )) since 107-pre, master's cycles and 107-8f's worker run among them (the worker's asserted 0 there)"
 # 107-10b — uCRM (106-10b's reading, carried): every run's request record GETs only, no token copy left at the next call — 107's,
 # 106's, 105's and 104's runs; nothing of any of them left in /tmp. The CONTROL a planted POST and a planted token copy, removed
 SCN107="$R107/scan107"; mkdir -p "$SCN107"; chmod 700 "$SCN107"
@@ -77,12 +77,13 @@ PY
 . "$L104F_107"; rm -f "$L104F_107"
 sweep104_107() { { sweep_files104; sheets104; ls -1 "$OUT104"/cash-*.txt 2>/dev/null; reqs104; } | sort -u; }
 NH4_107="$(sweep104_107 | xargs -r grep -lF -f "$NM107F" 2>/dev/null | wc -l | tr -d ' ')"; FH4_107="$(sweep104_107 | xargs -r grep -lF -f "$FORMS107" 2>/dev/null | wc -l | tr -d ' ')"
+NL4_107="$(for l107 in sweep_files104 sheets104 reqs104; do "$l107" 2>/dev/null | grep -c . | awk '{printf "%s", ($1 > 0) ? "y" : "n"}'; done)"   # each list read something before the controls (106-10c'')
 mkdir -p "$R104/sheets" "$R104/ucrm"
 for f107 in "$R104/run-zz107ctl.txt" "$R104/sheets/cash-zz107ctl.txt" "$R104/ucrm/run-zz107ctl.req"; do cp "$SCN107/control.txt" "$f107"; done
 CL4_107="$(for l107 in sweep_files104 sheets104 reqs104; do printf '%s%s ' "$("$l107" 2>/dev/null | grep -F 'zz107ctl' | xargs -r grep -lF -f "$NM107F" 2>/dev/null | wc -l | tr -d ' ')" "$("$l107" 2>/dev/null | grep -F 'zz107ctl' | xargs -r grep -lF -f "$FORMS107" 2>/dev/null | wc -l | tr -d ' ')"; done | sed 's/ $//')"
 rm -f "$R104/run-zz107ctl.txt" "$R104/sheets/cash-zz107ctl.txt" "$R104/ucrm/run-zz107ctl.req" "$SCN107/control.txt"
-check "$NH4_107|$FH4_107|$CL4_107" "0|0|11 11 11" \
-  "107-10c'' …nor in any of $V104's records, which 107's runs write too (sf.txt, the wrappers' logs of every command run as printed: $(sweep104_107 | grep -c .) files, by 104-10's own lists); the control found through each"
+check "$NH4_107|$FH4_107|$NL4_107|$CL4_107" "0|0|yyy|11 11 11" \
+  "107-10c'' …nor in any of $V104's records, which 107's runs write too (sf.txt, the wrappers' logs of every command run as printed: $(sweep104_107 | grep -c .) files, by 104-10's own lists, each list reading some); the control found through each"
 # 107-10d — the LK key files 5.18.107 wrote (its run folder's and the case folders'), each mode 0600 and read; no key's value in
 # any file the sweeps above read; the CONTROL a copy of the keys, found
 KL107="$( { [ -e "$LKF107" ] && echo "$LKF107"; find "$R107/case" -type f -name "lk-key-$V107" 2>/dev/null; } | sort -u)"
@@ -98,7 +99,7 @@ rm -f "$SCN107/key.pat" "$SCN107/key-control.txt"
 # marker alone, kyc_config.json, which holds 107-pre's planted settings text (the one fixture that stays by design, v2 A3, said
 # so: its numbers are none). The control: the book holds both
 sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1
-ND1_107="$( { grep -rlaE --exclude='plugin.sqlite3*' "$RX107" "$DATA" "$PD/data" "$RECS"; grep -rlaF --exclude='plugin.sqlite3*' --exclude='kyc_config.json' 'RH107SECRET-' "$DATA" "$PD/data" "$RECS"; } 2>/dev/null | sort -u)"
+ND1_107="$( { grep -rlaE --exclude='plugin.sqlite3*' "$RX107" "$DATA" "$PD/data" "$RECS"; grep -rlaF --exclude='plugin.sqlite3*' 'RH107SECRET-' "$DATA" "$PD/data" "$RECS" | grep -vxF "$DATA/kyc_config.json"; } 2>/dev/null | sort -u)"   # the one exemption by its path, never a name at every depth
 check "$(grep -c . <<<"$ND1_107")|$(grep -caF 'RH107SECRET-' "$DATA/kyc_config.json" 2>/dev/null)|$(grep -caE "$RX107" "$DATA/kyc_config.json" 2>/dev/null)|$( [ "$(n103 "$(grep -caE "$RX107" "$DATA/plugin.sqlite3" 2>/dev/null)")" -ge 1 ] && echo numbers)|$( [ "$(n103 "$(grep -caF 'RH107SECRET-' "$DATA/plugin.sqlite3" 2>/dev/null)")" -ge 1 ] && echo marker)" \
       "0|1|0|numbers|marker" \
   "107-10e $V107's own numbers ($PR107<NN>) and its RH107SECRET- marker in no file of the plugin's data folders or the records but the book — the marker once in kyc_config.json, the planted settings text (107-pre5, kept by design), with none of 107's numbers ($(grep -c . <<<"$ND1_107") other file(s)$( [ -n "$ND1_107" ] && printf ': %s' "$(xargs -r -n1 basename <<<"$ND1_107" | paste -sd, -)")); the control: the book holds both"

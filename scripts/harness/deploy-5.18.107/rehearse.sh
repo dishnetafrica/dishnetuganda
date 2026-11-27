@@ -779,7 +779,7 @@ TRAP0_107="$(trap -p EXIT | sed -E "s/^trap -- '(.*)' EXIT\$/\1/")"
 case "$TRAP0_107" in ''|trap*|*"'"*) echo "trap107:unread" >> "$SB/anchor-missing" ;; *) trap -- "cleanup107; $TRAP0_107" EXIT ;; esac
 check "$( [ -n "$TRAP0_107" ] && trap -p EXIT | grep -cF -- "cleanup107; $TRAP0_107")|$(LEFT107)|$( [ "$(grep -c . "$SB/anchor-missing" 2>/dev/null)" = "$AM0_107" ] && echo noanchormiss)" "1|none|noanchormiss" \
   "107-infra m the EXIT trap runs cleanup107 first, then the chain's (${TRAP0_107:-unread}); every 107 hook inserted with its anchor found (no anchor-missing line since 107-infra began); nothing armed"
-EVO0_107="$(evo_calls)"   # Evolution's requests before 107-pre: every later one is a run's or a worker's, each asserted where it is meant
+EVO0_107="$(evo_calls)"   # Evolution's requests before 107-pre: a run's are summed at 107-10a, the installed worker's (107-8f) asserted there; 107-10a says how many came since
 # ── 107's readers of the live book and its log (rh107q.py, read-only: mode=ro, query_only) and the keep folder every plant
 # keeps what it changes in (rh107-seed.php refuses an undo whose keep is not there). The book is checkpointed first, so a
 # reader sees what the WAL holds. A reader that fails prints one line: its own unread:<Error> (exit 3), else unread. ──
@@ -1069,18 +1069,28 @@ check "$(has "$OA2_107" 'NOT v9 as the workers read it')|${#TX107}" "yes|16" \
 mutant107 sa-v9 satxt -- --check
 check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the recorded ${TX107:0:12}")|$(has "$MUT107" 'NOT v9 as the workers read it')|$MUTRC107" "yes|no|0" \
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
-# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in k (a FIXTURE, said so). k, never d: PluginConfig::read
-# merges p, d, k and a later file wins, and the sandbox's kyc_config.json already says uganda (the root rehearsal writes it),
-# so a d plant would read Uganda. fx_file refuses a key the file holds, so the file is kept whole (keep106), the one key
-# rewritten in place (owner and mode kept), and put back byte for byte (back106). SA's capitals note, no refusal.
+# 107-3g — StaffJobsGate::applies false. Not reachable on a live book: a profile other than Uganda in the settings files (k is
+# merged last, and the sandbox's kyc_config.json says uganda) makes A23.7 refuse first — the pin's cashOnlyRuleInForce() reads
+# the same gate over a copy of the same three files (S:2853–2858, S:13442) — and A23 runs before qf_stage, SA's only caller
+# (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a copy whose SA reading
+# returns ug=0, nothing planted, as 107-3t' does for the text — shows the capitals note with the --check still GO; and the live
+# plant in k (a FIXTURE: the file kept whole by keep106, one key rewritten in place, owner and mode kept, put back byte for byte
+# by back106) shows the refusal at A23.7, nothing changed, SA never reached.
+anc107 sjg0 "\$o[] = 'ug=' . (StaffJobsGate::applies(\$c, \$dir) ? 1 : 0);" "\$o[] = 'ug=0';"
+check "$(has "$OA2_107" 'SA StaffJobsGate::applies reads Uganda as the workers read it (PluginConfig::read)')|$(has "$OA2_107" 'SA STAFFJOBSGATE::APPLIES IS FALSE')" "yes|no" \
+  "107-3g the real reading (107-pre6's --check): SA reads StaffJobsGate::applies as Uganda — never the capitals"
+mutant107 sa-sjg0 sjg0 -- --check
+check "$(has "$MUT107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(has "$MUT107" 'SA StaffJobsGate::applies reads Uganda')|$(checkgo107 "$MUT107")" "yes|no|yesnono0|0|0|samekey|0" \
+  "107-3g' a READER CONTROL (a copy whose SA reading returns ug=0, nothing planted): SA's note in capitals, and the --check still GO — a note, never a refusal"
 SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"
 SJG1_107="$(python3 -I -c 'import json, sys
 p = sys.argv[1]; d = json.load(open(p))
 assert isinstance(d, dict) and d.get("tenant_profile") == "uganda"
 d["tenant_profile"] = "south-sudan"; open(p, "w").write(json.dumps(d)); print("planted")' "$DATA/kyc_config.json" 2>/dev/null || echo refused)"
-fresh107; O107="$(run107c --check)"
-check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "kept|planted|yes|yesnono0|0|0|samekey|0" \
-  "107-3g StaffJobsGate::applies false (South Sudan's profile in k, the file read last; it said uganda): SA's note in capitals, and the --check still GO — a note, never a refusal"
+D3G_107="$(data94)"; fresh107; O107="$(run107c --check)"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')" "kept|planted|no|no" \
+  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): SA is never reached"
+nogo107 "107-3g\"'" "NO-GO (A23.7): rule A is NOT in force on this server's own configuration, as the pin's code reads it" "$O107" "$D3G_107" "$P106"
 check "$(back106 t107-sjg)|$(nskept107)|$(snapeq107)" "same|0|same" "107-3g* put back: kyc_config.json byte for byte"
 check "$(ancc107)|$(snapeq107)|$(bookdig107)|$(ledger107)|$(live)" "0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-|same|$B3_107|mig092=0 wa_no_ai=none|$P106" \
   "107-3z the exit: 107-pre's state — every key absent again (the files byte for byte, the book's digest), no 092, $P106 serving; every anchor so far the script's own text, once"
@@ -1446,9 +1456,9 @@ worker107() { env PATH="$SB/bin:$PATH" LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE=
 # NoAiList::add, which the installed worker settles done with no model call (root docs/76 §X.3) — said so.
 N8F_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 06)\",\"name\":\"RH107SECRET- a customer\",\"reason\":\"RH107SECRET- the named event run by the worker's own hold\"}]")"
 check "$( [ "$(n103 "$(sd107 "$N8F_107" id)")" -ge 1 ] && echo listed)|$(sd107 "$N8F_107" event)" "listed|0" "107-8f\"0 #$B8F_107's number listed (no alert): the sandbox reaches no model provider, so this is how the installed worker runs #$B8F_107 here — settled done with no model call, said so"
-WR8F_107="$(worker107)"; ES8F_107="$(sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 evstat "$DATA/plugin.sqlite3" "$A8F_107" "$B8F_107")"
-check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)" "0|$A8F_107:done|$B8F_107:done" \
-  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark, #$B8F_107 held (the list) — each done ($ES8F_107)"
+EW0_107="$(evo_calls)"; WR8F_107="$(worker107)"; EW8F_107=$(( $(evo_calls) - EW0_107 )); ES8F_107="$(sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 evstat "$DATA/plugin.sqlite3" "$A8F_107" "$B8F_107")"
+check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)|$EW8F_107" "0|$A8F_107:done|$B8F_107:done|0" \
+  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark, #$B8F_107 held (the list) — each done ($ES8F_107); Evolution not called by it (the one worker run outside every run)"
 rbno107
 check "$(has "$RBNO107" "; the conversations $C8F_107,")|$(has "$RBNO107" '(a) 0, counted apart')" "no|yes" "107-8f* the drain after the worker: the mark no longer listed, (a) 0 (§T.11:3528–3529)"
 rbq107 "107-8f**"
@@ -1458,8 +1468,8 @@ check "$(sd107 "$(seedk107 "$P107R" book_back b8f)" fixture)" "1" "107-8f*** the
 anc107 zeroctl '[ "$(kv "$1" b)" = "0" ] && [ "$(kv "$1" control)" != "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE' '[ "$(kv "$1" b)" = "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE'
 clkfwd107 $((2 * 86400 + 600))
 rbno107
-check "$(has "$RBNO107" ', control 0')|$(has "$RBNO107" 'ANSWER ANYTHING BUT ROLLBACK BELOW')|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" "RB107 root docs/76 §K's drain holds")" "yes|yes|1|no" \
-  "107-8g no typed ai.reply in the last day (the clock two days on, said so): the drain's control 0 — the capitals and the drain command stand, never 'the drain holds'"
+check "$(has "$RBNO107" ', control 0')|$(has "$RBNO107" "THEN RUN THE ROLLBACK AGAIN: root docs/76 §K's drain does not hold yet (ai_burst_merge_enabled off; the drain (a) ")|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" "RB107 root docs/76 §K's drain holds")" "yes|yes|1|no" \
+  "107-8g no typed ai.reply in the last day (the clock two days on, said so): the drain's control 0 — the drain's own capitals (K's and Q's notes share their first words, so those are not read) and the drain command stand, never 'the drain holds'"
 rbq107 "107-8g'"
 fresh107; mutant107 c8g-zero zeroctl -- --answer no --rollback
 check "$(has "$MUT107" "RB107 root docs/76 §K's drain holds")" "yes" "107-8g\" a weakened copy that counts a control-0 reading as zero says the drain holds — caught"
@@ -1718,152 +1728,152 @@ hasid107() {   # hasid107 OUTPUT PREFIX ID — yes when PREFIX is followed by ID
   local p; p="$(printf '%s' "$2" | sed 's/[][\.*^$()+?{}|/]/\\&/g')"; grep -qE -- "${p}$3([,;. ]|\$)" <<<"$1" && echo yes || echo no; }
 
 # ── Entry (v3 D11): A9, a plain first deploy PASSED, master106, --after-only PASSED ──
-reset107 "107-8b-A9"
+reset107 "107-8Rb-A9"
 dep107
-check "$(verd107 "$DEP107")|$DEPRC107|$(live)|$(nsd107)" "PASSED|0|$P107|absent|absent|absent" "107-8b the entry: a plain first deploy PASSED, $P107 serving, no K, Q or W.1 key"
-master106 "107-8b0"
-aft107 "107-8b1" PASSED $L2ON107
+check "$(verd107 "$DEP107")|$DEPRC107|$(live)|$(nsd107)" "PASSED|0|$P107|absent|absent|absent" "107-8Rb the entry: a plain first deploy PASSED, $P107 serving, no K, Q or W.1 key"
+master106 "107-8Rb0"
+aft107 "107-8Rb1" PASSED $L2ON107
 
 # ── R1 — a typed rollback on the off path (W.1 absent: off). Before it, the reader control of step 6 (v2 A3): a copy whose
 # SA_TXT_V9 is the planted text's prefix reads the plant as v9 — a READER CONTROL, never a production reading — answered no. ──
 fresh107; mutant107 r1-v9 satxt -- --answer no --rollback
 check "$(has "$MUT107" 'RB107 the settings text reads v9 as the workers read it (its sha256 prefix the recorded')|$(has "$MUT107" '  STOP: not confirmed')|$(live)" "yes|yes|$P107" \
-  "107-8c the reader control (a copy with the planted text's prefix as SA_TXT_V9, said so — never a production reading): step 6 says v9, nothing to restore; answered no, nothing changed"
+  "107-8Rc the reader control (a copy with the planted text's prefix as SA_TXT_V9, said so — never a production reading): step 6 says v9, nothing to restore; answered no, nothing changed"
 RS0_107="$(rbset107)"
-rbx107 "107-8d"
+rbx107 "107-8Rd-RB"
 check "$(has "$RBX107_OUT" 'RB107 waiting 125 s, then reading the switch and the drain again')|$(has "$RBX107_OUT" 'RB107 the settings text does not read v9 as the workers read it (')|$(has "$RBX107_OUT" 'This script prints no command that writes bot_custom_instructions')|$(grep -cE '^      .*bot_custom_instructions' <<<"$RBX107_OUT")" \
       "yes|yes|yes|0" \
-  "107-8d' the off path: two readings 125 s apart, then the question; step 6 says the planted text is not v9 — and prints no restore command (the script prints none, S:9009; v3's 'with the restore command' corrected)"
+  "107-8Rd' the off path: two readings 125 s apart, then the question; step 6 says the planted text is not v9 — and prints no restore command (the script prints none, S:9009; v3's 'with the restore command' corrected)"
 check "$(has "$RBX107_OUT" 'a queued assistant-off alert is settled done as unknown on both (wa.no_ai_alert=done/0+unknown)')|$(has "$RBX107_OUT" "  ok    RB107 the installed cron/master.php is $BV107's byte for byte")|$(has "$RBX107_OUT" '  ok    LK-RB1 every ladder key, in every place, reads after the rollback exactly as before it')|$(has "$RBX107_OUT" 'RB-X after the rollback: active wa_no_ai rows ')|$(( $(rbset107) - RS0_107 ))" \
       "yes|yes|yes|yes|1" \
-  "107-8d\" after the put-back: RB's assistant-off alert settled done as unknown on both (NA_RB, EP_NOAI_DONE); RB107 master $BV107's byte for byte; LK-RB1 every ladder key as before; RB-X counted; one rollback record"
+  "107-8Rd\" after the put-back: RB's assistant-off alert settled done as unknown on both (NA_RB, EP_NOAI_DONE); RB107 master $BV107's byte for byte; LK-RB1 every ladder key as before; RB-X counted; one rollback record"
 RS1_107="$(rbset107)"; fresh107; O8E_107="$(run107c --rollback)"
 check "$(rc107)|$(verd107 "$O8E_107")|$(has "$O8E_107" "  note  the container already serves $B107 ($BV107) — nothing to roll back; running the rollback checks")|$(has "$O8E_107" 'LK-RB1 not judged: this run rolled nothing back')|$(has "$O8E_107" 'Type ROLLBACK')|$(rbset107)|$(live)" \
       "0|PASSED|yes|yes|no|$RS1_107|$B107" \
-  "107-8d* --rollback again with $BV107 serving: RB_NOTHING — nothing to roll back, LK-RB1 not judged, no question asked, no record written, PASSED"
+  "107-8Rd* --rollback again with $BV107 serving: RB_NOTHING — nothing to roll back, LK-RB1 not judged, no question asked, no record written, PASSED"
 
 # ── RD1 — a --redeploy with a 092 WARNING planted and 092's OK line removed before it (§T.11:3485–3486): the straddle note and the
 # redeploy note, PASSED. Its copy (the WARNING counted as a FAIL) as --after-only. Then master106 and --after-only PASSED. ──
 K1="$(seedk107 "$(pinroot107)" log_keep r8e)"; K2="$(seedk107 "$(pinroot107)" log_drop r8e '"match":"ok092"')"; K3="$(seedk107 "$(pinroot107)" log_add r8e '"line":"warning092"')"
-check "$(sd107 "$K2" removed)|$(sd107 "$K3" fixture)|$(kv107 "$(log107)" ok)|$(kv107 "$(log107)" warning)" "1|1|0|1" "107-8e0 the plants (FIXTURES): 092's OK line taken out, a 092 WARNING appended"
-dredeploy107 "107-8e"
+check "$(sd107 "$K2" removed)|$(sd107 "$K3" fixture)|$(kv107 "$(log107)" ok)|$(kv107 "$(log107)" warning)" "1|1|0|1" "107-8Re0 the plants (FIXTURES): 092's OK line taken out, a 092 WARNING appended"
+dredeploy107 "107-8Re"
 check "$(has "$DRD107" 'the tar straddle (root docs/76 §T.6, TD12)')|$(has "$DRD107" '  note  MG-CA2 no OK line for 092 in migration.log — a redeploy: 092 was applied by an earlier deploy')|$(has "$DRD107" '— not judged here:')|$(has "$DRD107" '  FAIL  MG-CA2')" "yes|yes|no|no" \
-  "107-8e\" RD1: the straddle note (MG-CA1, NA-CA1 and R1 hold) and MG-CA2's redeploy note — never a FAIL"
+  "107-8Re\" RD1: the straddle note (MG-CA1, NA-CA1 and R1 hold) and MG-CA2's redeploy note — never a FAIL"
 anc107 warnfail '      note "MG-CA2 migration.log holds 092'"'"'s checksum WARNING ($wl): a read met bytes other than those recorded' '      MG_CA2_R=bad; bad "MG-CA2 migration.log holds 092'"'"'s checksum WARNING ($wl): a read met bytes other than those recorded'
 idle104; fresh107; mutant107 c8e-warn warnfail -- --after-only
-check "$MUTRC107|$(has "$MUT107" "  FAIL  MG-CA2 migration.log holds 092's checksum WARNING")" "1|yes" "107-8e* a weakened copy that counts the WARNING as a FAIL — caught (as --after-only)"
-master106 "107-8e**"
-aft107 "107-8e***" PASSED $L2ON107
-check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8e)" fixture)|$(kept107)" "1|0" "107-8e+ migration.log back"
+check "$MUTRC107|$(has "$MUT107" "  FAIL  MG-CA2 migration.log holds 092's checksum WARNING")" "1|yes" "107-8Re* a weakened copy that counts the WARNING as a FAIL — caught (as --after-only)"
+master106 "107-8Re**"
+aft107 "107-8Re***" PASSED $L2ON107
+check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8e)" fixture)|$(kept107)" "1|0" "107-8Re+ migration.log back"
 
 # ── R2 — W.1 on (the pin's wrapper, as printed), and a burst mark written while Type ROLLBACK waits (rbhold107; the seed's burst op,
 # as the worker writes it): ROLLBACK typed, it completes; rb_pre107's reading, taken before the mark, does not list it; rb107's
 # lists its conversation. Then a --check: NS-G1 NO-GO naming the key and its place, nothing changed. A fixture clears W.1 (A13). ──
 OW_107="$(run_line107c "" "$W1ON107")"
-check "$(rc107)|$(has "$OW_107" 'SET ai_burst_merge_enabled = 1')|$(jv107 ai_burst_merge_enabled)" '0|yes|"1"' "107-8f0 W.1 on through the pin's wrapper, as printed"
+check "$(rc107)|$(has "$OW_107" 'SET ai_burst_merge_enabled = 1')|$(jv107 ai_burst_merge_enabled)" '0|yes|"1"' "107-8Rf0 W.1 on through the pin's wrapper, as printed"
 plant2_107() { seed107 "$P107R" "[{\"op\":\"burst\",\"phone\":\"$(ph107 07)\",\"name\":\"RH107SECRET- a customer\",\"text\":\"RH107SECRET- hello\",\"text2\":\"RH107SECRET- and the price\",\"instance\":\"sales-001\",\"mark\":\"aside\",\"fail\":1}]" > "$R107/logs/plant2.json"; case "$(head -c1 "$R107/logs/plant2.json")" in '{') return 0 ;; *) return 1 ;; esac; }
 RS2_107="$(rbset107)"
-rbhold107 107-8f ROLLBACK -- plant2_107
+rbhold107 107-8Rf ROLLBACK -- plant2_107
 P2_107="$(cat "$R107/logs/plant2.json" 2>/dev/null)"; C2_107="$(sd107 "$P2_107" conv)"
 PRE2_107="$(sed -n '1,/Type ROLLBACK to put /p' <<<"$HOLDOUT107")"; POST2_107="$(sed -n '/Type ROLLBACK to put /,$p' <<<"$HOLDOUT107")"
 check "$HOLDSAW107|$HOLDRC107|$(sd107 "$P2_107" a_marked)|$(rc107)|$(live)|$(has "$HOLDOUT107" "  $V107 (rollback): PASSED.")|$(( $(rbset107) - RS2_107 ))" "yes|0|1|0|$B107|yes|1" \
-  "107-8f R2 held at Type ROLLBACK, a burst mark written there (the seed's own exit status 0); ROLLBACK typed: PASSED, $B107 serving, one record"
+  "107-8Rf R2 held at Type ROLLBACK, a burst mark written there (the seed's own exit status 0); ROLLBACK typed: PASSED, $B107 serving, one record"
 check "$(hasid107 "$PRE2_107" "the conversations " "$C2_107")|$(hasid107 "$POST2_107" "HAND THESE CONVERSATIONS TO STAFF ($BV107 CANNOT DRAIN THEM): " "$C2_107")|$(has "$PRE2_107" 'ai_burst_merge_enabled on; the last drain reading (a) 0,')" "no|yes|yes" \
-  "107-8f' rb_pre107's readings, taken before the mark, do not list conversation $C2_107; rb107's drain after the put-back hands it to staff in capitals"
-qcheck106 "107-8f q"   # the quarantine's --check after a rollback that copied (A14, S:13218–13239: every later deploy-mode run needs one), as 5.18.106's rehearsal does after every rollback
+  "107-8Rf' rb_pre107's readings, taken before the mark, do not list conversation $C2_107; rb107's drain after the put-back hands it to staff in capitals"
+qcheck106 "107-8Rf q"   # the quarantine's --check after a rollback that copied (A14, S:13218–13239: every later deploy-mode run needs one), as 5.18.106's rehearsal does after every rollback
 D94_8F_107="$(data94)"; fresh107; O8F_107="$(run107c --check)"
-check "$(has "$O8F_107" 'NO-GO (NS-G1): ai_burst_merge_enabled in k')|$(has "$O8F_107" 'no value is read out')" "yes|yes" "107-8f\" a --check with $BV107 serving: NS-G1 NO-GO naming W.1 and its place, no value"
-nogo107 "107-8f*" "NO-GO (NS-G1): " "$O8F_107" "$D94_8F_107" "$B107"
+check "$(has "$O8F_107" 'NO-GO (NS-G1): ai_burst_merge_enabled in k')|$(has "$O8F_107" 'no value is read out')" "yes|yes" "107-8Rf\" a --check with $BV107 serving: NS-G1 NO-GO naming W.1 and its place, no value"
+nogo107 "107-8Rf*" "NO-GO (NS-G1): " "$O8F_107" "$D94_8F_107" "$B107"
 CL2_107="$(seed107 "$PD" '[{"op":"clear107","keys":["ai_burst_merge_enabled"]}]')"; BU2_107="$(seed107 "$PD" "[{\"op\":\"burst_undo\",\"ids\":[$(sd107 "$P2_107" a),$(sd107 "$P2_107" b)]}]")"
 check "$(sd107 "$CL2_107" fixture)|$(sd107 "$CL2_107" places)|$(jv107 ai_burst_merge_enabled)|$(sd107 "$BU2_107" op)" "1|none|absent|burst_undo" \
-  "107-8f** A13: a fixture clears W.1 from kyc_config.json and the store row (PluginConfig::saveOverrides, the known-limits route, said so); the two planted events removed"
+  "107-8Rf** A13: a fixture clears W.1 from kyc_config.json and the store row (PluginConfig::saveOverrides, the known-limits route, said so); the two planted events removed"
 
 # ── RD2 — a --redeploy with every 092 line removed before it (§T.11:3499): the redeploy note, PASSED, reset=1. Then Q on through the
 # pin's set_config, as printed. ──
 K1="$(seedk107 "$(pinroot107)" log_keep r8g)"; K2="$(seedk107 "$(pinroot107)" log_drop r8g '"match":"any092"')"
-dredeploy107 "107-8g"
-check "$(sd107 "$K2" fixture)|$(has "$DRD107" '  note  MG-CA2 no OK line for 092 in migration.log — a redeploy')|$(has "$DRD107" 'the tar straddle')" "1|yes|no" "107-8g' RD2: every 092 line gone — the redeploy note, no straddle note"
-check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8g)" fixture)|$(kept107)" "1|0" "107-8g\" migration.log back"
+dredeploy107 "107-8Rg-RD2"
+check "$(sd107 "$K2" fixture)|$(has "$DRD107" '  note  MG-CA2 no OK line for 092 in migration.log — a redeploy')|$(has "$DRD107" 'the tar straddle')" "1|yes|no" "107-8Rg' RD2: every 092 line gone — the redeploy note, no straddle note"
+check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8g)" fixture)|$(kept107)" "1|0" "107-8Rg\" migration.log back"
 OQ_107="$(run_line107c "" "$QON107")"
-check "$(rc107)|$(has "$OQ_107" '  connection_quote_enabled = 1')|$(jv107 connection_quote_enabled)" '0|yes|"1"' "107-8g* Q on through $V107's set_config, as printed"
+check "$(rc107)|$(has "$OQ_107" '  connection_quote_enabled = 1')|$(jv107 connection_quote_enabled)" '0|yes|"1"' "107-8Rg* Q on through $V107's set_config, as printed"
 
 # ── R3's three copies, each in a PASSED --after-only with Q on — the cheapest mode reaching pb_para's K/Q lines (S:9121–9131), said
 # so: the summary prints the paragraph with LK-AO's reading. The control first: the real --after-only prints Q's line alone. ──
-master106 "107-8h0"
+master106 "107-8Rh0"
 idle104; fresh107; AO8H_107="$(run107c --after-only)"
 check "$(has "$AO8H_107" "connection_quote_enabled reads on (the run's latest reading of the ladder's keys): once $BV107's tools are installed none can write it. Its own command, alone, with its own log — it runs:")|$(has "$AO8H_107" "quoted_no_prices_enabled reads on (the run's latest reading")" "yes|no" \
-  "107-8h0' the control: with Q on, the summary's put-back paragraph prints Q's line alone, worded from the installed set_config (it runs)"
+  "107-8Rh0' the control: with Q on, the summary's put-back paragraph prints Q's line alone, worded from the installed set_config (it runs)"
 anc107 kqoff 'q="$(rb_kq "$ref" "$k")"' 'q=off'
 anc107 kline 'q="$(rb_kq "$ref" "$k")"' 'q="$(rb_kq "$ref" "$k")"; [ "$k" = quoted_no_prices_enabled ] && q=on'
 anc107 oldwhy "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys): once %s'\"'\"'s tools are installed none can write it. Its own command" "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys)%.0s: after the put-back no shipped tool can write these keys. Its own command"
 idle104; fresh107; mutant107 c8h-kqoff kqoff -- --after-only
-check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")" "no" "107-8h a weakened copy that drops the K/Q lines — caught"
+check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")" "no" "107-8Rh a weakened copy that drops the K/Q lines — caught"
 idle104; fresh107; mutant107 c8h-kline kline -- --after-only
-check "$(has "$MUT107" "quoted_no_prices_enabled reads on (the run's latest reading")" "yes" "107-8h' a weakened copy that prints K's line while K reads off — caught"
+check "$(has "$MUT107" "quoted_no_prices_enabled reads on (the run's latest reading")" "yes" "107-8Rh' a weakened copy that prints K's line while K reads off — caught"
 idle104; fresh107; mutant107 c8h-why oldwhy -- --after-only
-check "$(has "$MUT107" 'after the put-back no shipped tool can write these keys')|$(has "$MUT107" "once $BV107's tools are installed none can write it")" "yes|no" "107-8h\" a weakened copy with the old reason — caught"
+check "$(has "$MUT107" 'after the put-back no shipped tool can write these keys')|$(has "$MUT107" "once $BV107's tools are installed none can write it")" "yes|no" "107-8Rh\" a weakened copy with the old reason — caught"
 
 # ── R3 — H6 with Q on: a typed rollback on the off path whose record does not verify (5.18.106's tools installed). The stop's put-back
 # paragraph: the tools reading, the switch-off and the drain worded as refused, the known-limits repair, Q's line alone. A fixture
 # then clears Q. ──
 : > "$SB/rbfail107.fired"; : > "$SB/.rbfail107"
 RS3_107="$(rbset107)"; fresh107; O8I_107="$(run107c --answer ROLLBACK --rollback)"
-check "$(rc107)|$(grep -c . "$SB/rbfail107.fired")|$( [ -e "$SB/.rbfail107" ] && echo unspent || echo spent)|$(has "$O8I_107" '  STOP: the rollback did not verify (live=')|$(has "$O8I_107" '  Nothing further was done. Send the log file.')|$(live)|$(installed107 "$B107F")" \
-      "1|1|spent|yes|yes|$B107|0" \
-  "107-8i R3 H6 armed: ROLLBACK typed, $BV107's files copied, the record read wrong once — the rollback did not verify; 'Nothing further was done'; $BV107's files installed"
+check "$(rc107)|$(grep -c . "$SB/rbfail107.fired")|$( [ -e "$SB/.rbfail107" ] && echo unspent || echo spent)|$(has "$O8I_107" '  STOP: the rollback did not verify (live=')|$(has "$O8I_107" '  Nothing further was done. Send the log file.')|$(live)|$(installed107 "$B107F")|$(( $(rbset107) - RS3_107 ))" \
+      "1|1|spent|yes|yes|$B107|0|1" \
+  "107-8Ri R3 H6 armed: ROLLBACK typed, $BV107's files copied, the record read wrong once — the rollback did not verify; 'Nothing further was done'; $BV107's files installed; one rollback record"
 check "$(has "$O8I_107" "lib/SalesFollowupLadder.php ${B107:0:7}'s, tools/sales_followup.php ${B107:0:7}'s, lib/BurstMerge.php the pin's, tools/set_config.php ${B107:0:7}'s.")|$(has "$O8I_107" '  The switch-off — it is refused (undeclared):')|$(has "$O8I_107" '  The drain reading — it is refused (an unknown step):')|$(has "$O8I_107" "Where the switch-off does not run, the repair is root docs/76 §T.10's known limit")" \
       "yes|yes|yes|yes" \
-  "107-8i' the stop's put-back paragraph: the tools reading (the ladder, the tool and set_config $BV107's; BurstMerge the pin's); the switch-off refused (undeclared), the drain refused (an unknown step); the known-limits repair named"
+  "107-8Ri' the stop's put-back paragraph: the tools reading (the ladder, the tool and set_config $BV107's; BurstMerge the pin's); the switch-off refused (undeclared), the drain refused (an unknown step); the known-limits repair named"
 check "$(has "$O8I_107" "connection_quote_enabled reads on (the run's latest reading of the ladder's keys): once $BV107's tools are installed none can write it. Its own command, alone, with its own log — it is refused (unmanaged):")|$(has "$O8I_107" "quoted_no_prices_enabled reads on (the run's latest reading")|$(grep -cxF "      $QOFF107" <<<"$O8I_107")" \
       "yes|no|2" \
-  "107-8i\" Q's line alone, its reason 'once $BV107's tools are installed none can write it', its command worded as refused (unmanaged) — printed in rb_pre107's step 5 and again in the stop; no K line"
-qcheck106 "107-8i q"   # H6's rollback copied (RB_COPY_AT written before the verify failed, S:13847–13852): the --check A14 asks for
+  "107-8Ri\" Q's line alone, its reason 'once $BV107's tools are installed none can write it', its command worded as refused (unmanaged) — printed in rb_pre107's step 5 and again in the stop; no K line"
+qcheck106 "107-8Ri q"   # H6's rollback copied (RB_COPY_AT written before the verify failed, S:13847–13852): the --check A14 asks for
 CL3_107="$(seed107 "$PD" '[{"op":"clear107","keys":["connection_quote_enabled"]}]')"
-check "$(sd107 "$CL3_107" fixture)|$(jv107 connection_quote_enabled)" "1|absent" "107-8i* A13: a fixture clears Q (the known-limits route, said so)"
+check "$(sd107 "$CL3_107" fixture)|$(jv107 connection_quote_enabled)" "1|absent" "107-8Ri* A13: a fixture clears Q (the known-limits route, said so)"
 
 # ── RD3, then K on as printed; R4 — H6 with K on: K's line alone. A fixture clears K. ──
-dredeploy107 "107-8j"
+dredeploy107 "107-8Rj-RD3"
 OK4_107="$(run_line107c "" "$KON107")"
-check "$(rc107)|$(has "$OK4_107" '  quoted_no_prices_enabled = 1')|$(jv107 quoted_no_prices_enabled)" '0|yes|"1"' "107-8j' K on through $V107's set_config, as printed"
+check "$(rc107)|$(has "$OK4_107" '  quoted_no_prices_enabled = 1')|$(jv107 quoted_no_prices_enabled)" '0|yes|"1"' "107-8Rj' K on through $V107's set_config, as printed"
 : > "$SB/rbfail107.fired"; : > "$SB/.rbfail107"
 fresh107; O8K_107="$(run107c --answer ROLLBACK --rollback)"
 check "$(rc107)|$(grep -c . "$SB/rbfail107.fired")|$(has "$O8K_107" "quoted_no_prices_enabled reads on (the run's latest reading of the ladder's keys): once $BV107's tools are installed none can write it. Its own command, alone, with its own log — it is refused (unmanaged):")|$(has "$O8K_107" "connection_quote_enabled reads on (the run's latest reading")|$(live)" \
       "1|1|yes|no|$B107" \
-  "107-8k R4 H6 with K on: the stop's paragraph prints K's line alone (refused, unmanaged), no Q line"
-qcheck106 "107-8k q"
+  "107-8Rk R4 H6 with K on: the stop's paragraph prints K's line alone (refused, unmanaged), no Q line"
+qcheck106 "107-8Rk q"
 CL4_107="$(seed107 "$PD" '[{"op":"clear107","keys":["quoted_no_prices_enabled"]}]')"
-check "$(sd107 "$CL4_107" fixture)|$(nsd107)" "1|absent|absent|absent" "107-8k' A13: a fixture clears K — no K, Q or W.1 key"
+check "$(sd107 "$CL4_107" fixture)|$(nsd107)" "1|absent|absent|absent" "107-8Rk' A13: a fixture clears K — no K, Q or W.1 key"
 
 # ── RD4; R5 — H3, the clone's index lock: the rollback's checkout refused before anything is copied — 5.18.107's tools remain, every
 # command worded as running, 'it leaves '0'' beside the switch-off. The lock removed; nothing changed. ──
-dredeploy107 "107-8l"
+dredeploy107 "107-8Rl-RD4"
 : > "$REPO/.git/index.lock"; D94_8L_107="$(data94)"
 fresh107; O8L_107="$(run107c --answer ROLLBACK --rollback)"
 check "$(rc107)|$(has "$O8L_107" "  FAIL  git checkout $B107 failed — nothing was deployed")|$(has "$O8L_107" "  STOP: the rollback did not verify (live=$P107)")|$(has "$O8L_107" "lib/SalesFollowupLadder.php the pin's, tools/sales_followup.php the pin's, lib/BurstMerge.php the pin's, tools/set_config.php the pin's.")" \
       "1|yes|yes|yes" \
-  "107-8l R5 H3 (the clone's index lock): the checkout refused, nothing deployed, the rollback did not verify — $V107's tools remain (all four the pin's)"
+  "107-8Rl R5 H3 (the clone's index lock): the checkout refused, nothing deployed, the rollback did not verify — $V107's tools remain (all four the pin's)"
 check "$(has "$O8L_107" "  The switch-off — it runs, and leaves '0':")|$(has "$O8L_107" '  The drain reading — it runs:')|$(has "$O8L_107" 'Where the switch-off does not run')|$(has "$O8L_107" ' A refusal changes nothing and saves nothing.')|$(unlock106)|$(live)|$(installed107 "$P107F")|$(data94)" \
       "yes|yes|no|no|absent|$P107|0|$D94_8L_107" \
-  "107-8l' every command worded as running, 'it leaves '0'' beside the switch-off, no refusal sentence; the lock removed: $P107 serving, its files, the data as before"
+  "107-8Rl' every command worded as running, 'it leaves '0'' beside the switch-off, no refusal sentence; the lock removed: $P107 serving, its files, the data as before"
 
 # ── The put-back paragraph's reading (v3 item 10), in a PASSED --after-only's summary (the cheapest mode reaching pb_ready and
 # pb_para sum): W.1 off — the switch off, (a) 0 and (b) 0 — then on. Then the one-block rule's control. Then W.1 off as printed. ──
-master106 "107-8m0"
-aft107 "107-8m" PASSED $L2ON107
-check "$(has "$AFT107" ': switch off; the drain (a) 0, counted apart 0, (b) 0, control ')|$(has "$AFT107" 'One reading, not a drain.')" "yes|yes" "107-8m' the put-back paragraph, W.1 off: one reading — switch off, (a) 0 and (b) 0"
+master106 "107-8Rm0"
+aft107 "107-8Rm" PASSED $L2ON107
+check "$(has "$AFT107" ': switch off; the drain (a) 0, counted apart 0, (b) 0, control ')|$(has "$AFT107" 'One reading, not a drain.')" "yes|yes" "107-8Rm' the put-back paragraph, W.1 off: one reading — switch off, (a) 0 and (b) 0"
 OW2_107="$(run_line107c "" "$W1ON107")"
 idle104; fresh107; AO8M_107="$(run107c --after-only)"
-check "$(has "$OW2_107" 'SET ai_burst_merge_enabled = 1')|$(has "$AO8M_107" ': switch on; the drain ')" "yes|yes" "107-8m\" W.1 on (as printed): the paragraph's reading says the switch is on"
+check "$(has "$OW2_107" 'SET ai_burst_merge_enabled = 1')|$(has "$AO8M_107" ': switch on; the drain ')" "yes|yes" "107-8Rm\" W.1 on (as printed): the paragraph's reading says the switch is on"
 anc107 blk1 '  echo "      $ROLLBACK_CMD"' "$(printf '  echo "      $ROLLBACK_CMD"\n  echo "      $REDEPLOY_CMD"')"
 idle104; fresh107; mutant107 c8m-blk blk1 -- --after-only
 check "$(q107 blocks107 "$R107/mutants/run-$MUTT107.txt" | grep -oE 'adjacent=[0-9]+' | cut -d= -f2 | awk '{ print ($1 >= 1) ? "caught" : "missed" }')" "caught" \
-  "107-8m* the one-block rule's control (v2 A18): a copy that prints the redeploy command beside the rollback command reads adjacent — caught"
+  "107-8Rm* the one-block rule's control (v2 A18): a copy that prints the redeploy command beside the rollback command reads adjacent — caught"
 anc107 blk2 '  echo "      $ROLLBACK_CMD"' '  echo "      $ROLLBACK_CMD; $REDEPLOY_CMD"'
 idle104; fresh107; mutant107 c8m-blk2 blk2 -- --after-only
 check "$(q107 blocks107 "$R107/mutants/run-$MUTT107.txt" | grep -oE 'mixed=[0-9]+' | cut -d= -f2 | awk '{ print ($1 >= 1) ? "caught" : "missed" }')" "caught" \
-  "107-8m*' the other half of the rule's control: a copy that prints the redeploy command on the rollback command's own line reads mixed — caught"
+  "107-8Rm*' the other half of the rule's control: a copy that prints the redeploy command on the rollback command's own line reads mixed — caught"
 OO2_107="$(run_line107c "" "$BDOFF107")"
-check "$(has "$OO2_107" 'SET ai_burst_merge_enabled = 0')|$(jv107 ai_burst_merge_enabled)" 'yes|"0"' "107-8m** W.1 off by the switch-off as printed under $V107: it leaves '0'"
+check "$(has "$OO2_107" 'SET ai_burst_merge_enabled = 0')|$(jv107 ai_burst_merge_enabled)" 'yes|"0"' "107-8Rm** W.1 off by the switch-off as printed under $V107: it leaves '0'"
 
 # ── V1 through H5 — each a --redeploy whose V1 redirects (V1's automatic rollback, deploy mode only, S:13950). First §K's way out: a
 # leftover mark planted, a typed rollback on the off path anyway; then a --redeploy ending in V1: 'this run wrote no mark' with
@@ -1881,39 +1891,39 @@ v1run107() {   # v1run107 LABEL [SCRIPT] — H5 armed, then a --redeploy (or SCR
 }
 M9_107="$(seed107 "$P107R" "[{\"op\":\"burst\",\"phone\":\"$(ph107 08)\",\"name\":\"RH107SECRET- a customer\",\"text\":\"RH107SECRET- hello\",\"text2\":\"RH107SECRET- the price\",\"instance\":\"sales-001\",\"mark\":\"aside\",\"fail\":1}]")"
 C9_107="$(sd107 "$M9_107" conv)"
-check "$(sd107 "$M9_107" a_marked)|$(sd107 "$M9_107" b_status)" "1|failed" "107-8n0 a leftover mark planted under $V107 (the seed's burst op, as the worker writes it): conversation $C9_107"
-rbx107 "107-8n"
+check "$(sd107 "$M9_107" a_marked)|$(sd107 "$M9_107" b_status)" "1|failed" "107-8Rn0 a leftover mark planted under $V107 (the seed's burst op, as the worker writes it): conversation $C9_107"
+rbx107 "107-8Rn-RB"
 check "$(has "$RBX107_OUT" 'ANSWER ANYTHING BUT ROLLBACK BELOW')|$(hasid107 "$RBX107_OUT" "the conversations " "$C9_107")|$(hasid107 "$RBX107_OUT" "HAND THESE CONVERSATIONS TO STAFF ($BV107 CANNOT DRAIN THEM): " "$C9_107")" "yes|yes|yes" \
-  "107-8n' §K's way out: the drain does not hold (the capitals, its ids), the rollback typed anyway; after it the drain hands conversation $C9_107 to staff"
-v1run107 "107-8o"
+  "107-8Rn' §K's way out: the drain does not hold (the capitals, its ids), the rollback typed anyway; after it the drain hands conversation $C9_107 to staff"
+v1run107 "107-8Ro"
 check "$(has "$V1RD107" "this run wrote no mark; stage A counted leftover marks — (a) 1, ")|$(has "$V1RD107" 'the drain after the rollback lists what still waits')|$(hasid107 "$V1RD107" "HAND THESE CONVERSATIONS TO STAFF ($BV107 CANNOT DRAIN THEM): " "$C9_107")|$(has "$V1RD107" '(V1'"'"'s automatic rollback: against the deploy'"'"'s LK-B1)')" \
       "yes|yes|yes|yes" \
-  "107-8o' the V1 stop: stage A's count of leftover marks beside 'this run wrote no mark'; the stop hands conversation $C9_107 to staff; LK-RB1 against the deploy's LK-B1"
+  "107-8Ro' the V1 stop: stage A's count of leftover marks beside 'this run wrote no mark'; the stop hands conversation $C9_107 to staff; LK-RB1 against the deploy's LK-B1"
 BU9_107="$(seed107 "$PD" "[{\"op\":\"burst_undo\",\"ids\":[$(sd107 "$M9_107" a),$(sd107 "$M9_107" b)]}]")"
-check "$(sd107 "$BU9_107" op)" "burst_undo" "107-8o* the planted events removed"
+check "$(sd107 "$BU9_107" op)" "burst_undo" "107-8Ro* the planted events removed"
 # V1 with no mark and control above 0 (v3 item 9's "V1 with no mark", apart from control 0): an unmarked typed burst — two typed
 # ai.reply events, no mark (the seed's burst op, mark none) — so the drain after the rollback reads, and lists no conversation
 M9B_107="$(seed107 "$P107R" "[{\"op\":\"burst\",\"phone\":\"$(ph107 09)\",\"name\":\"RH107SECRET- a customer\",\"text\":\"RH107SECRET- hello\",\"text2\":\"RH107SECRET- again\",\"instance\":\"sales-001\",\"mark\":\"none\"}]")"
-check "$(sd107 "$M9B_107" a_marked)|$(sd107 "$M9B_107" a_status)|$(sd107 "$M9B_107" b_status)" "0|pending|pending" "107-8o2-0 an unmarked typed burst planted (two typed events, no mark)"
-v1run107 "107-8o2"
+check "$(sd107 "$M9B_107" a_marked)|$(sd107 "$M9B_107" a_status)|$(sd107 "$M9B_107" b_status)" "0|pending|pending" "107-8Ro2-0 an unmarked typed burst planted (two typed events, no mark)"
+v1run107 "107-8Ro2-V1"
 check "$(has "$V1RD107" 'stage A counted leftover marks')|$(has "$V1RD107" "the pin's drain after the rollback, on a copy of the book: (a) 0, counted apart 0, (b) 0, control ")|$(has "$V1RD107" '— it lists no conversation')|$(has "$V1RD107" "THE PIN'S DRAIN AFTER THE ROLLBACK IS INDETERMINATE")" "no|yes|yes|no" \
-  "107-8o2 V1 with no mark and typed messages in the last day: no count beside 'this run wrote no mark'; the stop reads the drain — (a) 0 and (b) 0 with its control — and lists no conversation"
+  "107-8Ro2 V1 with no mark and typed messages in the last day: no count beside 'this run wrote no mark'; the stop reads the drain — (a) 0 and (b) 0 with its control — and lists no conversation"
 BU9B_107="$(seed107 "$PD" "[{\"op\":\"burst_undo\",\"ids\":[$(sd107 "$M9B_107" a),$(sd107 "$M9B_107" b)]}]")"
-check "$(sd107 "$BU9B_107" op)" "burst_undo" "107-8o2* the unmarked events removed"
+check "$(sd107 "$BU9B_107" op)" "burst_undo" "107-8Ro2* the unmarked events removed"
 clkfwd107 $((2 * 86400 + 600))   # no typed ai.reply in the last day, whatever the book holds: control 0 (said so)
-v1run107 "107-8p"
+v1run107 "107-8Rp"
 check "$(has "$V1RD107" 'stage A counted leftover marks')|$(has "$V1RD107" "THE PIN'S DRAIN AFTER THE ROLLBACK IS INDETERMINATE — NO TYPED MESSAGE IN THE LAST DAY ((a) 0, counted apart 0, (b) 0, control 0)")" "no|yes" \
-  "107-8p' V1 with no mark and control 0 (the clock two days on, said so): no count beside 'this run wrote no mark'; the stop says INDETERMINATE — never 'nothing to drain'"
+  "107-8Rp' V1 with no mark and control 0 (the clock two days on, said so): no count beside 'this run wrote no mark'; the stop says INDETERMINATE — never 'nothing to drain'"
 anc107 ctl0 'if [ "$(kv "$1" control)" = "0" ]; then printf "THE PIN' 'if false; then printf "THE PIN'
-WK_107="$(weak107 v1-ctl0 ctl0)"; v1run107 "107-8q" "$WK_107"; rm -f "$WK_107"
+WK_107="$(weak107 v1-ctl0 ctl0)"; v1run107 "107-8Rq" "$WK_107"; rm -f "$WK_107"
 check "$(has "$V1RD107" "THE PIN'S DRAIN AFTER THE ROLLBACK IS INDETERMINATE")|$(has "$V1RD107" "the pin's drain after the rollback, on a copy of the book: (a) 0, counted apart 0, (b) 0, control 0 — it lists no conversation")" "no|yes" \
-  "107-8q' a weakened copy that reads control 0 as a reading — 'it lists no conversation' — caught (a V1 run of its own)"
+  "107-8Rq' a weakened copy that reads control 0 as a reading — 'it lists no conversation' — caught (a V1 run of its own)"
 RS9_107="$(rbset107)"; fresh107; O9R_107="$(run107c --rollback)"
-check "$(rc107)|$(has "$O9R_107" 'nothing to roll back; running the rollback checks')|$(has "$O9R_107" 'LK-RB1 not judged: this run rolled nothing back')|$(rbset107)" "0|yes|yes|$RS9_107" "107-8r rb107 and RB_NOTHING after V1's rollback: nothing to roll back, LK-RB1 not judged, no record"
+check "$(rc107)|$(has "$O9R_107" 'nothing to roll back; running the rollback checks')|$(has "$O9R_107" 'LK-RB1 not judged: this run rolled nothing back')|$(rbset107)" "0|yes|yes|$RS9_107" "107-8Rr rb107 and RB_NOTHING after V1's rollback: nothing to roll back, LK-RB1 not judged, no record"
 
 # ════════════════════════════════════════════════════════════════════════════
-# 107-9 — the final step: --redeploy (NS-G1 GO with W.1 '0' — the switch-off's own '0', left by 107-8m** under 5.18.107 and kept by
-# 107-8n's rollback), master106, --after-only PASSED with the owner's steps; steps 1 and 3 as printed; the drain through the
+# 107-9 — the final step: --redeploy (NS-G1 GO with W.1 '0' — the switch-off's own '0', left by 107-8Rm** under 5.18.107 and kept by
+# 107-8Rn's rollback), master106, --after-only PASSED with the owner's steps; steps 1 and 3 as printed; the drain through the
 # wrapper; the put-back's and step 5's set_config --value 0 lines; K and W.1 off as printed; the one-block rule over every run.
 # Exit: 5.18.107 serving, K, Q and W.1 off.
 # ════════════════════════════════════════════════════════════════════════════
@@ -1961,7 +1971,7 @@ EVQ107="${EVF106:-}"; EVQ107="/${EVQ107#http://*/}"
 EVA107=$(( $(evo_calls) - EVO0_106 )); EVA5_107=$(( EVO0_106 - EVO0_105 )); RFJ107=$(( $(refused106) - $(n103 "${RF4_106:-}") ))
 EVN107="$(cat "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | awk '{s += $1} $2 == "cron" {c++} END {printf "%d|%d\n", s, c}')"
 check "$EVN107|$(tail -n +"$(( EVO0_105 + 1 ))" "$SB/evo/requests.log" 2>/dev/null | grep -cvE "^(GET|POST) ($EVP107|$EVQ107)/")|$( [ -n "${RF4_106:-}" ] && [ "$RFJ107" -ge 15 ] && [ "$EVA107" -ge "$RFJ107" ] && echo ge)|$( [ -n "${EVODRV105:-}" ] && [ "$EVA5_107" -ge "$(n103 "${EVODRV105:-}")" ] && echo ge)" "0|0|0|ge|ge" \
-  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own"
+  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own; $(( $(evo_calls) - EVO0_107 )) since 107-pre, master's cycles and 107-8f's worker run among them (the worker's asserted 0 there)"
 # 107-10b — uCRM (106-10b's reading, carried): every run's request record GETs only, no token copy left at the next call — 107's,
 # 106's, 105's and 104's runs; nothing of any of them left in /tmp. The CONTROL a planted POST and a planted token copy, removed
 SCN107="$R107/scan107"; mkdir -p "$SCN107"; chmod 700 "$SCN107"
@@ -2022,12 +2032,13 @@ PY
 . "$L104F_107"; rm -f "$L104F_107"
 sweep104_107() { { sweep_files104; sheets104; ls -1 "$OUT104"/cash-*.txt 2>/dev/null; reqs104; } | sort -u; }
 NH4_107="$(sweep104_107 | xargs -r grep -lF -f "$NM107F" 2>/dev/null | wc -l | tr -d ' ')"; FH4_107="$(sweep104_107 | xargs -r grep -lF -f "$FORMS107" 2>/dev/null | wc -l | tr -d ' ')"
+NL4_107="$(for l107 in sweep_files104 sheets104 reqs104; do "$l107" 2>/dev/null | grep -c . | awk '{printf "%s", ($1 > 0) ? "y" : "n"}'; done)"   # each list read something before the controls (106-10c'')
 mkdir -p "$R104/sheets" "$R104/ucrm"
 for f107 in "$R104/run-zz107ctl.txt" "$R104/sheets/cash-zz107ctl.txt" "$R104/ucrm/run-zz107ctl.req"; do cp "$SCN107/control.txt" "$f107"; done
 CL4_107="$(for l107 in sweep_files104 sheets104 reqs104; do printf '%s%s ' "$("$l107" 2>/dev/null | grep -F 'zz107ctl' | xargs -r grep -lF -f "$NM107F" 2>/dev/null | wc -l | tr -d ' ')" "$("$l107" 2>/dev/null | grep -F 'zz107ctl' | xargs -r grep -lF -f "$FORMS107" 2>/dev/null | wc -l | tr -d ' ')"; done | sed 's/ $//')"
 rm -f "$R104/run-zz107ctl.txt" "$R104/sheets/cash-zz107ctl.txt" "$R104/ucrm/run-zz107ctl.req" "$SCN107/control.txt"
-check "$NH4_107|$FH4_107|$CL4_107" "0|0|11 11 11" \
-  "107-10c'' …nor in any of $V104's records, which 107's runs write too (sf.txt, the wrappers' logs of every command run as printed: $(sweep104_107 | grep -c .) files, by 104-10's own lists); the control found through each"
+check "$NH4_107|$FH4_107|$NL4_107|$CL4_107" "0|0|yyy|11 11 11" \
+  "107-10c'' …nor in any of $V104's records, which 107's runs write too (sf.txt, the wrappers' logs of every command run as printed: $(sweep104_107 | grep -c .) files, by 104-10's own lists, each list reading some); the control found through each"
 # 107-10d — the LK key files 5.18.107 wrote (its run folder's and the case folders'), each mode 0600 and read; no key's value in
 # any file the sweeps above read; the CONTROL a copy of the keys, found
 KL107="$( { [ -e "$LKF107" ] && echo "$LKF107"; find "$R107/case" -type f -name "lk-key-$V107" 2>/dev/null; } | sort -u)"
@@ -2043,7 +2054,7 @@ rm -f "$SCN107/key.pat" "$SCN107/key-control.txt"
 # marker alone, kyc_config.json, which holds 107-pre's planted settings text (the one fixture that stays by design, v2 A3, said
 # so: its numbers are none). The control: the book holds both
 sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1
-ND1_107="$( { grep -rlaE --exclude='plugin.sqlite3*' "$RX107" "$DATA" "$PD/data" "$RECS"; grep -rlaF --exclude='plugin.sqlite3*' --exclude='kyc_config.json' 'RH107SECRET-' "$DATA" "$PD/data" "$RECS"; } 2>/dev/null | sort -u)"
+ND1_107="$( { grep -rlaE --exclude='plugin.sqlite3*' "$RX107" "$DATA" "$PD/data" "$RECS"; grep -rlaF --exclude='plugin.sqlite3*' 'RH107SECRET-' "$DATA" "$PD/data" "$RECS" | grep -vxF "$DATA/kyc_config.json"; } 2>/dev/null | sort -u)"   # the one exemption by its path, never a name at every depth
 check "$(grep -c . <<<"$ND1_107")|$(grep -caF 'RH107SECRET-' "$DATA/kyc_config.json" 2>/dev/null)|$(grep -caE "$RX107" "$DATA/kyc_config.json" 2>/dev/null)|$( [ "$(n103 "$(grep -caE "$RX107" "$DATA/plugin.sqlite3" 2>/dev/null)")" -ge 1 ] && echo numbers)|$( [ "$(n103 "$(grep -caF 'RH107SECRET-' "$DATA/plugin.sqlite3" 2>/dev/null)")" -ge 1 ] && echo marker)" \
       "0|1|0|numbers|marker" \
   "107-10e $V107's own numbers ($PR107<NN>) and its RH107SECRET- marker in no file of the plugin's data folders or the records but the book — the marker once in kyc_config.json, the planted settings text (107-pre5, kept by design), with none of 107's numbers ($(grep -c . <<<"$ND1_107") other file(s)$( [ -n "$ND1_107" ] && printf ': %s' "$(xargs -r -n1 basename <<<"$ND1_107" | paste -sd, -)")); the control: the book holds both"

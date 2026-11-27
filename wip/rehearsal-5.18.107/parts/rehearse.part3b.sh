@@ -131,18 +131,28 @@ check "$(has "$OA2_107" 'NOT v9 as the workers read it')|${#TX107}" "yes|16" \
 mutant107 sa-v9 satxt -- --check
 check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the recorded ${TX107:0:12}")|$(has "$MUT107" 'NOT v9 as the workers read it')|$MUTRC107" "yes|no|0" \
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
-# 107-3g — StaffJobsGate::applies false: the profile set to South Sudan in k (a FIXTURE, said so). k, never d: PluginConfig::read
-# merges p, d, k and a later file wins, and the sandbox's kyc_config.json already says uganda (the root rehearsal writes it),
-# so a d plant would read Uganda. fx_file refuses a key the file holds, so the file is kept whole (keep106), the one key
-# rewritten in place (owner and mode kept), and put back byte for byte (back106). SA's capitals note, no refusal.
+# 107-3g — StaffJobsGate::applies false. Not reachable on a live book: a profile other than Uganda in the settings files (k is
+# merged last, and the sandbox's kyc_config.json says uganda) makes A23.7 refuse first — the pin's cashOnlyRuleInForce() reads
+# the same gate over a copy of the same three files (S:2853–2858, S:13442) — and A23 runs before qf_stage, SA's only caller
+# (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a copy whose SA reading
+# returns ug=0, nothing planted, as 107-3t' does for the text — shows the capitals note with the --check still GO; and the live
+# plant in k (a FIXTURE: the file kept whole by keep106, one key rewritten in place, owner and mode kept, put back byte for byte
+# by back106) shows the refusal at A23.7, nothing changed, SA never reached.
+anc107 sjg0 "\$o[] = 'ug=' . (StaffJobsGate::applies(\$c, \$dir) ? 1 : 0);" "\$o[] = 'ug=0';"
+check "$(has "$OA2_107" 'SA StaffJobsGate::applies reads Uganda as the workers read it (PluginConfig::read)')|$(has "$OA2_107" 'SA STAFFJOBSGATE::APPLIES IS FALSE')" "yes|no" \
+  "107-3g the real reading (107-pre6's --check): SA reads StaffJobsGate::applies as Uganda — never the capitals"
+mutant107 sa-sjg0 sjg0 -- --check
+check "$(has "$MUT107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(has "$MUT107" 'SA StaffJobsGate::applies reads Uganda')|$(checkgo107 "$MUT107")" "yes|no|yesnono0|0|0|samekey|0" \
+  "107-3g' a READER CONTROL (a copy whose SA reading returns ug=0, nothing planted): SA's note in capitals, and the --check still GO — a note, never a refusal"
 SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"
 SJG1_107="$(python3 -I -c 'import json, sys
 p = sys.argv[1]; d = json.load(open(p))
 assert isinstance(d, dict) and d.get("tenant_profile") == "uganda"
 d["tenant_profile"] = "south-sudan"; open(p, "w").write(json.dumps(d)); print("planted")' "$DATA/kyc_config.json" 2>/dev/null || echo refused)"
-fresh107; O107="$(run107c --check)"
-check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(checkgo107 "$O107")" "kept|planted|yes|yesnono0|0|0|samekey|0" \
-  "107-3g StaffJobsGate::applies false (South Sudan's profile in k, the file read last; it said uganda): SA's note in capitals, and the --check still GO — a note, never a refusal"
+D3G_107="$(data94)"; fresh107; O107="$(run107c --check)"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')" "kept|planted|no|no" \
+  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): SA is never reached"
+nogo107 "107-3g\"'" "NO-GO (A23.7): rule A is NOT in force on this server's own configuration, as the pin's code reads it" "$O107" "$D3G_107" "$P106"
 check "$(back106 t107-sjg)|$(nskept107)|$(snapeq107)" "same|0|same" "107-3g* put back: kyc_config.json byte for byte"
 check "$(ancc107)|$(snapeq107)|$(bookdig107)|$(ledger107)|$(live)" "0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-|same|$B3_107|mig092=0 wa_no_ai=none|$P106" \
   "107-3z the exit: 107-pre's state — every key absent again (the files byte for byte, the book's digest), no 092, $P106 serving; every anchor so far the script's own text, once"

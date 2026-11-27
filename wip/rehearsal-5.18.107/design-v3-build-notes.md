@@ -32,10 +32,10 @@ part that follows it says so in its own comment. Nothing here has run yet: the d
   before the verify fails, S:13847–13852) and V1's automatic one each need the quarantine's `--check` before any later
   deploy-mode run, `--check` included. Part 6 now runs `qcheck106` after R2, R3, R4 and inside `v1run107`, as 5.18.106's
   rehearsal does after every rollback. R5 (H3) copies nothing and needs none.
-- **107-8q′** looked for INDETERMINATE anywhere; stage A's SA note says it on every run with control 0 (S:8096). It now
+- **107-8Rq′** (then 107-8q′) looked for INDETERMINATE anywhere; stage A's SA note says it on every run with control 0 (S:8096). It now
   reads the stop's own text.
 - **A V1 case with control above 0 and no mark** was missing (the unmodified script's "it lists no conversation" branch,
-  S:8906): 107-8o2, an unmarked typed burst.
+  S:8906): 107-8Ro2, an unmarked typed burst.
 - **Copies without a positive observable** (107-8b″, 107-8b*, 107-5e*) and the WARNING count in 107-5d″ (the real line
   beside the planted one) tightened; 107-8b asserts the reason the switch was not read (P3B_WHY, S:12540).
 - Smaller: conversation ids matched whole (`hasid107`); V1's weakened copy kept out of the one-block sweep; the `mixed`
@@ -63,7 +63,7 @@ part that follows it says so in its own comment. Nothing here has run yet: the d
 - **rbx107** compared the ladder keys through 5.18.105's lists; `digest107` reads them through the pin's, W.1's two included.
 - **107-3 fixture readings** expected `True`; sd106 prints JSON booleans lower-case.
 - **107-3g** planted South Sudan in d, but kyc_config.json (k) is merged last and already says uganda, so SA would read
-  Uganda. The plant is in k now: the file kept whole (keep106), one key rewritten in place, put back byte for byte.
+  Uganda. The plant moved to k — and the third round showed that cannot reach SA either (below).
 - **107-6b** rewrites 092's ledger md5, so the --after-only's own V boot logs 092's real checksum WARNING into migration.log;
   nothing kept the log, and every later `back4_107` would have failed. 6b keeps and restores the log and asserts the real
   WARNING. **107-6g** (092's installed bytes altered) counts the planted WARNING and the real one: 2 or more, not 1.
@@ -73,10 +73,30 @@ part that follows it says so in its own comment. Nothing here has run yet: the d
   the refusal-list comment corrected; `sqx` and 5.18.105's key lists added to part 1's presence checks.
 - The second round's audits found **no A14 violation** and **no case assuming the opposite of the 125 s wait**.
 
+## Found by the third round (workflow `waw08fzc2`: the second round's fixes checked, parts 4c–7 read again), all fixed
+
+- **Blocker — 107-3g could not reach SA on a live book.** Any profile other than Uganda in the settings files makes A23.7
+  refuse first: the pin's `cashOnlyRuleInForce()` reads the same gate over a copy of the same three files (S:2853–2858,
+  S:13442), and A23 runs before `qf_stage`, SA's only caller (S:8566). The d plant of the first build could not reach it
+  either (k said uganda). 107-3g is now three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a
+  copy whose SA reading returns `ug=0`, nothing planted, as 107-3t' does — shows the capitals with the --check still GO; and
+  the live plant in k shows the refusal at A23.7, nothing changed, SA never reached. The design's "SA notes StaffJobsGate
+  false" is a branch no live book reaches through a --check; recorded, not a script defect (A23.7 is the stronger refusal).
+- **107-8g** read 'ANSWER ANYTHING BUT ROLLBACK BELOW', which K's and Q's step-5 notes also print while they are on: it now
+  reads the drain's own capitals.
+- **107-10c''** had lost 106-10c''s reading that each of 104's three lists reads something before the controls (a 0|0 over
+  empty lists read clean): carried back.
+- **107-10e**'s marker exemption excluded every file named kyc_config.json at any depth; it is now the one path.
+- **The installed worker's Evolution calls in 107-8f** were bounded by nothing (EVO0_107 was set and never read): asserted 0
+  around the worker run; 107-10a states the count since 107-pre.
+- **R3 (107-8Ri)** asserts its one rollback record (RS3_107 was taken and never read).
+- **Labels**: part 6's cases now carry their own range, `107-8R…`, and its helper calls (`rbx107`, `dredeploy107`,
+  `v1run107`) labels of their own (`-RB`, `-RD2`…`-RD4`, `-V1`), so no check label in 107's sections is used twice.
+
 ## Accepted as known limits
 
 - In 107-8f the installed worker runs every due event of D1's book, not only #A and #B; what else it does is judged by
   107-10's sweeps (Evolution counts, names and numbers), not case by case.
 - Whether rollback-mode stage A under `FAKE_CP_FAIL` reaches the question (107-8b) can only be shown by a run.
-- Whether stage A's other checks keep the --check GO with kyc_config.json reading South Sudan (107-3g), and whether 107-7b's
-  action-to-end time stays under 120 s, can only be shown by a run.
+- Whether 107-7b's action-to-end time stays under 120 s, and whether the installed worker in 107-8f calls Evolution for
+  nothing (asserted 0), can only be shown by a run.
