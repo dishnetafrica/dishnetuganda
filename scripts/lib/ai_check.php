@@ -63,11 +63,37 @@ function traits(string $r): string {
     return $t ? implode(' · ', $t) : '—';
 }
 
+/**
+ * 5.18.107 (root docs/76 §D.6): the store Part Q's builder reads the installation record from (UcrmCatalogue::fromStore,
+ * UcrmQuoteLinks::fromStore), over the COPY and read only: SqliteStore::load() would create a missing table. A record
+ * table is read as SqliteStore keeps it (one JSON row per record); a table that is absent, or not in that form, is empty.
+ */
+final class AiCheckCopyStore
+{
+    private $pdo;
+    public function __construct(PDO $pdo) { $this->pdo = $pdo; }
+    public function getPdo(): PDO { return $this->pdo; }
+    public function load(string $file): array
+    {
+        $t = (string)preg_replace('/[^a-zA-Z0-9_]/', '_', (string)preg_replace('/\.json$/', '', basename($file)));
+        try {
+            $q = $this->pdo->prepare("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?");
+            $q->execute([$t]);
+            if ((int)$q->fetchColumn() === 0) return [];
+            $rows = $this->pdo->query("SELECT data FROM [{$t}] ORDER BY id ASC")->fetchAll(PDO::FETCH_COLUMN);
+        } catch (\Throwable $e) {
+            return [];
+        }
+        return array_values(array_filter(array_map(function ($r) { return json_decode((string)$r, true); }, $rows), 'is_array'));
+    }
+}
+
 // ── The installed plugin ────────────────────────────────────────────────────
 foreach (['bootstrap_data', 'PluginConfig', 'KnowledgeBase', 'CrmApiClient', 'ShopCatalogue', 'DishNetTools',
           'PlanCatalogue', 'PlanFenceGuard', 'KitTaxNote', 'QuoteTaxLine', 'ReplyPrivacyGuard', 'ReplyTotals', 'BrainContext',
           'DishNetAiBrain',
-          'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus'] as $lib) {
+          'EvolutionApiService', 'FlyerAsset', 'MediaLibrary', 'NetworkEquipment', 'EventBus',
+          'ConnectionQuote', 'TopicRule'] as $lib) {   // 5.18.107 (root docs/76 §D.6, §W.2): Part Q's builder and the topic rule, where the installed plugin has them
     if (is_file("{$root}/lib/{$lib}.php")) require_once "{$root}/lib/{$lib}.php";
 }
 // The worker's class, for its own catalogue preparation and price check (never constructed).
@@ -375,6 +401,8 @@ if ($mode === 'report') {
 // ════════════════════════════════════════════════════════════════════════════
 if ($mode === 'ask') {
     $brain = new DishNetAiBrain($config);
+    // 5.18.107 (root docs/76 §W.2): rule 8 as the live worker sets it, where the installed plugin has it
+    if (class_exists('TopicRule') && method_exists($brain, 'setTopicRule')) $brain->setTopicRule(TopicRule::applies($config, $dataDir));
     if (!$brain->isConfigured()) stop('ask', 'no AI provider key is configured — nothing was asked');
     if ($data === null) stop('ask', 'the price list could not be fetched, so the answers would not be the ones customers get — nothing was asked');
     if (!class_exists('ReplyPrivacyGuard') || !class_exists('PlanFenceGuard')) stop('ask', 'the installed plugin lacks the reply checks this path needs');
@@ -382,7 +410,18 @@ if ($mode === 'ask') {
     // The worker's own permitted-amounts list, so the price check here is the one customers go through.
     $permitted = null;
     if (method_exists('AiReplyWorker', 'permittedAmounts')) {
-        $permitted = fn(array $ctx, string $prompt): array => AiReplyWorker::permittedAmounts($ctx, $prompt, $config);
+        // 5.18.107 (root docs/76 §D.6): and Part Q's figures, passed exactly as the worker passes them — only where the
+        // switch, Uganda, the hardware module and the builder agree for the sales number. Counted below, never printed.
+        $quoteFigures = [];
+        if (class_exists('ConnectionQuote') && ConnectionQuote::offerable($config, $dataDir, 'sales')
+                && (new ReflectionMethod('AiReplyWorker', 'permittedAmounts'))->getNumberOfParameters() >= 4) {
+            $qb = ConnectionQuote::build(AiReplyWorker::salesCatalogue($data, $config), $config,
+                new AiCheckCopyStore($pdo), $dataDir, $root);
+            if (!empty($qb['ok'])) $quoteFigures = $qb['figures'];
+            note('connection quotation (Part Q): ' . (!empty($qb['ok']) ? count($quoteFigures) . ' block figure(s) permitted, as on the live guard'
+                                                                     : 'not offered — ' . (string)$qb['reason']));
+        }
+        $permitted = fn(array $ctx, string $prompt): array => AiReplyWorker::permittedAmounts($ctx, $prompt, $config, $quoteFigures);
     } elseif (class_exists('AiReplyWorker')) {
         if (method_exists('AiReplyWorker', 'permittedValues')) {
             $w = (new ReflectionClass('AiReplyWorker'))->newInstanceWithoutConstructor();
