@@ -3686,3 +3686,240 @@ fix, its correction is what was taken, and where two corrections disagreed, the 
 | B3 — the switch-off was worded from the ladder alone, though it runs through `tools/sales_followup.php` | C | §T.7 (both files decide it), §T.11 (the ladder the pin's with the tool removed), §T.13's A4/B6 row |
 | B5 — the mixed-tree and not-read cases judged K/Q lines at a site where none print | C | §T.11 (those cases at the `BASE_DIFFERS` stop, where K and Q read *cannot be read*; a copy that words K/Q from the ladder) |
 | B6 — "an older state file" was listed under the `MG_CA2_SEEN`-absent branch, which the `MG_G1` rule sends elsewhere | C | §T.3 item 6 (the `MG_G1` rule decides first) |
+
+### T.14 Derivation record (27 Nov)
+
+`scripts/deploy-5.18.107.sh` is derived by `wip/derive-5.18.107/derive107.py` against the release commit `5b6245b`:
+twelve parts, 349 asserted edits. The result has 16,290 lines and sha256 `e37aec19…`. Two runs gave the same bytes
+(`6bde507`). The first derivation was `1e731dd` (346 edits, 16,232 lines, `f6ce1207…`). Five reviews of the derived
+script followed, each fixed in the derivation and never in the script.
+
+Where the derivation found §T wrong, incomplete or in conflict with itself, it follows the code and the difference is
+recorded here. None of them changes a decision of §T.10.
+
+**Found in the carried text and in §T (DF).** DF-1 to DF-9 were found because an assertion failed, not by reading.
+DF-10 was found by review 3.
+
+- **DF-1.** PERSONA_PHP's comment said 5.18.106 changes neither `lib/BrainContext.php` nor `lib/DishNetAiBrain.php`.
+  5.18.107 changes both, but nothing the persona probe builds:
+  - rule 8 prints only after `setTopicRule(true)`;
+  - the quotation and the turn travel only when a caller sets them;
+  - PERSONA_PHP does neither.
+
+  Both facts are asserted, from the probe's own text and the pin's brain. The summary's *what did not change* says the
+  same: the assistant's prompt as A10 and R16 build it, without rule 8 or K's and Q's per-turn facts.
+- **DF-2.** The note on 5.18.95's four fixes said `public.php` is kept byte for byte. W.5's tab key puts it in the delta.
+  The note now says 5.18.107 changes `public.php` only in its tab and permission maps, none of the lines those fixes read.
+- **DF-3.** QC-RB1's word `mutants_W` names catalogue_direct's folder, but it is also part of quote_followup's
+  `mutants_WB`. It is qualified as `catalogue_direct/mutants_W`, as `mutants_K` already was.
+- **DF-4.** R6's text check of `cron/event_processor.php` read 5.18.106's list literally, so it would fail after every
+  deploy. It now reads `EP_PIN_LIST`.
+- **DF-5.** VN-CA3's line, `VN_EP_LINE`, carried the old two lists. It is re-read off the release commit.
+- **DF-6.** §T.7 adds `wa_human_cooldown_minutes` to the keep list. At the pin it is already in
+  `SalesFollowupLadder::PREEXISTING`, so every copy carries it and no key is added. The derivation asserts it is there.
+- **DF-7.** SA reads the settings text and the gate through the pin's `PluginConfig::read($root, $dir)` over the copy.
+  Its signature, `read(string, string): array`, is asserted at the pin.
+- **DF-8.** *Read by nothing*, which §T.8 bans in the whole text, stood in the four assistant-off texts and the summary.
+  They now say *which no 5.18.106 file reads*, and that 092 stays and is passed over by the migration runner once
+  applied.
+- **DF-9.** BR1's after-a-rollback note offered the owner's command to turn `followup_auto_send` back on. A 5.18.107
+  rollback writes no setting. The note now says that a switch the owner turned off with their own command comes back on
+  only with theirs.
+- **DF-10.** §T.3 item 7 treats *NA-CA1 fails* as *the list does not read*. NA-CA1 has a first probe, the worker's own
+  read, and probes on throwaway copies, so it fails in three ways. The FAILED summary's lead (`MG_SAY`) is chosen by
+  what probe 1 answered:
+
+  | `MG_SAY` | When | Lead |
+  |---|---|---|
+  | `na` | the list is shown not to read: 092 read absent in the ledger, or probe 1 threw | capitals: no AI reply |
+  | `unk` | that is not established: the wait's last ledger reading, or the probes, did not answer | capitals: NOT ESTABLISHED |
+  | `mg` | MG-CA1's fact | MG-CA1's fact first; a list that reads never outranks it |
+  | `dat` | probe 1 lists NA-CA1's first sentinel: the list reads, but its rows are wrong | AI replies go on for every number not on it |
+  | `ctl` | probe 1 answered *not listed* and the rest of NA-CA1 failed | AI replies go on |
+  | `log` | only MG-CA2 failed | unchanged |
+
+  The rows are in precedence order. So §T.11's case with an active `wa_no_ai` row planted on NA-CA1's first sentinel
+  expects the `dat` lead, not item 7's capitals. Its rename case still expects `na`, because probe 1 throws there.
+
+**Choices §T left to the derivation.**
+
+- **The named display variables (partDV).** `BD_OFF_CMD`, `BD_DRAIN_CMD` and `W1_ON_CMD` are assigned at the top level.
+  `K_OFF_CMD`, `Q_OFF_CMD`, `K_ON_CMD` and `Q_ON_CMD` are assigned by `owner_cmds`. It assigns nothing while the book's
+  owner or the data folder is not known. `owner_cmds` replaces the printf helper partR first wrote, which §T.8's
+  definition of display text did not cover.
+- **The retired names.** §T.8's banned names were reworded at their sources, for example *5.18.106's claim-switch
+  refusal retired* and *5.18.106's one write retired*, so the history still reads.
+- **The report wrapper's pin.** The summary prints it literally: `7835906`, 5.18.105's release commit.
+  `$BASELINE_COMMIT` would have named `bf29cbd`.
+- **Switch-off, then drain.** A line of text stands between the two commands in rb_pre107 and in the summary (*the drain
+  reading, its own command, alone*), so two pasted lines are never one copy.
+- **Z19.** The rule on apostrophes inside a double-quoted `${o:-word}` is narrowed. Bash 5.2 keeps paired apostrophes;
+  the hazard is an odd count, or a `$` between a pair.
+- **rb_pre107's second reading** is taken 125 s after the first.
+
+**The whole-text checks as built (`keepcheck107.py`, after review 5).**
+
+- **Display text is judged per command, not per line.** A small shell tokenizer reads quotes, heredocs, command
+  substitutions, case patterns, groups, pipes and redirections.
+  - **Display text is:** the arguments of `echo`, `ok`, `bad`, `note`, `stop` and `hdr`; the arguments of a `printf`
+    that is not `printf -v`; and the right-hand side of a named display variable's plain assignment.
+  - **Output that leaves the terminal is code:**
+    - a command substitution inside display text, including one inside an arithmetic expansion;
+    - any pipe, `tee` included, and a process substitution;
+    - standard output redirected to a file, spaced or glued (`>f`, `1>>f`, `&>f`, `>&23`);
+    - standard error sent to a file in the same command as a `>&2`.
+
+    `2>&1`, `2>/dev/null` and `>&2` alone stay display. The same holds for a whole group: `{ … }`, `( … )`, `if … fi`,
+    a loop, a `case` or a function body. Whether its output goes to a pipe or a file (standard output or standard
+    error) is decided at the end of the command its closer begins, so `} 2>&1 | …` and `done < f | …` count, and
+    `} >&2` does not. A closer just before a body (`f() {`, `if ( … ) then`) decides nothing. Case patterns are read
+    as words, even when spelled `if)`, and a pattern's `|` is no pipe.
+  - **Also code:** a display variable's `+=`, and heredoc bodies. An array's contents are words, never commands or
+    display text.
+- **What the rules read.**
+  - The rules read code: unquoted shell, single-quoted text and heredoc bodies. The dot form of sourcing is read on
+    unquoted shell alone, because in PHP `.` is concatenation.
+  - A line is skipped only as a PHP comment, under four conditions:
+    - it is in the body of a heredoc delimited `PHP`;
+    - the delimiter is quoted, so nothing in the body expands;
+    - the heredoc is read by `cat`;
+    - `#` or `//` comes first, the whole line is heredoc text, and the line holds no `?>`.
+
+    It is never skipped by its raw prefix, in a quoted string, or in another heredoc. So a shell line beginning
+    `//usr/bin/env` is read, and so is the rest of a line where a quoted string closes. All 591 lines the real script
+    skips qualify.
+- **K1 and K5 read tools by name, per occurrence.**
+  - In code, `$QF_TOOL` appears once, inside `qf_tool`.
+  - The switch tool's names and `set_config.php` appear only where they are read: the sha256 lists, a whole
+    `EXPECTED_CHANGED` line, their own definition, the put-back's tools reading, a `grep`'s own file argument, RB's
+    failure labels with no command word in them, and Q-CA6's one run.
+  - K1's *the new owner commands only in display text* is enforced for the `set_config` commands by K5. The wrapper
+    commands stay with K1.
+  - K5 counts every form that sets a display variable, in code only.
+- **K7 (new, review 2) refuses the constructs that could hide a run.** Since review 3 none is anchored to a line's
+  start. Since reviews 4 and 5 the tokenizer resolves each command's program, read unquoted (`$'…'` decoded, `$`
+  before a quote dropped). It passes over leading redirections and `time -p`, over `command`, `builtin`, `exec`,
+  `nohup` and `env` with their options and assignments, and through the runners `docker exec` (its options and the
+  container) and `dxo`. `command -v` asks and runs nothing. The constructs refused are:
+  - `eval`, `source` and `.` as a command;
+  - `exec` redirecting the script's own output, anywhere in that prefix chain. Descriptors are read one by one, so
+    `exec 3>&1` and `exec 3>&-` pass;
+  - a shell program given standard input to run: `<`, `<<`, `<<<`, a pipe or `<( … )`, whatever positional arguments
+    come first;
+  - a shell program's literal `-c` string, after clustered options or `--`, that sources, evals, or feeds another
+    shell a pipe or a redirection;
+  - `${!…}`, and a shell given an expanding command string;
+  - a glob, or a variable file name, under `tools/` or `scripts/`;
+  - `printf -v`, `call_user_func`, a writer named as a string, `->save($x)` and `php -f`;
+  - a script run from a variable path.
+
+  None is in the script. The one named exception is the documented put-back, `bash "$REPO/scripts/deploy-hybrid.sh"`,
+  as a whole word.
+- **The control on the controls.** Each tokenizer feature added by reviews 4 and 5 was removed in turn from a copy of
+  the checker, and the copies or pass controls it guards then failed: 22 controls over nine features (review 4), and
+  24 over seventeen (review 5). Review 5's controls require more than a passing copy: the copy's own message must
+  disappear, because two features guard some copies at once.
+- **Pass controls (review 5).** 16 legitimate shapes must pass, each refused by an earlier checker. Examples: a
+  function or an `if ( … ) then` whose first command prints to standard error or sends its errors to a file;
+  `{ …; } >&2`; a pipe into `grep -c sh` or a `sed` whose text holds *dash*; `exec 3>&1`; an array beginning `.` or
+  holding `source`; `command -v source`; a `( … )` case pattern inside a command substitution.
+- **What reviews 4 and 5 changed in the real script's reading.** Review 4's tokenizer classes every character of the
+  script as review 3's did, except two arithmetic expansions, `$(… $(ql_n …) …)`, in the printf arguments of
+  `ql_cmp_say` and `qc_cmp_say`. There the command substitutions are now code (74 characters). Review 5's tokenizer
+  classes every character as review 4's did, and skips the same 591 lines.
+- **Cost.** One pass over the script takes 1.6 s. The 108 copies and 16 pass controls take about three and a half
+  minutes.
+- **The known limits.** These are beyond the checks as built:
+  - a tool name built by concatenation outside a `tools/` or `scripts/` path;
+  - a function's output sent to a file (`f() { echo "$K_OFF_CMD"; }; f > "$OUT/x.sh"`), since the call is not
+    followed into the function. Into a shell it is refused, as a shell reading a pipe;
+  - a program started through a runner other than those named (`timeout`, `xargs`, `sudo`);
+  - a shell given a script by a literal path (`sh /tmp/x.sh`);
+  - the order of redirections, which is not weighed: `2>f >&2` and `>&2 2>f` are both code.
+
+  The checks guard the derivation against its own regressions. They do not prove that the script cannot be made to
+  write; the rehearsal runs the script (§T.11).
+- **K6 is wider than §T.8 asked.** `DROP TABLE` and `CREATE TABLE` on `wa_no_ai` (neg092) also come under the copy-only
+  rule, and QF_PHP may be run by `qf_php` alone.
+- **108 weakened copies.** Each names the checks that must refuse it and the message of its own rule,
+  *⟨what⟩ in code*. So a copy that several rules refuse still proves its own rule, and none passes on a message that
+  merely quotes its line. The three folder-check controls are carried.
+
+**Review 1 of the derived script (27 Nov), of `1e731dd`.** Two read-only lenses: conformance to §T, and shell and checks.
+Each finding was checked against the script and the pinned PHP before it was fixed. All seven held; one was found by
+both lenses. Each fix is in the derivation, re-derived twice to the same bytes (`933cfaa`, sha256 `546d29e1…`).
+
+| Finding | Fixed in |
+|---|---|
+| R1 — the `lk` mode loaded the installed `PluginConfig`, and with it `ConfigVault`, then the pin's `QuoteInPlay` and `ConnectionQuote`. Their `TenantProfile` requires the pin's `ConfigVault.php`: an uncatchable class redeclaration once K or Q reads on. So LK-AO, LK-RB0/LK-RB1 and NS-G1's message could not be read exactly when the owner's §K steps are on | partNS: the pin's `PluginConfig`, as `RBSW_PHP` reads; the reader and everything it loads asserted byte-identical at `bf29cbd` and the pin |
+| R2 — `MG_SAY` had no reader. The FAILED summary never led with 092's consequence, and said "do not roll back on your own" where §T.3 item 7 and §M call for the rollback | partH (H12): the lead before the verdict, NA-CA1 in capitals; the FAILED line keeps its words unless `MG_SAY` is set |
+| R3 — MG-CA2 in `--after-only`, with 092 still missing, said the trim marker was stamped "before 092's applied_at", a time that did not exist | partMG: names the still-missing 092, an unreadable `applied_at` or an unreadable stamp |
+| R4 — `lk_mg_g1` was empty in `--rollback`, where MG-G1 never runs, so LK-RB1 refused the 092 row that R7 accepts | partMG: the rollback's own stage-A ledger, with R7's pattern; LK-RB1's texts name it; the RB note no longer says the rollback "applied no migration" (partR) |
+| R5 — rb_pre107's two readings left out *counted apart* and the conversation and event ids §T.7 step 2 asks for | partR (`rb_bd_say`, `rb_bd_ids`, `rb_drain ids`); partSA (`sa_bd`'s `events=`) |
+| R6 — SA's note claimed under `--check` a state file that only a deploy writes | partSA |
+| R7 — K1 and K5 recognised runs by their shape, so a variable path (`php "$SC"`, `"$IN_CONTAINER/$QF_TOOL"`) evaded them | keepcheck107: closed world. `$QF_TOOL` appears only inside `qf_tool`. The switch tool and `set_config.php` are named in code only where read (sha256 lists, `EXPECTED_CHANGED`, the definition, `pb_tool`, `grep` of the installed file, RB's failure labels, Q-CA6's one run) |
+
+**Review 2 of the derived script (27 Nov), of review 1's fixes (`1e731dd..933cfaa`).** The same two lenses found two
+findings about the script and nine about the checks; every one held (`f5863a7`, `c8275dd2…`).
+
+| Finding | Fixed in |
+|---|---|
+| S1 — the FAILED lead said in capitals that no customer gets an AI reply whenever NA-CA1 failed or MG-CA1's wait ended unseen. But NA-CA1 also fails on its throwaway-copy controls while probe 1, the worker's own read, answers; and the wait also ends unseen when the live ledger does not read | partMG: `MG_WAIT` (`absent` only on a ledger read without 092) and `NA_P1`; `MG_SAY` gains `unk` (not established) and `ctl` (controls failed, the read answered); MG-CA1's and MG-CA2's texts say *could not be read* there. partH leads each in turn |
+| S2 — the RB note named an R7 line that a `--rollback` never prints | partR: RB's database line |
+| C1–C9 — the readers exempted a whole line rather than one occurrence. `tee`, a redirection to a file, `printf -vX`, `${!x}`, `+=`, globs and string-named writers passed. One copy could pass with its rule deleted, since two K1 rules refused it | keepcheck107: per-occurrence readers, the tightened display text, every assignment form counted, K7, and each copy pinned to its rule's message |
+
+**Review 3 of the derived script (27 Nov), of review 2's fixes (`933cfaa..f5863a7`).** The same two lenses found five
+findings about the script and eight about the checks; every one held. They were re-derived twice to the same bytes
+(`0de6369`, `b5348ac6…`, 16,290 lines, 349 edits, 72 weakened copies).
+
+| Finding | Fixed in |
+|---|---|
+| T1 — `MG_WAIT` was decided from the last of the 13 ledger reads. Reads 1–12 answering `mig092=0` and read 13 failing gave *unread*, and the ledger was said not to have read | partMG: *absent* when the ledger answered `mig092=0` at least once; the text names the last reading where it differs |
+| T2 — on the fresh copy, a reading that did not answer (empty, or the outer catch's `?Class`) was failed as *not whole … the runner never re-runs a file it has recorded* | partMG: NOT ESTABLISHED |
+| T3 — NA-CA1's FAIL text was not split when `MG_SAY` was. Every failure still said *does not read the way the worker reads it*, including the states led as *AI replies go on* | partMG: the text says what probe 1 answered (`none`, `listed`, a throw, no answer) |
+| T4 — `p1=listed` was led as `ctl` (*failed on its controls*), though it is probe 1 itself failing: a number nobody can hold is listed | partMG, partH: `dat` (DF-10) |
+| T5 — `ctl` was tested before MG-CA1, so an MG-CA1 failure lost its fact and the MG-G1 consequence from the lead | partMG, partH: a list that reads never outranks `mg`; `mg` says the list answered where it did |
+| C10 — display text was judged one simple command at a time, so a pipe or a file after `( … )`, `{ …; }`, `if … fi` or a loop was never seen | keepcheck107: the group stack (`group_end`); four copies |
+| C11 — a glued redirection (`"$K_OFF_CMD">"$OUT/k.sh"`) was not recognised | keepcheck107: `redir_out` in the word reader, glued, `1>>` and `&>` forms; four copies |
+| C12 — lines were skipped by their raw prefix, so `//usr/bin/env …` was dropped from every rule | keepcheck107: the mask marks heredoc bodies (H) and single-quoted text (Q); a line is skipped only as a PHP comment; one copy |
+| C13 — K7's anchors missed an indented `eval` or `source`, and one after `!`, `command`, `builtin` or `time` | keepcheck107: both found anywhere in code; the dot form on unquoted shell; shells reading a pipe or a redirection added; six copies |
+| C14 — two K7 copies passed with their rule deleted, because another rule's message quoted the line | keepcheck107: every expected message is *⟨what⟩ in code*; the `call_user_func` copy names no writer; the `printf -vX` copy has no `eval` |
+| C15 — the tokenizer looped forever on `&>` | keepcheck107: `&>` is read as a redirection; two copies |
+| C16 — the counter of every form that sets a display variable ran on the raw line, display text and comments included | keepcheck107: on code only |
+| C17 — the put-back's exception matched a prefix: `bash "$REPO/scripts/deploy-hybrid.sh"2` runs another file | keepcheck107: a whole word; one copy |
+
+**Review 4 of the derived script (27 Nov), of review 3's fixes (`f5863a7..0de6369`).** The same two lenses found one
+finding about the script and seven about the checks; every one held, and one of the seven predates review 3. They
+were re-derived twice to the same bytes (`e8ad0b5`, `3062bbaf…`, 95 weakened copies).
+
+| Finding | Fixed in |
+|---|---|
+| U1 — review 3's T1 fix took *absent* from any `mig092=0` reading in the wait. A first reading at `mig092=0` before the boot, then twelve that did not answer, gave capitals that no boot had applied 092, where the last reading showed nothing | partMG: the last reading decides again. An earlier answer is said (*answered `mig092=0` at reading k of 13 and gave no reading after it*) and leads as `unk`. MG-CA2's texts say that the ledger gave no reading at the end of the wait |
+| C18 — the group rule looked only at the first token after a closer, so `} 2>&1 \| …`, `} 2>/dev/null >f`, `} <f \| …` and `done <f \| …` passed | keepcheck107: decided at the end of the command after the closer; three copies |
+| C19 — `2>f >&2`, a group sending its standard error to a file, `>&23` after a closer, and `exec >f` passed | keepcheck107: standard error to a file beside `>&2` is code; `exec` redirecting is refused; four copies |
+| C20 — a quoted string closed on a line beginning `//`, a heredoc read by a shell and a multi-line `sh -c` string were skipped whole | keepcheck107: skipped only in a heredoc delimited `PHP`, the line wholly heredoc text; three copies |
+| C21 — sourcing passed when quoted, from `./` or `<(…)`, after `if`, `!` or `command`, and inside `sh -c '…'`. A heredoc's `. "$f"`, refused at `f5863a7`, passed after review 3 | keepcheck107: command words with quotes removed; eval, source and `.` after any prefix; a shell's literal `-c` string; six copies |
+| C22 — a shell reading a script missed `-s`, `<<`, `<<<`, `/bin/sh` and `\| docker exec … sh` | keepcheck107: both rules widened; four copies |
+| C23 — a case pattern spelled as a keyword unbalanced the group stack, and `function` and `coproc` bodies popped without a push | keepcheck107: case-pattern position tracked; those bodies open a group; two copies |
+| C24 (predates review 3) — a command substitution inside `$(( … ))` in display text stayed display | keepcheck107: the arithmetic reader records it; one copy |
+
+**Review 5 of the derived script (27 Nov), of review 4's fixes (`0de6369..e8ad0b5`).** The same two lenses found one
+finding about the script, one wording finding beside it, and ten about the checks; every one held. They were
+re-derived twice to the same bytes (`6bde507`, `e37aec19…`, 108 weakened copies, 16 pass controls). A bash harness
+over `mg_after`, with its helpers stubbed and no PHP, reads every wait path true after the fix. The paths: absent,
+answered then silent, silent then a thrown reading, silent throughout, and `--after-only`.
+
+| Finding | Fixed in |
+|---|---|
+| V1 — review 4 sent *answered earlier, silent at the end* to `unk` and reworded both MG-CA2 notes. But the `unk` lead still said *the live ledger … did not answer*, false on that path, and contradicted the MG-CA1 line it points to | partH: *the live ledger did not answer at the end of MG-CA1's wait, or the assistant-off list did not answer*; the comment in partMG to match |
+| V2 — *gave no reading after it* sat beside *its last reading: …*, which quotes a reading (wording) | partMG: *did not answer*, in MG-CA1 and both MG-CA2 notes |
+| C25 — a shell with positional arguments before its redirection (`sh -s -- "$x" <<'PHP'`, `sh /dev/stdin "$x" <<…`) read a PHP heredoc whose `//` lines every check skipped | keepcheck107: a shell judged by its program and what it is given; PHP lines skipped only when read by `cat`; two copies |
+| C26 — a `(` case pattern on the case's own line unbalanced the group stack: a false negative, and a ParseError inside `$( )` | keepcheck107: the header ends at `in`; an open group at a return is a ParseError; one copy, one pass control |
+| C27 — an unquoted `<<PHP` expands `$( )` in a skipped comment line, and `?>` ends a PHP comment | keepcheck107: skipped only under a quoted delimiter, never on a line holding `?>`; two copies |
+| C28 — `sh -ec '. "$1"'`, `bash -euc` and `bash -c --` hid sourcing from the `-c` string rule | keepcheck107: clustered options and `--`; two copies |
+| C29 — `$'source'`, `$"source"`, `$'\x2e'`, a leading `2>/dev/null` and `time -p` hid the command word | keepcheck107: read unquoted, redirections and `time -p` passed over; four copies |
+| C30 — `command exec >f` passed the exec rule | keepcheck107: exec anywhere in the prefix chain; one copy |
+| C31 — a closer's pending decision carried into a function's body (`f() { echo … 2>f; }`), a false positive | keepcheck107: a body opener clears it; pass controls |
+| C32 — `} >&2` was code, against the documented rule | keepcheck107: standard error alone after a group stays display; a pass control |
+| C33 — the shell patterns matched argument and quoted text (`\| grep -c sh`, `sed "s/-/ dash /"`, `grep bash < f`) | keepcheck107: both patterns removed; shells judged by program only; pass controls |
+| C34 — `exec 3>&1` and `exec 3>&-`, arrays beginning `.` or holding `source`, and `command -v source` were refused | keepcheck107: descriptors read one by one; array contents no commands; `command -v` a query; pass controls |
