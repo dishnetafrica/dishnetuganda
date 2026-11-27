@@ -150,7 +150,17 @@ if fw != git(repo, "show", "HEAD:scripts/sales-followup.sh").decode():
     raise SystemExit("scripts/sales-followup.sh is not the committed one — it stays as it is")
 bash_n(fw, "scripts/sales-followup.sh")
 
+# ── the values measured on the release commit (partB's MEASURED; root docs/76 §T.2, §T.12 step 2, §T.15): the committed
+#    script is written only once each is "measured". An interim build — for the rehearsal, which measures some of them —
+#    asks for itself with DERIVE_ALLOW_EXPECTED=1, and says on its last line that it is interim ──
+pending = sorted(k for k, (_v, st, _why) in ctx.get("measured", {}).items() if st != "measured")
+if pending and os.environ.get("DERIVE_ALLOW_EXPECTED") != "1":
+    raise SystemExit("MEASURED: still expected, not measured on the release commit: " + ", ".join(pending)
+                     + " — nothing written (DERIVE_ALLOW_EXPECTED=1 writes an interim build, never the one handed over)")
 write_out(doc.t)
+if pending:
+    print("INTERIM BUILD (DERIVE_ALLOW_EXPECTED=1): still expected, not measured: " + ", ".join(pending)
+          + " — not the script handed over")
 print(f"wrote {out}: {doc.t.count(chr(10))} lines; added {ctx['n_added']}, changed {ctx['n_changed']}, kept {ctx['n_kept']}; "
       f"source sha256 {src_sha[:16]}…, result sha256 {hashlib.sha256(doc.t.encode()).hexdigest()}")
 print("parts: " + ", ".join(f"{n} {e}" for n, e in parts_log) + f"; total {len(doc.log)}")
