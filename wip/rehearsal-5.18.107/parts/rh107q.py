@@ -20,6 +20,8 @@
 #   log092 LOG            migration.log as MG-CA2 reads it (S:8455–8458), per LINE: ok= partial= warning= (092's) w071=
 #                         mk=<1 when line 1 is the runner's trim marker> mkt=<its stamp, read as UTC, epoch|-> size= okoff=<the
 #                         byte offset of 092's first OK line|-> owner=<uid> lines=
+#   sched DB              budget=<master_budget_seconds in the store's kyc_config row, or absent> entries=<master_schedule's
+#                         entries, or absent|unreadable> — what master reads (MS_PHP's reading, S:8212)
 #   bookdig DB            the book's logical digest — every schema object's text, then every table's rows in rowid order —
 #                         16 hex: unchanged across a run proves the run wrote nothing to the book
 import calendar
@@ -125,6 +127,29 @@ def log092(path):
              os.stat(path).st_uid, len([l for l in lines if l != ''])))
 
 
+def sched(db):
+    c = ro(db)
+    b = 'absent'
+    if has(c, 'kyc_config'):
+        r = c.execute('SELECT data FROM kyc_config WHERE id = 0').fetchone()
+        try:
+            d = json.loads(r[0]) if r else None
+        except ValueError:
+            d = None
+        if isinstance(d, dict) and 'master_budget_seconds' in d:
+            b = str(d['master_budget_seconds'])
+    e = 'absent'
+    if has(c, 'master_schedule'):
+        r = c.execute('SELECT data FROM master_schedule WHERE id = 0').fetchone()
+        if r:
+            try:
+                d = json.loads(r[0])
+                e = str(len(d)) if isinstance(d, dict) else 'unreadable'
+            except ValueError:
+                e = 'unreadable'
+    print('budget=%s entries=%s' % (b, e))
+
+
 def bookdig(db):
     c = ro(db)
     h = hashlib.sha256()
@@ -150,6 +175,8 @@ def main(argv):
             ledger(argv[2], cmd == 'ledgerx'); return 0
         if cmd == 'log092' and len(argv) == 3:
             log092(argv[2]); return 0
+        if cmd == 'sched' and len(argv) == 3:
+            sched(argv[2]); return 0
         if cmd == 'bookdig' and len(argv) == 3:
             bookdig(argv[2]); return 0
     except Exception as e:   # a reader that could not read says so, and never guesses
