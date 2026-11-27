@@ -192,7 +192,7 @@ for f107 in run106 run106c run_line106c fresh106 tidy106 installed106 left106 no
             setcfg106 setrc106 sget106 q106 kv106 cond106 dpre106 dstdrop106 cleanup106 expect106 onall106 quiet106 went106 last106 \
             rc106 sv106 sweep106 nr106 tst106 lock106 unlock106 refuse106 backups106 states106 keyf106 keysum106 \
             run104 fresh104 weak104 live104 sf104 sf104c sfrc104 clk_set104 clk_to104 fnow104 kat104 kday104 kdow104 dsnap104 drest104 \
-            kv104 q104 master104 sched104 ledger104 owner104 sv104 install_commit \
+            kv104 q104 master104 sched104 ledger104 owner104 sv104 install_commit idle104 base_log onst104 dk104 pubget v1read102 \
             check has okline noteline failline fails printed live inst_ver data94 kept_state evo_calls vt_host qj n103 \
             run105 run105c fresh105 tidy105 weak105 anc105 aft105 rbx105 onall105 on105 lk105 lkmap105 counts105 digest105 q105 kv105 \
             ref105 jf105 sv105; do
