@@ -568,6 +568,11 @@ def apply(doc, ctx):
         '  echo "                    (NS-G1 refuses otherwise; this rollback wrote nothing, so a switch you turned off before it"\n'
         '  echo "                    stays off until you turn it on). Then --redeploy, its own command, alone:"',
         why="H11: deploy again")
+    doc.sub('  echo "                    The report, read-only on a copy of the book (P1; its wrapper pinned to $BASELINE_COMMIT, whose"\n'
+            '  echo "                    report and inputs $EXPECTED_VERSION keeps byte for byte), its own command, alone:"',
+            '  echo "                    The report, read-only on a copy of the book (P1; its wrapper pinned to 7835906, 5.18.105\'s"\n'
+            '  echo "                    release commit, whose report and seven inputs $EXPECTED_VERSION keeps byte for byte), its own"\n'
+            '  echo "                    command, alone:"', why="H11: the report wrapper's literal pin (root docs/76 §T.2)")
     doc.sub("The owner's steps (root docs/75 §F) wait for a PASSED --after-only.", "The owner's steps (root docs/76 §K) wait for a PASSED --after-only.",
             why="H11: NOT YET")
     doc.sub("which asks G3's question again and nothing\n# of F3's,", "which asks G3's question again and nothing\n# of ME-CA1's,",

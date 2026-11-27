@@ -53,6 +53,7 @@ def apply(doc, ctx):
     doc.sub('    [ "$s2" = "off" ] || echo "      cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"   # §K\'s switch-off: printed, never run (RB107)\n'
             '    echo "      cd $REPO && bash $QF_WRAPPER --check burst-drain"   # §K\'s drain reading: printed, never run (RB107)\n',
             '    [ "$s2" = "off" ] || echo "      $BD_OFF_CMD"   # §K\'s switch-off: printed, never run (RB107)\n'
+            '    echo "  the drain reading, its own command, alone, again until (a) and (b) both read 0 twice:"\n'
             '    echo "      $BD_DRAIN_CMD"   # §K\'s drain reading: printed, never run (RB107)\n', why="DV: rb_pre107's switch-off and drain")
     doc.sub('    if [ -n "$DB_OWNER" ]; then\n      note "$k $( [ "$q" = "on" ] && echo "READS ON" || echo "COULD NOT BE READ") (NS-G1\'S RULE, ON LK-RB0):',
             '    if owner_cmds; then\n      note "$k $( [ "$q" = "on" ] && echo "READS ON" || echo "COULD NOT BE READ") (NS-G1\'S RULE, ON LK-RB0):',
@@ -84,8 +85,9 @@ def apply(doc, ctx):
     # the summary's rollback paragraph
     doc.sub('  echo "      cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"\n',
             '  echo "      $BD_OFF_CMD"\n', why="DV: the summary's switch-off")
-    doc.sub('  echo "      cd $REPO && bash $QF_WRAPPER --check burst-drain"\n',
-            '  echo "      $BD_DRAIN_CMD"\n', why="DV: the summary's drain reading")
+    doc.sub('  echo "      $BD_OFF_CMD"\n  echo\n  echo "      cd $REPO && bash $QF_WRAPPER --check burst-drain"\n',
+            '  echo "      $BD_OFF_CMD"\n  echo "  then the drain reading, its own command, alone:"\n  echo "      $BD_DRAIN_CMD"\n',
+            why="DV: the summary's drain reading, a line of text after the switch-off")
 
     # ── the result: no command of these left as literal text, owner_set_cmd gone, each variable assigned once ──
     import re
