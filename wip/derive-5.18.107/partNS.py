@@ -183,3 +183,30 @@ def apply(doc, ctx):
         doc.mustnot(s, why="CS-G1 and CS-B1 retired")
     doc.must('ns_check NS-G1 "$LK_G1"', 1)
     doc.must('ns_check NS-B1 "$o"', 1)
+
+    # §T.14 (review of the derived script): the lk mode read the live files through the INSTALLED PluginConfig ($live)
+    # and then ran the pin's QuoteInPlay::on and ConnectionQuote::on, which reach StaffJobsGate and TenantProfile::current,
+    # and TenantProfile requires the PIN's ConfigVault.php: a ConfigVault already declared from the installed tree, so PHP
+    # stops with an uncatchable compile error once K or Q reads on, and the whole lk reading prints nothing. One tree, as
+    # RBSW_PHP already reads them: the pin's PluginConfig over the live files — byte for byte bf29cbd's, with everything
+    # it loads, asserted here, so the reading is the one the installed reader gives before and after the copy.
+    for f in ("lib/PluginConfig.php", "lib/ConfigVault.php", "lib/SecureFile.php", "lib/StoreInterface.php",
+              "lib/JsonStore.php", "lib/SqliteStore.php"):
+        if git(repo, "rev-parse", f"{pin}:{plugin}/{f}") != git(repo, "rev-parse", f"{ctx['base_full']}:{plugin}/{f}"):
+            raise SystemExit(f"PART NS: {f} differs between bf29cbd and the pin — the pin's PluginConfig would not read as the installed one")
+    pc = git(repo, "show", f"{pin}:{plugin}/lib/PluginConfig.php").decode()
+    req = sorted(set(re.findall(r"require_once __DIR__ \. '/([A-Za-z]+\.php)'", pc)))
+    if req != ["ConfigVault.php", "JsonStore.php", "SqliteStore.php", "StoreInterface.php"]:
+        raise SystemExit(f"PART NS: the pin's PluginConfig requires {req}, not the four this check holds equal")
+    if "require_once __DIR__ . '/SecureFile.php';" not in git(repo, "show", f"{pin}:{plugin}/lib/ConfigVault.php").decode():
+        raise SystemExit("PART NS: the pin's ConfigVault no longer requires SecureFile as this check holds")
+    doc.sub("        require_once $live . '/lib/PluginConfig.php';\n        $cfg = PluginConfig::read($live, $pdd);\n",
+            "        // 5.18.107 (root docs/76 §T.14): the pin's PluginConfig over the live files, as RBSW_PHP reads them — one tree, so\n"
+            "        // that the pin's readers below (QuoteInPlay::on and ConnectionQuote::on reach TenantProfile, which requires\n"
+            "        // ConfigVault beside itself) never meet a ConfigVault declared from the installed tree; bf29cbd's byte for byte\n"
+            "        require_once $root . '/lib/PluginConfig.php';\n        $cfg = PluginConfig::read($live, $pdd);\n",
+            why="lk: one tree (the pin's PluginConfig)")
+    php = doc.t[doc.t.index('QF_PHP="$(cat <<\'PHP\'\n'):]
+    php = php[:php.index("\nPHP\n")]
+    if re.search(r"require(_once)?\s*\(?\s*\$live\b", php):
+        raise SystemExit("PART NS: QF_PHP still requires code from the installed tree ($live)")

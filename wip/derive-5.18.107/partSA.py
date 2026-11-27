@@ -91,10 +91,11 @@ SA_BLOCK = r"""# ── 5.18.107: stage A's notes (SA; root docs/76 §T.5) ─�
 SA_TXT_V9="__V9__"; BD_A=""
 # sa_bd SUB [ids] — the pin's --check burst-drain on SUB's copy (qf_tool): "bd=read a=N apart=N b=N control=N", or
 # "bd=unread(<why>)" and status 1. Its lines are matched whole, each once. The id lines beneath them leave here only with
-# "ids": " convs=<the conversation ids the reading lists, sorted, comma-separated>" ("-" for none) — rb107's and V1's,
-# which hand them to staff (root docs/76 §T.7); stage A never asks for them.
+# "ids": " convs=<the conversation ids the reading lists, sorted, comma-separated>" and " events=<the event ids behind
+# them, each marked event and each event it waits for, the same way>" ("-" for none) — rb_pre107's two readings and
+# rb107's, which print them and hand them to staff (root docs/76 §T.7 step 2); stage A never asks for them.
 sa_bd() {
-  local o rc a ap b c v cv
+  local o rc a ap b c v cv ev
   o="$(qf_tool "$1" --check burst-drain)"; rc=$?
   [ "$rc" -eq 0 ] || { printf 'bd=unread(exit-%s)' "$rc"; return 1; }
   if grep -q '^burst-drain: INDETERMINATE — the events could not be read' <<<"$o"; then printf 'bd=unread(events)'; return 1; fi
@@ -107,6 +108,8 @@ sa_bd() {
   [ "${2:-}" = "ids" ] || return 0
   cv="$(sed -n 's/^  conv \([0-9][0-9]*\): .*/\1/p' <<<"$o" | sort -un | paste -sd, -)"
   printf ' convs=%s' "${cv:--}"
+  ev="$(sed -n 's/^  conv [0-9][0-9]*: #\([0-9][0-9]*\)\( waits for #\([0-9][0-9]*\)\)\{0,1\}$/\1 \3/p' <<<"$o" | tr ' ' '\n' | grep -v '^$' | sort -un | paste -sd, -)"
+  printf ' events=%s' "${ev:--}"
 }
 # sa_stage SUB — stage A (a deploy and --check), on QF-G1's copy (SUB) through the pin's code: SA's notes; BD_A the drain's
 # counts (or its unread reason) for the state file. Never stops.
@@ -144,8 +147,8 @@ sa_stage() {
     BD_A="$bd"; a="$(kv "$bd" a)"; ap="$(kv "$bd" apart)"; b="$(kv "$bd" b)"; c="$(kv "$bd" control)"
     if [ "$c" = "0" ]; then note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b — INDETERMINATE: no typed message in the last day, so this reading cannot tell nothing waiting from a read that saw nothing"
     elif [ "$a" = "0" ] && [ "$b" = "0" ]; then note "SA burst marks still waiting (the pin's --check burst-drain on the copy): none — (a) 0, counted apart $ap, (b) 0, the control $c typed message(s) in the last day$( [ -n "$first" ] && echo " — as a first deploy expects: only $EXPECTED_VERSION writes the mark" || echo " — nothing an earlier $EXPECTED_VERSION left")"
-    else note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b, the control $c typed message(s) in the last day — $( [ -n "$first" ] && echo "UNEXPECTED ON A FIRST DEPLOY (only $EXPECTED_VERSION writes the mark)" || echo "what an earlier $EXPECTED_VERSION left")$( [ "$MODE" = "deploy" ] && echo "; kept in the state file for a rollback to say (V1)"). Counts only: the conversation ids are not logged"; fi
-  else BD_A="$bd"; note "SA burst marks still waiting could not be read on the copy (${bd#bd=}) — NOT ESTABLISHED$( [ "$MODE" = "deploy" ] && echo "; a rollback says so (V1)")"; fi
+    else note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b, the control $c typed message(s) in the last day — $( [ -n "$first" ] && echo "UNEXPECTED ON A FIRST DEPLOY (only $EXPECTED_VERSION writes the mark)" || echo "what an earlier $EXPECTED_VERSION left")$( [ "$MODE" = "deploy" ] && [ -z "$CHECK_ONLY" ] && echo "; kept in the state file for a rollback to say (V1)"). Counts only: the conversation ids are not logged"; fi
+  else BD_A="$bd"; note "SA burst marks still waiting could not be read on the copy (${bd#bd=}) — NOT ESTABLISHED$( [ "$MODE" = "deploy" ] && [ -z "$CHECK_ONLY" ] && echo "; a rollback says so (V1)")"; fi
   return 0
 }
 """

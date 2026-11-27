@@ -409,8 +409,33 @@ ACT_SAVE = re.compile(r"(?:saveOverrides|writeKycFile)\s*\([^;]*ai_burst_merge_e
 DRAIN_OK = re.compile(r"qf_tool \"\$[A-Za-z0-9_]+(?:/ss)?\" --check burst-drain\b")
 
 
+def _func_lines(v, name):
+    """the line numbers of a top-level function's body: from its 'name() {' line to the next line that is '}'"""
+    start = [n for n, raw, _ in v.lines if raw.startswith(f"{name}() {{")]
+    if len(start) != 1:
+        return set()
+    end = next((n for n, raw, _ in v.lines if n > start[0] and raw == "}"), None)
+    return set(range(start[0], (end or start[0]) + 1))
+
+
+SHA_LINE = re.compile(r"^[0-9a-f]{64}  tools/(?:sales_followup|set_config)\.php$")
+QF_DEF = 'QF_TOOL="tools/sales_followup.php"; QF_REPORT="tools/sales_followup_report.php"; QF_WRAPPER="scripts/sales-followup.sh"'
+
+
 def k1(v):
     bad = []
+    # the switch tool is reached only through qf_tool: $QF_TOOL in code once, in qf_tool's body; its names in code only in
+    # the sha256 lists, EXPECTED_CHANGED, their own definition and the put-back's tools reading (§T.14: closed, not shaped)
+    body = _func_lines(v, "qf_tool")
+    qt = [n for n, raw, code in v.code_lines() for _ in re.finditer(r"\$\{?QF_TOOL\b", code)]
+    if len(qt) != 1 or qt[0] not in body:
+        bad.append(("K1", f"$QF_TOOL in code {len(qt)} time(s), not once inside qf_tool's body (lines {qt[:4]})"))
+    for n, raw, code in v.code_lines():
+        for m in re.finditer(r"sales_followup\.php|sales-followup\.sh", code):
+            if SHA_LINE.match(raw) or raw.startswith('EXPECTED_CHANGED="') or raw == QF_DEF \
+                    or code[max(0, m.start() - 14):m.start()] == "pb_tool tools/":
+                continue
+            bad.append(("K1", f"line {n}: the switch tool named in code outside its readers ({raw.strip()[:90]})"))
     for n, raw, code in v.code_lines():
         if re.search(r"\b(qf_clear_and_baseline|qf_byhand)\b", code):
             bad.append(("K1", f"line {n}: a clear call ({raw.strip()[:80]})"))
@@ -482,6 +507,9 @@ def k4(v):
 K4B_EQ = 'if [ "$sca" = "$scb" ]; then ok "$c every _schema_checks row unchanged $w'
 K4B_X = ("scx=\"$(printf '%s\\n' \"$scb\" \"${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:}\" | tr ',' '\\n' | "
          "grep -v '^-*$' | sort | paste -sd, -)\"")
+K4B_G1 = ('case "$MODE" in after) sed -n \'s/^MG_G1=//p\' "$STATE" 2>/dev/null | tail -n1 ;; rollback) case "${DBS_A:-}" in '
+          '*" ledger="*":$MIG104_LAST:"*) printf absent ;; *" ledger="*":$MIG107_LAST:"*) printf present ;; esac ;; '
+          '*) printf \'%s\' "${MG_G1:-}" ;; esac;')
 K4B_ONE = ("elif [ \"$(lk_mg_g1)\" = \"absent\" ] && [ \"$(printf '%s' \"$sca\" | tr ',' '\\n' | sort | paste -sd, -)\" = "
            "\"$scx\" ]; then ok \"$c every _schema_checks row unchanged $w but one added")
 
@@ -507,8 +535,13 @@ def k4b(v):
     if defs != ['"092_wa_no_ai.sql:5"']:
         bad.append(("K4b", f"MIG107_SC is not defined once as 092_wa_no_ai.sql:5 ({defs})"))
     g1 = re.findall(r"(?m)^lk_mg_g1\(\) \{ (.*) \}$", t)
-    if g1 != ['if [ "$MODE" = "after" ]; then sed -n \'s/^MG_G1=//p\' "$STATE" 2>/dev/null | tail -n1; else printf \'%s\' "${MG_G1:-}"; fi;']:
-        bad.append(("K4b", "lk_mg_g1 does not read MG-G1's verdict alone (this run's, or the state file's in --after-only)"))
+    if g1 != [K4B_G1]:
+        bad.append(("K4b", "lk_mg_g1 does not read MG-G1's verdict (this run's, the state file's in --after-only) or, in --rollback, "
+                           "the rollback's own stage-A ledger as R7 reads it"))
+    # LK-RB1 and R7 accept 092 applied across a rollback on one condition (§T.3 items 8 and 9): the same DBS_A pattern
+    if len(re.findall(r'(?m)^DBS_RB="\$\(db_state\)"; db_judge RB "\$\{DBS_A:-\}" "\$DBS_RB" "across the rollback" strict '
+                      r'"\$\(case "\$\{DBS_A:-\}" in \*" ledger="\*":\$MIG104_LAST:"\*\) echo either ;; \*\) echo same ;; esac\)"', t)) != 1:
+        bad.append(("K4b", "R7's rollback rule no longer reads 092 absent from DBS_A as lk_mg_g1 does"))
     return bad
 
 
@@ -553,6 +586,19 @@ def k5(v):
     if rest:
         bad.append(("K5", f"{len(rest)} writer(s) in the code besides the two exceptions — 5.18.107 writes no key: "
                           + "; ".join(f"line {n}: {w}" for n, _, w in rest[:4])))
+    # set_config.php named in code only where it is read, never where it could be run (§T.14: closed, not shaped): the
+    # sha256 lists, EXPECTED_CHANGED, a grep of the installed file, the put-back's tools reading, and Q-CA6's one run
+    q6n = {qca6[0][0]} if len(qca6) == 1 else set()
+    for n, raw, code in v.code_lines():
+        labels = [x.span() for x in re.finditer(r'\bRB_[A-Z]+="\$RB_[A-Z]+ [^"$]*"', code)]   # RB's failure labels, printed later
+        for m in re.finditer(r"set_config\.php", code):
+            if any(a < m.start() < b for a, b in labels):
+                continue
+            if SHA_LINE.match(raw) or raw.startswith('EXPECTED_CHANGED="') or n in q6n \
+                    or code[max(0, m.start() - 14):m.start()] == "pb_tool tools/" \
+                    or (code[max(0, m.start() - 13):m.start()] == '"$DEST/tools/' and re.search(r"\bgrep -[A-Za-z]+ ", code[:m.start()])):
+                continue
+            bad.append(("K5", f"line {n}: set_config.php named in code outside its readers and Q-CA6's run ({raw.strip()[:90]})"))
     # the named display variables
     for var in DISPLAY_VARS:
         asg = [(n, raw) for n, raw, _ in v.lines if not raw.lstrip().startswith(("#", "//"))
@@ -708,8 +754,9 @@ def run(doc, ctx):
             raise SystemExit(f"KEEP CHECK CONTROL ({what}): its anchor is found {doc.t.count(old)} times: {old[:100]!r}")
         got = keep_check(doc.t.replace(old, new))
         tags = sorted({a for a, _ in got})
-        if tags != [tag]:
-            raise SystemExit(f"KEEP CHECK CONTROL ({what}): refused for {tags or 'nothing'}, not for {tag} alone: {got[:3]}")
+        want = sorted(tag) if isinstance(tag, tuple) else [tag]
+        if tags != want:
+            raise SystemExit(f"KEEP CHECK CONTROL ({what}): refused for {tags or 'nothing'}, not for exactly {want}: {got[:3]}")
         n_ctl[0] += 1
 
     t = doc.t
@@ -721,11 +768,15 @@ def run(doc, ctx):
     kweak("  qf_keep_and_baseline\n", "  qf_clear_and_baseline\n  qf_keep_and_baseline\n", "K1", "the clear call re-inserted")
     kweak(RB0, RB0 + '  sub="$(qf_copy rbx "$P3B_PIN")" && qf_tool "$sub" status\n', "K1", "the switch tool run with another verb")
     kweak(RB0, RB0 + '  ( cd "$REPO" && bash "$QF_WRAPPER" show )\n', "K1", "the wrapper run")
-    kweak(RB0, RB0 + '  docker exec -u "$DB_OWNER" "$CONTAINER" php "$IN_CONTAINER/$QF_TOOL" set ai_burst_merge_enabled 0\n', "K1",
-          "set ai_burst_merge_enabled 0 outside display text, through a path no writer detector names")
-    kweak(RB0, RB0 + '  SC="$IN_CONTAINER/tools/set_config.php"; docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER" '
-                     'php "$SC" --key ai_burst_merge_enabled --value 0\n', "K1",
-          "--key ai_burst_merge_enabled to set_config outside display text, through a variable")
+    kweak(RB0, RB0 + '  for f in "$IN_CONTAINER"/tools/sales_f*.php; do docker exec -u "$DB_OWNER" "$CONTAINER" php "$f" set ai_burst_merge_enabled 0; done\n',
+          "K1", "set ai_burst_merge_enabled 0 outside display text, through a glob that names no tool (the act clause alone)")
+    kweak(RB0, RB0 + '  for f in "$IN_CONTAINER"/tools/set_c*.php; do docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER" '
+                     'php "$f" --key ai_burst_merge_enabled --value 0; done\n', "K1",
+          "--key ai_burst_merge_enabled to set_config outside display text, through a glob (the act clause alone)")
+    # §T.14 (review of the derived script): the switch tool reached other than through qf_tool
+    kweak(RB0, RB0 + '  docker exec -u "$DB_OWNER" "$CONTAINER" php "$IN_CONTAINER/$QF_TOOL" erase\n', "K1",
+          "the switch tool's erase through $QF_TOOL, outside qf_tool")
+    kweak(RB0, RB0 + '  T="$IN_CONTAINER/tools/sales_followup.php"\n', "K1", "the switch tool named in code outside its readers")
     kweak(RB0, RB0 + '  bash "$REPO/scripts/sales-followup.sh" --check burst-drain >/dev/null\n', "K1",
           "a live sales-followup.sh --check burst-drain outside display text")
     kweak(RB0, RB0 + '  o="$(qf_php rbx "$PDD_IN" burst-drain)"\n', "K1", "burst-drain handed to code other than qf_tool's check")
@@ -751,6 +802,8 @@ def run(doc, ctx):
                            "[ -n \"$sca\" ]"), "K4b", "any extra row accepted")
     kweak(ONE + "\n", "", "K4b", "the exact equality restored alone (fails on a first deploy)")
     kweak(ONE, ONE.replace('[ "$(lk_mg_g1)" = "absent" ] && ', ""), "K4b", "the one row accepted whatever MG-G1 read")
+    kweak('rollback) case "${DBS_A:-}" in *" ledger="*":$MIG104_LAST:"*) printf absent ;; *" ledger="*":$MIG107_LAST:"*) printf present ;; esac ;; ',
+          "", "K4b", "lk_mg_g1 in --rollback reading MG_G1, which no rollback sets")
     # K5: each detector form in code
     kweak(RB0, RB0 + "  printf '%s' \"<?php PluginConfig::saveOverrides(\\$d, ['followup_enabled' => '0']);\" | docker exec -i \"$CONTAINER\" php\n",
           "K5", "a saveOverrides in a printf piped into docker exec php")
@@ -762,10 +815,13 @@ def run(doc, ctx):
     if len(q6) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K5): Q-CA6's run found {len(q6)} times")
     kweak(q6[0], q6[0].replace('DN_DATA_DIR="$d"', 'DN_DATA_DIR="$PDD_IN"'), "K5", "Q-CA6's set_config run pointed at $PDD_IN")
-    kweak(RB0, RB0 + '  bash "$REPO/scripts/sales-followup.sh" off chase\n', "K5", "the switch tool's off, run live")
+    kweak(RB0, RB0 + '  bash "$REPO/scripts/sales-followup.sh" off chase\n', ("K1", "K5"),
+          "the switch tool's off, run live (K1: the tool named outside its readers; K5: a writer)")
+    kweak(RB0, RB0 + '  SC="$IN_CONTAINER/tools/set_config.php"; docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER" '
+                     'php "$SC" --key followup_enabled --value 0\n', "K5", "set_config run through a variable")
     # the tokenizer's own controls: a command substitution inside display text is code, and so is an echo piped into a shell
-    kweak(RB0, RB0 + '  note "RB107 $(bash "$REPO/scripts/sales-followup.sh" off chase)"\n', "K5",
-          "a writer inside a command substitution in display text")
+    kweak(RB0, RB0 + '  note "RB107 $(docker exec "$CONTAINER" php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0)"\n',
+          "K5", "a writer inside a command substitution in display text")
     kweak('  echo "      $K_ON_CMD"\n', '  echo "      $K_ON_CMD" | sh\n', "K5", "K_ON_CMD echoed into sh")
     # K5: the named display variables
     kq = '      case "$k" in quoted_no_prices_enabled) echo "      $K_OFF_CMD" ;; *) echo "      $Q_OFF_CMD" ;; esac'
@@ -795,7 +851,7 @@ def run(doc, ctx):
     if len(g2) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K6): QF-G2's copy found {len(g2)} times")
     kweak(g2[0], g2[0].replace('sub="$(qf_copy g2 "$P3B_PIN")"', 'sub="$PDD_IN"'), "K6", "the trial's copy replaced by the live data folder")
-    print(f"  keep check: K1–K6 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused for its own reason alone")
+    print(f"  keep check: K1–K6 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused for exactly its own check(s)")
 
     # the run's folder (DS3-fix1, carried): made in the main shell before any subshell reads it — weakened copies
     print("  folder check: " + folder_check(t))

@@ -643,6 +643,38 @@ def apply(doc, ctx):
                 "# 5.18.98 — after a PASSED deploy or --after-only whose G3",
                 OWNER + "# 5.18.98 — after a PASSED deploy or --after-only whose G3", keep_ends=False, why="H11: the owner's steps")
 
+    # ── H12: the FAILED summary's lead (root docs/76 §T.3 item 7; §T.14, review of the derived script) ──
+    # mg_after sets MG_SAY (na, mg or log, NA-CA1 first) and nothing printed it: the lead stands before the verdict chain, and
+    # the FAILED line keeps its words where MG_SAY is empty, and where it is set says that §M calls for the rollback — not
+    # an automatic one (TD5): §K's two commands, then the rollback command, each alone, at the end of the summary.
+    LEAD = (
+        '# 5.18.107 (root docs/76 §T.3 item 7): a failure of 092\'s after the copy leads the FAILED summary — NA-CA1 first (in\n'
+        '# capitals: no AI reply), then MG-CA1, then MG-CA2 alone (MG_SAY, set by mg_after); facts only, nothing run.\n'
+        'if [ "$FAIL" != "0" ] && [ -n "${MG_SAY:-}" ]; then\n'
+        '  echo\n'
+        '  case "$MG_SAY" in\n'
+        '    na) echo "  NO UGANDA CUSTOMER GETS AN AI REPLY: THE ASSISTANT-OFF LIST (wa_no_ai, MIGRATION 092) CANNOT BE READ THE WAY THE"\n'
+        '        echo "  WORKER READS IT (NA-CA1, OR MG-CA1\'S WAIT ABOVE: NO BOOT HAS APPLIED 092) — EACH ai.reply DIES AFTER ABOUT 36 MINUTES"\n'
+        '        echo "  OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;\n'
+        '    mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"\n'
+        '        echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"\n'
+        '        echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092\'s ledger row is repaired by hand."\n'
+        '        if [ "${NA_CA1_R:-}" = "ok" ]; then echo "  The assistant-off list reads the way the worker reads it (NA-CA1): AI replies go on."\n'
+        '        else echo "  NA-CA1 was not judged (no copy to read on): whether AI replies go on is NOT ESTABLISHED."; fi ;;\n'
+        '    log) echo "  migration.log holds a PARTIAL line for 092 (MG-CA2 above), but the ledger is whole — 092\'s checksum"\n'
+        '         echo "  ${MIG107_LAST_MD5:0:16}…, its _schema_checks row ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects (MG-CA1) — so 092 needs"\n'
+        '         echo "  no repair and MG-G1 would accept a redeploy. The assistant-off list reads the way the worker reads it (NA-CA1): AI"\n'
+        '         echo "  replies go on." ;;\n'
+        '  esac\n'
+        'fi\n')
+    doc.insert_before('if [ "$FAIL" = "0" ] && [ "$NOT_YET" = "0" ]; then echo; echo "  $EXPECTED_VERSION ($MODE): PASSED.', LEAD,
+                      why="H12: the FAILED summary's lead (MG_SAY)")
+    doc.sub('else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi\n',
+            'else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED$( if [ -n "${MG_SAY:-}" ]; then echo " — a failure after the copy means the rollback (root docs/76 §M), never an automatic one: root docs/76 §K\'s two commands first, then the rollback command, each alone, at the end of this summary. Send this LOG FILE back (never the cash sheet)."; else echo " — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi)"; fi\n',
+            why="H12: the FAILED line where MG_SAY is set")
+    if doc.t.count("MG_SAY") != 5 + 4:
+        raise SystemExit(f"partH: MG_SAY named {doc.t.count('MG_SAY')} times, not 9 (its declaration and mg_after's four, the lead's three, the verdict's one)")
+
     # ── the result ──
     t = doc.t
     for s in ("uj_judgeable", "uj_gate_a", "UJ_ON_GATE", "UJ_A", "UJ-CA", "UJ-ON", "root docs/75 §F", "--key followup_daily_cap", "raise followup_daily_cap",

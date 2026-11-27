@@ -488,7 +488,7 @@ mg_after() {
       nowait|"")
         if [ -n "$mk" ] && [ -n "$mkt" ] && [ -n "$au" ] && [ "$mkt" -ge "$au" ]; then
           note "MG-CA2 no OK line for 092 now — $( [ "$v" = "nowait" ] && echo "stage R's wait timed out (MG_CA2_SEEN=nowait), so its reading says nothing about the line;" || echo "the state file holds no MG_CA2_SEEN record;") the log's first line is a trim marker stamped (read as UTC) at or after 092's applied_at: 071_dpo_payments.sql's checksum WARNING is logged on every boot, and the runner halves the log within hours"
-        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( [ -n "$mk" ] && echo "the log's trim marker is stamped before 092's applied_at" || echo "the log's first line is no trim marker")"; fi ;;
+        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
       *) note "MG-CA2 NOT ESTABLISHED — THE STATE FILE'S MG_CA2_SEEN RECORD CANNOT BE READ (${v})" ;;
     esac
   fi
@@ -563,13 +563,15 @@ mg_after() {
             '  scb="$(qf_kv "$b0" sc)"; sca="$(qf_kv "$a0" sc)"\n'
             '  scx="$(printf \'%s\\n\' "$scb" "${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:}" | tr \',\' \'\\n\' | grep -v \'^-*$\' | sort | paste -sd, -)"\n'
             '  if [ "$sca" = "$scb" ]; then ok "$c every _schema_checks row unchanged $w ($(printf \'%s\' "$sca" | tr \',\' \'\\n\' | grep -c .) rows)"\n'
-            '  elif [ "$(lk_mg_g1)" = "absent" ] && [ "$(printf \'%s\' "$sca" | tr \',\' \'\\n\' | sort | paste -sd, -)" = "$scx" ]; then ok "$c every _schema_checks row unchanged $w but one added, exactly ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} — 092\'s self-check at the first boot (MG-G1 read 092 absent)"\n'
-            '  else bad "$c a _schema_checks row changed $w ($(printf \'%s\' "$scb" | tr \',\' \' \') → $(printf \'%s\' "$sca" | tr \',\' \' \'))$( [ "$(lk_mg_g1)" = "absent" ] && echo " — only ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} may be added, 092\'s self-check at the first boot" || echo " — MG-G1 read 092 $(lk_mg_g1): none may be added")"; fi\n',
+            '  elif [ "$(lk_mg_g1)" = "absent" ] && [ "$(printf \'%s\' "$sca" | tr \',\' \'\\n\' | sort | paste -sd, -)" = "$scx" ]; then ok "$c every _schema_checks row unchanged $w but one added, exactly ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} — 092\'s self-check at the first boot ($( [ "$MODE" = "rollback" ] && echo "this rollback\'s stage-A ledger" || echo "MG-G1") read 092 absent)"\n'
+            '  else bad "$c a _schema_checks row changed $w ($(printf \'%s\' "$scb" | tr \',\' \' \') → $(printf \'%s\' "$sca" | tr \',\' \' \'))$( [ "$(lk_mg_g1)" = "absent" ] && echo " — only ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} may be added, 092\'s self-check at the first boot" || echo " — $( [ "$MODE" = "rollback" ] && echo "this rollback\'s stage-A ledger" || echo "MG-G1") read 092 $( [ -n "$(lk_mg_g1)" ] && lk_mg_g1 || echo "as nothing known"): none may be added")"; fi\n',
             why="lk_rows_judge: exact or plus 092's row (K4b)")
     doc.sub("# lk_rows_judge CODE BEFORE AFTER WHEN — two lkrows readings: no table's rows fell (quote_followup_state over its rows NOT\n",
-            "# lk_mg_g1 — MG-G1's verdict as lk_rows_judge reads it: this run's (the deploy run; a rollback's stage A, where 092 is present\n"
-            "# whenever 5.18.107 was live), or the state file's MG_G1 line in --after-only; empty when neither is known\n"
-            "lk_mg_g1() { if [ \"$MODE\" = \"after\" ]; then sed -n 's/^MG_G1=//p' \"$STATE\" 2>/dev/null | tail -n1; else printf '%s' \"${MG_G1:-}\"; fi; }\n"
+            "# lk_mg_g1 — MG-G1's verdict as lk_rows_judge reads it: this run's (the deploy run), the state file's MG_G1 line in\n"
+            "# --after-only, or in --rollback, which runs no MG-G1, its own stage-A ledger (DBS_A) as R7 reads it — absent where the\n"
+            "# last row is 091 (MIG104_LAST), present where it is 092 (MIG107_LAST); empty when none is known (root docs/76 §T.3\n"
+            "# items 8 and 9: LK-RB1 and R7 accept 092 applied across a rollback on the same condition)\n"
+            "lk_mg_g1() { case \"$MODE\" in after) sed -n 's/^MG_G1=//p' \"$STATE\" 2>/dev/null | tail -n1 ;; rollback) case \"${DBS_A:-}\" in *\" ledger=\"*\":$MIG104_LAST:\"*) printf absent ;; *\" ledger=\"*\":$MIG107_LAST:\"*) printf present ;; esac ;; *) printf '%s' \"${MG_G1:-}\" ;; esac; }\n"
             "# lk_rows_judge CODE BEFORE AFTER WHEN — two lkrows readings: no table's rows fell (quote_followup_state over its rows NOT\n",
             why="lk_mg_g1")
     for s in ("adds no migration, and this run applies none", "(5.18.106 adds no migration: 091 last before and after",

@@ -82,7 +82,10 @@ rb_drain() {
   cih_drop "$sub"
   return "$rc"
 }
-rb_bd_say() { case "$1" in "bd=read "*) printf '(a) %s, (b) %s, control %s' "$(kv "$1" a)" "$(kv "$1" b)" "$(kv "$1" control)" ;; *) printf 'not read (%s)' "${1#bd=}" ;; esac; }   # rb_bd_say LINE — a drain reading's counts
+rb_bd_say() { case "$1" in "bd=read "*) printf '(a) %s, counted apart %s, (b) %s, control %s' "$(kv "$1" a)" "$(kv "$1" apart)" "$(kv "$1" b)" "$(kv "$1" control)" ;; *) printf 'not read (%s)' "${1#bd=}" ;; esac; }   # rb_bd_say LINE — a drain reading's counts
+# rb_bd_ids LINE — a reading taken with "ids": the conversation and event ids behind its counts (root docs/76 §T.7 step 2),
+# ids only, never a phone or a text; nothing for a reading taken without them or not read
+rb_bd_ids() { case "$1" in "bd=read "*" convs="*) printf '; the conversations %s, the events %s' "$(kv "$1" convs)" "$(kv "$1" events)" ;; esac; }
 rb_bd_zero() { case "$1" in "bd=read "*) [ "$(kv "$1" a)" = "0" ] && [ "$(kv "$1" b)" = "0" ] && [ "$(kv "$1" control)" != "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE — (a) 0 and (b) 0 with a control above 0: a reading §K counts
 # rb_bd_staff LINE — a drain reading after the rollback, for staff: the conversation ids in capitals, since 5.18.106
 # cannot drain; a control of 0 is INDETERMINATE; never "nothing to drain"
@@ -132,14 +135,14 @@ rb_pre107() {
   hdr "B. Before ROLLBACK: the ladder, the burst marks and the switches as they stand (LK-RB0, RB107; read-only — the rollback writes nothing and keeps every switch; root docs/76 §T.7)"
 __LK__
   # 1, 2 — the switch, as the worker reads it, and the pin's drain on a copy
-  s1="$(rb_switch)"; b1="$(rb_drain)"
-  note "RB107 ai_burst_merge_enabled as the worker reads it (the pin's BurstMerge::on over PluginConfig::read of the live files): $s1; the pin's --check burst-drain on a copy of the book: $(rb_bd_say "$b1") — read at $(utc_of "$(date -u +%s)")"
+  s1="$(rb_switch)"; b1="$(rb_drain ids)"
+  note "RB107 ai_burst_merge_enabled as the worker reads it (the pin's BurstMerge::on over PluginConfig::read of the live files): $s1; the pin's --check burst-drain on a copy of the book: $(rb_bd_say "$b1")$(rb_bd_ids "$b1") — read at $(utc_of "$(date -u +%s)")"
   # 3 — off: 125 s, then both again
   if [ "$s1" = "off" ]; then
     echo "  RB107 waiting 125 s, then reading the switch and the drain again (root docs/76 §K: the second reading at least 2 minutes after the switch-off)"
     sleep 125
-    s2="$(rb_switch)"; b2="$(rb_drain)"
-    note "RB107 again, 125 s later: ai_burst_merge_enabled $s2; the drain $(rb_bd_say "$b2") — read at $(utc_of "$(date -u +%s)")"
+    s2="$(rb_switch)"; b2="$(rb_drain ids)"
+    note "RB107 again, 125 s later: ai_burst_merge_enabled $s2; the drain $(rb_bd_say "$b2")$(rb_bd_ids "$b2") — read at $(utc_of "$(date -u +%s)")"
     [ "$s2" = "off" ] && rb_bd_zero "$b1" && rb_bd_zero "$b2" && held=1
   fi
   [ -n "$s2" ] || s2="$s1"; [ -n "$b2" ] || b2="$b1"
@@ -507,7 +510,7 @@ def apply(doc, ctx):
             "# drain once more (the conversation ids for staff). Read-only. When this run rolled nothing back (RB_NOTHING), LK-RB1\n"
             "# is a note — not judged, nothing to compare. Nothing was written.\nrb107\n", why="RB107's call")
     doc.line("note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it — the four follow-up jobs and lib/FollowUpService.php — and $( case \"${AS_RB1:-}\" in",
-             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, applied or removed no migration, and wrote no key (root docs/76 §T.7) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
+             "note \"RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, removed no migration and wrote no key (root docs/76 §T.7; where 092 was absent at this rollback's stage A, the first boot after the put-back applies it — $BASELINE_COMMIT's runner reads migrations/ by its glob — and R7 above judges exactly that) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy\"",
              why="RB's last note")
 
     # ── the summary: what it means, the rollback paragraph, the put-back paragraph; as_after_verdict and as_back_on go ──
@@ -634,7 +637,7 @@ def apply(doc, ctx):
             raise SystemExit(f"partR: {s!r} is left below the header")
     if body.count("followup_auto_send '0'") != 0 or "5.18.106's one write (followup_auto_send\n# '0'" not in body:
         raise SystemExit("partR: followup_auto_send '0' is named below the header other than in the RB block's history line")
-    for f in ("rb_pre107", "rb107", "rb_switch", "rb_drain", "rb_bd_say", "rb_bd_zero", "rb_bd_staff", "rb_kq", "owner_set_cmd",
+    for f in ("rb_pre107", "rb107", "rb_switch", "rb_drain", "rb_bd_say", "rb_bd_ids", "rb_bd_zero", "rb_bd_staff", "rb_kq", "owner_set_cmd",
               "rb_x_say", "pb_tool", "pb_word", "pb_ready", "pb_para"):
         doc.must(f + "() {", 1, why=f"{f} defined once")
     doc.must("$(pb_para pre)", 4); doc.must("$(pb_para deploy)", 1); doc.must("$(pb_para rb)", 1); doc.must("$(pb_para v1)", 1)
@@ -647,6 +650,11 @@ def apply(doc, ctx):
         raise SystemExit(f"partR: pb_ready is called {len(calls)} times, not 4 (two stops, the deploy that did not verify, the summary)")
     doc.must("    rb_pre107   #", 1); doc.must("rb107\n", 1); doc.must("then rb107   #", 1)
     doc.must("RB_DRAIN=\"$(rb_drain ids)\"", 1)
+    # §T.14 (review of the derived script): rb_pre107's two readings print (a), counted apart, (b), the control and the ids
+    doc.must('b1="$(rb_drain ids)"', 1); doc.must('b2="$(rb_drain ids)"', 1)
+    doc.must('$(rb_bd_say "$b1")$(rb_bd_ids "$b1")', 1); doc.must('$(rb_bd_say "$b2")$(rb_bd_ids "$b2")', 1)
+    if "applied or removed no migration" in doc.t:
+        raise SystemExit("partR: 'applied or removed no migration' is still said — false where 092 is applied after a rollback")
     left = sorted(set(re.findall(r"AS-RB[0-9]|RB106", doc.t)))
     stray = [f"{k + 1}: {l[:80]}" for k, l in enumerate(lines) if k >= head_end and re.search(r"AS-RB[0-9]|RB106", l)
              and not l.startswith("echo \"  names             ") ]

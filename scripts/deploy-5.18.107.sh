@@ -6451,7 +6451,10 @@ try {
             if (isset($h['p']) || isset($h['d'])) { if ($isAll) $held[] = $k; else $heldS++; }
             if (($h['k'] ?? '') !== ($h['s'] ?? '')) $differ[] = $k;
         }
-        require_once $live . '/lib/PluginConfig.php';
+        // 5.18.107 (root docs/76 §T.14): the pin's PluginConfig over the live files, as RBSW_PHP reads them — one tree, so
+        // that the pin's readers below (QuoteInPlay::on and ConnectionQuote::on reach TenantProfile, which requires
+        // ConfigVault beside itself) never meet a ConfigVault declared from the installed tree; bf29cbd's byte for byte
+        require_once $root . '/lib/PluginConfig.php';
         $cfg = PluginConfig::read($live, $pdd);
         $on = []; $sk = [];
         foreach (SalesFollowupLadder::steps() as $s) {
@@ -7592,9 +7595,11 @@ lk_ca1() {
 }
 # lk_rows_n LINE TABLE — one table's count in an lkrows reading (-1 absent, empty unread)
 lk_rows_n() { qf_kv "$1" rows | tr ',' '\n' | sed -n "s/^$2://p" | head -1; }
-# lk_mg_g1 — MG-G1's verdict as lk_rows_judge reads it: this run's (the deploy run; a rollback's stage A, where 092 is present
-# whenever 5.18.107 was live), or the state file's MG_G1 line in --after-only; empty when neither is known
-lk_mg_g1() { if [ "$MODE" = "after" ]; then sed -n 's/^MG_G1=//p' "$STATE" 2>/dev/null | tail -n1; else printf '%s' "${MG_G1:-}"; fi; }
+# lk_mg_g1 — MG-G1's verdict as lk_rows_judge reads it: this run's (the deploy run), the state file's MG_G1 line in
+# --after-only, or in --rollback, which runs no MG-G1, its own stage-A ledger (DBS_A) as R7 reads it — absent where the
+# last row is 091 (MIG104_LAST), present where it is 092 (MIG107_LAST); empty when none is known (root docs/76 §T.3
+# items 8 and 9: LK-RB1 and R7 accept 092 applied across a rollback on the same condition)
+lk_mg_g1() { case "$MODE" in after) sed -n 's/^MG_G1=//p' "$STATE" 2>/dev/null | tail -n1 ;; rollback) case "${DBS_A:-}" in *" ledger="*":$MIG104_LAST:"*) printf absent ;; *" ledger="*":$MIG107_LAST:"*) printf present ;; esac ;; *) printf '%s' "${MG_G1:-}" ;; esac; }
 # lk_rows_judge CODE BEFORE AFTER WHEN — two lkrows readings: no table's rows fell (quote_followup_state over its rows NOT
 # LIKE 'list_last:%'), each _schema_checks row unchanged and no entry of the four jobs gone from master_schedule.json — each
 # a FAIL; quote_followup_state's whole count, the four jobs' runs and the claims after BEFORE, a note (the steps that are
@@ -7615,8 +7620,8 @@ lk_rows_judge() {
   scb="$(qf_kv "$b0" sc)"; sca="$(qf_kv "$a0" sc)"
   scx="$(printf '%s\n' "$scb" "${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:}" | tr ',' '\n' | grep -v '^-*$' | sort | paste -sd, -)"
   if [ "$sca" = "$scb" ]; then ok "$c every _schema_checks row unchanged $w ($(printf '%s' "$sca" | tr ',' '\n' | grep -c .) rows)"
-  elif [ "$(lk_mg_g1)" = "absent" ] && [ "$(printf '%s' "$sca" | tr ',' '\n' | sort | paste -sd, -)" = "$scx" ]; then ok "$c every _schema_checks row unchanged $w but one added, exactly ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} — 092's self-check at the first boot (MG-G1 read 092 absent)"
-  else bad "$c a _schema_checks row changed $w ($(printf '%s' "$scb" | tr ',' ' ') → $(printf '%s' "$sca" | tr ',' ' '))$( [ "$(lk_mg_g1)" = "absent" ] && echo " — only ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} may be added, 092's self-check at the first boot" || echo " — MG-G1 read 092 $(lk_mg_g1): none may be added")"; fi
+  elif [ "$(lk_mg_g1)" = "absent" ] && [ "$(printf '%s' "$sca" | tr ',' '\n' | sort | paste -sd, -)" = "$scx" ]; then ok "$c every _schema_checks row unchanged $w but one added, exactly ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} — 092's self-check at the first boot ($( [ "$MODE" = "rollback" ] && echo "this rollback's stage-A ledger" || echo "MG-G1") read 092 absent)"
+  else bad "$c a _schema_checks row changed $w ($(printf '%s' "$scb" | tr ',' ' ') → $(printf '%s' "$sca" | tr ',' ' '))$( [ "$(lk_mg_g1)" = "absent" ] && echo " — only ${MIG107_SC%%:*}:${MIG107_SC##*:}/${MIG107_SC##*:} may be added, 092's self-check at the first boot" || echo " — $( [ "$MODE" = "rollback" ] && echo "this rollback's stage-A ledger" || echo "MG-G1") read 092 $( [ -n "$(lk_mg_g1)" ] && lk_mg_g1 || echo "as nothing known"): none may be added")"; fi
   jb="$(qf_kv "$b0" jobs | tr ',' '\n' | cut -d: -f1 | grep -v '^-$')"; ja="$(qf_kv "$a0" jobs | tr ',' '\n' | cut -d: -f1)"
   for t in $jb; do grep -qxF -- "$t" <<<"$ja" || j="$j $t"; done
   if [ -z "$j" ]; then ok "$c master_schedule.json keeps every entry of the four jobs it held before ($(printf '%s' "${jb:-none}" | paste -sd' ' -); sched=$(qf_kv "$a0" sched))"
@@ -8018,10 +8023,11 @@ lm_rb1() {
 SA_TXT_V9="fca936af7760"; BD_A=""
 # sa_bd SUB [ids] — the pin's --check burst-drain on SUB's copy (qf_tool): "bd=read a=N apart=N b=N control=N", or
 # "bd=unread(<why>)" and status 1. Its lines are matched whole, each once. The id lines beneath them leave here only with
-# "ids": " convs=<the conversation ids the reading lists, sorted, comma-separated>" ("-" for none) — rb107's and V1's,
-# which hand them to staff (root docs/76 §T.7); stage A never asks for them.
+# "ids": " convs=<the conversation ids the reading lists, sorted, comma-separated>" and " events=<the event ids behind
+# them, each marked event and each event it waits for, the same way>" ("-" for none) — rb_pre107's two readings and
+# rb107's, which print them and hand them to staff (root docs/76 §T.7 step 2); stage A never asks for them.
 sa_bd() {
-  local o rc a ap b c v cv
+  local o rc a ap b c v cv ev
   o="$(qf_tool "$1" --check burst-drain)"; rc=$?
   [ "$rc" -eq 0 ] || { printf 'bd=unread(exit-%s)' "$rc"; return 1; }
   if grep -q '^burst-drain: INDETERMINATE — the events could not be read' <<<"$o"; then printf 'bd=unread(events)'; return 1; fi
@@ -8034,6 +8040,8 @@ sa_bd() {
   [ "${2:-}" = "ids" ] || return 0
   cv="$(sed -n 's/^  conv \([0-9][0-9]*\): .*/\1/p' <<<"$o" | sort -un | paste -sd, -)"
   printf ' convs=%s' "${cv:--}"
+  ev="$(sed -n 's/^  conv [0-9][0-9]*: #\([0-9][0-9]*\)\( waits for #\([0-9][0-9]*\)\)\{0,1\}$/\1 \3/p' <<<"$o" | tr ' ' '\n' | grep -v '^$' | sort -un | paste -sd, -)"
+  printf ' events=%s' "${ev:--}"
 }
 # sa_stage SUB — stage A (a deploy and --check), on QF-G1's copy (SUB) through the pin's code: SA's notes; BD_A the drain's
 # counts (or its unread reason) for the state file. Never stops.
@@ -8071,8 +8079,8 @@ sa_stage() {
     BD_A="$bd"; a="$(kv "$bd" a)"; ap="$(kv "$bd" apart)"; b="$(kv "$bd" b)"; c="$(kv "$bd" control)"
     if [ "$c" = "0" ]; then note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b — INDETERMINATE: no typed message in the last day, so this reading cannot tell nothing waiting from a read that saw nothing"
     elif [ "$a" = "0" ] && [ "$b" = "0" ]; then note "SA burst marks still waiting (the pin's --check burst-drain on the copy): none — (a) 0, counted apart $ap, (b) 0, the control $c typed message(s) in the last day$( [ -n "$first" ] && echo " — as a first deploy expects: only $EXPECTED_VERSION writes the mark" || echo " — nothing an earlier $EXPECTED_VERSION left")"
-    else note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b, the control $c typed message(s) in the last day — $( [ -n "$first" ] && echo "UNEXPECTED ON A FIRST DEPLOY (only $EXPECTED_VERSION writes the mark)" || echo "what an earlier $EXPECTED_VERSION left")$( [ "$MODE" = "deploy" ] && echo "; kept in the state file for a rollback to say (V1)"). Counts only: the conversation ids are not logged"; fi
-  else BD_A="$bd"; note "SA burst marks still waiting could not be read on the copy (${bd#bd=}) — NOT ESTABLISHED$( [ "$MODE" = "deploy" ] && echo "; a rollback says so (V1)")"; fi
+    else note "SA burst marks still waiting (the pin's --check burst-drain on the copy): (a) $a, counted apart $ap, (b) $b, the control $c typed message(s) in the last day — $( [ -n "$first" ] && echo "UNEXPECTED ON A FIRST DEPLOY (only $EXPECTED_VERSION writes the mark)" || echo "what an earlier $EXPECTED_VERSION left")$( [ "$MODE" = "deploy" ] && [ -z "$CHECK_ONLY" ] && echo "; kept in the state file for a rollback to say (V1)"). Counts only: the conversation ids are not logged"; fi
+  else BD_A="$bd"; note "SA burst marks still waiting could not be read on the copy (${bd#bd=}) — NOT ESTABLISHED$( [ "$MODE" = "deploy" ] && [ -z "$CHECK_ONLY" ] && echo "; a rollback says so (V1)")"; fi
   return 0
 }
 # ── 5.18.107: master's own record after the copy (ME-CA1, ME-CA2; root docs/76 §T.6, §W.7) ─────────────────────────────
@@ -8455,7 +8463,7 @@ mg_after() {
       nowait|"")
         if [ -n "$mk" ] && [ -n "$mkt" ] && [ -n "$au" ] && [ "$mkt" -ge "$au" ]; then
           note "MG-CA2 no OK line for 092 now — $( [ "$v" = "nowait" ] && echo "stage R's wait timed out (MG_CA2_SEEN=nowait), so its reading says nothing about the line;" || echo "the state file holds no MG_CA2_SEEN record;") the log's first line is a trim marker stamped (read as UTC) at or after 092's applied_at: 071_dpo_payments.sql's checksum WARNING is logged on every boot, and the runner halves the log within hours"
-        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( [ -n "$mk" ] && echo "the log's trim marker is stamped before 092's applied_at" || echo "the log's first line is no trim marker")"; fi ;;
+        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
       *) note "MG-CA2 NOT ESTABLISHED — THE STATE FILE'S MG_CA2_SEEN RECORD CANNOT BE READ (${v})" ;;
     esac
   fi
@@ -8849,7 +8857,10 @@ rb_drain() {
   cih_drop "$sub"
   return "$rc"
 }
-rb_bd_say() { case "$1" in "bd=read "*) printf '(a) %s, (b) %s, control %s' "$(kv "$1" a)" "$(kv "$1" b)" "$(kv "$1" control)" ;; *) printf 'not read (%s)' "${1#bd=}" ;; esac; }   # rb_bd_say LINE — a drain reading's counts
+rb_bd_say() { case "$1" in "bd=read "*) printf '(a) %s, counted apart %s, (b) %s, control %s' "$(kv "$1" a)" "$(kv "$1" apart)" "$(kv "$1" b)" "$(kv "$1" control)" ;; *) printf 'not read (%s)' "${1#bd=}" ;; esac; }   # rb_bd_say LINE — a drain reading's counts
+# rb_bd_ids LINE — a reading taken with "ids": the conversation and event ids behind its counts (root docs/76 §T.7 step 2),
+# ids only, never a phone or a text; nothing for a reading taken without them or not read
+rb_bd_ids() { case "$1" in "bd=read "*" convs="*) printf '; the conversations %s, the events %s' "$(kv "$1" convs)" "$(kv "$1" events)" ;; esac; }
 rb_bd_zero() { case "$1" in "bd=read "*) [ "$(kv "$1" a)" = "0" ] && [ "$(kv "$1" b)" = "0" ] && [ "$(kv "$1" control)" != "0" ] ;; *) return 1 ;; esac; }   # rb_bd_zero LINE — (a) 0 and (b) 0 with a control above 0: a reading §K counts
 # rb_bd_staff LINE — a drain reading after the rollback, for staff: the conversation ids in capitals, since 5.18.106
 # cannot drain; a control of 0 is INDETERMINATE; never "nothing to drain"
@@ -8921,14 +8932,14 @@ rb_pre107() {
   if [ -n "$LK_RB0_SHOW" ]; then note "LK-RB0 the tool's show on a copy, before the rollback: $(lk_show_say "$LK_RB0_SHOW")"
   else note "LK-RB0 the tool's show could not be read on a copy before the rollback (${sub:-no copy of the code})"; fi
   # 1, 2 — the switch, as the worker reads it, and the pin's drain on a copy
-  s1="$(rb_switch)"; b1="$(rb_drain)"
-  note "RB107 ai_burst_merge_enabled as the worker reads it (the pin's BurstMerge::on over PluginConfig::read of the live files): $s1; the pin's --check burst-drain on a copy of the book: $(rb_bd_say "$b1") — read at $(utc_of "$(date -u +%s)")"
+  s1="$(rb_switch)"; b1="$(rb_drain ids)"
+  note "RB107 ai_burst_merge_enabled as the worker reads it (the pin's BurstMerge::on over PluginConfig::read of the live files): $s1; the pin's --check burst-drain on a copy of the book: $(rb_bd_say "$b1")$(rb_bd_ids "$b1") — read at $(utc_of "$(date -u +%s)")"
   # 3 — off: 125 s, then both again
   if [ "$s1" = "off" ]; then
     echo "  RB107 waiting 125 s, then reading the switch and the drain again (root docs/76 §K: the second reading at least 2 minutes after the switch-off)"
     sleep 125
-    s2="$(rb_switch)"; b2="$(rb_drain)"
-    note "RB107 again, 125 s later: ai_burst_merge_enabled $s2; the drain $(rb_bd_say "$b2") — read at $(utc_of "$(date -u +%s)")"
+    s2="$(rb_switch)"; b2="$(rb_drain ids)"
+    note "RB107 again, 125 s later: ai_burst_merge_enabled $s2; the drain $(rb_bd_say "$b2")$(rb_bd_ids "$b2") — read at $(utc_of "$(date -u +%s)")"
     [ "$s2" = "off" ] && rb_bd_zero "$b1" && rb_bd_zero "$b2" && held=1
   fi
   [ -n "$s2" ] || s2="$s1"; [ -n "$b2" ] || b2="$b1"
@@ -15832,7 +15843,7 @@ grep -qF 'var UG_PHOTOS' "$DEST/tabs/support/scheduling.php" 2>/dev/null && grep
 # drain once more (the conversation ids for staff). Read-only. When this run rolled nothing back (RB_NOTHING), LK-RB1
 # is a note — not judged, nothing to compare. Nothing was written.
 rb107
-note "RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, applied or removed no migration, and wrote no key (root docs/76 §T.7) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy"
+note "RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, removed no migration and wrote no key (root docs/76 §T.7; where 092 was absent at this rollback's stage A, the first boot after the put-back applies it — $BASELINE_COMMIT's runner reads migrations/ by its glob — and R7 above judges exactly that) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy"
 fi
 
 # 5.18.93: the salesperson pilot against the deploy's own record of it. A run compares the pilot only with what it read
@@ -16108,12 +16119,31 @@ echo "  checks            $PASS ok, $FAIL failed, $NOTE notes$( [ "$NOT_YET" = "
 # 5.18.106 (root docs/75 §L.5, DL3): three states, FAIL first — PASSED; NOT YET (ME-CA1's since 5.18.107, root docs/76
 # §T.6; --after-only only: PASSED and
 # the owner's steps wait for a later --after-only, its command alone on its line with its log; exit status 3); FAILED.
+# 5.18.107 (root docs/76 §T.3 item 7): a failure of 092's after the copy leads the FAILED summary — NA-CA1 first (in
+# capitals: no AI reply), then MG-CA1, then MG-CA2 alone (MG_SAY, set by mg_after); facts only, nothing run.
+if [ "$FAIL" != "0" ] && [ -n "${MG_SAY:-}" ]; then
+  echo
+  case "$MG_SAY" in
+    na) echo "  NO UGANDA CUSTOMER GETS AN AI REPLY: THE ASSISTANT-OFF LIST (wa_no_ai, MIGRATION 092) CANNOT BE READ THE WAY THE"
+        echo "  WORKER READS IT (NA-CA1, OR MG-CA1'S WAIT ABOVE: NO BOOT HAS APPLIED 092) — EACH ai.reply DIES AFTER ABOUT 36 MINUTES"
+        echo "  OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
+    mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"
+        echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"
+        echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092's ledger row is repaired by hand."
+        if [ "${NA_CA1_R:-}" = "ok" ]; then echo "  The assistant-off list reads the way the worker reads it (NA-CA1): AI replies go on."
+        else echo "  NA-CA1 was not judged (no copy to read on): whether AI replies go on is NOT ESTABLISHED."; fi ;;
+    log) echo "  migration.log holds a PARTIAL line for 092 (MG-CA2 above), but the ledger is whole — 092's checksum"
+         echo "  ${MIG107_LAST_MD5:0:16}…, its _schema_checks row ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects (MG-CA1) — so 092 needs"
+         echo "  no repair and MG-G1 would accept a redeploy. The assistant-off list reads the way the worker reads it (NA-CA1): AI"
+         echo "  replies go on." ;;
+  esac
+fi
 if [ "$FAIL" = "0" ] && [ "$NOT_YET" = "0" ]; then echo; echo "  $EXPECTED_VERSION ($MODE): PASSED. Send this LOG FILE back (not a copy of the terminal, and never the cash sheet)."
 elif [ "$FAIL" = "0" ]; then
   echo; echo "  $EXPECTED_VERSION (after-only): NOT YET — ${ME_NY_SAY:-ME-CA1 above}; run it again after ${ME_NY_AT:-the next master cycle}"
   echo "  Send this LOG FILE back (not a copy of the terminal, and never the cash sheet). The owner's steps (root docs/76 §K) wait for a PASSED --after-only. Then --after-only again, its own command, alone, with its own log:"
   echo "      $AFTER_CMD"
-else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi
+else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED$( if [ -n "${MG_SAY:-}" ]; then echo " — a failure after the copy means the rollback (root docs/76 §M), never an automatic one: root docs/76 §K's two commands first, then the rollback command, each alone, at the end of this summary. Send this LOG FILE back (never the cash sheet)."; else echo " — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi)"; fi
 # 5.18.107 (root docs/76 §K, §T.9): after a PASSED --after-only — no FAIL and no NOT YET — the owner's own steps, each
 # its own command on its own line with its own log, printed and never run by this script, in §K's order: 0 X and O7,
 # nothing to switch; 1 K — K_ON_CMD, set_config as the book's owner on the live data folder, its output cut where the
