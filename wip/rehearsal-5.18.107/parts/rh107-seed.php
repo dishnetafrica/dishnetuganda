@@ -39,12 +39,14 @@
 //                                          the whole book kept and put back through SQLite's backup (fixture) — the undo of every
 //                                          ledger and table plant that cannot be reversed in place (a rename rewrites the SQL text
 //                                          SQLite stores, and a wa_no_ai row is never deleted)
-//   ledger092     {"what":"rename"|"checksum"|"sentinel","keep","tag"[,"phone"]}  /  ledger092_undo {"what","keep","tag"}
+//   ledger092     {"what":"rename"|"checksum"|"sentinel"|"unledgered"|"partial","keep","tag"[,"phone"]}  /  ledger092_undo {"what","keep","tag"}
 //   ledger071     {"keep","tag"}  /  ledger071_undo {"keep","tag"}
 //                                          fixtures: 092's table renamed (the book kept first); 092's or 071's ledger checksum
 //                                          rewritten to another md5 (the original kept); NA-CA1's first sentinel — the script's
 //                                          own constant, passed in, 2560…: no number anyone can hold — inserted active (the book
-//                                          kept first)
+//                                          kept first); 092's five objects made by its own statements with no ledger row and no
+//                                          _schema_checks row (the pairing's ground); 092 recorded with its _schema_checks row
+//                                          taken out (a partial 092) — each with the book kept first
 //   log_keep      {"keep","tag"}  /  log_back {"keep","tag"}           <data>/migration.log kept, and put back byte for byte
 //   log_add       {"keep","tag","line":"ok092"|"warning092"|"partial092"|"warning071"}
 //   log_drop      {"keep","tag","match":"ok092"|"warning092"|"partial092"|"any092"}
@@ -141,7 +143,7 @@ function rh107_bad(array $o, string $range): string
         case 'ledger092':
         case 'ledger092_undo':
             if (!rh107_tag($o)) return 'a keep folder and a tag are needed';
-            if (!in_array($o['what'] ?? null, ['rename', 'checksum', 'sentinel'], true)) return 'what is rename, checksum or sentinel';
+            if (!in_array($o['what'] ?? null, ['rename', 'checksum', 'sentinel', 'unledgered', 'partial'], true)) return 'what is rename, checksum, sentinel, unledgered or partial';
             if ($op === 'ledger092' && $o['what'] === 'sentinel' && !(is_string($o['phone'] ?? null) && preg_match('/^2560[0-9]{8}$/', $o['phone']))) {
                 return 'the sentinel is a number nobody can hold: 256, then 0, then eight digits (the script\'s NA_SENTINEL_1)';
             }
@@ -480,7 +482,7 @@ try {
             if ($op === 'budget_back') rh107_unkeep($keep, $tag);
             $r += ['what' => "master_budget_seconds in the store's kyc_config row through its save()", 'budget' => $want === null ? 'absent' : (string)$want, 'file' => 'unchanged'];
         } elseif ($op === 'book_keep' || $op === 'book_back'
-                  || (($op === 'ledger092' || $op === 'ledger092_undo') && in_array($o['what'], ['rename', 'sentinel'], true))) {
+                  || (($op === 'ledger092' || $op === 'ledger092_undo') && in_array($o['what'], ['rename', 'sentinel', 'unledgered', 'partial'], true))) {
             $kdb = $keep . '/' . $tag . '.db';
             if ($op === 'book_keep' || $op === 'ledger092') {
                 if (file_exists($kdb) || file_exists($keep . '/' . $tag . '.meta')) throw new RuntimeException('book_keep: that tag is kept already');
@@ -494,12 +496,31 @@ try {
                 rh107_put0600($keep . '/' . $tag . '.meta', (string)json_encode(['kind' => 'book', 'dig' => $dig]));
                 $r += ['fixture' => 1, 'what' => 'the book kept (SQLite backup)', 'dig' => $dig];
             }
-            if ($op === 'ledger092') {
+            if ($op === 'ledger092' && $o['what'] === 'unledgered') {
+                // the pairing's ground (§T.11): 092's objects made by its own statements (the code root's file, split by the
+                // runner's own splitter) with no ledger row — the self-check INSERT left out, so no _schema_checks row either
+                if (rh107_ledger($pdo, RH107_F092) !== [] || rh107_has($pdo, 'wa_no_ai')) throw new RuntimeException('ledger092: 092 or its table is there already');
+                $sql = @file_get_contents($root . '/migrations/' . RH107_F092);
+                if (!is_string($sql) || $sql === '') throw new RuntimeException('ledger092: the code root carries no 092');
+                $ran = 0;
+                foreach (MigrationRunner::splitStatements($sql) as $st) {
+                    if (preg_match('/^\s*INSERT\b/i', $st)) continue;
+                    $pdo->exec($st); $ran++;
+                }
+                $objs = (int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('wa_no_ai','idx_wna_active','wna_never_deleted','wna_identity_fixed','wna_lift_once')")->fetchColumn();
+                if (rh107_ledger($pdo, RH107_F092) !== [] || $objs !== 5) throw new RuntimeException('ledger092: not five objects with no ledger row');
+                $r = ['op' => $op, 'fixture' => 1, 'what' => "092's five objects with no ledger row (the book kept first)", 'ran' => $ran, 'objects' => $objs, 'dig' => $r['dig']];
+            } elseif ($op === 'ledger092') {
                 if (rh107_ledger($pdo, RH107_F092) === [] || !rh107_has($pdo, 'wa_no_ai')) throw new RuntimeException('ledger092: 092 is not applied');
-                if ($o['what'] === 'rename') {
+                if ($o['what'] === 'partial') {
+                    // a 092 the runner recorded without its verdict: the ledger row stays, its _schema_checks row goes
+                    $d = $pdo->exec("DELETE FROM _schema_checks WHERE migration = '092_wa_no_ai.sql'");
+                    if ($d !== 1) throw new RuntimeException('ledger092: no _schema_checks row for 092 to take out');
+                    $r = ['op' => $op, 'fixture' => 1, 'what' => "092 recorded with no _schema_checks row (the book kept first)", 'removed' => $d, 'dig' => $r['dig']];
+                } elseif ($o['what'] === 'rename') {
                     $pdo->exec('ALTER TABLE wa_no_ai RENAME TO rh107_wa_no_ai');
                     $r = ['op' => $op, 'fixture' => 1, 'what' => "092's table renamed (the book kept first)", 'table' => rh107_has($pdo, 'wa_no_ai') ? 1 : 0, 'dig' => $r['dig']];
-                } else {
+                } elseif ($o['what'] === 'sentinel') {
                     $i = $pdo->prepare('INSERT INTO wa_no_ai (phone, reason, added_by, active) VALUES (?, ?, ?, 1)');
                     $i->execute([(string)$o['phone'], RH107_MARK . 'sentinel', RH107_MARK . 'seed']);
                     $r = ['op' => $op, 'fixture' => 1, 'what' => "NA-CA1's first sentinel inserted active (the book kept first)", 'id' => (int)$pdo->lastInsertId(), 'dig' => $r['dig']];
