@@ -4,9 +4,9 @@
 # that reaches its branch, said so. Every keep is undone before the next A9.
 # ════════════════════════════════════════════════════════════════════════════
 echo; echo "== 107-5. D2–D10: first deploys with a plant — before stamp_copy (H2), at the DEPLOY hold, at deploy-hybrid's read (H4), a WARNING beside the OK line, the log unwritable (seen=0), WARNING only, other bytes at stamp_copy, no boot (nowait, H1), a PARTIAL line =="
-verd107() {   # verd107 OUTPUT — the run's verdict line as read: PASSED, FAILED:<n>, NOTYET, or none
-  if grep -qxF "  $V107 (deploy): PASSED. Send this LOG FILE back (not a copy of the terminal, and never the cash sheet)." <<<"$1"; then echo PASSED
-  elif grep -qE "^  ${V107//./\\.} \(deploy\): [0-9]+ FAILED" <<<"$1"; then echo "FAILED:$(grep -oE "^  ${V107//./\\.} \(deploy\): [0-9]+ FAILED" <<<"$1" | grep -oE '[0-9]+ FAILED' | cut -d' ' -f1)"
+verd107() {   # verd107 OUTPUT — the run's verdict line as read (a deploy, a redeploy or a rollback): PASSED, FAILED:<n>, NOTYET, or none
+  if grep -qxE "  ${V107//./\\.} \((deploy|rollback)\): PASSED\. Send this LOG FILE back \(not a copy of the terminal, and never the cash sheet\)\." <<<"$1"; then echo PASSED
+  elif grep -qE "^  ${V107//./\\.} \((deploy|rollback)\): [0-9]+ FAILED" <<<"$1"; then echo "FAILED:$(grep -oE "^  ${V107//./\\.} \((deploy|rollback)\): [0-9]+ FAILED" <<<"$1" | grep -oE '[0-9]+ FAILED' | cut -d' ' -f1)"
   elif grep -qF "  $V107 (after-only): NOT YET — " <<<"$1"; then echo NOTYET
   else echo none; fi
 }

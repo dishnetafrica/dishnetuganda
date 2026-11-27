@@ -6,11 +6,12 @@ echo; echo "== 107-8 (part one). on D1: the rollback answered anything but ROLLB
 rbno107() {   # rbno107 [ANSWER] [--env K=V] — a --rollback under the clock answered ANSWER (no by default): not confirmed, nothing changed;
               # RBNO107 its output; asserted by the caller with rbq107
   local a=no; [ "${1:-}" = "" ] || { case "$1" in --*) ;; *) a="$1"; shift ;; esac; }
-  D94R_107="$(data94)"; fresh107; RBNO107="$(run107c --answer "$a" "$@" --rollback)"
+  D94R_107="$(data94)"; RBC0_107="$(rbcopy107)"; fresh107; RBNO107="$(run107c --answer "$a" "$@" --rollback)"
 }
-rbq107() {   # rbq107 LABEL — the latest rbno107 not confirmed, nothing changed: $P107 serving, the data folder's digest as before, no record
-  check "$(has "$RBNO107" '  STOP: not confirmed')$(has "$RBNO107" 'Nothing was changed. Send the log file.')|$(rc107)|$(live)|$(data94)|$(ls "$OUT107"/rollback-state-*.env 2>/dev/null | grep -c .)" \
-        "yesyes|1|$P107|$D94R_107|0" "$1 not confirmed: 'Nothing was changed', exit 1, $P107 serving, the data folder's digest as before, no rollback record"
+rbcopy107() { grep -l '^RB_COPY_AT=[0-9]' "$OUT107"/rollback-state-*.env 2>/dev/null | wc -l | tr -d ' '; }   # rollback records holding a copy time (a declined rollback writes its record before the question, S:13757, with none)
+rbq107() {   # rbq107 LABEL — the latest rbno107 not confirmed, nothing changed: $P107 serving, the data folder's digest as before, no record with a copy time
+  check "$(has "$RBNO107" '  STOP: not confirmed')$(has "$RBNO107" 'Nothing was changed. Send the log file.')|$(rc107)|$(live)|$(data94)|$(rbcopy107)" \
+        "yesyes|1|$P107|$D94R_107|$RBC0_107" "$1 not confirmed: 'Nothing was changed', exit 1, $P107 serving, the data folder's digest as before, no new rollback record with a copy time (the record a declined rollback writes before its question carries none — S:13757, as 5.18.106's rehearsal reads it)"
 }
 printed107() { grep -F -- "$2" <<<"$1" | grep -E '^      ' | head -1 | sed -E 's/^ {6}//'; }   # printed107 OUTPUT FRAGMENT — the first command line the script printed (six spaces) holding FRAGMENT
 jv107() { python3 -I -c 'import json, sys

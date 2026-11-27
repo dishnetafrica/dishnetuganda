@@ -25,6 +25,10 @@
 #   evstat DB ID…         <id>:<status>:<attempts> for each event id, or <id>:none — the drain's named events, read back
 #   bookdig DB            the book's logical digest — every schema object's text, then every table's rows in rowid order —
 #                         16 hex: unchanged across a run proves the run wrote nothing to the book
+#   blocks107 FILE…       design-v2 A18, the one-block rule, over the runs' kept outputs: files= cmds=<command lines of the five
+#                         kinds — deploy, redeploy, after, rollback, putback — six-space lines> mixed=<lines holding a
+#                         rollback command beside any other of the five> adjacent=<two of the five with no prose line between
+#                         them: only blank lines or other six-space lines> at=<file:line of each offence, or ->
 import calendar
 import hashlib
 import json
@@ -174,6 +178,44 @@ def bookdig(db):
     print(h.hexdigest()[:16])
 
 
+def blocks107(files):
+    """A18: (a) no line holds a rollback command beside a deploy, redeploy, after-only or put-back command; (b) no two command
+    lines of the five kinds (six spaces of indent) follow each other with only blank lines, or other six-space lines,
+    between them — a prose line must separate them. A command is classified by the deploy script it invokes and that
+    invocation's own flags, or as a put-back (git checkout <commit> beside deploy-hybrid.sh)."""
+    inv = re.compile(r'bash scripts/deploy-[0-9.]+\.sh((?:\s+--[a-z-]+)*)')
+    def kinds(line):
+        k = []
+        for m in inv.finditer(line):
+            fl = m.group(1).split()
+            k.append('rollback' if '--rollback' in fl else 'redeploy' if '--redeploy' in fl else 'after' if '--after-only' in fl else 'deploy')
+        if re.search(r'git checkout [0-9a-f]{7}', line) and 'deploy-hybrid.sh' in line:
+            k.append('putback')
+        return k
+    n_files = n_cmd = n_mix = n_adj = 0
+    at = []
+    for path in files:
+        n_files += 1
+        with open(path, 'rb') as fh:
+            lines = fh.read().decode('utf-8', 'replace').replace('\r', '').split('\n')
+        prev = False
+        for i, line in enumerate(lines, 1):
+            k = kinds(line)
+            if len(k) >= 2 and 'rollback' in k:
+                n_mix += 1; at.append('%s:%d' % (os.path.basename(path), i))
+            six = line.startswith('      ') and not line.startswith('       ') and line.strip() != ''
+            if six and k:
+                n_cmd += 1
+                if prev:
+                    n_adj += 1; at.append('%s:%d' % (os.path.basename(path), i))
+                prev = True
+            elif line.strip() == '' or six:
+                pass
+            else:
+                prev = False
+    print('files=%d cmds=%d mixed=%d adjacent=%d at=%s' % (n_files, n_cmd, n_mix, n_adj, ','.join(at[:12]) or '-'))
+
+
 def main(argv):
     if len(argv) < 2:
         print('unknown'); return 2
@@ -191,6 +233,8 @@ def main(argv):
             evstat(argv[2], argv[3:]); return 0
         if cmd == 'bookdig' and len(argv) == 3:
             bookdig(argv[2]); return 0
+        if cmd == 'blocks107' and len(argv) >= 3:
+            blocks107(argv[2:]); return 0
     except Exception as e:   # a reader that could not read says so, and never guesses
         print('unread:%s' % type(e).__name__); return 3
     print('unknown'); return 2
