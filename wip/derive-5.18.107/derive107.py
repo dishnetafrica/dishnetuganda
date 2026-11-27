@@ -20,8 +20,10 @@
 #           R7 (db_mig107), LK-CA2's and LK-RB1's _schema_checks rows, the state lines MG_G1, QF_COPY_UNIX, MG_CA2_SEEN
 #   partNS  the switches [T.4]: CS-G1, CS-B1 and FE-G1 retired; NS-G1 and NS-B1 (the lk mode's per-place verdicts and
 #           their positive control); the lk key list; lk_read on the pin alone
-#   partSA  the readings before the deploy [T.5]: U1–U5 and the uj mode retired; stage A's notes
-#   partME  after the copy [T.6]: UJ-CA and UJ-ON retired; ME-CA1 on master's own record and its poll; ME-CA2; NOT YET
+#   partSA  the readings before the deploy [T.5, T.6]: 5.18.106's UJ machinery retired as the one block it is — U1–U4,
+#           FE-G1, UJ-CA, UJ-ON, the uj mode, UJ_A and the three keep-list keys only UJ read (U5 is partR's); stage A's
+#           notes (SA) and the drain's counts in the state file (BD_A)
+#   partME  after the copy [T.6]: ME-CA1 on master's own record and its poll; ME-CA2; NOT YET re-pointed to ME-CA1
 #   partL   the masking carried [T.2]: LM's same-file rule for the two changed files
 #   partR   the rollback [T.7]: AS-RB1 and its family retired; rb_pre107 and rb107; V1; RB_NOTHING; the put-back's tools
 #           reading and its commands
