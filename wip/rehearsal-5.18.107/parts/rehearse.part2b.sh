@@ -5,7 +5,7 @@ LEFT107() {   # LEFT107 — the chain's and this release's triggers still armed,
   local f out=""
   for f in "$SB/.ujfail106" "$SB/web/.redirect106" "$SB/web/.redirect106lock" "$SB/evo/rh106-refuse.list" "$SB/.rbfail104" "$SB/.rbfail103" \
            "$SB/web/.redirect105" "$SB/web/.redirect104" "$SB/web/.left104m" \
-           "$SB/web/.noboot107" "$SB/.plant092touch107" "$SB/.boot107" "$SB/.rbfail107" "$SB/web/.redirect107" "$SB/web/.redirect107lock"; do
+           "$SB/web/.noboot107" "$SB/.plant092touch107" "$SB/.alter092touch107" "$SB/.boot107" "$SB/.rbfail107" "$SB/web/.redirect107" "$SB/web/.redirect107lock"; do
     [ -e "$f" ] && out="$out,${f#$SB/}"
   done
   [ -e "$REPO/.git/index.lock" ] && out="$out,index.lock"
@@ -117,6 +117,11 @@ cat > "$SB/touch107.hook" <<'HOOK'
     case "$_rh_o7" in ''|*[!0-9-]*) echo unread >> "@SB@/plant092touch107.refused" ;; *) printf '%s\n' "$((_rh_o7 + 3))" > "@CLKF@.h2" && cat "@CLKF@.h2" > "@CLKF@" && rm -f "@CLKF@.h2" ;; esac
     echo fired >> "@SB@/plant092touch107.fired"
   fi
+  if [ -f "@SB@/.alter092touch107" ]; then
+    rm -f "@SB@/.alter092touch107"
+    if [ -f "@PD@/migrations/092_wa_no_ai.sql" ]; then printf '%s\n' '-- RH107SECRET- a byte the pin does not have (H2, at stamp_copy)' >> "@PD@/migrations/092_wa_no_ai.sql"; echo fired >> "@SB@/alter092touch107.fired"
+    else echo nofile >> "@SB@/alter092touch107.fired"; fi
+  fi
 HOOK
 python3 -I - "$SB/datebin/touch" "$SB/touch107.hook" "$SB" "$H107" "$CLKPRE104" "$CLKF104" "$PHPBIN" "$PD" "$DATA" "$R107" <<'PY' || echo "datebin:touch107" >> "$SB/anchor-missing"
 import sys
@@ -128,13 +133,13 @@ h = (open(hook).read().replace('@SB@', sb).replace('@H107@', h107).replace('@CLK
      .replace('@PHP@', php).replace('@PD@', pd).replace('@DATA@', data).replace('@R107@', r107))
 assert '@' not in h, 'a placeholder left'
 anchor = 'if [ -n "${RH106_TOUCH:-}" ] && [ "${1:-}" = -c ] && [ "$#" -ge 2 ]; then\n'
-assert s.count(anchor) == 1 and s.count('.plant092touch107') == 0, (s.count(anchor), s.count('.plant092touch107'))
+assert s.count(anchor) == 1 and s.count('.plant092touch107') == 0 and s.count('.alter092touch107') == 0, (s.count(anchor), s.count('.plant092touch107'))
 i = s.index(anchor) + len(anchor)
 s2 = s[:i] + h + s[i:]
-assert len(s2) == len(s) + len(h) and s2.count('.plant092touch107') == 2 and s2.index(anchor) < s2.index('.plant092touch107') < s2.index('for a in')
+assert len(s2) == len(s) + len(h) and s2.count('.plant092touch107') == 2 and s2.count('.alter092touch107') == 2 and s2.index(anchor) < s2.index('.plant092touch107') < s2.index('.alter092touch107') < s2.index('for a in')
 open(p, 'w').write(s2)
 PY
-rm -f "$SB/touch107.hook"; : > "$SB/plant092touch107.fired"; : > "$SB/plant092touch107.refused"
+rm -f "$SB/touch107.hook"; : > "$SB/plant092touch107.fired"; : > "$SB/plant092touch107.refused"; : > "$SB/alter092touch107.fired"
 TCF107="$H107/touch.ctl"; : > "$TCF107"
 O0_107="$(head -n1 "$CLKF104")"
 env PATH="$SB/datebin:$PATH" RH106_TOUCH=1 LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$CLKF104" touch -c "$TCF107"; H2A_107="$(grep -c . "$SB/plant092touch107.fired")|$(head -n1 "$CLKF104")"
@@ -143,7 +148,14 @@ env PATH="$SB/datebin:$PATH" RH106_TOUCH=1 LD_PRELOAD="$CLKPRE104" RH104_CLOCK_F
 check "$(bash -n "$SB/datebin/touch" && echo parses)|$H2A_107|$H2B_107|$(grep -c . "$SB/plant092touch107.refused")|$(grep -c '^booted$' "$R107/boot/h2.out" 2>/dev/null)|$(stat -c %a "$CLKF104")" \
       "parses|0|$O0_107|1|$(( O0_107 + 3 ))|spent|near|0|1|644" \
   "107-infra h H2 the date folder's touch: unarmed it stamps as before (no boot, the clock unmoved); armed, it boots the installed store once (as uid 1000, under the clock), moves the clock 3 s on (the offset file, mode kept), consumes the trigger, then stamps at the clock's time"
-: > "$SB/plant092touch107.fired"; : > "$R107/boot/h2.out"; rm -f "$TCF107"
+: > "$SB/plant092touch107.fired"; : > "$R107/boot/h2.out"
+# H2's second trigger (v3 §A, §T.11:3487 — D8): .alter092touch107 appends one comment line to the INSTALLED 092 at the same touch,
+# so V1's boot applies other bytes; only where the file is on disk. Its control here, 5.18.106 serving: nothing created, spent.
+: > "$SB/.alter092touch107"
+env PATH="$SB/datebin:$PATH" RH106_TOUCH=1 LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$CLKF104" touch -c "$TCF107"
+check "$(cat "$SB/alter092touch107.fired")|$( [ -e "$PD/migrations/092_wa_no_ai.sql" ] && echo made || echo none)|$( [ -e "$SB/.alter092touch107" ] && echo unspent || echo spent)|$(grep -c . "$SB/plant092touch107.fired")" "nofile|none|spent|0" \
+  "107-infra h H2's second trigger (.alter092touch107) with no 092 on disk ($V106 serving): it creates no file, records nofile, is spent, and boots nothing"
+: > "$SB/alter092touch107.fired"; rm -f "$TCF107"
 # H4 — .boot107 (v2 A8, v3 review 2 TC2/FM1): one boot at deploy-hybrid's read of .deployed-commit while it names 5.18.106 — the
 # exact call, and only when the docker's parent command line names deploy-hybrid.sh (stage A's LIVE_BEFORE makes the same call
 # from the script itself). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
