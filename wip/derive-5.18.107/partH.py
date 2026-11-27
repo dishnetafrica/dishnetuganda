@@ -644,7 +644,7 @@ def apply(doc, ctx):
                 OWNER + "# 5.18.98 — after a PASSED deploy or --after-only whose G3", keep_ends=False, why="H11: the owner's steps")
 
     # ── H12: the FAILED summary's lead (root docs/76 §T.3 item 7; §T.14, review of the derived script) ──
-    # mg_after sets MG_SAY (na, mg or log, NA-CA1 first) and nothing printed it: the lead stands before the verdict chain, and
+    # mg_after sets MG_SAY (na, unk, ctl, mg or log, NA-CA1 first; unk and ctl since review 2) and nothing printed it: the lead stands before the verdict chain, and
     # the FAILED line keeps its words where MG_SAY is empty, and where it is set says that §M calls for the rollback — not
     # an automatic one (TD5): §K's two commands, then the rollback command, each alone, at the end of the summary.
     LEAD = (
@@ -656,6 +656,11 @@ def apply(doc, ctx):
         '    na) echo "  NO UGANDA CUSTOMER GETS AN AI REPLY: THE ASSISTANT-OFF LIST (wa_no_ai, MIGRATION 092) CANNOT BE READ THE WAY THE"\n'
         '        echo "  WORKER READS IT (NA-CA1, OR MG-CA1\'S WAIT ABOVE: NO BOOT HAS APPLIED 092) — EACH ai.reply DIES AFTER ABOUT 36 MINUTES"\n'
         '        echo "  OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;\n'
+        '    unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER OR THE ASSISTANT-OFF LIST DID NOT ANSWER"\n'
+        '         echo "  (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER GETS AN AI REPLY, AND EACH ai.reply DIES AFTER"\n'
+        '         echo "  ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;\n'
+        '    ctl) echo "  NA-CA1 failed on its controls (its line above says which), but its first probe, the worker\'s own read of the"\n'
+        '         echo "  assistant-off list, answered: AI replies go on." ;;\n'
         '    mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"\n'
         '        echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"\n'
         '        echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092\'s ledger row is repaired by hand."\n'
@@ -672,8 +677,11 @@ def apply(doc, ctx):
     doc.sub('else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi\n',
             'else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED$( if [ -n "${MG_SAY:-}" ]; then echo " — a failure after the copy means the rollback (root docs/76 §M), never an automatic one: root docs/76 §K\'s two commands first, then the rollback command, each alone, at the end of this summary. Send this LOG FILE back (never the cash sheet)."; else echo " — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi)"; fi\n',
             why="H12: the FAILED line where MG_SAY is set")
-    if doc.t.count("MG_SAY") != 5 + 4:
-        raise SystemExit(f"partH: MG_SAY named {doc.t.count('MG_SAY')} times, not 9 (its declaration and mg_after's four, the lead's three, the verdict's one)")
+    if doc.t.count("MG_SAY") != 1 + 8 + 4:
+        raise SystemExit(f"partH: MG_SAY named {doc.t.count('MG_SAY')} times, not 13 (its declaration, mg_after's eight, the lead's three, the verdict's one)")
+    for w, k in (("na", 2), ("unk", 2), ("ctl", 1), ("mg", 1), ("log", 1)):
+        if len(re.findall(rf"MG_SAY={w}\b", doc.t)) != k or doc.t.count(f"    {w}) echo \"  ") != 1:
+            raise SystemExit(f"partH: MG_SAY={w} is not set {k} time(s) by mg_after and led once")
 
     # ── the result ──
     t = doc.t

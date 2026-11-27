@@ -7331,7 +7331,7 @@ QF_HOOKS="lib/NotificationService.php|WaSendBudget::recordNotify(|3|- lib/Notifi
 QF_EVENTS="ops_pre_due_d7 ops_pre_due_d3 ops_pre_due_d1 ops_overdue_d1 ops_overdue_d3 ops_overdue_d5 ops_low_balance ops_win_back staff_jobs_summary staff_daily_report bidal_morning_summary cashbook_daily_summary cash_carry_reminder"   # QF-G3: WaSendBudget::NOTIFY_KINDS' events, from the pin (each a literal elsewhere in the pin's tree)
 QF_HK7_MIN="15"   # QF-G3: HK07's control — the scan finds at least this many send sites (tests/test_wa_send_budget.php, from Git)
 QF_G1=""; QF_G1_LINE=""; QF_BASE=""   # 5.18.105: QF-G4 and its variables retired — LK-G1 (root docs/74 §H.4.4)
-MG_G1=""; MG_G1_LINE=""; QF_G2_MG=""; QF_G2_NEG092=""; NA_G1=""; MG_SAY=""; MG_CA1_R=""; NA_CA1_R=""; MG_CA2_R=""   # 5.18.107 (root docs/76 §T.3)
+MG_G1=""; MG_G1_LINE=""; QF_G2_MG=""; QF_G2_NEG092=""; NA_G1=""; MG_SAY=""; MG_WAIT=""; NA_P1=""; MG_CA1_R=""; NA_CA1_R=""; MG_CA2_R=""   # 5.18.107 (root docs/76 §T.3)
 QF_COPY_AT=""; QF_COPY_UNIX=""; QF_KEEP=""; QF_N=0; QF_ROOT_ERR=""
 qf_php() { dxo php -d display_errors=stderr -d log_errors=0 -d opcache.enable_cli=0 -r "$QF_PHP" "$@"; }   # qf_php MODE ARG… — one line
 qf_safe() { sed -E 's/[0-9]{9,}/<digits>/g'; }   # no run of 9 or more digits reaches the log or the terminal
@@ -8406,9 +8406,13 @@ mg_after() {
     [ "$i" = "13" ] || sleep 5
   done
   r1="$( [ "$(sha256sum "$DEST/$MIG107_LAST_PATH" 2>/dev/null | cut -c1-64)" = "$MIG107_SHA" ] && echo ok || echo bad )"
+  # §T.14 (review 2 of the derived script): the wait ends unseen either on the ledger read without 092 (absent) or on a
+  # ledger that did not read (unread) — only the first says no boot has applied 092
+  MG_WAIT=""; [ -n "$seen" ] || { [ "$o" = "mig092=0" ] && MG_WAIT=absent || MG_WAIT=unread; }
   if [ -z "$seen" ]; then
     MG_CA1_R=bad
-    bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (${o:-not read}): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
+    if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (${o:-not read}): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
+    else bad "MG-CA1 the live migration ledger could not be read in a wait of 60 s (${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
   elif [ -z "$inst" ] || ! sub="$(qf_copy mg "$inst")"; then
     MG_CA1_R=bad; bad "MG-CA1 092 is in the live ledger, but a fresh copy to read it on could not be made — ${sub:-no installed code to read with}; MG-CA1 and NA-CA1 are not judged"
   else
@@ -8425,7 +8429,7 @@ mg_after() {
       present\|*) note "MG-CA1 092 was applied by an earlier deploy, before this copy (${at:-?} UTC)" ;;
     esac
     # NA-CA1 — the same probes as NA-G1, through the installed NoAiList, on this copy
-    v="$(qf_php na "$sub/code" "$sub" "$NA_SENTINEL_1" "$NA_SENTINEL_2")"
+    v="$(qf_php na "$sub/code" "$sub" "$NA_SENTINEL_1" "$NA_SENTINEL_2")"; NA_P1="$(qf_kv "$v" p1)"   # probe 1, the worker's own read: none or listed is an answer, ?<class> a list that does not read
     case "$v" in
       "p1=none any="[01]" active="[0-9]*" scan=1 p2=listed,none p3=PDOException gate="*) NA_CA1_R=ok; ok2=1
         ok "NA-CA1 wa_no_ai reads the way the worker reads it, through the installed NoAiList on a fresh copy: a number nobody holds is not listed and nothing throws; the positive control lists a sentinel row on a throwaway copy, the second sentinel not; with the table renamed the read throws ($v)" ;;
@@ -8453,7 +8457,7 @@ mg_after() {
   elif [ -z "$mg" ]; then note "MG-CA2 NOT ESTABLISHED — THE STATE FILE HOLDS NO MG_G1 RECORD (an older state file): whether 092 was this deploy's to apply cannot be told, so its missing OK line is not judged"
   elif [ "$mg" = "present" ]; then note "MG-CA2 no OK line for 092 in migration.log — a redeploy: 092 was applied by an earlier deploy, the runner writes nothing for an applied file, and halving may have dropped the line since"
   elif [ "$MODE" = "deploy" ]; then
-    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ (MG-CA1's wait timed out; its FAIL stands)"
+    if [ -z "$seen" ]; then note "MG-CA2 NOT ESTABLISHED — $( [ "$MG_WAIT" = "absent" ] && echo "NO BOOT HAD APPLIED 092 WHEN THE LOG WAS READ" || echo "092 COULD NOT BE SEEN IN THE LEDGER WHEN THE LOG WAS READ, WHICH DID NOT READ") (MG-CA1's wait; its FAIL stands)"
     else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log, THOUGH THE LEDGER HOLDS IT: minutes after the first boot, halving would need about 128 KiB logged after 092's line, so the cause is a log write that failed silently (@file_put_contents)"; fi
   else
     v="$(sed -n 's/^MG_CA2_SEEN=//p' "$STATE" 2>/dev/null | tail -n1)"
@@ -8463,12 +8467,15 @@ mg_after() {
       nowait|"")
         if [ -n "$mk" ] && [ -n "$mkt" ] && [ -n "$au" ] && [ "$mkt" -ge "$au" ]; then
           note "MG-CA2 no OK line for 092 now — $( [ "$v" = "nowait" ] && echo "stage R's wait timed out (MG_CA2_SEEN=nowait), so its reading says nothing about the line;" || echo "the state file holds no MG_CA2_SEEN record;") the log's first line is a trim marker stamped (read as UTC) at or after 092's applied_at: 071_dpo_payments.sql's checksum WARNING is logged on every boot, and the runner halves the log within hours"
-        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
+        else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND $( [ "$v" = "nowait" ] && echo "STAGE R'S WAIT TIMED OUT (MG_CA2_SEEN=nowait), SO ITS READING SAYS NOTHING ABOUT THE LINE" || echo "THE STATE FILE HOLDS NO MG_CA2_SEEN RECORD"); $( if [ -z "$seen" ]; then [ "$MG_WAIT" = "absent" ] && echo "092 IS STILL NOT IN THE LIVE LEDGER: THIS RUN'S WAIT TIMED OUT TOO (MG-CA1 ABOVE)" || echo "THE LIVE LEDGER DID NOT READ IN THIS RUN'S WAIT EITHER (MG-CA1 ABOVE)"; elif [ -z "$au" ]; then echo "092's applied_at could not be read, so no trim marker is weighed against it"; elif [ -n "$mk" ] && [ -z "$mkt" ]; then echo "the log's trim marker carries a stamp that could not be read"; elif [ -n "$mk" ]; then echo "the log's trim marker is stamped before 092's applied_at"; else echo "the log's first line is no trim marker"; fi)"; fi ;;
       *) note "MG-CA2 NOT ESTABLISHED — THE STATE FILE'S MG_CA2_SEEN RECORD CANNOT BE READ (${v})" ;;
     esac
   fi
-  # the FAILED summary's lead (root docs/76 §T.3 item 7): NA-CA1 first, then MG-CA1, then MG-CA2 alone
-  if [ "$NA_CA1_R" = "bad" ] || [ -z "$seen" ]; then MG_SAY=na
+  # the FAILED summary's lead (root docs/76 §T.3 item 7): NA-CA1 first, then MG-CA1, then MG-CA2 alone. "na" only where the
+  # list is shown not to read (092 read absent, or probe 1 threw); "unk" where that is not established (the ledger or the
+  # list did not answer); "ctl" where NA-CA1 failed on its controls while probe 1, the worker's own read, answered (§T.14)
+  if [ -z "$seen" ]; then if [ "$MG_WAIT" = "absent" ]; then MG_SAY=na; else MG_SAY=unk; fi
+  elif [ "$NA_CA1_R" = "bad" ]; then case "$NA_P1" in none|listed) MG_SAY=ctl ;; "?"*) MG_SAY=na ;; *) MG_SAY=unk ;; esac
   elif [ "$MG_CA1_R" = "bad" ]; then MG_SAY=mg
   elif [ "$MG_CA2_R" = "bad" ]; then MG_SAY=log
   else MG_SAY=""; fi
@@ -15843,7 +15850,7 @@ grep -qF 'var UG_PHOTOS' "$DEST/tabs/support/scheduling.php" 2>/dev/null && grep
 # drain once more (the conversation ids for staff). Read-only. When this run rolled nothing back (RB_NOTHING), LK-RB1
 # is a note — not judged, nothing to compare. Nothing was written.
 rb107
-note "RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, removed no migration and wrote no key (root docs/76 §T.7; where 092 was absent at this rollback's stage A, the first boot after the put-back applies it — $BASELINE_COMMIT's runner reads migrations/ by its glob — and R7 above judges exactly that) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy"
+note "RB the code is $BASELINE_VERSION's again where $EXPECTED_VERSION changed it, and nothing else moved: the rollback ran no switch tool, no set_config and no off-hook, removed no migration and wrote no key (root docs/76 §T.7; where 092 was absent at this rollback's stage A, the first boot after the put-back applies it — $BASELINE_COMMIT's runner reads migrations/ by its glob — and RB's database line above judges exactly that) — every step of the sales follow-up keeps running as its switch says, and 5.18.105's masked log lines stay masked (LM-RB1). Every close $EXPECTED_VERSION made stays (nothing reopens one). $ADDED_LEFT of the $N_ADDED files $EXPECTED_VERSION adds are on disk (deploy-hybrid.sh never deletes; counted above) — the nine classes and $MIG107_LAST among them — named by nothing $BASELINE_COMMIT tracks (QC-RB1); the assistant-off list stays, and no $BASELINE_VERSION file reads it (RB-X above). ECO Bank, the uCRM catalogue's settings, the channel registry and every number's owner stay as they were (RB above). A14 of any later deploy needs the quarantine's --check begun after this rollback's copy (RB_COPY_AT), and a later deploy of $EXPECTED_VERSION goes with --redeploy"
 fi
 
 # 5.18.93: the salesperson pilot against the deploy's own record of it. A run compares the pilot only with what it read
@@ -16127,6 +16134,11 @@ if [ "$FAIL" != "0" ] && [ -n "${MG_SAY:-}" ]; then
     na) echo "  NO UGANDA CUSTOMER GETS AN AI REPLY: THE ASSISTANT-OFF LIST (wa_no_ai, MIGRATION 092) CANNOT BE READ THE WAY THE"
         echo "  WORKER READS IT (NA-CA1, OR MG-CA1'S WAIT ABOVE: NO BOOT HAS APPLIED 092) — EACH ai.reply DIES AFTER ABOUT 36 MINUTES"
         echo "  OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
+    unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER OR THE ASSISTANT-OFF LIST DID NOT ANSWER"
+         echo "  (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER GETS AN AI REPLY, AND EACH ai.reply DIES AFTER"
+         echo "  ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
+    ctl) echo "  NA-CA1 failed on its controls (its line above says which), but its first probe, the worker's own read of the"
+         echo "  assistant-off list, answered: AI replies go on." ;;
     mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"
         echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"
         echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092's ledger row is repaired by hand."

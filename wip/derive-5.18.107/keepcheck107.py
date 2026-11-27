@@ -151,21 +151,24 @@ class Tok:
             out = []
             for w in words:
                 m = ASSIGN.match(t, w.s)
-                if m and t[w.s:m.end()].rstrip("+=") in self.dv:
+                # a listed variable's plain assignment only: "+=" changes a printed command and is code (review 2)
+                if m and t[m.end() - 2] != "+" and t[w.s:m.end() - 1] in self.dv:
                     out += self.cut(m.end(), w.e, w.subs)
             return out
         cw = t[words[ci].s:words[ci].e]
         args = words[ci + 1:]
         if cw == "printf":
-            if args and t[args[0].s:args[0].e] == "-v":
+            if args and t[args[0].s:args[0].e].startswith("-v"):   # printf -v NAME and printf -vNAME assign (review 2)
                 return []
         elif cw not in DISPLAY_WORDS:
             return []
+        # (review 2) output that goes anywhere but the terminal is code: any pipe (tee included: it can feed a shell), a
+        # process substitution, or standard output redirected to a file; a redirection of standard error (2>…, >&2) is not
         if piped_at is not None:
-            m = re.compile(r"[ \t]*(\S+)").match(t, piped_at)
-            if not m or m.group(1) != "tee":
-                return []
+            return []
         if any(w.psub_out for w in args):
+            return []
+        if any(re.match(r"(?:1|&)?>>?\|?(?!&2$)", t[w.s:w.e]) for w in args):
             return []
         out = []
         for w in args:
@@ -419,6 +422,20 @@ def _func_lines(v, name):
 
 
 SHA_LINE = re.compile(r"^[0-9a-f]{64}  tools/(?:sales_followup|set_config)\.php$")
+EXPECTED_LINE = re.compile(r'^EXPECTED_CHANGED="[^"$`;&|]*"$')   # the whole line one plain assignment, nothing expanded or run
+GREP_ARG = re.compile(r"""\bgrep -[A-Za-z]+ (?:'[^']*'|"(?:[^"\\]|\\.)*") "\$DEST/tools/$""")   # the grep's own file argument
+Q6_RUN = "sh -c 'php \"$1/tools/"   # Q-CA6's one run, inside its single-quoted sh -c
+
+
+def _reader(n, raw, code, pos, extra=()):
+    """is the tool name at code[pos] in a reading context (§T.14, per occurrence, never per line)?"""
+    if SHA_LINE.match(raw):
+        return True
+    if EXPECTED_LINE.match(raw):
+        return True
+    if code[max(0, pos - 14):pos] == "pb_tool tools/":
+        return True
+    return any(f(n, raw, code, pos) for f in extra)
 QF_DEF = 'QF_TOOL="tools/sales_followup.php"; QF_REPORT="tools/sales_followup_report.php"; QF_WRAPPER="scripts/sales-followup.sh"'
 
 
@@ -432,8 +449,7 @@ def k1(v):
         bad.append(("K1", f"$QF_TOOL in code {len(qt)} time(s), not once inside qf_tool's body (lines {qt[:4]})"))
     for n, raw, code in v.code_lines():
         for m in re.finditer(r"sales_followup\.php|sales-followup\.sh", code):
-            if SHA_LINE.match(raw) or raw.startswith('EXPECTED_CHANGED="') or raw == QF_DEF \
-                    or code[max(0, m.start() - 14):m.start()] == "pb_tool tools/":
+            if raw == QF_DEF or _reader(n, raw, code, m.start()):
                 continue
             bad.append(("K1", f"line {n}: the switch tool named in code outside its readers ({raw.strip()[:90]})"))
     for n, raw, code in v.code_lines():
@@ -590,19 +606,22 @@ def k5(v):
     # sha256 lists, EXPECTED_CHANGED, a grep of the installed file, the put-back's tools reading, and Q-CA6's one run
     q6n = {qca6[0][0]} if len(qca6) == 1 else set()
     for n, raw, code in v.code_lines():
-        labels = [x.span() for x in re.finditer(r'\bRB_[A-Z]+="\$RB_[A-Z]+ [^"$]*"', code)]   # RB's failure labels, printed later
+        # RB's failure labels, printed later: a word list with no command in it (review 2: never a "php" or a "docker")
+        labels = [x.span() for x in re.finditer(r'\bRB_[A-Z]+="\$RB_[A-Z]+ [^"$`;&|]*"', code)
+                  if not re.search(r"(?<![\w./:-])(?:php|docker|sh|bash)\b", x.group(0))]
         for m in re.finditer(r"set_config\.php", code):
             if any(a < m.start() < b for a, b in labels):
                 continue
-            if SHA_LINE.match(raw) or raw.startswith('EXPECTED_CHANGED="') or n in q6n \
-                    or code[max(0, m.start() - 14):m.start()] == "pb_tool tools/" \
-                    or (code[max(0, m.start() - 13):m.start()] == '"$DEST/tools/' and re.search(r"\bgrep -[A-Za-z]+ ", code[:m.start()])):
+            if _reader(n, raw, code, m.start(), extra=(
+                    lambda n, raw, code, pos: bool(GREP_ARG.search(code[:pos])),
+                    lambda n, raw, code, pos: n in q6n and code.count("set_config.php") == 1 and code[max(0, pos - len(Q6_RUN)):pos] == Q6_RUN)):
                 continue
             bad.append(("K5", f"line {n}: set_config.php named in code outside its readers and Q-CA6's run ({raw.strip()[:90]})"))
     # the named display variables
     for var in DISPLAY_VARS:
+        # every form that sets it (review 2): NAME=, NAME+=, printf -v NAME, read/declare/local/export … NAME
         asg = [(n, raw) for n, raw, _ in v.lines if not raw.lstrip().startswith(("#", "//"))
-               and re.search(rf"(?<![\w$]){var}=", raw)]
+               for _ in re.finditer(rf"(?<![\w$]){var}\+?=|\bprintf\s+-v\s*{var}\b|\b(?:read|declare|typeset|local|export|readonly)\b[^;&|\n]*\b{var}\b", raw)]
         if len(asg) != 1:
             bad.append(("K5", f"{var} is assigned {len(asg)} times, not once"))
         else:
@@ -634,7 +653,7 @@ def k5(v):
             line_code = v.lines[n - 1][2]
             col = m.start() - (t.rfind("\n", 0, m.start()) + 1)
             pre = line_code[:col]
-            if re.search(r"(?:^|[;&|({]|\bthen|\bdo|\belse)\s*\"?$", pre):
+            if re.search(r"(?:^|[;&|(){]|\bthen|\bdo|\belse)\s*\"?$", pre):
                 how = "as a command word"
             elif re.search(r"\beval\s+\"?$", pre):
                 how = "in eval"
@@ -735,12 +754,45 @@ def k6(v):
     return bad
 
 
+# ── K7 — no construct that can hide a run (§T.14, review 2 of the derived script). K1's and K5's readers recognise a tool
+#    by its name; a name built by a glob, a variable, an indirect expansion, a string handed to a shell or an eval would pass
+#    them. None of these constructs is in the script, so each is refused outright, with one named exception: the documented
+#    put-back, bash "$REPO/scripts/deploy-hybrid.sh". A name assembled by concatenation stays beyond any text check; the
+#    rehearsal runs the script (§T.11) ──
+HIDERS = [
+    (re.compile(r"(?:^|[;&|(){]\s*|\b(?:then|do|else)\s+)eval\b"), "eval"),
+    (re.compile(r"\$\{!"), "an indirect expansion ${!…}"),
+    (re.compile(r"\b(?:sh|bash|dash|zsh)\s+-c\s+[\"$]"), "a shell given an expanding command string"),
+    (re.compile(r"(?:tools|scripts)/[^\s\"';|&)]*[*?\[]"), "a glob in a tools/ or scripts/ path"),
+    (re.compile(r"(?:tools|scripts)/[\"']?\$"), "a file name under tools/ or scripts/ held in a variable"),
+    (re.compile(r"\bprintf\s+-v"), "printf -v"),
+    (re.compile(r"\bcall_user_func(?:_array)?\b"), "call_user_func"),
+    (re.compile(r"[\"'](?:saveOverrides|writeKycFile)[\"']"), "a writer named as a string"),
+    (re.compile(r"->save\(\s*\$"), "a ->save( whose file name is a variable"),
+    (re.compile(r"\bphp\s+-f\b"), "php -f"),
+    (re.compile(r"(?:^|[;&|({]\s*|\b(?:then|do|else)\s+)(?:source|\.)\s+[\"$/]"), "a file sourced"),
+    (re.compile(r"(?<![\w./-])(?:bash|sh)\s+[\"']?\$"), "a script run from a variable path"),
+]
+RUN_OK = 'bash "$REPO/scripts/deploy-hybrid.sh"'
+
+
+def k7(v):
+    bad = []
+    for n, raw, code in v.code_lines():
+        for rx, what in HIDERS:
+            for m in rx.finditer(code):
+                if what == "a script run from a variable path" and code.startswith(RUN_OK, m.start()):
+                    continue
+                bad.append(("K7", f"line {n}: {what} in code ({raw.strip()[:80]})"))
+    return bad
+
+
 def keep_check(t):
     try:
         v = View(t)
     except ParseError as e:
         return [("PARSE", str(e))]
-    return k1(v) + k2(v) + k3(v) + k4(v) + k4b(v) + k5(v) + k6(v)
+    return k1(v) + k2(v) + k3(v) + k4(v) + k4b(v) + k5(v) + k6(v) + k7(v)
 
 
 def run(doc, ctx):
@@ -749,7 +801,9 @@ def run(doc, ctx):
         raise SystemExit("KEEP CHECK: " + "; ".join(f"{a}: {b}" for a, b in kb[:12]))
     n_ctl = [0]
 
-    def kweak(old, new, tag, what):
+    def kweak(old, new, tag, what, expect):
+        """a weakened copy: refused by exactly the checks named in tag (one, or a tuple), and among the messages the one its
+        rule gives (expect), so a copy that two rules refuse still proves the rule it is there for (review 2)"""
         if doc.t.count(old) != 1:
             raise SystemExit(f"KEEP CHECK CONTROL ({what}): its anchor is found {doc.t.count(old)} times: {old[:100]!r}")
         got = keep_check(doc.t.replace(old, new))
@@ -757,6 +811,8 @@ def run(doc, ctx):
         want = sorted(tag) if isinstance(tag, tuple) else [tag]
         if tags != want:
             raise SystemExit(f"KEEP CHECK CONTROL ({what}): refused for {tags or 'nothing'}, not for exactly {want}: {got[:3]}")
+        if not any(expect in m for _, m in got):
+            raise SystemExit(f"KEEP CHECK CONTROL ({what}): refused, but not by the rule it is for ({expect!r}): {got[:3]}")
         n_ctl[0] += 1
 
     t = doc.t
@@ -764,94 +820,135 @@ def run(doc, ctx):
     if len(rb0) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL: rb_pre107's cih_main line found {len(rb0)} times")
     RB0 = rb0[0] + "\n"
+
+    def ins(line):   # a line inserted in code, after rb_pre107's cih_main line
+        return RB0 + "  " + line + "\n"
+
+    LIVE = 'docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER"'
+    W5 = "writer(s) in the code besides the two exceptions"
+    N5 = "set_config.php named in code outside its readers"
     # K1
-    kweak("  qf_keep_and_baseline\n", "  qf_clear_and_baseline\n  qf_keep_and_baseline\n", "K1", "the clear call re-inserted")
-    kweak(RB0, RB0 + '  sub="$(qf_copy rbx "$P3B_PIN")" && qf_tool "$sub" status\n', "K1", "the switch tool run with another verb")
-    kweak(RB0, RB0 + '  ( cd "$REPO" && bash "$QF_WRAPPER" show )\n', "K1", "the wrapper run")
-    kweak(RB0, RB0 + '  for f in "$IN_CONTAINER"/tools/sales_f*.php; do docker exec -u "$DB_OWNER" "$CONTAINER" php "$f" set ai_burst_merge_enabled 0; done\n',
-          "K1", "set ai_burst_merge_enabled 0 outside display text, through a glob that names no tool (the act clause alone)")
-    kweak(RB0, RB0 + '  for f in "$IN_CONTAINER"/tools/set_c*.php; do docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER" '
-                     'php "$f" --key ai_burst_merge_enabled --value 0; done\n', "K1",
-          "--key ai_burst_merge_enabled to set_config outside display text, through a glob (the act clause alone)")
-    # §T.14 (review of the derived script): the switch tool reached other than through qf_tool
-    kweak(RB0, RB0 + '  docker exec -u "$DB_OWNER" "$CONTAINER" php "$IN_CONTAINER/$QF_TOOL" erase\n', "K1",
-          "the switch tool's erase through $QF_TOOL, outside qf_tool")
-    kweak(RB0, RB0 + '  T="$IN_CONTAINER/tools/sales_followup.php"\n', "K1", "the switch tool named in code outside its readers")
-    kweak(RB0, RB0 + '  bash "$REPO/scripts/sales-followup.sh" --check burst-drain >/dev/null\n', "K1",
-          "a live sales-followup.sh --check burst-drain outside display text")
-    kweak(RB0, RB0 + '  o="$(qf_php rbx "$PDD_IN" burst-drain)"\n', "K1", "burst-drain handed to code other than qf_tool's check")
+    kweak("  qf_keep_and_baseline\n", "  qf_clear_and_baseline\n  qf_keep_and_baseline\n", "K1", "the clear call re-inserted", "a clear call")
+    kweak(RB0, ins('sub="$(qf_copy rbx "$P3B_PIN")" && qf_tool "$sub" status'), "K1", "the switch tool run with another verb",
+          "the switch tool runs status")
+    kweak(RB0, ins('( cd "$REPO" && bash "$QF_WRAPPER" show )'), ("K1", "K7"), "the wrapper run", "the wrapper outside display text")
+    kweak(RB0, ins(f'for f in "$IN_CONTAINER"/tools/sales_f*.php; do {LIVE} php "$f" set ai_burst_merge_enabled 0; done'), ("K1", "K7"),
+          "set ai_burst_merge_enabled 0 through a glob (K1's act clause; K7's glob)", "the burst switch set outside display text")
+    kweak(RB0, ins(f'for f in "$IN_CONTAINER"/tools/set_c*.php; do {LIVE} php "$f" --key ai_burst_merge_enabled --value 0; done'),
+          ("K1", "K7"), "--key ai_burst_merge_enabled through a glob (K1's act clause; K7's glob)", "the burst switch given to set_config")
+    kweak(RB0, ins(f'{LIVE} php "$IN_CONTAINER/$QF_TOOL" erase'), "K1", "the switch tool's erase through $QF_TOOL, outside qf_tool",
+          "$QF_TOOL in code")
+    kweak(RB0, ins('T="$IN_CONTAINER/tools/sales_followup.php"'), "K1", "the switch tool named in code outside its readers",
+          "the switch tool named in code outside its readers")
+    kweak(RB0, ins('bash "$REPO/scripts/sales-followup.sh" --check burst-drain >/dev/null'), ("K1", "K7"),
+          "a live sales-followup.sh --check burst-drain outside display text", "the drain reading run other than through qf_tool on a copy")
+    kweak(RB0, ins('o="$(qf_php rbx "$PDD_IN" burst-drain)"'), "K1", "burst-drain handed to code other than qf_tool's check",
+          "burst-drain in code other than qf_tool's check")
     # K2
     ca1 = [l for l in t.split("\n") if re.match(r"  lk_ca1\b", l)]
     if len(ca1) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL: the LK-CA1 call line found {len(ca1)} times")
-    kweak(ca1[0] + "\n", "", "K2", "LK-CA1 removed")
+    kweak(ca1[0] + "\n", "", "K2", "LK-CA1 removed", "LK-CA1 is not called once from qf_after")
     # K3
     V1E = 'esac )"; if do_rollback; then QCV1_RB=ok'
-    kweak(V1E, 'esac )"; qf_rb1; if do_rollback; then QCV1_RB=ok', "K3", "QF-RB1 called again in V1")
+    kweak(V1E, 'esac )"; qf_rb1; if do_rollback; then QCV1_RB=ok', "K3", "QF-RB1 called again in V1",
+          "V1 runs QF-RB1 or the switch tool before its put-back")
     kweak(V1E, 'esac )"; sub="$(qf_copy v1x "$P3B_PIN")" && qf_tool "$sub" show >/dev/null; if do_rollback; then QCV1_RB=ok', "K3",
-          "the switch tool run in V1 before its put-back")
+          "the switch tool run in V1 before its put-back", "V1 runs QF-RB1 or the switch tool before its put-back")
     # K4
     kweak("$cnt('quote_followup_state', \" WHERE k NOT LIKE 'list_last:%'\")", "$cnt('quote_followup_state')", "K4",
-          "quote_followup_state counted over every row")
+          "quote_followup_state counted over every row", "never-fell count is not taken over its rows")
     # K4b
     one = [l for l in t.split("\n") if l.strip().startswith(K4B_ONE)]
     if len(one) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K4b): the one-row acceptance found {len(one)} times")
     ONE = one[0]
+    A1 = "does not accept exactly the one row"
     kweak(ONE, ONE.replace("[ \"$(printf '%s' \"$sca\" | tr ',' '\\n' | sort | paste -sd, -)\" = \"$scx\" ]",
-                           "[ -n \"$sca\" ]"), "K4b", "any extra row accepted")
-    kweak(ONE + "\n", "", "K4b", "the exact equality restored alone (fails on a first deploy)")
-    kweak(ONE, ONE.replace('[ "$(lk_mg_g1)" = "absent" ] && ', ""), "K4b", "the one row accepted whatever MG-G1 read")
+                           "[ -n \"$sca\" ]"), "K4b", "any extra row accepted", A1)
+    kweak(ONE + "\n", "", "K4b", "the exact equality restored alone (fails on a first deploy)", A1)
+    kweak(ONE, ONE.replace('[ "$(lk_mg_g1)" = "absent" ] && ', ""), "K4b", "the one row accepted whatever MG-G1 read", A1)
     kweak('rollback) case "${DBS_A:-}" in *" ledger="*":$MIG104_LAST:"*) printf absent ;; *" ledger="*":$MIG107_LAST:"*) printf present ;; esac ;; ',
-          "", "K4b", "lk_mg_g1 in --rollback reading MG_G1, which no rollback sets")
+          "", "K4b", "lk_mg_g1 in --rollback reading MG_G1, which no rollback sets", "lk_mg_g1 does not read MG-G1's verdict")
     # K5: each detector form in code
-    kweak(RB0, RB0 + "  printf '%s' \"<?php PluginConfig::saveOverrides(\\$d, ['followup_enabled' => '0']);\" | docker exec -i \"$CONTAINER\" php\n",
-          "K5", "a saveOverrides in a printf piped into docker exec php")
-    kweak(RB0, RB0 + "  dxo php -r 'require \"/x/lib/KycService.php\"; KycService::writeKycFile(\"/x\", []);'\n", "K5",
-          "a writeKycFile call")
-    kweak(RB0, RB0 + "  dxo php -r '$s = SqliteStore::create(\"'\"$PDD_IN\"'\"); $s->save(\"kyc_config.json\", []);'\n", "K5",
-          "a ->save of kyc_config.json on the live data folder")
+    kweak(RB0, ins("printf '%s' \"<?php PluginConfig::saveOverrides(\\$d, ['followup_enabled' => '0']);\" | docker exec -i \"$CONTAINER\" php"),
+          "K5", "a saveOverrides in a printf piped into docker exec php", W5)
+    kweak(RB0, ins("dxo php -r 'require \"/x/lib/KycService.php\"; KycService::writeKycFile(\"/x\", []);'"), "K5", "a writeKycFile call", W5)
+    kweak(RB0, ins("dxo php -r '$s = SqliteStore::create(\"'\"$PDD_IN\"'\"); $s->save(\"kyc_config.json\", []);'"), "K5",
+          "a ->save of kyc_config.json on the live data folder", W5)
     q6 = [l for l in t.split("\n") if "ucrm_quote_organization_id" in l and "--value disabled" in l and 'DN_DATA_DIR="$d"' in l]
     if len(q6) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K5): Q-CA6's run found {len(q6)} times")
-    kweak(q6[0], q6[0].replace('DN_DATA_DIR="$d"', 'DN_DATA_DIR="$PDD_IN"'), "K5", "Q-CA6's set_config run pointed at $PDD_IN")
-    kweak(RB0, RB0 + '  bash "$REPO/scripts/sales-followup.sh" off chase\n', ("K1", "K5"),
-          "the switch tool's off, run live (K1: the tool named outside its readers; K5: a writer)")
-    kweak(RB0, RB0 + '  SC="$IN_CONTAINER/tools/set_config.php"; docker exec -u "$DB_OWNER" -e DN_DATA_DIR="$PDD_IN" "$CONTAINER" '
-                     'php "$SC" --key followup_enabled --value 0\n', "K5", "set_config run through a variable")
-    # the tokenizer's own controls: a command substitution inside display text is code, and so is an echo piped into a shell
-    kweak(RB0, RB0 + '  note "RB107 $(docker exec "$CONTAINER" php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0)"\n',
-          "K5", "a writer inside a command substitution in display text")
-    kweak('  echo "      $K_ON_CMD"\n', '  echo "      $K_ON_CMD" | sh\n', "K5", "K_ON_CMD echoed into sh")
+    kweak(q6[0], q6[0].replace('DN_DATA_DIR="$d"', 'DN_DATA_DIR="$PDD_IN"'), "K5", "Q-CA6's set_config run pointed at $PDD_IN",
+          "Q-CA6's throwaway set_config run found 0 times")
+    kweak(q6[0], q6[0] + f'; {LIVE} php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0 >/dev/null', "K5",
+          "a second set_config run hidden on Q-CA6's line", N5)
+    kweak(RB0, ins('bash "$REPO/scripts/sales-followup.sh" off chase'), ("K1", "K5", "K7"),
+          "the switch tool's off, run live (K1: named outside its readers; K5: a writer; K7: a script run from a variable path)", W5)
+    kweak(RB0, ins(f'SC="$IN_CONTAINER/tools/set_config.php"; {LIVE} php "$SC" --key followup_enabled --value 0'), "K5",
+          "set_config run through a variable", N5)
+    kweak(RB0, ins(f'( grep -q . /dev/null; DEST="$IN_CONTAINER"; {LIVE} php "$DEST/tools/set_config.php" --key followup_enabled --value 0 )'),
+          "K5", "set_config run on a line that also greps (the reader is per occurrence)", N5)
+    kweak(RB0, ins(f'EXPECTED_CHANGED="$EXPECTED_CHANGED"; {LIVE} php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0'),
+          "K5", "set_config run on a line that begins as EXPECTED_CHANGED's", N5)
+    kweak(RB0, ins('RB_ZZ="$RB_ZZ php -f /x/tools/set_config.php -- --key followup_enabled --value 0"; docker exec "$CONTAINER" $RB_ZZ'),
+          ("K5", "K7"), "a run disguised as an RB failure label", N5)
+    # the tokenizer's own controls: output that leaves the terminal is code — a substitution, a pipe, tee, a file
+    kweak(RB0, ins('note "RB107 $(docker exec "$CONTAINER" php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0)"'),
+          "K5", "a writer inside a command substitution in display text", W5)
+    kweak('  echo "      $K_ON_CMD"\n', '  echo "      $K_ON_CMD" | sh\n', "K5", "K_ON_CMD echoed into sh", "K_ON_CMD expanded in code")
+    kweak(RB0, ins('echo "$BD_OFF_CMD" | tee -a /dev/null | bash'), "K5", "BD_OFF_CMD echoed through tee into bash",
+          "BD_OFF_CMD expanded in code")
+    kweak(RB0, ins('echo "$K_OFF_CMD" > "$OUT/x.sh"'), "K5", "K_OFF_CMD echoed into a file", "K_OFF_CMD expanded in code")
     # K5: the named display variables
     kq = '      case "$k" in quoted_no_prices_enabled) echo "      $K_OFF_CMD" ;; *) echo "      $Q_OFF_CMD" ;; esac'
-    kweak(kq, kq.replace('echo "      $K_OFF_CMD"', '"$K_OFF_CMD"'), "K5", "K_OFF_CMD as a command word")
-    kweak(kq, kq.replace('echo "      $Q_OFF_CMD"', 'eval "$Q_OFF_CMD"'), "K5", "Q_OFF_CMD in eval")
-    kweak('  echo "      $K_ON_CMD"\n', '  sh -c "$K_ON_CMD"\n', "K5", "K_ON_CMD in sh -c")
-    kweak('  echo "      $W1_ON_CMD"\n', '  bash -c "$W1_ON_CMD"\n', "K5", "W1_ON_CMD in bash -c")
+    kweak(kq, kq.replace('echo "      $K_OFF_CMD"', '"$K_OFF_CMD"'), "K5", "K_OFF_CMD as a command word", "K_OFF_CMD expanded as a command word")
+    kweak(kq, kq.replace('echo "      $Q_OFF_CMD"', 'eval "$Q_OFF_CMD"'), ("K5", "K7"), "Q_OFF_CMD in eval", "Q_OFF_CMD expanded in eval")
+    kweak('  echo "      $K_ON_CMD"\n', '  sh -c "$K_ON_CMD"\n', ("K5", "K7"), "K_ON_CMD in sh -c", "K_ON_CMD expanded in sh -c or bash -c")
+    kweak('  echo "      $W1_ON_CMD"\n', '  bash -c "$W1_ON_CMD"\n', ("K5", "K7"), "W1_ON_CMD in bash -c", "W1_ON_CMD expanded in sh -c or bash -c")
     kweak('    echo "      $BD_DRAIN_CMD"   # §K\'s drain reading: printed, never run (RB107)\n',
           '    X="$BD_DRAIN_CMD"; echo "      $X"   # §K\'s drain reading: printed, never run (RB107)\n', "K5",
-          "BD_DRAIN_CMD through another assignment")
+          "BD_DRAIN_CMD through another assignment", "BD_DRAIN_CMD expanded in code")
+    kweak(RB0, ins('printf -vX \'%s\' "$K_OFF_CMD"; eval "$X"'), ("K5", "K7"), "K_OFF_CMD through printf -vX and eval",
+          "K_OFF_CMD expanded in code")
     bdd = [l for l in t.split("\n") if l.startswith("BD_DRAIN_CMD=")]
-    kweak(bdd[0] + "\n", bdd[0] + "\n" + bdd[0] + "\n", "K5", "BD_DRAIN_CMD assigned twice")
+    kweak(bdd[0] + "\n", bdd[0] + "\n" + bdd[0] + "\n", "K5", "BD_DRAIN_CMD assigned twice", "BD_DRAIN_CMD is assigned 2 times")
+    bdo = [l for l in t.split("\n") if l.startswith("BD_OFF_CMD=")]
+    kweak(bdo[0] + "\n", bdo[0] + "\n" + 'BD_OFF_CMD+=" && bash $QF_WRAPPER off chase"\n', ("K1", "K5", "K7"),
+          "BD_OFF_CMD changed by +=", "BD_OFF_CMD is assigned 2 times")
     k_on = [l for l in t.split("\n") if l.startswith("  K_ON_CMD=")]
     kweak(k_on[0] + "\n", k_on[0] + "\n" + '  X_OFF_CMD="docker exec -u $DB_OWNER -e DN_DATA_DIR=$PDD_IN $CONTAINER php '
           '$IN_CONTAINER/tools/set_config.php --key followup_enabled --value 0"\n', "K5",
-          "a display variable added to the script but not to the list")
+          "a display variable added to the script but not to the list", W5)
     # K6
     na = [l for l in t.split("\n") if l.startswith('  NA_G1="$(qf_php na "$sub/code" "$sub" ')]
     if len(na) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K6): NA-G1's call found {len(na)} times")
     kweak(na[0], na[0].replace('"$sub/code" "$sub"', '"$sub/code" "$PDD_IN"'), "K6",
-          "the list probe pointed at the live data folder (its plugin.sqlite3, the live book)")
-    kweak("        " + NA_REFUSAL + "\n", "", "K6", "the list probe's path check removed")
+          "the list probe pointed at the live data folder (its plugin.sqlite3, the live book)", "qf_php na is not given a copy")
+    kweak("        " + NA_REFUSAL + "\n", "", "K6", "the list probe's path check removed", "first statement does not refuse")
     kweak('  o="$(qf_php trial "$sub/code" "$sub" "$MIG107_LAST")"', '  o="$(qf_php trial "$sub/code" "$PDD_IN" "$MIG107_LAST")"',
-          "K6", "the trial called on the live book")
+          "K6", "the trial called on the live book", "qf_php trial is not given a copy")
     g2 = [l for l in t.split("\n") if l.startswith('  sub="$(qf_copy g2 "$P3B_PIN")" || stop ')]
     if len(g2) != 1:
         raise SystemExit(f"KEEP CHECK CONTROL (K6): QF-G2's copy found {len(g2)} times")
-    kweak(g2[0], g2[0].replace('sub="$(qf_copy g2 "$P3B_PIN")"', 'sub="$PDD_IN"'), "K6", "the trial's copy replaced by the live data folder")
-    print(f"  keep check: K1–K6 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused for exactly its own check(s)")
+    kweak(g2[0], g2[0].replace('sub="$(qf_copy g2 "$P3B_PIN")"', 'sub="$PDD_IN"'), "K6", "the trial's copy replaced by the live data folder",
+          "the copy qf_php trial reads is not qf_copy's")
+    # K7 (review 2): the constructs that hide a run, and the one exception held exact
+    kweak(RB0, ins(f'x=QF_TOOL; {LIVE} php "$IN_CONTAINER/${{!x}}" off chase'), "K7", "the switch tool through an indirect expansion",
+          "an indirect expansion")
+    kweak(RB0, ins(f"{LIVE} sh -c 'php \"$1\"/tools/sales_f*.php off chase' _ \"$IN_CONTAINER\""), "K7",
+          "the switch tool through a glob inside sh -c", "a glob in a tools/ or scripts/ path")
+    kweak(RB0, ins('v=BD_OFF_CMD; eval "${!v}"'), "K7", "a display variable run through ${!v} and eval", "an indirect expansion")
+    kweak(RB0, ins("dxo php -r 'call_user_func([\"PluginConfig\", \"saveOverrides\"], \"/x\", []);'"), "K7",
+          "saveOverrides through call_user_func", "call_user_func")
+    kweak(RB0, ins("dxo php -r '$s = SqliteStore::create(\"/x\"); $f = \"kyc_config.json\"; $s->save($f, []);'"), "K7",
+          "a ->save of kyc_config.json through a variable", "a ->save( whose file name is a variable")
+    kweak(RB0, ins('bash "$OUT/x.sh"'), "K7", "a script run from a variable path", "a script run from a variable path")
+    kweak(RB0, ins('bash "$REPO/scripts/deploy-hybrid2.sh"'), "K7", "the put-back's exception is exact (another script)",
+          "a script run from a variable path")
+    print(f"  keep check: K1–K7 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused by exactly "
+          "the checks named for it and by the rule it is for")
 
     # the run's folder (DS3-fix1, carried): made in the main shell before any subshell reads it — weakened copies
     print("  folder check: " + folder_check(t))
