@@ -89,10 +89,12 @@ SA_BLOCK = r"""# ── 5.18.107: stage A's notes (SA; root docs/76 §T.5) ─�
 #   - StaffJobsGate::applies as the workers read it (PluginConfig::read), the gate every 5.18.107 part needs — false is a
 #     note in capitals, as 5.18.106's U4 said it.
 SA_TXT_V9="__V9__"; BD_A=""
-# sa_bd SUB — the pin's --check burst-drain on SUB's copy (qf_tool): "bd=read a=N apart=N b=N control=N", or
-# "bd=unread(<why>)" and status 1. Its lines are matched whole, each once; the id lines beneath them never leave here.
+# sa_bd SUB [ids] — the pin's --check burst-drain on SUB's copy (qf_tool): "bd=read a=N apart=N b=N control=N", or
+# "bd=unread(<why>)" and status 1. Its lines are matched whole, each once. The id lines beneath them leave here only with
+# "ids": " convs=<the conversation ids the reading lists, sorted, comma-separated>" ("-" for none) — rb107's and V1's,
+# which hand them to staff (root docs/76 §T.7); stage A never asks for them.
 sa_bd() {
-  local o rc a ap b c v
+  local o rc a ap b c v cv
   o="$(qf_tool "$1" --check burst-drain)"; rc=$?
   [ "$rc" -eq 0 ] || { printf 'bd=unread(exit-%s)' "$rc"; return 1; }
   if grep -q '^burst-drain: INDETERMINATE — the events could not be read' <<<"$o"; then printf 'bd=unread(events)'; return 1; fi
@@ -102,6 +104,9 @@ sa_bd() {
   c="$(sed -n 's/^burst-drain: control: \([0-9][0-9]*\) typed message(s) in the last day$/\1/p' <<<"$o")"
   for v in "$a" "$ap" "$b" "$c"; do case "$v" in ''|*[!0-9]*) printf 'bd=unread(lines)'; return 1 ;; esac; done
   printf 'bd=read a=%s apart=%s b=%s control=%s' "$a" "$ap" "$b" "$c"
+  [ "${2:-}" = "ids" ] || return 0
+  cv="$(sed -n 's/^  conv \([0-9][0-9]*\): .*/\1/p' <<<"$o" | sort -un | paste -sd, -)"
+  printf ' convs=%s' "${cv:--}"
 }
 # sa_stage SUB — stage A (a deploy and --check), on QF-G1's copy (SUB) through the pin's code: SA's notes; BD_A the drain's
 # counts (or its unread reason) for the state file. Never stops.
