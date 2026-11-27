@@ -2599,20 +2599,22 @@ F3 readings and the rollback's one write.
 
   A14's loop, its two stop messages and its note follow. Its ok line names the whole chain; at 5.18.106 it named only up
   to `PREV5` while the loop read `PREV9` (S106:13168, 13216).
-- **The lists, from Git, never typed.** The delta is 104 files:
-  - 64 changed: the build's 62, plus `manifest.json` and `SAFETY.md`;
+- **The lists, from Git, never typed.** The delta is 110 files:
+  - 70 changed: the build's 62; `manifest.json` and `SAFETY.md`; the five distributor tests' version pins; and
+    `tests/quote_from_ucrm/F_send_quote.php`, F6 re-pointed for O7 when the release-stage run of
+    `test_quote_from_ucrm` found it comparing the Uganda journey with 5.18.101's byte for byte;
   - 40 added: 30 tests, nine lib classes and `migrations/092_wa_no_ai.sql`;
-  - 46 of the 104 are runtime files (36 changed, 10 added).
+  - 46 of the 110 are runtime files (36 changed, 10 added).
 
   The three lists:
-  - **`PREV_CHANGED`**: the 64 changed files at `bf29cbd`'s sha256 (what must be live before, and what a rollback puts
-    back). 40 of them were in 5.18.106's kept list, 11 in its delta, and 13 in neither.
-  - **`PIN_SHA256S`**: the 104 at the pin's sha256.
-  - **The kept list**: (455 − 40) + (23 − 11) = **427**, at `bf29cbd`'s sha256 and asserted equal at the pin. The 12
+  - **`PREV_CHANGED`**: the 70 changed files at `bf29cbd`'s sha256 (what must be live before, and what a rollback puts
+    back). 41 of them were in 5.18.106's kept list, 16 in its delta, and 13 in neither.
+  - **`PIN_SHA256S`**: the 110 at the pin's sha256.
+  - **The kept list**: (455 − 41) + (23 − 16) = **421**, at `bf29cbd`'s sha256 and asserted equal at the pin. The 7
     files of 5.18.106's delta that 5.18.107 does not change rejoin it. `lib/QuoteTaxLine.php` leaves it.
 
   The derivation first asserts 5.18.106's own counts (455, 23, 20 changed, 3 added) as its starting point. The counts
-  above were measured on the build branch. The derivation re-reads them from the release commit, and a difference is
+  above were measured on the release commit (`5b6245b`). The derivation re-reads them from it, and a difference is
   refused, never adjusted.
 - **A7 is carried: the release commit holds the plugin tree only.** The build branch also changes the root file
   `scripts/lib/ai_check.php` (W.2's library list). It goes on the development branch, as every root script does, and no
@@ -2690,7 +2692,7 @@ F3 readings and the rollback's one write.
 - **BR1 and RB's file checks.** An earlier 5.18.107 and its rollback leave all 40 added files installed:
   `deploy-hybrid.sh` copies with tar and never deletes. Ten of them are runtime: nine classes nothing in `bf29cbd`
   requires, and 092, which `bf29cbd`'s runner globs. The texts say so. RB's comment that `kyc_form.php` and
-  `set_config.php` are "kept by their own sha256" is corrected: both are among the 64.
+  `set_config.php` are "kept by their own sha256" is corrected: both are among the 70.
 
 ### T.3 Migration 092 — the trial before the copy, the first boot after it, and a rollback
 
@@ -2991,7 +2993,7 @@ F3 readings and the rollback's one write.
 ### T.6 After the copy, and `--after-only`
 
 - **R1 and Q-CA1 are re-pinned:**
-  - the 104 delta files at the pin's sha256 and the 427 kept files at `bf29cbd`'s;
+  - the 110 delta files at the pin's sha256 and the 421 kept files at `bf29cbd`'s;
   - master and main by their pins;
   - `php -l` on every changed or added runtime PHP file, with test files reported apart;
   - `catalogue.json` decodes;
@@ -3154,7 +3156,7 @@ F3 readings and the rollback's one write.
     conversation ids in capitals, for staff, because 5.18.106 cannot drain; a control of 0 is INDETERMINATE. It never
     says *nothing to drain*.
 - **`rb107`, in place of `rb106`, is read-only.** It checks:
-  - the 64 changed files at `bf29cbd`'s sha256 and the 427 kept files unchanged;
+  - the 70 changed files at `bf29cbd`'s sha256 and the 421 kept files unchanged;
   - the 40 added files left in place, named: nine classes nothing in `bf29cbd` requires, and 092;
   - master as before;
   - LK-RB1, through the pin-only reader;
@@ -3392,7 +3394,7 @@ F3 readings and the rollback's one write.
   - 5.18.106 serving, its `--after-only` PASSED, and the quarantine's `--check` PASSED;
   - steps 1–6 on, as §F's step 2 left production. The chase means claim mode.
 - **Then:**
-  - **A plain 5.18.106 tree, before the rehearsal's first 5.18.107 copy** (said so): one of the 64 changed files other
+  - **A plain 5.18.106 tree, before the rehearsal's first 5.18.107 copy** (said so): one of the 70 changed files other
     than the four tools files is edited, which brings the deploy run's `BASE_DIFFERS` stop. The tools reading names the
     three present files *bf29cbd's* and `lib/BurstMerge.php` *absent*, never *not read*; every command is worded as
     refused, with nothing saved; *it leaves `'0'`* is never said; K and Q read *cannot be read*, and their lines print,
