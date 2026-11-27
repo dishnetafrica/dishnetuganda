@@ -27,6 +27,10 @@
 //                                          two typed ai.reply events on one conversation, as evo_webhook emits them; "aside"
 //                                          marks the first for the second (a waits, b unsettled), "claim" takes the first (a
 //                                          only), "fail" fails the second once (failed, 1 of its attempts, retrying)
+//   noai          {"phone","name","reason"[,"alert":1]}
+//                                          a number listed through the code root's NoAiList::add (as the staff screens list it),
+//                                          and with alert the wa.no_ai_alert queued as evo_webhook queues it (EventBus::emit, its
+//                                          payload); undone by book_back (a wa_no_ai row is never deleted)
 //   burst_undo    {"ids":[…]}              the events this helper emitted, removed (fixture; each checked to be its own)
 //   sched         {"keep","tag","set":{job:{"ago_s":n|"at":epoch,"duration_ms":n}}[,"drop":[job,…]]}
 //   sched_raw     {"keep","tag","raw":"…"}  /  sched_back {"keep","tag"}
@@ -72,7 +76,7 @@ const RH107_SW = ['quoted_no_prices_enabled', 'connection_quote_enabled', 'ai_bu
 const RH107_TXT = ['quoted_reply_text', 'quoted_alert_cooldown_hours', 'connection_quote_transport', 'connection_quote_tax_line',
                    'connection_quote_closing', 'no_ai_alert_cooldown_hours', 'ai_burst_merge_window_minutes'];
 const RH107_PROSE = ['quoted_reply_text', 'connection_quote_transport', 'connection_quote_tax_line', 'connection_quote_closing'];
-const RH107_OPS = ['settext', 'clear107', 'store_keys107', 'store_keys107_undo', 'burst', 'burst_undo', 'sched', 'sched_raw', 'sched_back',
+const RH107_OPS = ['noai', 'settext', 'clear107', 'store_keys107', 'store_keys107_undo', 'burst', 'burst_undo', 'sched', 'sched_raw', 'sched_back',
                    'budget', 'budget_back', 'book_keep', 'book_back', 'ledger092', 'ledger092_undo', 'ledger071', 'ledger071_undo',
                    'log_keep', 'log_back', 'log_add', 'log_drop', 'log_mark', 'log_fill', 'mig092'];
 const RH107_F092 = '092_wa_no_ai.sql';
@@ -88,6 +92,7 @@ function rh107_job($v): bool { return is_string($v) && preg_match('/^[a-z][a-z0-
 /** '' when the op is the rehearsal's own and well formed, else why not. Values are judged, never echoed. */
 function rh107_bad(array $o, string $range): string
 {
+    $root = (string)($GLOBALS['root'] ?? '');
     $op = (string)($o['op'] ?? '');
     if (!in_array($op, RH107_OPS, true)) return 'an op this helper does not know';
     if (array_key_exists('phone', $o) && $op !== 'ledger092' && !(is_string($o['phone']) && preg_match('/^\+?' . $range . '[0-9]{2}$/', $o['phone']))) {
@@ -119,6 +124,11 @@ function rh107_bad(array $o, string $range): string
             if (array_key_exists('fail', $o) && $o['fail'] !== 1) return 'fail is 1 or absent';
             if (array_key_exists('origin', $o) && $o['origin'] !== 'voice') return 'origin is voice or absent';
             return '';
+        case 'noai':
+            foreach (['phone', 'name', 'reason'] as $k) if (!array_key_exists($k, $o)) return 'noai needs ' . $k;
+            if (!is_string($o['reason']) || strpos($o['reason'], RH107_MARK) === false) return 'a reason without the ' . RH107_MARK . ' mark';
+            if (array_key_exists('alert', $o) && $o['alert'] !== 1) return 'alert is 1 or absent';
+            return is_file($root . '/lib/NoAiList.php') ? '' : 'noai needs the code root\'s NoAiList';
         case 'burst_undo':
             if (!rh107_list($o['ids'] ?? null)) return 'burst_undo needs ids';
             foreach ($o['ids'] as $i) if (!is_int($i) || $i < 1) return 'an id is a positive number';
@@ -410,6 +420,21 @@ try {
             $r += ['conv' => $cid, 'a' => $a, 'b' => $b, 'took' => $took, 'a_status' => (string)$rows[0]['status'], 'b_status' => (string)$rows[1]['status'],
                    'b_attempts' => (int)$rows[1]['attempts'] . '/' . (int)$rows[1]['max_attempts'],
                    'a_marked' => strpos((string)$rows[0]['error'], BurstMerge::MARK . $b) !== false ? 1 : 0, 'origin' => ($o['origin'] ?? '') === 'voice' ? 'voice' : 'typed'];
+        } elseif ($op === 'noai') {
+            foreach (['timezone', 'UtcClock', 'TenantProfile', 'StaffJobsGate', 'NoAiList'] as $l) if (is_file($root . '/lib/' . $l . '.php')) require_once $root . '/lib/' . $l . '.php';
+            $cfg = PluginConfig::read($root, $data);
+            $L = new NoAiList($pdo, $cfg, $data);
+            $a = $L->add((string)$o['phone'], (string)$o['reason'], (string)$o['name']);
+            if (empty($a['ok']) || !empty($a['already'])) throw new RuntimeException('noai: not listed new');
+            $ev = 0;
+            if (($o['alert'] ?? 0) === 1) {
+                $conv = new ConversationService($data, $pdo);
+                $c = $conv->ensureConversation(ltrim((string)$o['phone'], '+'), 'sales', (string)$o['name'], 'webhook');
+                $cid = (int)($c['id'] ?? 0);
+                $ev = (new EventBus($pdo))->emit('wa.no_ai_alert', 'conversation', $cid, ['channel' => 'sales', 'customer_phone' => (string)$a['phone'],
+                    'conversation_id' => $cid, 'no_ai_id' => (int)$a['id']], 3, 'evo_webhook');
+            }
+            $r += ['what' => 'a number listed through NoAiList::add' . ($ev ? ', its alert queued as evo_webhook queues it' : ''), 'id' => (int)$a['id'], 'event' => $ev];
         } elseif ($op === 'burst_undo') {
             $st = $pdo->prepare("SELECT payload FROM events WHERE id = ? AND event_type = 'ai.reply' AND created_by = 'evo_webhook'");
             foreach ($o['ids'] as $id) {

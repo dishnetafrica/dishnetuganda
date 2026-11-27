@@ -22,6 +22,7 @@
 #                         byte offset of 092's first OK line|-> owner=<uid> lines=
 #   sched DB              budget=<master_budget_seconds in the store's kyc_config row, or absent> entries=<master_schedule's
 #                         entries, or absent|unreadable> — what master reads (MS_PHP's reading, S:8212)
+#   evstat DB ID…         <id>:<status>:<attempts> for each event id, or <id>:none — the drain's named events, read back
 #   bookdig DB            the book's logical digest — every schema object's text, then every table's rows in rowid order —
 #                         16 hex: unchanged across a run proves the run wrote nothing to the book
 import calendar
@@ -150,6 +151,15 @@ def sched(db):
     print('budget=%s entries=%s' % (b, e))
 
 
+def evstat(db, ids):
+    c = ro(db)
+    out = []
+    for i in ids:
+        r = c.execute('SELECT status, attempts FROM events WHERE id = ?', (int(i),)).fetchone()
+        out.append('%d:%s' % (int(i), '%s:%d' % (r[0], r[1]) if r else 'none'))
+    print(' '.join(out))
+
+
 def bookdig(db):
     c = ro(db)
     h = hashlib.sha256()
@@ -177,6 +187,8 @@ def main(argv):
             log092(argv[2]); return 0
         if cmd == 'sched' and len(argv) == 3:
             sched(argv[2]); return 0
+        if cmd == 'evstat' and len(argv) >= 4:
+            evstat(argv[2], argv[3:]); return 0
         if cmd == 'bookdig' and len(argv) == 3:
             bookdig(argv[2]); return 0
     except Exception as e:   # a reader that could not read says so, and never guesses
