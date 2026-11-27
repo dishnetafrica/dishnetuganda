@@ -115,7 +115,7 @@ check "$( case "$NAS107" in +256[0-9]*|256[0-9]*) echo read ;; *) echo "unread:$
 # ── The EXIT trap: this release's triggers first, then the chain's own cleanup (the trap as the chain set it, or as a
 # development runner restored it). ──
 cleanup107() {
-  [ -n "${SB:-}" ] && rm -f "$SB/web/.noboot107" "$SB/.plant092touch107" "$SB/.boot107" "$SB/.rbfail107" "$SB/.rbfail107.seen" "$SB/web/.redirect107" "$SB/web/.redirect107lock"
+  [ -n "${SB:-}" ] && rm -f "$SB/web/.noboot107" "$SB/.plant092touch107" "$SB/.alter092touch107" "$SB/.boot107" "$SB/.rbfail107" "$SB/.rbfail107.seen" "$SB/web/.redirect107" "$SB/web/.redirect107lock"
   [ -n "${DATA:-}" ] && [ -f "$DATA/migration.log" ] && chmod u+w "$DATA/migration.log" 2>/dev/null
   return 0
 }

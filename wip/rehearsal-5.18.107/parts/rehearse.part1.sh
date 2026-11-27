@@ -190,7 +190,7 @@ rm -f "$H107_PREFIX"
 for f107 in run106 run106c run_line106c fresh106 tidy106 installed106 left106 nogo106 checkgo106 weak106 anc106 ancc106 keep106 back106 \
             mark106 cut106 aft106 rbx106 qcheck106 dredeploy106 v1run106 csb1run106 master106 sender106 seed106 seed106r plant106 \
             setcfg106 setrc106 sget106 q106 kv106 cond106 dpre106 dstdrop106 cleanup106 expect106 onall106 quiet106 went106 last106 \
-            rc106 sv106 sweep106 nr106 tst106 lock106 unlock106 refuse106 backups106 states106 keyf106 keysum106 \
+            rc106 sv106 sweep106 nr106 tst106 lock106 unlock106 refuse106 refused106 evopost106 uo106 tl106 sweep105 spent99 backups106 states106 keyf106 keysum106 \
             run104 fresh104 weak104 live104 sf104 sf104c sfrc104 clk_set104 clk_to104 fnow104 kat104 kday104 kdow104 dsnap104 drest104 \
             kv104 q104 master104 sched104 ledger104 owner104 sv104 install_commit idle104 base_log onst104 dk104 pubget v1read102 \
             check has okline noteline failline fails printed live inst_ver data94 kept_state evo_calls vt_host qj n103 \

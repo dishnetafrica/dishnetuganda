@@ -11,6 +11,13 @@ LEFT107() {   # LEFT107 — the chain's and this release's triggers still armed,
   [ -e "$REPO/.git/index.lock" ] && out="$out,index.lock"
   echo "${out#,}" | sed 's/^$/none/'
 }
+# 5.18.106's refusal list stays from 106-6 (its sender pass) until 106-10f, which removes it — and 106-10 is cut with the
+# chain, so its removal is carried here, as 106-10f made it: removed, then a send for J1's first number answered with a key.id
+# and nothing more refused (one call to the stand-in Evolution, outside every run, as 106-10f's).
+RLB107="$(if [ -e "$SB/evo/rh106-refuse.list" ]; then grep -c . "$SB/evo/rh106-refuse.list"; else echo absent; fi)"; RFB107="$(refused106)"
+RLA107="$(refuse106)"; RQ107="$(evopost106 sendText "${J1A106:-}")"
+check "$RLA107:$( [ -e "$SB/evo/rh106-refuse.list" ] && echo listed || echo unlisted):$RQ107:$(( $(refused106) - RFB107 ))" "0:unlisted:id:0" \
+  "107-infra e0 $V106's refusal list (it listed $RLB107; 106-10f removes it, cut with 106-10) removed here as 106-10f did: a send for J1's first number answered with a key.id, nothing more refused"
 check "$(LEFT107)|$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY106" 2>/dev/null | grep -c .)" "none|0" \
   "107-infra e nothing the chain armed is left armed (106-10f's reading, run before 107 touches a stand-in): no trigger, no index lock, no weakened copy of 5.18.106's script left in the clone"
 
