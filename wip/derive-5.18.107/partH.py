@@ -659,12 +659,17 @@ def apply(doc, ctx):
         '    unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER OR THE ASSISTANT-OFF LIST DID NOT ANSWER"\n'
         '         echo "  (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER GETS AN AI REPLY, AND EACH ai.reply DIES AFTER"\n'
         '         echo "  ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;\n'
-        '    ctl) echo "  NA-CA1 failed on its controls (its line above says which), but its first probe, the worker\'s own read of the"\n'
+        '    ctl) echo "  NA-CA1 failed past its first probe (its line above says how), but that probe, the worker\'s own read of the"\n'
         '         echo "  assistant-off list, answered: AI replies go on." ;;\n'
+        '    dat) echo "  NA-CA1 failed: the assistant-off list reads, but its first probe, the worker\'s own read, lists a number nobody"\n'
+        '         echo "  can hold (NA-CA1\'s first sentinel; its line above): its rows are not what 092 and staff left. AI replies go on for"\n'
+        '         echo "  every number not on it." ;;\n'
         '    mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"\n'
-        '        echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"\n'
-        '        echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092\'s ledger row is repaired by hand."\n'
+        '        echo "  its objects, no copy to read them on, or a reading that did not answer). Where they are not whole, the migration"\n'
+        '        echo "  runner never re-runs a file it has recorded, and after a rollback MG-G1 refuses every redeploy until 092\'s ledger"\n'
+        '        echo "  row is repaired by hand."\n'
         '        if [ "${NA_CA1_R:-}" = "ok" ]; then echo "  The assistant-off list reads the way the worker reads it (NA-CA1): AI replies go on."\n'
+        '        elif [ "${NA_P1:-}" = "none" ] || [ "${NA_P1:-}" = "listed" ]; then echo "  The assistant-off list answered the worker\'s own read (NA-CA1\'s first probe; NA-CA1\'s own failure is its line above): AI replies go on."\n'
         '        else echo "  NA-CA1 was not judged (no copy to read on): whether AI replies go on is NOT ESTABLISHED."; fi ;;\n'
         '    log) echo "  migration.log holds a PARTIAL line for 092 (MG-CA2 above), but the ledger is whole — 092\'s checksum"\n'
         '         echo "  ${MIG107_LAST_MD5:0:16}…, its _schema_checks row ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects (MG-CA1) — so 092 needs"\n'
@@ -677,9 +682,9 @@ def apply(doc, ctx):
     doc.sub('else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi\n',
             'else echo; echo "  $EXPECTED_VERSION ($MODE): $FAIL FAILED$( if [ -n "${MG_SAY:-}" ]; then echo " — a failure after the copy means the rollback (root docs/76 §M), never an automatic one: root docs/76 §K\'s two commands first, then the rollback command, each alone, at the end of this summary. Send this LOG FILE back (never the cash sheet)."; else echo " — send the log file (never the cash sheet); do not roll back on your own unless staff or customers are affected."; fi)"; fi\n',
             why="H12: the FAILED line where MG_SAY is set")
-    if doc.t.count("MG_SAY") != 1 + 8 + 4:
-        raise SystemExit(f"partH: MG_SAY named {doc.t.count('MG_SAY')} times, not 13 (its declaration, mg_after's eight, the lead's three, the verdict's one)")
-    for w, k in (("na", 2), ("unk", 2), ("ctl", 1), ("mg", 1), ("log", 1)):
+    if doc.t.count("MG_SAY") != 1 + 9 + 4:
+        raise SystemExit(f"partH: MG_SAY named {doc.t.count('MG_SAY')} times, not 14 (its declaration, mg_after's nine, the lead's three, the verdict's one)")
+    for w, k in (("na", 2), ("unk", 2), ("ctl", 1), ("dat", 1), ("mg", 1), ("log", 1)):
         if len(re.findall(rf"MG_SAY={w}\b", doc.t)) != k or doc.t.count(f"    {w}) echo \"  ") != 1:
             raise SystemExit(f"partH: MG_SAY={w} is not set {k} time(s) by mg_after and led once")
 

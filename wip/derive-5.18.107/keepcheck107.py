@@ -35,10 +35,10 @@ class ParseError(Exception):
 
 
 class _Word:
-    __slots__ = ("s", "e", "subs", "psub_out")
+    __slots__ = ("s", "e", "subs", "psub_out", "redir_out")
 
     def __init__(self, s):
-        self.s, self.e, self.subs, self.psub_out = s, s, [], False
+        self.s, self.e, self.subs, self.psub_out, self.redir_out = s, s, [], False, False
 
 
 class Tok:
@@ -58,7 +58,7 @@ class Tok:
     def cmds(self, i, closer):
         t, n = self.t, self.n
         words, spans = [], []
-        st = {"ci": None, "case": 0, "paren": 0}
+        st = {"ci": None, "case": 0, "paren": 0, "grp": [], "spans": spans}   # grp: len(spans) at each open group (review 3)
 
         def finish(piped_at=None):
             if words:
@@ -109,11 +109,13 @@ class Tok:
                 else:
                     finish()
                     st["paren"] += 1
+                    st["grp"].append(len(spans))
                     i += 1
             elif c == ")":
                 if st["paren"] > 0:
                     finish()
                     st["paren"] -= 1
+                    self.group_end(i + 1, st)
                     i += 1
                 elif st["case"] > 0:
                     finish()
@@ -135,6 +137,10 @@ class Tok:
         words.append(w)
         if st["ci"] is None:
             txt = self.t[w.s:w.e]
+            if txt in ("{", "if", "for", "while", "until", "select"):
+                st["grp"].append(len(st["spans"]))
+            elif txt in ("}", "fi", "done", "esac"):
+                self.group_end(w.e, st)
             if txt == "esac":
                 st["case"] = max(0, st["case"] - 1)
             elif txt in KEYWORDS or ASSIGN.match(txt):
@@ -143,6 +149,22 @@ class Tok:
                 st["ci"] = len(words) - 1
                 if txt == "case":
                     st["case"] += 1
+                    st["grp"].append(len(st["spans"]))
+
+    def group_end(self, pos, st):
+        """a group closes: when its output goes to a pipe or a file, the display text inside it is code (review 3)"""
+        if not st["grp"]:
+            return
+        at = st["grp"].pop()
+        m = re.compile(r"[ \t]*(\|\|?|&>|1?>>?|2>|>)").match(self.t, pos)
+        if not m:
+            return
+        op = m.group(1)
+        if op == "||" or op == "2>":
+            return
+        if op.endswith(">") and self.t.startswith("&2", m.end()):
+            return
+        del st["spans"][at:]
 
     def judge(self, words, ci, piped_at):
         """The display spans of one finished command."""
@@ -168,7 +190,7 @@ class Tok:
             return []
         if any(w.psub_out for w in args):
             return []
-        if any(re.match(r"(?:1|&)?>>?\|?(?!&2$)", t[w.s:w.e]) for w in args):
+        if any(w.redir_out for w in words):
             return []
         out = []
         for w in args:
@@ -202,6 +224,7 @@ class Tok:
                 if (line.lstrip("\t") if strip else line) == delim:
                     i = j + 1
                     break
+                self.mask[i:j] = b"H" * (j - i)   # a heredoc body: code (PHP, sums, texts)
                 i = j + 1
         self.pending = []
         return i
@@ -222,6 +245,10 @@ class Tok:
                     continue
                 break
             if c == "&":
+                if t.startswith("&>", i):   # &> — both streams to a file; never a zero-length word (review 3)
+                    w.redir_out = True
+                    i += 1
+                    continue
                 if i > w.s and t[i - 1] in "<>":
                     i += 1
                     continue
@@ -232,6 +259,7 @@ class Tok:
                 j = t.find("'", i + 1)
                 if j < 0:
                     raise ParseError(f"an unclosed ' at offset {i}")
+                self.mask[i:j + 1] = b"Q" * (j + 1 - i)   # single-quoted text: code that no shell expands here
                 i = j + 1
             elif c == '"':
                 i = self.dq(i + 1, w)
@@ -252,6 +280,11 @@ class Tok:
                         w.psub_out = True
                     i, inner = self.cmds(i + 2, ")")
                     w.subs.append((s, i, inner))
+                elif c == ">":   # standard output redirected, spaced or glued; 2> and >&2 are standard error (review 3)
+                    k = 2 if t.startswith((">>", ">|"), i) else 1
+                    if not (t[w.s:i] == "2" or (t.startswith("&2", i + k) and not t[i + k + 2:i + k + 3].isdigit())):
+                        w.redir_out = True
+                    i += k
                 else:
                     i += 1
             else:
@@ -360,19 +393,30 @@ class View:
     def __init__(self, t):
         self.t = t
         self.mask = Tok(t, DISPLAY_VARS).mask
-        self.lines = []   # (lineno, raw, code): code keeps only the 'C' characters, every other one a space
+        self.lines = []   # (lineno, raw, code): code keeps the code characters (C, Q, H), every other one a space
+        self.shell = {}   # lineno -> the unquoted shell code alone (C)
+        self.skipped = set()
         at = 0
         for n, raw in enumerate(t.split("\n"), 1):
             m = self.mask[at:at + len(raw)]
-            if raw.lstrip().startswith(("#", "//")):
-                code = ""
+            lead = len(raw) - len(raw.lstrip())
+            # (review 3) a line is skipped only as a PHP comment — // or # first, inside a heredoc or a quoted string —
+            # never by its raw prefix: a shell line beginning //usr/bin/env, or # inside a string, is code
+            if raw.lstrip().startswith(("#", "//")) and lead < len(raw) and m[lead] in (72, 81):
+                code, sh = "", ""
+                self.skipped.add(n)
             else:
-                code = "".join(ch if m[k] == 67 else " " for k, ch in enumerate(raw))
+                code = "".join(ch if m[k] in (67, 72, 81) else " " for k, ch in enumerate(raw))
+                sh = "".join(ch if m[k] == 67 else " " for k, ch in enumerate(raw))
             self.lines.append((n, raw, code))
+            self.shell[n] = sh
             at += len(raw) + 1
 
     def code_lines(self):
         return [(n, raw, code) for n, raw, code in self.lines if code.strip()]
+
+    def skip(self, n):
+        return n in self.skipped or not self.lines[n - 1][2].strip()
 
     def cls_at(self, off):
         return chr(self.mask[off])
@@ -620,8 +664,8 @@ def k5(v):
     # the named display variables
     for var in DISPLAY_VARS:
         # every form that sets it (review 2): NAME=, NAME+=, printf -v NAME, read/declare/local/export … NAME
-        asg = [(n, raw) for n, raw, _ in v.lines if not raw.lstrip().startswith(("#", "//"))
-               for _ in re.finditer(rf"(?<![\w$]){var}\+?=|\bprintf\s+-v\s*{var}\b|\b(?:read|declare|typeset|local|export|readonly)\b[^;&|\n]*\b{var}\b", raw)]
+        asg = [(n, raw) for n, raw, code in v.code_lines()
+               for _ in re.finditer(rf"(?<![\w$]){var}\+?=|\bprintf\s+-v\s*{var}\b|\b(?:read|declare|typeset|local|export|readonly)\b[^;&|\n]*\b{var}\b", code)]
         if len(asg) != 1:
             bad.append(("K5", f"{var} is assigned {len(asg)} times, not once"))
         else:
@@ -645,7 +689,7 @@ def k5(v):
             c = v.cls_at(m.start())
             n = t.count("\n", 0, m.start()) + 1
             raw = v.lines[n - 1][1]
-            if raw.lstrip().startswith(("#", "//")) or c == "X":
+            if n in v.skipped or c == "X":
                 continue
             if c == "D":
                 shown += 1
@@ -691,7 +735,7 @@ def k6(v):
     modes = _modes(php)
     # every new MigrationRunner( in the script sits in QF_PHP
     mr_at = [m.start() for m in re.finditer(r"new MigrationRunner\(", t)
-             if not v.lines[t.count("\n", 0, m.start())][1].lstrip().startswith(("#", "//"))]
+             if (t.count("\n", 0, m.start()) + 1) not in v.skipped and v.cls_at(m.start()) != "X"]
     outside = [p for p in mr_at if not (php_at <= p < php_at + len(php))]
     if outside:
         bad.append(("K6", f"{len(outside)} new MigrationRunner( outside QF_PHP"))
@@ -759,8 +803,11 @@ def k6(v):
 #    them. None of these constructs is in the script, so each is refused outright, with one named exception: the documented
 #    put-back, bash "$REPO/scripts/deploy-hybrid.sh". A name assembled by concatenation stays beyond any text check; the
 #    rehearsal runs the script (§T.11) ──
-HIDERS = [
-    (re.compile(r"(?:^|[;&|(){]\s*|\b(?:then|do|else)\s+)eval\b"), "eval"),
+HIDERS = [   # (review 3) each found anywhere in code, not anchored to a line's start
+    (re.compile(r"(?<![\w$./>:-])eval\b"), "eval"),
+    (re.compile(r"(?<![\w$./>:-])source\s+[\"$/]"), "a file sourced"),
+    (re.compile(r"\b(?:sh|bash|dash|zsh)\s*<(?!<)"), "a shell reading a script from a redirection"),
+    (re.compile(r"\|\s*(?:sh|bash|dash|zsh)\b(?!\s+-n)"), "a shell reading a pipe"),
     (re.compile(r"\$\{!"), "an indirect expansion ${!…}"),
     (re.compile(r"\b(?:sh|bash|dash|zsh)\s+-c\s+[\"$]"), "a shell given an expanding command string"),
     (re.compile(r"(?:tools|scripts)/[^\s\"';|&)]*[*?\[]"), "a glob in a tools/ or scripts/ path"),
@@ -770,9 +817,10 @@ HIDERS = [
     (re.compile(r"[\"'](?:saveOverrides|writeKycFile)[\"']"), "a writer named as a string"),
     (re.compile(r"->save\(\s*\$"), "a ->save( whose file name is a variable"),
     (re.compile(r"\bphp\s+-f\b"), "php -f"),
-    (re.compile(r"(?:^|[;&|({]\s*|\b(?:then|do|else)\s+)(?:source|\.)\s+[\"$/]"), "a file sourced"),
     (re.compile(r"(?<![\w./-])(?:bash|sh)\s+[\"']?\$"), "a script run from a variable path"),
 ]
+# the dot form of sourcing, on unquoted shell code alone: in PHP (heredocs, quoted strings) "." is concatenation
+DOT = re.compile(r"(?:^\s*|[;&|({]\s*|\b(?:then|do|else)\s+|\)\s+)\.\s+[\"$/]")
 RUN_OK = 'bash "$REPO/scripts/deploy-hybrid.sh"'
 
 
@@ -781,9 +829,12 @@ def k7(v):
     for n, raw, code in v.code_lines():
         for rx, what in HIDERS:
             for m in rx.finditer(code):
-                if what == "a script run from a variable path" and code.startswith(RUN_OK, m.start()):
-                    continue
+                if what == "a script run from a variable path" and code.startswith(RUN_OK, m.start()) \
+                        and code[m.start() + len(RUN_OK):m.start() + len(RUN_OK) + 1] in ("", " ", "\t", ";", "|", "&", ")"):
+                    continue   # the documented put-back, as a whole word (review 3)
                 bad.append(("K7", f"line {n}: {what} in code ({raw.strip()[:80]})"))
+        if DOT.search(v.shell[n]):
+            bad.append(("K7", f"line {n}: a file sourced in code ({raw.strip()[:80]})"))
     return bad
 
 
@@ -896,8 +947,8 @@ def run(doc, ctx):
     # the tokenizer's own controls: output that leaves the terminal is code — a substitution, a pipe, tee, a file
     kweak(RB0, ins('note "RB107 $(docker exec "$CONTAINER" php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0)"'),
           "K5", "a writer inside a command substitution in display text", W5)
-    kweak('  echo "      $K_ON_CMD"\n', '  echo "      $K_ON_CMD" | sh\n', "K5", "K_ON_CMD echoed into sh", "K_ON_CMD expanded in code")
-    kweak(RB0, ins('echo "$BD_OFF_CMD" | tee -a /dev/null | bash'), "K5", "BD_OFF_CMD echoed through tee into bash",
+    kweak('  echo "      $K_ON_CMD"\n', '  echo "      $K_ON_CMD" | sh\n', ("K5", "K7"), "K_ON_CMD echoed into sh", "K_ON_CMD expanded in code")
+    kweak(RB0, ins('echo "$BD_OFF_CMD" | tee -a /dev/null | bash'), ("K5", "K7"), "BD_OFF_CMD echoed through tee into bash",
           "BD_OFF_CMD expanded in code")
     kweak(RB0, ins('echo "$K_OFF_CMD" > "$OUT/x.sh"'), "K5", "K_OFF_CMD echoed into a file", "K_OFF_CMD expanded in code")
     # K5: the named display variables
@@ -909,8 +960,26 @@ def run(doc, ctx):
     kweak('    echo "      $BD_DRAIN_CMD"   # §K\'s drain reading: printed, never run (RB107)\n',
           '    X="$BD_DRAIN_CMD"; echo "      $X"   # §K\'s drain reading: printed, never run (RB107)\n', "K5",
           "BD_DRAIN_CMD through another assignment", "BD_DRAIN_CMD expanded in code")
-    kweak(RB0, ins('printf -vX \'%s\' "$K_OFF_CMD"; eval "$X"'), ("K5", "K7"), "K_OFF_CMD through printf -vX and eval",
+    kweak(RB0, ins('printf -vX \'%s\' "$K_OFF_CMD"; $X'), ("K5", "K7"), "K_OFF_CMD through printf -vX, then run",
           "K_OFF_CMD expanded in code")
+    # (review 3) a group's output, glued and both-stream redirections: display text that leaves the terminal is code
+    kweak(RB0, ins('{ echo "$K_OFF_CMD"; } | sh'), ("K5", "K7"), "K_OFF_CMD echoed in a { } group piped into sh",
+          "K_OFF_CMD expanded in code")
+    kweak(RB0, ins('if true; then echo "$Q_OFF_CMD"; fi > "$OUT/x.sh"'), "K5", "Q_OFF_CMD echoed in an if whose output goes to a file",
+          "Q_OFF_CMD expanded in code")
+    kweak(RB0, ins('( echo "$BD_DRAIN_CMD" ) | tee /dev/null'), "K5", "BD_DRAIN_CMD echoed in a subshell piped into tee",
+          "BD_DRAIN_CMD expanded in code")
+    kweak(RB0, ins('while false; do echo "$K_ON_CMD"; done >> "$OUT/x"'), "K5", "K_ON_CMD echoed in a loop whose output is appended to a file",
+          "K_ON_CMD expanded in code")
+    kweak(RB0, ins('case "$MODE" in *) echo "$Q_ON_CMD" ;; esac > "$OUT/x"'), "K5", "Q_ON_CMD echoed in a case whose output goes to a file",
+          "Q_ON_CMD expanded in code")
+    kweak(RB0, ins('echo "$K_OFF_CMD">"$OUT/x.sh"'), "K5", "K_OFF_CMD echoed into a file, the redirection glued", "K_OFF_CMD expanded in code")
+    kweak(RB0, ins('echo "$W1_ON_CMD" 1>>"$OUT/x"'), "K5", "W1_ON_CMD appended to a file through 1>>", "W1_ON_CMD expanded in code")
+    kweak(RB0, ins('echo "$BD_OFF_CMD" &> "$OUT/x"'), "K5", "BD_OFF_CMD echoed into a file through &>", "BD_OFF_CMD expanded in code")
+    kweak(RB0, ins('echo "$Q_OFF_CMD" &>"$OUT/x"'), "K5", "Q_OFF_CMD echoed into a file through &>, glued", "Q_OFF_CMD expanded in code")
+    # (review 3) a shell line is skipped by its mask, never by its raw prefix
+    kweak(RB0, ins('//usr/bin/env docker exec "$CONTAINER" php "$IN_CONTAINER/tools/set_config.php" --key followup_enabled --value 0'),
+          "K5", "set_config run on a line beginning //usr/bin/env", N5)
     bdd = [l for l in t.split("\n") if l.startswith("BD_DRAIN_CMD=")]
     kweak(bdd[0] + "\n", bdd[0] + "\n" + bdd[0] + "\n", "K5", "BD_DRAIN_CMD assigned twice", "BD_DRAIN_CMD is assigned 2 times")
     bdo = [l for l in t.split("\n") if l.startswith("BD_OFF_CMD=")]
@@ -936,17 +1005,33 @@ def run(doc, ctx):
           "the copy qf_php trial reads is not qf_copy's")
     # K7 (review 2): the constructs that hide a run, and the one exception held exact
     kweak(RB0, ins(f'x=QF_TOOL; {LIVE} php "$IN_CONTAINER/${{!x}}" off chase'), "K7", "the switch tool through an indirect expansion",
-          "an indirect expansion")
+          "an indirect expansion ${!…} in code")
     kweak(RB0, ins(f"{LIVE} sh -c 'php \"$1\"/tools/sales_f*.php off chase' _ \"$IN_CONTAINER\""), "K7",
-          "the switch tool through a glob inside sh -c", "a glob in a tools/ or scripts/ path")
-    kweak(RB0, ins('v=BD_OFF_CMD; eval "${!v}"'), "K7", "a display variable run through ${!v} and eval", "an indirect expansion")
-    kweak(RB0, ins("dxo php -r 'call_user_func([\"PluginConfig\", \"saveOverrides\"], \"/x\", []);'"), "K7",
-          "saveOverrides through call_user_func", "call_user_func")
+          "the switch tool through a glob inside sh -c", "a glob in a tools/ or scripts/ path in code")
+    kweak(RB0, ins('v=BD_OFF_CMD; eval "${!v}"'), "K7", "a display variable run through ${!v} and eval", "an indirect expansion ${!…} in code")
+    kweak(RB0, ins("dxo php -r '$c = \"PluginConfig\"; call_user_func([$c, base64_decode(\"c2F2ZU92ZXJyaWRlcw==\")], \"/x\", []);'"), "K7",
+          "a writer reached through call_user_func, its name encoded", "call_user_func in code")
     kweak(RB0, ins("dxo php -r '$s = SqliteStore::create(\"/x\"); $f = \"kyc_config.json\"; $s->save($f, []);'"), "K7",
-          "a ->save of kyc_config.json through a variable", "a ->save( whose file name is a variable")
-    kweak(RB0, ins('bash "$OUT/x.sh"'), "K7", "a script run from a variable path", "a script run from a variable path")
+          "a ->save of kyc_config.json through a variable", "a ->save( whose file name is a variable in code")
+    kweak(RB0, ins('bash "$OUT/x.sh"'), "K7", "a script run from a variable path", "a script run from a variable path in code")
     kweak(RB0, ins('bash "$REPO/scripts/deploy-hybrid2.sh"'), "K7", "the put-back's exception is exact (another script)",
-          "a script run from a variable path")
+          "a script run from a variable path in code")
+    kweak(RB0, ins('bash "$REPO/scripts/deploy-hybrid.sh"2'), "K7", "the put-back's exception is a whole word (a suffix after it)",
+          "a script run from a variable path in code")
+    kweak(RB0, ins('eval "$(cat /dev/null)"'), "K7", "eval", "eval in code")
+    kweak(RB0, ins('if ! command eval "$OUT"; then :; fi'), "K7", "eval after ! and command", "eval in code")
+    kweak(RB0, ins('source "$OUT/x.sh"'), "K7", "a file sourced", "a file sourced in code")
+    kweak(RB0, ins('case "$MODE" in *) . "$OUT/x.sh" ;; esac'), "K7", "a file sourced with ., after a case pattern",
+          "a file sourced in code")
+    kweak(RB0, ins('bash < "$OUT/x.sh"'), "K7", "a shell reading a script from a redirection",
+          "a shell reading a script from a redirection in code")
+    kweak(RB0, ins('cat "$OUT/x.sh" | bash'), "K7", "a shell reading a pipe", "a shell reading a pipe in code")
+    kweak(RB0, ins(f'T=x.php; {LIVE} php "$IN_CONTAINER/tools/$T" off chase'), "K7", "a file name under tools/ held in a variable",
+          "a file name under tools/ or scripts/ held in a variable in code")
+    kweak(RB0, ins(f'{LIVE} php -f /x/tools/x.php'), "K7", "php -f", "php -f in code")
+    kweak(RB0, ins("dxo php -r '$m = \"writeKycFile\"; KycService::$m(\"/x\", []);'"), "K7", "a writer named as a string",
+          "a writer named as a string in code")
+    kweak(RB0, ins("printf -v X '%s' x"), "K7", "printf -v", "printf -v in code")
     print(f"  keep check: K1–K7 ({len(DISPLAY_VARS)} named display variables); {n_ctl[0]} weakened copies, each refused by exactly "
           "the checks named for it and by the rule it is for")
 

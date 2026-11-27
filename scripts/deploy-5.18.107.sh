@@ -8394,7 +8394,8 @@ me_ca1() {
 #    (a first boot's SqliteStore::create can run while tar is still writing other files), so it is dated against the
 #    copy's start in a note, never judged. ──
 mg_after() {
-  local inst="$1" mg o sub w at au="" cu v seen="" ok1="" ok2="" r1 log l1 mk mkt okl pl wl i
+  local inst="$1" mg o sub w at au="" cu v seen="" w0="" ok1="" ok2="" r1 log l1 mk mkt okl pl wl i
+  NA_P1=""   # set only by this run's NA-CA1 probe
   cih_main || true   # the run's folder, made in this shell before the readings on copies below, which run in $( … ) (DS3-fix1)
   if [ "$MODE" = "after" ]; then mg="$(sed -n 's/^MG_G1=//p' "$STATE" 2>/dev/null | tail -n1)"; cu="$(sed -n 's/^QF_COPY_UNIX=//p' "$STATE" 2>/dev/null | tail -n1)"
   else mg="${MG_G1:-}"; cu="${QF_COPY_UNIX:-}"; fi
@@ -8402,16 +8403,16 @@ mg_after() {
   # MG-CA1 — a bounded wait (60 s) on the LIVE ledger, read-only, for 092's row; then a fresh copy
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13; do
     o="$(qf_php mgledger "$PDD_IN/plugin.sqlite3")"
-    case "$o" in "mig092=1") seen=1; break ;; esac
+    case "$o" in "mig092=1") seen=1; break ;; "mig092=0") w0=1 ;; esac   # w0: the ledger answered without 092 at least once
     [ "$i" = "13" ] || sleep 5
   done
   r1="$( [ "$(sha256sum "$DEST/$MIG107_LAST_PATH" 2>/dev/null | cut -c1-64)" = "$MIG107_SHA" ] && echo ok || echo bad )"
   # §T.14 (review 2 of the derived script): the wait ends unseen either on the ledger read without 092 (absent) or on a
   # ledger that did not read (unread) — only the first says no boot has applied 092
-  MG_WAIT=""; [ -n "$seen" ] || { [ "$o" = "mig092=0" ] && MG_WAIT=absent || MG_WAIT=unread; }
+  MG_WAIT=""; [ -n "$seen" ] || { [ -n "$w0" ] && MG_WAIT=absent || MG_WAIT=unread; }   # review 3: any answer, not the last read alone
   if [ -z "$seen" ]; then
     MG_CA1_R=bad
-    if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (${o:-not read}): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
+    if [ "$MG_WAIT" = "absent" ]; then bad "MG-CA1 092 is not in the live migration ledger after a wait of 60 s (it answered mig092=0$( [ "$o" = "mig092=0" ] || echo "; its last reading: ${o:-no answer}")): no boot has applied it since the copy — and until one does, no Uganda customer gets an AI reply (the list cannot be read)"
     else bad "MG-CA1 the live migration ledger could not be read in a wait of 60 s (${o:-no answer}): whether a boot has applied 092 since the copy, and so whether the assistant-off list reads, is NOT ESTABLISHED"; fi
   elif [ -z "$inst" ] || ! sub="$(qf_copy mg "$inst")"; then
     MG_CA1_R=bad; bad "MG-CA1 092 is in the live ledger, but a fresh copy to read it on could not be made — ${sub:-no installed code to read with}; MG-CA1 and NA-CA1 are not judged"
@@ -8421,6 +8422,7 @@ mg_after() {
       "mig092=1 cks=${MIG107_LAST_MD5:0:16} sc=${MIG107_SC##*:}/${MIG107_SC##*:} objects=5/5 objsql=same table=1 at="*)
         MG_CA1_R=ok; ok1=1
         ok "MG-CA1 092 on a fresh copy after the copy: in the migration ledger with its checksum ${MIG107_LAST_MD5:0:16}…, its _schema_checks row ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects as the pin's 092 makes them ($o)" ;;
+      ""|"?"*) MG_CA1_R=bad; bad "MG-CA1 092 could not be read on a fresh copy after the copy (${o:-no answer}): whether its ledger row, checksum, _schema_checks row and objects are whole is NOT ESTABLISHED" ;;
       *) MG_CA1_R=bad; bad "MG-CA1 092 on a fresh copy after the copy is not whole ($o; the reviewed checksum ${MIG107_LAST_MD5:0:16}…, ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects): the runner never re-runs a file it has recorded" ;;
     esac
     at="$(qf_kv "$o" at)"; au=""; case "$at" in [0-9][0-9][0-9][0-9]-*) au="$(date -u -d "${at/T/ }" +%s 2>/dev/null)" ;; esac
@@ -8433,7 +8435,13 @@ mg_after() {
     case "$v" in
       "p1=none any="[01]" active="[0-9]*" scan=1 p2=listed,none p3=PDOException gate="*) NA_CA1_R=ok; ok2=1
         ok "NA-CA1 wa_no_ai reads the way the worker reads it, through the installed NoAiList on a fresh copy: a number nobody holds is not listed and nothing throws; the positive control lists a sentinel row on a throwaway copy, the second sentinel not; with the table renamed the read throws ($v)" ;;
-      *) NA_CA1_R=bad; bad "NA-CA1 wa_no_ai does not read the way the worker reads it, through the installed NoAiList ($v)" ;;
+      *) NA_CA1_R=bad   # review 3: the verdict says what probe 1, the worker's own read, answered
+         case "$NA_P1" in
+           none) bad "NA-CA1 wa_no_ai reads the way the worker reads it (probe 1: a number nobody holds is not listed), but the rest of NA-CA1 did not hold ($v): probe 1 alone does not pass it" ;;
+           listed) bad "NA-CA1 wa_no_ai lists a number nobody can hold (probe 1, the worker's own read, returned a row for NA-CA1's first sentinel; $v): the list reads, but its rows are not what 092 and staff left" ;;
+           "?"*) bad "NA-CA1 wa_no_ai does not read the way the worker reads it, through the installed NoAiList ($v): probe 1 threw" ;;
+           *) bad "NA-CA1 the probes did not answer ($v): whether wa_no_ai reads the way the worker reads it is NOT ESTABLISHED" ;;
+         esac ;;
     esac
     cih_drop "$sub"
   fi
@@ -8474,9 +8482,12 @@ mg_after() {
   # the FAILED summary's lead (root docs/76 §T.3 item 7): NA-CA1 first, then MG-CA1, then MG-CA2 alone. "na" only where the
   # list is shown not to read (092 read absent, or probe 1 threw); "unk" where that is not established (the ledger or the
   # list did not answer); "ctl" where NA-CA1 failed on its controls while probe 1, the worker's own read, answered (§T.14)
+  # review 3: a list that reads (probe 1 answered none or listed) never outranks MG-CA1's fact; "dat" where probe 1 lists a
+  # number nobody can hold (the list reads, its rows are wrong), "ctl" where the rest of NA-CA1 failed
   if [ -z "$seen" ]; then if [ "$MG_WAIT" = "absent" ]; then MG_SAY=na; else MG_SAY=unk; fi
-  elif [ "$NA_CA1_R" = "bad" ]; then case "$NA_P1" in none|listed) MG_SAY=ctl ;; "?"*) MG_SAY=na ;; *) MG_SAY=unk ;; esac
+  elif [ "$NA_CA1_R" = "bad" ] && [ "$NA_P1" != "none" ] && [ "$NA_P1" != "listed" ]; then case "$NA_P1" in "?"*) MG_SAY=na ;; *) MG_SAY=unk ;; esac
   elif [ "$MG_CA1_R" = "bad" ]; then MG_SAY=mg
+  elif [ "$NA_CA1_R" = "bad" ]; then if [ "$NA_P1" = "listed" ]; then MG_SAY=dat; else MG_SAY=ctl; fi
   elif [ "$MG_CA2_R" = "bad" ]; then MG_SAY=log
   else MG_SAY=""; fi
 }
@@ -16137,12 +16148,17 @@ if [ "$FAIL" != "0" ] && [ -n "${MG_SAY:-}" ]; then
     unk) echo "  WHETHER UGANDA CUSTOMERS GET AI REPLIES IS NOT ESTABLISHED: THE LIVE LEDGER OR THE ASSISTANT-OFF LIST DID NOT ANSWER"
          echo "  (MG-CA1 OR NA-CA1 ABOVE). IF THE LIST DOES NOT READ, NO UGANDA CUSTOMER GETS AN AI REPLY, AND EACH ai.reply DIES AFTER"
          echo "  ABOUT 36 MINUTES OF BACKOFF, WITH A STAFF ALERT AND NO HAND-OVER." ;;
-    ctl) echo "  NA-CA1 failed on its controls (its line above says which), but its first probe, the worker's own read of the"
+    ctl) echo "  NA-CA1 failed past its first probe (its line above says how), but that probe, the worker's own read of the"
          echo "  assistant-off list, answered: AI replies go on." ;;
+    dat) echo "  NA-CA1 failed: the assistant-off list reads, but its first probe, the worker's own read, lists a number nobody"
+         echo "  can hold (NA-CA1's first sentinel; its line above): its rows are not what 092 and staff left. AI replies go on for"
+         echo "  every number not on it." ;;
     mg) echo "  092 is not shown whole in the live migration ledger (MG-CA1 above says why: its checksum, its _schema_checks row,"
-        echo "  its objects, or no copy to read them on). Where they are not whole, the migration runner never re-runs a file it has"
-        echo "  recorded, and after a rollback MG-G1 refuses every redeploy until 092's ledger row is repaired by hand."
+        echo "  its objects, no copy to read them on, or a reading that did not answer). Where they are not whole, the migration"
+        echo "  runner never re-runs a file it has recorded, and after a rollback MG-G1 refuses every redeploy until 092's ledger"
+        echo "  row is repaired by hand."
         if [ "${NA_CA1_R:-}" = "ok" ]; then echo "  The assistant-off list reads the way the worker reads it (NA-CA1): AI replies go on."
+        elif [ "${NA_P1:-}" = "none" ] || [ "${NA_P1:-}" = "listed" ]; then echo "  The assistant-off list answered the worker's own read (NA-CA1's first probe; NA-CA1's own failure is its line above): AI replies go on."
         else echo "  NA-CA1 was not judged (no copy to read on): whether AI replies go on is NOT ESTABLISHED."; fi ;;
     log) echo "  migration.log holds a PARTIAL line for 092 (MG-CA2 above), but the ledger is whole — 092's checksum"
          echo "  ${MIG107_LAST_MD5:0:16}…, its _schema_checks row ${MIG107_SC##*:} of ${MIG107_SC##*:}, its five objects (MG-CA1) — so 092 needs"
