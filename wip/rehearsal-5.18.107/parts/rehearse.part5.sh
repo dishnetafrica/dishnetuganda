@@ -98,8 +98,8 @@ check "$(has "$MUT107" 'the tar straddle')|$(has "$MUT107" "checksum WARNING (1)
   "107-5d' a weakened copy that keys the straddle note on MG-G1 alone (a redeploy) reads no note on a first deploy — caught (as --after-only)"
 MF107="$PD/migrations/092_wa_no_ai.sql"; mkdir -p "$STK107"; cp -p "$MF107" "$STK107/mf5d"; printf '%s\n' '-- RH107SECRET- a byte the pin does not have' >> "$MF107"
 ao107
-check "$AORC107|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (")|$(has "$AO107" 'not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin'"'"'s')|$(has "$AO107" 'the tar straddle')" \
-      "1|yes|yes|yes|no" \
+check "$AORC107|$( [ "$(n103 "$(kv107 "$(log107)" warning)")" -ge 2 ] && echo real)|$(has "$AO107" 'R1 installed files that differ:')|$(has "$AO107" "MG-CA2 migration.log holds 092's checksum WARNING (")|$(has "$AO107" 'not judged here: R1 reads the installed migrations/092_wa_no_ai.sql other than the pin'"'"'s')|$(has "$AO107" 'the tar straddle')" \
+      "1|real|yes|yes|yes|no" \
   "107-5d\" 092's installed bytes altered after the copy (a FIXTURE): the --after-only's own V1 boot logs the real WARNING beside the planted one — R1 FAIL, MG-CA2 names the WARNING as not judged beside R1, no straddle note"
 cp -p "$STK107/mf5d" "$MF107" && rm -f "$STK107/mf5d"
 check "$(installed107 "$P107F")|$(sd107 "$(seedk107 "$(pinroot107)" log_back l5d)" fixture)|$(kept107)" "0|1|0" "107-5d* 092's installed file and migration.log back"
@@ -121,7 +121,7 @@ check "$(has "$AO107" 'MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND STAGE 
 anc107 seen0note '      0) note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092, AND STAGE R OF THE DEPLOY READ NONE EITHER (MG_CA2_SEEN=0)' '      0) note "MG-CA2 no OK line for 092, and stage R of the deploy read none either (MG_CA2_SEEN=0)'
 anc107 mgown '  if [ "$MODE" = "after" ]; then mg="$(sed -n '"'"'s/^MG_G1=//p'"'"' "$STATE" 2>/dev/null | tail -n1)";' '  if [ "$MODE" = "after" ]; then mg="${MG_G1:-}";'
 idle104; fresh107; mutant107 c5e-note seen0note -- --after-only
-check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED')" "no" "107-5e* a weakened copy that says seen=0 as a plain note — caught"
+check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED')|$(has "$MUT107" 'MG-CA2 no OK line for 092, and stage R of the deploy read none either (MG_CA2_SEEN=0)')" "no|yes" "107-5e* a weakened copy that says the --after-only's seen=0 reading as a plain note — caught (its note printed: the copy reached the branch)"
 idle104; fresh107; mutant107 c5e-mgown mgown -- --after-only
 check "$(has "$MUT107" 'STAGE R OF THE DEPLOY READ NONE EITHER')|$( { [ "$(has "$MUT107" 'THE STATE FILE HOLDS NO MG_G1 RECORD')" = yes ] || [ "$(has "$MUT107" 'a redeploy: 092 was applied by an earlier deploy')" = yes ]; } && echo misread)" "no|misread" \
   "107-5e** a weakened copy that reads MG-G1 from its own run (an --after-only runs no stage A) loses the deploy's record — caught"
@@ -137,6 +137,15 @@ check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED')|$(has "$MUT107" "rh107 copy: th
 idle104; fresh107; mutant107 c5e-0as1 seen0x seen0as1 -- --after-only
 check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED')|$(has "$MUT107" "is the runner's trim marker")" "no|yes" "107-5e++ a weakened copy that reads 0 as 1 names the halving — caught"
 check "$(sd107 "$(seedk107 "$P107R" log_back l5em)" fixture)|$(kept107)" "1|0" "107-5e+++ migration.log back"
+# Stage R's own capitals (S:8485, deploy mode only — the --after-only copies above reach S:8489, not this line): their copy, a
+# deploy of its own from A9 with the log unwritable again (said so: v3 §C item 6 does not hold for this branch).
+anc107 seenR '    else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log, THOUGH THE LEDGER HOLDS IT' '    else note "MG-CA2 no OK line for 092 in migration.log, though the ledger holds it'
+reset107 "107-5e-A9b"
+K1="$(seedk107 "$(pinroot107)" log_keep l5eR)"; LM5ER_107="$(stat -c %a "$DATA/migration.log")"; chmod 0444 "$DATA/migration.log"
+fresh107; mutant107 c5e-R seenR -- --answer DEPLOY
+check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log')|$(has "$MUT107" 'MG-CA2 no OK line for 092 in migration.log, though the ledger holds it')|$(sget107 "$STATE107" MG_CA2_SEEN)" "no|yes|0" \
+  "107-5e# a weakened copy that says stage R's reading (seen=0) as a plain note in the deploy run — caught (a deploy of its own from A9, the log unwritable)"
+check "$(sd107 "$(seedk107 "$(pinroot107)" log_back l5eR)" fixture)|$(stat -c %a "$DATA/migration.log")|$(kept107)" "1|$LM5ER_107|0" "107-5e## migration.log back, writable"
 
 # ── D7 — WARNING only, first deploy: a WARNING planted, then the log made unwritable. The straddle note beside stage R's
 # NOT ESTABLISHED; PASSED. ──

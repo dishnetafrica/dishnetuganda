@@ -3,8 +3,8 @@
 # the boots' output files, the stand-in log's fatal check, the leftover reading over 106's and 107's triggers, the ledger071
 # undo). 5.18.106's 106-10 is cut with its rehearsal (107-cut), so what it judged is judged here again, over 106's records and
 # 107's alike, by this file's own lines. Every file this section plants is a CONTROL of a reading (zz107ctl, zz-control,
-# key-control, .zz107ctl.sh), said so where it is planted, removed at once and asserted gone in 107-10f. No number of 107's
-# range is planted or newly used here.
+# key-control, .zz107ctl.sh), said so where it is planted, removed at once and asserted gone in 107-10f. The control file holds
+# one of 107's own numbers (from FORMS107, never newly made), in this section's own folder only, and is removed with it.
 # ════════════════════════════════════════════════════════════════════════════
 echo; echo "== 107-10. what the rehearsal left behind, over 104's, 105's, 106's and 107's records alike: the sweeps, the fixtures' leftovers, the chain's failure files =="
 # 107-10a — Evolution (106-10a's reading, carried): no run of 5.18.107's, 5.18.106's or 5.18.105's script called it, every run
@@ -34,7 +34,7 @@ rm -f "$SCN107/zz-control.req" "$SCN107/zz-control.tok"
 # list as a run terminal and as a boot output, found by both scans, removed.
 sweep107() { { ls "$R107"/run-*.txt "$R107"/mutants/*.txt "$R107"/sheets/* "$R107"/logs/*.log "$R107"/logs/stream-*.txt "$OUT107"/state-* "$OUT107"/rollback-state-* "$OUT107"/cih-rows-* "$OUT107"/*.log "$OUT107"/cash-*.txt; \
                find "$R107/case" -type f ! -path '*/backup-*/*' 2>/dev/null; } 2>/dev/null | grep -v '/lk-key' | sort -u; }
-sweepx107() { ls -1 "$R104"/logs/master-106m-*.out "$R104"/logs/master-106s-*.out "$R107"/logs/act-*.txt "$R107"/ucrm/run-*.req "$R107"/boot/*.out "$R107"/logs/worker107.out 2>/dev/null; }
+sweepx107() { ls -1 "$R104"/logs/master-106m-*.out "$R104"/logs/master-106s-*.out "$R107"/logs/act-*.txt "$R107"/logs/*.json "$R107"/ucrm/run-*.req "$R107"/boot/*.out "$R107"/logs/worker107.out 2>/dev/null; }
 sweepall107() { { sweep107; sweepx107; } | sort -u; }
 printf 'RH107SECRET-control %s\n' "$(grep -m1 -F '7001070' "$FORMS107")" > "$SCN107/control.txt"; chmod 600 "$SCN107/control.txt"
 NHS107="$(sweepall107 | xargs -r grep -lF -f "$NM107F" 2>/dev/null | wc -l | tr -d ' ')"; FHS107="$(sweepall107 | xargs -r grep -lF -f "$FORMS107" 2>/dev/null | wc -l | tr -d ' ')"
@@ -104,20 +104,20 @@ check "$(grep -c . <<<"$ND1_107")|$(grep -caF 'RH107SECRET-' "$DATA/kyc_config.j
   "107-10e $V107's own numbers ($PR107<NN>) and its RH107SECRET- marker in no file of the plugin's data folders or the records but the book — the marker once in kyc_config.json, the planted settings text (107-pre5, kept by design), with none of 107's numbers ($(grep -c . <<<"$ND1_107") other file(s)$( [ -n "$ND1_107" ] && printf ': %s' "$(xargs -r -n1 basename <<<"$ND1_107" | paste -sd, -)")); the control: the book holds both"
 # 107-10f — the fixtures' leftovers, each asserted gone: every trigger of 106's and 107's (LEFT107, v3); the clone's index lock;
 # the weakened copies (every $REPO/scripts/.NAME.sh newer than this release's script; the CONTROL one planted, counted, removed);
-# the keep folders empty (107's, and the case's state-file keep), then removed; NA-CA1's sentinel row gone; 071's ledger checksum
+# the keep folders empty (107's, its state-file keep and 107-3's NS keep), kept in place; every control this section planted gone; NA-CA1's sentinel row gone; 071's ledger checksum
 # as 107-4 read it (the ledger071 undo, v3); migration.log writable as found; H2's refusal record empty; no [master] line of
 # 107-7's plants left; neither RH107_RANGE nor RH106_TOUCH in the rehearsal's own environment
 WC0_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY107" 2>/dev/null | grep -c .)"
 cp "$DEPLOY107" "$REPO/scripts/.zz107ctl.sh"; touch "$REPO/scripts/.zz107ctl.sh"; WC1_107="$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY107" 2>/dev/null | grep -c .)"; rm -f "$REPO/scripts/.zz107ctl.sh"
-KN107="$(kept107)|$(ls -A "$STK107" 2>/dev/null | grep -c .)"
-check "$(LEFT107)|$(lock106)|$WC0_107:$WC1_107:$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY107" 2>/dev/null | grep -c .)|$KN107|$(kv107 "$(ledgerx107)" sentinel)|$(kv107 "$(ledgerx107)" cks071)|$(stat -c %a "$DATA/migration.log")|$(grep -c . "$SB/plant092touch107.refused" 2>/dev/null)|$(grep -c 'RH107SECRET- a thrown error' "$PD/data/plugin.log" 2>/dev/null)|$(env | grep -cE '^(RH107_RANGE|RH106_TOUCH)=')" \
-      "none|absent|0:1:0|0|0|0|$(kv107 "$LX4_107" cks071)|$(stat -c %a "$SNAP107/$(sha256sum <<<"$DATA/migration.log" | cut -c1-16)" 2>/dev/null)|0|0|0" \
+KN107="$(kept107)|$(ls -A "$STK107" 2>/dev/null | grep -c .)|$(nskept107)|$(ls "$R104"/run-zz107ctl.txt "$R104"/sheets/cash-zz107ctl.txt "$R104"/ucrm/run-zz107ctl.req "$R105"/run-zz107ctl.txt "$R106"/run-zz107ctl.txt "$R107"/run-zz107ctl.txt "$R107"/boot/zz107ctl.out 2>/dev/null | grep -c .)"
+check "$(LEFT107)|$(lock106)|$WC0_107:$WC1_107:$(find "$REPO/scripts" -maxdepth 1 -name '.*.sh' -newer "$DEPLOY107" 2>/dev/null | grep -c .)|$KN107|$(kv107 "$(ledgerx107)" sentinel)|$(kv107 "$(ledgerx107)" cks071)|$(stat -c %a "$DATA/migration.log")|$(grep -c . "$SB/plant092touch107.refused" 2>/dev/null)|$(n103 "$(grep -c 'RH107SECRET- a thrown error' "$PD/data/plugin.log" 2>/dev/null)")|$(env | grep -cE '^(RH107_RANGE|RH106_TOUCH)=')" \
+      "none|absent|0:1:0|0|0|0|0|0|$(kv107 "$LX4_107" cks071)|$(stat -c %a "$SNAP107/$(sha256sum <<<"$DATA/migration.log" | cut -c1-16)" 2>/dev/null)|0|0|0" \
   "107-10f the fixtures' leftovers gone: no trigger of 106's or 107's armed, no index lock, no weakened copy left (the control planted, counted, removed), nothing kept, NA-CA1's sentinel row gone, 071's checksum as 107-4 read it (ledger071 undone), migration.log's mode as the snapshot's, H2 never refused a backward clock, no planted [master] ERROR left, neither range nor touch flag in the rehearsal's own environment"
 rm -rf "${SCN107:?}"
 # 107-10g — the stand-in web server's log (v3 FM6): no new Fatal or Parse error since 107-infra f's relaunch; every boot output of
 # 107's says booted
 WF1X_107="$(grep -cE 'Fatal error|Parse error' "$SB/web.log" 2>/dev/null)"
-BO107="$(for f107 in "$R107"/boot/*.out; do [ -s "$f107" ] || continue; grep -qx 'booted' "$f107" || echo "${f107##*/}"; done | paste -sd, -)"
+BO107="$(for f107 in "$R107"/boot/*.out; do [ -s "$f107" ] || continue; grep -qvxE 'booted|' "$f107" && echo "${f107##*/}"; done | paste -sd, -)"   # any line but booted (h2.out and h4.out gather every firing)
 check "$(( $(n103 "$WF1X_107") - $(n103 "$WF0X_107") ))|$( [ "$(grep -c . "$SB/web.log")" -gt "$(n103 "$WL0_107")" ] && echo grew)|${BO107:-all-booted}" "0|grew|all-booted" \
   "107-10g the stand-in's log: no new Fatal or Parse error since its relaunch on the clock (it grew: every request since was logged); every boot output of 107's (H2's, H4's, boot107's) says booted"
 # 107-10h — 106's sections' failure files (106-10g/h, cut with 106-10): from 106's baselines (AM0_106, WF0_106, BR0_106) to 107's

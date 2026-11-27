@@ -6,12 +6,13 @@ echo; echo "== 107-8 (part one). on D1: the rollback answered anything but ROLLB
 rbno107() {   # rbno107 [ANSWER] [--env K=V] — a --rollback under the clock answered ANSWER (no by default): not confirmed, nothing changed;
               # RBNO107 its output; asserted by the caller with rbq107
   local a=no; [ "${1:-}" = "" ] || { case "$1" in --*) ;; *) a="$1"; shift ;; esac; }
-  D94R_107="$(data94)"; RBC0_107="$(rbcopy107)"; fresh107; RBNO107="$(run107c --answer "$a" "$@" --rollback)"
+  D94R_107="$(data94)"; RBC0_107="$(rbcopy107)"; RKS0_107="$(keysum107)"; RST0_107="$(sha256sum < "$STATE107" 2>/dev/null | cut -c1-16)"
+  fresh107; RBNO107="$(run107c --answer "$a" "$@" --rollback)"
 }
 rbcopy107() { grep -l '^RB_COPY_AT=[0-9]' "$OUT107"/rollback-state-*.env 2>/dev/null | wc -l | tr -d ' '; }   # rollback records holding a copy time (a declined rollback writes its record before the question, S:13757, with none)
 rbq107() {   # rbq107 LABEL — the latest rbno107 not confirmed, nothing changed: $P107 serving, the data folder's digest as before, no record with a copy time
-  check "$(has "$RBNO107" '  STOP: not confirmed')$(has "$RBNO107" 'Nothing was changed. Send the log file.')|$(rc107)|$(live)|$(data94)|$(rbcopy107)" \
-        "yesyes|1|$P107|$D94R_107|$RBC0_107" "$1 not confirmed: 'Nothing was changed', exit 1, $P107 serving, the data folder's digest as before, no new rollback record with a copy time (the record a declined rollback writes before its question carries none — S:13757, as 5.18.106's rehearsal reads it)"
+  check "$(has "$RBNO107" '  STOP: not confirmed')$(has "$RBNO107" 'Nothing was changed. Send the log file.')|$(rc107)|$(live)|$(data94)|$(rbcopy107)|$(keysum107)|$(sha256sum < "$STATE107" 2>/dev/null | cut -c1-16)" \
+        "yesyes|1|$P107|$D94R_107|$RBC0_107|$RKS0_107|$RST0_107" "$1 not confirmed: 'Nothing was changed', exit 1, $P107 serving, the data folder's digest as before, the LK key file and the deploy's state file unchanged, no new rollback record with a copy time (the record a declined rollback writes before its question carries none — S:13757, as 5.18.106's rehearsal reads it)"
 }
 printed107() { grep -F -- "$2" <<<"$1" | grep -E '^      ' | head -1 | sed -E 's/^ {6}//'; }   # printed107 OUTPUT FRAGMENT — the first command line the script printed (six spaces) holding FRAGMENT
 jv107() { python3 -I -c 'import json, sys
@@ -42,14 +43,14 @@ anc107 dropset '    [ "$s2" = "off" ] || echo "      $BD_OFF_CMD"   # §K'"'"'s 
 anc107 kqon "$(printf '    q="$(rb_kq "${LK_RB0:-}" "$k")"\n    [ "$q" = "off" ] && continue\n')" "$(printf '    q="$(rb_kq "${LK_RB0:-}" "$k")"\n    [ "$q" = "on" ] || continue\n')"
 rbno107 no --env FAKE_CP_FAIL=1
 KOFF107="$(printed107 "$RBNO107" '--key quoted_no_prices_enabled --value 0')"; QOFF107="$(printed107 "$RBNO107" '--key connection_quote_enabled --value 0')"
-check "$(has "$RBNO107" 'SWITCH NOT READ — ai_burst_merge_enabled: NOT READ')|$(grep -cxF "      $BDOFF107" <<<"$RBNO107")|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" '— ai_burst_merge_enabled NOT READ')|$(has "$RBNO107" "quoted_no_prices_enabled COULD NOT BE READ (NS-G1'S RULE, ON LK-RB0)")|$(has "$RBNO107" "connection_quote_enabled COULD NOT BE READ (NS-G1'S RULE, ON LK-RB0)")|$(grep -cxF "      $KOFF107" <<<"$RBNO107")|$(grep -cxF "      $QOFF107" <<<"$RBNO107")" \
+check "$(has "$RBNO107" 'SWITCH NOT READ — ai_burst_merge_enabled: NOT READ (the pin is not staged: the release code could not be copied above)')|$(grep -cxF "      $BDOFF107" <<<"$RBNO107")|$(grep -cxF "      $BDDR107" <<<"$RBNO107")|$(has "$RBNO107" '— ai_burst_merge_enabled NOT READ')|$(has "$RBNO107" "quoted_no_prices_enabled COULD NOT BE READ (NS-G1'S RULE, ON LK-RB0)")|$(has "$RBNO107" "connection_quote_enabled COULD NOT BE READ (NS-G1'S RULE, ON LK-RB0)")|$(grep -cxF "      $KOFF107" <<<"$RBNO107")|$(grep -cxF "      $QOFF107" <<<"$RBNO107")" \
       "yes|1|1|yes|yes|yes|1|1" \
-  "107-8b the switch NOT READ (the pin's code made uncopiable, said so): SWITCH NOT READ, both §K commands each alone, the prompt saying NOT READ; step 5 names K and Q as not read, each set_config --value 0 alone with its own log"
+  "107-8b the switch NOT READ (the pin's code made uncopiable, said so): SWITCH NOT READ with its reason (P3B_WHY, S:12540), both §K commands each alone, the prompt saying NOT READ; step 5 names K and Q as not read, each set_config --value 0 alone with its own log"
 rbq107 "107-8b'"
 fresh107; mutant107 c8b-dropset dropset -- --env FAKE_CP_FAIL=1 --answer no --rollback
-check "$(grep -cxF "      $BDOFF107" <<<"$MUT107")" "0" "107-8b\" a weakened copy that drops the switch-off line — caught"
+check "$(grep -cxF "      $BDOFF107" <<<"$MUT107")|$(grep -cxF "      $BDDR107" <<<"$MUT107")|$(has "$MUT107" 'SWITCH NOT READ — ai_burst_merge_enabled: NOT READ (the pin is not staged: the release code could not be copied above)')" "0|1|yes" "107-8b\" a weakened copy that drops the switch-off line — caught (the drain line and the reason still printed: the copy reached the same place)"
 fresh107; mutant107 c8b-kqon kqon -- --env FAKE_CP_FAIL=1 --answer no --rollback
-check "$(has "$MUT107" 'COULD NOT BE READ (NS-G1')|$(grep -cF -- '--value 0' <<<"$MUT107")" "no|0" "107-8b* a weakened copy whose step 5 fires only on 'on': no note and no line when K and Q cannot be read — caught"
+check "$(has "$MUT107" 'COULD NOT BE READ (NS-G1')|$(grep -cF -- '--value 0' <<<"$MUT107")|$(has "$MUT107" 'SWITCH NOT READ — ai_burst_merge_enabled: NOT READ (the pin is not staged: the release code could not be copied above)')|$(has "$MUT107" '  STOP: not confirmed')" "no|0|yes|yes" "107-8b* a weakened copy whose step 5 fires only on 'on': no note and no line when K and Q cannot be read — caught"
 # 8c — TD7: K on through 5.18.107's set_config, as printed; the rollback answered no names K, its off command alone; then Q on: both
 for k107 in quoted_no_prices_enabled connection_quote_enabled; do
   OK8_107="$(run_line107c "" "$( [ "$k107" = quoted_no_prices_enabled ] && echo "$KON107" || echo "$QON107")")"
