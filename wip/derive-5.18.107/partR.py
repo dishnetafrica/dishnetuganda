@@ -28,8 +28,8 @@ TOOLS4 = ["lib/SalesFollowupLadder.php", "tools/sales_followup.php", "lib/BurstM
 
 NEW_HEAD = r"""# ── 5.18.107: the rollback writes nothing; §K's drain before it (RB107; root docs/76 §T.7) ───────────────────────────
 # The rollback — --rollback, and V1's automatic one — puts bf29cbd (5.18.106) back through do_rollback (git checkout, the
-# documented deploy, stamp_copy on COPY_MARK, RB_COPY_AT) and writes nothing. 5.18.106's AS-RB1 (followup_auto_send '0'
-# before the put-back) retired with its hazard, 5.18.105's sender: the target now carries F5, and 5.18.107 changes neither
+# documented deploy, stamp_copy on COPY_MARK, RB_COPY_AT) and writes nothing. 5.18.106's one write (followup_auto_send
+# '0' before the put-back) retired with its hazard, 5.18.105's sender: the target now carries F5, and 5.18.107 changes neither
 # approval nor the run — cron/followup_run.php, lib/FollowUpPolicy.php, lib/FollowUpService.php and cron/followup_close.php
 # are bf29cbd's byte for byte (derive107.py asserts it). The rollback never runs the switch tool or set_config, at either
 # call site, and nothing blocks it: a switch or a drain reading is said, never a refusal (TD6). What 5.18.107 leaves that
@@ -410,8 +410,8 @@ def apply(doc, ctx):
             "    # it reads on and §L.7's five conditions hold, recomputed in its own process; never a reason to stop — then\n"
             "    # do_rollback: no switch tool, no other key, no by-hand put-back of rows or keys.\n"
             "    as_rb1 typed\n",
-            "    # 5.18.107 (root docs/76 §T.7): no write before the put-back (AS-RB1 retired) — do_rollback: no switch tool, no\n"
-            "    # set_config, no key, no by-hand put-back of rows or keys.\n", why="the typed rollback: no write")
+            "    # 5.18.107 (root docs/76 §T.7): no write before the put-back (5.18.106's one write retired) — do_rollback: no\n"
+            "    # switch tool, no set_config, no key, no by-hand put-back of rows or keys.\n", why="the typed rollback: no write")
     doc.sub("else stop \"the rollback did not verify (live=$(live_commit)). $PUTBACK_HAZARD$(as_para rb) Put $BASELINE_VERSION back by hand, with its own command:$PUTBACK_SHOW\"",
             "else pb_ready; stop \"the rollback did not verify (live=$(live_commit)). $PUTBACK_HAZARD$(pb_para rb) Put $BASELINE_VERSION back by hand, with its own command:$PUTBACK_SHOW\"",
             why="a rollback that did not verify")
@@ -613,7 +613,7 @@ def apply(doc, ctx):
             "# ── 5.18.95: the database, before and after (R7, RB) — 5.18.107 adds 092; a rollback writes nothing (root docs/76 §T.7) ─",
             why="R7's header")
     doc.sub("and this run writes nothing in it$( [ \"${AS_RB1:-}\" = \"written\" ] && echo \" but followup_auto_send's '0' in the settings row, before the put-back (AS-RB1)\")$( [ \"$1\" = \"RB\" ] && echo \": the rollback runs no switch tool and no off-hook, writes no key but followup_auto_send (AS-RB1), and applies or removes no migration (root docs/75 §L.7)\")\"",
-            "and this run writes nothing in it$( [ \"$1\" = \"RB\" ] && echo \": the rollback runs no switch tool, no set_config and no off-hook, writes no key, and applies or removes no migration (root docs/76 §T.7)\")\"",
+            "and this run writes nothing in it$( [ \"$1\" = \"RB\" ] && echo \": the rollback runs no switch tool, no set_config and no off-hook, writes no key, and removes no migration (root docs/76 §T.7)\")\"",
             why="R7's ok line: the rollback writes no key")
     doc.sub("# docs/75 §L.2; a rollback writes one settings key, AS-RB1, and R7 is read right after it); 5.18.104 added 089–091",
             "# docs/75 §L.2; since 5.18.107 a rollback writes nothing, root docs/76 §T.7); 5.18.104 added 089–091", why="R7's comment")
@@ -632,7 +632,7 @@ def apply(doc, ctx):
     for s in gone:
         if s in body:
             raise SystemExit(f"partR: {s!r} is left below the header")
-    if body.count("followup_auto_send '0'") != 1 or "5.18.106's AS-RB1 (followup_auto_send '0'" not in body:
+    if body.count("followup_auto_send '0'") != 0 or "5.18.106's one write (followup_auto_send\n# '0'" not in body:
         raise SystemExit("partR: followup_auto_send '0' is named below the header other than in the RB block's history line")
     for f in ("rb_pre107", "rb107", "rb_switch", "rb_drain", "rb_bd_say", "rb_bd_zero", "rb_bd_staff", "rb_kq", "owner_set_cmd",
               "rb_x_say", "pb_tool", "pb_word", "pb_ready", "pb_para"):
@@ -649,7 +649,7 @@ def apply(doc, ctx):
     doc.must("RB_DRAIN=\"$(rb_drain ids)\"", 1)
     left = sorted(set(re.findall(r"AS-RB[0-9]|RB106", doc.t)))
     stray = [f"{k + 1}: {l[:80]}" for k, l in enumerate(lines) if k >= head_end and re.search(r"AS-RB[0-9]|RB106", l)
-             and not l.startswith("echo \"  names             ") and "5.18.106's AS-RB1 (" not in l and "(AS-RB1 retired)" not in l]
+             and not l.startswith("echo \"  names             ") ]
     if stray:
         raise SystemExit(f"partR: AS-RB or RB106 left outside the header and the summary's names line: {stray[:6]}")
     ctx.update(rb_left=left)

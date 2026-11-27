@@ -178,7 +178,7 @@ def apply(doc, ctx):
         raise SystemExit("PART NS: LK-G1's comment does not go on after naming NS-G1")
     doc.sub("# 5.18.107 K's, Q's or W.1's switch reading on is NS-G1's refusal, on this reading, right after it (ns_check; root docs/76\n# " + m.group(1) + "\n",
             "# 5.18.107 K's, Q's or W.1's switch reading on is NS-G1's refusal, on this reading, right after it (ns_check; root docs/76\n"
-            "# §T.4); 5.18.106's CS-G1 retired (TD1): the claim switches stay as the owner has them.\n", why="LK-G1's comment ends on NS")
+            "# §T.4); 5.18.106's claim-switch refusal retired (TD1): the claim switches stay as the owner has them.\n", why="LK-G1's comment ends on NS")
     for s in ("cs_check CS-G1", "cs_check CS-B1", "cs_check() {", "cs_found() {", "cs_check_cmd()", "cs_has() {"):
         doc.mustnot(s, why="CS-G1 and CS-B1 retired")
     doc.must('ns_check NS-G1 "$LK_G1"', 1)

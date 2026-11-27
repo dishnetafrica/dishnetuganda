@@ -185,7 +185,8 @@ def apply(doc, ctx):
         # QF
         ("the one form 5.18.105 and 5.18.106 accept, root docs/74 §H.4.4)", "the one form 5.18.105 through 5.18.107 accept, root docs/74 §H.4.4)"),
         ("  # reads them — and since 5.18.106 CS-G1 refuses a claim switch present, root docs/75 §L.3.)\n",
-         "  # reads them — and 5.18.106's CS-G1 retired (root docs/76 §T.4, TD1): the claim switches stay as the owner has them.)\n"),
+         "  # reads them — and 5.18.106's claim-switch refusal retired (root docs/76 §T.4, TD1): the claim switches stay as the\n"
+         "  # owner has them.)\n"),
         ("  # 5.18.105 and 5.18.106: 090 is 5.18.104's, in the live book's ledger", "  # 5.18.105 through 5.18.107: 090 is 5.18.104's, in the live book's ledger"),
         # the RB notes of Part V, Part O and Part P: they continue under bf29cbd
         ("# under 7835906 as Part V's switches say. Read on a copy.", "# under bf29cbd as Part V's switches say. Read on a copy."),
@@ -238,7 +239,7 @@ def apply(doc, ctx):
         ("never a value), the steps on and skipped. 5.18.106 (root docs/75 §L.3): CS-B1 first, on LK-B1's reading — none of\n"
          "  # the three claim switches present in <data>/kyc_config.json or its store row, or nothing is copied; its remedies are\n"
          "  # printed, never run.\n",
-         "never a value), the steps on and skipped. 5.18.106's CS-B1 retired with its CS-G1 (root docs/76 §T.4, TD1): the\n"
+         "never a value), the steps on and skipped. 5.18.106's claim-switch refusals retired (root docs/76 §T.4, TD1): the\n"
          "  # claim switches are copied as the owner has them.\n"),
         # V6, Q-CA5
         ("(and so does the rollback target, 5.18.105).", "(and so does the rollback target, 5.18.106)."),
@@ -263,6 +264,17 @@ def apply(doc, ctx):
         ("plugin.sqlite3's size, read as stage A read them: the ledger must be the same, the file the same size or larger",
          "plugin.sqlite3's size, read as stage A read them: the ledger must be the same (on a first deploy, 092's row added and\n"
          "# nothing else), the file the same size or larger"),
+        # 5.18.107 adds 092: the texts that said it adds no migration (VN-M1, OF-M1, QF-CA1) and 5.18.98's R7 history
+        ("$EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 090",
+         "$EXPECTED_VERSION adds only 092, so no boot applies 090 and waiting changes nothing: the book's 090"),
+        ("$EXPECTED_VERSION adds no migration, so no boot applies it and waiting changes nothing: the book's 091",
+         "$EXPECTED_VERSION adds only 092, so no boot applies 091 and waiting changes nothing: the book's 091"),
+        ("— $EXPECTED_VERSION adds no migration and removes none\"", "— $EXPECTED_VERSION adds only 092 and removes none\""),
+        ("which its runner added; 5.18.98 adds no migration, so the\n# ledger must not move at all — db_judge.)",
+         "which its runner added; 5.18.98 added none, so the\n# ledger was not to move at all — db_judge; 5.18.107 allows exactly 092's row where MG-G1 read it absent, db_mig107.)"),
+        # the summary's D9 note: post_kyc.php and webhook.php are kept by 5.18.107 too (partH asserts both)
+        ("# 5.18.103 through 5.18.106: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks were LM's masked log lines only, and 5.18.106 changes neither",
+         "# 5.18.103 through 5.18.107: D9 (no Delivery PDF on Uganda) was 5.18.102's change; none changes it — 5.18.105's post_kyc.php and webhook.php hunks were LM's masked log lines only, and 5.18.106 and 5.18.107 change neither"),
         # RB: the quoting code in place (§T.2: kyc_form.php and set_config.php are among the 70)
         ("# 5.18.99's quoting code is in place: the rollback target has it. 5.18.106 changes none of its files that reach uCRM:\n"
          "# lib/QuotationService.php (5.18.105's, its log lines masked), lib/KycService.php, lib/KycCrmSync.php, includes/api/api_cron_debug.php,\n"
@@ -342,5 +354,5 @@ def apply(doc, ctx):
             raise SystemExit(f"PART T: the body still says {s!r}")
     for s in ("5.18.107's one, 092 (wa_no_ai), is not a bank table either", "PERSONA_PHP does neither (root docs/76 §T.14, DF-1)",
               "5.18.107 changes it again (its tab tables — the AI Knowledge Base screen's own key — not", "the installed plugin is live 5.18.106",
-              "the live plugin is 5.18.106", "comes back on only by yours (root docs/76 §T.7)", "5.18.106's CS-B1 retired with its CS-G1"):
+              "the live plugin is 5.18.106", "comes back on only by yours (root docs/76 §T.7)", "5.18.106's claim-switch refusals retired (root docs/76 §T.4, TD1)"):
         doc.must(s, why="partT's result")

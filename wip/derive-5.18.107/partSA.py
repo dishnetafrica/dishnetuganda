@@ -74,7 +74,7 @@ SA_MODE = r"""    case 'sa':     // sa ROOT DIR V9 — 5.18.107 (root docs/76 §
 
 SA_BLOCK = r"""# ── 5.18.107: stage A's notes (SA; root docs/76 §T.5) ───────────────────────────────────────────────────────────────────
 # Read-only, at stage A (a deploy and --check), on QF-G1's copy through the PIN's code (P3B_PIN); notes only — counts and
-# fixed words, never a refusal (DL2). 5.18.106's U1–U5, FE-G1, UJ-CA and UJ-ON retired with F1–F5, 5.18.106's own (F3 is
+# fixed words, never a refusal (DL2). 5.18.106's readings before and after the copy retired with F1–F5, 5.18.106's own (F3 is
 # proven on production, root docs/75 §S). What SA notes:
 #   - wa_no_ai: absent on a first deploy (092 makes it, empty, at the first boot after the copy); on a redeploy, its rows;
 #   - the typed ai.reply events that carry a burst mark and still wait — the pin's own --check burst-drain on the copy
@@ -229,7 +229,7 @@ def apply(doc, ctx):
             "  # FE-G1, their one refusal: U4 read followup_enabled off. On copies,\n",
             "  # every part's keys, retired since 5.18.105: LK-G1 reads them as found); then the notes. 5.18.107 (root docs/76\n"
             "  # §T.3–§T.5): MG-G1 and NS-G1, refusals; SA, stage A's notes — wa_no_ai, the burst marks still waiting, the\n"
-            "  # settings text, OFFICE_LOCATION and StaffJobsGate — never a refusal (5.18.106's CS-G1, U1–U4 and FE-G1 retired). On copies,\n",
+            "  # settings text, OFFICE_LOCATION and StaffJobsGate — never a refusal (5.18.106's claim-switch checks and readings retired). On copies,\n",
             why="stage A's comment")
     doc.sub("kept live by 5.18.105's LK; 5.18.106's CS-G1, U1–U5 and FE-G1; read-only, on copies through the pin's code)\"",
             "kept live by 5.18.105's LK; 5.18.107's MG-G1, NS-G1 and SA; read-only, on copies through the pin's code)\"",
