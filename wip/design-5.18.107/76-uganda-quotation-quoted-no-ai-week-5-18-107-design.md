@@ -3240,7 +3240,7 @@ F3 readings and the rollback's one write.
   - rule 8 out of the absolute rules; the settings text's own STAY ON DISHNET TOPICS paragraph still holds it (§K
     step 4);
   - no office line;
-  - the AI Knowledge Base screen without its menu link (F-9);
+  - the AI Knowledge Base screen without its menu link (§W.5);
   - no two-prices warning;
   - F-1's, F-7's, F-8's and F-11's defects.
 
