@@ -51,11 +51,13 @@ EP_CALL_LINES = [
 # a value §T predicts and the release suite or the rehearsal has still to show — the driver refuses to write the committed
 # script while any is not "measured".
 MEASURED = {
-    "UG_PIN_SIGNATURE": (UG, "expected", "§T.2: unchanged, since its five probe events exclude wa.no_ai_alert; the "
-                         "rehearsal's A6 and R13 compare the pin's five-event run with it"),
-    "EP_NOAI_PIN_UG": ("wa.no_ai_alert=pending/0", "expected", "§T.2: the pin on Uganda leaves the alert for the worker"),
-    "EP_NOAI_DONE": ("wa.no_ai_alert=done/0+unknown", "expected", "§T.2: bf29cbd on both profiles, and the pin on South "
-                     "Sudan, settle it done as unknown"),
+    "UG_PIN_SIGNATURE": (UG, "measured", "§T.15 M0: A6's own EP_PHP, taken from the script, run on 771a3c1 as Uganda "
+                         "(five events) with PHP 8.3 CLI, 27 Nov — the PHP the rehearsal's stand-in container runs; "
+                         "its A6 and R13 read it again"),
+    "EP_NOAI_PIN_UG": ("wa.no_ai_alert=pending/0", "measured", "§T.15 M0: EP_PHP on 771a3c1 as Uganda with "
+                       "wa.no_ai_alert:3, 27 Nov"),
+    "EP_NOAI_DONE": ("wa.no_ai_alert=done/0+unknown", "measured", "§T.15 M0: EP_PHP with wa.no_ai_alert:3 on bf29cbd "
+                     "as Uganda and as South Sudan, and on 771a3c1 as South Sudan, each this value, 27 Nov"),
     "T1_SIGNATURE": ("548 passed, 0 failed rc=0", "measured", "§T.15: T1 on 771a3c1, 27 Nov (as in suite pass D1 on the "
                      "first cut, 5b6245b, which the re-cut does not change for it)"),
     "T4_SIGNATURE": ("20 passed, 0 failed, 0 skipped rc=0", "measured", "§T.15: T4 with --no-mutants on 771a3c1 against "
