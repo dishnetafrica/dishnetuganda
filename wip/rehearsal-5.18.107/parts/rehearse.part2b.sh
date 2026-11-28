@@ -54,11 +54,12 @@ C0_107="$(cpr107)"; W0_107="$(date -u +%s)"
 kill "$WEB_PID" 2>/dev/null; wait "$WEB_PID" 2>/dev/null
 pkill -f -- "-S 127.0.0.1:$WPORT -t $SB/web" 2>/dev/null   # a restored shell's WEB_PID may name a process it did not start: the server found by its own command line
 for i in $(seq 1 50); do curl -s --noproxy '*' -o /dev/null "$PLUGIN_BASE?page=rh107b_probe" 2>/dev/null || break; sleep 0.1; done   # the old server gone
-# opcache re-reads a changed file only once revalidate_freq (2 s) has passed on the CLOCK, and this rehearsal moves the clock:
-# trial 1 (28 Nov) found the server serving public.php as compiled before H5's edit, minutes later (rh106_probe answered,
-# rh107_probe two lines below it did not) — and a deploy's copy of lib/ would be read the same way. revalidate_freq=0: every
-# request checks the file, whatever the clock does; H5's probe is its observable.
-setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$CLKF104" "$PHPBIN" -d opcache.revalidate_freq=0 -S "127.0.0.1:$WPORT" -t "$SB/web" >>"$SB/web.log" 2>&1 & WEB_PID=$!; PIDS+=("$WEB_PID")
+# No opcache in the relaunched server. Trial 1 (28 Nov) found it serving public.php as compiled before H5's edit, minutes
+# later: rh106_probe answered and rh107_probe, two lines below it in the same file, did not; a fresh server without opcache
+# answered rh107_probe from the same file, so the stale copy was opcache's. revalidate_freq=0 did not cure it (trial 1c);
+# why its timestamp check missed the edit under the clock shim is not established, so the cache is switched off rather than
+# tuned. A deploy's copy of lib/ would otherwise be read the same way. H5's probe is the observable.
+setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE="$CLKF104" "$PHPBIN" -d opcache.enable=0 -S "127.0.0.1:$WPORT" -t "$SB/web" >>"$SB/web.log" 2>&1 & WEB_PID=$!; PIDS+=("$WEB_PID")
 for i in $(seq 1 100); do grep -q 'rh107-boot-hooks-ready' <<<"$(pubget page=rh107b_probe)" && break; sleep 0.1; done
 C1_107="$(cpr107)"; F1_107="$(fnow104)"
 check "$(nr106 "${C0_107%% *}" "$W0_107")|$(nr106 "${C0_107##* }" "$W0_107")|$( [ $(( F1_107 - W0_107 )) -ge 3600 ] && echo ahead)|$(nr106 "${C1_107%% *}" "$F1_107")|$(nr106 "${C1_107##* }" "$F1_107")|$(pubget page=rh107b_probe)|$(standin_page customer_login)" \
