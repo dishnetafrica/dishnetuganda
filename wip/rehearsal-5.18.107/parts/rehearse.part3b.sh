@@ -56,8 +56,9 @@ check "$(ledger107)|$(bookdig107)|$(logsha107)|$(snapeq107)|$(live)" "mig092=0 w
 # 107-3 — NS-G1, NS-B1 and stage A's notes (root docs/76 §T.11; v2 §B 107-3, A13). The places: p <plugin>/data/config.json,
 # d <data>/config.json, k <data>/kyc_config.json — planted by rh106-seed.php's fx_file as root (said so: no release writes
 # p or d, and 5.18.106's tools refuse these keys) and put back by fx_file_back; s the store row, by rh107-seed.php's
-# store_keys107. W.1's switch is one of the ladder's own keys (107-infra b), so in p or d LK-G1 refuses it first (S:7480):
-# NS-G1 is shown there with K and Q, and W.1 in p is LK-G1's refusal, recorded as such.
+# store_keys107. W.1's switch is one of the ladder's settings (settingKeys(), 107-infra b), never one of allKeys(), and LK-G1
+# refuses only an allKeys() key held by p or d (S:7511): so NS-G1 judges W.1 in every place, and 107-3w shows it in p (trial 1,
+# 28 Nov, found the first build expecting LK-G1's refusal there).
 # ════════════════════════════════════════════════════════════════════════════
 echo; echo "== 107-3. NS-G1, NS-B1 and stage A's notes: the switches in each place, '0', the store row alone, the texts, NS-B1 mid-run, the settings text, StaffJobsGate =="
 B3_107="$(bookdig107)"; NSK107="$R107/nskept"; mkdir -p "$NSK107"; chmod 700 "$NSK107"
@@ -84,14 +85,13 @@ for pl107 in p d k; do
     "107-3$pl107\" a weakened copy that leaves $pl107 out of NS-G1's judged places reads GO over the same plant — caught"
   check "$(sd106 "$(fxb107 "$pl107" "on-$pl107")" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3$pl107* the plant put back, the file byte for byte"
 done
-# W.1's switch in p: a ladder key held by a config.json — LK-G1's refusal, before NS-G1 reads (recorded, root docs/76 §C)
+# W.1's switch in p: a ladder setting, not an allKeys() key — LK-G1 counts it set and holds nothing, and NS-G1 refuses it
 X1="$(fxs107 p w1-p '{"ai_burst_merge_enabled":"1"}')"
 D94_107="$(data94)"; fresh107; O107="$(run107c --check)"
-check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (LK-G1): 1 of the ladder')|$(has "$O107" 'ai_burst_merge_enabled')|$(has "$O107" 'NO-GO (NS-G1)')" "true|yes|yes|no" \
-  "107-3w W.1's switch on in p: LK-G1 refuses it first — a ladder key held by a config.json (S:7480) — so NS-G1 never reads it there; the refusal names the key"
-nogo107 "107-3w'" "NO-GO (LK-G1): " "$O107" "$D94_107" "$P106"
+check "$(sd106 "$X1" 0 fixture)|$(has "$O107" 'NO-GO (NS-G1): ai_burst_merge_enabled in p reads on')|$(has "$O107" 'no value is read out')|$(has "$O107" 'NO-GO (LK-G1)')" "true|yes|yes|no" \
+  "107-3w W.1's switch on in p (a FIXTURE plant, '1'): NS-G1 refuses it, naming the key and the place, never a value — LK-G1 holds nothing, since W.1's switch is a ladder setting and LK-G1 judges allKeys() alone (S:7511)"
+nogo107 "107-3w'" "NO-GO (NS-G1): " "$O107" "$D94_107" "$P106"
 check "$(sd106 "$(fxb107 p w1-p)" 0 fixture)|$(nskept107)|$(snapeq107)" "true|0|same" "107-3w* put back"
-echo "  note  RH-NOTE 107-3w (for the owner, root docs/76 §C): W.1's switch is a ladder key, so in p or d LK-G1's refusal stands where §T.11 names NS-G1's; nothing is changed either way"
 # 107-3o — off and set, never judged on: K 0, Q 'off' and W.1 '0' in k (§K's own pre-rollback step leaves '0'); K and W.1 on in
 # the store row alone (no reader reads it); the texts set: two in k, W.1's window in the store row. GO, with each note.
 X1="$(fxs107 k off-k '{"quoted_no_prices_enabled":0,"connection_quote_enabled":"off","ai_burst_merge_enabled":"0","quoted_reply_text":"RH107SECRET- a quoted reply","no_ai_alert_cooldown_hours":"6"}')"
