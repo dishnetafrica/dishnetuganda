@@ -141,11 +141,11 @@ check "$(sd107 "$(seedk107 "$P107R" log_back l5em)" fixture)|$(kept107)" "1|0" "
 # deploy of its own from A9 with the log unwritable again (said so: v3 §C item 6 does not hold for this branch).
 anc107 seenR '    else note "MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log, THOUGH THE LEDGER HOLDS IT' '    else note "MG-CA2 no OK line for 092 in migration.log, though the ledger holds it'
 reset107 "107-5e-A9b"
-K1="$(seedk107 "$(pinroot107)" log_keep l5eR)"; LM5ER_107="$(stat -c %a "$DATA/migration.log")"; chmod 0444 "$DATA/migration.log"
+K1="$(seedk107 "$(pinroot107)" log_keep l5er)"; LM5ER_107="$(stat -c %a "$DATA/migration.log")"; chmod 0444 "$DATA/migration.log"
 fresh107; mutant107 c5e-R seenR -- --answer DEPLOY
-check "$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log')|$(has "$MUT107" 'MG-CA2 no OK line for 092 in migration.log, though the ledger holds it')|$(sget107 "$STATE107" MG_CA2_SEEN)" "no|yes|0" \
+check "$(sd107 "$K1" fixture)|$(has "$MUT107" 'MG-CA2 NOT ESTABLISHED — NO OK LINE FOR 092 IN migration.log')|$(has "$MUT107" 'MG-CA2 no OK line for 092 in migration.log, though the ledger holds it')|$(sget107 "$STATE107" MG_CA2_SEEN)" "1|no|yes|0" \
   "107-5e# a weakened copy that says stage R's reading (seen=0) as a plain note in the deploy run — caught (a deploy of its own from A9, the log unwritable)"
-check "$(sd107 "$(seedk107 "$(pinroot107)" log_back l5eR)" fixture)|$(stat -c %a "$DATA/migration.log")|$(kept107)" "1|$LM5ER_107|0" "107-5e## migration.log back, writable"
+check "$(sd107 "$(seedk107 "$(pinroot107)" log_back l5er)" fixture)|$(stat -c %a "$DATA/migration.log")|$(kept107)" "1|$LM5ER_107|0" "107-5e## migration.log back, writable"
 
 # ── D7 — WARNING only, first deploy: a WARNING planted, then the log made unwritable. The straddle note beside stage R's
 # NOT ESTABLISHED; PASSED. ──
