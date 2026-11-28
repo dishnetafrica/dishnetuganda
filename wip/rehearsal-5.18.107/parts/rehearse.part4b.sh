@@ -36,7 +36,7 @@ schedL107() { seedk107 "$P107R" sched "$1" '"set":{"followup_send":{"ago_s":0,"d
 schedat107() { seed107 "$P107R" "[{\"op\":\"sched\",\"keep\":\"$KEEP107\",\"tag\":\"$1\",\"set\":{\"$2\":{\"ago_s\":$3,\"duration_ms\":$4}}}]"; }   # schedat107 TAG JOB AGO DURATION
 schedath107() { local o; o="$(schedat107 "$@")"; printf '%s\n' "$o" > "$R107/logs/schedat-$1.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # schedat107 as a poll's ACTION: non-zero unless the seed answered JSON (never none(…))
 for c107 in cycle nocycle missed; do
-  K1="$(schedL107 "s7b-$c107")"
+  K1="$(schedL107 "s7b-$c107")"; check "$(sd107 "$K1" op)|$( [ "$(n103 "$(sd107 "$K1" entries)")" -ge 1 ] && echo read)" "sched|read" "107-7bk-$c107 the (L, -1) plant took (the seed reads its entry back before it answers)"
   case "$c107" in
     cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" event_processor -30 5 ;;
     missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" followup_send -30 5 ;;
@@ -70,6 +70,7 @@ check "$(sd107 "$(seedk107 "$P107R" sched_back s7c)" fixture)" "1" "107-7c* the 
 for c107 in fail note outside; do
   j107=quote_chase; [ "$c107" = outside ] && j107=notify_retry
   K1="$(seedk107 "$P107R" sched "s7d-$c107" "\"set\":{\"$j107\":{\"ago_s\":$( [ "$c107" = note ] && echo 0 || echo 30),\"duration_ms\":-1}$( [ "$c107" = note ] || echo ',"event_processor":{"ago_s":0,"duration_ms":5}')}")"
+  check "$(sd107 "$K1" op)|$( [ "$(n103 "$(sd107 "$K1" entries)")" -ge 1 ] && echo read)" "sched|read" "107-7dk-$c107 the (L, -1) plant on $j107 took (the seed reads it back before it answers) — 107-7d3's own check would pass without it"
   ao107
   case "$c107" in
     fail) check "$AORC107|$(has "$AO107" 'ME-CA2 FAIL — quote_chase started after the copy and never returned to master')" "1|yes" "107-7d1 ME-CA2: quote_chase at (L, -1) and a later cycle begun: FAIL" ;;

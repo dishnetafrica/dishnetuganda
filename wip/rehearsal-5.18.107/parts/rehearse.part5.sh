@@ -56,7 +56,8 @@ check "$(case "$AT5B_107|$CU5B_107" in *[!0-9\|]*|'|'*|*'|') echo unread ;; *) [
 # ── D4 — A8/H4: 092 left on disk (the pin's file copied into the live 5.18.106 plugin, a FIXTURE, said so), a WARNING planted
 # beside it; .boot107 armed by csb1run107's action at Type DEPLOY — never before the run (v3 TC2): 5.18.106's runner applies the
 # 092 on disk at deploy-hybrid's read of the record, after QF_BASE, before the tar. First its control: armed before a --check,
-# the counter stays 0 (the parent is not deploy-hybrid). Then: the straddle note, no dated note, PASSED. The copy (the note
+# the counter stays 0: the script's own read is not deploy-hybrid's, and stage A's deploy-hybrid.sh --check (S:12315) passes
+# through, marked dhcheck. Then: the straddle note, no dated note, PASSED. The copy (the note
 # keyed on applied_at < QF_COPY_UNIX) runs as --after-only. ──
 reset107 "107-5c-A9"
 cp "$(pin092_107)" "$PD/migrations/092_wa_no_ai.sql"; chown 1000:1000 "$PD/migrations/092_wa_no_ai.sql"; chmod 644 "$PD/migrations/092_wa_no_ai.sql"

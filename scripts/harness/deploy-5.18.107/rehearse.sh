@@ -1339,7 +1339,7 @@ schedL107() { seedk107 "$P107R" sched "$1" '"set":{"followup_send":{"ago_s":0,"d
 schedat107() { seed107 "$P107R" "[{\"op\":\"sched\",\"keep\":\"$KEEP107\",\"tag\":\"$1\",\"set\":{\"$2\":{\"ago_s\":$3,\"duration_ms\":$4}}}]"; }   # schedat107 TAG JOB AGO DURATION
 schedath107() { local o; o="$(schedat107 "$@")"; printf '%s\n' "$o" > "$R107/logs/schedat-$1.json"; case "$o" in '{'*) return 0 ;; *) return 1 ;; esac; }   # schedat107 as a poll's ACTION: non-zero unless the seed answered JSON (never none(…))
 for c107 in cycle nocycle missed; do
-  K1="$(schedL107 "s7b-$c107")"
+  K1="$(schedL107 "s7b-$c107")"; check "$(sd107 "$K1" op)|$( [ "$(n103 "$(sd107 "$K1" entries)")" -ge 1 ] && echo read)" "sched|read" "107-7bk-$c107 the (L, -1) plant took (the seed reads its entry back before it answers)"
   case "$c107" in
     cycle)   pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" event_processor -30 5 ;;
     missed)  pollrun107 "107-7b-$c107" "$DEPLOY107" -- schedath107 "a7b-$c107" followup_send -30 5 ;;
@@ -1373,6 +1373,7 @@ check "$(sd107 "$(seedk107 "$P107R" sched_back s7c)" fixture)" "1" "107-7c* the 
 for c107 in fail note outside; do
   j107=quote_chase; [ "$c107" = outside ] && j107=notify_retry
   K1="$(seedk107 "$P107R" sched "s7d-$c107" "\"set\":{\"$j107\":{\"ago_s\":$( [ "$c107" = note ] && echo 0 || echo 30),\"duration_ms\":-1}$( [ "$c107" = note ] || echo ',"event_processor":{"ago_s":0,"duration_ms":5}')}")"
+  check "$(sd107 "$K1" op)|$( [ "$(n103 "$(sd107 "$K1" entries)")" -ge 1 ] && echo read)" "sched|read" "107-7dk-$c107 the (L, -1) plant on $j107 took (the seed reads it back before it answers) — 107-7d3's own check would pass without it"
   ao107
   case "$c107" in
     fail) check "$AORC107|$(has "$AO107" 'ME-CA2 FAIL — quote_chase started after the copy and never returned to master')" "1|yes" "107-7d1 ME-CA2: quote_chase at (L, -1) and a later cycle begun: FAIL" ;;
@@ -1489,10 +1490,11 @@ EW0_107="$(evo_calls)"; WR8F_107="$(worker107)"; EW8F_107=$(( $(evo_calls) - EW0
 WL8F_107="$(tail -n +"$((AL0_107 + 1))" "$DATA/ai_platform.log" 2>/dev/null)"; RQ8F_107="$(tail -n +"$((EW0_107 + 1))" "$SB/evo/requests.log" 2>/dev/null)"
 OTH8F_107="$(printf '%s\n' "$WL8F_107" | grep -oE 'conv [0-9]+: in channel=' | grep -vc "^conv $C8F_107: ")"
 PRS8F_107="$(printf '%s' "$RQ8F_107" | grep -c '^POST /[^ ]*/chat/sendPresence/')"; SND8F_107="$(printf '%s' "$RQ8F_107" | grep -vc -e '^POST /[^ ]*/chat/sendPresence/' -e '^$')"
-AS8F_107="$( [ "$(has "$WL8F_107" "conv $C8F_107: the assistant is off for this number (list row #")" = yes ] && { [ "$(has "$WL8F_107" ' — not answered; staff alert sent to the ')" = yes ] && echo 1 || echo 0; } || echo noline)"
+HL8F_107="$(grep -F "conv $C8F_107: the assistant is off for this number (list row #" <<<"$WL8F_107")"   # #B's own hold line, never another number's
+AS8F_107="$( [ -n "$HL8F_107" ] && { grep -qF -e ' — not answered; staff alert sent to the ' -e ' — not answered; staff alert not sent (send_failed: ' <<<"$HL8F_107" && echo 1 || echo 0; } || echo noline)"   # one request when the alert reached Evolution (sent, or refused there: AlertService.php:139-150)
 check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)|$(has "$WL8F_107" "conv $C8F_107: event #$A8F_107 is answered with #$B8F_107 — nothing to send for it")|$AS8F_107|$(has "$WL8F_107" "conv $C8F_107: in channel=")|$PRS8F_107|$SND8F_107|$EW8F_107" \
       "0|$A8F_107:done|$B8F_107:done|yes|$( [ "$AS8F_107" = noline ] && echo the-hold-line || echo "$AS8F_107")|no|$OTH8F_107|$(n103 "$AS8F_107")|$(( OTH8F_107 + $(n103 "$AS8F_107") ))" \
-  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark ('nothing to send for it'), #$B8F_107 held by the list, its staff alert said ($AS8F_107 sent) — each done ($ES8F_107); neither reaches the typing; Evolution called by it $EW8F_107 time(s): a typing presence for each of the $OTH8F_107 other conversation(s) it took in, a send only for the alert"
+  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark ('nothing to send for it'), #$B8F_107 held by the list, its staff alert said ($AS8F_107 sent) — each done ($ES8F_107); neither reaches the typing; Evolution called by it $EW8F_107 time(s): a typing presence for each of the $OTH8F_107 other conversation(s) it took in, a send only for #B's own alert when it reached Evolution"
 rbno107
 check "$(has "$RBNO107" "; the conversations $C8F_107,")|$(has "$RBNO107" '(a) 0, counted apart')" "no|yes" "107-8f* the drain after the worker: the mark no longer listed, (a) 0 (§T.11:3528–3529)"
 rbq107 "107-8f**"
@@ -1574,7 +1576,8 @@ check "$(case "$AT5B_107|$CU5B_107" in *[!0-9\|]*|'|'*|*'|') echo unread ;; *) [
 # ── D4 — A8/H4: 092 left on disk (the pin's file copied into the live 5.18.106 plugin, a FIXTURE, said so), a WARNING planted
 # beside it; .boot107 armed by csb1run107's action at Type DEPLOY — never before the run (v3 TC2): 5.18.106's runner applies the
 # 092 on disk at deploy-hybrid's read of the record, after QF_BASE, before the tar. First its control: armed before a --check,
-# the counter stays 0 (the parent is not deploy-hybrid). Then: the straddle note, no dated note, PASSED. The copy (the note
+# the counter stays 0: the script's own read is not deploy-hybrid's, and stage A's deploy-hybrid.sh --check (S:12315) passes
+# through, marked dhcheck. Then: the straddle note, no dated note, PASSED. The copy (the note
 # keyed on applied_at < QF_COPY_UNIX) runs as --after-only. ──
 reset107 "107-5c-A9"
 cp "$(pin092_107)" "$PD/migrations/092_wa_no_ai.sql"; chown 1000:1000 "$PD/migrations/092_wa_no_ai.sql"; chmod 644 "$PD/migrations/092_wa_no_ai.sql"
@@ -2006,7 +2009,7 @@ EVQ107="${EVF106:-}"; EVQ107="/${EVQ107#http://*/}"
 EVA107=$(( $(evo_calls) - EVO0_106 )); EVA5_107=$(( EVO0_106 - EVO0_105 )); RFJ107=$(( $(refused106) - $(n103 "${RF4_106:-}") ))
 EVN107="$(cat "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | awk '{s += $1} $2 == "cron" {c++} END {printf "%d|%d\n", s, c}')"
 check "$EVN107|$(tail -n +"$(( EVO0_105 + 1 ))" "$SB/evo/requests.log" 2>/dev/null | grep -cvE "^(GET|POST) ($EVP107|$EVQ107)/")|$( [ -n "${RF4_106:-}" ] && [ "$RFJ107" -ge 15 ] && [ "$EVA107" -ge "$RFJ107" ] && echo ge)|$( [ -n "${EVODRV105:-}" ] && [ "$EVA5_107" -ge "$(n103 "${EVODRV105:-}")" ] && echo ge)" "0|0|0|ge|ge" \
-  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own; $(( $(evo_calls) - EVO0_107 )) since 107-pre, master's cycles and 107-8f's worker run among them (the worker's asserted 0 there)"
+  "107-10a Evolution: no run of $V107's script, $V106's or $V105's called it ($(ls "$R107"/evo/run-*.n "$R106"/evo/run-*.n "$R105"/evo/run-*.n 2>/dev/null | wc -l | tr -d ' ') runs read, every one summed); the cron stand-in ran its worker during none of them; every request on the stand-in's own base paths; outside every run, calls at least the sends refused for J1's numbers ($RFJ107) and 105's drives' own; $(( $(evo_calls) - EVO0_107 )) since 107-pre, master's cycles and 107-8f's worker run among them (attributed there: a typing presence for each other conversation it took in, a send only for #B's alert)"
 # 107-10b — uCRM (106-10b's reading, carried): every run's request record GETs only, no token copy left at the next call — 107's,
 # 106's, 105's and 104's runs; nothing of any of them left in /tmp. The CONTROL a planted POST and a planted token copy, removed
 SCN107="$R107/scan107"; mkdir -p "$SCN107"; chmod 700 "$SCN107"
