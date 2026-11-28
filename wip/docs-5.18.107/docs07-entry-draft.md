@@ -1,13 +1,13 @@
 # Draft — 5.18.107's entry for root `docs/07-change-control.md`
 
-Not yet in `docs/07`. Every ⟦PENDING⟧ is a figure not yet measured: suite pass E2 on `771a3c1`, the
+Not yet in `docs/07`. Every ⟦PENDING⟧ is a figure not yet measured: the
 rehearsal's development trials and record run, or the entry's closing date. When they are in, this text goes into `docs/07` after the 22–24 Nov
 entry, `wip/design-5.18.107/76-…` moves to root `docs/76-…`, and the draft is deleted, in one commit. Each figure below
 was read from the repository on 27 Nov; the sources are named beside them.
 
 ---
 
-## 21–⟦PENDING⟧ Nov — 5.18.107: on Uganda, the connection quotation built in code (Part Q); a customer holding a live quotation gets no price from the assistant (Part K); the numbers the assistant never answers (Part X, migration 092); one reply to a burst (W.1); the topic rule built in (W.2); the office line on the customer-care hand-over (W.3); the AI Knowledge Base screen reachable (W.5); a two-prices warning (W.6); "Nothing is added on top." leaves the tax lines (O7); four defect fixes (F-1, F-7, F-8, F-11) — every new switch off; South Sudan unchanged. `release/5.18.107` = `771a3c1`, one commit on 5.18.106 (`bf29cbd`), re-cut once on 27 Nov for test fixes only (the first cut, `5b6245b`, kept); NOT pushed; `scripts/deploy-5.18.107.sh` pinned to it; the release suite twice on it: pass E1, 317 files, 23,917 passed, 7 failed (the container-only seven alone), and pass E2 ⟦PENDING⟧; the rehearsal ⟦PENDING⟧; NOT deployed
+## 21–⟦PENDING⟧ Nov — 5.18.107: on Uganda, the connection quotation built in code (Part Q); a customer holding a live quotation gets no price from the assistant (Part K); the numbers the assistant never answers (Part X, migration 092); one reply to a burst (W.1); the topic rule built in (W.2); the office line on the customer-care hand-over (W.3); the AI Knowledge Base screen reachable (W.5); a two-prices warning (W.6); "Nothing is added on top." leaves the tax lines (O7); four defect fixes (F-1, F-7, F-8, F-11) — every new switch off; South Sudan unchanged. `release/5.18.107` = `771a3c1`, one commit on 5.18.106 (`bf29cbd`), re-cut once on 27 Nov for test fixes only (the first cut, `5b6245b`, kept); NOT pushed; `scripts/deploy-5.18.107.sh` pinned to it; the release suite twice on it: pass E1, 317 files, 23,917 passed, 7 failed (the container-only seven alone), and pass E2, the same but for known limit 16's D03 flake once (23,916 passed, 8 failed); the rehearsal ⟦PENDING⟧; NOT deployed
 
 **Request.** The owner's requests of 18–25 Nov, and two defects found on 23 Nov, each mapped read-only against
 `bf29cbd` (root `docs/76` §B and §W):
@@ -101,7 +101,10 @@ Every change sits behind `StaffJobsGate::applies()`, so South Sudan runs exactly
   container-only checks, the same lines as D1's and 5.18.106's C2 (`test_install_authorisation` ×2, `test_mail_quote`,
   `test_migration_integrity`, `test_secure_file` ×3). None of D1's date-aged lines, its D03 flake, `test_timezone` or VK1
   came back. Counted as D1 was: each `ok` line and each `FAIL` line of the log.
-- **Suite pass E2 on `771a3c1`:** ⟦PENDING⟧.
+- **Suite pass E2 on `771a3c1`** (28 Nov 00:06 – 06:28 UTC): 317 files, 23,916 passed, 8 failed — E1's seven and one more,
+  `test_quote_followup` L05, whose own output names D03 alone (*"D03 --all: byte for byte 221c9dc's output"*): known
+  limit 16's flake (5.18.105's D03 measurement, 38 runs in 530). Every other file passed exactly as many checks as in E1,
+  in the same order.
 - **`scripts/deploy-5.18.107.sh`** (`abf0a25`): derived by 349 asserted edits on 5.18.106's script. 16,306 lines, sha256
   `8b67f903…`; two runs gave the same bytes (§T.16).
   - Its design is `docs/76` §T, reviewed four times. Five reviews of the derived script followed, each fixed in the
