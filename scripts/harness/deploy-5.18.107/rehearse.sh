@@ -1350,9 +1350,9 @@ for c107 in cycle nocycle missed; do
                "107-7b1 (L, -1) then a later cycle written while the poll waits: ME-CA1 FAIL — followup_send never returned and a later cycle began" ;;
     missed)  check "$HOLDSAW107|$HOLDRC107|$(rc107)|$(has "$HOLDOUT107" 'ran again between two reads of the poll (a newer last_run): the poll missed the window')" "yes|0|3|yes" \
                "107-7b2 (L, -1) then followup_send re-dispatched between two reads: NOT YET, the poll missed the window" ;;
-    nocycle) check "$HOLDSAW107|$HOLDRC107|$(rc107)|$(has "$HOLDOUT107" 'master did not start a new cycle within the poll'"'"'s bound: followup_send still read duration_ms -1')|$(has "$HOLDOUT107" "  $V107 (after-only): NOT YET — ")|$(has "$HOLDOUT107" 'run it again after')|$(grep -cxF "      $EXP_AFTER107" <<<"$HOLDOUT107")" \
-                   "yes|0|3|yes|yes|yes|1" \
-               "107-7b3 (L, -1) and no new cycle within the bound (the clock moved past it, said so): NOT YET, master did not start one; the summary NOT YET (exit 3), 'run it again after', the --after-only command alone"
+    nocycle) check "$HOLDSAW107|$HOLDRC107|$(rc107)|$(has "$HOLDOUT107" 'master did not start a new cycle within the poll'"'"'s bound: followup_send still read duration_ms -1')|$(has "$HOLDOUT107" "  $V107 (after-only): NOT YET — ")|$(has "$HOLDOUT107" 'run it again after')|$(awk -v t="Then --after-only again, its own command, alone, with its own log:" 'f { print; exit } index($0, t) { f = 1 }' <<<"$HOLDOUT107")" \
+                   "yes|0|3|yes|yes|yes|      $EXP_AFTER107" \
+               "107-7b3 (L, -1) and no new cycle within the bound (the clock moved past it, said so): NOT YET, master did not start one; the summary NOT YET (exit 3), 'run it again after', the --after-only command alone on the line after the summary's 'Then --after-only again' (as 106-5a' reads it: the 'check it' block prints the same command twice more, S:16091-16095; the sentence, S:16188)"
              check "$(sd107 "$(seedk107 "$P107R" budget_back g7b)" budget)" "$(kv107 "$MS0_107" budget)" "107-7b3' master_budget_seconds back as it was" ;;
   esac
   check "$( [ "$A7_107" -ge 0 ] && [ "$A7_107" -lt 120 ] && echo quick)|$(sd107 "$(seedk107 "$P107R" sched_back "s7b-$c107")" fixture)" "quick|1" \
