@@ -92,9 +92,20 @@ worker107() { env PATH="$SB/bin:$PATH" LD_PRELOAD="$CLKPRE104" RH104_CLOCK_FILE=
 # NoAiList::add, which the installed worker settles done with no model call (root docs/76 §X.3) — said so.
 N8F_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 06)\",\"name\":\"RH107SECRET- a customer\",\"reason\":\"RH107SECRET- the named event run by the worker's own hold\"}]")"
 check "$( [ "$(n103 "$(sd107 "$N8F_107" id)")" -ge 1 ] && echo listed)|$(sd107 "$N8F_107" event)" "listed|0" "107-8f\"0 #$B8F_107's number listed (no alert): the sandbox reaches no model provider, so this is how the installed worker runs #$B8F_107 here — settled done with no model call, said so"
+# The worker runs every due event of the book, not only #A and #B (a known limit): trial 1d measured one — an ai.reply left
+# pending by an earlier chain section, its conversation another — whose path sends the typing presence before the model
+# (AiReplyWorker.php:306–310, after its 'conv N: in channel=' line; the hold and the carried mark return before both, :231–244).
+# So every Evolution request of this run is attributed: a typing presence for each other conversation the worker took in, a
+# send only if the staff alert for #B says it was sent (NoAiAlert; this sandbox has no alert number), none for #A or #B.
+AL0_107="$(grep -c '' "$DATA/ai_platform.log" 2>/dev/null)"; AL0_107="$(n103 "$AL0_107")"
 EW0_107="$(evo_calls)"; WR8F_107="$(worker107)"; EW8F_107=$(( $(evo_calls) - EW0_107 )); ES8F_107="$(sqx "PRAGMA wal_checkpoint(TRUNCATE)" >/dev/null 2>&1; q107 evstat "$DATA/plugin.sqlite3" "$A8F_107" "$B8F_107")"
-check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)|$EW8F_107" "0|$A8F_107:done|$B8F_107:done|0" \
-  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark, #$B8F_107 held (the list) — each done ($ES8F_107); Evolution not called by it (the one worker run outside every run)"
+WL8F_107="$(tail -n +"$((AL0_107 + 1))" "$DATA/ai_platform.log" 2>/dev/null)"; RQ8F_107="$(tail -n +"$((EW0_107 + 1))" "$SB/evo/requests.log" 2>/dev/null)"
+OTH8F_107="$(printf '%s\n' "$WL8F_107" | grep -oE 'conv [0-9]+: in channel=' | grep -vc "^conv $C8F_107: ")"
+PRS8F_107="$(printf '%s' "$RQ8F_107" | grep -c '^POST /[^ ]*/chat/sendPresence/')"; SND8F_107="$(printf '%s' "$RQ8F_107" | grep -vc -e '^POST /[^ ]*/chat/sendPresence/' -e '^$')"
+AS8F_107="$( [ "$(has "$WL8F_107" "conv $C8F_107: the assistant is off for this number (list row #")" = yes ] && { [ "$(has "$WL8F_107" ' — not answered; staff alert sent to the ')" = yes ] && echo 1 || echo 0; } || echo noline)"
+check "$WR8F_107|$(cut -d' ' -f1 <<<"$ES8F_107" | cut -d: -f1-2)|$(cut -d' ' -f2 <<<"$ES8F_107" | cut -d: -f1-2)|$(has "$WL8F_107" "conv $C8F_107: event #$A8F_107 is answered with #$B8F_107 — nothing to send for it")|$AS8F_107|$(has "$WL8F_107" "conv $C8F_107: in channel=")|$PRS8F_107|$SND8F_107|$EW8F_107" \
+      "0|$A8F_107:done|$B8F_107:done|yes|$( [ "$AS8F_107" = noline ] && echo the-hold-line || echo "$AS8F_107")|no|$OTH8F_107|$(n103 "$AS8F_107")|$(( OTH8F_107 + $(n103 "$AS8F_107") ))" \
+  "107-8f\" the installed worker (run_worker.php, as the cron runs it, as the book's owner, under the clock) runs both: #$A8F_107 carried by its mark ('nothing to send for it'), #$B8F_107 held by the list, its staff alert said ($AS8F_107 sent) — each done ($ES8F_107); neither reaches the typing; Evolution called by it $EW8F_107 time(s): a typing presence for each of the $OTH8F_107 other conversation(s) it took in, a send only for the alert"
 rbno107
 check "$(has "$RBNO107" "; the conversations $C8F_107,")|$(has "$RBNO107" '(a) 0, counted apart')" "no|yes" "107-8f* the drain after the worker: the mark no longer listed, (a) 0 (§T.11:3528–3529)"
 rbq107 "107-8f**"
