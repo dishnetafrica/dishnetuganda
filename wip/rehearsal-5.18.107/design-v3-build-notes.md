@@ -160,3 +160,23 @@ user), the plugin's own uCRM catalogue cache (`lib/DishNetTools.php:387`, `sys_g
 Not 5.18.107's: every run of the chain that serves the catalogue writes it, and 107-10 sweeps the sandbox and the plugin's
 folders, not the host's `/tmp`. It holds the synthetic catalogue only. Removed by name; a new sandbox path gives a new name, so
 it cannot reach the record run. Recorded, not changed.
+
+## The record run (28 Nov) — the whole chain from scratch, from `/home/user/t106`
+
+**Run 1, on `a9e67d0`** (19:56:04 UTC), was stopped by hand at 19:58 UTC, in 94-1: 74 passed, 33 failed, every failure in the
+chain's root (the quarantine's rehearsal, 5.18.93's deploy, and 5.18.94's own checks) and every one the same cause, **docs/07
+known limit 17**. 5.18.94's harness repacks its clone into one pack, as a fresh clone of the remote is, so that Git's short form
+follows the real object count; the pushed branches alone now pass 16,384 packed objects (a fresh clone, repacked: **17,248**),
+so the clone writes `69c87a6f` where every pin in the chain names `69c87a6`. The quarantine's and 5.18.93's checks then compared
+7 characters with 8, A14 never passed, and nothing after it could. Foreseen in 5.18.106's chain notes on 20 Nov (*margin: 145
+packed objects … once the pushed branches alone pass 16,384, every future chain fails there*); the development runners met it
+first and set the deploy scripts' own remedy on their restored clone, so the trials never showed it. **Not the script's**:
+`deploy-5.18.107.sh` refuses an 8-character checkout at A0 with nothing changed and prints `git -C <checkout> config
+core.abbrev 7` (S:12119), and the server's checkout wrote the 7-character form at every deploy so far.
+
+**The fix, in 5.18.94's harness** (the chain's one clone; no later harness reads the lines changed — 5.18.95's cut asserts only
+untouched anchors): where the repacked clone writes more than 7 characters it gets `core.abbrev 7`, said on its own line with the
+packed count; and 1z, which sets `core.abbrev 8` to drive A0's refusal, now puts back what it found (unset, or 7) instead of
+always unsetting, its last check reading `--local`. Shown before the rerun: 5.18.94's Python cut applied to the quarantine's
+rehearsal parses, and its three inserted lines, run on a real clone of the checkout, print *8-character commits (17248 packed
+objects)*, set 7, and read `69c87a6f` back as `69c87a6`; 1z's put-back run both ways (from 7 → 7, from unset → unset).

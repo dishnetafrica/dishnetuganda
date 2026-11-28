@@ -60,9 +60,17 @@ pre = '\n'.join(lines[:at[0]]) + '\n'
 # The clone in one pack, as a fresh clone of the remote is: Git's short form follows the object count (8 characters from
 # about 16,000), and a local clone keeps this checkout's duplicate packs and loose objects (12 Oct: 21,920 counted, 13,064
 # once repacked). The server's checkout recorded 69c87a6 on 11 Oct — the 7-character form.
+# 28 Nov: the pushed branches alone pass 16,384 (a fresh clone, repacked: 17,248 packed), so a fresh clone writes
+# 69c87a6f, while the server's checkout wrote the 7-character form at every deploy since (A0 passed, 22 Nov). Where the
+# repacked clone writes more than 7 characters it is given the deploy scripts' own remedy, core.abbrev 7 (docs/07 known
+# limit 17), said on its own line; 1z puts back whatever it found.
 clone = 'git clone -q --no-hardlinks "$R" "$SB/repo" || { echo "cannot clone $R"; exit 1; }\n'
+abbrev = (r'''AB94_H="$(git -C "$SB/repo" log -1 --format=%h)"; [ "${#AB94_H}" -le 7 ] || { git -C "$SB/repo" config core.abbrev 7 '''
+          r'''&& echo "  clone     a fresh clone writes ${#AB94_H}-character commits ($(git -C "$SB/repo" count-objects -v | sed -n 's/^in-pack: //p') '''
+          r'''packed objects): core.abbrev 7 set on it, the deploy scripts' own remedy (known limit 17)"; } '''
+          r'''|| { echo "cannot set core.abbrev on the clone"; exit 1; }''' + '\n')
 assert pre.count(clone) == 1, pre.count(clone)
-pre = pre.replace(clone, clone + 'git -C "$SB/repo" repack -a -d -q && git -C "$SB/repo" prune-packed || { echo "cannot repack the clone"; exit 1; }\n')
+pre = pre.replace(clone, clone + 'git -C "$SB/repo" repack -a -d -q && git -C "$SB/repo" prune-packed || { echo "cannot repack the clone"; exit 1; }\n' + abbrev)
 for need in ('own_server\n', 'QP="$(qpin qpin)"', 'qrun() {', 'set_sched() {', 'echo "== Q0. the real 5.18.93 deploy'):
     assert pre.count(need) >= 1, need
 open(dst, 'w', encoding='utf-8').write(pre)
@@ -263,14 +271,16 @@ echo; echo "== 94-1. A14: nothing before the quarantine has moved the file and i
 # A0's short-form guard: a checkout writing 8-character commits (as a clone with duplicate packs did, 12 Oct) is refused
 # with its remedy, before anything changes; a copy without the guard is refused only by the parent check, naming the
 # longer form — the message the guard replaces.
+# (1z's setting is put back as found: unset, or the root clone's core.abbrev 7 where a fresh clone writes 8, 28 Nov)
+AB94_WAS="$(git -C "$REPO" config --local core.abbrev || echo unset)"
 git -C "$REPO" config core.abbrev 8; fresh94; OUT="$(run94 --answer NO)"
 M="$(mutant abbrev "$DEPLOY94" '[ "$ABBREV_PIN|$ABBREV_BASE" = "$EXPECTED_PLUGIN_COMMIT|$BASELINE_COMMIT" ] \' 'true \')"; fresh94; OUTM="$(run94 --answer NO --script "$M")"; rm -f "$M"
-git -C "$REPO" config --unset core.abbrev
+if [ "$AB94_WAS" = unset ]; then git -C "$REPO" config --unset core.abbrev; else git -C "$REPO" config core.abbrev "$AB94_WAS"; fi
 check "$(has "$OUT" "STOP: this checkout writes commits in a short form of 8 characters (${P94}")$(has "$OUT" "Run: git -C $REPO config core.abbrev 7")$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesyesnono|$B93|0|$D94" \
   "1z a checkout writing 8-character commits is refused before anything changes, with the remedy (git config core.abbrev 7)"
 check "$(has "$OUTM" "is not cut on $B93 (5.18.93): its parent is ${B93}")$(went94 "$OUTM")" "yesnono" \
   "1z' a copy without the guard is refused only by the parent check, naming the longer form (the message the guard replaces)"
-check "$(git -C "$REPO" config core.abbrev || echo unset)$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)" "unset$P94" "…the setting taken out again: the clone writes the 7-character form"
+check "$(git -C "$REPO" config --local core.abbrev || echo unset)$(git -C "$REPO" log -1 --format=%h "$P94" -- $P)" "$AB94_WAS$P94" "…the setting put back as 1z found it ($AB94_WAS): the clone writes the 7-character form"
 fresh94; OUT="$(run94 --answer NO)"
 check "$(has "$OUT" 'NO-GO (A14): the stray store'"'"'s quarantine is not done, or does not hold — no record at')$(went94 "$OUT")|$(live)|$(backups94)|$(data94)" "yesnono|$B93|0|$D94" \
   "1a no quarantine yet (no record): NO-GO at A14, nothing deployed, backed up or changed"
