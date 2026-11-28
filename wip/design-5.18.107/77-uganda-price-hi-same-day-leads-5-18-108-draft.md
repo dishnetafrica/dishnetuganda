@@ -4,7 +4,7 @@
 
 - **Why this file exists.** On 25 Nov the owner split the next version in two. 5.18.107 keeps the quotation built in
   code (Part Q), quoted customers (Part K), the "assistant off" list (Part X), F-1, F-7, F-8 and the week's items
-  (docs/76). **5.18.108 gets Parts H, S, N and L**, carried here from docs/76 as it stood on 21 Nov after
+  (docs/76). **5.18.108 gets Parts H, S, N and L** (and Part E, §Y, asked for on 28 Nov), carried here from docs/76 as it stood on 21 Nov after
   six reviews. The part sections, the step bodies and the decisions are word for word; §L and §P are word for word
   apart from one paragraph docs/76's review 7 found dropped and restored; §N is a selection. Review 7 (docs/76 §R.9,
   R7-R11) also corrected the step numbering below, one stale release number (§H.3) and two §N values.
@@ -518,6 +518,38 @@ After the switch is on, the owner removes the NAME AND EMAIL paragraph from Extr
 - `lead_contact_enabled` (off; needs `ai_lead_capture`);
 - `lead_source_value`;
 - `ai_crm_lead_sync_since` (written by the tool, never typed).
+
+## Y. Part E — an existing customer writes: one fixed reply, then staff (owner, 28 Nov; not designed yet)
+
+**Request** (owner, 28 Nov, paraphrased, no customer data): stop the assistant's automatic replies to people who are
+already DishNet customers, as uCRM shows them.
+
+**The owner's decisions, 28 Nov** (asked in the conversation, answered there):
+
+| | Question | Answer |
+|---|---|---|
+| **E1** | What does an existing customer get when they write? | **One fixed short reply** (for example "Thanks, our customer care team will get back to you shortly"), then staff take over. Not silence, and not the assistant |
+| **E2** | Who counts as an existing customer? | A uCRM client with a service that is **active or suspended** (suspended is usually unpaid). A client whose services have all **ended** is a former customer and gets the assistant as before: they may be buying again |
+| **E3** | Do enquiry follow-ups, offers and win-back messages stop for them too? | **No.** Only the assistant's reply changes. Invoices, receipts and payment reminders go as today |
+| **E4** | If uCRM cannot be reached when the message arrives? | **The assistant replies as normal.** At worst an existing customer gets an assistant reply during the outage, as happens today |
+
+**What is known before the design** (read on 28 Nov, not yet mapped in full):
+
+- The reply worker already resolves the uCRM client behind a WhatsApp number for each turn
+  (`CustomerIdentity::resolve()`, state `IDENTIFIED` with a `client_id`; `workers/AiReplyWorker.php`), and the support
+  channel already reads a client's service status from uCRM. Part E adds no new way of identifying a person: a number
+  that does not resolve to exactly one client is not an existing customer, and gets the assistant (E4's spirit).
+- Part X (5.18.107, `wa_no_ai`) already holds a reply before the model is asked, with an alert to the line owner, the
+  lead's salesperson or the central number. Part E is the same hold with a different source and **one fixed reply**
+  instead of none. Part X fails closed (a list that cannot be read stops every reply); **Part E fails open** (E4). The
+  difference is deliberate and must stay visible in the code and the tests.
+- A number on Part X's list gets no reply at all: Part X wins over Part E.
+
+**Open, to be decided when Part E is designed:** the reply's exact wording (the owner's); how often the fixed reply
+repeats (once per conversation, or once per quiet spell); who is alerted for the hand-over, and the cooldown; voice
+notes (the fixed reply in place of the voice acknowledgement); its switch (off by default, as every part's); how it
+meets Part K (a quoted customer who is also an existing customer) and W.1 (one reply to a burst). The website chat is
+out of scope: it cannot tell who the visitor is (docs/76 §E.5).
 
 ---
 
