@@ -121,6 +121,6 @@ cleanup107() {
 }
 TRAP0_107="$(trap -p EXIT | sed -E "s/^trap -- '(.*)' EXIT\$/\1/")"
 case "$TRAP0_107" in ''|trap*|*"'"*) echo "trap107:unread" >> "$SB/anchor-missing" ;; *) trap -- "cleanup107; $TRAP0_107" EXIT ;; esac
-check "$( [ -n "$TRAP0_107" ] && trap -p EXIT | grep -cF -- "cleanup107; $TRAP0_107")|$(LEFT107)|$( [ "$(grep -c . "$SB/anchor-missing" 2>/dev/null)" = "$AM0_107" ] && echo noanchormiss)" "1|none|noanchormiss" \
+check "$( [ -n "$TRAP0_107" ] && trap -p EXIT | grep -cF -- "cleanup107; $TRAP0_107")|$(LEFT107)|$( [ "$(n103 "$(grep -c . "$SB/anchor-missing" 2>/dev/null)")" = "$AM0_107" ] && echo noanchormiss)" "1|none|noanchormiss" \
   "107-infra m the EXIT trap runs cleanup107 first, then the chain's (${TRAP0_107:-unread}); every 107 hook inserted with its anchor found (no anchor-missing line since 107-infra began); nothing armed"
 EVO0_107="$(evo_calls)"   # Evolution's requests before 107-pre: a run's are summed at 107-10a, the installed worker's (107-8f) asserted there; 107-10a says how many came since
