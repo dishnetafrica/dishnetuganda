@@ -148,4 +148,15 @@ comment, two checks tightened; 107-3g the only vault-key plant), a pre-sweep of 
 (P-1: no defect; four plants now asserted before their cases), and of T1-8…T1-11 (R-2: 107-8f"'s alert scoped to #B's own
 line and counting a send Evolution refused; 107-7b/7d's schedule plants asserted; two texts brought up to date).
 
-Trial 2 runs on `977a893`. ⟦PENDING⟧
+**Trial 2, on `977a893`** (28 Nov 15:42 – 19:51 UTC), ran to the end: **3,558 passed, 5 failed** — the same 5 inherited
+from the chain sections snap1 holds, and **0 of 5.18.107's own** (404 passed, against 380 and 14 failed in trial 1d: the cases
+T1-4…T1-11 fixed, the controls and plants R-1, P-1 and R-2 added). Every case those fixes touched passed: 107-infra h and m,
+107-3w, 107-3g" (and its vault reading), 107-4-0, 107-5c1 and 5c…5c\*, 107-5e# and 5e##, 107-6a, 107-6i, 107-7b3, the
+7bk/7dk plants, 107-8f", 107-8Rg0, 107-8Rh, 107-10b. Its two `note` lines are trial 1d's, word for word: RH-NOTE A2 (A6's
+reading, for the derivation's record) and 107-5h's V1 under H1 (recorded, not judged).
+
+One thing outside the sandbox outlived it: `/tmp/dishnet_catalogue_<hash>.json` (2,253 bytes, mode 0600, the stand-in's
+user), the plugin's own uCRM catalogue cache (`lib/DishNetTools.php:387`, `sys_get_temp_dir()`), keyed by the install path.
+Not 5.18.107's: every run of the chain that serves the catalogue writes it, and 107-10 sweeps the sandbox and the plugin's
+folders, not the host's `/tmp`. It holds the synthetic catalogue only. Removed by name; a new sandbox path gives a new name, so
+it cannot reach the record run. Recorded, not changed.
