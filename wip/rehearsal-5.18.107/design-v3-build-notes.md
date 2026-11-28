@@ -88,7 +88,8 @@ part that follows it says so in its own comment. Nothing here has run yet: the d
   empty lists read clean): carried back.
 - **107-10e**'s marker exemption excluded every file named kyc_config.json at any depth; it is now the one path.
 - **The installed worker's Evolution calls in 107-8f** were bounded by nothing (EVO0_107 was set and never read): asserted 0
-  around the worker run; 107-10a states the count since 107-pre.
+  around the worker run; 107-10a states the count since 107-pre. *(Superseded by trial 1d, T1-9 below: the worker runs
+  every due event, and its requests are now attributed rather than asserted 0.)*
 - **R3 (107-8Ri)** asserts its one rollback record (RS3_107 was taken and never read).
 - **Labels**: part 6's cases now carry their own range, `107-8R…`, and its helper calls (`rbx107`, `dredeploy107`,
   `v1run107`) labels of their own (`-RB`, `-RD2`…`-RD4`, `-V1`), so no check label in 107's sections is used twice.
@@ -99,4 +100,52 @@ part that follows it says so in its own comment. Nothing here has run yet: the d
   107-10's sweeps (Evolution counts, names and numbers), not case by case.
 - Whether rollback-mode stage A under `FAKE_CP_FAIL` reaches the question (107-8b) can only be shown by a run.
 - Whether 107-7b's action-to-end time stays under 120 s, and whether the installed worker in 107-8f calls Evolution for
-  nothing (asserted 0), can only be shown by a run.
+  nothing (asserted 0), can only be shown by a run. *(The second half was answered by trial 1d, T1-9: it calls it for another
+  due event's typing presence.)*
+
+## The development trials (28 Nov) — from the snapshot `b107rh/snap1`, never committed
+
+Each trial restores 5.18.106's rehearsal as `snap1` saved it (over snap4's lower chain) and runs 5.18.107's own lines; the
+record run is the whole chain from scratch. Trials 1–1c stopped early on the stand-in web server (T1-2, T1-3); trial 1d ran to
+the end on `dfe5f54`: **3,534 passed, 19 failed** — 5 inherited from the chain sections snap1 holds, and 14 of 5.18.107's own,
+every one explained below. **No finding was a defect of `deploy-5.18.107.sh`**: each was the rehearsal's own expectation, plant
+or reader, and each was fixed there, reassembled, committed and pushed.
+
+- **T1-1, 107-infra m** — the anchor-missing file absent made `grep -c` print nothing, read as a failure; now through `n103`.
+- **T1-2, T1-3, 107-infra h (H5)** — the stand-in relaunched on the clock answered from `public.php` as compiled before H5's edit.
+  `opcache.revalidate_freq=0` did not cure it; the relaunched stand-in runs with opcache off. Why the cache ignored the edit is
+  not established; a fresh server without opcache serves it.
+- **T1-4, 107-3w** — W.1's switch is a ladder *setting*, and LK-G1 counts `allKeys()` only (S:7511): NS-G1 refuses it in p, as
+  §T.11 says. The case expected LK-G1.
+- **T1-5, 107-4-0** — `sv107` reads `NAME=` only at a line's start; `QF_WRAPPER` is the third assignment on S:7336 (the only
+  such name of the fifteen it reads). A reader of its own, and the assignment asserted to occur once.
+- **T1-6, 107-6a and 107-6i** — the seed's rename of `wa_no_ai` was refused: SQLite 3.45 re-parses every view on a rename, and a
+  migration-built book carries views that no longer compile (`error in view v_lte_pending_jobs`). The seed renames under
+  `legacy_alter_table`, as the script's own probe 3 does (S:6738–6745, §T.16 S-1), and asserts the rename took. Shown on a
+  backup of the trial's book, with the unfixed seed refused on the same copy.
+- **T1-7, 107-3g"'** — two expectation errors. With South Sudan's profile planted, **A9 refuses first** (the registry is not
+  taken off Uganda, S:12956–12957; A9b next, A23.7 later still). And the data digest moved because the **live vault** moved:
+  the script's `tools/set_distributors.php --show`, run as root on the live folder, loads the configuration, and that load
+  refreshes the vault when its content differs — documented by the script itself (S:669; Z1, S:11844: *said, never failed*).
+  `tenant_profile` is a vault key. The vault is now kept and put back around the plant, and its one move asserted.
+- **T1-8, 107-7b3** — the `--after-only` command is printed three times in a NOT YET run (twice in *check it*, S:16091–16095,
+  once after the summary's sentence, S:16188); the case counted one. It now reads the line after the sentence, as 106-5a' does.
+- **T1-9, 107-8f"** — the installed worker runs every due event, not only the case's two (the known limit): an `ai.reply` left
+  pending by an earlier chain section took the normal path, `conv N: in channel=` then the typing presence
+  (AiReplyWorker.php:306–310), then failed for want of a provider key. The case's own events reach neither typing nor a send.
+  Every request of the run is now attributed: a presence per other conversation taken in, a send only for #B's own alert.
+- **T1-10, 107-5c1 (and 107-5c, 5c', 5c\*)** — the H4 hook fired on stage A's `deploy-hybrid.sh --check` (S:12315), whose read
+  of the record has a deploy-hybrid parent, and booted 5.18.106 over the planted 092. The deploy and the rollback call it with no
+  argument (S:13884, S:13844); a `--check` parent now passes through, marked, with a control in 107-infra h. 5c, 5c' and 5c\*
+  started from that boot's state.
+- **T1-11, 107-5e##** — the keep tag `l5eR` broke the seed's rule (`^[a-z0-9][a-z0-9-]{0,39}$`), so the log was never kept or
+  put back. Now `l5er`; 107-5e# asserts its keep; every other tag swept.
+- **T1-12, 107-10b** — two `/tmp/dnb-5.18.106-*` folders left by trial 1, cut by a container restart before its clean-up. Not
+  the rehearsal's; removed by name, and the development runner now refuses to start while such folders exist.
+
+**Reviews during the trial**, each by two read-only agents, every finding verified before it was applied: of 7a781fe (R-1: one
+comment, two checks tightened; 107-3g the only vault-key plant), a pre-sweep of 107-8…107-10 before the trial reached them
+(P-1: no defect; four plants now asserted before their cases), and of T1-8…T1-11 (R-2: 107-8f"'s alert scoped to #B's own
+line and counting a send Evolution refused; 107-7b/7d's schedule plants asserted; two texts brought up to date).
+
+Trial 2 runs on `977a893`. ⟦PENDING⟧
