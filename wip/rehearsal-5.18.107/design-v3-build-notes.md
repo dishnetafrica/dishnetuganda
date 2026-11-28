@@ -175,8 +175,23 @@ first and set the deploy scripts' own remedy on their restored clone, so the tri
 core.abbrev 7` (S:12119), and the server's checkout wrote the 7-character form at every deploy so far.
 
 **The fix, in 5.18.94's harness** (the chain's one clone; no later harness reads the lines changed — 5.18.95's cut asserts only
-untouched anchors): where the repacked clone writes more than 7 characters it gets `core.abbrev 7`, said on its own line with the
+untouched anchors — but one measures the condition they work around, below): where the repacked clone writes more than 7
+characters it gets `core.abbrev 7`, said on its own line with the
 packed count; and 1z, which sets `core.abbrev 8` to drive A0's refusal, now puts back what it found (unset, or 7) instead of
 always unsetting, its last check reading `--local`. Shown before the rerun: 5.18.94's Python cut applied to the quarantine's
 rehearsal parses, and its three inserted lines, run on a real clone of the checkout, print *8-character commits (17248 packed
 objects)*, set 7, and read `69c87a6f` back as `69c87a6`; 1z's put-back run both ways (from 7 → 7, from unset → unset).
+
+**Run 2, on `a6687f5`** (20:02:44 UTC), passed the root (*a fresh clone writes 8-character commits (17257 packed objects):
+core.abbrev 7 set on it*) and reached 94-2 with 151 passed and 0 failed; stopped by hand at about 20:20 UTC on a review's
+finding. **The review** (one read-only agent, given the commit and not this note's reasoning) confirmed the change sound — the one
+clone, no re-init, re-clone or config reset anywhere in the chain, the A0 guard identical in all fourteen scripts and only 1z
+driving it, every pin's 7-character prefix unambiguous, the inserted line safe under the chain's `set -u`, both cuts still
+matching — and found **one thing it would still fail: 104-0's control** (`deploy-5.18.104/rehearse.sh`, before the cut 5.18.105
+makes at 104-10) wanted the clone's packed count *under* 16,384, *measured, never assumed*, and would read `over:17257`. Not one
+of trial 2's inherited five: snap1's 104-0 ran on 18–20 Nov at 16,239. **Fixed there**: the field reads `under` below 16,384, and
+above it `held` only while the clone carries `core.abbrev 7`; above it without the setting, or with a count that cannot be read,
+it fails, naming both. Shown on a real repacked clone (with the setting `771a3c1|held|771a3c1`; without it a FAIL naming
+`over:17257:abbrev=unset`) and over every count/setting pair. The review's other point is recorded, not changed: the
+7-character controls of 94–99 (*in one pack as a fresh clone is*) now hold because of the setting, not the count; they still
+catch a setting lost partway through the chain.

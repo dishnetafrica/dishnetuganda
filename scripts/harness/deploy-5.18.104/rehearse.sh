@@ -41,7 +41,7 @@
 #     each _schema_checks count as its own INSERT states it; the copy mark a file the release changes; the header's four
 #     commands between its two marker lines, each alone, none a rollback; the retired codes (5.18.102's QL-CA1, QL-LK1,
 #     QL-RB1–QL-RB3, --rollback-unpriced-pending) silent; the clone's short form of the pin 7 characters, its objects
-#     under Git's 16,384 (0);
+#     under Git's 16,384 or, past it, the root clone's core.abbrev 7 (0);
 #   · (c) --check is GO: stage A alone — QF-G1 (a first deploy, 088 last), QF-G2 (the one trial, its line and its negative
 #     control's), VN-G7, QF-G3, QF-G4 (none of the pin's allKeys() set, the count the release's ladder gives), VN-G1, VN-G2,
 #     VN-G4, VN-G6, OF-G1 (both), OF-G2 and AC-L1 ok; the notes QF-N1–QF-N7, VN-G1's, VN-G3, VN-G5, OF-N1–OF-N3, AC-N1 (its
@@ -686,10 +686,14 @@ check "$(git -C "$REPO" rev-parse --short "$P104^" 2>/dev/null)|$(git -C "$REPO"
   "…cut on 5.18.103 ($P103), the script's baseline in full; the pin says 5.18.104, its parent 5.18.103"
 # Git's short form follows the object count (8 characters from 16,384 packed objects: root docs/07 5.18.103 known limit 11,
 # the coordinator's measurement of 7 Nov): every chained check that compares a short form with a 7-character pin depends on
-# the clone staying under it — measured here, never assumed.
+# the clone staying under it — measured here, never assumed. Since 28 Nov the pushed branches pass it, and 5.18.94's
+# harness gives the root clone the deploy scripts' own remedy, core.abbrev 7 (docs/07 known limit 17): the field reads
+# 'under' below 16,384 and 'held' above it only while the clone carries that setting — over it without the setting fails.
 OBJ104="$(git -C "$REPO" count-objects -v | sed -n 's/^in-pack: //p')"
-check "$(git -C "$REPO" rev-parse --short "$P104F")|$( [ "$(n103 "$OBJ104")" -ge 1 ] && [ "$(n103 "$OBJ104")" -lt 16384 ] && echo under || echo "over:${OBJ104:-?}")|$(git -C "$REPO" log -1 --format=%h "$P104F" -- "$P")" "$P104|under|$P104" \
-  "control: the clone writes the release commit's short form in the pin's 7 characters ($P104), its packed objects ($OBJ104) under Git's 16,384 — the form scripts/deploy-hybrid.sh records"
+UND104="$( [ "$(n103 "$OBJ104")" -ge 1 ] || echo unread; [ "$(n103 "$OBJ104")" -ge 1 ] && { [ "$(n103 "$OBJ104")" -lt 16384 ] && echo under || echo over; })"
+AB104="$(git -C "$REPO" config --local core.abbrev || echo unset)"
+check "$(git -C "$REPO" rev-parse --short "$P104F")|$( [ "$UND104" = under ] && echo under || { [ "$UND104" = over ] && [ "$AB104" = 7 ] && echo held || echo "$UND104:${OBJ104:-?}:abbrev=$AB104"; })|$(git -C "$REPO" log -1 --format=%h "$P104F" -- "$P")" "$P104|$( [ "$UND104" = under ] && echo under || echo held)|$P104" \
+  "control: the clone writes the release commit's short form in the pin's 7 characters ($P104), its packed objects ($OBJ104) under Git's 16,384, or past it with the root clone's core.abbrev $AB104 (known limit 17) — the form scripts/deploy-hybrid.sh records"
 check "$(dl D "$P103" "$P104" | grep -c .)|$(dl A "$P103" "$P104" | grep -c .)|$(dl AM "$P103" "$P104" | grep -c .)|$(git -C "$REPO" diff --no-renames --name-only --diff-filter=CRTUXB "$P103" "$P104" | grep -c .)|$(git -C "$REPO" diff --name-only "$P103" "$P104" | grep -vc "^$P/")" "0|$NA104|$N104|0|0" \
   "the delta: $N104 files under the plugin, $NA104 of them added, none deleted, renamed or retyped, nothing outside it"
 check "$(dl A "$P103" "$P104" | sed "s#^$P/##" | LC_ALL=C sort | paste -sd' ' -)|$(dl M "$P103" "$P104" | sed "s#^$P/##" | LC_ALL=C sort | paste -sd' ' -)" \
