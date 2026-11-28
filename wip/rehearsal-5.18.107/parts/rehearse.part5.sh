@@ -65,8 +65,8 @@ check "$(sd107 "$K2" fixture)|$(ledger107)|$(md5sum < "$PD/migrations/092_wa_no_
   "107-5c0 the plants: the pin's 092 on disk in the live $V106 plugin (a FIXTURE), a 092 WARNING appended to migration.log (a FIXTURE, UTC); the ledger holds no 092"
 : > "$SB/boot107.fired"; : > "$SB/boot107.passed"; : > "$R107/boot/h4.out"; : > "$SB/.boot107"
 D94_5C_107="$(data94)"; fresh107; O5C_107="$(run107c --check)"
-check "$(grep -c . "$SB/boot107.fired")|$( [ "$(grep -c . "$SB/boot107.passed")" -ge 1 ] && echo passed)|$( [ -e "$SB/.boot107" ] && echo armed || echo spent)|$(ledger107)|$(data94)" "0|passed|armed|mig092=0 wa_no_ai=none|$D94_5C_107" \
-  "107-5c1 H4's control: armed before a --check, the record read by the script itself passes through (its parent is not deploy-hybrid) — 0 boots, still armed, no 092 applied, the data as before"
+check "$(grep -c . "$SB/boot107.fired")|$( [ "$(grep -c '^notdh$' "$SB/boot107.passed")" -ge 1 ] && echo passed)|$( [ "$(grep -c '^dhcheck$' "$SB/boot107.passed")" -ge 1 ] && echo dhcheck)|$( [ -e "$SB/.boot107" ] && echo armed || echo spent)|$(ledger107)|$(data94)" "0|passed|dhcheck|armed|mig092=0 wa_no_ai=none|$D94_5C_107" \
+  "107-5c1 H4's control: armed before a --check, the record read by the script itself and by stage A's deploy-hybrid.sh --check (S:12315) passes through — neither is the deploy's read — 0 boots, still armed, no 092 applied, the data as before"
 rm -f "$SB/.boot107"; : > "$SB/boot107.passed"
 arm4_107() { grep -c . "$SB/boot107.fired" > "$R107/logs/arm4.n"; : > "$SB/.boot107"; }   # at the hold: the counter read, then H4 armed
 csb1run107 107-5c "$DEPLOY107" -- arm4_107

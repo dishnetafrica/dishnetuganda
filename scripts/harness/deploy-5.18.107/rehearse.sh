@@ -580,14 +580,16 @@ check "$(cat "$SB/alter092touch107.fired")|$( [ -e "$PD/migrations/092_wa_no_ai.
   "107-infra h H2's second trigger (.alter092touch107) with no 092 on disk ($V106 serving): it creates no file, records nofile, is spent, and boots nothing"
 : > "$SB/alter092touch107.fired"; rm -f "$TCF107"
 # H4 — .boot107 (v2 A8, v3 review 2 TC2/FM1): one boot at deploy-hybrid's read of .deployed-commit while it names 5.18.106 — the
-# exact call, and only when the docker's parent command line names deploy-hybrid.sh (stage A's LIVE_BEFORE makes the same call
-# from the script itself). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
+# exact call, and only when the docker's parent command line names deploy-hybrid.sh without --check (stage A's LIVE_BEFORE makes
+# the same call from the script itself, and stage A's "--check says" runs deploy-hybrid.sh --check, S:12315, which reads the
+# record the same way — trial 1d: that read fired the hook in 107-5c1's --check; it passes through now, marked dhcheck). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
 cat > "$SB/docker107.hook" <<'HOOK'
 # ── 5.18.107's rehearsal: H4 (boot107, one boot at deploy-hybrid's record read) and H6 (rbfail107, a rollback's record read wrong once) ──
 if [ "$*" = "exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit" ]; then
   _rh_r7="$(tail -n1 "@PD@/.deployed-commit" 2>/dev/null | tr -cd '0-9a-f')"
   if [ -f "@SB@/.boot107" ] && [ "$_rh_r7" = "@P106@" ]; then
     case "$(ps -o args= -p "$PPID" 2>/dev/null)" in
+      *deploy-hybrid.sh\ --check*) echo "dhcheck" >> "@SB@/boot107.passed" ;;
       *deploy-hybrid.sh*) rm -f "@SB@/.boot107"
         ( cd "@H107@/v" && setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="@CLKPRE@" RH104_CLOCK_FILE="@CLKF@" "@PHP@" -d log_errors=0 "@H107@/boot.php" "@PD@" "@DATA@" ) >> "@R107@/boot/h4.out" 2>&1
         echo fired >> "@SB@/boot107.fired" ;;
@@ -624,15 +626,16 @@ DC107="/data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit"
 cp -p "$PD/.deployed-commit" "$SB/dc107.kept"
 : > "$SB/.boot107"
 H4A_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)|$(grep -c . "$SB/boot107.fired")|$(grep -c . "$SB/boot107.passed")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)"   # the rehearsal's own call: not deploy-hybrid
+H4C_107="$(bash -c 'exec -a "bash scripts/deploy-hybrid.sh --check" bash -c "env PATH=\"$1/bin:\$PATH\" bash \"$1/bin/docker\" exec ucrm cat \"$2\" | tail -n1"' _ "$SB" "$DC107")|$(grep -c . "$SB/boot107.fired")|$(grep -c '^dhcheck$' "$SB/boot107.passed")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)"   # deploy-hybrid.sh --check (S:12315): passes through
 H4B_107="$(bash -c 'exec -a "bash scripts/deploy-hybrid.sh" bash -c "env PATH=\"$1/bin:\$PATH\" bash \"$1/bin/docker\" exec ucrm cat \"$2\" | tail -n1"' _ "$SB" "$DC107")|$(grep -c . "$SB/boot107.fired")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)|$(grep -c '^booted$' "$R107/boot/h4.out" 2>/dev/null)"
 rm -f "$SB/.boot107"
 : > "$SB/.rbfail107"; printf '%s\n' "$P107" > "$PD/.deployed-commit"
 H6A_107="$(dk104 exec ucrm cat "$DC107" | tail -n1):$( [ -f "$SB/.rbfail107.seen" ] && echo seen)"
 printf '%s\n' "$P106" > "$PD/.deployed-commit"; H6B_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)"; H6C_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)"
 cp -p "$SB/dc107.kept" "$PD/.deployed-commit"; rm -f "$SB/dc107.kept" "$SB/.rbfail107" "$SB/.rbfail107.seen"
-check "$(bash -n "$SB/bin/docker" && echo parses)|$H4A_107|$H4B_107|$H6A_107|$H6B_107|$H6C_107|$(grep -c . "$SB/rbfail107.fired")|$(live)" \
-      "parses|$P106|0|1|unspent|$P106|1|spent|1|$P107:seen|0000000|$P106|1|$P106" \
-  "107-infra h H4 and H6 in the stand-in docker: .boot107 armed, the record read from anywhere but deploy-hybrid passes through (counted as passed, still armed); from deploy-hybrid it boots once and is spent; .rbfail107 armed, a read naming $P107 then one naming $P106 answers 0000000 once, then the record again; the record put back"
+check "$(bash -n "$SB/bin/docker" && echo parses)|$H4A_107|$H4C_107|$H4B_107|$H6A_107|$H6B_107|$H6C_107|$(grep -c . "$SB/rbfail107.fired")|$(live)" \
+      "parses|$P106|0|1|unspent|$P106|0|1|unspent|$P106|1|spent|1|$P107:seen|0000000|$P106|1|$P106" \
+  "107-infra h H4 and H6 in the stand-in docker: .boot107 armed, the record read from anywhere but deploy-hybrid passes through (counted as passed, still armed), and from deploy-hybrid.sh --check too (marked dhcheck, still armed); from deploy-hybrid's deploy it boots once and is spent; .rbfail107 armed, a read naming $P107 then one naming $P106 answers 0000000 once, then the record again; the record put back"
 : > "$SB/boot107.fired"; : > "$SB/boot107.passed"; : > "$SB/rbfail107.fired"; : > "$R107/boot/h4.out"
 # H5 — .redirect107 and .redirect107lock (v2 A5, v3): R6's A7 shape for this release — a probe page, and a 302 on the sign-in
 # page only while the installed manifest says 5.18.107 and the trigger can be spent; with the lock beside it, the same spend
@@ -1446,7 +1449,8 @@ for k107 in quoted_no_prices_enabled connection_quote_enabled; do
 done
 # 8d — a listed number (through NoAiList::add, as the staff screens list it) and a queued wa.no_ai_alert (as evo_webhook queues it):
 # RB-X's counts; the book kept first and put back after (a wa_no_ai row is never deleted)
-K1="$(seedk107 "$P107R" book_keep b8d)"; N8D_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 05)\",\"name\":\"RH107SECRET- staff\",\"reason\":\"RH107SECRET- a listed number\",\"alert\":1}]")"
+K1="$(seedk107 "$P107R" book_keep b8d)"; check "$(sd107 "$K1" fixture)" "1" "107-8d- the book kept first (its put-back, 107-8d*, restores from it)"
+N8D_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 05)\",\"name\":\"RH107SECRET- staff\",\"reason\":\"RH107SECRET- a listed number\",\"alert\":1}]")"
 rbno107
 check "$( [ "$(n103 "$(sd107 "$N8D_107" id)")" -ge 1 ] && echo listed)|$( [ "$(n103 "$(sd107 "$N8D_107" event)")" -ge 1 ] && echo queued)|$(has "$RBNO107" "RB-X before the rollback: active wa_no_ai rows $(( $(n103 "$NAI0_107") + 1 )) — no $BV107 file reads the list")|$(has "$RBNO107" "pending wa.no_ai_alert events $(( $(n103 "$NAL0_107") + 1 )) — $BV107's event processor acks a queued alert as unknown")" "listed|queued|yes|yes" \
   "107-8d a listed number and a queued alert: RB-X counts one more of each than 107-8a found, each with what $BV107 does with it"
@@ -1458,7 +1462,7 @@ check "$(rc107)|$(has "$OOFF_107" 'SET ai_burst_merge_enabled = 0')|$(jv107 ai_b
 # 8f — §M: a mark whose named event is retrying (two typed ai.reply events on one conversation, the first set aside for the second, the
 # second failed once — EventBus and BurstMerge, as the worker writes them), the switch off: the drain lists the ids, after the 125 s
 # wait. The real worker (run_worker.php, as the server's cron runs it) then answers the event, and the drain lists it no longer.
-K1="$(seedk107 "$P107R" book_keep b8f)"
+K1="$(seedk107 "$P107R" book_keep b8f)"; check "$(sd107 "$K1" fixture)" "1" "107-8f- the book kept first (its put-back, 107-8f***, restores from it)"
 M8F_107="$(seed107 "$P107R" "[{\"op\":\"burst\",\"phone\":\"$(ph107 06)\",\"name\":\"RH107SECRET- a customer\",\"text\":\"RH107SECRET- hello\",\"text2\":\"RH107SECRET- the price please\",\"instance\":\"sales-001\",\"mark\":\"aside\",\"fail\":1}]")"
 A8F_107="$(sd107 "$M8F_107" a)"; B8F_107="$(sd107 "$M8F_107" b)"; C8F_107="$(sd107 "$M8F_107" conv)"
 check "$(sd107 "$M8F_107" a_marked)|$(sd107 "$M8F_107" b_status)|$(sd107 "$M8F_107" b_attempts | cut -d/ -f1)|$(sd107 "$M8F_107" origin)" "1|failed|1|typed" "107-8f0 the plant: event #$A8F_107 set aside for #$B8F_107, which failed once and is retrying"
@@ -1579,8 +1583,8 @@ check "$(sd107 "$K2" fixture)|$(ledger107)|$(md5sum < "$PD/migrations/092_wa_no_
   "107-5c0 the plants: the pin's 092 on disk in the live $V106 plugin (a FIXTURE), a 092 WARNING appended to migration.log (a FIXTURE, UTC); the ledger holds no 092"
 : > "$SB/boot107.fired"; : > "$SB/boot107.passed"; : > "$R107/boot/h4.out"; : > "$SB/.boot107"
 D94_5C_107="$(data94)"; fresh107; O5C_107="$(run107c --check)"
-check "$(grep -c . "$SB/boot107.fired")|$( [ "$(grep -c . "$SB/boot107.passed")" -ge 1 ] && echo passed)|$( [ -e "$SB/.boot107" ] && echo armed || echo spent)|$(ledger107)|$(data94)" "0|passed|armed|mig092=0 wa_no_ai=none|$D94_5C_107" \
-  "107-5c1 H4's control: armed before a --check, the record read by the script itself passes through (its parent is not deploy-hybrid) — 0 boots, still armed, no 092 applied, the data as before"
+check "$(grep -c . "$SB/boot107.fired")|$( [ "$(grep -c '^notdh$' "$SB/boot107.passed")" -ge 1 ] && echo passed)|$( [ "$(grep -c '^dhcheck$' "$SB/boot107.passed")" -ge 1 ] && echo dhcheck)|$( [ -e "$SB/.boot107" ] && echo armed || echo spent)|$(ledger107)|$(data94)" "0|passed|dhcheck|armed|mig092=0 wa_no_ai=none|$D94_5C_107" \
+  "107-5c1 H4's control: armed before a --check, the record read by the script itself and by stage A's deploy-hybrid.sh --check (S:12315) passes through — neither is the deploy's read — 0 boots, still armed, no 092 applied, the data as before"
 rm -f "$SB/.boot107"; : > "$SB/boot107.passed"
 arm4_107() { grep -c . "$SB/boot107.fired" > "$R107/logs/arm4.n"; : > "$SB/.boot107"; }   # at the hold: the counter read, then H4 armed
 csb1run107 107-5c "$DEPLOY107" -- arm4_107
@@ -1821,6 +1825,7 @@ check "$(sd107 "$CL2_107" fixture)|$(sd107 "$CL2_107" places)|$(jv107 ai_burst_m
 # ── RD2 — a --redeploy with every 092 line removed before it (§T.11:3499): the redeploy note, PASSED, reset=1. Then Q on through the
 # pin's set_config, as printed. ──
 K1="$(seedk107 "$(pinroot107)" log_keep r8g)"; K2="$(seedk107 "$(pinroot107)" log_drop r8g '"match":"any092"')"
+check "$(sd107 "$K1" fixture)|$(sd107 "$K2" fixture)|$(kv107 "$(log107)" ok)" "1|1|0" "107-8Rg0 the plants (FIXTURES), before the redeploy: migration.log kept, then every 092 line taken out — no OK line for 092 left"
 dredeploy107 "107-8Rg-RD2"
 check "$(sd107 "$K2" fixture)|$(has "$DRD107" '  note  MG-CA2 no OK line for 092 in migration.log — a redeploy')|$(has "$DRD107" 'the tar straddle')" "1|yes|no" "107-8Rg' RD2: every 092 line gone — the redeploy note, no straddle note"
 check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8g)" fixture)|$(kept107)" "1|0" "107-8Rg\" migration.log back"
@@ -1837,7 +1842,7 @@ anc107 kqoff 'q="$(rb_kq "$ref" "$k")"' 'q=off'
 anc107 kline 'q="$(rb_kq "$ref" "$k")"' 'q="$(rb_kq "$ref" "$k")"; [ "$k" = quoted_no_prices_enabled ] && q=on'
 anc107 oldwhy "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys): once %s'\"'\"'s tools are installed none can write it. Its own command" "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys)%.0s: after the put-back no shipped tool can write these keys. Its own command"
 idle104; fresh107; mutant107 c8h-kqoff kqoff -- --after-only
-check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")" "no" "107-8Rh a weakened copy that drops the K/Q lines — caught"
+check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")|$(has "$MUT107" 'BEFORE ANY PUT-BACK BY HAND')" "no|yes" "107-8Rh a weakened copy that drops the K/Q lines — caught (the paragraph itself still printed, S:9112, so the absence is the K/Q lines' alone)"
 idle104; fresh107; mutant107 c8h-kline kline -- --after-only
 check "$(has "$MUT107" "quoted_no_prices_enabled reads on (the run's latest reading")" "yes" "107-8Rh' a weakened copy that prints K's line while K reads off — caught"
 idle104; fresh107; mutant107 c8h-why oldwhy -- --after-only

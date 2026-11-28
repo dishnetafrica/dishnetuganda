@@ -63,7 +63,8 @@ for k107 in quoted_no_prices_enabled connection_quote_enabled; do
 done
 # 8d — a listed number (through NoAiList::add, as the staff screens list it) and a queued wa.no_ai_alert (as evo_webhook queues it):
 # RB-X's counts; the book kept first and put back after (a wa_no_ai row is never deleted)
-K1="$(seedk107 "$P107R" book_keep b8d)"; N8D_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 05)\",\"name\":\"RH107SECRET- staff\",\"reason\":\"RH107SECRET- a listed number\",\"alert\":1}]")"
+K1="$(seedk107 "$P107R" book_keep b8d)"; check "$(sd107 "$K1" fixture)" "1" "107-8d- the book kept first (its put-back, 107-8d*, restores from it)"
+N8D_107="$(seed107 "$P107R" "[{\"op\":\"noai\",\"phone\":\"$(ph107 05)\",\"name\":\"RH107SECRET- staff\",\"reason\":\"RH107SECRET- a listed number\",\"alert\":1}]")"
 rbno107
 check "$( [ "$(n103 "$(sd107 "$N8D_107" id)")" -ge 1 ] && echo listed)|$( [ "$(n103 "$(sd107 "$N8D_107" event)")" -ge 1 ] && echo queued)|$(has "$RBNO107" "RB-X before the rollback: active wa_no_ai rows $(( $(n103 "$NAI0_107") + 1 )) — no $BV107 file reads the list")|$(has "$RBNO107" "pending wa.no_ai_alert events $(( $(n103 "$NAL0_107") + 1 )) — $BV107's event processor acks a queued alert as unknown")" "listed|queued|yes|yes" \
   "107-8d a listed number and a queued alert: RB-X counts one more of each than 107-8a found, each with what $BV107 does with it"
@@ -75,7 +76,7 @@ check "$(rc107)|$(has "$OOFF_107" 'SET ai_burst_merge_enabled = 0')|$(jv107 ai_b
 # 8f — §M: a mark whose named event is retrying (two typed ai.reply events on one conversation, the first set aside for the second, the
 # second failed once — EventBus and BurstMerge, as the worker writes them), the switch off: the drain lists the ids, after the 125 s
 # wait. The real worker (run_worker.php, as the server's cron runs it) then answers the event, and the drain lists it no longer.
-K1="$(seedk107 "$P107R" book_keep b8f)"
+K1="$(seedk107 "$P107R" book_keep b8f)"; check "$(sd107 "$K1" fixture)" "1" "107-8f- the book kept first (its put-back, 107-8f***, restores from it)"
 M8F_107="$(seed107 "$P107R" "[{\"op\":\"burst\",\"phone\":\"$(ph107 06)\",\"name\":\"RH107SECRET- a customer\",\"text\":\"RH107SECRET- hello\",\"text2\":\"RH107SECRET- the price please\",\"instance\":\"sales-001\",\"mark\":\"aside\",\"fail\":1}]")"
 A8F_107="$(sd107 "$M8F_107" a)"; B8F_107="$(sd107 "$M8F_107" b)"; C8F_107="$(sd107 "$M8F_107" conv)"
 check "$(sd107 "$M8F_107" a_marked)|$(sd107 "$M8F_107" b_status)|$(sd107 "$M8F_107" b_attempts | cut -d/ -f1)|$(sd107 "$M8F_107" origin)" "1|failed|1|typed" "107-8f0 the plant: event #$A8F_107 set aside for #$B8F_107, which failed once and is retrying"

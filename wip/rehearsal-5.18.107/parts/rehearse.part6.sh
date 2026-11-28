@@ -86,6 +86,7 @@ check "$(sd107 "$CL2_107" fixture)|$(sd107 "$CL2_107" places)|$(jv107 ai_burst_m
 # ── RD2 — a --redeploy with every 092 line removed before it (§T.11:3499): the redeploy note, PASSED, reset=1. Then Q on through the
 # pin's set_config, as printed. ──
 K1="$(seedk107 "$(pinroot107)" log_keep r8g)"; K2="$(seedk107 "$(pinroot107)" log_drop r8g '"match":"any092"')"
+check "$(sd107 "$K1" fixture)|$(sd107 "$K2" fixture)|$(kv107 "$(log107)" ok)" "1|1|0" "107-8Rg0 the plants (FIXTURES), before the redeploy: migration.log kept, then every 092 line taken out — no OK line for 092 left"
 dredeploy107 "107-8Rg-RD2"
 check "$(sd107 "$K2" fixture)|$(has "$DRD107" '  note  MG-CA2 no OK line for 092 in migration.log — a redeploy')|$(has "$DRD107" 'the tar straddle')" "1|yes|no" "107-8Rg' RD2: every 092 line gone — the redeploy note, no straddle note"
 check "$(sd107 "$(seedk107 "$(pinroot107)" log_back r8g)" fixture)|$(kept107)" "1|0" "107-8Rg\" migration.log back"
@@ -102,7 +103,7 @@ anc107 kqoff 'q="$(rb_kq "$ref" "$k")"' 'q=off'
 anc107 kline 'q="$(rb_kq "$ref" "$k")"' 'q="$(rb_kq "$ref" "$k")"; [ "$k" = quoted_no_prices_enabled ] && q=on'
 anc107 oldwhy "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys): once %s'\"'\"'s tools are installed none can write it. Its own command" "(the run'\"'\"'s latest reading of the ladder'\"'\"'s keys)%.0s: after the put-back no shipped tool can write these keys. Its own command"
 idle104; fresh107; mutant107 c8h-kqoff kqoff -- --after-only
-check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")" "no" "107-8Rh a weakened copy that drops the K/Q lines — caught"
+check "$(has "$MUT107" "connection_quote_enabled reads on (the run's latest reading")|$(has "$MUT107" 'BEFORE ANY PUT-BACK BY HAND')" "no|yes" "107-8Rh a weakened copy that drops the K/Q lines — caught (the paragraph itself still printed, S:9112, so the absence is the K/Q lines' alone)"
 idle104; fresh107; mutant107 c8h-kline kline -- --after-only
 check "$(has "$MUT107" "quoted_no_prices_enabled reads on (the run's latest reading")" "yes" "107-8Rh' a weakened copy that prints K's line while K reads off — caught"
 idle104; fresh107; mutant107 c8h-why oldwhy -- --after-only

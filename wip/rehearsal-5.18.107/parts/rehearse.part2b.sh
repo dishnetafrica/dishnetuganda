@@ -171,14 +171,16 @@ check "$(cat "$SB/alter092touch107.fired")|$( [ -e "$PD/migrations/092_wa_no_ai.
   "107-infra h H2's second trigger (.alter092touch107) with no 092 on disk ($V106 serving): it creates no file, records nofile, is spent, and boots nothing"
 : > "$SB/alter092touch107.fired"; rm -f "$TCF107"
 # H4 — .boot107 (v2 A8, v3 review 2 TC2/FM1): one boot at deploy-hybrid's read of .deployed-commit while it names 5.18.106 — the
-# exact call, and only when the docker's parent command line names deploy-hybrid.sh (stage A's LIVE_BEFORE makes the same call
-# from the script itself). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
+# exact call, and only when the docker's parent command line names deploy-hybrid.sh without --check (stage A's LIVE_BEFORE makes
+# the same call from the script itself, and stage A's "--check says" runs deploy-hybrid.sh --check, S:12315, which reads the
+# record the same way — trial 1d: that read fired the hook in 107-5c1's --check; it passes through now, marked dhcheck). Armed only by csb1run107's action at Type DEPLOY; consumed; counted; its output to a file.
 cat > "$SB/docker107.hook" <<'HOOK'
 # ── 5.18.107's rehearsal: H4 (boot107, one boot at deploy-hybrid's record read) and H6 (rbfail107, a rollback's record read wrong once) ──
 if [ "$*" = "exec ucrm cat /data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit" ]; then
   _rh_r7="$(tail -n1 "@PD@/.deployed-commit" 2>/dev/null | tr -cd '0-9a-f')"
   if [ -f "@SB@/.boot107" ] && [ "$_rh_r7" = "@P106@" ]; then
     case "$(ps -o args= -p "$PPID" 2>/dev/null)" in
+      *deploy-hybrid.sh\ --check*) echo "dhcheck" >> "@SB@/boot107.passed" ;;
       *deploy-hybrid.sh*) rm -f "@SB@/.boot107"
         ( cd "@H107@/v" && setpriv --reuid 1000 --regid 1000 --clear-groups -- env LD_PRELOAD="@CLKPRE@" RH104_CLOCK_FILE="@CLKF@" "@PHP@" -d log_errors=0 "@H107@/boot.php" "@PD@" "@DATA@" ) >> "@R107@/boot/h4.out" 2>&1
         echo fired >> "@SB@/boot107.fired" ;;
@@ -215,15 +217,16 @@ DC107="/data/ucrm/data/plugins/dishnet-hybrid-sudan/.deployed-commit"
 cp -p "$PD/.deployed-commit" "$SB/dc107.kept"
 : > "$SB/.boot107"
 H4A_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)|$(grep -c . "$SB/boot107.fired")|$(grep -c . "$SB/boot107.passed")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)"   # the rehearsal's own call: not deploy-hybrid
+H4C_107="$(bash -c 'exec -a "bash scripts/deploy-hybrid.sh --check" bash -c "env PATH=\"$1/bin:\$PATH\" bash \"$1/bin/docker\" exec ucrm cat \"$2\" | tail -n1"' _ "$SB" "$DC107")|$(grep -c . "$SB/boot107.fired")|$(grep -c '^dhcheck$' "$SB/boot107.passed")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)"   # deploy-hybrid.sh --check (S:12315): passes through
 H4B_107="$(bash -c 'exec -a "bash scripts/deploy-hybrid.sh" bash -c "env PATH=\"$1/bin:\$PATH\" bash \"$1/bin/docker\" exec ucrm cat \"$2\" | tail -n1"' _ "$SB" "$DC107")|$(grep -c . "$SB/boot107.fired")|$( [ -e "$SB/.boot107" ] && echo unspent || echo spent)|$(grep -c '^booted$' "$R107/boot/h4.out" 2>/dev/null)"
 rm -f "$SB/.boot107"
 : > "$SB/.rbfail107"; printf '%s\n' "$P107" > "$PD/.deployed-commit"
 H6A_107="$(dk104 exec ucrm cat "$DC107" | tail -n1):$( [ -f "$SB/.rbfail107.seen" ] && echo seen)"
 printf '%s\n' "$P106" > "$PD/.deployed-commit"; H6B_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)"; H6C_107="$(dk104 exec ucrm cat "$DC107" | tail -n1)"
 cp -p "$SB/dc107.kept" "$PD/.deployed-commit"; rm -f "$SB/dc107.kept" "$SB/.rbfail107" "$SB/.rbfail107.seen"
-check "$(bash -n "$SB/bin/docker" && echo parses)|$H4A_107|$H4B_107|$H6A_107|$H6B_107|$H6C_107|$(grep -c . "$SB/rbfail107.fired")|$(live)" \
-      "parses|$P106|0|1|unspent|$P106|1|spent|1|$P107:seen|0000000|$P106|1|$P106" \
-  "107-infra h H4 and H6 in the stand-in docker: .boot107 armed, the record read from anywhere but deploy-hybrid passes through (counted as passed, still armed); from deploy-hybrid it boots once and is spent; .rbfail107 armed, a read naming $P107 then one naming $P106 answers 0000000 once, then the record again; the record put back"
+check "$(bash -n "$SB/bin/docker" && echo parses)|$H4A_107|$H4C_107|$H4B_107|$H6A_107|$H6B_107|$H6C_107|$(grep -c . "$SB/rbfail107.fired")|$(live)" \
+      "parses|$P106|0|1|unspent|$P106|0|1|unspent|$P106|1|spent|1|$P107:seen|0000000|$P106|1|$P106" \
+  "107-infra h H4 and H6 in the stand-in docker: .boot107 armed, the record read from anywhere but deploy-hybrid passes through (counted as passed, still armed), and from deploy-hybrid.sh --check too (marked dhcheck, still armed); from deploy-hybrid's deploy it boots once and is spent; .rbfail107 armed, a read naming $P107 then one naming $P106 answers 0000000 once, then the record again; the record put back"
 : > "$SB/boot107.fired"; : > "$SB/boot107.passed"; : > "$SB/rbfail107.fired"; : > "$R107/boot/h4.out"
 # H5 — .redirect107 and .redirect107lock (v2 A5, v3): R6's A7 shape for this release — a probe page, and a 302 on the sign-in
 # page only while the installed manifest says 5.18.107 and the trigger can be spent; with the lock beside it, the same spend
