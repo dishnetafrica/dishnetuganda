@@ -543,7 +543,14 @@ try {
                     if ($d !== 1) throw new RuntimeException('ledger092: no _schema_checks row for 092 to take out');
                     $r = ['op' => $op, 'fixture' => 1, 'what' => "092 recorded with no _schema_checks row (the book kept first)", 'removed' => $d, 'dig' => $r['dig']];
                 } elseif ($o['what'] === 'rename') {
-                    $pdo->exec('ALTER TABLE wa_no_ai RENAME TO rh107_wa_no_ai');
+                    // legacy_alter_table, as the script's own probe 3 does (S:6738-6745): a modern SQLite re-parses every view
+                    // of the book on a rename and refuses it when one does not compile, and a migration-built book carries
+                    // three (§T.16 S-1). Trial 1d (28 Nov) measured it here: "error in view v_lte_pending_jobs: no such
+                    // column: j.run_after", the plant refused, and 107-6a ran over a whole wa_no_ai. The table alone renamed,
+                    // its index and three triggers with it; the book is put back from its keep by ledger092_undo.
+                    $pdo->exec('PRAGMA legacy_alter_table = ON');
+                    try { $pdo->exec('ALTER TABLE wa_no_ai RENAME TO rh107_wa_no_ai'); } finally { $pdo->exec('PRAGMA legacy_alter_table = OFF'); }
+                    if (rh107_has($pdo, 'wa_no_ai') || !rh107_has($pdo, 'rh107_wa_no_ai')) throw new RuntimeException('ledger092: the rename did not take');
                     $r = ['op' => $op, 'fixture' => 1, 'what' => "092's table renamed (the book kept first)", 'table' => rh107_has($pdo, 'wa_no_ai') ? 1 : 0, 'dig' => $r['dig']];
                 } elseif ($o['what'] === 'sentinel') {
                     $i = $pdo->prepare('INSERT INTO wa_no_ai (phone, reason, added_by, active) VALUES (?, ?, ?, 1)');

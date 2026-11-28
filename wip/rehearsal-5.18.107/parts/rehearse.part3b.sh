@@ -132,27 +132,40 @@ mutant107 sa-v9 satxt -- --check
 check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the recorded ${TX107:0:12}")|$(has "$MUT107" 'NOT v9 as the workers read it')|$MUTRC107" "yes|no|0" \
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
 # 107-3g — StaffJobsGate::applies false. Not reachable on a live book: a profile other than Uganda in the settings files (k is
-# merged last, and the sandbox's kyc_config.json says uganda) makes A23.7 refuse first — the pin's cashOnlyRuleInForce() reads
-# the same gate over a copy of the same three files (S:2853–2858, S:13442) — and A23 runs before qf_stage, SA's only caller
-# (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a copy whose SA reading
-# returns ug=0, nothing planted, as 107-3t' does for the text — shows the capitals note with the --check still GO; and the live
-# plant in k (a FIXTURE: the file kept whole by keep106, one key rewritten in place, owner and mode kept, put back byte for byte
-# by back106) shows the refusal at A23.7, nothing changed, SA never reached.
+# merged last, and the sandbox's kyc_config.json says uganda) makes A9 refuse first — off Uganda the code does not take the
+# channel registry, whose switch reads ON in both copies (S:12956–12957; measured, trial 1d) — and A23.7 would refuse next, the
+# pin's cashOnlyRuleInForce() reading the same gate over a copy of the same three files (S:2853–2858, S:13442); both run before
+# qf_stage, SA's only caller (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a
+# copy whose SA reading returns ug=0, nothing planted, as 107-3t' does for the text — shows the capitals note with the --check
+# still GO; and the live plant in k (a FIXTURE: the file kept whole by keep106, one key rewritten in place, owner and mode kept,
+# put back byte for byte by back106) shows the refusal at A9, SA never reached. One thing moves, and the script says so: the
+# installed tools/set_distributors.php --show, run as root on the live folder, loads the configuration, and that load refreshes
+# the live vault when its content differs (S:669, Z1 at S:11844 — a move said, never failed). tenant_profile is a vault key, so
+# the plant reaches the vault (trial 1d: run 903 wrote it, the next deploy's own reading wrote it back). The vault is kept
+# beside the file and put back before "nothing changed" is judged, and its one move is asserted: tenant_profile alone.
 anc107 sjg0 "\$o[] = 'ug=' . (StaffJobsGate::applies(\$c, \$dir) ? 1 : 0);" "\$o[] = 'ug=0';"
 check "$(has "$OA2_107" 'SA StaffJobsGate::applies reads Uganda as the workers read it (PluginConfig::read)')|$(has "$OA2_107" 'SA STAFFJOBSGATE::APPLIES IS FALSE')" "yes|no" \
   "107-3g the real reading (107-pre6's --check): SA reads StaffJobsGate::applies as Uganda — never the capitals"
 mutant107 sa-sjg0 sjg0 -- --check
 check "$(has "$MUT107" "SA STAFFJOBSGATE::APPLIES IS FALSE ON THIS BOOK'S SETTINGS, AS THE WORKERS READ THEM")|$(has "$MUT107" 'SA StaffJobsGate::applies reads Uganda')|$(checkgo107 "$MUT107")" "yes|no|yesnono0|0|0|samekey|0" \
   "107-3g' a READER CONTROL (a copy whose SA reading returns ug=0, nothing planted): SA's note in capitals, and the --check still GO — a note, never a refusal"
-SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"
+SJG0_107="$(keep106 t107-sjg "$DATA/kyc_config.json")"; SJGV_107="$(keep106 t107-sjgv "$VAULT")"
 SJG1_107="$(python3 -I -c 'import json, sys
 p = sys.argv[1]; d = json.load(open(p))
 assert isinstance(d, dict) and d.get("tenant_profile") == "uganda"
 d["tenant_profile"] = "south-sudan"; open(p, "w").write(json.dumps(d)); print("planted")' "$DATA/kyc_config.json" 2>/dev/null || echo refused)"
 D3G_107="$(data94)"; fresh107; O107="$(run107c --check)"
-check "$( [ "$SJG0_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')" "kept|planted|no|no" \
-  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): SA is never reached"
-nogo107 "107-3g\"'" "NO-GO (A23.7): rule A is NOT in force on this server's own configuration, as the pin's code reads it" "$O107" "$D3G_107" "$P106"
+VMV107="$(python3 -I -c 'import json, sys
+a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
+ca, cb = a.get("config", {}), b.get("config", {})
+m = sorted(k for k in set(ca) | set(cb) if ca.get(k, "<absent>") != cb.get(k, "<absent>"))
+w = "secret-same" if a.get("webhook_secret_file") == b.get("webhook_secret_file") else "secret-moved"
+print(",".join(m) + "|" + str(cb.get("tenant_profile", "")) + "|" + w)' "$R106/kept/t107-sjgv/file" "$VAULT" 2>/dev/null || echo unread)"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$( [ "$SJGV_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')|$(has "$O107" 'evo=yes registry=off; the Inbox')" "kept|kept|planted|no|no|yes" \
+  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): the files' routing reads registry=off, and SA is never reached"
+check "$VMV107|$(back106 t107-sjgv)" "tenant_profile|south-sudan|secret-same|same" \
+  "107-3g\"v the one move the script names (S:669, Z1): the plugin's own load in tools/set_distributors.php --show refreshed the live vault's tenant_profile from the plant, nothing else in it (the webhook secret untouched) — put back byte for byte"
+nogo107 "107-3g\"'" "NO-GO: the registry's switch reads ON in both copies (mn=on/on), but on this server's own configuration the code does not take the registry (files: " "$O107" "$D3G_107" "$P106"
 check "$(back106 t107-sjg)|$(nskept107)|$(snapeq107)" "same|0|same" "107-3g* put back: kyc_config.json byte for byte"
 check "$(ancc107)|$(snapeq107)|$(bookdig107)|$(ledger107)|$(live)" "0|$(ls "$AN107"/*.a | wc -l | tr -d ' ')|-|same|$B3_107|mig092=0 wa_no_ai=none|$P106" \
   "107-3z the exit: 107-pre's state — every key absent again (the files byte for byte, the book's digest), no 092, $P106 serving; every anchor so far the script's own text, once"
