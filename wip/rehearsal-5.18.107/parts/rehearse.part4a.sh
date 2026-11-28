@@ -5,8 +5,8 @@ echo; echo "== 107-4. D1: $V107 over $BV106 — the first deploy, PASSED: QF-G2'
 tidy107 "107-4-pre"
 P107R="$PD"   # the seed's code root once 5.18.107 serves: the installed release's own classes (rh107-seed.php never boots the store)
 BDOFF107="cd $REPO && bash scripts/sales-followup.sh set ai_burst_merge_enabled 0"; BDDR107="cd $REPO && bash scripts/sales-followup.sh --check burst-drain"   # the script's BD_OFF_CMD and BD_DRAIN_CMD as printed (S:7341-7342)
-check "$(sed -nE 's/^(.*; )?QF_WRAPPER="([^"]*)".*/\2/p' "$DEPLOY107" | head -1)|$(grep -cF 'BD_OFF_CMD="cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"' "$DEPLOY107")|$(grep -cF 'BD_DRAIN_CMD="cd $REPO && bash $QF_WRAPPER --check burst-drain"' "$DEPLOY107")" "scripts/sales-followup.sh|1|1" \
-  "107-4-0 the two §K commands as the script assigns them, over its own wrapper (read from the script, never typed — the third assignment on its line, S:7336, which sv107 cannot read)"
+check "$(grep -c 'QF_WRAPPER=' "$DEPLOY107")|$(sed -nE 's/^(.*; )?QF_WRAPPER="([^"]*)".*/\2/p' "$DEPLOY107" | head -1)|$(grep -cF 'BD_OFF_CMD="cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"' "$DEPLOY107")|$(grep -cF 'BD_DRAIN_CMD="cd $REPO && bash $QF_WRAPPER --check burst-drain"' "$DEPLOY107")" "1|scripts/sales-followup.sh|1|1" \
+  "107-4-0 the two §K commands as the script assigns them, over its own wrapper (read from the script, never typed — its one assignment, the third on its line, S:7336, which sv107 cannot read)"
 check "$(states107)|$(backups107)|$(keysum107)|$(left107)|$(inst_ver)|$(ledger107)|$(kept107)" "0|0|nokey|0|$V106|mig092=0 wa_no_ai=none|0" \
   "107-4a a first deploy: no state file, rollback record, backup or LK key of $V107's in its run folder; none of the $NA107 files it adds on disk; $V106 installed; no 092 and no wa_no_ai; nothing kept"
 fresh107; O4_107="$(run107c --answer DEPLOY)"; T4_107="$(last107)"

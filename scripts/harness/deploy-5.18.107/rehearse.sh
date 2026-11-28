@@ -1076,9 +1076,10 @@ check "$(has "$MUT107" "v9 as the workers read it — its sha256 prefix is the r
   "107-3t' a READER CONTROL (a copy pinning the planted text's prefix, one line differing): the same reading says v9 — the branch exists and the comparison is live"
 # 107-3g — StaffJobsGate::applies false. Not reachable on a live book: a profile other than Uganda in the settings files (k is
 # merged last, and the sandbox's kyc_config.json says uganda) makes A9 refuse first — off Uganda the code does not take the
-# channel registry, whose switch reads ON in both copies (S:12956–12957; measured, trial 1d) — and A23.7 would refuse next, the
-# pin's cashOnlyRuleInForce() reading the same gate over a copy of the same three files (S:2853–2858, S:13442); both run before
-# qf_stage, SA's only caller (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a
+# channel registry, whose switch reads ON in both copies (S:12956–12957; measured, trial 1d) — and A9b would refuse next on the
+# same cause (S:12969: ChannelRegistry::enabled() is gated on StaffJobsGate::applies, so the registry reads enabled=off/on), A23.7
+# later still, the pin's cashOnlyRuleInForce() reading the same gate over a copy of the same three files (S:2853–2858, S:13442);
+# all run before qf_stage, SA's only caller (S:8566). So, three readings: the real one says Uganda (107-pre6's --check); a READER CONTROL — a
 # copy whose SA reading returns ug=0, nothing planted, as 107-3t' does for the text — shows the capitals note with the --check
 # still GO; and the live plant in k (a FIXTURE: the file kept whole by keep106, one key rewritten in place, owner and mode kept,
 # put back byte for byte by back106) shows the refusal at A9, SA never reached. One thing moves, and the script says so: the
@@ -1104,8 +1105,8 @@ ca, cb = a.get("config", {}), b.get("config", {})
 m = sorted(k for k in set(ca) | set(cb) if ca.get(k, "<absent>") != cb.get(k, "<absent>"))
 w = "secret-same" if a.get("webhook_secret_file") == b.get("webhook_secret_file") else "secret-moved"
 print(",".join(m) + "|" + str(cb.get("tenant_profile", "")) + "|" + w)' "$R106/kept/t107-sjgv/file" "$VAULT" 2>/dev/null || echo unread)"
-check "$( [ "$SJG0_107" != absent ] && echo kept)|$( [ "$SJGV_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')|$(has "$O107" 'evo=yes registry=off; the Inbox')" "kept|kept|planted|no|no|yes" \
-  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): the files' routing reads registry=off, and SA is never reached"
+check "$( [ "$SJG0_107" != absent ] && echo kept)|$( [ "$SJGV_107" != absent ] && echo kept)|$SJG1_107|$(has "$O107" 'SA STAFFJOBSGATE')|$(has "$O107" 'SA StaffJobsGate')|$(has "$O107" '  note  SA ')|$(has "$O107" 'evo=yes registry=off; the Inbox')" "kept|kept|planted|no|no|no|yes" \
+  "107-3g\" South Sudan's profile in k, the file read last (a FIXTURE; it said uganda): the files' routing reads registry=off, and SA is never reached — no SA note at all"
 check "$VMV107|$(back106 t107-sjgv)" "tenant_profile|south-sudan|secret-same|same" \
   "107-3g\"v the one move the script names (S:669, Z1): the plugin's own load in tools/set_distributors.php --show refreshed the live vault's tenant_profile from the plant, nothing else in it (the webhook secret untouched) — put back byte for byte"
 nogo107 "107-3g\"'" "NO-GO: the registry's switch reads ON in both copies (mn=on/on), but on this server's own configuration the code does not take the registry (files: " "$O107" "$D3G_107" "$P106"
@@ -1119,8 +1120,8 @@ echo; echo "== 107-4. D1: $V107 over $BV106 — the first deploy, PASSED: QF-G2'
 tidy107 "107-4-pre"
 P107R="$PD"   # the seed's code root once 5.18.107 serves: the installed release's own classes (rh107-seed.php never boots the store)
 BDOFF107="cd $REPO && bash scripts/sales-followup.sh set ai_burst_merge_enabled 0"; BDDR107="cd $REPO && bash scripts/sales-followup.sh --check burst-drain"   # the script's BD_OFF_CMD and BD_DRAIN_CMD as printed (S:7341-7342)
-check "$(sed -nE 's/^(.*; )?QF_WRAPPER="([^"]*)".*/\2/p' "$DEPLOY107" | head -1)|$(grep -cF 'BD_OFF_CMD="cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"' "$DEPLOY107")|$(grep -cF 'BD_DRAIN_CMD="cd $REPO && bash $QF_WRAPPER --check burst-drain"' "$DEPLOY107")" "scripts/sales-followup.sh|1|1" \
-  "107-4-0 the two §K commands as the script assigns them, over its own wrapper (read from the script, never typed — the third assignment on its line, S:7336, which sv107 cannot read)"
+check "$(grep -c 'QF_WRAPPER=' "$DEPLOY107")|$(sed -nE 's/^(.*; )?QF_WRAPPER="([^"]*)".*/\2/p' "$DEPLOY107" | head -1)|$(grep -cF 'BD_OFF_CMD="cd $REPO && bash $QF_WRAPPER set ai_burst_merge_enabled 0"' "$DEPLOY107")|$(grep -cF 'BD_DRAIN_CMD="cd $REPO && bash $QF_WRAPPER --check burst-drain"' "$DEPLOY107")" "1|scripts/sales-followup.sh|1|1" \
+  "107-4-0 the two §K commands as the script assigns them, over its own wrapper (read from the script, never typed — its one assignment, the third on its line, S:7336, which sv107 cannot read)"
 check "$(states107)|$(backups107)|$(keysum107)|$(left107)|$(inst_ver)|$(ledger107)|$(kept107)" "0|0|nokey|0|$V106|mig092=0 wa_no_ai=none|0" \
   "107-4a a first deploy: no state file, rollback record, backup or LK key of $V107's in its run folder; none of the $NA107 files it adds on disk; $V106 installed; no 092 and no wa_no_ai; nothing kept"
 fresh107; O4_107="$(run107c --answer DEPLOY)"; T4_107="$(last107)"
